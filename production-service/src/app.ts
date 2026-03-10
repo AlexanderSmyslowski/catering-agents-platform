@@ -1,5 +1,9 @@
 import Fastify from "fastify";
-import { validateAcceptedEventSpec, type AcceptedEventSpec } from "@catering/shared-core";
+import {
+  validateAcceptedEventSpec,
+  type AcceptedEventSpec,
+  type Queryable
+} from "@catering/shared-core";
 import { DuckDuckGoRecipeSearchProvider } from "./recipe-discovery/duckduckgo-provider.js";
 import { RecipeDiscoveryService } from "./recipe-discovery/service.js";
 import { InMemoryRecipeRepository } from "./repositories/in-memory-recipe-repository.js";
@@ -11,13 +15,17 @@ export interface ProductionAppOptions {
   discoveryService?: RecipeDiscoveryService;
   store?: ProductionStore;
   dataRoot?: string;
+  databaseUrl?: string;
+  pgPool?: Queryable;
 }
 
 export function buildProductionApp(options: ProductionAppOptions = {}) {
   const repository =
     options.repository ??
     new InMemoryRecipeRepository(undefined, {
-      dataRoot: options.dataRoot
+      rootDir: options.dataRoot,
+      databaseUrl: options.databaseUrl,
+      pgPool: options.pgPool
     });
   const discoveryService =
     options.discoveryService ??
@@ -25,7 +33,9 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   const store =
     options.store ??
     new ProductionStore({
-      dataRoot: options.dataRoot
+      rootDir: options.dataRoot,
+      databaseUrl: options.databaseUrl,
+      pgPool: options.pgPool
     });
 
   const app = Fastify({
@@ -35,19 +45,19 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.post<{ Body: { eventSpec: AcceptedEventSpec } }>("/v1/production/plans", async (request, reply) => {
     const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
     const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
-    store.savePlan(artifacts.productionPlan);
-    store.savePurchaseList(artifacts.purchaseList);
+    await store.savePlan(artifacts.productionPlan);
+    await store.savePurchaseList(artifacts.purchaseList);
     return reply.code(201).send(artifacts);
   });
 
   app.get("/v1/production/plans", async (_request, reply) => {
     return reply.send({
-      items: store.listPlans()
+      items: await store.listPlans()
     });
   });
 
   app.get<{ Params: { planId: string } }>("/v1/production/plans/:planId", async (request, reply) => {
-    const plan = store.getPlan(request.params.planId);
+    const plan = await store.getPlan(request.params.planId);
     if (!plan) {
       return reply.code(404).send({ message: "ProductionPlan not found." });
     }
@@ -58,7 +68,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.get<{ Params: { purchaseListId: string } }>(
     "/v1/production/purchase-lists/:purchaseListId",
     async (request, reply) => {
-      const list = store.getPurchaseList(request.params.purchaseListId);
+      const list = await store.getPurchaseList(request.params.purchaseListId);
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList not found." });
       }
@@ -69,13 +79,13 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   app.get("/v1/production/purchase-lists", async (_request, reply) => {
     return reply.send({
-      items: store.listPurchaseLists()
+      items: await store.listPurchaseLists()
     });
   });
 
   app.get("/v1/production/recipes", async (_request, reply) => {
     return reply.send({
-      items: repository.list()
+      items: await repository.list()
     });
   });
 

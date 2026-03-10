@@ -1,6 +1,5 @@
 import pdf from "pdf-parse";
-import type { DocumentInput, EventRequest } from "@catering/shared-core";
-import { SCHEMA_VERSION } from "@catering/shared-core";
+import { createEventRequestFromText, type DocumentInput } from "@catering/shared-core";
 
 function decodeText(buffer: Buffer): string {
   return buffer.toString("utf8").replace(/\0/g, "").trim();
@@ -23,24 +22,9 @@ export async function extractTextFromDocument(document: DocumentInput): Promise<
 
 export function buildEventRequestFromText(input: {
   requestId: string;
-  channel: EventRequest["source"]["channel"];
+  channel: Parameters<typeof createEventRequestFromText>[0]["channel"];
   rawText: string;
   sourceRef?: string;
-}): EventRequest {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    requestId: input.requestId,
-    source: {
-      channel: input.channel,
-      receivedAt: new Date().toISOString(),
-      sourceRef: input.sourceRef
-    },
-    rawInputs: [
-      {
-        kind: input.channel === "email" ? "email" : input.channel === "pdf_upload" ? "pdf" : "text",
-        content: input.rawText
-      }
-    ]
-  };
+}) {
+  return createEventRequestFromText(input);
 }
-

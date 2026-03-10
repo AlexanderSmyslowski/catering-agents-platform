@@ -1,44 +1,50 @@
 import {
-  FileBackedCollection,
+  createPersistentCollection,
+  type CollectionStorageOptions,
+  type PersistentCollection,
   type AcceptedEventSpec,
   type EventRequest
 } from "@catering/shared-core";
 
 export class IntakeStore {
-  private readonly requests: FileBackedCollection<EventRequest>;
+  private readonly requests: PersistentCollection<EventRequest>;
 
-  private readonly specs: FileBackedCollection<AcceptedEventSpec>;
+  private readonly specs: PersistentCollection<AcceptedEventSpec>;
 
-  constructor(options?: { dataRoot?: string }) {
-    this.requests = new FileBackedCollection({
+  constructor(options?: CollectionStorageOptions) {
+    this.requests = createPersistentCollection<EventRequest>({
       collectionName: "intake/requests",
       getId: (request) => request.requestId,
-      rootDir: options?.dataRoot
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
     });
-    this.specs = new FileBackedCollection({
+    this.specs = createPersistentCollection<AcceptedEventSpec>({
       collectionName: "intake/specs",
       getId: (spec) => spec.specId,
-      rootDir: options?.dataRoot
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
     });
   }
 
-  saveRequest(request: EventRequest): void {
-    this.requests.set(request);
+  async saveRequest(request: EventRequest): Promise<void> {
+    await this.requests.set(request);
   }
 
-  saveSpec(spec: AcceptedEventSpec): void {
-    this.specs.set(spec);
+  async saveSpec(spec: AcceptedEventSpec): Promise<void> {
+    await this.specs.set(spec);
   }
 
-  getSpec(specId: string): AcceptedEventSpec | undefined {
+  async getSpec(specId: string): Promise<AcceptedEventSpec | undefined> {
     return this.specs.get(specId);
   }
 
-  listRequests(): EventRequest[] {
+  async listRequests(): Promise<EventRequest[]> {
     return this.requests.list();
   }
 
-  listSpecs(): AcceptedEventSpec[] {
+  async listSpecs(): Promise<AcceptedEventSpec[]> {
     return this.specs.list();
   }
 }

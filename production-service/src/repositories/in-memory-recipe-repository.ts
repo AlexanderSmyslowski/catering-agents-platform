@@ -1,6 +1,8 @@
 import type { MenuComponent, Recipe } from "@catering/shared-core";
 import {
-  FileBackedCollection,
+  createPersistentCollection,
+  type CollectionStorageOptions,
+  type PersistentCollection,
   internalRecipes,
   validateRecipe
 } from "@catering/shared-core";
@@ -20,21 +22,25 @@ function overlapScore(left: string, right: string): number {
 }
 
 export class InMemoryRecipeRepository {
-  private readonly recipes: FileBackedCollection<Recipe>;
+  private readonly recipes: PersistentCollection<Recipe>;
 
-  constructor(seed: Recipe[] | undefined = internalRecipes, options?: { dataRoot?: string }) {
-    this.recipes = new FileBackedCollection({
+  constructor(
+    seed: Recipe[] | undefined = internalRecipes,
+    options?: CollectionStorageOptions
+  ) {
+    this.recipes = createPersistentCollection<Recipe>({
       collectionName: "production/recipes",
       getId: (recipe) => recipe.recipeId,
       validate: validateRecipe,
-      rootDir: options?.dataRoot,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool,
       seed: seed ?? internalRecipes
     });
   }
 
-  findCandidates(component: MenuComponent): Recipe[] {
-    return this.recipes
-      .list()
+  async findCandidates(component: MenuComponent): Promise<Recipe[]> {
+    return (await this.recipes.list())
       .map((recipe) => ({
         recipe,
         score: overlapScore(component.label, recipe.name)
@@ -44,11 +50,11 @@ export class InMemoryRecipeRepository {
       .map((item) => item.recipe);
   }
 
-  save(recipe: Recipe): void {
-    this.recipes.set(recipe);
+  async save(recipe: Recipe): Promise<void> {
+    await this.recipes.set(recipe);
   }
 
-  list(): Recipe[] {
+  async list(): Promise<Recipe[]> {
     return this.recipes.list();
   }
 }

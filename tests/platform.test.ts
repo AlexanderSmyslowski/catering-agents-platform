@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { newDb } from "pg-mem";
 import {
   SCHEMA_VERSION,
   normalizeEventRequestToSpec,
@@ -58,7 +59,7 @@ function createDataRoot(): string {
 describe("catering agents platform", () => {
   it("normalizes manual text into the canonical AcceptedEventSpec", async () => {
     const dataRoot = createDataRoot();
-    const app = buildIntakeApp(new IntakeStore({ dataRoot }));
+    const app = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
 
     const response = await app.inject({
       method: "POST",
@@ -79,7 +80,7 @@ describe("catering agents platform", () => {
 
   it("creates an offer draft and promotes a structured variant", async () => {
     const dataRoot = createDataRoot();
-    const app = buildOfferApp(new OfferStore({ dataRoot }));
+    const app = buildOfferApp(new OfferStore({ rootDir: dataRoot }));
     const request = baseEventRequest(
       "Meeting am 2026-06-03 fuer 35 Teilnehmer mit Kaffeepause und Croissants."
     );
@@ -134,7 +135,7 @@ describe("catering agents platform", () => {
 
   it("falls back to internet recipes and auto-uses high confidence results", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { dataRoot });
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/tomato-soup",
@@ -224,7 +225,7 @@ describe("catering agents platform", () => {
 
   it("marks low confidence internet recipes as partial and review-required", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { dataRoot });
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/weak-recipe",
@@ -299,7 +300,7 @@ describe("catering agents platform", () => {
 
   it("persists intake specs and requests across app restarts", async () => {
     const dataRoot = createDataRoot();
-    const firstApp = buildIntakeApp(new IntakeStore({ dataRoot }));
+    const firstApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
 
     const createResponse = await firstApp.inject({
       method: "POST",
@@ -312,7 +313,7 @@ describe("catering agents platform", () => {
     const body = createResponse.json();
     await firstApp.close();
 
-    const restartedApp = buildIntakeApp(new IntakeStore({ dataRoot }));
+    const restartedApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
     const listSpecsResponse = await restartedApp.inject({
       method: "GET",
       url: "/v1/intake/specs"
@@ -335,7 +336,7 @@ describe("catering agents platform", () => {
 
   it("persists offer drafts across app restarts and exposes list endpoints", async () => {
     const dataRoot = createDataRoot();
-    const firstApp = buildOfferApp(new OfferStore({ dataRoot }));
+    const firstApp = buildOfferApp(new OfferStore({ rootDir: dataRoot }));
 
     const createResponse = await firstApp.inject({
       method: "POST",
@@ -348,7 +349,7 @@ describe("catering agents platform", () => {
     const draft = createResponse.json();
     await firstApp.close();
 
-    const restartedApp = buildOfferApp(new OfferStore({ dataRoot }));
+    const restartedApp = buildOfferApp(new OfferStore({ rootDir: dataRoot }));
     const listResponse = await restartedApp.inject({
       method: "GET",
       url: "/v1/offers/drafts"
@@ -366,8 +367,8 @@ describe("catering agents platform", () => {
 
   it("persists production plans, purchase lists, and discovered recipes across restarts", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { dataRoot });
-    const store = new ProductionStore({ dataRoot });
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/lentil-stew",
@@ -468,5 +469,132 @@ describe("catering agents platform", () => {
     expect(detailResponse.json().planId).toBe(created.productionPlan.planId);
     await restartedApp.close();
     rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("supports PostgreSQL-backed persistence across services", async () => {
+    const db = newDb();
+    const { Pool } = db.adapters.createPg();
+    const pool = new Pool();
+
+    const intakeApp = buildIntakeApp(new IntakeStore({ pgPool: pool }));
+    const intakeResponse = await intakeApp.inject({
+      method: "POST",
+      url: "/v1/intake/normalize",
+      payload: {
+        text: "Universitaetskonferenz am 2026-07-01 fuer 80 Teilnehmer mit Linseneintopf und Kaffee."
+      }
+    });
+    const acceptedEventSpec = intakeResponse.json().acceptedEventSpec;
+    await intakeApp.close();
+
+    const offerApp = buildOfferApp(new OfferStore({ pgPool: pool }));
+    await offerApp.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      payload: {
+        text: "Empfang am 2026-07-04 fuer 50 Teilnehmer mit Flying Bites und Aperitif."
+      }
+    });
+    const offerListResponse = await offerApp.inject({
+      method: "GET",
+      url: "/v1/offers/drafts"
+    });
+    expect(offerListResponse.json().items).toHaveLength(1);
+    await offerApp.close();
+
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/lentil-stew-pg",
+        title: "Linseneintopf Rezept",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Linseneintopf Rezept",
+          baseYield: {
+            servings: 12,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "lentils",
+              name: "Lentils",
+              quantity: {
+                amount: 1.5,
+                unit: "kg"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "kg"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Cook lentils slowly."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 12
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 9,
+          stepCount: 5,
+          mappedIngredientRatio: 0.95
+        }
+      }
+    ]);
+    const repository = new InMemoryRecipeRepository([], { pgPool: pool });
+    const productionApp = buildProductionApp({
+      repository,
+      store: new ProductionStore({ pgPool: pool }),
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      pgPool: pool
+    });
+    const productionResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: acceptedEventSpec
+      }
+    });
+    expect(productionResponse.statusCode).toBe(201);
+    await productionApp.close();
+
+    const restartedIntakeApp = buildIntakeApp(new IntakeStore({ pgPool: pool }));
+    const restartedOfferApp = buildOfferApp(new OfferStore({ pgPool: pool }));
+    const restartedProductionApp = buildProductionApp({
+      pgPool: pool
+    });
+
+    expect(
+      (await restartedIntakeApp.inject({ method: "GET", url: "/v1/intake/specs" })).json().items
+    ).toHaveLength(1);
+    expect(
+      (await restartedOfferApp.inject({ method: "GET", url: "/v1/offers/drafts" })).json().items
+    ).toHaveLength(1);
+    expect(
+      (await restartedProductionApp.inject({ method: "GET", url: "/v1/production/plans" })).json().items
+    ).toHaveLength(1);
+    expect(
+      (
+        await restartedProductionApp.inject({
+          method: "GET",
+          url: "/v1/production/recipes"
+        })
+      )
+        .json()
+        .items.some((item: { source: { tier: string } }) => item.source.tier === "internet_fallback")
+    ).toBe(true);
+
+    await restartedIntakeApp.close();
+    await restartedOfferApp.close();
+    await restartedProductionApp.close();
+    await pool.end();
   });
 });

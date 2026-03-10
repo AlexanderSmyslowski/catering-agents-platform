@@ -74,11 +74,17 @@ export class RecipeDiscoveryService {
     component: MenuComponent,
     eventSpec: AcceptedEventSpec
   ): Promise<RecipeResolution> {
-    const internalCandidates = this.repository.findCandidates(component).sort((left, right) => {
-      const leftScore = tierWeight[left.source.tier] + fitScoreForRecipe(left.name, component, eventSpec);
-      const rightScore = tierWeight[right.source.tier] + fitScoreForRecipe(right.name, component, eventSpec);
-      return rightScore - leftScore;
-    });
+    const internalCandidates = (await this.repository.findCandidates(component)).sort(
+      (left, right) => {
+        const leftScore =
+          tierWeight[left.source.tier] +
+          fitScoreForRecipe(left.name, component, eventSpec);
+        const rightScore =
+          tierWeight[right.source.tier] +
+          fitScoreForRecipe(right.name, component, eventSpec);
+        return rightScore - leftScore;
+      }
+    );
 
     const internalWinner = internalCandidates[0];
     if (internalWinner) {
@@ -163,7 +169,7 @@ export class RecipeDiscoveryService {
       };
     }
 
-    this.repository.save(winner.recipe);
+    await this.repository.save(winner.recipe);
 
     const unresolvedItems =
       winner.recipe.source.approvalState === "review_required"
@@ -189,4 +195,3 @@ export class RecipeDiscoveryService {
     };
   }
 }
-

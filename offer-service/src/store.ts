@@ -1,25 +1,32 @@
-import { FileBackedCollection, type OfferDraft } from "@catering/shared-core";
+import {
+  createPersistentCollection,
+  type CollectionStorageOptions,
+  type PersistentCollection,
+  type OfferDraft
+} from "@catering/shared-core";
 
 export class OfferStore {
-  private readonly drafts: FileBackedCollection<OfferDraft>;
+  private readonly drafts: PersistentCollection<OfferDraft>;
 
-  constructor(options?: { dataRoot?: string }) {
-    this.drafts = new FileBackedCollection({
+  constructor(options?: CollectionStorageOptions) {
+    this.drafts = createPersistentCollection<OfferDraft>({
       collectionName: "offers/drafts",
       getId: (draft) => draft.draftId,
-      rootDir: options?.dataRoot
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
     });
   }
 
-  saveDraft(draft: OfferDraft): void {
-    this.drafts.set(draft);
+  async saveDraft(draft: OfferDraft): Promise<void> {
+    await this.drafts.set(draft);
   }
 
-  getDraft(draftId: string): OfferDraft | undefined {
+  async getDraft(draftId: string): Promise<OfferDraft | undefined> {
     return this.drafts.get(draftId);
   }
 
-  listDrafts(): OfferDraft[] {
+  async listDrafts(): Promise<OfferDraft[]> {
     return this.drafts.list();
   }
 }

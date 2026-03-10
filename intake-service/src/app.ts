@@ -40,7 +40,7 @@ export function buildIntakeApp(store = new IntakeStore()) {
               rawText: body.text
             });
 
-      store.saveRequest(eventRequest);
+      await store.saveRequest(eventRequest);
       const spec = validateAcceptedEventSpec(
         normalizeEventRequestToSpec(eventRequest, {
           sourceType:
@@ -54,7 +54,7 @@ export function buildIntakeApp(store = new IntakeStore()) {
         })
       );
 
-      store.saveSpec(spec);
+      await store.saveSpec(spec);
       return reply.code(201).send({
         eventRequest,
         acceptedEventSpec: spec
@@ -101,8 +101,8 @@ export function buildIntakeApp(store = new IntakeStore()) {
       })
     );
 
-    store.saveRequest(validatedRequest);
-    store.saveSpec(spec);
+    await store.saveRequest(validatedRequest);
+    await store.saveSpec(spec);
 
     return reply.code(201).send({
       eventRequest: validatedRequest,
@@ -112,18 +112,18 @@ export function buildIntakeApp(store = new IntakeStore()) {
 
   app.get("/v1/intake/requests", async (_request, reply) => {
     return reply.send({
-      items: store.listRequests()
+      items: await store.listRequests()
     });
   });
 
   app.get("/v1/intake/specs", async (_request, reply) => {
     return reply.send({
-      items: store.listSpecs()
+      items: await store.listSpecs()
     });
   });
 
   app.get<{ Params: { specId: string } }>("/v1/intake/specs/:specId", async (request, reply) => {
-    const spec = store.getSpec(request.params.specId);
+    const spec = await store.getSpec(request.params.specId);
     if (!spec) {
       return reply.code(404).send({ message: "AcceptedEventSpec not found." });
     }

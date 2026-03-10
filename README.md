@@ -22,6 +22,7 @@ npm test
 npm run dev:intake
 npm run dev:offer
 npm run dev:production
+npm run dev:ui
 ```
 
 Standardmaessig speichern die Services ihre Laufzeitdaten unter `./data`.
@@ -30,6 +31,24 @@ Auf Servern sollte dafuer ein persistentes Verzeichnis gesetzt werden:
 ```bash
 export CATERING_DATA_ROOT=/var/lib/catering-agents
 ```
+
+Fuer PostgreSQL statt Dateispeicher:
+
+```bash
+export CATERING_DATABASE_URL=postgresql://user:password@localhost:5432/catering_agents
+```
+
+Die interne Web-App laeuft im Dev-Modus ueber Vite auf Port `3200` und proxied standardmaessig auf:
+
+- `http://localhost:3101` fuer Intake
+- `http://localhost:3102` fuer Offers
+- `http://localhost:3103` fuer Production
+
+Optional konfigurierbar ueber:
+
+- `VITE_INTAKE_PROXY_TARGET`
+- `VITE_OFFERS_PROXY_TARGET`
+- `VITE_PRODUCTION_PROXY_TARGET`
 
 ## Checkpoints
 
@@ -49,5 +68,5 @@ npm run checkpoint -- <kurzname> --push
 
 - Deployment-Empfehlung fuer den MVP: Hetzner-VM als interne Plattform mit HTTPS-Reverse-Proxy, Web-App fuer Mitarbeiter und getrennten API-Services.
 - Zugriff fuer Angebots-Ersteller und Kuechenplanung erfolgt ueber die interne Web-App, nicht direkt per Shell auf dem Server.
-- Intake-, Angebots-, Produktions- und Rezeptdaten werden im MVP dateibasiert persistiert und ueberstehen Server-Neustarts.
+- Intake-, Angebots-, Produktions- und Rezeptdaten werden im MVP entweder dateibasiert oder ueber PostgreSQL persistiert und ueberstehen Server-Neustarts.
 - GitHub- und Checkpoint-Strategie siehe [docs/deployment-and-versioning.md](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/docs/deployment-and-versioning.md).

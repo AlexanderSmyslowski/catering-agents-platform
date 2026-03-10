@@ -1,47 +1,53 @@
 import {
-  FileBackedCollection,
+  createPersistentCollection,
+  type CollectionStorageOptions,
+  type PersistentCollection,
   type ProductionPlan,
   type PurchaseList
 } from "@catering/shared-core";
 
 export class ProductionStore {
-  private readonly plans: FileBackedCollection<ProductionPlan>;
-  private readonly purchaseLists: FileBackedCollection<PurchaseList>;
+  private readonly plans: PersistentCollection<ProductionPlan>;
+  private readonly purchaseLists: PersistentCollection<PurchaseList>;
 
-  constructor(options?: { dataRoot?: string }) {
-    this.plans = new FileBackedCollection({
+  constructor(options?: CollectionStorageOptions) {
+    this.plans = createPersistentCollection<ProductionPlan>({
       collectionName: "production/plans",
       getId: (plan) => plan.planId,
-      rootDir: options?.dataRoot
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
     });
-    this.purchaseLists = new FileBackedCollection({
+    this.purchaseLists = createPersistentCollection<PurchaseList>({
       collectionName: "production/purchase-lists",
       getId: (list) => list.purchaseListId,
-      rootDir: options?.dataRoot
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
     });
   }
 
-  savePlan(plan: ProductionPlan): void {
-    this.plans.set(plan);
+  async savePlan(plan: ProductionPlan): Promise<void> {
+    await this.plans.set(plan);
   }
 
-  getPlan(planId: string): ProductionPlan | undefined {
+  async getPlan(planId: string): Promise<ProductionPlan | undefined> {
     return this.plans.get(planId);
   }
 
-  savePurchaseList(list: PurchaseList): void {
-    this.purchaseLists.set(list);
+  async savePurchaseList(list: PurchaseList): Promise<void> {
+    await this.purchaseLists.set(list);
   }
 
-  getPurchaseList(listId: string): PurchaseList | undefined {
+  async getPurchaseList(listId: string): Promise<PurchaseList | undefined> {
     return this.purchaseLists.get(listId);
   }
 
-  listPlans(): ProductionPlan[] {
+  async listPlans(): Promise<ProductionPlan[]> {
     return this.plans.list();
   }
 
-  listPurchaseLists(): PurchaseList[] {
+  async listPurchaseLists(): Promise<PurchaseList[]> {
     return this.purchaseLists.list();
   }
 }

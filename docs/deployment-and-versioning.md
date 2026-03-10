@@ -16,6 +16,17 @@ Aktueller MVP-Stand:
 - Laufzeitdaten werden dateibasiert unter `CATERING_DATA_ROOT` gespeichert
 - ohne gesetzte Umgebungsvariable wird lokal `./data` verwendet
 - dadurch bleiben Intake-Vorgaenge, Angebotsentwuerfe, Produktionsplaene, Einkaufslisten und recherchierte Rezepte nach Neustarts erhalten
+- alternativ kann `CATERING_DATABASE_URL` gesetzt werden; dann nutzen alle Services PostgreSQL mit JSONB-Persistenz
+- die interne Web-App ist als Vite-Frontend angebunden und spricht die Service-APIs ueber Reverse-Proxy-Pfade an
+
+Empfohlene Hetzner-MVP-Topologie:
+
+- Nginx oder Caddy terminiert HTTPS
+- `/api/intake` -> `intake-service`
+- `/api/offers` -> `offer-service`
+- `/api/production` -> `production-service`
+- `/` -> gebaute `backoffice-ui`
+- PostgreSQL auf derselben VM oder als separater Hetzner-Dienst
 
 Das ist sinnvoll, weil:
 
