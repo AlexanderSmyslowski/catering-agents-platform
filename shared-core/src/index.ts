@@ -1,4 +1,5 @@
 export * from "./fixtures/sample-data.js";
+export * from "./persistence.js";
 export * from "./rules/normalization.js";
 export * from "./rules/offer.js";
 export * from "./rules/purchasing.js";

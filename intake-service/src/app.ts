@@ -110,6 +110,18 @@ export function buildIntakeApp(store = new IntakeStore()) {
     });
   });
 
+  app.get("/v1/intake/requests", async (_request, reply) => {
+    return reply.send({
+      items: store.listRequests()
+    });
+  });
+
+  app.get("/v1/intake/specs", async (_request, reply) => {
+    return reply.send({
+      items: store.listSpecs()
+    });
+  });
+
   app.get<{ Params: { specId: string } }>("/v1/intake/specs/:specId", async (request, reply) => {
     const spec = store.getSpec(request.params.specId);
     if (!spec) {
@@ -121,4 +133,3 @@ export function buildIntakeApp(store = new IntakeStore()) {
 
   return app;
 }
-

@@ -10,14 +10,23 @@ export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
   discoveryService?: RecipeDiscoveryService;
   store?: ProductionStore;
+  dataRoot?: string;
 }
 
 export function buildProductionApp(options: ProductionAppOptions = {}) {
-  const repository = options.repository ?? new InMemoryRecipeRepository();
+  const repository =
+    options.repository ??
+    new InMemoryRecipeRepository(undefined, {
+      dataRoot: options.dataRoot
+    });
   const discoveryService =
     options.discoveryService ??
     new RecipeDiscoveryService(repository, new DuckDuckGoRecipeSearchProvider());
-  const store = options.store ?? new ProductionStore();
+  const store =
+    options.store ??
+    new ProductionStore({
+      dataRoot: options.dataRoot
+    });
 
   const app = Fastify({
     logger: false
@@ -29,6 +38,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     store.savePlan(artifacts.productionPlan);
     store.savePurchaseList(artifacts.purchaseList);
     return reply.code(201).send(artifacts);
+  });
+
+  app.get("/v1/production/plans", async (_request, reply) => {
+    return reply.send({
+      items: store.listPlans()
+    });
   });
 
   app.get<{ Params: { planId: string } }>("/v1/production/plans/:planId", async (request, reply) => {
@@ -52,6 +67,17 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     }
   );
 
+  app.get("/v1/production/purchase-lists", async (_request, reply) => {
+    return reply.send({
+      items: store.listPurchaseLists()
+    });
+  });
+
+  app.get("/v1/production/recipes", async (_request, reply) => {
+    return reply.send({
+      items: repository.list()
+    });
+  });
+
   return app;
 }
-

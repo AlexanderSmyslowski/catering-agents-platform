@@ -21,6 +21,12 @@ export function buildOfferApp(store = new OfferStore()) {
     return reply.code(201).send(draft);
   });
 
+  app.get("/v1/offers/drafts", async (_request, reply) => {
+    return reply.send({
+      items: store.listDrafts()
+    });
+  });
+
   app.get<{ Params: { draftId: string } }>("/v1/offers/drafts/:draftId", async (request, reply) => {
     const draft = store.getDraft(request.params.draftId);
     if (!draft) {
@@ -48,4 +54,3 @@ export function buildOfferApp(store = new OfferStore()) {
 
   return app;
 }
-

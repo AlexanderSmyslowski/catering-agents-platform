@@ -11,6 +11,12 @@ Empfohlene Aufteilung:
 - PostgreSQL, Redis und Objektspeicher im selben privaten Netz oder auf derselben VM
 - Reverse Proxy mit HTTPS und Authentifizierung vor allen UIs und APIs
 
+Aktueller MVP-Stand:
+
+- Laufzeitdaten werden dateibasiert unter `CATERING_DATA_ROOT` gespeichert
+- ohne gesetzte Umgebungsvariable wird lokal `./data` verwendet
+- dadurch bleiben Intake-Vorgaenge, Angebotsentwuerfe, Produktionsplaene, Einkaufslisten und recherchierte Rezepte nach Neustarts erhalten
+
 Das ist sinnvoll, weil:
 
 - beide Rollen dieselbe Plattform im Browser nutzen koennen

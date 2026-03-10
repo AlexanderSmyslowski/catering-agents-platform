@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   SCHEMA_VERSION,
@@ -7,11 +10,14 @@ import {
   type RecipeSearchQuery,
   type WebRecipeCandidate
 } from "@catering/shared-core";
-import { buildIntakeApp } from "@catering/intake-service";
-import { buildOfferApp } from "@catering/offer-service";
-import { buildProductionApp } from "@catering/production-service";
-import { InMemoryRecipeRepository } from "@catering/production-service";
-import { RecipeDiscoveryService } from "@catering/production-service";
+import { IntakeStore, buildIntakeApp } from "@catering/intake-service";
+import { OfferStore, buildOfferApp } from "@catering/offer-service";
+import {
+  InMemoryRecipeRepository,
+  ProductionStore,
+  RecipeDiscoveryService,
+  buildProductionApp
+} from "@catering/production-service";
 import type { WebRecipeSearchProvider } from "@catering/production-service";
 
 class FakeWebProvider implements WebRecipeSearchProvider {
@@ -45,9 +51,14 @@ function specWithComponent(label: string): AcceptedEventSpec {
   );
 }
 
+function createDataRoot(): string {
+  return mkdtempSync(path.join(tmpdir(), "catering-agents-"));
+}
+
 describe("catering agents platform", () => {
   it("normalizes manual text into the canonical AcceptedEventSpec", async () => {
-    const app = buildIntakeApp();
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp(new IntakeStore({ dataRoot }));
 
     const response = await app.inject({
       method: "POST",
@@ -62,10 +73,13 @@ describe("catering agents platform", () => {
     expect(body.acceptedEventSpec.servicePlan.eventType).toBe("conference");
     expect(body.acceptedEventSpec.attendees.expected).toBe(120);
     expect(body.acceptedEventSpec.readiness.status).toBe("complete");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
   });
 
   it("creates an offer draft and promotes a structured variant", async () => {
-    const app = buildOfferApp();
+    const dataRoot = createDataRoot();
+    const app = buildOfferApp(new OfferStore({ dataRoot }));
     const request = baseEventRequest(
       "Meeting am 2026-06-03 fuer 35 Teilnehmer mit Kaffeepause und Croissants."
     );
@@ -93,10 +107,13 @@ describe("catering agents platform", () => {
     const spec = promoteResponse.json();
     expect(spec.sourceLineage[0].sourceType).toBe("offer_service");
     expect(spec.servicePlan.modules.length).toBeGreaterThan(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
   });
 
   it("builds a production plan from the independent intake path using internal recipes", async () => {
-    const app = buildProductionApp();
+    const dataRoot = createDataRoot();
+    const app = buildProductionApp({ dataRoot });
     const spec = specWithComponent("Filterkaffee Station");
 
     const response = await app.inject({
@@ -111,10 +128,13 @@ describe("catering agents platform", () => {
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_verified");
     expect(body.purchaseList.items.length).toBeGreaterThan(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
   });
 
   it("falls back to internet recipes and auto-uses high confidence results", async () => {
-    const repository = new InMemoryRecipeRepository([]);
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/tomato-soup",
@@ -180,7 +200,8 @@ describe("catering agents platform", () => {
     const discovery = new RecipeDiscoveryService(repository, provider);
     const app = buildProductionApp({
       repository,
-      discoveryService: discovery
+      discoveryService: discovery,
+      dataRoot
     });
     const spec = specWithComponent("Tomatensuppe");
 
@@ -197,10 +218,13 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internet_fallback");
     expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(true);
     expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
   });
 
   it("marks low confidence internet recipes as partial and review-required", async () => {
-    const repository = new InMemoryRecipeRepository([]);
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/weak-recipe",
@@ -251,7 +275,8 @@ describe("catering agents platform", () => {
     const discovery = new RecipeDiscoveryService(repository, provider);
     const app = buildProductionApp({
       repository,
-      discoveryService: discovery
+      discoveryService: discovery,
+      dataRoot
     });
     const spec = specWithComponent("Mystery Bowl");
 
@@ -268,5 +293,180 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
     expect(body.productionPlan.readiness.status).toBe("partial");
     expect(body.productionPlan.unresolvedItems[0]).toContain("requires manual review");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists intake specs and requests across app restarts", async () => {
+    const dataRoot = createDataRoot();
+    const firstApp = buildIntakeApp(new IntakeStore({ dataRoot }));
+
+    const createResponse = await firstApp.inject({
+      method: "POST",
+      url: "/v1/intake/normalize",
+      payload: {
+        text: "Konferenz am 2026-05-12 fuer 45 Teilnehmer mit Tomatensuppe und Buffet."
+      }
+    });
+
+    const body = createResponse.json();
+    await firstApp.close();
+
+    const restartedApp = buildIntakeApp(new IntakeStore({ dataRoot }));
+    const listSpecsResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/intake/specs"
+    });
+    const listRequestsResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/intake/requests"
+    });
+    const detailResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/intake/specs/${body.acceptedEventSpec.specId}`
+    });
+
+    expect(listSpecsResponse.json().items).toHaveLength(1);
+    expect(listRequestsResponse.json().items).toHaveLength(1);
+    expect(detailResponse.json().specId).toBe(body.acceptedEventSpec.specId);
+    await restartedApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists offer drafts across app restarts and exposes list endpoints", async () => {
+    const dataRoot = createDataRoot();
+    const firstApp = buildOfferApp(new OfferStore({ dataRoot }));
+
+    const createResponse = await firstApp.inject({
+      method: "POST",
+      url: "/v1/offers/drafts",
+      payload: baseEventRequest(
+        "Lunch am 2026-06-10 fuer 70 Teilnehmer mit Buffet und Dessert."
+      )
+    });
+
+    const draft = createResponse.json();
+    await firstApp.close();
+
+    const restartedApp = buildOfferApp(new OfferStore({ dataRoot }));
+    const listResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/offers/drafts"
+    });
+    const detailResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/offers/drafts/${draft.draftId}`
+    });
+
+    expect(listResponse.json().items).toHaveLength(1);
+    expect(detailResponse.json().draftId).toBe(draft.draftId);
+    await restartedApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists production plans, purchase lists, and discovered recipes across restarts", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { dataRoot });
+    const store = new ProductionStore({ dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/lentil-stew",
+        title: "Linseneintopf Rezept",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Linseneintopf Rezept",
+          baseYield: {
+            servings: 12,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "lentils",
+              name: "Lentils",
+              quantity: {
+                amount: 1.5,
+                unit: "kg"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "kg"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Cook lentils gently until tender."
+            },
+            {
+              index: 2,
+              instruction: "Season and hold warm for service."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 12
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 10,
+          stepCount: 5,
+          mappedIngredientRatio: 0.95
+        }
+      }
+    ]);
+    const discovery = new RecipeDiscoveryService(repository, provider);
+    const firstApp = buildProductionApp({
+      repository,
+      discoveryService: discovery,
+      store,
+      dataRoot
+    });
+
+    const createResponse = await firstApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: specWithComponent("Linseneintopf")
+      }
+    });
+
+    const created = createResponse.json();
+    await firstApp.close();
+
+    const restartedApp = buildProductionApp({
+      dataRoot
+    });
+    const plansResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/production/plans"
+    });
+    const purchaseListsResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/production/purchase-lists"
+    });
+    const recipesResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/production/recipes"
+    });
+    const detailResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/production/plans/${created.productionPlan.planId}`
+    });
+
+    expect(plansResponse.json().items).toHaveLength(1);
+    expect(purchaseListsResponse.json().items).toHaveLength(1);
+    expect(
+      recipesResponse
+        .json()
+        .items.some((item: { source: { tier: string } }) => item.source.tier === "internet_fallback")
+    ).toBe(true);
+    expect(detailResponse.json().planId).toBe(created.productionPlan.planId);
+    await restartedApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
   });
 });

@@ -1,5 +1,9 @@
 import type { MenuComponent, Recipe } from "@catering/shared-core";
-import { internalRecipes, validateRecipe } from "@catering/shared-core";
+import {
+  FileBackedCollection,
+  internalRecipes,
+  validateRecipe
+} from "@catering/shared-core";
 
 function normalize(value: string): string[] {
   return value
@@ -16,16 +20,21 @@ function overlapScore(left: string, right: string): number {
 }
 
 export class InMemoryRecipeRepository {
-  private readonly recipes = new Map<string, Recipe>();
+  private readonly recipes: FileBackedCollection<Recipe>;
 
-  constructor(seed: Recipe[] = internalRecipes) {
-    for (const recipe of seed) {
-      this.recipes.set(recipe.recipeId, validateRecipe(recipe));
-    }
+  constructor(seed: Recipe[] | undefined = internalRecipes, options?: { dataRoot?: string }) {
+    this.recipes = new FileBackedCollection({
+      collectionName: "production/recipes",
+      getId: (recipe) => recipe.recipeId,
+      validate: validateRecipe,
+      rootDir: options?.dataRoot,
+      seed: seed ?? internalRecipes
+    });
   }
 
   findCandidates(component: MenuComponent): Recipe[] {
-    return [...this.recipes.values()]
+    return this.recipes
+      .list()
       .map((recipe) => ({
         recipe,
         score: overlapScore(component.label, recipe.name)
@@ -36,11 +45,10 @@ export class InMemoryRecipeRepository {
   }
 
   save(recipe: Recipe): void {
-    this.recipes.set(recipe.recipeId, validateRecipe(recipe));
+    this.recipes.set(recipe);
   }
 
   list(): Recipe[] {
-    return [...this.recipes.values()];
+    return this.recipes.list();
   }
 }
-
