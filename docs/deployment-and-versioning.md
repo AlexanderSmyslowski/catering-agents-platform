@@ -49,6 +49,18 @@ Namensschema fuer stabile Zwischenversionen:
 - Tag-Format: `checkpoint-YYYYMMDD-N-kurzname`
 - Beispiel: `checkpoint-20260310-1-mvp-foundation`
 
+Im Repo ist dafuer ein Helfer hinterlegt:
+
+```bash
+npm run checkpoint -- <kurzname>
+```
+
+Mit Push:
+
+```bash
+npm run checkpoint -- <kurzname> --push
+```
+
 Was zu jedem Checkpoint gehoert:
 
 - lauffaehiger Build
@@ -79,3 +91,12 @@ Sobald ein GitHub-Repository angelegt ist:
 3. Tags pushen
 4. spaeter fuer jeden stabilen Meilenstein neuen Checkpoint-Tag setzen
 
+## Praktischer Ablauf im Repo
+
+Der Script-Workflow macht automatisch:
+
+- `npm run build`
+- `npm test`
+- Ermittlung der naechsten Checkpoint-Nummer fuer den aktuellen Tag
+- Erstellung eines annotierten Git-Tags
+- optional Push von Branch und Tag

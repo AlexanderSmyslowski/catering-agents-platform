@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",
+    "checkpoint": "bash ./scripts/create-checkpoint.sh",
     "dev:intake": "tsx intake-service/src/server.ts",
     "dev:offer": "tsx offer-service/src/server.ts",
     "dev:production": "tsx production-service/src/server.ts"

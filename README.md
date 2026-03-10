@@ -24,6 +24,20 @@ npm run dev:offer
 npm run dev:production
 ```
 
+## Checkpoints
+
+Einen reproduzierbaren Zwischenstand erzeugst du mit:
+
+```bash
+npm run checkpoint -- <kurzname>
+```
+
+Optional direkt mit Push:
+
+```bash
+npm run checkpoint -- <kurzname> --push
+```
+
 ## Betrieb und Versionierung
 
 - Deployment-Empfehlung fuer den MVP: Hetzner-VM als interne Plattform mit HTTPS-Reverse-Proxy, Web-App fuer Mitarbeiter und getrennten API-Services.
