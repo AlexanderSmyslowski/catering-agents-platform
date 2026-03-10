@@ -1,0 +1,81 @@
+# Deployment und Versionierung
+
+## Hetzner fuer den MVP
+
+Ja, fuer dieses Projekt macht ein Hetzner-Server im MVP Sinn, wenn die Plattform intern genutzt wird und Datenschutz, Kostenkontrolle und EU-Hosting wichtig sind.
+
+Empfohlene Aufteilung:
+
+- `backoffice-ui` als zentrale Web-Oberflaeche fuer Angebots-Ersteller und Produktionsplaner
+- `intake-service`, `offer-service`, `production-service` als interne HTTP-Services
+- PostgreSQL, Redis und Objektspeicher im selben privaten Netz oder auf derselben VM
+- Reverse Proxy mit HTTPS und Authentifizierung vor allen UIs und APIs
+
+Das ist sinnvoll, weil:
+
+- beide Rollen dieselbe Plattform im Browser nutzen koennen
+- niemand direkten Shell-Zugriff auf den Server braucht
+- die Agenten zentral mit denselben Stammdaten, Logs und Rezeptquellen arbeiten
+- Hetzner fuer einen internen MVP genug Leistung bei ueberschaubaren Kosten bietet
+
+## Zugriff fuer verschiedene Personen
+
+Empfohlener Betriebsmodus:
+
+- Angebots-Ersteller oeffnen die Web-App und arbeiten im Bereich `Offer Workspace`
+- Kueche / Produktionsplanung oeffnet dieselbe Web-App im Bereich `Production Control`
+- Intake- und Review-Masken liegen ebenfalls in derselben internen Anwendung
+- Rollen und Rechte werden in der App und vor dem Reverse Proxy geregelt
+
+Nicht empfohlen:
+
+- gemeinsame Nutzung eines Terminalzugangs
+- lokale Einzelinstallationen pro Mitarbeiter
+- direkter Aufruf einzelner Services ohne UI und Rechtekonzept
+
+## GitHub-Strategie
+
+Das Projekt sollte als Git-Repository lokal entwickelt und auf GitHub gespiegelt werden.
+
+Empfohlener Ablauf:
+
+- `main` enthaelt nur stabile, nachvollziehbare Zwischenstaende
+- Arbeitsbranches bekommen das Prefix `codex/`
+- jeder fachlich stabile Schritt wird mit Commit und Git-Tag markiert
+- Tags bilden reproduzierbare Checkpoints
+
+Namensschema fuer stabile Zwischenversionen:
+
+- Tag-Format: `checkpoint-YYYYMMDD-N-kurzname`
+- Beispiel: `checkpoint-20260310-1-mvp-foundation`
+
+Was zu jedem Checkpoint gehoert:
+
+- lauffaehiger Build
+- gruene Tests
+- kurzer Change-Summary im Commit
+
+## Reproduzierbarkeit
+
+Fuer reproduzierbare Zwischenstaende gilt:
+
+- jeder Checkpoint muss `npm run build` und `npm test` erfolgreich bestehen
+- relevante Architekturentscheidungen werden in `docs/` festgehalten
+- spaetere Datenimporte und Stammdaten-Bootstrap-Skripte werden versioniert im Repo abgelegt
+
+## GitHub Actions
+
+Im Repo ist eine einfache CI vorgesehen:
+
+- bei Push und Pull Request werden Build und Tests ausgefuehrt
+- damit ist jeder Checkpoint auf GitHub nachvollziehbar pruefbar
+
+## Naechster praktischer Schritt
+
+Sobald ein GitHub-Repository angelegt ist:
+
+1. lokalen Remote `origin` setzen
+2. `main` pushen
+3. Tags pushen
+4. spaeter fuer jeden stabilen Meilenstein neuen Checkpoint-Tag setzen
+

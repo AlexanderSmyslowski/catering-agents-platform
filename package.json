@@ -1,0 +1,41 @@
+{
+  "name": "catering-agents-platform",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared-core",
+    "intake-service",
+    "offer-service",
+    "production-service",
+    "print-export",
+    "backoffice-ui"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run",
+    "dev:intake": "tsx intake-service/src/server.ts",
+    "dev:offer": "tsx offer-service/src/server.ts",
+    "dev:production": "tsx production-service/src/server.ts"
+  },
+  "dependencies": {
+    "@fastify/multipart": "^9.0.3",
+    "@mozilla/readability": "^0.6.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "fastify": "^5.6.1",
+    "jsdom": "^26.1.0",
+    "pdf-parse": "^1.1.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28.0.0",
+    "@types/node": "^24.3.0",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/react": "^19.1.11",
+    "@types/react-dom": "^19.1.7",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
