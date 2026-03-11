@@ -1,12 +1,14 @@
 import {
   aggregatePurchaseList,
   mergeReadiness,
+  procurementGroupFor,
   SCHEMA_VERSION,
   toProductionBatch,
   validateAcceptedEventSpec,
   validateProductionPlan,
   validatePurchaseList,
   type AcceptedEventSpec,
+  type PurchaseItem,
   type ProductionPlan,
   type PurchaseList
 } from "@catering/shared-core";
@@ -39,12 +41,77 @@ function gnPlanFor(servings: number): { container: string; count: number }[] {
   ];
 }
 
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function procurementItemsForComponent(
+  component: AcceptedEventSpec["menuPlan"][number],
+  servings: number
+): PurchaseItem[] {
+  const productionMode = component.productionDecision?.mode;
+  const purchasedElements = component.productionDecision?.purchasedElements ?? [];
+
+  if (productionMode === "hybrid") {
+    return purchasedElements.map((element, index) => ({
+      ingredientId: `proc-${slugify(component.componentId)}-${slugify(element)}-${index + 1}`,
+      displayName: `${element} für ${component.label}`,
+      normalizedQty: servings,
+      normalizedUnit: "portion",
+      purchaseQty: servings,
+      purchaseUnit: "portion",
+      group: procurementGroupFor(element),
+      supplierHint: "Metro Convenience",
+      sourceRecipes: [`procurement:${component.componentId}`],
+      mappingConfidence: 0.7
+    }));
+  }
+
+  if (productionMode === "convenience_purchase") {
+    return purchasedElements.map((element, index) => ({
+      ingredientId: `proc-${slugify(component.componentId)}-${slugify(element)}-${index + 1}`,
+      displayName: `${element} für ${component.label}`,
+      normalizedQty: servings,
+      normalizedUnit: "portion",
+      purchaseQty: servings,
+      purchaseUnit: "portion",
+      group: procurementGroupFor(element),
+      supplierHint: "Metro Convenience",
+      sourceRecipes: [`procurement:${component.componentId}`],
+      mappingConfidence: 0.7
+    }));
+  }
+
+  if (productionMode === "external_finished") {
+    return [
+      {
+        ingredientId: `proc-${slugify(component.componentId)}-finished`,
+        displayName: component.label,
+        normalizedQty: servings,
+        normalizedUnit: "portion",
+        purchaseQty: servings,
+        purchaseUnit: "portion",
+        group: procurementGroupFor(component.label),
+        supplierHint: "Metro / externer Lieferant",
+        sourceRecipes: [`procurement:${component.componentId}`],
+        mappingConfidence: 0.65
+      }
+    ];
+  }
+
+  return [];
+}
+
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
   discoveryService: RecipeDiscoveryService
 ): Promise<{ productionPlan: ProductionPlan; purchaseList: PurchaseList }> {
   const eventSpec = validateAcceptedEventSpec(eventSpecInput);
   const productionBatches: ProductionPlan["productionBatches"] = [];
+  const procurementItems: PurchaseItem[] = [];
   const kitchenSheets: ProductionPlan["kitchenSheets"] = [];
   const timeline: ProductionPlan["timeline"] = [];
   const recipeSelections: ProductionPlan["recipeSelections"] = [];
@@ -88,17 +155,19 @@ export async function buildProductionArtifacts(
     }
 
     if (productionMode === "convenience_purchase" || productionMode === "external_finished") {
+      procurementItems.push(...procurementItemsForComponent(component, servings));
       recipeSelections.push({
         componentId: component.componentId,
         selectionReason:
           productionMode === "convenience_purchase"
-            ? "Komponente ist als Convenience-Zukauf markiert und wird nicht über Rezeptlogik aufgelöst."
-            : "Komponente ist als Fertigprodukt markiert und wird nicht über Rezeptlogik aufgelöst.",
+            ? "Komponente ist als Convenience-Zukauf markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen."
+            : "Komponente ist als Fertigprodukt markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen.",
         autoUsedInternetRecipe: false
       });
-      unresolvedItems.push(`Beschaffungsmenge für ${component.label} manuell prüfen.`);
       continue;
     }
+
+    procurementItems.push(...procurementItemsForComponent(component, servings));
 
     const resolution = await discoveryService.resolveRecipe(component, eventSpec);
     recipeSelections.push(resolution.selection);
@@ -143,7 +212,7 @@ export async function buildProductionArtifacts(
   });
 
   const purchaseList = validatePurchaseList(
-    aggregatePurchaseList(eventSpec.specId, productionBatches)
+    aggregatePurchaseList(eventSpec.specId, productionBatches, procurementItems)
   );
 
   return {

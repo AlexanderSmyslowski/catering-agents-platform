@@ -443,6 +443,79 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("adds hybrid and convenience purchases to the purchase list", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildProductionApp({ dataRoot });
+    const baseSpec = normalizeEventRequestToSpec(
+      baseEventRequest(
+        "Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Filterkaffee Station und Brot & Baguette."
+      )
+    );
+
+    const spec: AcceptedEventSpec = {
+      ...baseSpec,
+      menuPlan: [
+        {
+          componentId: "filterkaffee-station-1",
+          label: "Filterkaffee Station",
+          course: "main",
+          menuCategory: "classic",
+          serviceStyle: "buffet",
+          desiredRecipeTags: ["conference"],
+          servings: 60,
+          dietaryTags: [],
+          productionDecision: {
+            mode: "hybrid",
+            purchasedElements: ["Kaffeefilter"]
+          }
+        },
+        {
+          componentId: "brot-baguette-2",
+          label: "BROT & BAGUETTE",
+          course: "main",
+          menuCategory: "classic",
+          serviceStyle: "buffet",
+          desiredRecipeTags: ["conference"],
+          servings: 60,
+          dietaryTags: [],
+          productionDecision: {
+            mode: "convenience_purchase",
+            purchasedElements: ["Baguette", "Brot"]
+          }
+        }
+      ]
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.readiness.status).toBe("complete");
+    expect(body.productionPlan.productionBatches.length).toBeGreaterThan(0);
+    expect(
+      body.productionPlan.recipeSelections.find(
+        (entry: { componentId: string }) => entry.componentId === "brot-baguette-2"
+      ).selectionReason
+    ).toContain("Einkaufsliste");
+    expect(
+      body.purchaseList.items.some((item: { displayName: string }) =>
+        item.displayName.includes("Kaffeefilter")
+      )
+    ).toBe(true);
+    expect(
+      body.purchaseList.items.some((item: { displayName: string }) => item.displayName.includes("Baguette"))
+    ).toBe(true);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("requires category and sourcing decisions before recipe resolution starts", async () => {
     const dataRoot = createDataRoot();
     const app = buildProductionApp({
