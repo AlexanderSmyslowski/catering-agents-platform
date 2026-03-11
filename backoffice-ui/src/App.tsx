@@ -15,8 +15,10 @@ import {
   loadDashboardState,
   loadServiceHealth,
   offerExportUrl,
+  persistOperatorName,
   productionExportUrl,
   purchaseListExportUrl,
+  readOperatorName,
   reviewRecipe,
   seedDemoData,
   uploadRecipeFile,
@@ -31,7 +33,8 @@ const emptyState: DashboardState = {
   offerDrafts: [],
   productionPlans: [],
   purchaseLists: [],
-  recipes: []
+  recipes: [],
+  auditEvents: []
 };
 
 const emptyHealth: ServiceHealthState = {
@@ -84,6 +87,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+  const [operatorName, setOperatorName] = useState(() => readOperatorName());
   const [intakeText, setIntakeText] = useState(
     "Konferenz am 2026-06-18 fuer 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
   );
@@ -144,6 +148,17 @@ export function App() {
       JSON.stringify(plan).toLowerCase().includes(query)
     );
   }, [dashboard.productionPlans, deferredSearch]);
+
+  const filteredAuditEvents = useMemo(() => {
+    const query = deferredSearch.trim().toLowerCase();
+    if (!query) {
+      return dashboard.auditEvents;
+    }
+
+    return dashboard.auditEvents.filter((entry) =>
+      JSON.stringify(entry).toLowerCase().includes(query)
+    );
+  }, [dashboard.auditEvents, deferredSearch]);
 
   async function handleIntakeSubmit() {
     setSubmitting(true);
@@ -246,6 +261,11 @@ export function App() {
     }
   }
 
+  function handleOperatorNameChange(value: string) {
+    const persisted = persistOperatorName(value);
+    setOperatorName(persisted);
+  }
+
   return (
     <DashboardShell title="Catering Operations Backoffice">
       <section className="hero-panel">
@@ -273,6 +293,10 @@ export function App() {
           <StatusCard
             title="Recipe Inventory"
             body={`${dashboard.recipes.length} recipes cached, including internet fallbacks.`}
+          />
+          <StatusCard
+            title="Audit Trail"
+            body={`${dashboard.auditEvents.length} recent actions with operator attribution.`}
           />
         </div>
         <div className="metrics-grid">
@@ -351,6 +375,12 @@ export function App() {
 
       <section className="toolbar">
         <input
+          className="operator-input"
+          placeholder="Operator name"
+          value={operatorName}
+          onChange={(event) => handleOperatorNameChange(event.target.value)}
+        />
+        <input
           className="search"
           placeholder="Filter specs, plans or drafts"
           value={search}
@@ -388,6 +418,25 @@ export function App() {
               </li>
             ))}
             {filteredSpecs.length === 0 ? <li>No specs yet.</li> : null}
+          </ul>
+        </article>
+
+        <article className="panel">
+          <header>
+            <p className="eyebrow">Audit Trail</p>
+            <h3>Recent operator actions across all services</h3>
+          </header>
+          <ul className="item-list compact">
+            {filteredAuditEvents.map((entry) => (
+              <li key={String(entry.auditId)}>
+                <strong>{String(entry.summary ?? entry.action ?? entry.auditId)}</strong>
+                <p className="helper-text">
+                  {String(entry.at ?? "-")} | {String((entry.actor as Record<string, unknown>)?.name ?? "-")} |{" "}
+                  {String(entry.action ?? "-")}
+                </p>
+              </li>
+            ))}
+            {filteredAuditEvents.length === 0 ? <li>No audit events yet.</li> : null}
           </ul>
         </article>
 

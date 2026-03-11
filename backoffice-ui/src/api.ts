@@ -5,6 +5,7 @@ export interface DashboardState {
   productionPlans: Array<Record<string, unknown>>;
   purchaseLists: Array<Record<string, unknown>>;
   recipes: Array<Record<string, unknown>>;
+  auditEvents: Array<Record<string, unknown>>;
 }
 
 export type RecipeUploadTarget = "offer" | "production";
@@ -24,13 +25,32 @@ export interface ServiceHealthState {
   exports: ServiceHealth;
 }
 
+const OPERATOR_NAME_STORAGE_KEY = "catering.operatorName";
+
+function getDefaultOperatorName(): string {
+  if (typeof window === "undefined") {
+    return "Backoffice Operator";
+  }
+
+  const stored = window.localStorage.getItem(OPERATOR_NAME_STORAGE_KEY)?.trim();
+  return stored || "Backoffice Operator";
+}
+
+function buildHeaders(initHeaders?: HeadersInit, includeJsonContentType = true): Headers {
+  const headers = new Headers(initHeaders);
+  if (includeJsonContentType && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+  if (!headers.has("x-actor-name")) {
+    headers.set("x-actor-name", getDefaultOperatorName());
+  }
+  return headers;
+}
+
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {})
-    },
-    ...init
+    ...init,
+    headers: buildHeaders(init?.headers)
   });
 
   if (!response.ok) {
@@ -41,14 +61,15 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
 }
 
 export async function loadDashboardState(): Promise<DashboardState> {
-  const [intakeRequests, acceptedSpecs, offerDrafts, productionPlans, purchaseLists, recipes] =
+  const [intakeRequests, acceptedSpecs, offerDrafts, productionPlans, purchaseLists, recipes, auditEvents] =
     await Promise.all([
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/requests"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/specs"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/offers/v1/offers/drafts"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/plans"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/purchase-lists"),
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/recipes")
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/recipes"),
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/audit/events?limit=30")
     ]);
 
   return {
@@ -57,7 +78,8 @@ export async function loadDashboardState(): Promise<DashboardState> {
     offerDrafts: offerDrafts.items,
     productionPlans: productionPlans.items,
     purchaseLists: purchaseLists.items,
-    recipes: recipes.items
+    recipes: recipes.items,
+    auditEvents: auditEvents.items
   };
 }
 
@@ -116,7 +138,8 @@ export async function uploadRecipeFile(
 
   const response = await fetch(endpoint, {
     method: "POST",
-    body: formData
+    body: formData,
+    headers: buildHeaders(undefined, false)
   });
 
   if (!response.ok) {
@@ -124,6 +147,18 @@ export async function uploadRecipeFile(
   }
 
   return (await response.json()) as { recipe: Record<string, unknown> };
+}
+
+export function readOperatorName(): string {
+  return getDefaultOperatorName();
+}
+
+export function persistOperatorName(name: string): string {
+  const trimmed = name.trim() || "Backoffice Operator";
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(OPERATOR_NAME_STORAGE_KEY, trimmed);
+  }
+  return trimmed;
 }
 
 export async function reviewRecipe(

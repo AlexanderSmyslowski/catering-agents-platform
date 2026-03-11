@@ -15,6 +15,20 @@ export type RecipeApprovalState =
   | "rejected";
 export type RecipeReviewDecision = "approve" | "verify" | "reject";
 
+export interface AuditEntry {
+  auditId: string;
+  at: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  actor: {
+    name: string;
+    source: string;
+  };
+  summary: string;
+  details?: Record<string, string | number | boolean | null | undefined>;
+}
+
 export interface Money {
   amount: number;
   currency: string;

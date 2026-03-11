@@ -1,6 +1,8 @@
 import Fastify, { type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import {
+  actorNameFromHeaders,
+  AuditLogStore,
   createEventRequestFromText,
   createOfferDraft,
   extractTextFromDocument,
@@ -31,6 +33,7 @@ interface RecipeReviewBody {
 export interface OfferAppOptions extends CollectionStorageOptions {
   store?: OfferStore;
   recipeLibrary?: RecipeLibrary;
+  auditLog?: AuditLogStore;
 }
 
 function isOfferStore(value: OfferStore | OfferAppOptions | undefined): value is OfferStore {
@@ -88,8 +91,16 @@ async function recipeImportFromMultipart(
   };
 }
 
+function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }) {
+  return {
+    name: actorNameFromHeaders(request.headers, "Offer Operator"),
+    source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
+  };
+}
+
 export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   const options = isOfferStore(input) ? { store: input } : input;
+  const storageOptions = isOfferStore(input) ? input.storageOptions : options;
   const store =
     options.store ??
     new OfferStore({
@@ -100,9 +111,16 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   const recipeLibrary =
     options.recipeLibrary ??
     new RecipeLibrary(undefined, {
-      rootDir: options.rootDir,
-      databaseUrl: options.databaseUrl,
-      pgPool: options.pgPool
+      rootDir: storageOptions?.rootDir,
+      databaseUrl: storageOptions?.databaseUrl,
+      pgPool: storageOptions?.pgPool
+    });
+  const auditLog =
+    options.auditLog ??
+    new AuditLogStore({
+      rootDir: storageOptions?.rootDir,
+      databaseUrl: storageOptions?.databaseUrl,
+      pgPool: storageOptions?.pgPool
     });
 
   const app = Fastify({
@@ -112,9 +130,10 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   app.register(multipart);
 
   app.get("/health", async (_request, reply) => {
-    const [drafts, recipes] = await Promise.all([
+    const [drafts, recipes, auditEvents] = await Promise.all([
       store.listDrafts(),
-      recipeLibrary.list()
+      recipeLibrary.list(),
+      auditLog.count()
     ]);
     return reply.send({
       service: "offer-service",
@@ -122,7 +141,8 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       timestamp: new Date().toISOString(),
       counts: {
         offerDrafts: drafts.length,
-        recipes: recipes.length
+        recipes: recipes.length,
+        auditEvents
       }
     });
   });
@@ -131,6 +151,18 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     const eventRequest = validateEventRequest(request.body);
     const draft = validateOfferDraft(createOfferDraft(eventRequest));
     await store.saveDraft(draft);
+    await auditLog.log({
+      action: "offer.draft_created",
+      entityType: "OfferDraft",
+      entityId: draft.draftId,
+      actor: actorForRequest(request),
+      summary: "Created offer draft from structured event request.",
+      details: {
+        requestId: eventRequest.requestId,
+        readiness: draft.proposedEventSpec.readiness.status,
+        variants: draft.variantSet.length
+      }
+    });
     return reply.code(201).send(draft);
   });
 
@@ -142,10 +174,22 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     });
     const draft = validateOfferDraft(createOfferDraft(eventRequest));
     await store.saveDraft(draft);
+    await auditLog.log({
+      action: "offer.draft_created_from_text",
+      entityType: "OfferDraft",
+      entityId: draft.draftId,
+      actor: actorForRequest(request),
+      summary: "Created offer draft from free text.",
+      details: {
+        requestId: eventRequest.requestId,
+        readiness: draft.proposedEventSpec.readiness.status,
+        variants: draft.variantSet.length
+      }
+    });
     return reply.code(201).send(draft);
   });
 
-  app.post("/v1/offers/seed-demo", async (_request, reply) => {
+  app.post("/v1/offers/seed-demo", async (request, reply) => {
     const seeded = [];
     for (const eventRequest of getDemoOfferRequests()) {
       const draft = validateOfferDraft(createOfferDraft(eventRequest));
@@ -155,6 +199,16 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         draftId: draft.draftId
       });
     }
+    await auditLog.log({
+      action: "offer.seed_demo",
+      entityType: "SeedBatch",
+      entityId: `offer-demo-${Date.now()}`,
+      actor: actorForRequest(request),
+      summary: `Seeded ${seeded.length} offer draft(s).`,
+      details: {
+        seededCount: seeded.length
+      }
+    });
 
     return reply.code(201).send({
       seeded,
@@ -188,6 +242,18 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   app.post<{ Body: RecipeTextImportBody }>("/v1/offers/recipes/import-text", async (request, reply) => {
     const recipe = parseUploadedRecipeText(request.body);
     await recipeLibrary.save(recipe);
+    await auditLog.log({
+      action: "recipe.imported_text",
+      entityType: "Recipe",
+      entityId: recipe.recipeId,
+      actor: actorForRequest(request),
+      summary: `Imported recipe text into shared library: ${recipe.name}.`,
+      details: {
+        recipeName: recipe.name,
+        sourceTier: recipe.source.tier,
+        approvalState: recipe.source.approvalState
+      }
+    });
     return reply.code(201).send({ recipe });
   });
 
@@ -195,6 +261,19 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     const payload = await recipeImportFromMultipart(request);
     const recipe = parseUploadedRecipeText(payload);
     await recipeLibrary.save(recipe);
+    await auditLog.log({
+      action: "recipe.uploaded_file",
+      entityType: "Recipe",
+      entityId: recipe.recipeId,
+      actor: actorForRequest(request),
+      summary: `Uploaded recipe file into shared library: ${recipe.name}.`,
+      details: {
+        recipeName: recipe.name,
+        filename: payload.filename,
+        sourceTier: recipe.source.tier,
+        approvalState: recipe.source.approvalState
+      }
+    });
     return reply.code(201).send({ recipe });
   });
 
@@ -202,6 +281,18 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     "/v1/offers/recipes/:recipeId/review",
     async (request, reply) => {
       const recipe = await recipeLibrary.reviewRecipe(request.params.recipeId, request.body);
+      await auditLog.log({
+        action: "recipe.reviewed",
+        entityType: "Recipe",
+        entityId: recipe.recipeId,
+        actor: actorForRequest(request),
+        summary: `Reviewed recipe ${recipe.name} via offer workflow.`,
+        details: {
+          decision: request.body.decision,
+          approvalState: recipe.source.approvalState,
+          sourceTier: recipe.source.tier
+        }
+      });
       return reply.send({ recipe });
     }
   );
@@ -226,6 +317,18 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       const promoted = validateAcceptedEventSpec(
         promoteOfferVariant(draft, request.body?.variantId)
       );
+      await auditLog.log({
+        action: "offer.promoted_variant",
+        entityType: "AcceptedEventSpec",
+        entityId: promoted.specId,
+        actor: actorForRequest(request),
+        summary: `Promoted offer variant into operational event spec.`,
+        details: {
+          draftId: draft.draftId,
+          variantId: request.body?.variantId ?? draft.variantSet[0]?.variantId,
+          readiness: promoted.readiness.status
+        }
+      });
 
       return reply.code(201).send(promoted);
     }

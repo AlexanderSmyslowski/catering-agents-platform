@@ -11,7 +11,10 @@ export class IntakeStore {
 
   private readonly specs: PersistentCollection<AcceptedEventSpec>;
 
+  readonly storageOptions?: CollectionStorageOptions;
+
   constructor(options?: CollectionStorageOptions) {
+    this.storageOptions = options;
     this.requests = createPersistentCollection<EventRequest>({
       collectionName: "intake/requests",
       getId: (request) => request.requestId,

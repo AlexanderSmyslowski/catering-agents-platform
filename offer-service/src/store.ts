@@ -8,7 +8,10 @@ import {
 export class OfferStore {
   private readonly drafts: PersistentCollection<OfferDraft>;
 
+  readonly storageOptions?: CollectionStorageOptions;
+
   constructor(options?: CollectionStorageOptions) {
+    this.storageOptions = options;
     this.drafts = createPersistentCollection<OfferDraft>({
       collectionName: "offers/drafts",
       getId: (draft) => draft.draftId,

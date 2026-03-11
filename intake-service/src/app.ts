@@ -1,6 +1,9 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import {
+  actorNameFromHeaders,
+  AuditLogStore,
+  type CollectionStorageOptions,
   getDemoIntakeRequests,
   normalizeEventRequestToSpec,
   validateAcceptedEventSpec,
@@ -21,7 +24,39 @@ interface DocumentBody {
   requestId?: string;
 }
 
-export function buildIntakeApp(store = new IntakeStore()) {
+export interface IntakeAppOptions extends CollectionStorageOptions {
+  store?: IntakeStore;
+  auditLog?: AuditLogStore;
+}
+
+function isIntakeStore(value: IntakeStore | IntakeAppOptions | undefined): value is IntakeStore {
+  return value instanceof IntakeStore;
+}
+
+function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }) {
+  return {
+    name: actorNameFromHeaders(request.headers, "Intake Operator"),
+    source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
+  };
+}
+
+export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
+  const options = isIntakeStore(input) ? { store: input } : input;
+  const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
+  const store =
+    options.store ??
+    new IntakeStore({
+      rootDir: options.rootDir,
+      databaseUrl: options.databaseUrl,
+      pgPool: options.pgPool
+    });
+  const auditLog =
+    options.auditLog ??
+    new AuditLogStore({
+      rootDir: storageOptions?.rootDir,
+      databaseUrl: storageOptions?.databaseUrl,
+      pgPool: storageOptions?.pgPool
+    });
   const app = Fastify({
     logger: false
   });
@@ -29,14 +64,19 @@ export function buildIntakeApp(store = new IntakeStore()) {
   app.register(multipart);
 
   app.get("/health", async (_request, reply) => {
-    const [requests, specs] = await Promise.all([store.listRequests(), store.listSpecs()]);
+    const [requests, specs, auditEvents] = await Promise.all([
+      store.listRequests(),
+      store.listSpecs(),
+      auditLog.count()
+    ]);
     return reply.send({
       service: "intake-service",
       status: "ok",
       timestamp: new Date().toISOString(),
       counts: {
         requests: requests.length,
-        acceptedSpecs: specs.length
+        acceptedSpecs: specs.length,
+        auditEvents
       }
     });
   });
@@ -69,6 +109,18 @@ export function buildIntakeApp(store = new IntakeStore()) {
       );
 
       await store.saveSpec(spec);
+      await auditLog.log({
+        action: "intake.normalized",
+        entityType: "AcceptedEventSpec",
+        entityId: spec.specId,
+        actor: actorForRequest(request),
+        summary: `Normalized ${eventRequest.source.channel} intake into AcceptedEventSpec.`,
+        details: {
+          requestId: eventRequest.requestId,
+          channel: eventRequest.source.channel,
+          readiness: spec.readiness.status
+        }
+      });
       return reply.code(201).send({
         eventRequest,
         acceptedEventSpec: spec
@@ -117,6 +169,18 @@ export function buildIntakeApp(store = new IntakeStore()) {
 
     await store.saveRequest(validatedRequest);
     await store.saveSpec(spec);
+    await auditLog.log({
+      action: "intake.documents_normalized",
+      entityType: "AcceptedEventSpec",
+      entityId: spec.specId,
+      actor: actorForRequest(request),
+      summary: `Normalized ${documents.length} uploaded document(s) into AcceptedEventSpec.`,
+      details: {
+        requestId: validatedRequest.requestId,
+        documentCount: documents.length,
+        readiness: spec.readiness.status
+      }
+    });
 
     return reply.code(201).send({
       eventRequest: validatedRequest,
@@ -146,6 +210,16 @@ export function buildIntakeApp(store = new IntakeStore()) {
         specId: spec.specId
       });
     }
+    await auditLog.log({
+      action: "intake.seed_demo",
+      entityType: "SeedBatch",
+      entityId: `intake-demo-${Date.now()}`,
+      actor: actorForRequest(_request),
+      summary: `Seeded ${seeded.length} intake demo record(s).`,
+      details: {
+        seededCount: seeded.length
+      }
+    });
 
     return reply.code(201).send({
       seeded,

@@ -1019,4 +1019,93 @@ describe("catering agents platform", () => {
     await restartedProductionApp.close();
     await pool.end();
   });
+
+  it("records a shared audit trail with operator attribution across services", async () => {
+    const dataRoot = createDataRoot();
+    const intakeApp = buildIntakeApp({
+      rootDir: dataRoot
+    });
+    const offerApp = buildOfferApp({
+      rootDir: dataRoot
+    });
+    const productionApp = buildProductionApp({
+      dataRoot
+    });
+
+    const offerResponse = await offerApp.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      headers: {
+        "x-actor-name": "Angebot Team"
+      },
+      payload: {
+        text: "Sommerempfang am 2026-07-01 fuer 45 Teilnehmer mit Fingerfood und Getraenken."
+      }
+    });
+    expect(offerResponse.statusCode).toBe(201);
+
+    const intakeResponse = await intakeApp.inject({
+      method: "POST",
+      url: "/v1/intake/normalize",
+      headers: {
+        "x-actor-name": "Kuechenplanung"
+      },
+      payload: {
+        text: "Konferenz am 2026-08-04 fuer 60 Teilnehmer mit Lunchbuffet und Tomatensuppe."
+      }
+    });
+    expect(intakeResponse.statusCode).toBe(201);
+
+    const productionResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      headers: {
+        "x-actor-name": "Operations"
+      },
+      payload: {
+        eventSpec: intakeResponse.json().acceptedEventSpec
+      }
+    });
+    expect(productionResponse.statusCode).toBe(201);
+
+    const auditResponse = await productionApp.inject({
+      method: "GET",
+      url: "/v1/production/audit/events?limit=10"
+    });
+    expect(auditResponse.statusCode).toBe(200);
+
+    const auditEvents = auditResponse.json().items as Array<{
+      action: string;
+      actor: { name: string };
+      entityType: string;
+    }>;
+
+    expect(
+      auditEvents.some(
+        (entry) =>
+          entry.action === "offer.draft_created_from_text" &&
+          entry.actor.name === "Angebot Team"
+      )
+    ).toBe(true);
+    expect(
+      auditEvents.some(
+        (entry) =>
+          entry.action === "intake.normalized" &&
+          entry.actor.name === "Kuechenplanung"
+      )
+    ).toBe(true);
+    expect(
+      auditEvents.some(
+        (entry) =>
+          entry.action === "production.plan_created" &&
+          entry.actor.name === "Operations"
+      )
+    ).toBe(true);
+    expect(auditEvents.some((entry) => entry.entityType === "ProductionPlan")).toBe(true);
+
+    await intakeApp.close();
+    await offerApp.close();
+    await productionApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
 });

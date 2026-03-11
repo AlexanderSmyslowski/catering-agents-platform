@@ -58,6 +58,7 @@ input {
 }
 
 .search,
+.operator-input,
 textarea {
   width: 100%;
   border-radius: 0.9rem;
@@ -68,6 +69,10 @@ textarea {
 
 .file-input {
   width: 100%;
+}
+
+.operator-input {
+  max-width: 15rem;
 }
 
 textarea {

@@ -20,6 +20,7 @@ Aktueller MVP-Stand:
 - alternativ kann `CATERING_DATABASE_URL` gesetzt werden; dann nutzen alle Services PostgreSQL mit JSONB-Persistenz
 - die interne Web-App ist als Vite-Frontend angebunden und spricht die Service-APIs ueber Reverse-Proxy-Pfade an
 - Exportdownloads fuer Angebote, Produktionsplaene und Einkaufslisten laufen ueber einen separaten Export-Service
+- alle mutierenden Fachaktionen koennen ueber `x-actor-name` einem Operator zugeordnet werden und landen im gemeinsamen Audit-Log
 
 Empfohlene Hetzner-MVP-Topologie:
 
@@ -51,6 +52,7 @@ Empfohlener Betriebsmodus:
 - Rezept-PDFs oder Textdateien koennen ueber beide Agenten-Workspaces hochgeladen werden und erweitern die gemeinsame Rezeptbibliothek
 - Rezepte aus Uploads oder Internet-Fallbacks koennen in der Rezeptliste freigegeben, verifiziert oder abgelehnt werden
 - Service-Gesundheit und Demo-Seeding sind ueber die Admin-Pfade in der Web-App sichtbar
+- die Web-App fuehrt einen Operator-Namen lokal und sendet ihn bei mutierenden Aktionen mit, damit Audit-Eintraege personell nachvollziehbar bleiben
 - Rollen und Rechte werden in der App und vor dem Reverse Proxy geregelt
 
 Nicht empfohlen:
@@ -58,6 +60,21 @@ Nicht empfohlen:
 - gemeinsame Nutzung eines Terminalzugangs
 - lokale Einzelinstallationen pro Mitarbeiter
 - direkter Aufruf einzelner Services ohne UI und Rechtekonzept
+
+## Audit und Nachvollziehbarkeit
+
+Der gemeinsame Audit-Feed ist serviceuebergreifend aufgebaut:
+
+- Intake, Offer und Production schreiben in dieselbe persistierte Audit-Collection
+- gelesen wird der Feed aktuell ueber `GET /v1/production/audit/events`
+- bei Dateispeicher liegt er unter `audit/events`, bei PostgreSQL in derselben `catering_records`-Tabelle
+- typische Aktionen: Intake-Normalisierung, Angebotsentwurf, Varianten-Promotion, Produktionsplanung, Rezept-Upload und Rezept-Review
+
+Damit ist spaeter nachvollziehbar:
+
+- wer einen Angebotsentwurf erzeugt hat
+- wer einen Produktionsplan ausgeloest hat
+- wer ein Rezept hochgeladen, freigegeben, verifiziert oder abgelehnt hat
 
 ## GitHub-Strategie
 

@@ -58,6 +58,7 @@ Die Web-App bietet Exportlinks fuer:
 - Angebots-HTML
 - Produktionsblatt-HTML
 - Einkaufslisten-CSV
+- einen sichtbaren Audit-Trail der letzten Operator-Aktionen
 
 Die Rezeptbibliothek kann jetzt von beiden Agenten aus erweitert werden:
 
@@ -74,6 +75,10 @@ Fuer frische Deployments stehen ausserdem Admin-Endpunkte bereit:
 - `POST /v1/intake/seed-demo`
 - `POST /v1/offers/seed-demo`
 - `POST /v1/production/seed-demo`
+- `GET /v1/production/audit/events?limit=30` fuer den gemeinsamen Audit-Feed
+
+Operator-Namen koennen ueber den Header `x-actor-name` mitgegeben werden.
+Die Backoffice-UI speichert diesen Namen lokal und sendet ihn bei mutierenden Aktionen automatisch mit.
 
 Die Web-App nutzt diese Pfade jetzt direkt fuer Service-Status und Demo-Befuellung.
 
@@ -123,4 +128,5 @@ npm run checkpoint -- <kurzname> --push
 - Deployment-Empfehlung fuer den MVP: Hetzner-VM als interne Plattform mit HTTPS-Reverse-Proxy, Web-App fuer Mitarbeiter und getrennten API-Services.
 - Zugriff fuer Angebots-Ersteller und Kuechenplanung erfolgt ueber die interne Web-App, nicht direkt per Shell auf dem Server.
 - Intake-, Angebots-, Produktions- und Rezeptdaten werden im MVP entweder dateibasiert oder ueber PostgreSQL persistiert und ueberstehen Server-Neustarts.
+- Nutzeraktionen aus Intake, Angebot, Produktion und Rezept-Review landen in einem gemeinsamen Audit-Log und sind in der Web-App sichtbar.
 - GitHub- und Checkpoint-Strategie siehe [docs/deployment-and-versioning.md](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/docs/deployment-and-versioning.md).
