@@ -8,6 +8,7 @@ Empfohlene Aufteilung:
 
 - `backoffice-ui` als zentrale Web-Oberflaeche fuer Angebots-Ersteller und Produktionsplaner
 - `intake-service`, `offer-service`, `production-service` als interne HTTP-Services
+- `print-export` als separater HTTP-Service fuer HTML-/CSV-Downloads
 - PostgreSQL, Redis und Objektspeicher im selben privaten Netz oder auf derselben VM
 - Reverse Proxy mit HTTPS und Authentifizierung vor allen UIs und APIs
 
@@ -18,6 +19,7 @@ Aktueller MVP-Stand:
 - dadurch bleiben Intake-Vorgaenge, Angebotsentwuerfe, Produktionsplaene, Einkaufslisten und recherchierte Rezepte nach Neustarts erhalten
 - alternativ kann `CATERING_DATABASE_URL` gesetzt werden; dann nutzen alle Services PostgreSQL mit JSONB-Persistenz
 - die interne Web-App ist als Vite-Frontend angebunden und spricht die Service-APIs ueber Reverse-Proxy-Pfade an
+- Exportdownloads fuer Angebote, Produktionsplaene und Einkaufslisten laufen ueber einen separaten Export-Service
 
 Empfohlene Hetzner-MVP-Topologie:
 
@@ -25,6 +27,7 @@ Empfohlene Hetzner-MVP-Topologie:
 - `/api/intake` -> `intake-service`
 - `/api/offers` -> `offer-service`
 - `/api/production` -> `production-service`
+- `/api/exports` -> `print-export`
 - `/` -> gebaute `backoffice-ui`
 - PostgreSQL auf derselben VM oder als separater Hetzner-Dienst
 

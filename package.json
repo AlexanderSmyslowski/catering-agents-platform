@@ -17,7 +17,8 @@
     "dev:ui": "npm --workspace @catering/backoffice-ui run dev",
     "dev:intake": "tsx intake-service/src/server.ts",
     "dev:offer": "tsx offer-service/src/server.ts",
-    "dev:production": "tsx production-service/src/server.ts"
+    "dev:production": "tsx production-service/src/server.ts",
+    "dev:exports": "tsx print-export/src/server.ts"
   },
   "dependencies": {
     "@fastify/multipart": "^9.0.3",

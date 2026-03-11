@@ -29,9 +29,13 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_PRODUCTION_PROXY_TARGET ?? "http://localhost:3103",
           changeOrigin: true,
           rewrite: (input) => input.replace(/^\/api\/production/, "")
+        },
+        "/api/exports": {
+          target: env.VITE_EXPORTS_PROXY_TARGET ?? "http://localhost:3104",
+          changeOrigin: true,
+          rewrite: (input) => input.replace(/^\/api\/exports/, "")
         }
       }
     }
   };
 });
-

@@ -13,6 +13,9 @@ import {
   createOfferFromText,
   createProductionPlan,
   loadDashboardState,
+  offerExportUrl,
+  productionExportUrl,
+  purchaseListExportUrl,
   type DashboardState
 } from "./api.js";
 
@@ -240,6 +243,14 @@ export function App() {
               <li key={String(plan.planId)}>
                 <strong>{String(plan.planId)}</strong>
                 <p>Readiness: {String((plan.readiness as Record<string, unknown>)?.status ?? "-")}</p>
+                <a
+                  className="ghost-link"
+                  href={productionExportUrl(String(plan.planId))}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Produktionsblatt exportieren
+                </a>
               </li>
             ))}
             {filteredPlans.length === 0 ? <li>No production plans yet.</li> : null}
@@ -266,9 +277,41 @@ export function App() {
               <li key={String(draft.draftId)}>
                 <strong>{String(draft.draftId)}</strong>
                 <p>{String(draft.eventSummary ?? "-")}</p>
+                <a
+                  className="ghost-link"
+                  href={offerExportUrl(String(draft.draftId))}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Angebot exportieren
+                </a>
               </li>
             ))}
             {dashboard.offerDrafts.length === 0 ? <li>No offer drafts yet.</li> : null}
+          </ul>
+        </article>
+
+        <article className="panel">
+          <header>
+            <p className="eyebrow">Purchase Lists</p>
+            <h3>CSV-ready procurement outputs</h3>
+          </header>
+          <ul className="item-list compact">
+            {dashboard.purchaseLists.map((purchaseList) => (
+              <li key={String(purchaseList.purchaseListId)}>
+                <strong>{String(purchaseList.purchaseListId)}</strong>
+                <p>Items: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
+                <a
+                  className="ghost-link"
+                  href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Einkaufsliste CSV
+                </a>
+              </li>
+            ))}
+            {dashboard.purchaseLists.length === 0 ? <li>No purchase lists yet.</li> : null}
           </ul>
         </article>
       </section>
@@ -279,4 +322,3 @@ export function App() {
     </DashboardShell>
   );
 }
-

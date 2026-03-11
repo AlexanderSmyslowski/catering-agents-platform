@@ -13,6 +13,7 @@ import {
 } from "@catering/shared-core";
 import { IntakeStore, buildIntakeApp } from "@catering/intake-service";
 import { OfferStore, buildOfferApp } from "@catering/offer-service";
+import { buildPrintExportApp } from "@catering/print-export";
 import {
   InMemoryRecipeRepository,
   ProductionStore,
@@ -468,6 +469,64 @@ describe("catering agents platform", () => {
     ).toBe(true);
     expect(detailResponse.json().planId).toBe(created.productionPlan.planId);
     await restartedApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("serves offer, production, and purchase list exports from persisted records", async () => {
+    const dataRoot = createDataRoot();
+    const offerApp = buildOfferApp(new OfferStore({ rootDir: dataRoot }));
+    const offerResponse = await offerApp.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      payload: {
+        text: "Lunch am 2026-08-14 fuer 55 Teilnehmer mit Buffet und Filterkaffee."
+      }
+    });
+    const draft = offerResponse.json();
+    await offerApp.close();
+
+    const productionApp = buildProductionApp({ dataRoot });
+    const productionResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: specWithComponent("Filterkaffee Station")
+      }
+    });
+    const productionPayload = productionResponse.json();
+    await productionApp.close();
+
+    const exportApp = buildPrintExportApp({ rootDir: dataRoot });
+    const offerExportResponse = await exportApp.inject({
+      method: "GET",
+      url: `/v1/exports/offers/${draft.draftId}/html`
+    });
+    const planExportResponse = await exportApp.inject({
+      method: "GET",
+      url: `/v1/exports/production-plans/${productionPayload.productionPlan.planId}/html`
+    });
+    const purchaseExportResponse = await exportApp.inject({
+      method: "GET",
+      url: `/v1/exports/purchase-lists/${productionPayload.purchaseList.purchaseListId}/csv`
+    });
+
+    expect(offerExportResponse.statusCode).toBe(200);
+    expect(offerExportResponse.headers["content-type"]).toContain("text/html");
+    expect(offerExportResponse.body).toContain(String(draft.draftId));
+    expect(offerExportResponse.body).toContain("Vielen Dank");
+
+    expect(planExportResponse.statusCode).toBe(200);
+    expect(planExportResponse.headers["content-type"]).toContain("text/html");
+    expect(planExportResponse.body).toContain(String(productionPayload.productionPlan.planId));
+    expect(planExportResponse.body).toContain("Produktionsplan");
+
+    expect(purchaseExportResponse.statusCode).toBe(200);
+    expect(purchaseExportResponse.headers["content-type"]).toContain("text/csv");
+    expect(purchaseExportResponse.body).toContain(
+      '"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"'
+    );
+
+    await exportApp.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
 

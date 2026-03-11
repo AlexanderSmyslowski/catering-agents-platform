@@ -6,8 +6,8 @@ MVP-Monorepo fuer zwei spezialisierte Catering-Agenten:
 - `intake-service`: Intake, Parsing, Normalisierung
 - `production-service`: Produktions-/Kuechen-CoPilot
 - `shared-core`: kanonische Schemata, Regeln und Taxonomien
-- `print-export`: Exporthelfer fuer HTML/CSV
-- `backoffice-ui`: UI-Skelett fuer interne Workflows
+- `print-export`: HTML-/CSV-Exportservice fuer Angebote, Produktionsplaene und Einkaufslisten
+- `backoffice-ui`: interne Web-App fuer Intake, Angebote, Produktion und Exporte
 
 ## Schnellstart
 
@@ -22,6 +22,7 @@ npm test
 npm run dev:intake
 npm run dev:offer
 npm run dev:production
+npm run dev:exports
 npm run dev:ui
 ```
 
@@ -43,12 +44,20 @@ Die interne Web-App laeuft im Dev-Modus ueber Vite auf Port `3200` und proxied s
 - `http://localhost:3101` fuer Intake
 - `http://localhost:3102` fuer Offers
 - `http://localhost:3103` fuer Production
+- `http://localhost:3104` fuer Exporte
 
 Optional konfigurierbar ueber:
 
 - `VITE_INTAKE_PROXY_TARGET`
 - `VITE_OFFERS_PROXY_TARGET`
 - `VITE_PRODUCTION_PROXY_TARGET`
+- `VITE_EXPORTS_PROXY_TARGET`
+
+Die Web-App bietet Exportlinks fuer:
+
+- Angebots-HTML
+- Produktionsblatt-HTML
+- Einkaufslisten-CSV
 
 ## Checkpoints
 
