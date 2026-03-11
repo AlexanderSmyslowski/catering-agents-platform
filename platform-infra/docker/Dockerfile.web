@@ -7,7 +7,7 @@ COPY . .
 RUN npm ci
 RUN npm --workspace @catering/backoffice-ui run build
 
-FROM nginx:1.27-alpine
+FROM caddy:2.10-alpine
 
-COPY platform-infra/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/backoffice-ui/dist /usr/share/nginx/html
+COPY platform-infra/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/backoffice-ui/dist /srv

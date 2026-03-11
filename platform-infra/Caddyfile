@@ -1,0 +1,27 @@
+{
+	email {$CADDY_EMAIL}
+}
+
+{$CATERING_SITE_ADDRESS::80} {
+	root * /srv
+	encode zstd gzip
+
+	handle_path /api/intake/* {
+		reverse_proxy intake:3101
+	}
+
+	handle_path /api/offers/* {
+		reverse_proxy offer:3102
+	}
+
+	handle_path /api/production/* {
+		reverse_proxy production:3103
+	}
+
+	handle_path /api/exports/* {
+		reverse_proxy exports:3104
+	}
+
+	try_files {path} /index.html
+	file_server
+}

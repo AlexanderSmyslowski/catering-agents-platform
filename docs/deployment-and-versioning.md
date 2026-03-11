@@ -10,7 +10,7 @@ Empfohlene Aufteilung:
 - `intake-service`, `offer-service`, `production-service` als interne HTTP-Services
 - `print-export` als separater HTTP-Service fuer HTML-/CSV-Downloads
 - PostgreSQL, Redis und Objektspeicher im selben privaten Netz oder auf derselben VM
-- Reverse Proxy mit HTTPS und Authentifizierung vor allen UIs und APIs
+- Caddy als Reverse Proxy mit HTTPS und Authentifizierung vor allen UIs und APIs
 
 Aktueller MVP-Stand:
 
@@ -23,7 +23,7 @@ Aktueller MVP-Stand:
 
 Empfohlene Hetzner-MVP-Topologie:
 
-- Nginx oder Caddy terminiert HTTPS
+- Caddy im `web`-Container terminiert HTTPS
 - `/api/intake` -> `intake-service`
 - `/api/offers` -> `offer-service`
 - `/api/production` -> `production-service`
@@ -32,6 +32,7 @@ Empfohlene Hetzner-MVP-Topologie:
 - PostgreSQL auf derselben VM oder als separater Hetzner-Dienst
 
 Im Repo liegt dafuer jetzt eine lauffaehige Compose-Basis unter [platform-infra/docker-compose.yml](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/platform-infra/docker-compose.yml) mit separatem Web-Proxy und PostgreSQL.
+Der reproduzierbare Remote-Deploy liegt unter [platform-infra/scripts/deploy-hetzner.sh](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/platform-infra/scripts/deploy-hetzner.sh).
 
 Das ist sinnvoll, weil:
 

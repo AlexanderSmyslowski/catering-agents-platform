@@ -81,7 +81,16 @@ services:
       - production
       - exports
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    environment:
+      CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}
+      CADDY_EMAIL: ${CADDY_EMAIL:-ops@example.com}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:

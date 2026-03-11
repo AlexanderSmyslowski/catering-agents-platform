@@ -81,7 +81,7 @@ Fuer einen zentralen Serverbetrieb liegt unter [platform-infra/README.md](/Users
 
 - PostgreSQL
 - Intake-, Offer-, Production- und Export-Service
-- Nginx-Web-Frontend mit Reverse-Proxy auf die APIs
+- Caddy-Web-Frontend mit Reverse-Proxy auf die APIs und optionaler automatischer HTTPS-Terminierung
 
 Start:
 
@@ -90,6 +90,17 @@ cd platform-infra
 cp .env.example .env
 docker compose up --build -d
 ```
+
+Fuer eine echte Hetzner-Domain wird in `platform-infra/.env` z. B. gesetzt:
+
+```bash
+CATERING_SITE_ADDRESS=app.example.com
+CADDY_EMAIL=ops@example.com
+HTTP_PORT=80
+HTTPS_PORT=443
+```
+
+Danach ist die Web-App unter `https://app.example.com` vorgesehen.
 
 ## Checkpoints
 
