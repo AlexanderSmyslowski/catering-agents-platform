@@ -251,6 +251,51 @@ function formatPercent(value?: unknown): string | undefined {
   return `${Math.round(numeric * 100)} %`;
 }
 
+function renderPlanList(
+  plans: Array<Record<string, unknown>>,
+  specById: Map<string, Record<string, unknown>>,
+  submitting: boolean,
+  setSelectedPlanId: (planId: string) => void
+) {
+  return (
+    <ul className="item-list compact">
+      {plans.map((plan) => {
+        const relatedSpec = specById.get(String(plan.eventSpecId ?? ""));
+        const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
+        const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
+        return (
+          <li key={String(plan.planId)}>
+            <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Produktionsplan"}</strong>
+            <p>
+              Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}
+              {" · "}Produktionsblätter: {batchCount}
+              {" · "}Offene Punkte: {unresolvedCount}
+            </p>
+            <div className="action-row">
+              <button
+                className="secondary-button"
+                disabled={submitting}
+                onClick={() => setSelectedPlanId(String(plan.planId))}
+              >
+                Einzelheiten
+              </button>
+            </div>
+            <a
+              className="ghost-link"
+              href={productionExportUrl(String(plan.planId))}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Produktionsblatt exportieren
+            </a>
+          </li>
+        );
+      })}
+      {plans.length === 0 ? <li>Noch keine Produktionspläne vorhanden.</li> : null}
+    </ul>
+  );
+}
+
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
   const baseUrl = useMemo(() => getBaseUrl(), []);
@@ -262,7 +307,7 @@ export function App() {
   const [notice, setNotice] = useState<string>();
   const [operatorName, setOperatorName] = useState(() => readOperatorName());
   const [intakeText, setIntakeText] = useState(
-    "Konferenz am 2026-06-18 für 90 Teilnehmende mit Lunchbuffet, Tomatensuppe und Kaffeestation."
+    "Konferenz am 2026-06-18 für 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
   );
   const [manualEventType, setManualEventType] = useState("conference");
   const [manualEventDate, setManualEventDate] = useState("");
@@ -275,7 +320,7 @@ export function App() {
   const [intakeFile, setIntakeFile] = useState<File | null>(null);
   const [intakeChannel, setIntakeChannel] = useState<IntakeDocumentChannel>("pdf_upload");
   const [offerText, setOfferText] = useState(
-    "Besprechung am 2026-06-25 für 35 Teilnehmende mit Kaffeepause, Croissants und Wasserservice."
+    "Besprechung am 2026-06-25 für 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
   );
   const [recipeName, setRecipeName] = useState("");
   const [recipeFile, setRecipeFile] = useState<File | null>(null);
@@ -415,10 +460,62 @@ export function App() {
     [dashboard.offerDrafts, selectedDraftId]
   );
 
+  const focusedProductionSpec = useMemo(() => {
+    const preferred = focusedProductionSpecId
+      ? dashboard.acceptedSpecs.find((spec) => String(spec.specId) === focusedProductionSpecId)
+      : undefined;
+    return (
+      preferred ??
+      filteredSpecs[filteredSpecs.length - 1] ??
+      dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1]
+    );
+  }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId]);
+
+  const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
+
+  const currentSpecPlans = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return orderedPlans;
+    }
+    const matchingPlans = orderedPlans.filter(
+      (plan) => String(plan.eventSpecId ?? "") === currentProductionSpecId
+    );
+    return matchingPlans.length > 0 ? matchingPlans : orderedPlans;
+  }, [currentProductionSpecId, orderedPlans]);
+
+  const archivedPlans = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return [];
+    }
+    return orderedPlans.filter((plan) => String(plan.eventSpecId ?? "") !== currentProductionSpecId);
+  }, [currentProductionSpecId, orderedPlans]);
+
+  const currentSpecPurchaseLists = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return orderedPurchaseLists;
+    }
+    const matchingLists = orderedPurchaseLists.filter(
+      (purchaseList) => String(purchaseList.eventSpecId ?? "") === currentProductionSpecId
+    );
+    return matchingLists.length > 0 ? matchingLists : orderedPurchaseLists;
+  }, [currentProductionSpecId, orderedPurchaseLists]);
+
+  const archivedPurchaseLists = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return [];
+    }
+    return orderedPurchaseLists.filter(
+      (purchaseList) => String(purchaseList.eventSpecId ?? "") !== currentProductionSpecId
+    );
+  }, [currentProductionSpecId, orderedPurchaseLists]);
+
   const selectedPlan = useMemo(
     () =>
-      orderedPlans.find((plan) => String(plan.planId) === selectedPlanId) ?? orderedPlans[0],
-    [orderedPlans, selectedPlanId]
+      currentSpecPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
+      orderedPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
+      currentSpecPlans[0] ??
+      orderedPlans[0],
+    [currentSpecPlans, orderedPlans, selectedPlanId]
   );
 
   const selectedPlanSpec = useMemo(() => {
@@ -437,17 +534,6 @@ export function App() {
       })
     );
   }, [selectedPlanSpec]);
-
-  const focusedProductionSpec = useMemo(() => {
-    const preferred = focusedProductionSpecId
-      ? dashboard.acceptedSpecs.find((spec) => String(spec.specId) === focusedProductionSpecId)
-      : undefined;
-    return (
-      preferred ??
-      filteredSpecs[filteredSpecs.length - 1] ??
-      dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1]
-    );
-  }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId]);
 
   const productionQuestions = useMemo(
     () => buildProductionQuestions(focusedProductionSpec),
@@ -1913,41 +1999,26 @@ export function App() {
                 </div>
               </div>
             ) : null}
-            <ul className="item-list compact">
-              {orderedPlans.map((plan) => {
-                const relatedSpec = specById.get(String(plan.eventSpecId ?? ""));
-                const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
-                const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
-                return (
-                <li key={String(plan.planId)}>
-                  <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Produktionsplan"}</strong>
-                  <p>
-                    Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}
-                    {" · "}Produktionsblätter: {batchCount}
-                    {" · "}Offene Punkte: {unresolvedCount}
-                  </p>
-                  <div className="action-row">
-                    <button
-                      className="secondary-button"
-                      disabled={submitting}
-                      onClick={() => setSelectedPlanId(String(plan.planId))}
-                    >
-                      Einzelheiten
-                    </button>
-                  </div>
-                  <a
-                    className="ghost-link"
-                    href={productionExportUrl(String(plan.planId))}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Produktionsblatt exportieren
-                  </a>
-                </li>
-              );
-              })}
-              {orderedPlans.length === 0 ? <li>Noch keine Produktionspläne vorhanden.</li> : null}
-            </ul>
+            <header>
+              <p className="eyebrow">Aktueller Vorgang</p>
+              <h4 className="subsection-title">
+                {focusedProductionSpec ? getSpecLabel(focusedProductionSpec) : "Neuester Produktionslauf"}
+              </h4>
+            </header>
+            <p className="helper-text">
+              Hier erscheinen nur die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere Läufe stehen weiter unten.
+            </p>
+            {renderPlanList(currentSpecPlans, specById, submitting, setSelectedPlanId)}
+            {archivedPlans.length > 0 ? (
+              <>
+                <div className="divider" />
+                <header>
+                  <p className="eyebrow">Ältere Produktionsläufe</p>
+                  <h4 className="subsection-title">Frühere Ergebnisse aus anderen Vorgängen</h4>
+                </header>
+                {renderPlanList(archivedPlans, specById, submitting, setSelectedPlanId)}
+              </>
+            ) : null}
             {selectedPlan ? (
               <>
                 <div className="divider" />
@@ -2106,7 +2177,7 @@ export function App() {
               <h3>CSV-fähige Beschaffungslisten</h3>
             </header>
             <ul className="item-list compact">
-              {orderedPurchaseLists.map((purchaseList) => {
+              {currentSpecPurchaseLists.map((purchaseList) => {
                 const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
                 return (
                 <li key={String(purchaseList.purchaseListId)}>
@@ -2123,8 +2194,33 @@ export function App() {
                 </li>
               );
               })}
-              {orderedPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten vorhanden.</li> : null}
+              {currentSpecPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li> : null}
             </ul>
+            {archivedPurchaseLists.length > 0 ? (
+              <>
+                <div className="divider" />
+                <p className="eyebrow">Ältere Einkaufslisten</p>
+                <ul className="item-list compact">
+                  {archivedPurchaseLists.map((purchaseList) => {
+                    const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                    return (
+                      <li key={String(purchaseList.purchaseListId)}>
+                        <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                        <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
+                        <a
+                          className="ghost-link"
+                          href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Einkaufsliste herunterladen
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : null}
           </article>
         </section>
       ) : null}

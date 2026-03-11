@@ -297,5 +297,5 @@ export function buildProductionAssumptions(spec?: Record<string, unknown>): stri
 export function getSpecLabel(spec: Record<string, unknown>): string {
   const event = asRecord(spec.event);
   const attendees = asRecord(spec.attendees);
-  return `${translateEventType(typeof event?.type === "string" ? event.type : "")} · ${attendees?.expected ?? "?"} Teilnehmende · ${event?.date ?? "offen"}`;
+  return `${translateEventType(typeof event?.type === "string" ? event.type : "")} · ${attendees?.expected ?? "?"} Teilnehmer · ${event?.date ?? "offen"}`;
 }
