@@ -472,6 +472,115 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("imports human-uploaded recipe text through the offer agent into the shared library", async () => {
+    const dataRoot = createDataRoot();
+    const offerApp = buildOfferApp({
+      rootDir: dataRoot
+    });
+
+    const uploadResponse = await offerApp.inject({
+      method: "POST",
+      url: "/v1/offers/recipes/import-text",
+      payload: {
+        recipeName: "Humus Bowl",
+        text: [
+          "Humus Bowl",
+          "Zutaten",
+          "500 g Kichererbsen",
+          "150 ml Olivenoel",
+          "2 pcs Zitronen",
+          "Zubereitung",
+          "1. Kichererbsen mixen.",
+          "2. Olivenoel und Zitronensaft zugeben.",
+          "3. Abschmecken und kalt stellen."
+        ].join("\n")
+      }
+    });
+
+    expect(uploadResponse.statusCode).toBe(201);
+    const uploadedRecipe = uploadResponse.json().recipe;
+    expect(uploadedRecipe.name).toBe("Humus Bowl");
+    expect(uploadedRecipe.source.tier).toBe("internal_approved");
+    await offerApp.close();
+
+    const productionApp = buildProductionApp({
+      dataRoot
+    });
+    const recipesResponse = await productionApp.inject({
+      method: "GET",
+      url: "/v1/production/recipes"
+    });
+    const planResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: specWithComponent("Humus Bowl")
+      }
+    });
+
+    expect(
+      recipesResponse
+        .json()
+        .items.some((item: { recipeId: string }) => item.recipeId === uploadedRecipe.recipeId)
+    ).toBe(true);
+    expect(planResponse.json().productionPlan.recipeSelections[0].recipeId).toBe(
+      uploadedRecipe.recipeId
+    );
+    expect(planResponse.json().productionPlan.recipeSelections[0].sourceTier).toBe(
+      "internal_approved"
+    );
+    await productionApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("imports human-uploaded recipe text through the production agent into the shared library", async () => {
+    const dataRoot = createDataRoot();
+    const productionApp = buildProductionApp({
+      dataRoot
+    });
+
+    const uploadResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/recipes/import-text",
+      payload: {
+        recipeName: "Tomatensalsa",
+        text: [
+          "Tomatensalsa",
+          "Ingredients",
+          "1 kg Tomatoes",
+          "200 g Onion",
+          "100 ml Olive Oil",
+          "Instructions",
+          "1. Dice tomatoes and onion.",
+          "2. Mix with olive oil.",
+          "3. Chill before service."
+        ].join("\n")
+      }
+    });
+
+    expect(uploadResponse.statusCode).toBe(201);
+    const uploadedRecipe = uploadResponse.json().recipe;
+    expect(uploadedRecipe.ingredients.length).toBeGreaterThan(0);
+    expect(uploadedRecipe.steps.length).toBeGreaterThan(0);
+    await productionApp.close();
+
+    const offerApp = buildOfferApp({
+      rootDir: dataRoot
+    });
+    const recipesResponse = await offerApp.inject({
+      method: "GET",
+      url: "/v1/offers/recipes"
+    });
+
+    expect(
+      recipesResponse
+        .json()
+        .items.some((item: { recipeId: string }) => item.recipeId === uploadedRecipe.recipeId)
+    ).toBe(true);
+    await offerApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("serves offer, production, and purchase list exports from persisted records", async () => {
     const dataRoot = createDataRoot();
     const offerApp = buildOfferApp(new OfferStore({ rootDir: dataRoot }));

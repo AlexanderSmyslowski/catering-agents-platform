@@ -90,6 +90,25 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     pgPool: options.pgPool
   });
 
+  app.get("/health", async (_request, reply) => {
+    const [offerDrafts, productionPlans, purchaseLists] = await Promise.all([
+      offerStore.listDrafts(),
+      productionStore.listPlans(),
+      productionStore.listPurchaseLists()
+    ]);
+
+    return reply.send({
+      service: "print-export",
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      counts: {
+        offerDrafts: offerDrafts.length,
+        productionPlans: productionPlans.length,
+        purchaseLists: purchaseLists.length
+      }
+    });
+  });
+
   app.get<{ Params: { draftId: string } }>(
     "/v1/exports/offers/:draftId/html",
     async (request, reply) => {

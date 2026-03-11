@@ -59,6 +59,13 @@ Die Web-App bietet Exportlinks fuer:
 - Produktionsblatt-HTML
 - Einkaufslisten-CSV
 
+Die Rezeptbibliothek kann jetzt von beiden Agenten aus erweitert werden:
+
+- `POST /v1/offers/recipes/upload` fuer Datei-Uploads ueber den Angebotsagenten
+- `POST /v1/production/recipes/upload` fuer Datei-Uploads ueber den Produktionsagenten
+- beide Pfade schreiben in dieselbe persistierte Rezeptbibliothek
+- fuer Tests und interne Automationen existieren zusaetzlich die JSON-Endpunkte `.../recipes/import-text`
+
 ## Docker / Hetzner-MVP
 
 Fuer einen zentralen Serverbetrieb liegt unter [platform-infra/README.md](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/platform-infra/README.md) eine Compose-Basis mit:

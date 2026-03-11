@@ -7,6 +7,8 @@ export interface DashboardState {
   recipes: Array<Record<string, unknown>>;
 }
 
+export type RecipeUploadTarget = "offer" | "production";
+
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     headers: {
@@ -63,6 +65,34 @@ export async function createProductionPlan(eventSpec: Record<string, unknown>) {
     method: "POST",
     body: JSON.stringify({ eventSpec })
   });
+}
+
+export async function uploadRecipeFile(
+  target: RecipeUploadTarget,
+  file: File,
+  recipeName?: string
+) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (recipeName?.trim()) {
+    formData.append("recipeName", recipeName.trim());
+  }
+
+  const endpoint =
+    target === "offer"
+      ? "/api/offers/v1/offers/recipes/upload"
+      : "/api/production/v1/production/recipes/upload";
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+
+  return (await response.json()) as { recipe: Record<string, unknown> };
 }
 
 export function offerExportUrl(draftId: string): string {

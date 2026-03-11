@@ -16,6 +16,7 @@ import {
   offerExportUrl,
   productionExportUrl,
   purchaseListExportUrl,
+  uploadRecipeFile,
   type DashboardState
 } from "./api.js";
 
@@ -45,6 +46,8 @@ export function App() {
   const [offerText, setOfferText] = useState(
     "Meeting am 2026-06-25 fuer 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
   );
+  const [recipeName, setRecipeName] = useState("");
+  const [recipeFile, setRecipeFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
 
@@ -139,6 +142,28 @@ export function App() {
     }
   }
 
+  async function handleRecipeUpload(target: "offer" | "production") {
+    if (!recipeFile) {
+      setError("Please choose a recipe file before uploading.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await uploadRecipeFile(target, recipeFile, recipeName);
+      setRecipeFile(null);
+      setRecipeName("");
+      await refreshDashboard();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Failed to upload recipe."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <DashboardShell title="Catering Operations Backoffice">
       <section className="hero-panel">
@@ -191,6 +216,36 @@ export function App() {
           <button disabled={submitting} onClick={() => void handleOfferSubmit()}>
             Angebot entwerfen
           </button>
+        </article>
+
+        <article className="panel form-panel">
+          <header>
+            <p className="eyebrow">Recipe Library</p>
+            <h3>Upload PDF or text recipes into the shared library</h3>
+          </header>
+          <input
+            value={recipeName}
+            onChange={(event) => setRecipeName(event.target.value)}
+            placeholder="Optionaler Rezeptname"
+          />
+          <input
+            className="file-input"
+            type="file"
+            accept=".pdf,.txt,.md,text/plain,application/pdf"
+            onChange={(event) => setRecipeFile(event.target.files?.[0] ?? null)}
+          />
+          <p className="helper-text">
+            Uploads ueber Angebots- oder Produktionsagent erweitern dieselbe Rezeptbibliothek.
+          </p>
+          <div className="action-row">
+            <button disabled={submitting} onClick={() => void handleRecipeUpload("offer")}>
+              Zum Angebotsagenten hochladen
+            </button>
+            <button disabled={submitting} onClick={() => void handleRecipeUpload("production")}>
+              Zur Produktion hochladen
+            </button>
+          </div>
+          {recipeFile ? <p className="helper-text">Ausgewaehlt: {recipeFile.name}</p> : null}
         </article>
       </section>
 

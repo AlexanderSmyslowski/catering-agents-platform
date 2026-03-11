@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import {
+  getDemoIntakeRequests,
   normalizeEventRequestToSpec,
   validateAcceptedEventSpec,
   validateEventRequest,
@@ -26,6 +27,19 @@ export function buildIntakeApp(store = new IntakeStore()) {
   });
 
   app.register(multipart);
+
+  app.get("/health", async (_request, reply) => {
+    const [requests, specs] = await Promise.all([store.listRequests(), store.listSpecs()]);
+    return reply.send({
+      service: "intake-service",
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      counts: {
+        requests: requests.length,
+        acceptedSpecs: specs.length
+      }
+    });
+  });
 
   app.post<{ Body: EventRequest | { text: string; channel?: EventRequest["source"]["channel"]; requestId?: string } }>(
     "/v1/intake/normalize",
@@ -107,6 +121,38 @@ export function buildIntakeApp(store = new IntakeStore()) {
     return reply.code(201).send({
       eventRequest: validatedRequest,
       acceptedEventSpec: spec
+    });
+  });
+
+  app.post("/v1/intake/seed-demo", async (_request, reply) => {
+    const seeded = [];
+    for (const eventRequest of getDemoIntakeRequests()) {
+      await store.saveRequest(eventRequest);
+      const spec = validateAcceptedEventSpec(
+        normalizeEventRequestToSpec(eventRequest, {
+          sourceType:
+            eventRequest.source.channel === "pdf_upload"
+              ? "pdf"
+              : eventRequest.source.channel === "email"
+                ? "email"
+                : "manual_input",
+          reference: eventRequest.requestId,
+          commercialState: "manual"
+        })
+      );
+      await store.saveSpec(spec);
+      seeded.push({
+        requestId: eventRequest.requestId,
+        specId: spec.specId
+      });
+    }
+
+    return reply.code(201).send({
+      seeded,
+      counts: {
+        requests: (await store.listRequests()).length,
+        acceptedSpecs: (await store.listSpecs()).length
+      }
     });
   });
 

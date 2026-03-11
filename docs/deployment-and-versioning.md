@@ -47,6 +47,7 @@ Empfohlener Betriebsmodus:
 - Angebots-Ersteller oeffnen die Web-App und arbeiten im Bereich `Offer Workspace`
 - Kueche / Produktionsplanung oeffnet dieselbe Web-App im Bereich `Production Control`
 - Intake- und Review-Masken liegen ebenfalls in derselben internen Anwendung
+- Rezept-PDFs oder Textdateien koennen ueber beide Agenten-Workspaces hochgeladen werden und erweitern die gemeinsame Rezeptbibliothek
 - Rollen und Rechte werden in der App und vor dem Reverse Proxy geregelt
 
 Nicht empfohlen:
