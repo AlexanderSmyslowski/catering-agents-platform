@@ -17,14 +17,17 @@ function parseResultLinks(html: string): string[] {
 
 export class DuckDuckGoRecipeSearchProvider implements WebRecipeSearchProvider {
   async searchRecipes(query: RecipeSearchQuery): Promise<WebRecipeCandidate[]> {
-    const response = await fetch(
-      `https://duckduckgo.com/html/?q=${encodeURIComponent(query.query)}`,
-      {
+    let response: Response;
+    try {
+      response = await fetch(`https://duckduckgo.com/html/?q=${encodeURIComponent(query.query)}`, {
+        signal: AbortSignal.timeout(800),
         headers: {
           "user-agent": "CateringAgentsBot/0.1 (+internal MVP recipe discovery)"
         }
-      }
-    );
+      });
+    } catch {
+      return [];
+    }
 
     if (!response.ok) {
       return [];
@@ -45,4 +48,3 @@ export class DuckDuckGoRecipeSearchProvider implements WebRecipeSearchProvider {
     return candidates.filter((candidate): candidate is WebRecipeCandidate => Boolean(candidate));
   }
 }
-

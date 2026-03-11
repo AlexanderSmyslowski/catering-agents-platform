@@ -2,30 +2,20 @@ import type { PropsWithChildren } from "react";
 
 export function DashboardShell({
   title,
+  subtitle,
   children
-}: PropsWithChildren<{ title: string }>) {
+}: PropsWithChildren<{ title: string; subtitle?: string }>) {
   return (
-    <main
-      style={{
-        fontFamily: "Georgia, serif",
-        padding: "3rem",
-        background:
-          "linear-gradient(160deg, rgba(241,233,220,1) 0%, rgba(255,250,244,1) 100%)",
-        minHeight: "100vh",
-        color: "#2d2418"
-      }}
-    >
-      <h1 style={{ fontSize: "2.6rem", marginBottom: "1rem" }}>{title}</h1>
-      <section
-        style={{
-          display: "grid",
-          gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))"
-        }}
-      >
-        {children}
-      </section>
+    <main className="app-shell">
+      <div className="app-shell__veil" />
+      <div className="app-shell__inner">
+        <header className="app-shell__header">
+          <p className="app-shell__kicker">Catering-Betriebssystem</p>
+          <h1>{title}</h1>
+          {subtitle ? <p className="app-shell__subtitle">{subtitle}</p> : null}
+        </header>
+        <section className="app-shell__content">{children}</section>
+      </div>
     </main>
   );
 }
-

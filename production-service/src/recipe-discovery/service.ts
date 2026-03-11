@@ -108,6 +108,7 @@ export class RecipeDiscoveryService {
       recipe: Recipe;
       query: RecipeSearchQuery;
     }[] = [];
+    let webSearchFailed = false;
 
     for (const locale of locales) {
       const query: RecipeSearchQuery = {
@@ -120,7 +121,12 @@ export class RecipeDiscoveryService {
             : `${component.label} recipe ${eventSpec.servicePlan.serviceForm} catering`
       };
 
-      const searchResults = await this.webProvider.searchRecipes(query);
+      let searchResults: WebRecipeCandidate[] = [];
+      try {
+        searchResults = await this.webProvider.searchRecipes(query);
+      } catch {
+        webSearchFailed = true;
+      }
       for (const candidate of searchResults) {
         const qualityScore = qualityScoreForCandidate(candidate);
         const fitScore = fitScoreForRecipe(candidate.title, component, eventSpec);
@@ -159,13 +165,18 @@ export class RecipeDiscoveryService {
     })[0];
 
     if (!winner) {
+      const unresolvedReason = webSearchFailed
+        ? `Kein Rezeptkandidat für ${component.label} gefunden, Internetrecherche fehlgeschlagen.`
+        : `Kein Rezeptkandidat für ${component.label} gefunden.`;
       return {
         selection: {
           componentId: component.componentId,
-          selectionReason: "Es konnte kein interner oder externer Rezeptkandidat validiert werden.",
+          selectionReason: webSearchFailed
+            ? "Es konnte kein interner Rezeptkandidat gefunden werden und die Internetrecherche ist fehlgeschlagen."
+            : "Es konnte kein interner oder externer Rezeptkandidat validiert werden.",
           autoUsedInternetRecipe: false
         },
-        unresolvedItems: [`Kein Rezeptkandidat fuer ${component.label} gefunden.`]
+        unresolvedItems: [unresolvedReason]
       };
     }
 
@@ -183,8 +194,8 @@ export class RecipeDiscoveryService {
         recipeId: winner.recipe.recipeId,
         selectionReason:
           winner.recipe.source.approvalState === "auto_usable"
-            ? "Internet-Fallback-Rezept mit ausreichender Qualitaet automatisch ausgewaehlt."
-            : "Internet-Fallback-Rezept ausgewaehlt, aber zur Pruefung markiert.",
+            ? "Internet-Ausweichrezept mit ausreichender Qualität automatisch ausgewählt."
+            : "Internet-Ausweichrezept ausgewählt, aber zur Prüfung markiert.",
         searchQuery: winner.query.query,
         autoUsedInternetRecipe: winner.recipe.source.approvalState === "auto_usable",
         sourceTier: winner.recipe.source.tier,

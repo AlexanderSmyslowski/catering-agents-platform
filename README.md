@@ -66,6 +66,12 @@ Optional konfigurierbar ueber:
 - `VITE_PRODUCTION_PROXY_TARGET`
 - `VITE_EXPORTS_PROXY_TARGET`
 
+Die Oberflaeche hat jetzt drei Einstiege:
+
+- `http://localhost:3200/` als Startseite mit Agentenwahl
+- `http://localhost:3200/angebot` fuer den Angebotsagenten
+- `http://localhost:3200/produktion` fuer den Produktionsagenten
+
 Die Web-App bietet Exportlinks fuer:
 
 - Angebots-HTML
@@ -126,6 +132,10 @@ HTTPS_PORT=443
 ```
 
 Danach ist die Web-App unter `https://app.example.com` vorgesehen.
+Die getrennten Arbeitsflaechen liegen dann unter:
+
+- `https://app.example.com/angebot`
+- `https://app.example.com/produktion`
 
 ## Checkpoints
 

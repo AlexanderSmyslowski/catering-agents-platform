@@ -20,6 +20,10 @@ docker compose up --build -d
 ```
 
 Danach ist die Plattform lokal standardmaessig auf `http://localhost:8080` erreichbar.
+Die getrennten Arbeitsflaechen liegen lokal unter:
+
+- `http://localhost:8080/angebot`
+- `http://localhost:8080/produktion`
 
 ## Oeffentliche Domain auf Hetzner
 
@@ -33,6 +37,10 @@ HTTPS_PORT=443
 ```
 
 Dann zeigt Caddy die Plattform unter `https://app.example.com` aus und terminiert TLS direkt im `web`-Container.
+Die beiden Agenten sind dann unter eigenen URLs erreichbar:
+
+- `https://app.example.com/angebot`
+- `https://app.example.com/produktion`
 
 ## Reproduzierbarer Deploy-Run
 
