@@ -355,6 +355,18 @@ button:disabled {
   font-size: 0.95rem;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .item-list {
   list-style: none;
   padding: 0;
@@ -402,6 +414,64 @@ button:disabled {
   border-radius: 1.15rem;
   padding: 1rem 1.1rem;
   overflow-x: auto;
+}
+
+.drag-drop-zone,
+.question-window {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1.2rem;
+  border-radius: 1.35rem;
+  background: rgba(250, 252, 255, 0.76);
+  border: 1px dashed rgba(15, 23, 34, 0.18);
+}
+
+.drag-drop-zone {
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.drag-drop-zone strong {
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+}
+
+.drag-drop-zone--active {
+  border-color: rgba(49, 99, 181, 0.55);
+  background: rgba(236, 244, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.drag-drop-zone__cta {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 34, 0.08);
+  box-shadow: 0 10px 24px rgba(31, 57, 89, 0.08);
+}
+
+.question-panel {
+  align-content: start;
+}
+
+.question-window__spec {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.question-list {
+  list-style: decimal;
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.55rem;
 }
 
 .status-card {

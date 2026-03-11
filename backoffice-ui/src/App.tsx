@@ -1,5 +1,6 @@
 import {
   startTransition,
+  type DragEvent,
   useDeferredValue,
   useEffect,
   useEffectEvent,
@@ -189,6 +190,90 @@ function getRouteSubtitle(route: AppRoute): string {
   return "Zwei spezialisierte Arbeitsflächen mit gemeinsamem Regelkern und klar getrennten Zuständigkeiten.";
 }
 
+function extractAcceptedSpecId(payload: Record<string, unknown>): string | undefined {
+  const spec = payload.acceptedEventSpec as Record<string, unknown> | undefined;
+  const specId = spec?.specId;
+  return typeof specId === "string" ? specId : undefined;
+}
+
+function extractProductionPlanId(payload: Record<string, unknown>): string | undefined {
+  const plan = payload.productionPlan as Record<string, unknown> | undefined;
+  const planId = plan?.planId;
+  return typeof planId === "string" ? planId : undefined;
+}
+
+function channelForFile(file: File): IntakeDocumentChannel {
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".eml")) {
+    return "email";
+  }
+  if (lowerName.endsWith(".pdf")) {
+    return "pdf_upload";
+  }
+  return "text";
+}
+
+function stringListFromUnknown(input: unknown): string[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  return input.map((item) => String(item)).filter(Boolean);
+}
+
+function messageListFromUnknown(input: unknown): string[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  return input
+    .map((item) => {
+      if (item && typeof item === "object" && "message" in item) {
+        return String((item as { message?: unknown }).message ?? "");
+      }
+      return String(item ?? "");
+    })
+    .filter(Boolean);
+}
+
+function buildProductionQuestions(spec?: Record<string, unknown>): string[] {
+  if (!spec) {
+    return ["Bitte ziehe zuerst ein Angebot hinein oder lade eine Datei hoch."];
+  }
+
+  const event = spec.event as Record<string, unknown> | undefined;
+  const attendees = spec.attendees as Record<string, unknown> | undefined;
+  const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
+  const missingFields = stringListFromUnknown(spec.missingFields);
+  const readiness = String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "");
+  const questions: string[] = [];
+
+  if (!event?.date) {
+    questions.push("Welches Veranstaltungsdatum gilt verbindlich für die Produktion?");
+  }
+  if (!attendees?.expected) {
+    questions.push("Mit welcher verbindlichen Teilnehmerzahl soll kalkuliert und produziert werden?");
+  }
+  if (!event?.serviceForm) {
+    questions.push("Welche Serviceform gilt: Buffet, Menü, Flying oder Ausgabe?");
+  }
+  if (menuPlan.length === 0) {
+    questions.push("Welche Gerichte oder Komponenten sollen konkret produziert werden?");
+  }
+
+  for (const field of missingFields) {
+    questions.push(`Bitte klären: ${field}`);
+  }
+
+  if (questions.length === 0 && readiness === "partial") {
+    questions.push("Bitte prüfe die Annahmen des Agenten, bevor die Produktion final freigegeben wird.");
+  }
+
+  if (questions.length === 0 && readiness === "insufficient") {
+    questions.push("Es fehlen noch Angaben, bevor belastbare Mengen und Einkaufslisten berechnet werden können.");
+  }
+
+  return [...new Set(questions)];
+}
+
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
   const baseUrl = useMemo(() => getBaseUrl(), []);
@@ -221,6 +306,8 @@ export function App() {
   const [editingSpecId, setEditingSpecId] = useState<string>();
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
+  const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string>();
+  const [dragActive, setDragActive] = useState(false);
   const [editingEventType, setEditingEventType] = useState("");
   const [editingEventDate, setEditingEventDate] = useState("");
   const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
@@ -323,6 +410,23 @@ export function App() {
     [dashboard.productionPlans, selectedPlanId]
   );
 
+  const focusedProductionSpec = useMemo(() => {
+    const preferred = focusedProductionSpecId
+      ? dashboard.acceptedSpecs.find((spec) => String(spec.specId) === focusedProductionSpecId)
+      : undefined;
+    return preferred ?? filteredSpecs[0] ?? dashboard.acceptedSpecs[0];
+  }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId]);
+
+  const productionQuestions = useMemo(
+    () => buildProductionQuestions(focusedProductionSpec),
+    [focusedProductionSpec]
+  );
+
+  const productionAssumptions = useMemo(
+    () => messageListFromUnknown(focusedProductionSpec?.assumptions),
+    [focusedProductionSpec]
+  );
+
   function clearMessages() {
     setError(undefined);
     setNotice(undefined);
@@ -332,7 +436,11 @@ export function App() {
     setSubmitting(true);
     clearMessages();
     try {
-      await createAcceptedSpecFromText(intakeText);
+      const response = await createAcceptedSpecFromText(intakeText);
+      const specId = extractAcceptedSpecId(response);
+      if (specId) {
+        setFocusedProductionSpecId(specId);
+      }
       await refreshDashboard();
       setNotice("Freitext wurde in eine operative Spezifikation überführt.");
     } catch (submitError) {
@@ -371,8 +479,13 @@ export function App() {
     setSubmitting(true);
     clearMessages();
     try {
-      await createAcceptedSpecFromDocument(intakeFile, intakeChannel);
+      const response = await createAcceptedSpecFromDocument(intakeFile, intakeChannel);
+      const specId = extractAcceptedSpecId(response);
+      if (specId) {
+        setFocusedProductionSpecId(specId);
+      }
       setIntakeFile(null);
+      setDragActive(false);
       await refreshDashboard();
       setNotice("Dokument wurde in eine operative Spezifikation überführt.");
     } catch (submitError) {
@@ -388,7 +501,7 @@ export function App() {
     setSubmitting(true);
     clearMessages();
     try {
-      await createAcceptedSpecFromManualForm({
+      const response = await createAcceptedSpecFromManualForm({
         eventType: manualEventType.trim() || undefined,
         eventDate: manualEventDate.trim() || undefined,
         attendeeCount: manualAttendeeCount.trim() ? Number(manualAttendeeCount) : undefined,
@@ -401,6 +514,10 @@ export function App() {
         venueName: manualVenueName.trim() || undefined,
         notes: manualNotes.trim() || undefined
       });
+      const specId = extractAcceptedSpecId(response);
+      if (specId) {
+        setFocusedProductionSpecId(specId);
+      }
       setManualEventDate("");
       setManualAttendeeCount("");
       setManualMenuItems("");
@@ -422,7 +539,11 @@ export function App() {
     setSubmitting(true);
     clearMessages();
     try {
-      await createProductionPlan(spec);
+      const response = await createProductionPlan(spec);
+      const planId = extractProductionPlanId(response);
+      if (planId) {
+        setSelectedPlanId(planId);
+      }
       await refreshDashboard();
       setNotice("Produktionsplan wurde erzeugt.");
     } catch (submitError) {
@@ -440,6 +561,7 @@ export function App() {
     const menuPlan = Array.isArray(spec.menuPlan) ? (spec.menuPlan as Array<Record<string, unknown>>) : [];
 
     setEditingSpecId(String(spec.specId));
+    setFocusedProductionSpecId(String(spec.specId));
     setEditingEventType(String(event?.type ?? ""));
     setEditingEventDate(String(event?.date ?? ""));
     setEditingAttendeeCount(String(attendees?.expected ?? ""));
@@ -564,6 +686,19 @@ export function App() {
   function handleOperatorNameChange(value: string) {
     const persisted = persistOperatorName(value);
     setOperatorName(persisted);
+  }
+
+  function handleProductionDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setDragActive(false);
+    const file = event.dataTransfer.files?.[0];
+    if (!file) {
+      return;
+    }
+    setIntakeFile(file);
+    setIntakeChannel(channelForFile(file));
+    setNotice(`Datei ${file.name} ist bereit zur Verarbeitung.`);
+    setError(undefined);
   }
 
   const routeCards = [
@@ -1028,8 +1163,55 @@ export function App() {
         <section className="wide-grid">
           <article className="panel form-panel">
             <header>
-              <p className="eyebrow">Unabhängige Erfassung</p>
-              <h3>Operative Daten ohne Angebotsagent anlegen</h3>
+              <p className="eyebrow">Schritt 1</p>
+              <h3>Angebot hineinziehen oder hochladen</h3>
+            </header>
+            <label
+              className={dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={handleProductionDrop}
+            >
+              <input
+                className="visually-hidden"
+                type="file"
+                accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
+                onChange={(event) => {
+                  const nextFile = event.target.files?.[0] ?? null;
+                  setIntakeFile(nextFile);
+                  setIntakeChannel(nextFile ? channelForFile(nextFile) : intakeChannel);
+                  setDragActive(false);
+                }}
+              />
+              <span className="eyebrow">Drag & Drop</span>
+              <strong>Angebot, E-Mail oder Textdatei hier ablegen</strong>
+              <p className="helper-text">
+                PDF, E-Mail und Textdateien werden direkt in operative Veranstaltungsdaten überführt.
+              </p>
+              <span className="drag-drop-zone__cta">Datei auswählen</span>
+            </label>
+            {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
+            <div className="action-row">
+              <select
+                className="operator-input"
+                value={intakeChannel}
+                onChange={(event) => setIntakeChannel(event.target.value as IntakeDocumentChannel)}
+              >
+                <option value="pdf_upload">PDF / Angebot</option>
+                <option value="email">E-Mail</option>
+                <option value="text">Textdatei</option>
+              </select>
+              <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
+                Dokument übernehmen
+              </button>
+            </div>
+            <div className="divider" />
+            <header>
+              <p className="eyebrow">Alternative</p>
+              <h3>Freitext direkt einfügen</h3>
             </header>
             <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
             <div className="action-row">
@@ -1038,29 +1220,9 @@ export function App() {
               </button>
             </div>
             <div className="divider" />
-            <select
-              className="operator-input"
-              value={intakeChannel}
-              onChange={(event) => setIntakeChannel(event.target.value as IntakeDocumentChannel)}
-            >
-              <option value="pdf_upload">PDF / Angebot</option>
-              <option value="email">E-Mail</option>
-              <option value="text">Textdatei</option>
-            </select>
-            <input
-              className="file-input"
-              type="file"
-              accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
-              onChange={(event) => setIntakeFile(event.target.files?.[0] ?? null)}
-            />
-            <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
-              Dokument normalisieren
-            </button>
-            {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
-            <div className="divider" />
             <header>
-              <p className="eyebrow">Direkterfassung</p>
-              <h3>Veranstaltungsdaten strukturiert eingeben</h3>
+              <p className="eyebrow">Fallback</p>
+              <h3>Veranstaltungsdaten direkt eingeben</h3>
             </header>
             <input
               value={manualEventType}
@@ -1107,66 +1269,86 @@ export function App() {
             </button>
           </article>
 
-          <article className="panel form-panel">
+          <article className="panel form-panel question-panel">
             <header>
-              <p className="eyebrow">Rezeptbibliothek</p>
-              <h3>Rezepte in die gemeinsame Küchenbibliothek übernehmen</h3>
+              <p className="eyebrow">Schritt 2</p>
+              <h3>Rückfragen des Agenten</h3>
             </header>
-            <input
-              value={recipeName}
-              onChange={(event) => setRecipeName(event.target.value)}
-              placeholder="Optionaler Rezeptname"
-            />
-            <input
-              className="file-input"
-              type="file"
-              accept=".pdf,.txt,.md,text/plain,application/pdf"
-              onChange={(event) => setRecipeFile(event.target.files?.[0] ?? null)}
-            />
-            <p className="helper-text">
-              Die Bibliothek wird von Angebots- und Produktionsagent gemeinsam genutzt.
-            </p>
-            <div className="action-row">
-              <button disabled={submitting} onClick={() => void handleRecipeUpload("offer")}>
-                Über Angebotsagent speichern
-              </button>
-              <button disabled={submitting} onClick={() => void handleRecipeUpload("production")}>
-                Über Produktionsagent speichern
-              </button>
-            </div>
-            {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
-          </article>
-
-          <article className="panel">
-            <header>
-              <p className="eyebrow">Operative Spezifikationen</p>
-              <h3>Grundlage für Küchenplanung und Einkaufslogik</h3>
-            </header>
-            <ul className="item-list">
-              {filteredSpecs.map((spec) => (
-                <li key={String(spec.specId)} className="list-row">
-                  <div>
-                    <strong>{getSpecLabel(spec)}</strong>
-                    <p>Status: {translateReadiness(String((spec.readiness as Record<string, unknown>)?.status ?? "-"))}</p>
-                  </div>
-                  <div className="action-row">
-                    <button disabled={submitting} onClick={() => void handleCreatePlan(spec)}>
-                      Produktion planen
-                    </button>
-                    <button className="secondary-button" disabled={submitting} onClick={() => beginSpecEdit(spec)}>
-                      Bearbeiten
-                    </button>
-                  </div>
-                </li>
-              ))}
-              {filteredSpecs.length === 0 ? <li>Noch keine Spezifikationen vorhanden.</li> : null}
-            </ul>
+            {focusedProductionSpec ? (
+              <>
+                <div className="question-window">
+                  <p className="question-window__spec">{getSpecLabel(focusedProductionSpec)}</p>
+                  <p className="helper-text">
+                    Status:{" "}
+                    {translateReadiness(
+                      String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+                    )}
+                  </p>
+                  <ul className="question-list">
+                    {productionQuestions.map((question) => (
+                      <li key={question}>{question}</li>
+                    ))}
+                  </ul>
+                  {productionAssumptions.length > 0 ? (
+                    <>
+                      <p className="eyebrow">Annahmen des Agenten</p>
+                      <ul className="item-list compact">
+                        {productionAssumptions.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                </div>
+                <div className="action-row">
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() => beginSpecEdit(focusedProductionSpec)}
+                  >
+                    Rückfragen beantworten
+                  </button>
+                  <button disabled={submitting} onClick={() => void handleCreatePlan(focusedProductionSpec)}>
+                    Berechnung starten
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="helper-text">
+                Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten.
+              </p>
+            )}
+            {filteredSpecs.length > 1 ? (
+              <>
+                <div className="divider" />
+                <header>
+                  <p className="eyebrow">Erkannte Eingänge</p>
+                  <h3>Zwischen mehreren Vorgängen wechseln</h3>
+                </header>
+                <ul className="item-list compact">
+                  {filteredSpecs.slice(0, 6).map((spec) => (
+                    <li key={String(spec.specId)}>
+                      <strong>{getSpecLabel(spec)}</strong>
+                      <div className="action-row">
+                        <button
+                          className="secondary-button"
+                          disabled={submitting}
+                          onClick={() => setFocusedProductionSpecId(String(spec.specId))}
+                        >
+                          Für Rückfragen öffnen
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
             {editingSpecId ? (
               <>
                 <div className="divider" />
                 <div className="form-panel">
                   <header>
-                    <p className="eyebrow">Spezifikation bearbeiten</p>
+                    <p className="eyebrow">Antwortfenster</p>
                     <h3>{editingSpecId}</h3>
                   </header>
                   <input
@@ -1196,10 +1378,10 @@ export function App() {
                   />
                   <div className="action-row">
                     <button disabled={submitting} onClick={() => void handleSaveSpecEdit()}>
-                      Spezifikation speichern
+                      Antworten speichern
                     </button>
                     <button className="secondary-button" disabled={submitting} onClick={() => resetSpecEdit()}>
-                      Abbrechen
+                      Fenster schließen
                     </button>
                   </div>
                 </div>
@@ -1209,8 +1391,8 @@ export function App() {
 
           <article className="panel">
             <header>
-              <p className="eyebrow">Produktionspläne</p>
-              <h3>Küchenausgabe, Zeitfenster und Rezeptauswahl</h3>
+              <p className="eyebrow">Schritt 3</p>
+              <h3>Berechnete Ergebnisse</h3>
             </header>
             <ul className="item-list compact">
               {filteredPlans.map((plan) => (
@@ -1266,6 +1448,33 @@ export function App() {
                 </ul>
               </>
             ) : null}
+          </article>
+
+          <article className="panel form-panel">
+            <header>
+              <p className="eyebrow">Rezeptbibliothek</p>
+              <h3>Zusätzliche Rezepte in die Küchenbibliothek übernehmen</h3>
+            </header>
+            <input
+              value={recipeName}
+              onChange={(event) => setRecipeName(event.target.value)}
+              placeholder="Optionaler Rezeptname"
+            />
+            <input
+              className="file-input"
+              type="file"
+              accept=".pdf,.txt,.md,text/plain,application/pdf"
+              onChange={(event) => setRecipeFile(event.target.files?.[0] ?? null)}
+            />
+            <div className="action-row">
+              <button disabled={submitting} onClick={() => void handleRecipeUpload("offer")}>
+                Über Angebotsagent speichern
+              </button>
+              <button disabled={submitting} onClick={() => void handleRecipeUpload("production")}>
+                Über Produktionsagent speichern
+              </button>
+            </div>
+            {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
           </article>
 
           <article className="panel">
