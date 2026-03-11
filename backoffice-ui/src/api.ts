@@ -10,6 +10,7 @@ export interface DashboardState {
 
 export type RecipeUploadTarget = "offer" | "production";
 export type RecipeReviewDecision = "approve" | "verify" | "reject";
+export type IntakeDocumentChannel = "pdf_upload" | "email" | "text";
 
 export interface ServiceHealth {
   service: string;
@@ -103,6 +104,35 @@ export async function createAcceptedSpecFromText(text: string) {
   return fetchJson<Record<string, unknown>>("/api/intake/v1/intake/normalize", {
     method: "POST",
     body: JSON.stringify({ text })
+  });
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  for (const value of bytes) {
+    binary += String.fromCharCode(value);
+  }
+  return btoa(binary);
+}
+
+export async function createAcceptedSpecFromDocument(
+  file: File,
+  channel: IntakeDocumentChannel
+) {
+  return fetchJson<Record<string, unknown>>("/api/intake/v1/intake/documents", {
+    method: "POST",
+    body: JSON.stringify({
+      channel,
+      documents: [
+        {
+          filename: file.name,
+          mimeType: file.type || "text/plain",
+          contentBase64: await fileToBase64(file)
+        }
+      ]
+    })
   });
 }
 

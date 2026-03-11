@@ -9,6 +9,7 @@ import {
 import { DashboardShell } from "../components/dashboard-shell.js";
 import { StatusCard } from "../components/status-card.js";
 import {
+  createAcceptedSpecFromDocument,
   createAcceptedSpecFromText,
   createOfferFromText,
   createProductionPlan,
@@ -23,6 +24,7 @@ import {
   seedDemoData,
   uploadRecipeFile,
   type DashboardState,
+  type IntakeDocumentChannel,
   type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
@@ -91,6 +93,8 @@ export function App() {
   const [intakeText, setIntakeText] = useState(
     "Konferenz am 2026-06-18 fuer 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
   );
+  const [intakeFile, setIntakeFile] = useState<File | null>(null);
+  const [intakeChannel, setIntakeChannel] = useState<IntakeDocumentChannel>("pdf_upload");
   const [offerText, setOfferText] = useState(
     "Meeting am 2026-06-25 fuer 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
   );
@@ -184,6 +188,27 @@ export function App() {
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Failed to create offer draft."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleIntakeDocumentSubmit() {
+    if (!intakeFile) {
+      setError("Please choose a document before uploading.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await createAcceptedSpecFromDocument(intakeFile, intakeChannel);
+      setIntakeFile(null);
+      await refreshDashboard();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Failed to normalize intake document."
       );
     } finally {
       setSubmitting(false);
@@ -326,9 +351,40 @@ export function App() {
             <h3>Normalize free text into AcceptedEventSpec</h3>
           </header>
           <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
-          <button disabled={submitting} onClick={() => void handleIntakeSubmit()}>
-            Intake normalisieren
-          </button>
+          <div className="action-row">
+            <button disabled={submitting} onClick={() => void handleIntakeSubmit()}>
+              Text normalisieren
+            </button>
+          </div>
+          <div className="divider" />
+          <header>
+            <p className="eyebrow">Document Intake</p>
+            <h3>Upload PDF, E-Mail or text offer files</h3>
+          </header>
+          <select
+            className="operator-input"
+            value={intakeChannel}
+            onChange={(event) => setIntakeChannel(event.target.value as IntakeDocumentChannel)}
+          >
+            <option value="pdf_upload">PDF / Angebot</option>
+            <option value="email">E-Mail</option>
+            <option value="text">Textdatei</option>
+          </select>
+          <input
+            className="file-input"
+            type="file"
+            accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
+            onChange={(event) => setIntakeFile(event.target.files?.[0] ?? null)}
+          />
+          <p className="helper-text">
+            Diese Schicht fuehrt manuelle Dateien direkt in dasselbe AcceptedEventSpec wie der Agent-1-Pfad.
+          </p>
+          <div className="action-row">
+            <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
+              Dokument normalisieren
+            </button>
+          </div>
+          {intakeFile ? <p className="helper-text">Ausgewaehlt: {intakeFile.name}</p> : null}
         </article>
 
         <article className="panel form-panel">

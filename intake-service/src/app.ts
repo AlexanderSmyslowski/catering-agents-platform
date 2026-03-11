@@ -24,6 +24,21 @@ interface DocumentBody {
   requestId?: string;
 }
 
+function rawInputKindForMimeType(
+  mimeType: string
+): EventRequest["rawInputs"][number]["kind"] {
+  if (mimeType.includes("pdf")) {
+    return "pdf";
+  }
+  if (mimeType.includes("message/rfc822")) {
+    return "email";
+  }
+  if (mimeType.includes("json")) {
+    return "json";
+  }
+  return "text";
+}
+
 export interface IntakeAppOptions extends CollectionStorageOptions {
   store?: IntakeStore;
   auditLog?: AuditLogStore;
@@ -139,6 +154,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     const extracted = await Promise.all(
       documents.map(async (document, index) => ({
         documentId: `${body.requestId ?? "document"}-${index + 1}`,
+        mimeType: document.mimeType,
         text: await extractTextFromDocument(document)
       }))
     );
@@ -151,9 +167,9 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         receivedAt: new Date().toISOString()
       },
       rawInputs: extracted.map((item) => ({
-        kind: "pdf",
+        kind: rawInputKindForMimeType(item.mimeType),
         content: item.text,
-        mimeType: "application/pdf",
+        mimeType: item.mimeType,
         documentId: item.documentId
       }))
     };
@@ -161,7 +177,12 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     const validatedRequest = validateEventRequest(eventRequest);
     const spec = validateAcceptedEventSpec(
       normalizeEventRequestToSpec(validatedRequest, {
-        sourceType: "pdf",
+        sourceType:
+          validatedRequest.source.channel === "email"
+            ? "email"
+            : validatedRequest.source.channel === "pdf_upload"
+              ? "pdf"
+              : "manual_input",
         reference: validatedRequest.requestId,
         commercialState: "manual"
       })

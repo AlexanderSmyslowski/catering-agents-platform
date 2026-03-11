@@ -79,6 +79,40 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("normalizes uploaded intake documents into the canonical AcceptedEventSpec", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/intake/documents",
+      payload: {
+        channel: "text",
+        documents: [
+          {
+            filename: "angebot.txt",
+            mimeType: "text/plain",
+            contentBase64: Buffer.from(
+              "Meeting am 2026-05-14 fuer 24 Teilnehmer mit Kaffeepause und Croissants.",
+              "utf8"
+            ).toString("base64")
+          }
+        ]
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.eventRequest.rawInputs[0].kind).toBe("text");
+    expect(body.eventRequest.rawInputs[0].mimeType).toBe("text/plain");
+    expect(body.acceptedEventSpec.attendees.expected).toBe(24);
+    expect(body.acceptedEventSpec.readiness.status).toBe("complete");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("creates an offer draft and promotes a structured variant", async () => {
     const dataRoot = createDataRoot();
     const app = buildOfferApp(new OfferStore({ rootDir: dataRoot }));

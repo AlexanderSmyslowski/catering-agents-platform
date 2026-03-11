@@ -50,6 +50,7 @@ Empfohlener Betriebsmodus:
 - Kueche / Produktionsplanung oeffnet dieselbe Web-App im Bereich `Production Control`
 - Intake- und Review-Masken liegen ebenfalls in derselben internen Anwendung
 - Rezept-PDFs oder Textdateien koennen ueber beide Agenten-Workspaces hochgeladen werden und erweitern die gemeinsame Rezeptbibliothek
+- manuelle Angebote, PDFs, E-Mails und Textdateien koennen ueber den Intake-Upload direkt nach `AcceptedEventSpec` normalisiert werden
 - Rezepte aus Uploads oder Internet-Fallbacks koennen in der Rezeptliste freigegeben, verifiziert oder abgelehnt werden
 - Service-Gesundheit und Demo-Seeding sind ueber die Admin-Pfade in der Web-App sichtbar
 - die Web-App fuehrt einen Operator-Namen lokal und sendet ihn bei mutierenden Aktionen mit, damit Audit-Eintraege personell nachvollziehbar bleiben
