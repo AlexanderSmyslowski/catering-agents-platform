@@ -299,6 +299,94 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("exposes health endpoints and idempotent demo seeding across services", async () => {
+    const dataRoot = createDataRoot();
+    const intakeApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+    const offerApp = buildOfferApp({
+      rootDir: dataRoot
+    });
+    const productionApp = buildProductionApp({
+      dataRoot
+    });
+    const exportApp = buildPrintExportApp({
+      rootDir: dataRoot
+    });
+
+    const initialIntakeHealth = await intakeApp.inject({
+      method: "GET",
+      url: "/health"
+    });
+    const initialOfferHealth = await offerApp.inject({
+      method: "GET",
+      url: "/health"
+    });
+    const initialProductionHealth = await productionApp.inject({
+      method: "GET",
+      url: "/health"
+    });
+    const initialExportHealth = await exportApp.inject({
+      method: "GET",
+      url: "/health"
+    });
+
+    expect(initialIntakeHealth.statusCode).toBe(200);
+    expect(initialOfferHealth.statusCode).toBe(200);
+    expect(initialProductionHealth.statusCode).toBe(200);
+    expect(initialExportHealth.statusCode).toBe(200);
+
+    const seedResponses = await Promise.all([
+      intakeApp.inject({
+        method: "POST",
+        url: "/v1/intake/seed-demo"
+      }),
+      offerApp.inject({
+        method: "POST",
+        url: "/v1/offers/seed-demo"
+      }),
+      productionApp.inject({
+        method: "POST",
+        url: "/v1/production/seed-demo"
+      })
+    ]);
+
+    seedResponses.forEach((response) => {
+      expect(response.statusCode).toBe(201);
+    });
+
+    const repeatedSeedResponses = await Promise.all([
+      intakeApp.inject({
+        method: "POST",
+        url: "/v1/intake/seed-demo"
+      }),
+      offerApp.inject({
+        method: "POST",
+        url: "/v1/offers/seed-demo"
+      }),
+      productionApp.inject({
+        method: "POST",
+        url: "/v1/production/seed-demo"
+      })
+    ]);
+
+    expect(repeatedSeedResponses[0].json().counts.requests).toBe(seedResponses[0].json().counts.requests);
+    expect(repeatedSeedResponses[1].json().counts.offerDrafts).toBe(seedResponses[1].json().counts.offerDrafts);
+    expect(repeatedSeedResponses[2].json().counts.productionPlans).toBe(seedResponses[2].json().counts.productionPlans);
+
+    const finalExportHealth = await exportApp.inject({
+      method: "GET",
+      url: "/health"
+    });
+
+    expect(finalExportHealth.json().counts.offerDrafts).toBeGreaterThan(0);
+    expect(finalExportHealth.json().counts.productionPlans).toBeGreaterThan(0);
+
+    await intakeApp.close();
+    await offerApp.close();
+    await productionApp.close();
+    await exportApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("persists intake specs and requests across app restarts", async () => {
     const dataRoot = createDataRoot();
     const firstApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));

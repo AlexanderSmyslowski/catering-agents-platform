@@ -66,6 +66,15 @@ Die Rezeptbibliothek kann jetzt von beiden Agenten aus erweitert werden:
 - beide Pfade schreiben in dieselbe persistierte Rezeptbibliothek
 - fuer Tests und interne Automationen existieren zusaetzlich die JSON-Endpunkte `.../recipes/import-text`
 
+Fuer frische Deployments stehen ausserdem Admin-Endpunkte bereit:
+
+- `GET /health` auf Intake, Offer, Production und Export
+- `POST /v1/intake/seed-demo`
+- `POST /v1/offers/seed-demo`
+- `POST /v1/production/seed-demo`
+
+Die Web-App nutzt diese Pfade jetzt direkt fuer Service-Status und Demo-Befuellung.
+
 ## Docker / Hetzner-MVP
 
 Fuer einen zentralen Serverbetrieb liegt unter [platform-infra/README.md](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/platform-infra/README.md) eine Compose-Basis mit:

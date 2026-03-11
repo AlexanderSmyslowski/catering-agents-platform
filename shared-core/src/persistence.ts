@@ -89,19 +89,21 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
     mkdirSync(this.directory, {
       recursive: true
     });
-    this.loadExisting();
+    this.syncFromDisk();
     if (options.seed && options.seed.length > 0) {
       this.ensureSeed(options.seed);
     }
   }
 
   async list(): Promise<T[]> {
+    this.syncFromDisk();
     return [...this.items.entries()]
       .sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
       .map(([, value]) => value);
   }
 
   async get(id: string): Promise<T | undefined> {
+    this.syncFromDisk();
     return this.items.get(id);
   }
 
@@ -123,7 +125,8 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
     }
   }
 
-  private loadExisting(): void {
+  private syncFromDisk(): void {
+    this.items.clear();
     if (!existsSync(this.directory)) {
       return;
     }

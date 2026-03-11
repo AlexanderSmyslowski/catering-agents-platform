@@ -9,6 +9,20 @@ export interface DashboardState {
 
 export type RecipeUploadTarget = "offer" | "production";
 
+export interface ServiceHealth {
+  service: string;
+  status: string;
+  timestamp: string;
+  counts: Record<string, number>;
+}
+
+export interface ServiceHealthState {
+  intake: ServiceHealth;
+  offers: ServiceHealth;
+  production: ServiceHealth;
+  exports: ServiceHealth;
+}
+
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     headers: {
@@ -43,6 +57,22 @@ export async function loadDashboardState(): Promise<DashboardState> {
     productionPlans: productionPlans.items,
     purchaseLists: purchaseLists.items,
     recipes: recipes.items
+  };
+}
+
+export async function loadServiceHealth(): Promise<ServiceHealthState> {
+  const [intake, offers, production, exportsHealth] = await Promise.all([
+    fetchJson<ServiceHealth>("/api/intake/health"),
+    fetchJson<ServiceHealth>("/api/offers/health"),
+    fetchJson<ServiceHealth>("/api/production/health"),
+    fetchJson<ServiceHealth>("/api/exports/health")
+  ]);
+
+  return {
+    intake,
+    offers,
+    production,
+    exports: exportsHealth
   };
 }
 
@@ -93,6 +123,29 @@ export async function uploadRecipeFile(
   }
 
   return (await response.json()) as { recipe: Record<string, unknown> };
+}
+
+export async function seedDemoData() {
+  const [intake, offers, production] = await Promise.all([
+    fetchJson<Record<string, unknown>>("/api/intake/v1/intake/seed-demo", {
+      method: "POST",
+      body: "{}"
+    }),
+    fetchJson<Record<string, unknown>>("/api/offers/v1/offers/seed-demo", {
+      method: "POST",
+      body: "{}"
+    }),
+    fetchJson<Record<string, unknown>>("/api/production/v1/production/seed-demo", {
+      method: "POST",
+      body: "{}"
+    })
+  ]);
+
+  return {
+    intake,
+    offers,
+    production
+  };
 }
 
 export function offerExportUrl(draftId: string): string {

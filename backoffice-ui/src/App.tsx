@@ -13,11 +13,14 @@ import {
   createOfferFromText,
   createProductionPlan,
   loadDashboardState,
+  loadServiceHealth,
   offerExportUrl,
   productionExportUrl,
   purchaseListExportUrl,
+  seedDemoData,
   uploadRecipeFile,
-  type DashboardState
+  type DashboardState,
+  type ServiceHealthState
 } from "./api.js";
 
 const emptyState: DashboardState = {
@@ -29,14 +32,53 @@ const emptyState: DashboardState = {
   recipes: []
 };
 
+const emptyHealth: ServiceHealthState = {
+  intake: {
+    service: "intake-service",
+    status: "unknown",
+    timestamp: "",
+    counts: {}
+  },
+  offers: {
+    service: "offer-service",
+    status: "unknown",
+    timestamp: "",
+    counts: {}
+  },
+  production: {
+    service: "production-service",
+    status: "unknown",
+    timestamp: "",
+    counts: {}
+  },
+  exports: {
+    service: "print-export",
+    status: "unknown",
+    timestamp: "",
+    counts: {}
+  }
+};
+
 function getSpecLabel(spec: Record<string, unknown>): string {
   const event = spec.event as Record<string, unknown> | undefined;
   const attendees = spec.attendees as Record<string, unknown> | undefined;
   return `${event?.type ?? "Event"} | ${attendees?.expected ?? "?"} pax | ${event?.date ?? "offen"}`;
 }
 
+function formatCounts(counts: Record<string, number>): string {
+  const entries = Object.entries(counts);
+  if (entries.length === 0) {
+    return "No counters";
+  }
+
+  return entries
+    .map(([label, value]) => `${label}: ${value}`)
+    .join(" | ");
+}
+
 export function App() {
   const [dashboard, setDashboard] = useState<DashboardState>(emptyState);
+  const [serviceHealth, setServiceHealth] = useState<ServiceHealthState>(emptyHealth);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
@@ -56,9 +98,13 @@ export function App() {
     setError(undefined);
 
     try {
-      const state = await loadDashboardState();
+      const [state, health] = await Promise.all([
+        loadDashboardState(),
+        loadServiceHealth()
+      ]);
       startTransition(() => {
         setDashboard(state);
+        setServiceHealth(health);
         setLoading(false);
       });
     } catch (refreshError) {
@@ -164,6 +210,21 @@ export function App() {
     }
   }
 
+  async function handleSeedDemoData() {
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await seedDemoData();
+      await refreshDashboard();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Failed to seed demo data."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <DashboardShell title="Catering Operations Backoffice">
       <section className="hero-panel">
@@ -191,6 +252,24 @@ export function App() {
           <StatusCard
             title="Recipe Inventory"
             body={`${dashboard.recipes.length} recipes cached, including internet fallbacks.`}
+          />
+        </div>
+        <div className="metrics-grid">
+          <StatusCard
+            title="Intake Health"
+            body={`${serviceHealth.intake.status} | ${formatCounts(serviceHealth.intake.counts)}`}
+          />
+          <StatusCard
+            title="Offer Health"
+            body={`${serviceHealth.offers.status} | ${formatCounts(serviceHealth.offers.counts)}`}
+          />
+          <StatusCard
+            title="Production Health"
+            body={`${serviceHealth.production.status} | ${formatCounts(serviceHealth.production.counts)}`}
+          />
+          <StatusCard
+            title="Export Health"
+            body={`${serviceHealth.exports.status} | ${formatCounts(serviceHealth.exports.counts)}`}
           />
         </div>
       </section>
@@ -256,6 +335,9 @@ export function App() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <button disabled={loading || submitting} onClick={() => void handleSeedDemoData()}>
+          Demo-Daten laden
+        </button>
         <button disabled={loading || submitting} onClick={() => void refreshDashboard()}>
           Refresh
         </button>

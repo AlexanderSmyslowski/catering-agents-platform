@@ -48,6 +48,7 @@ Empfohlener Betriebsmodus:
 - Kueche / Produktionsplanung oeffnet dieselbe Web-App im Bereich `Production Control`
 - Intake- und Review-Masken liegen ebenfalls in derselben internen Anwendung
 - Rezept-PDFs oder Textdateien koennen ueber beide Agenten-Workspaces hochgeladen werden und erweitern die gemeinsame Rezeptbibliothek
+- Service-Gesundheit und Demo-Seeding sind ueber die Admin-Pfade in der Web-App sichtbar
 - Rollen und Rechte werden in der App und vor dem Reverse Proxy geregelt
 
 Nicht empfohlen:
