@@ -497,6 +497,32 @@ export function App() {
     }
   }
 
+  async function processIncomingProductionFile(file: File, channel: IntakeDocumentChannel) {
+    setSubmitting(true);
+    clearMessages();
+    setIntakeFile(file);
+    setIntakeChannel(channel);
+
+    try {
+      const response = await createAcceptedSpecFromDocument(file, channel);
+      const specId = extractAcceptedSpecId(response);
+      if (specId) {
+        setFocusedProductionSpecId(specId);
+      }
+      setIntakeFile(null);
+      setDragActive(false);
+      await refreshDashboard();
+      setNotice(`Dokument ${file.name} wurde übernommen und analysiert.`);
+    } catch (submitError) {
+      setIntakeFile(file);
+      setError(
+        submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleManualSpecSubmit() {
     setSubmitting(true);
     clearMessages();
@@ -695,10 +721,7 @@ export function App() {
     if (!file) {
       return;
     }
-    setIntakeFile(file);
-    setIntakeChannel(channelForFile(file));
-    setNotice(`Datei ${file.name} ist bereit zur Verarbeitung.`);
-    setError(undefined);
+    void processIncomingProductionFile(file, channelForFile(file));
   }
 
   const routeCards = [
@@ -1181,15 +1204,17 @@ export function App() {
                 accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
                 onChange={(event) => {
                   const nextFile = event.target.files?.[0] ?? null;
-                  setIntakeFile(nextFile);
-                  setIntakeChannel(nextFile ? channelForFile(nextFile) : intakeChannel);
+                  if (!nextFile) {
+                    return;
+                  }
                   setDragActive(false);
+                  void processIncomingProductionFile(nextFile, channelForFile(nextFile));
                 }}
               />
               <span className="eyebrow">Drag & Drop</span>
               <strong>Angebot, E-Mail oder Textdatei hier ablegen</strong>
               <p className="helper-text">
-                PDF, E-Mail und Textdateien werden direkt in operative Veranstaltungsdaten überführt.
+                PDF, E-Mail und Textdateien werden sofort analysiert und in operative Veranstaltungsdaten überführt.
               </p>
               <span className="drag-drop-zone__cta">Datei auswählen</span>
             </label>
@@ -1205,7 +1230,7 @@ export function App() {
                 <option value="text">Textdatei</option>
               </select>
               <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
-                Dokument übernehmen
+                Erneut mit ausgewähltem Typ verarbeiten
               </button>
             </div>
             <div className="divider" />
