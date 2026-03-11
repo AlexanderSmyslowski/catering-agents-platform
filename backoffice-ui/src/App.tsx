@@ -245,6 +245,7 @@ export function App() {
   const [recipeFile, setRecipeFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
   const [editingSpecId, setEditingSpecId] = useState<string>();
+  const [dismissedProductionAnswerSpecId, setDismissedProductionAnswerSpecId] = useState<string>();
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string>();
@@ -544,12 +545,13 @@ export function App() {
     }
   }
 
-  function beginSpecEdit(spec: Record<string, unknown>) {
+  function loadSpecIntoEditor(spec: Record<string, unknown>) {
     const event = spec.event as Record<string, unknown> | undefined;
     const attendees = spec.attendees as Record<string, unknown> | undefined;
     const menuPlan = Array.isArray(spec.menuPlan) ? (spec.menuPlan as Array<Record<string, unknown>>) : [];
 
     setEditingSpecId(String(spec.specId));
+    setDismissedProductionAnswerSpecId(undefined);
     setFocusedProductionSpecId(String(spec.specId));
     setEditingEventType(String(event?.type ?? ""));
     setEditingEventDate(String(event?.date ?? ""));
@@ -558,7 +560,16 @@ export function App() {
     setEditingMenuItems(menuPlan.map((item) => String(item.label ?? "")).filter(Boolean).join(", "));
   }
 
-  function resetSpecEdit() {
+  function beginSpecEdit(spec: Record<string, unknown>) {
+    loadSpecIntoEditor(spec);
+  }
+
+  function resetSpecEdit(markDismissed = true) {
+    if (markDismissed) {
+      setDismissedProductionAnswerSpecId(editingSpecId);
+    } else {
+      setDismissedProductionAnswerSpecId(undefined);
+    }
     setEditingSpecId(undefined);
     setEditingEventType("");
     setEditingEventDate("");
@@ -585,7 +596,7 @@ export function App() {
           .map((item) => item.trim())
           .filter(Boolean)
       });
-      resetSpecEdit();
+      resetSpecEdit(false);
       await refreshDashboard();
       setNotice("Spezifikation wurde gespeichert.");
     } catch (submitError) {
@@ -596,6 +607,36 @@ export function App() {
       setSubmitting(false);
     }
   }
+
+  useEffect(() => {
+    if (route !== "production" || !focusedProductionSpec) {
+      return;
+    }
+
+    const specId = String(focusedProductionSpec.specId ?? "");
+    if (!specId) {
+      return;
+    }
+
+    const readiness = String(
+      (focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? ""
+    );
+    const shouldAutoOpen = productionQuestions.length > 0 || readiness !== "complete";
+
+    if (
+      shouldAutoOpen &&
+      editingSpecId !== specId &&
+      dismissedProductionAnswerSpecId !== specId
+    ) {
+      loadSpecIntoEditor(focusedProductionSpec);
+    }
+  }, [
+    dismissedProductionAnswerSpecId,
+    editingSpecId,
+    focusedProductionSpec,
+    productionQuestions.length,
+    route
+  ]);
 
   async function handlePromoteDraft(draftId: string, variantId?: string) {
     setSubmitting(true);
@@ -1332,6 +1373,74 @@ export function App() {
                       </ul>
                     </>
                   ) : null}
+                  {editingSpecId === String(focusedProductionSpec.specId) ? (
+                    <>
+                      <div className="divider" />
+                      <header>
+                        <p className="eyebrow">Direkte Antworten</p>
+                        <h4 className="subsection-title">Rückfragen unmittelbar ergänzen</h4>
+                      </header>
+                      <div className="answer-grid">
+                        <label className="field-block">
+                          <span>Veranstaltungstyp</span>
+                          <select
+                            value={editingEventType}
+                            onChange={(event) => setEditingEventType(event.target.value)}
+                          >
+                            <option value="">Bitte wählen</option>
+                            <option value="meeting">Besprechung</option>
+                            <option value="conference">Konferenz</option>
+                            <option value="lunch">Lunch</option>
+                            <option value="reception">Empfang</option>
+                            <option value="dinner">Abendessen</option>
+                            <option value="trade_fair">Messe</option>
+                          </select>
+                        </label>
+                        <label className="field-block">
+                          <span>Datum</span>
+                          <input
+                            value={editingEventDate}
+                            onChange={(event) => setEditingEventDate(event.target.value)}
+                            placeholder="2026-06-18"
+                          />
+                        </label>
+                        <label className="field-block">
+                          <span>Teilnehmerzahl</span>
+                          <input
+                            value={editingAttendeeCount}
+                            onChange={(event) => setEditingAttendeeCount(event.target.value)}
+                            inputMode="numeric"
+                            placeholder="120"
+                          />
+                        </label>
+                        <label className="field-block">
+                          <span>Serviceform</span>
+                          <select
+                            value={editingServiceForm}
+                            onChange={(event) => setEditingServiceForm(event.target.value)}
+                          >
+                            <option value="">Bitte wählen</option>
+                            <option value="buffet">Buffet</option>
+                            <option value="plated">Menü am Platz</option>
+                            <option value="standing_reception">Empfang / Flying</option>
+                            <option value="grab_and_go">Ausgabe / Grab-and-go</option>
+                            <option value="coffee_break">Kaffeepause</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="field-block">
+                        <span>Gerichte und Komponenten</span>
+                        <textarea
+                          value={editingMenuItems}
+                          onChange={(event) => setEditingMenuItems(event.target.value)}
+                          placeholder="Kalbsbuletten, Kartoffelsalat, Nudelsalat, Mandel-Curry, Schokoladenkuchen"
+                        />
+                      </label>
+                      <p className="helper-text">
+                        Mehrere Gerichte bitte durch Komma trennen. Diese Angaben aktualisieren direkt die operative Spezifikation.
+                      </p>
+                    </>
+                  ) : null}
                 </div>
                 <div className="action-row">
                   <button
@@ -1339,8 +1448,13 @@ export function App() {
                     disabled={submitting}
                     onClick={() => beginSpecEdit(focusedProductionSpec)}
                   >
-                    Rückfragen beantworten
+                    Antworten bearbeiten
                   </button>
+                  {editingSpecId === String(focusedProductionSpec.specId) ? (
+                    <button className="secondary-button" disabled={submitting} onClick={() => void handleSaveSpecEdit()}>
+                      Antworten speichern
+                    </button>
+                  ) : null}
                   <button disabled={submitting} onClick={() => void handleCreatePlan(focusedProductionSpec)}>
                     Berechnung starten
                   </button>
@@ -1378,7 +1492,7 @@ export function App() {
                 </ul>
               </>
             ) : null}
-            {editingSpecId ? (
+            {editingSpecId && editingSpecId !== String(focusedProductionSpec?.specId ?? "") ? (
               <>
                 <div className="divider" />
                 <div className="form-panel">

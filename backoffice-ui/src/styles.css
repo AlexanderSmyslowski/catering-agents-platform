@@ -474,6 +474,29 @@ button:disabled {
   gap: 0.55rem;
 }
 
+.subsection-title {
+  margin: 0;
+  letter-spacing: -0.02em;
+  font-size: 1.02rem;
+}
+
+.answer-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.field-block {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field-block span {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(15, 23, 34, 0.7);
+}
+
 .processing-note {
   margin: 0;
   padding: 0.9rem 1rem;
