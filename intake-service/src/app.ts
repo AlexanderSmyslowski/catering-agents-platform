@@ -150,8 +150,9 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool
     });
-  const app = Fastify({
-    logger: false
+const app = Fastify({
+    logger: false,
+    bodyLimit: 25 * 1024 * 1024
   });
 
   app.register(multipart);

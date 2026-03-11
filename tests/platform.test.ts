@@ -113,6 +113,35 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("accepts larger uploaded intake documents without failing on body size limits", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+    const repeatedText = `${"Lunch am 2026-05-14 fuer 120 Teilnehmer mit Buffet und Dessert. ".repeat(120000)}Ende.`;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/intake/documents",
+      payload: {
+        channel: "text",
+        documents: [
+          {
+            filename: "grosses-angebot.txt",
+            mimeType: "text/plain",
+            contentBase64: Buffer.from(repeatedText, "utf8").toString("base64")
+          }
+        ]
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().acceptedEventSpec.attendees.expected).toBe(120);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("allows manual enrichment of AcceptedEventSpec data through the intake service", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
