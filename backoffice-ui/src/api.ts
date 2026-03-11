@@ -136,6 +136,25 @@ export async function createAcceptedSpecFromDocument(
   });
 }
 
+export async function updateAcceptedSpec(
+  specId: string,
+  input: {
+    eventDate?: string;
+    attendeeCount?: number;
+    serviceForm?: string;
+    eventType?: string;
+    menuItems?: string[];
+  }
+) {
+  return fetchJson<{ acceptedEventSpec: Record<string, unknown> }>(
+    `/api/intake/v1/intake/specs/${specId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
 export async function createOfferFromText(text: string) {
   return fetchJson<Record<string, unknown>>("/api/offers/v1/offers/from-text", {
     method: "POST",

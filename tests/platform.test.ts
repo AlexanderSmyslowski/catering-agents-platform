@@ -113,6 +113,45 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("allows manual enrichment of AcceptedEventSpec data through the intake service", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/normalize",
+      payload: {
+        text: "Event ohne Datum fuer unklare Teilnehmerzahl."
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    expect(createdSpec.readiness.status).toBe("insufficient");
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      payload: {
+        eventType: "conference",
+        eventDate: "2026-09-03",
+        attendeeCount: 48,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe", "Lunchbuffet"]
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json().acceptedEventSpec.readiness.status).toBe("complete");
+    expect(updateResponse.json().acceptedEventSpec.attendees.expected).toBe(48);
+    expect(updateResponse.json().acceptedEventSpec.menuPlan).toHaveLength(2);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("creates an offer draft and promotes a structured variant", async () => {
     const dataRoot = createDataRoot();
     const app = buildOfferApp(new OfferStore({ rootDir: dataRoot }));

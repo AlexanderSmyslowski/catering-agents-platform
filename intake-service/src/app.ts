@@ -6,8 +6,10 @@ import {
   type CollectionStorageOptions,
   getDemoIntakeRequests,
   normalizeEventRequestToSpec,
+  withEvaluatedReadiness,
   validateAcceptedEventSpec,
   validateEventRequest,
+  type AcceptedEventSpec,
   type DocumentInput,
   type EventRequest
 } from "@catering/shared-core";
@@ -24,6 +26,14 @@ interface DocumentBody {
   requestId?: string;
 }
 
+interface SpecUpdateBody {
+  eventDate?: string;
+  attendeeCount?: number;
+  serviceForm?: string;
+  eventType?: string;
+  menuItems?: string[];
+}
+
 function rawInputKindForMimeType(
   mimeType: string
 ): EventRequest["rawInputs"][number]["kind"] {
@@ -37,6 +47,62 @@ function rawInputKindForMimeType(
     return "json";
   }
   return "text";
+}
+
+function normalizeMenuItems(input: string[] | undefined): string[] | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const items = input.map((item) => item.trim()).filter(Boolean);
+  return items.length > 0 ? items : [];
+}
+
+function applySpecUpdates(
+  spec: AcceptedEventSpec,
+  body: SpecUpdateBody
+) {
+  const nextEventType = body.eventType?.trim() || spec.event.type || spec.servicePlan.eventType;
+  const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
+  const nextAttendeeCount = body.attendeeCount ?? spec.attendees.expected;
+  const nextMenuItems = normalizeMenuItems(body.menuItems);
+
+  const nextSpec = {
+    ...spec,
+    event: {
+      ...spec.event,
+      type: nextEventType,
+      date: body.eventDate?.trim() || spec.event.date,
+      serviceForm: nextServiceForm
+    },
+    attendees: {
+      ...spec.attendees,
+      expected: nextAttendeeCount
+    },
+    servicePlan: {
+      ...spec.servicePlan,
+      eventType: nextEventType ?? spec.servicePlan.eventType,
+      serviceForm: nextServiceForm
+    },
+    menuPlan:
+      nextMenuItems === undefined
+        ? spec.menuPlan.map((item) => ({
+            ...item,
+            serviceStyle: nextServiceForm,
+            servings: nextAttendeeCount
+          }))
+        : nextMenuItems.map((label, index) => ({
+            componentId: `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
+            label,
+            course: spec.menuPlan[index]?.course ?? "main",
+            serviceStyle: nextServiceForm,
+            desiredRecipeTags: spec.menuPlan[index]?.desiredRecipeTags ?? (nextEventType ? [nextEventType] : []),
+            servings: nextAttendeeCount,
+            dietaryTags: spec.menuPlan[index]?.dietaryTags ?? []
+          }))
+  };
+
+  return withEvaluatedReadiness(nextSpec);
 }
 
 export interface IntakeAppOptions extends CollectionStorageOptions {
@@ -271,6 +337,36 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     return reply.send(spec);
   });
+
+  app.patch<{ Params: { specId: string }; Body: SpecUpdateBody }>(
+    "/v1/intake/specs/:specId",
+    async (request, reply) => {
+      const spec = await store.getSpec(request.params.specId);
+      if (!spec) {
+        return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
+      }
+
+      const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
+      await store.saveSpec(updatedSpec);
+      await auditLog.log({
+        action: "intake.spec_updated",
+        entityType: "AcceptedEventSpec",
+        entityId: updatedSpec.specId,
+        actor: actorForRequest(request),
+        summary: "AcceptedEventSpec manuell nachbearbeitet.",
+        details: {
+          eventDate: updatedSpec.event.date,
+          attendeeCount: updatedSpec.attendees.expected,
+          serviceForm: updatedSpec.servicePlan.serviceForm,
+          readiness: updatedSpec.readiness.status
+        }
+      });
+
+      return reply.send({
+        acceptedEventSpec: updatedSpec
+      });
+    }
+  );
 
   return app;
 }

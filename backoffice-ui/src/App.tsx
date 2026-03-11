@@ -23,6 +23,7 @@ import {
   readOperatorName,
   reviewRecipe,
   seedDemoData,
+  updateAcceptedSpec,
   uploadRecipeFile,
   type DashboardState,
   type IntakeDocumentChannel,
@@ -161,6 +162,12 @@ export function App() {
   const [recipeName, setRecipeName] = useState("");
   const [recipeFile, setRecipeFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
+  const [editingSpecId, setEditingSpecId] = useState<string>();
+  const [editingEventType, setEditingEventType] = useState("");
+  const [editingEventDate, setEditingEventDate] = useState("");
+  const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
+  const [editingServiceForm, setEditingServiceForm] = useState("");
+  const [editingMenuItems, setEditingMenuItems] = useState("");
   const deferredSearch = useDeferredValue(search);
 
   const refreshDashboard = useEffectEvent(async () => {
@@ -284,6 +291,59 @@ export function App() {
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Produktionsplan konnte nicht erstellt werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function beginSpecEdit(spec: Record<string, unknown>) {
+    const event = spec.event as Record<string, unknown> | undefined;
+    const attendees = spec.attendees as Record<string, unknown> | undefined;
+    const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan as Array<Record<string, unknown>> : [];
+
+    setEditingSpecId(String(spec.specId));
+    setEditingEventType(String(event?.type ?? ""));
+    setEditingEventDate(String(event?.date ?? ""));
+    setEditingAttendeeCount(String(attendees?.expected ?? ""));
+    setEditingServiceForm(String(event?.serviceForm ?? ""));
+    setEditingMenuItems(menuPlan.map((item) => String(item.label ?? "")).filter(Boolean).join(", "));
+  }
+
+  function resetSpecEdit() {
+    setEditingSpecId(undefined);
+    setEditingEventType("");
+    setEditingEventDate("");
+    setEditingAttendeeCount("");
+    setEditingServiceForm("");
+    setEditingMenuItems("");
+  }
+
+  async function handleSaveSpecEdit() {
+    if (!editingSpecId) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await updateAcceptedSpec(editingSpecId, {
+        eventType: editingEventType.trim() || undefined,
+        eventDate: editingEventDate.trim() || undefined,
+        serviceForm: editingServiceForm.trim() || undefined,
+        attendeeCount: editingAttendeeCount.trim()
+          ? Number(editingAttendeeCount)
+          : undefined,
+        menuItems: editingMenuItems
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      });
+      resetSpecEdit();
+      await refreshDashboard();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Spezifikation konnte nicht gespeichert werden."
       );
     } finally {
       setSubmitting(false);
@@ -540,16 +600,73 @@ export function App() {
                   <strong>{getSpecLabel(spec)}</strong>
                   <p>Status: {translateReadiness(String((spec.readiness as Record<string, unknown>)?.status ?? "-"))}</p>
                 </div>
-                <button
-                  disabled={submitting}
-                  onClick={() => void handleCreatePlan(spec)}
-                >
-                  Produktion planen
-                </button>
+                <div className="action-row">
+                  <button
+                    disabled={submitting}
+                    onClick={() => void handleCreatePlan(spec)}
+                  >
+                    Produktion planen
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() => beginSpecEdit(spec)}
+                  >
+                    Nachbearbeiten
+                  </button>
+                </div>
               </li>
             ))}
             {filteredSpecs.length === 0 ? <li>Noch keine Spezifikationen vorhanden.</li> : null}
           </ul>
+          {editingSpecId ? (
+            <>
+              <div className="divider" />
+              <div className="form-panel">
+                <header>
+                  <p className="eyebrow">Spezifikation bearbeiten</p>
+                  <h3>{editingSpecId}</h3>
+                </header>
+                <input
+                  value={editingEventType}
+                  onChange={(event) => setEditingEventType(event.target.value)}
+                  placeholder="Eventtyp, z. B. conference"
+                />
+                <input
+                  value={editingEventDate}
+                  onChange={(event) => setEditingEventDate(event.target.value)}
+                  placeholder="Datum, z. B. 2026-06-18"
+                />
+                <input
+                  value={editingAttendeeCount}
+                  onChange={(event) => setEditingAttendeeCount(event.target.value)}
+                  placeholder="Teilnehmerzahl"
+                />
+                <input
+                  value={editingServiceForm}
+                  onChange={(event) => setEditingServiceForm(event.target.value)}
+                  placeholder="Serviceform, z. B. buffet"
+                />
+                <textarea
+                  value={editingMenuItems}
+                  onChange={(event) => setEditingMenuItems(event.target.value)}
+                  placeholder="Menuepunkte kommasepariert"
+                />
+                <div className="action-row">
+                  <button disabled={submitting} onClick={() => void handleSaveSpecEdit()}>
+                    Spezifikation speichern
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() => resetSpecEdit()}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
         </article>
 
         <article className="panel">
