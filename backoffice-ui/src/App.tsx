@@ -10,6 +10,7 @@ import { DashboardShell } from "../components/dashboard-shell.js";
 import { StatusCard } from "../components/status-card.js";
 import {
   createAcceptedSpecFromDocument,
+  createAcceptedSpecFromManualForm,
   createAcceptedSpecFromText,
   createOfferFromText,
   createProductionPlan,
@@ -154,6 +155,14 @@ export function App() {
   const [intakeText, setIntakeText] = useState(
     "Konferenz am 2026-06-18 fuer 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
   );
+  const [manualEventType, setManualEventType] = useState("conference");
+  const [manualEventDate, setManualEventDate] = useState("");
+  const [manualAttendeeCount, setManualAttendeeCount] = useState("");
+  const [manualServiceForm, setManualServiceForm] = useState("buffet");
+  const [manualMenuItems, setManualMenuItems] = useState("");
+  const [manualCustomerName, setManualCustomerName] = useState("");
+  const [manualVenueName, setManualVenueName] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
   const [intakeFile, setIntakeFile] = useState<File | null>(null);
   const [intakeChannel, setIntakeChannel] = useState<IntakeDocumentChannel>("pdf_upload");
   const [offerText, setOfferText] = useState(
@@ -276,6 +285,39 @@ export function App() {
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleManualSpecSubmit() {
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await createAcceptedSpecFromManualForm({
+        eventType: manualEventType.trim() || undefined,
+        eventDate: manualEventDate.trim() || undefined,
+        attendeeCount: manualAttendeeCount.trim() ? Number(manualAttendeeCount) : undefined,
+        serviceForm: manualServiceForm.trim() || undefined,
+        menuItems: manualMenuItems
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        customerName: manualCustomerName.trim() || undefined,
+        venueName: manualVenueName.trim() || undefined,
+        notes: manualNotes.trim() || undefined
+      });
+      setManualEventDate("");
+      setManualAttendeeCount("");
+      setManualMenuItems("");
+      setManualCustomerName("");
+      setManualVenueName("");
+      setManualNotes("");
+      await refreshDashboard();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Manuelle Spezifikation konnte nicht erstellt werden."
       );
     } finally {
       setSubmitting(false);
@@ -489,6 +531,56 @@ export function App() {
           <div className="action-row">
             <button disabled={submitting} onClick={() => void handleIntakeSubmit()}>
               Text normalisieren
+            </button>
+          </div>
+          <div className="divider" />
+          <header>
+            <p className="eyebrow">Strukturiertes Formular</p>
+            <h3>AcceptedEventSpec direkt manuell erfassen</h3>
+          </header>
+          <input
+            value={manualEventType}
+            onChange={(event) => setManualEventType(event.target.value)}
+            placeholder="Eventtyp, z. B. conference"
+          />
+          <input
+            value={manualEventDate}
+            onChange={(event) => setManualEventDate(event.target.value)}
+            placeholder="Datum, z. B. 2026-10-10"
+          />
+          <input
+            value={manualAttendeeCount}
+            onChange={(event) => setManualAttendeeCount(event.target.value)}
+            placeholder="Teilnehmerzahl"
+          />
+          <input
+            value={manualServiceForm}
+            onChange={(event) => setManualServiceForm(event.target.value)}
+            placeholder="Serviceform, z. B. buffet"
+          />
+          <input
+            value={manualMenuItems}
+            onChange={(event) => setManualMenuItems(event.target.value)}
+            placeholder="Menuepunkte kommasepariert"
+          />
+          <input
+            value={manualCustomerName}
+            onChange={(event) => setManualCustomerName(event.target.value)}
+            placeholder="Kundenname"
+          />
+          <input
+            value={manualVenueName}
+            onChange={(event) => setManualVenueName(event.target.value)}
+            placeholder="Ort / Venue"
+          />
+          <textarea
+            value={manualNotes}
+            onChange={(event) => setManualNotes(event.target.value)}
+            placeholder="Interne Notizen oder Einschraenkungen"
+          />
+          <div className="action-row">
+            <button disabled={submitting} onClick={() => void handleManualSpecSubmit()}>
+              Manuelle Spezifikation anlegen
             </button>
           </div>
           <div className="divider" />

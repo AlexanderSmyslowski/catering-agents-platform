@@ -4,6 +4,7 @@ import {
   actorNameFromHeaders,
   AuditLogStore,
   type CollectionStorageOptions,
+  createEventRequestFromManualForm,
   getDemoIntakeRequests,
   normalizeEventRequestToSpec,
   withEvaluatedReadiness,
@@ -32,6 +33,17 @@ interface SpecUpdateBody {
   serviceForm?: string;
   eventType?: string;
   menuItems?: string[];
+}
+
+interface ManualSpecBody {
+  eventType?: string;
+  eventDate?: string;
+  attendeeCount?: number;
+  serviceForm?: string;
+  menuItems?: string[];
+  customerName?: string;
+  venueName?: string;
+  notes?: string;
 }
 
 function rawInputKindForMimeType(
@@ -271,6 +283,43 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     return reply.code(201).send({
       eventRequest: validatedRequest,
+      acceptedEventSpec: spec
+    });
+  });
+
+  app.post<{ Body: ManualSpecBody }>("/v1/intake/specs/manual", async (request, reply) => {
+    const eventRequest = validateEventRequest(
+      createEventRequestFromManualForm({
+        requestId: `manual-${Date.now()}`,
+        ...request.body
+      })
+    );
+
+    const spec = validateAcceptedEventSpec(
+      normalizeEventRequestToSpec(eventRequest, {
+        sourceType: "manual_input",
+        reference: eventRequest.requestId,
+        commercialState: "manual"
+      })
+    );
+
+    await store.saveRequest(eventRequest);
+    await store.saveSpec(spec);
+    await auditLog.log({
+      action: "intake.manual_spec_created",
+      entityType: "AcceptedEventSpec",
+      entityId: spec.specId,
+      actor: actorForRequest(request),
+      summary: "AcceptedEventSpec aus manuellem Formular erstellt.",
+      details: {
+        requestId: eventRequest.requestId,
+        readiness: spec.readiness.status,
+        attendeeCount: spec.attendees.expected
+      }
+    });
+
+    return reply.code(201).send({
+      eventRequest,
       acceptedEventSpec: spec
     });
   });

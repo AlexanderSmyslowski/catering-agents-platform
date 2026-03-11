@@ -152,6 +152,40 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("creates an AcceptedEventSpec directly from a structured manual form", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "conference",
+        eventDate: "2026-10-10",
+        attendeeCount: 75,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe", "Lunchbuffet", "Kaffeestation"],
+        customerName: "Universitaet Heidelberg",
+        venueName: "Heidelberg Campus",
+        notes: "Vegetarische Option vorsehen."
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.eventRequest.source.channel).toBe("manual_form");
+    expect(body.eventRequest.rawInputs[0].kind).toBe("form");
+    expect(body.acceptedEventSpec.readiness.status).toBe("complete");
+    expect(body.acceptedEventSpec.attendees.expected).toBe(75);
+    expect(body.acceptedEventSpec.menuPlan).toHaveLength(3);
+    expect(body.acceptedEventSpec.customer.name).toBe("Universitaet Heidelberg");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("creates an offer draft and promotes a structured variant", async () => {
     const dataRoot = createDataRoot();
     const app = buildOfferApp(new OfferStore({ rootDir: dataRoot }));

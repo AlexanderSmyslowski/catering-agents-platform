@@ -84,6 +84,7 @@ Die Web-App nutzt diese Pfade jetzt direkt fuer Service-Status und Demo-Befuellu
 Zusatzlich kann sie nun PDF-, TXT-, MD- und E-Mail-Dateien ueber den Intake-Pfad hochladen und daraus direkt `AcceptedEventSpec`-Datensaetze erzeugen.
 Angebotsvarianten koennen ausserdem direkt aus der UI in operative `AcceptedEventSpec`-Datensaetze promoted werden.
 Unvollstaendige `AcceptedEventSpec`-Datensaetze lassen sich im Intake-Bereich nun direkt im Backoffice nachbearbeiten und erneut validieren.
+Zusatzlich gibt es jetzt einen strukturierten manuellen Intake-Pfad, der ohne Freitext direkt ein `AcceptedEventSpec` aus Formularfeldern erzeugt.
 
 ## Docker / Hetzner-MVP
 

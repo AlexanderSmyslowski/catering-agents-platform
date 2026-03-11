@@ -52,6 +52,7 @@ Empfohlener Betriebsmodus:
 - Rezept-PDFs oder Textdateien koennen ueber beide Agenten-Workspaces hochgeladen werden und erweitern die gemeinsame Rezeptbibliothek
 - manuelle Angebote, PDFs, E-Mails und Textdateien koennen ueber den Intake-Upload direkt nach `AcceptedEventSpec` normalisiert werden
 - unvollstaendige `AcceptedEventSpec`-Datensaetze koennen im Backoffice manuell nachbearbeitet und erneut validiert werden
+- ein strukturiertes Intake-Formular kann ohne Freitext direkt operative `AcceptedEventSpec`-Datensaetze anlegen
 - Rezepte aus Uploads oder Internet-Fallbacks koennen in der Rezeptliste freigegeben, verifiziert oder abgelehnt werden
 - Service-Gesundheit und Demo-Seeding sind ueber die Admin-Pfade in der Web-App sichtbar
 - die Web-App fuehrt einen Operator-Namen lokal und sendet ihn bei mutierenden Aktionen mit, damit Audit-Eintraege personell nachvollziehbar bleiben

@@ -155,6 +155,22 @@ export async function updateAcceptedSpec(
   );
 }
 
+export async function createAcceptedSpecFromManualForm(input: {
+  eventType?: string;
+  eventDate?: string;
+  attendeeCount?: number;
+  serviceForm?: string;
+  menuItems?: string[];
+  customerName?: string;
+  venueName?: string;
+  notes?: string;
+}) {
+  return fetchJson<Record<string, unknown>>("/api/intake/v1/intake/specs/manual", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function createOfferFromText(text: string) {
   return fetchJson<Record<string, unknown>>("/api/offers/v1/offers/from-text", {
     method: "POST",

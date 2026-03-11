@@ -126,10 +126,13 @@ export function normalizeEventRequestToSpec(
   const serviceForm = request.event?.serviceForm ?? detectServiceForm(rawText, eventType);
   const attendees = request.attendees?.expected ?? parseAttendees(rawText);
   const eventDate = request.event?.date ?? parseDate(rawText);
-  const menuLabels = extractMenuLabels(
-    rawText,
-    request.desiredCatering?.map((item) => item.label) ?? defaults.defaultMenuKeywords
-  );
+  const menuLabels =
+    request.source.channel === "manual_form" && (request.desiredCatering?.length ?? 0) > 0
+      ? request.desiredCatering!.map((item) => item.label)
+      : extractMenuLabels(
+          rawText,
+          request.desiredCatering?.map((item) => item.label) ?? defaults.defaultMenuKeywords
+        );
 
   const assumptions: Assumption[] = [];
   const uncertainties: Uncertainty[] = request.uncertainties ? [...request.uncertainties] : [];
