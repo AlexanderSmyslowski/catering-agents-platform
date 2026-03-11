@@ -370,7 +370,11 @@ export function App() {
     const preferred = focusedProductionSpecId
       ? dashboard.acceptedSpecs.find((spec) => String(spec.specId) === focusedProductionSpecId)
       : undefined;
-    return preferred ?? filteredSpecs[0] ?? dashboard.acceptedSpecs[0];
+    return (
+      preferred ??
+      filteredSpecs[filteredSpecs.length - 1] ??
+      dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1]
+    );
   }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId]);
 
   const productionQuestions = useMemo(
@@ -536,9 +540,20 @@ export function App() {
   async function handleCreatePlan(spec: Record<string, unknown>) {
     setSubmitting(true);
     clearMessages();
-    setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
     try {
-      const response = await createProductionPlan(spec);
+      let specForPlanning = spec;
+      const focusedSpecId = String(spec.specId ?? "");
+
+      if (editingSpecId && editingSpecId === focusedSpecId) {
+        setNotice("Antworten werden übernommen...");
+        const updatedSpec = await persistCurrentSpecEdit({ quiet: true });
+        if (updatedSpec) {
+          specForPlanning = updatedSpec;
+        }
+      }
+
+      setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
+      const response = await createProductionPlan(specForPlanning);
       const planId = extractProductionPlanId(response);
       if (planId) {
         setSelectedPlanId(planId);
@@ -622,6 +637,60 @@ export function App() {
     }));
   }
 
+  function buildCurrentSpecUpdateInput() {
+    const componentUpdates: Parameters<typeof updateAcceptedSpec>[1]["componentUpdates"] =
+      Object.entries(editingComponentStates).map(([componentId, state]) => ({
+        componentId,
+        menuCategory:
+          state.menuCategory === "classic" ||
+          state.menuCategory === "vegetarian" ||
+          state.menuCategory === "vegan"
+            ? state.menuCategory
+            : undefined,
+        productionMode:
+          state.productionMode === "scratch" ||
+          state.productionMode === "hybrid" ||
+          state.productionMode === "convenience_purchase" ||
+          state.productionMode === "external_finished"
+            ? state.productionMode
+            : undefined,
+        purchasedElements: state.purchasedElements
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        notes: state.notes.trim() || undefined
+      }));
+
+    return {
+      eventType: editingEventType.trim() || undefined,
+      eventDate: editingEventDate.trim() || undefined,
+      serviceForm: editingServiceForm.trim() || undefined,
+      attendeeCount: editingAttendeeCount.trim() ? Number(editingAttendeeCount) : undefined,
+      menuItems: editingMenuItems
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      componentUpdates
+    };
+  }
+
+  async function persistCurrentSpecEdit(options?: { quiet?: boolean }) {
+    if (!editingSpecId) {
+      return undefined;
+    }
+
+    const response = await updateAcceptedSpec(editingSpecId, buildCurrentSpecUpdateInput());
+    const updatedSpec = response.acceptedEventSpec;
+    const updatedSpecId = String(updatedSpec.specId ?? editingSpecId);
+    setFocusedProductionSpecId(updatedSpecId);
+    resetSpecEdit(false);
+    await refreshDashboard();
+    if (!options?.quiet) {
+      setNotice("Spezifikation wurde gespeichert.");
+    }
+    return updatedSpec;
+  }
+
   async function handleSaveSpecEdit() {
     if (!editingSpecId) {
       return;
@@ -630,40 +699,7 @@ export function App() {
     setSubmitting(true);
     clearMessages();
     try {
-      await updateAcceptedSpec(editingSpecId, {
-        eventType: editingEventType.trim() || undefined,
-        eventDate: editingEventDate.trim() || undefined,
-        serviceForm: editingServiceForm.trim() || undefined,
-        attendeeCount: editingAttendeeCount.trim() ? Number(editingAttendeeCount) : undefined,
-        menuItems: editingMenuItems
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        componentUpdates: Object.entries(editingComponentStates).map(([componentId, state]) => ({
-          componentId,
-          menuCategory:
-            state.menuCategory === "classic" ||
-            state.menuCategory === "vegetarian" ||
-            state.menuCategory === "vegan"
-              ? state.menuCategory
-              : undefined,
-          productionMode:
-            state.productionMode === "scratch" ||
-            state.productionMode === "hybrid" ||
-            state.productionMode === "convenience_purchase" ||
-            state.productionMode === "external_finished"
-              ? state.productionMode
-              : undefined,
-          purchasedElements: state.purchasedElements
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean),
-          notes: state.notes.trim() || undefined
-        }))
-      });
-      resetSpecEdit(false);
-      await refreshDashboard();
-      setNotice("Spezifikation wurde gespeichert.");
+      await persistCurrentSpecEdit();
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Spezifikation konnte nicht gespeichert werden."
@@ -1607,7 +1643,9 @@ export function App() {
                     </button>
                   ) : null}
                   <button disabled={submitting} onClick={() => void handleCreatePlan(focusedProductionSpec)}>
-                    Berechnung starten
+                    {editingSpecId === String(focusedProductionSpec.specId)
+                      ? "Speichern und Berechnung starten"
+                      : "Berechnung starten"}
                   </button>
                 </div>
               </>
