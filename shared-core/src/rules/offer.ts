@@ -149,7 +149,7 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
 
   const internalWorkingText = [
     `Draft-ID: draft-${request.requestId}`,
-    `Readiness: ${proposedEventSpec.readiness.status}`,
+    `Status: ${proposedEventSpec.readiness.status}`,
     ...(openQuestions.length > 0 ? ["Offene Punkte:", ...openQuestions.map((item) => `- ${item}`)] : [])
   ].join("\n");
 

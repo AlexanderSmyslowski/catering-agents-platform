@@ -93,7 +93,7 @@ async function recipeImportFromMultipart(
 
 function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }) {
   return {
-    name: actorNameFromHeaders(request.headers, "Offer Operator"),
+    name: actorNameFromHeaders(request.headers, "Angebots-Mitarbeiter"),
     source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
   };
 }
@@ -156,7 +156,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       entityType: "OfferDraft",
       entityId: draft.draftId,
       actor: actorForRequest(request),
-      summary: "Created offer draft from structured event request.",
+      summary: "Angebotsentwurf aus strukturierter Event-Anfrage erstellt.",
       details: {
         requestId: eventRequest.requestId,
         readiness: draft.proposedEventSpec.readiness.status,
@@ -179,7 +179,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       entityType: "OfferDraft",
       entityId: draft.draftId,
       actor: actorForRequest(request),
-      summary: "Created offer draft from free text.",
+      summary: "Angebotsentwurf aus Freitext erstellt.",
       details: {
         requestId: eventRequest.requestId,
         readiness: draft.proposedEventSpec.readiness.status,
@@ -204,7 +204,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       entityType: "SeedBatch",
       entityId: `offer-demo-${Date.now()}`,
       actor: actorForRequest(request),
-      summary: `Seeded ${seeded.length} offer draft(s).`,
+      summary: `${seeded.length} Angebotsentwuerfe als Demo angelegt.`,
       details: {
         seededCount: seeded.length
       }
@@ -233,7 +233,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   app.get<{ Params: { recipeId: string } }>("/v1/offers/recipes/:recipeId", async (request, reply) => {
     const recipe = await recipeLibrary.get(request.params.recipeId);
     if (!recipe) {
-      return reply.code(404).send({ message: "Recipe not found." });
+      return reply.code(404).send({ message: "Rezept nicht gefunden." });
     }
 
     return reply.send(recipe);
@@ -247,7 +247,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       entityType: "Recipe",
       entityId: recipe.recipeId,
       actor: actorForRequest(request),
-      summary: `Imported recipe text into shared library: ${recipe.name}.`,
+      summary: `Rezepttext in gemeinsame Bibliothek importiert: ${recipe.name}.`,
       details: {
         recipeName: recipe.name,
         sourceTier: recipe.source.tier,
@@ -266,7 +266,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       entityType: "Recipe",
       entityId: recipe.recipeId,
       actor: actorForRequest(request),
-      summary: `Uploaded recipe file into shared library: ${recipe.name}.`,
+      summary: `Rezeptdatei in gemeinsame Bibliothek hochgeladen: ${recipe.name}.`,
       details: {
         recipeName: recipe.name,
         filename: payload.filename,
@@ -286,7 +286,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         entityType: "Recipe",
         entityId: recipe.recipeId,
         actor: actorForRequest(request),
-        summary: `Reviewed recipe ${recipe.name} via offer workflow.`,
+        summary: `Rezept ${recipe.name} ueber den Angebots-Workflow geprueft.`,
         details: {
           decision: request.body.decision,
           approvalState: recipe.source.approvalState,
@@ -300,7 +300,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   app.get<{ Params: { draftId: string } }>("/v1/offers/drafts/:draftId", async (request, reply) => {
     const draft = await store.getDraft(request.params.draftId);
     if (!draft) {
-      return reply.code(404).send({ message: "OfferDraft not found." });
+      return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
     }
 
     return reply.send(draft);
@@ -311,7 +311,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     async (request, reply) => {
       const draft = await store.getDraft(request.params.draftId);
       if (!draft) {
-        return reply.code(404).send({ message: "OfferDraft not found." });
+        return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
       }
 
       const promoted = validateAcceptedEventSpec(
@@ -322,7 +322,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         entityType: "AcceptedEventSpec",
         entityId: promoted.specId,
         actor: actorForRequest(request),
-        summary: `Promoted offer variant into operational event spec.`,
+        summary: `Angebotsvariante in operative Event-Spezifikation uebernommen.`,
         details: {
           draftId: draft.draftId,
           variantId: request.body?.variantId ?? draft.variantSet[0]?.variantId,

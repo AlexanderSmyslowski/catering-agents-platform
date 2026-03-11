@@ -114,7 +114,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     async (request, reply) => {
       const draft = await offerStore.getDraft(request.params.draftId);
       if (!draft) {
-        return reply.code(404).send({ message: "OfferDraft not found." });
+        return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
       }
 
       reply.header(
@@ -132,7 +132,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     async (request, reply) => {
       const plan = await productionStore.getPlan(request.params.planId);
       if (!plan) {
-        return reply.code(404).send({ message: "ProductionPlan not found." });
+        return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
       reply.header(
@@ -150,7 +150,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     async (request, reply) => {
       const list = await productionStore.getPurchaseList(request.params.purchaseListId);
       if (!list) {
-        return reply.code(404).send({ message: "PurchaseList not found." });
+        return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
       }
 
       reply.header(

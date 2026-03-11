@@ -222,7 +222,7 @@ function recipeNameFromText(
     return path.parse(filename).name.replace(/[-_]+/g, " ").trim();
   }
 
-  return "Uploaded Recipe";
+  return "Hochgeladenes Rezept";
 }
 
 function servingsFromText(text: string): number {
@@ -276,7 +276,7 @@ export function parseUploadedRecipeText(input: {
 }): Recipe {
   const text = input.text.trim();
   if (!text) {
-    throw new Error("Uploaded recipe text is empty.");
+    throw new Error("Der hochgeladene Rezepttext ist leer.");
   }
 
   const sections = splitSections(text);
@@ -294,7 +294,7 @@ export function parseUploadedRecipeText(input: {
       : sections.notes.filter((line) => !isIngredientLine(line)).slice(0, 12);
   const steps = (stepsSource.length > 0
     ? stepsSource
-    : ["Follow the uploaded preparation notes and review before production."]).map(
+    : ["Bitte die hochgeladenen Zubereitungshinweise vor der Produktion pruefen."]).map(
     (instruction, index) => ({
       index: index + 1,
       instruction: instruction
@@ -305,7 +305,7 @@ export function parseUploadedRecipeText(input: {
   );
 
   if (ingredients.length === 0) {
-    throw new Error("No ingredient lines could be extracted from the uploaded recipe.");
+    throw new Error("Aus dem hochgeladenen Rezept konnten keine Zutatenzeilen extrahiert werden.");
   }
 
   const coverageScore = Number(
@@ -331,7 +331,7 @@ export function parseUploadedRecipeText(input: {
       qualityScore: coverageScore >= 0.8 ? 0.9 : 0.78,
       fitScore: 1,
       extractionCompleteness: coverageScore,
-      licenseNote: "Human-uploaded internal recipe source."
+      licenseNote: "Menschlich hochgeladene interne Rezeptquelle."
     },
     baseYield: {
       servings,
@@ -416,7 +416,7 @@ export class RecipeLibrary {
   ): Promise<Recipe> {
     const recipe = await this.get(recipeId);
     if (!recipe) {
-      throw new Error(`Recipe ${recipeId} not found.`);
+      throw new Error(`Rezept ${recipeId} wurde nicht gefunden.`);
     }
 
     const source = { ...recipe.source };
@@ -439,7 +439,7 @@ export class RecipeLibrary {
 
     source.licenseNote = [
       recipe.source.licenseNote,
-      `Review decision: ${input.decision}.`,
+      `Review-Entscheidung: ${input.decision}.`,
       input.note?.trim()
     ]
       .filter(Boolean)

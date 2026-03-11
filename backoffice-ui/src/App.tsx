@@ -67,20 +67,79 @@ const emptyHealth: ServiceHealthState = {
   }
 };
 
+function translateEventType(value?: string): string {
+  const labels: Record<string, string> = {
+    conference: "Konferenz",
+    meeting: "Meeting",
+    reception: "Empfang",
+    dinner: "Dinner",
+    fair: "Messe",
+    workshop: "Workshop"
+  };
+  return value ? labels[value] ?? value : "Event";
+}
+
+function translateReadiness(value?: string): string {
+  const labels: Record<string, string> = {
+    complete: "vollstaendig",
+    partial: "teilweise vollstaendig",
+    insufficient: "unzureichend"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+function translateHealthStatus(value?: string): string {
+  const labels: Record<string, string> = {
+    ok: "ok",
+    unknown: "unbekannt"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+function translateRecipeTier(value?: string): string {
+  const labels: Record<string, string> = {
+    internal_verified: "intern verifiziert",
+    digitized_cookbook: "digitalisiertes Kochbuch",
+    internal_approved: "intern freigegeben",
+    internet_fallback: "Internet-Fallback"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+function translateApprovalState(value?: string): string {
+  const labels: Record<string, string> = {
+    approved_internal: "intern freigegeben",
+    auto_usable: "automatisch nutzbar",
+    review_required: "Pruefung noetig",
+    rejected: "abgelehnt"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
 function getSpecLabel(spec: Record<string, unknown>): string {
   const event = spec.event as Record<string, unknown> | undefined;
   const attendees = spec.attendees as Record<string, unknown> | undefined;
-  return `${event?.type ?? "Event"} | ${attendees?.expected ?? "?"} pax | ${event?.date ?? "offen"}`;
+  return `${translateEventType(String(event?.type ?? ""))} | ${attendees?.expected ?? "?"} Teilnehmende | ${event?.date ?? "offen"}`;
 }
 
 function formatCounts(counts: Record<string, number>): string {
   const entries = Object.entries(counts);
   if (entries.length === 0) {
-    return "No counters";
+    return "Keine Zaehler";
   }
 
+  const labels: Record<string, string> = {
+    requests: "Anfragen",
+    acceptedSpecs: "Spezifikationen",
+    offerDrafts: "Angebotsentwuerfe",
+    productionPlans: "Produktionsplaene",
+    purchaseLists: "Einkaufslisten",
+    recipes: "Rezepte",
+    auditEvents: "Audit-Eintraege"
+  };
+
   return entries
-    .map(([label, value]) => `${label}: ${value}`)
+    .map(([label, value]) => `${labels[label] ?? label}: ${value}`)
     .join(" | ");
 }
 
@@ -97,7 +156,7 @@ export function App() {
   const [intakeFile, setIntakeFile] = useState<File | null>(null);
   const [intakeChannel, setIntakeChannel] = useState<IntakeDocumentChannel>("pdf_upload");
   const [offerText, setOfferText] = useState(
-    "Meeting am 2026-06-25 fuer 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
+    "Besprechung am 2026-06-25 fuer 35 Teilnehmende mit Kaffeepause, Croissants und Wasserservice."
   );
   const [recipeName, setRecipeName] = useState("");
   const [recipeFile, setRecipeFile] = useState<File | null>(null);
@@ -123,7 +182,7 @@ export function App() {
       setError(
         refreshError instanceof Error
           ? refreshError.message
-          : "Failed to load dashboard."
+          : "Dashboard konnte nicht geladen werden."
       );
     }
   });
@@ -173,7 +232,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Failed to normalize intake."
+        submitError instanceof Error ? submitError.message : "Intake-Text konnte nicht normalisiert werden."
       );
     } finally {
       setSubmitting(false);
@@ -188,7 +247,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Failed to create offer draft."
+        submitError instanceof Error ? submitError.message : "Angebotsentwurf konnte nicht erstellt werden."
       );
     } finally {
       setSubmitting(false);
@@ -197,7 +256,7 @@ export function App() {
 
   async function handleIntakeDocumentSubmit() {
     if (!intakeFile) {
-      setError("Please choose a document before uploading.");
+      setError("Bitte waehle zuerst ein Dokument aus.");
       return;
     }
 
@@ -209,7 +268,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Failed to normalize intake document."
+        submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
       );
     } finally {
       setSubmitting(false);
@@ -224,7 +283,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Failed to create production plan."
+        submitError instanceof Error ? submitError.message : "Produktionsplan konnte nicht erstellt werden."
       );
     } finally {
       setSubmitting(false);
@@ -239,7 +298,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Failed to promote offer draft."
+        submitError instanceof Error ? submitError.message : "Angebotsvariante konnte nicht uebernommen werden."
       );
     } finally {
       setSubmitting(false);
@@ -248,7 +307,7 @@ export function App() {
 
   async function handleRecipeUpload(target: "offer" | "production") {
     if (!recipeFile) {
-      setError("Please choose a recipe file before uploading.");
+      setError("Bitte waehle zuerst eine Rezeptdatei aus.");
       return;
     }
 
@@ -261,7 +320,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Failed to upload recipe."
+        submitError instanceof Error ? submitError.message : "Rezept konnte nicht hochgeladen werden."
       );
     } finally {
       setSubmitting(false);
@@ -276,7 +335,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Failed to seed demo data."
+        submitError instanceof Error ? submitError.message : "Demo-Daten konnten nicht geladen werden."
       );
     } finally {
       setSubmitting(false);
@@ -295,7 +354,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Failed to review recipe."
+        submitError instanceof Error ? submitError.message : "Rezeptpruefung konnte nicht gespeichert werden."
       );
     } finally {
       setSubmitting(false);
@@ -308,54 +367,54 @@ export function App() {
   }
 
   return (
-    <DashboardShell title="Catering Operations Backoffice">
+    <DashboardShell title="Catering Backoffice">
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">Shared Core Live View</p>
-          <h2>Offer, intake and production now run against the same persisted contracts.</h2>
+          <p className="eyebrow">Gemeinsamer Live-Betrieb</p>
+          <h2>Angebot, Intake und Produktion arbeiten jetzt auf denselben persistenten Vertragsdaten.</h2>
           <p className="lede">
-            The dashboard reads the real service APIs and lets operations create intake specs,
-            generate offer drafts and trigger production plans from the browser.
+            Das Dashboard spricht die echten Service-APIs an und erlaubt es, Intake-Spezifikationen
+            zu erzeugen, Angebotsentwuerfe zu erstellen und Produktionsplaene direkt im Browser auszuloesen.
           </p>
         </div>
         <div className="metrics-grid">
           <StatusCard
-            title="Accepted Specs"
-            body={`${dashboard.acceptedSpecs.length} persisted event specs ready for operations.`}
+            title="Operative Spezifikationen"
+            body={`${dashboard.acceptedSpecs.length} persistierte Event-Spezifikationen sind fuer die operative Nutzung verfuegbar.`}
           />
           <StatusCard
-            title="Offer Drafts"
-            body={`${dashboard.offerDrafts.length} customer-facing drafts available.`}
+            title="Angebotsentwuerfe"
+            body={`${dashboard.offerDrafts.length} kundenfaehige Entwuerfe stehen bereit.`}
           />
           <StatusCard
-            title="Production Plans"
-            body={`${dashboard.productionPlans.length} kitchen plans with linked purchase lists.`}
+            title="Produktionsplaene"
+            body={`${dashboard.productionPlans.length} Kuechenplaene mit verknuepften Einkaufslisten sind vorhanden.`}
           />
           <StatusCard
-            title="Recipe Inventory"
-            body={`${dashboard.recipes.length} recipes cached, including internet fallbacks.`}
+            title="Rezeptbestand"
+            body={`${dashboard.recipes.length} Rezepte sind hinterlegt, inklusive Internet-Fallbacks.`}
           />
           <StatusCard
-            title="Audit Trail"
-            body={`${dashboard.auditEvents.length} recent actions with operator attribution.`}
+            title="Audit-Trail"
+            body={`${dashboard.auditEvents.length} letzte Aktionen sind mit Bearbeiter-Zuordnung erfasst.`}
           />
         </div>
         <div className="metrics-grid">
           <StatusCard
-            title="Intake Health"
-            body={`${serviceHealth.intake.status} | ${formatCounts(serviceHealth.intake.counts)}`}
+            title="Intake-Status"
+            body={`${translateHealthStatus(serviceHealth.intake.status)} | ${formatCounts(serviceHealth.intake.counts)}`}
           />
           <StatusCard
-            title="Offer Health"
-            body={`${serviceHealth.offers.status} | ${formatCounts(serviceHealth.offers.counts)}`}
+            title="Angebots-Status"
+            body={`${translateHealthStatus(serviceHealth.offers.status)} | ${formatCounts(serviceHealth.offers.counts)}`}
           />
           <StatusCard
-            title="Production Health"
-            body={`${serviceHealth.production.status} | ${formatCounts(serviceHealth.production.counts)}`}
+            title="Produktions-Status"
+            body={`${translateHealthStatus(serviceHealth.production.status)} | ${formatCounts(serviceHealth.production.counts)}`}
           />
           <StatusCard
-            title="Export Health"
-            body={`${serviceHealth.exports.status} | ${formatCounts(serviceHealth.exports.counts)}`}
+            title="Export-Status"
+            body={`${translateHealthStatus(serviceHealth.exports.status)} | ${formatCounts(serviceHealth.exports.counts)}`}
           />
         </div>
       </section>
@@ -363,8 +422,8 @@ export function App() {
       <section className="wide-grid">
         <article className="panel form-panel">
           <header>
-            <p className="eyebrow">Manual Intake</p>
-            <h3>Normalize free text into AcceptedEventSpec</h3>
+            <p className="eyebrow">Manueller Intake</p>
+            <h3>Freitext in ein AcceptedEventSpec normalisieren</h3>
           </header>
           <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
           <div className="action-row">
@@ -374,8 +433,8 @@ export function App() {
           </div>
           <div className="divider" />
           <header>
-            <p className="eyebrow">Document Intake</p>
-            <h3>Upload PDF, E-Mail or text offer files</h3>
+            <p className="eyebrow">Dokumenten-Intake</p>
+            <h3>PDF-, E-Mail- oder Textdateien hochladen</h3>
           </header>
           <select
             className="operator-input"
@@ -405,8 +464,8 @@ export function App() {
 
         <article className="panel form-panel">
           <header>
-            <p className="eyebrow">Offer Workspace</p>
-            <h3>Create an offer draft from free text</h3>
+            <p className="eyebrow">Angebotsbereich</p>
+            <h3>Angebotsentwurf aus Freitext erstellen</h3>
           </header>
           <textarea value={offerText} onChange={(event) => setOfferText(event.target.value)} />
           <button disabled={submitting} onClick={() => void handleOfferSubmit()}>
@@ -416,8 +475,8 @@ export function App() {
 
         <article className="panel form-panel">
           <header>
-            <p className="eyebrow">Recipe Library</p>
-            <h3>Upload PDF or text recipes into the shared library</h3>
+            <p className="eyebrow">Rezeptbibliothek</p>
+            <h3>PDF- oder Textrezepte in die gemeinsame Bibliothek hochladen</h3>
           </header>
           <input
             value={recipeName}
@@ -448,13 +507,13 @@ export function App() {
       <section className="toolbar">
         <input
           className="operator-input"
-          placeholder="Operator name"
+          placeholder="Bearbeitername"
           value={operatorName}
           onChange={(event) => handleOperatorNameChange(event.target.value)}
         />
         <input
           className="search"
-          placeholder="Filter specs, plans or drafts"
+          placeholder="Spezifikationen, Plaene oder Entwuerfe filtern"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -462,7 +521,7 @@ export function App() {
           Demo-Daten laden
         </button>
         <button disabled={loading || submitting} onClick={() => void refreshDashboard()}>
-          Refresh
+          Aktualisieren
         </button>
       </section>
 
@@ -472,14 +531,14 @@ export function App() {
         <article className="panel">
           <header>
             <p className="eyebrow">AcceptedEventSpec</p>
-            <h3>Operational event inputs</h3>
+            <h3>Operative Event-Eingaben</h3>
           </header>
           <ul className="item-list">
             {filteredSpecs.map((spec) => (
               <li key={String(spec.specId)} className="list-row">
                 <div>
                   <strong>{getSpecLabel(spec)}</strong>
-                  <p>Readiness: {String((spec.readiness as Record<string, unknown>)?.status ?? "-")}</p>
+                  <p>Status: {translateReadiness(String((spec.readiness as Record<string, unknown>)?.status ?? "-"))}</p>
                 </div>
                 <button
                   disabled={submitting}
@@ -489,14 +548,14 @@ export function App() {
                 </button>
               </li>
             ))}
-            {filteredSpecs.length === 0 ? <li>No specs yet.</li> : null}
+            {filteredSpecs.length === 0 ? <li>Noch keine Spezifikationen vorhanden.</li> : null}
           </ul>
         </article>
 
         <article className="panel">
           <header>
-            <p className="eyebrow">Audit Trail</p>
-            <h3>Recent operator actions across all services</h3>
+            <p className="eyebrow">Audit-Trail</p>
+            <h3>Letzte Bearbeitungsschritte ueber alle Services</h3>
           </header>
           <ul className="item-list compact">
             {filteredAuditEvents.map((entry) => (
@@ -508,20 +567,20 @@ export function App() {
                 </p>
               </li>
             ))}
-            {filteredAuditEvents.length === 0 ? <li>No audit events yet.</li> : null}
+            {filteredAuditEvents.length === 0 ? <li>Noch keine Audit-Eintraege vorhanden.</li> : null}
           </ul>
         </article>
 
         <article className="panel">
           <header>
-            <p className="eyebrow">Production</p>
-            <h3>Kitchen output and recipe cache</h3>
+            <p className="eyebrow">Produktion</p>
+            <h3>Kuechenausgabe und Rezeptcache</h3>
           </header>
           <ul className="item-list compact">
             {filteredPlans.map((plan) => (
               <li key={String(plan.planId)}>
                 <strong>{String(plan.planId)}</strong>
-                <p>Readiness: {String((plan.readiness as Record<string, unknown>)?.status ?? "-")}</p>
+                <p>Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}</p>
                 <a
                   className="ghost-link"
                   href={productionExportUrl(String(plan.planId))}
@@ -532,7 +591,7 @@ export function App() {
                 </a>
               </li>
             ))}
-            {filteredPlans.length === 0 ? <li>No production plans yet.</li> : null}
+            {filteredPlans.length === 0 ? <li>Noch keine Produktionsplaene vorhanden.</li> : null}
           </ul>
           <div className="divider" />
           <ul className="item-list compact">
@@ -540,8 +599,8 @@ export function App() {
               <li key={String(recipe.recipeId)}>
                 <strong>{String(recipe.name)}</strong>
                 <p>
-                  {String((recipe.source as Record<string, unknown>)?.tier ?? "-")} |{" "}
-                  {String((recipe.source as Record<string, unknown>)?.approvalState ?? "-")}
+                  {translateRecipeTier(String((recipe.source as Record<string, unknown>)?.tier ?? "-"))} |{" "}
+                  {translateApprovalState(String((recipe.source as Record<string, unknown>)?.approvalState ?? "-"))}
                 </p>
                 <div className="action-row">
                   <button
@@ -574,14 +633,14 @@ export function App() {
                 </div>
               </li>
             ))}
-            {dashboard.recipes.length === 0 ? <li>No recipes yet.</li> : null}
+            {dashboard.recipes.length === 0 ? <li>Noch keine Rezepte vorhanden.</li> : null}
           </ul>
         </article>
 
         <article className="panel">
           <header>
-            <p className="eyebrow">Offer Drafts</p>
-            <h3>Latest commercial outputs</h3>
+            <p className="eyebrow">Angebotsentwuerfe</p>
+            <h3>Aktuelle kaufmaennische Ergebnisse</h3>
           </header>
           <ul className="item-list compact">
             {dashboard.offerDrafts.map((draft) => (
@@ -604,7 +663,7 @@ export function App() {
                               )
                             }
                           >
-                            {`Als Spec uebernehmen: ${String(variantRecord.label ?? variantRecord.variantId)}`}
+                            {`Als Spezifikation uebernehmen: ${String(variantRecord.label ?? variantRecord.variantId)}`}
                           </button>
                         );
                       })
@@ -620,20 +679,20 @@ export function App() {
                 </a>
               </li>
             ))}
-            {dashboard.offerDrafts.length === 0 ? <li>No offer drafts yet.</li> : null}
+            {dashboard.offerDrafts.length === 0 ? <li>Noch keine Angebotsentwuerfe vorhanden.</li> : null}
           </ul>
         </article>
 
         <article className="panel">
           <header>
-            <p className="eyebrow">Purchase Lists</p>
-            <h3>CSV-ready procurement outputs</h3>
+            <p className="eyebrow">Einkaufslisten</p>
+            <h3>CSV-faehige Beschaffungslisten</h3>
           </header>
           <ul className="item-list compact">
             {dashboard.purchaseLists.map((purchaseList) => (
               <li key={String(purchaseList.purchaseListId)}>
                 <strong>{String(purchaseList.purchaseListId)}</strong>
-                <p>Items: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
+                <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
                 <a
                   className="ghost-link"
                   href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
@@ -644,13 +703,13 @@ export function App() {
                 </a>
               </li>
             ))}
-            {dashboard.purchaseLists.length === 0 ? <li>No purchase lists yet.</li> : null}
+            {dashboard.purchaseLists.length === 0 ? <li>Noch keine Einkaufslisten vorhanden.</li> : null}
           </ul>
         </article>
       </section>
 
       <footer className="footer-note">
-        {loading ? "Loading live platform state..." : "Live data loaded from intake, offer and production services."}
+        {loading ? "Live-Plattformdaten werden geladen..." : "Live-Daten aus Intake-, Angebots- und Produktionsservice geladen."}
       </footer>
     </DashboardShell>
   );

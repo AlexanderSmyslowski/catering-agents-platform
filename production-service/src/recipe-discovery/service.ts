@@ -162,10 +162,10 @@ export class RecipeDiscoveryService {
       return {
         selection: {
           componentId: component.componentId,
-          selectionReason: "No internal or web recipe candidate could be validated.",
+          selectionReason: "Es konnte kein interner oder externer Rezeptkandidat validiert werden.",
           autoUsedInternetRecipe: false
         },
-        unresolvedItems: [`No recipe candidate found for ${component.label}.`]
+        unresolvedItems: [`Kein Rezeptkandidat fuer ${component.label} gefunden.`]
       };
     }
 
@@ -173,7 +173,7 @@ export class RecipeDiscoveryService {
 
     const unresolvedItems =
       winner.recipe.source.approvalState === "review_required"
-        ? [`Recipe ${winner.recipe.name} requires manual review before final production.`]
+        ? [`Rezept ${winner.recipe.name} muss vor der finalen Produktion manuell geprueft werden.`]
         : [];
 
     return {
@@ -183,8 +183,8 @@ export class RecipeDiscoveryService {
         recipeId: winner.recipe.recipeId,
         selectionReason:
           winner.recipe.source.approvalState === "auto_usable"
-            ? "Auto-selected internet fallback recipe with sufficient quality."
-            : "Internet fallback recipe selected but marked for review.",
+            ? "Internet-Fallback-Rezept mit ausreichender Qualitaet automatisch ausgewaehlt."
+            : "Internet-Fallback-Rezept ausgewaehlt, aber zur Pruefung markiert.",
         searchQuery: winner.query.query,
         autoUsedInternetRecipe: winner.recipe.source.approvalState === "auto_usable",
         sourceTier: winner.recipe.source.tier,

@@ -91,7 +91,7 @@ export interface ProductionAppOptions {
 
 function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }) {
   return {
-    name: actorNameFromHeaders(request.headers, "Production Operator"),
+    name: actorNameFromHeaders(request.headers, "Produktions-Mitarbeiter"),
     source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
   };
 }
@@ -159,7 +159,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       entityType: "ProductionPlan",
       entityId: artifacts.productionPlan.planId,
       actor: actorForRequest(request),
-      summary: `Created production plan for ${eventSpec.specId}.`,
+      summary: `Produktionsplan fuer ${eventSpec.specId} erstellt.`,
       details: {
         specId: eventSpec.specId,
         purchaseListId: artifacts.purchaseList.purchaseListId,
@@ -187,7 +187,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       entityType: "SeedBatch",
       entityId: `production-demo-${Date.now()}`,
       actor: actorForRequest(request),
-      summary: `Seeded ${seeded.length} production demo plan(s).`,
+      summary: `${seeded.length} Produktions-Demoplaene angelegt.`,
       details: {
         seededCount: seeded.length
       }
@@ -211,7 +211,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.get<{ Params: { planId: string } }>("/v1/production/plans/:planId", async (request, reply) => {
     const plan = await store.getPlan(request.params.planId);
     if (!plan) {
-      return reply.code(404).send({ message: "ProductionPlan not found." });
+      return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
     }
 
     return reply.send(plan);
@@ -222,7 +222,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     async (request, reply) => {
       const list = await store.getPurchaseList(request.params.purchaseListId);
       if (!list) {
-        return reply.code(404).send({ message: "PurchaseList not found." });
+        return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
       }
 
       return reply.send(list);
@@ -254,7 +254,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.get<{ Params: { recipeId: string } }>("/v1/production/recipes/:recipeId", async (request, reply) => {
     const recipe = await repository.get(request.params.recipeId);
     if (!recipe) {
-      return reply.code(404).send({ message: "Recipe not found." });
+      return reply.code(404).send({ message: "Rezept nicht gefunden." });
     }
 
     return reply.send(recipe);
@@ -268,7 +268,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       entityType: "Recipe",
       entityId: recipe.recipeId,
       actor: actorForRequest(request),
-      summary: `Imported recipe text into shared library: ${recipe.name}.`,
+      summary: `Rezepttext in gemeinsame Bibliothek importiert: ${recipe.name}.`,
       details: {
         recipeName: recipe.name,
         sourceTier: recipe.source.tier,
@@ -287,7 +287,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       entityType: "Recipe",
       entityId: recipe.recipeId,
       actor: actorForRequest(request),
-      summary: `Uploaded recipe file into shared library: ${recipe.name}.`,
+      summary: `Rezeptdatei in gemeinsame Bibliothek hochgeladen: ${recipe.name}.`,
       details: {
         recipeName: recipe.name,
         filename: payload.filename,
@@ -307,7 +307,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
         entityType: "Recipe",
         entityId: recipe.recipeId,
         actor: actorForRequest(request),
-        summary: `Reviewed recipe ${recipe.name} via production workflow.`,
+        summary: `Rezept ${recipe.name} ueber den Produktions-Workflow geprueft.`,
         details: {
           decision: request.body.decision,
           approvalState: recipe.source.approvalState,

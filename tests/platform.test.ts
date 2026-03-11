@@ -328,7 +328,7 @@ describe("catering agents platform", () => {
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
     expect(body.productionPlan.readiness.status).toBe("partial");
-    expect(body.productionPlan.unresolvedItems[0]).toContain("requires manual review");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("manuell geprueft");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -492,7 +492,7 @@ describe("catering agents platform", () => {
 
     expect(planResponse.json().productionPlan.recipeSelections[0].recipeId).toBeUndefined();
     expect(planResponse.json().productionPlan.unresolvedItems[0]).toContain(
-      "No recipe candidate found"
+      "Kein Rezeptkandidat"
     );
 
     await productionApp.close();

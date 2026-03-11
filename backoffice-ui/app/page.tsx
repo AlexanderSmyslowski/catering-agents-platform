@@ -3,20 +3,19 @@ import { StatusCard } from "../components/status-card.js";
 
 export default function Page() {
   return (
-    <DashboardShell title="Catering Operations Backoffice">
+    <DashboardShell title="Catering Backoffice">
       <StatusCard
-        title="Intake Review"
-        body="Prueft PDFs, E-Mails und Formulare, zeigt Unsicherheiten und promoted sie in den operativen Event-Standard."
+        title="Intake-Pruefung"
+        body="Prueft PDFs, E-Mails und Formulare, zeigt Unsicherheiten und ueberfuehrt sie in den operativen Event-Standard."
       />
       <StatusCard
-        title="Offer Workspace"
+        title="Angebotsbereich"
         body="Erzeugt Varianten, dokumentiert Annahmen und macht den strukturierten OfferDraft fuer Vertrieb und Produktion sichtbar."
       />
       <StatusCard
-        title="Production Control"
+        title="Produktionssteuerung"
         body="Zeigt Rezeptquellen, automatische Internet-Fallbacks, Skalierungen, GN-Hinweise und die gruppierte Einkaufsliste."
       />
     </DashboardShell>
   );
 }
-

@@ -50,7 +50,7 @@ function isIntakeStore(value: IntakeStore | IntakeAppOptions | undefined): value
 
 function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }) {
   return {
-    name: actorNameFromHeaders(request.headers, "Intake Operator"),
+    name: actorNameFromHeaders(request.headers, "Intake-Mitarbeiter"),
     source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
   };
 }
@@ -129,7 +129,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         entityType: "AcceptedEventSpec",
         entityId: spec.specId,
         actor: actorForRequest(request),
-        summary: `Normalized ${eventRequest.source.channel} intake into AcceptedEventSpec.`,
+        summary: `Intake aus ${eventRequest.source.channel} in AcceptedEventSpec normalisiert.`,
         details: {
           requestId: eventRequest.requestId,
           channel: eventRequest.source.channel,
@@ -195,7 +195,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       entityType: "AcceptedEventSpec",
       entityId: spec.specId,
       actor: actorForRequest(request),
-      summary: `Normalized ${documents.length} uploaded document(s) into AcceptedEventSpec.`,
+      summary: `${documents.length} hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert.`,
       details: {
         requestId: validatedRequest.requestId,
         documentCount: documents.length,
@@ -236,7 +236,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       entityType: "SeedBatch",
       entityId: `intake-demo-${Date.now()}`,
       actor: actorForRequest(_request),
-      summary: `Seeded ${seeded.length} intake demo record(s).`,
+      summary: `${seeded.length} Intake-Demodatensaetze angelegt.`,
       details: {
         seededCount: seeded.length
       }
@@ -266,7 +266,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   app.get<{ Params: { specId: string } }>("/v1/intake/specs/:specId", async (request, reply) => {
     const spec = await store.getSpec(request.params.specId);
     if (!spec) {
-      return reply.code(404).send({ message: "AcceptedEventSpec not found." });
+      return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
     }
 
     return reply.send(spec);
