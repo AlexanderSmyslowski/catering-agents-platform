@@ -82,6 +82,7 @@ Die Backoffice-UI speichert diesen Namen lokal und sendet ihn bei mutierenden Ak
 
 Die Web-App nutzt diese Pfade jetzt direkt fuer Service-Status und Demo-Befuellung.
 Zusatzlich kann sie nun PDF-, TXT-, MD- und E-Mail-Dateien ueber den Intake-Pfad hochladen und daraus direkt `AcceptedEventSpec`-Datensaetze erzeugen.
+Angebotsvarianten koennen ausserdem direkt aus der UI in operative `AcceptedEventSpec`-Datensaetze promoted werden.
 
 ## Docker / Hetzner-MVP
 

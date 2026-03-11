@@ -17,6 +17,7 @@ import {
   loadServiceHealth,
   offerExportUrl,
   persistOperatorName,
+  promoteOfferDraft,
   productionExportUrl,
   purchaseListExportUrl,
   readOperatorName,
@@ -224,6 +225,21 @@ export function App() {
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Failed to create production plan."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handlePromoteDraft(draftId: string, variantId?: string) {
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await promoteOfferDraft(draftId, variantId);
+      await refreshDashboard();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Failed to promote offer draft."
       );
     } finally {
       setSubmitting(false);
@@ -572,6 +588,28 @@ export function App() {
               <li key={String(draft.draftId)}>
                 <strong>{String(draft.draftId)}</strong>
                 <p>{String(draft.eventSummary ?? "-")}</p>
+                <div className="action-row">
+                  {Array.isArray(draft.variantSet)
+                    ? draft.variantSet.map((variant) => {
+                        const variantRecord = variant as Record<string, unknown>;
+                        return (
+                          <button
+                            key={String(variantRecord.variantId)}
+                            className="secondary-button"
+                            disabled={submitting}
+                            onClick={() =>
+                              void handlePromoteDraft(
+                                String(draft.draftId),
+                                String(variantRecord.variantId)
+                              )
+                            }
+                          >
+                            {`Als Spec uebernehmen: ${String(variantRecord.label ?? variantRecord.variantId)}`}
+                          </button>
+                        );
+                      })
+                    : null}
+                </div>
                 <a
                   className="ghost-link"
                   href={offerExportUrl(String(draft.draftId))}

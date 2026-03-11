@@ -143,6 +143,13 @@ export async function createOfferFromText(text: string) {
   });
 }
 
+export async function promoteOfferDraft(draftId: string, variantId?: string) {
+  return fetchJson<Record<string, unknown>>(`/api/offers/v1/offers/drafts/${draftId}/promote`, {
+    method: "POST",
+    body: JSON.stringify(variantId ? { variantId } : {})
+  });
+}
+
 export async function createProductionPlan(eventSpec: Record<string, unknown>) {
   return fetchJson<Record<string, unknown>>("/api/production/v1/production/plans", {
     method: "POST",
