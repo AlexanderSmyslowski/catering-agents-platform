@@ -26,6 +26,19 @@ npm run dev:exports
 npm run dev:ui
 ```
 
+Fuer den kompletten lokalen Stack mit Demo-Daten:
+
+```bash
+npm run local:start
+```
+
+Status und Stop:
+
+```bash
+npm run local:status
+npm run local:stop
+```
+
 Standardmaessig speichern die Services ihre Laufzeitdaten unter `./data`.
 Auf Servern sollte dafuer ein persistentes Verzeichnis gesetzt werden:
 
@@ -85,6 +98,7 @@ Zusatzlich kann sie nun PDF-, TXT-, MD- und E-Mail-Dateien ueber den Intake-Pfad
 Angebotsvarianten koennen ausserdem direkt aus der UI in operative `AcceptedEventSpec`-Datensaetze promoted werden.
 Unvollstaendige `AcceptedEventSpec`-Datensaetze lassen sich im Intake-Bereich nun direkt im Backoffice nachbearbeiten und erneut validieren.
 Zusatzlich gibt es jetzt einen strukturierten manuellen Intake-Pfad, der ohne Freitext direkt ein `AcceptedEventSpec` aus Formularfeldern erzeugt.
+Die Web-App zeigt ausserdem Detailansichten fuer Angebotsentwuerfe und Produktionsplaene, damit operative Inhalte direkt lesbar sind.
 
 ## Docker / Hetzner-MVP
 

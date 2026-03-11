@@ -170,6 +170,15 @@ button:disabled {
   margin: 1rem 0;
 }
 
+.detail-pre {
+  white-space: pre-wrap;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(92, 66, 37, 0.12);
+  border-radius: 0.9rem;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+}
+
 .error-banner {
   grid-column: 1 / -1;
   margin: 0;

@@ -172,6 +172,8 @@ export function App() {
   const [recipeFile, setRecipeFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
   const [editingSpecId, setEditingSpecId] = useState<string>();
+  const [selectedDraftId, setSelectedDraftId] = useState<string>();
+  const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [editingEventType, setEditingEventType] = useState("");
   const [editingEventDate, setEditingEventDate] = useState("");
   const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
@@ -239,6 +241,18 @@ export function App() {
       JSON.stringify(entry).toLowerCase().includes(query)
     );
   }, [dashboard.auditEvents, deferredSearch]);
+
+  const selectedDraft = useMemo(
+    () =>
+      dashboard.offerDrafts.find((draft) => String(draft.draftId) === selectedDraftId),
+    [dashboard.offerDrafts, selectedDraftId]
+  );
+
+  const selectedPlan = useMemo(
+    () =>
+      dashboard.productionPlans.find((plan) => String(plan.planId) === selectedPlanId),
+    [dashboard.productionPlans, selectedPlanId]
+  );
 
   async function handleIntakeSubmit() {
     setSubmitting(true);
@@ -790,6 +804,15 @@ export function App() {
               <li key={String(plan.planId)}>
                 <strong>{String(plan.planId)}</strong>
                 <p>Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}</p>
+                <div className="action-row">
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() => setSelectedPlanId(String(plan.planId))}
+                  >
+                    Details
+                  </button>
+                </div>
                 <a
                   className="ghost-link"
                   href={productionExportUrl(String(plan.planId))}
@@ -802,6 +825,34 @@ export function App() {
             ))}
             {filteredPlans.length === 0 ? <li>Noch keine Produktionsplaene vorhanden.</li> : null}
           </ul>
+          <div className="divider" />
+          {selectedPlan ? (
+            <>
+              <header>
+                <p className="eyebrow">Plan-Details</p>
+                <h3>{String(selectedPlan.planId)}</h3>
+              </header>
+              <p>
+                Offene Punkte:{" "}
+                {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0
+                  ? selectedPlan.unresolvedItems.join(" | ")
+                  : "keine"}
+              </p>
+              <ul className="item-list compact">
+                {Array.isArray(selectedPlan.recipeSelections)
+                  ? selectedPlan.recipeSelections.map((selection) => {
+                      const selectionRecord = selection as Record<string, unknown>;
+                      return (
+                        <li key={String(selectionRecord.componentId)}>
+                          <strong>{String(selectionRecord.componentId)}</strong>
+                          <p>{String(selectionRecord.selectionReason ?? "-")}</p>
+                        </li>
+                      );
+                    })
+                  : null}
+              </ul>
+            </>
+          ) : null}
           <div className="divider" />
           <ul className="item-list compact">
             {dashboard.recipes.slice(0, 8).map((recipe) => (
@@ -857,6 +908,13 @@ export function App() {
                 <strong>{String(draft.draftId)}</strong>
                 <p>{String(draft.eventSummary ?? "-")}</p>
                 <div className="action-row">
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() => setSelectedDraftId(String(draft.draftId))}
+                  >
+                    Details
+                  </button>
                   {Array.isArray(draft.variantSet)
                     ? draft.variantSet.map((variant) => {
                         const variantRecord = variant as Record<string, unknown>;
@@ -890,6 +948,18 @@ export function App() {
             ))}
             {dashboard.offerDrafts.length === 0 ? <li>Noch keine Angebotsentwuerfe vorhanden.</li> : null}
           </ul>
+          {selectedDraft ? (
+            <>
+              <div className="divider" />
+              <header>
+                <p className="eyebrow">Entwurfs-Details</p>
+                <h3>{String(selectedDraft.draftId)}</h3>
+              </header>
+              <p>{String(selectedDraft.eventSummary ?? "-")}</p>
+              <pre className="detail-pre">{String(selectedDraft.customerFacingText ?? "")}</pre>
+              <pre className="detail-pre">{String(selectedDraft.internalWorkingText ?? "")}</pre>
+            </>
+          ) : null}
         </article>
 
         <article className="panel">
