@@ -17,11 +17,42 @@ const tierWeight: Record<Recipe["source"]["tier"], number> = {
   internet_fallback: 1
 };
 
+const culinaryTokenExpansions: Record<string, string[]> = {
+  schokoladenkuchen: ["chocolate", "cake"],
+  kuchen: ["cake"],
+  schokolade: ["chocolate"],
+  tomatensuppe: ["tomato", "soup"],
+  suppe: ["soup"],
+  kartoffelsalat: ["potato", "salad"],
+  nudelsalat: ["pasta", "salad"],
+  salat: ["salad"],
+  brot: ["bread"],
+  baguette: ["baguette"],
+  kalbsbuletten: ["veal", "meatballs"],
+  buletten: ["meatballs"],
+  curry: ["curry"],
+  reis: ["rice"],
+  schmorzwiebeln: ["braised", "onions"]
+};
+
+const veganCuePattern = /\b(vegan|pflanzlich|plant[- ]based|dairy[- ]free|eggless)\b/i;
+const vegetarianCuePattern = /\b(vegetarisch|vegetarian)\b/i;
+
 function normalizeTokens(value: string): string[] {
-  return value
+  const baseTokens = value
     .toLowerCase()
     .split(/[^a-z0-9äöüß]+/i)
     .filter(Boolean);
+  const expanded = new Set<string>();
+
+  for (const token of baseTokens) {
+    expanded.add(token);
+    for (const extra of culinaryTokenExpansions[token] ?? []) {
+      expanded.add(extra);
+    }
+  }
+
+  return [...expanded];
 }
 
 function commonPrefixLength(left: string, right: string): number {
@@ -66,12 +97,43 @@ function cleanedSearchLabel(label: string): string {
     .trim();
 }
 
+function translateLabelForLocale(label: string, locale: "de" | "en"): string {
+  if (locale !== "en") {
+    return label;
+  }
+
+  let translated = label.toLowerCase();
+  const replacements: Array<[RegExp, string]> = [
+    [/\bschokoladenkuchen\b/g, "chocolate cake"],
+    [/\bkuchen\b/g, "cake"],
+    [/\bschokolade\b/g, "chocolate"],
+    [/\btomatensuppe\b/g, "tomato soup"],
+    [/\bsuppe\b/g, "soup"],
+    [/\bkartoffelsalat\b/g, "potato salad"],
+    [/\bnudelsalat\b/g, "pasta salad"],
+    [/\bkraut-karottensalat\b/g, "cabbage carrot salad"],
+    [/\bsalat\b/g, "salad"],
+    [/\bbrot\b/g, "bread"],
+    [/\bbaguette\b/g, "baguette"],
+    [/\bkalbsbuletten\b/g, "veal meatballs"],
+    [/\bschmorzwiebeln\b/g, "braised onions"],
+    [/\bbasmatireis\b/g, "basmati rice"],
+    [/\bwildkräutersalat\b/g, "wild herb salad"]
+  ];
+
+  for (const [pattern, replacement] of replacements) {
+    translated = translated.replace(pattern, replacement);
+  }
+
+  return translated.replace(/\s+/g, " ").trim();
+}
+
 function buildSearchQueries(
   component: MenuComponent,
   eventSpec: AcceptedEventSpec,
   locale: "de" | "en"
 ): string[] {
-  const cleanedLabel = cleanedSearchLabel(component.label);
+  const cleanedLabel = translateLabelForLocale(cleanedSearchLabel(component.label), locale);
   const classificationHint =
     component.menuCategory === "vegan"
       ? locale === "de"
@@ -111,7 +173,47 @@ function fitScoreForRecipe(
     ).length /
     Math.max(componentTokens.length, 1);
   const eventBoost = eventSpec.servicePlan.serviceForm === component.serviceStyle ? 0.1 : 0;
-  return Math.min(1, overlap + eventBoost);
+  const categoryBoost = categoryBoostForText(recipeName, component);
+  return Math.min(1, Math.max(0, overlap + eventBoost + categoryBoost));
+}
+
+function hasCategoryCue(text: string, category: MenuComponent["menuCategory"] | undefined): boolean {
+  if (!category) {
+    return true;
+  }
+
+  if (category === "vegan") {
+    return veganCuePattern.test(text);
+  }
+
+  if (category === "vegetarian") {
+    return vegetarianCuePattern.test(text) || veganCuePattern.test(text);
+  }
+
+  return true;
+}
+
+function categoryBoostForText(
+  text: string,
+  component: MenuComponent
+): number {
+  if (!component.menuCategory) {
+    return 0;
+  }
+
+  return hasCategoryCue(text, component.menuCategory) ? 0.25 : -0.3;
+}
+
+function candidateSupportsMenuCategory(
+  candidate: WebRecipeCandidate,
+  component: MenuComponent
+): boolean {
+  if (!component.menuCategory) {
+    return true;
+  }
+
+  const text = `${candidate.title} ${candidate.url} ${(candidate.recipe?.dietTags ?? []).join(" ")}`;
+  return hasCategoryCue(text, component.menuCategory);
 }
 
 function qualityScoreForCandidate(candidate: WebRecipeCandidate): number {
@@ -203,6 +305,10 @@ export class RecipeDiscoveryService {
         }
 
         for (const candidate of searchResults) {
+          if (!candidateSupportsMenuCategory(candidate, component)) {
+            continue;
+          }
+
           const qualityScore = qualityScoreForCandidate(candidate);
           const fitScore = fitScoreForRecipe(candidate.title, component, eventSpec);
           if (fitScore < 0.2) {
@@ -224,10 +330,14 @@ export class RecipeDiscoveryService {
           });
 
           if (materialized) {
-            candidates.push({
-              recipe: validateRecipe(materialized),
-              query
-            });
+            try {
+              candidates.push({
+                recipe: validateRecipe(materialized),
+                query
+              });
+            } catch {
+              continue;
+            }
           }
         }
 
@@ -248,15 +358,25 @@ export class RecipeDiscoveryService {
     })[0];
 
     if (!winner) {
+      const categoryHint =
+        component.menuCategory === "vegan"
+          ? "veganer "
+          : component.menuCategory === "vegetarian"
+            ? "vegetarischer "
+            : "";
       const unresolvedReason = webSearchFailed
-        ? `Kein Rezeptkandidat für ${component.label} gefunden, Internetrecherche fehlgeschlagen.`
-        : `Kein Rezeptkandidat für ${component.label} gefunden.`;
+        ? `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden, Internetrecherche fehlgeschlagen.`
+        : `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden.`;
       return {
         selection: {
           componentId: component.componentId,
           selectionReason: webSearchFailed
             ? "Es konnte kein interner Rezeptkandidat gefunden werden und die Internetrecherche ist fehlgeschlagen."
-            : "Es konnte kein interner oder externer Rezeptkandidat validiert werden.",
+            : component.menuCategory === "vegan"
+              ? "Es konnte kein interner oder externer veganer Rezeptkandidat belastbar validiert werden."
+              : component.menuCategory === "vegetarian"
+                ? "Es konnte kein interner oder externer vegetarischer Rezeptkandidat belastbar validiert werden."
+                : "Es konnte kein interner oder externer Rezeptkandidat belastbar validiert werden.",
           autoUsedInternetRecipe: false
         },
         unresolvedItems: [unresolvedReason]

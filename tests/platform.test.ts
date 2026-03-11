@@ -748,6 +748,206 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("skips invalid web recipe candidates instead of failing the production plan", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/broken-tomato-soup",
+        title: "Tomatensuppe Rezept",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Tomatensuppe Rezept",
+          baseYield: {
+            servings: 10,
+            unit: "servings"
+          },
+          ingredients: [],
+          steps: [],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 10
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 0,
+          stepCount: 0,
+          mappedIngredientRatio: 0
+        }
+      }
+    ]);
+    const discovery = new RecipeDiscoveryService(repository, provider);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: discovery,
+      dataRoot
+    });
+    const spec = specWithComponent("Tomatensuppe");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.readiness.status).toBe("partial");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("belastbar validiert");
+    expect(body.productionPlan.productionBatches).toHaveLength(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("prefers vegan internet recipes for vegan menu components", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/chocolate-cake",
+        title: "Chocolate Cake",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Chocolate Cake",
+          baseYield: {
+            servings: 12,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "flour",
+              name: "Flour",
+              quantity: {
+                amount: 500,
+                unit: "g"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Bake the cake."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 12
+          },
+          allergens: [],
+          dietTags: []
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 10,
+          stepCount: 5,
+          mappedIngredientRatio: 0.95
+        }
+      },
+      {
+        url: "https://example.com/vegan-chocolate-cake",
+        title: "Vegan Chocolate Cake",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Vegan Chocolate Cake",
+          baseYield: {
+            servings: 12,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "flour",
+              name: "Flour",
+              quantity: {
+                amount: 500,
+                unit: "g"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "plant-milk",
+              name: "Plant Milk",
+              quantity: {
+                amount: 400,
+                unit: "ml"
+              },
+              group: "dairy",
+              purchaseUnit: "l",
+              normalizedUnit: "ml"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Mix dry ingredients."
+            },
+            {
+              index: 2,
+              instruction: "Add plant milk and bake."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 12
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 12,
+          stepCount: 6,
+          mappedIngredientRatio: 0.95
+        }
+      }
+    ]);
+    const discovery = new RecipeDiscoveryService(repository, provider);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: discovery,
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Schokoladenkuchen vegan.")
+      ),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
+    const storedRecipe = await repository.get(recipeId);
+    expect(storedRecipe?.name).toBe("Vegan Chocolate Cake");
+    expect(storedRecipe?.dietTags).toContain("vegan");
+    expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(true);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("promotes reviewed internet recipes into the approved shared library", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });

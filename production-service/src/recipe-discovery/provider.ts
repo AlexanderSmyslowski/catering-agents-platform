@@ -175,6 +175,13 @@ export function candidateToRecipe(
     return undefined;
   }
 
+  const inferredDietTags = new Set(partial.dietTags ?? []);
+  if (component.menuCategory === "vegan") {
+    inferredDietTags.add("vegan");
+  } else if (component.menuCategory === "vegetarian") {
+    inferredDietTags.add("vegetarian");
+  }
+
   return {
     schemaVersion: SCHEMA_VERSION,
     recipeId: `web-${slugify(partial.name)}-${createHash("sha1").update(candidate.url).digest("hex").slice(0, 8)}`,
@@ -200,7 +207,7 @@ export function candidateToRecipe(
       batchSize: partial.baseYield.servings
     },
     allergens: partial.allergens ?? [],
-    dietTags: partial.dietTags ?? []
+    dietTags: [...inferredDietTags]
   };
 }
 

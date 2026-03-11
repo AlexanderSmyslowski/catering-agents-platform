@@ -6,6 +6,7 @@ import {
   useEffect,
   useEffectEvent,
   useMemo,
+  useRef,
   useState
 } from "react";
 import { DashboardShell } from "../components/dashboard-shell.js";
@@ -36,7 +37,10 @@ import {
 import {
   buildProductionAssumptions,
   buildProductionQuestions,
-  getSpecLabel
+  getSpecLabel,
+  translateMenuCategory,
+  translateProductionMode,
+  translateServiceForm
 } from "./production-language.js";
 
 type AppRoute = "home" | "offer" | "production";
@@ -222,6 +226,31 @@ function formatEta(seconds: number): string {
   return `${seconds} Sekunden`;
 }
 
+function trailingNumericRank(value: unknown): number {
+  const match = String(value ?? "").match(/(\d{6,})$/);
+  return match ? Number(match[1]) : 0;
+}
+
+function compareNewestRecordsBy(key: string) {
+  return (left: Record<string, unknown>, right: Record<string, unknown>) =>
+    trailingNumericRank(right[key]) - trailingNumericRank(left[key]);
+}
+
+function estimatePlanningDurationMs(spec: Record<string, unknown>): number {
+  const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
+  const baseDuration = 4500;
+  const perComponent = menuPlan.length * 2200;
+  return Math.max(6000, Math.min(30000, baseDuration + perComponent));
+}
+
+function formatPercent(value?: unknown): string | undefined {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return undefined;
+  }
+  return `${Math.round(numeric * 100)} %`;
+}
+
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
   const baseUrl = useMemo(() => getBaseUrl(), []);
@@ -263,6 +292,12 @@ export function App() {
   const [documentEtaSeconds, setDocumentEtaSeconds] = useState<number | undefined>();
   const [documentEstimatedDurationMs, setDocumentEstimatedDurationMs] = useState(0);
   const [documentStartedAt, setDocumentStartedAt] = useState<number | undefined>();
+  const [planPhase, setPlanPhase] = useState<"idle" | "planning" | "done">("idle");
+  const [planProgress, setPlanProgress] = useState(0);
+  const [planEtaSeconds, setPlanEtaSeconds] = useState<number | undefined>();
+  const [planEstimatedDurationMs, setPlanEstimatedDurationMs] = useState(0);
+  const [planStartedAt, setPlanStartedAt] = useState<number | undefined>();
+  const [planningSpecLabel, setPlanningSpecLabel] = useState<string>();
   const [editingEventType, setEditingEventType] = useState("");
   const [editingEventDate, setEditingEventDate] = useState("");
   const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
@@ -270,6 +305,7 @@ export function App() {
   const [editingMenuItems, setEditingMenuItems] = useState("");
   const [editingComponentStates, setEditingComponentStates] = useState<Record<string, ComponentEditState>>({});
   const deferredSearch = useDeferredValue(search);
+  const productionResultsRef = useRef<HTMLDivElement | null>(null);
 
   const refreshDashboard = useEffectEvent(async () => {
     setLoading(true);
@@ -356,15 +392,51 @@ export function App() {
     );
   }, [dashboard.purchaseLists, deferredSearch]);
 
+  const orderedPlans = useMemo(
+    () => [...filteredPlans].sort(compareNewestRecordsBy("planId")),
+    [filteredPlans]
+  );
+
+  const orderedPurchaseLists = useMemo(
+    () => [...filteredPurchaseLists].sort(compareNewestRecordsBy("purchaseListId")),
+    [filteredPurchaseLists]
+  );
+
+  const specById = useMemo(
+    () =>
+      new Map(
+        dashboard.acceptedSpecs.map((spec) => [String(spec.specId ?? ""), spec] as const)
+      ),
+    [dashboard.acceptedSpecs]
+  );
+
   const selectedDraft = useMemo(
     () => dashboard.offerDrafts.find((draft) => String(draft.draftId) === selectedDraftId),
     [dashboard.offerDrafts, selectedDraftId]
   );
 
   const selectedPlan = useMemo(
-    () => dashboard.productionPlans.find((plan) => String(plan.planId) === selectedPlanId),
-    [dashboard.productionPlans, selectedPlanId]
+    () =>
+      orderedPlans.find((plan) => String(plan.planId) === selectedPlanId) ?? orderedPlans[0],
+    [orderedPlans, selectedPlanId]
   );
+
+  const selectedPlanSpec = useMemo(() => {
+    if (!selectedPlan) {
+      return undefined;
+    }
+    return specById.get(String(selectedPlan.eventSpecId ?? ""));
+  }, [selectedPlan, specById]);
+
+  const selectedPlanComponentsById = useMemo(() => {
+    const menuPlan = Array.isArray(selectedPlanSpec?.menuPlan) ? selectedPlanSpec.menuPlan : [];
+    return new Map(
+      menuPlan.map((entry) => {
+        const component = entry as Record<string, unknown>;
+        return [String(component.componentId ?? ""), component] as const;
+      })
+    );
+  }, [selectedPlanSpec]);
 
   const focusedProductionSpec = useMemo(() => {
     const preferred = focusedProductionSpecId
@@ -404,6 +476,47 @@ export function App() {
       window.clearInterval(intervalId);
     };
   }, [documentEstimatedDurationMs, documentPhase, documentStartedAt]);
+
+  useEffect(() => {
+    if (planPhase !== "planning" || !planStartedAt || planEstimatedDurationMs <= 0) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const elapsed = Date.now() - planStartedAt;
+      const ratio = Math.min(elapsed / planEstimatedDurationMs, 0.92);
+      const remainingMs = Math.max(planEstimatedDurationMs - elapsed, 700);
+      setPlanProgress(Math.max(12, Math.round(ratio * 100)));
+      setPlanEtaSeconds(Math.max(1, Math.ceil(remainingMs / 1000)));
+    }, 180);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [planEstimatedDurationMs, planPhase, planStartedAt]);
+
+  const scrollToProductionResults = useEffectEvent((behavior: ScrollBehavior = "smooth") => {
+    if (route !== "production") {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      productionResultsRef.current?.scrollIntoView({
+        behavior,
+        block: "start"
+      });
+    });
+  });
+
+  useEffect(() => {
+    if (route !== "production") {
+      return;
+    }
+
+    if (planPhase === "planning" || planPhase === "done") {
+      scrollToProductionResults(planPhase === "done" ? "smooth" : "auto");
+    }
+  }, [planPhase, route, scrollToProductionResults]);
 
   function clearMessages() {
     setError(undefined);
@@ -552,15 +665,33 @@ export function App() {
         }
       }
 
+      const specLabel = getSpecLabel(specForPlanning);
+      const estimatedDurationMs = estimatePlanningDurationMs(specForPlanning);
+      setPlanningSpecLabel(specLabel);
+      setPlanPhase("planning");
+      setPlanProgress(12);
+      setPlanEtaSeconds(Math.max(1, Math.ceil(estimatedDurationMs / 1000)));
+      setPlanEstimatedDurationMs(estimatedDurationMs);
+      setPlanStartedAt(Date.now());
+      setSelectedPlanId(undefined);
       setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
+      scrollToProductionResults("auto");
       const response = await createProductionPlan(specForPlanning);
       const planId = extractProductionPlanId(response);
       if (planId) {
         setSelectedPlanId(planId);
       }
       await refreshDashboard();
+      setPlanPhase("done");
+      setPlanProgress(100);
+      setPlanEtaSeconds(0);
       setNotice("Produktionsplan wurde erzeugt.");
     } catch (submitError) {
+      setPlanPhase("idle");
+      setPlanProgress(0);
+      setPlanEtaSeconds(undefined);
+      setPlanEstimatedDurationMs(0);
+      setPlanStartedAt(undefined);
       setError(
         submitError instanceof Error ? submitError.message : "Produktionsplan konnte nicht erstellt werden."
       );
@@ -1728,15 +1859,73 @@ export function App() {
           </article>
 
           <article className="panel">
+            <div ref={productionResultsRef} />
             <header>
               <p className="eyebrow">Schritt 3</p>
               <h3>Berechnete Ergebnisse</h3>
             </header>
+            {planPhase === "planning" && planningSpecLabel ? (
+              <div className="progress-panel">
+                <div
+                  className="progress-ring"
+                  style={
+                    {
+                      "--progress-angle": `${Math.max(0, Math.min(planProgress, 100)) * 3.6}deg`
+                    } as CSSProperties
+                  }
+                >
+                  <span>{planProgress}%</span>
+                </div>
+                <div className="progress-panel__content">
+                  <p className="processing-note">
+                    Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen für {planningSpecLabel} ...
+                  </p>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-bar__fill"
+                      style={{ width: `${Math.max(0, Math.min(planProgress, 100))}%` }}
+                    />
+                  </div>
+                  <p className="helper-text">
+                    Geschätzte Restzeit: {formatEta(planEtaSeconds ?? 1)}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            {planPhase === "done" && planningSpecLabel ? (
+              <div className="progress-panel">
+                <div
+                  className="progress-ring progress-ring--done"
+                  style={{ "--progress-angle": "360deg" } as CSSProperties}
+                >
+                  <span>100%</span>
+                </div>
+                <div className="progress-panel__content">
+                  <p className="processing-note processing-note--success">
+                    Produktionsplan wurde für {planningSpecLabel} erzeugt.
+                  </p>
+                  <div className="progress-bar">
+                    <div className="progress-bar__fill" style={{ width: "100%" }} />
+                  </div>
+                  <p className="helper-text">
+                    Die Rezepte, Produktionsschritte und Einkaufspositionen wurden aktualisiert.
+                  </p>
+                </div>
+              </div>
+            ) : null}
             <ul className="item-list compact">
-              {filteredPlans.map((plan) => (
+              {orderedPlans.map((plan) => {
+                const relatedSpec = specById.get(String(plan.eventSpecId ?? ""));
+                const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
+                const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
+                return (
                 <li key={String(plan.planId)}>
-                  <strong>{String(plan.planId)}</strong>
-                  <p>Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}</p>
+                  <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Produktionsplan"}</strong>
+                  <p>
+                    Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}
+                    {" · "}Produktionsblätter: {batchCount}
+                    {" · "}Offene Punkte: {unresolvedCount}
+                  </p>
                   <div className="action-row">
                     <button
                       className="secondary-button"
@@ -1755,30 +1944,84 @@ export function App() {
                     Produktionsblatt exportieren
                   </a>
                 </li>
-              ))}
-              {filteredPlans.length === 0 ? <li>Noch keine Produktionspläne vorhanden.</li> : null}
+              );
+              })}
+              {orderedPlans.length === 0 ? <li>Noch keine Produktionspläne vorhanden.</li> : null}
             </ul>
             {selectedPlan ? (
               <>
                 <div className="divider" />
                 <header>
                   <p className="eyebrow">Plandetails</p>
-                  <h3>{String(selectedPlan.planId)}</h3>
+                  <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
                 </header>
-                <p>
-                  Offene Punkte:{" "}
-                  {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0
-                    ? selectedPlan.unresolvedItems.join(" · ")
-                    : "keine"}
+                <p className="helper-text">
+                  Status:{" "}
+                  {translateReadiness(
+                    String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+                  )}
+                  {selectedPlanSpec
+                    ? ` · Serviceform: ${translateServiceForm(
+                        String(
+                          (
+                            selectedPlanSpec.servicePlan as Record<string, unknown> | undefined
+                          )?.serviceForm ?? "offen"
+                        )
+                      )}`
+                    : ""}
+                  {" · "}Produktionsblätter:{" "}
+                  {Array.isArray(selectedPlan.productionBatches) ? selectedPlan.productionBatches.length : 0}
                 </p>
+                {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0 ? (
+                  <>
+                    <p>Offene Punkte:</p>
+                    <ul className="item-list compact">
+                      {selectedPlan.unresolvedItems.map((entry) => (
+                        <li key={String(entry)}>{String(entry)}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p>Offene Punkte: keine</p>
+                )}
+                {Array.isArray(selectedPlan.productionBatches) && selectedPlan.productionBatches.length === 0 ? (
+                  <p className="helper-text">
+                    Belastbare Produktionsblätter entstehen erst, wenn für alle relevanten Komponenten ein nutzbares
+                    Rezept oder eine eindeutige Beschaffungsentscheidung vorliegt.
+                  </p>
+                ) : null}
                 <ul className="item-list compact">
                   {Array.isArray(selectedPlan.recipeSelections)
                     ? selectedPlan.recipeSelections.map((selection) => {
                         const selectionRecord = selection as Record<string, unknown>;
+                        const componentId = String(selectionRecord.componentId ?? "");
+                        const component = selectedPlanComponentsById.get(componentId);
+                        const componentLabel = String(component?.label ?? componentId);
+                        const qualityScore = formatPercent(selectionRecord.qualityScore);
+                        const fitScore = formatPercent(selectionRecord.fitScore);
                         return (
-                          <li key={String(selectionRecord.componentId)}>
-                            <strong>{String(selectionRecord.componentId)}</strong>
+                          <li key={componentId}>
+                            <strong>{componentLabel}</strong>
                             <p>{String(selectionRecord.selectionReason ?? "-")}</p>
+                            {component ? (
+                              <p className="helper-text">
+                                Kategorie: {translateMenuCategory(String(component.menuCategory ?? ""))}
+                                {" · "}Herstellungsart:{" "}
+                                {translateProductionMode(
+                                  String(
+                                    (
+                                      component.productionDecision as Record<string, unknown> | undefined
+                                    )?.mode ?? ""
+                                  )
+                                )}
+                              </p>
+                            ) : null}
+                            {qualityScore || fitScore ? (
+                              <p className="helper-text">
+                                {qualityScore ? `Qualität ${qualityScore}` : "Qualität offen"}
+                                {fitScore ? ` · Passung ${fitScore}` : ""}
+                              </p>
+                            ) : null}
                           </li>
                         );
                       })
@@ -1863,9 +2106,11 @@ export function App() {
               <h3>CSV-fähige Beschaffungslisten</h3>
             </header>
             <ul className="item-list compact">
-              {filteredPurchaseLists.map((purchaseList) => (
+              {orderedPurchaseLists.map((purchaseList) => {
+                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                return (
                 <li key={String(purchaseList.purchaseListId)}>
-                  <strong>{String(purchaseList.purchaseListId)}</strong>
+                  <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
                   <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
                   <a
                     className="ghost-link"
@@ -1876,8 +2121,9 @@ export function App() {
                     Einkaufsliste herunterladen
                   </a>
                 </li>
-              ))}
-              {filteredPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten vorhanden.</li> : null}
+              );
+              })}
+              {orderedPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten vorhanden.</li> : null}
             </ul>
           </article>
         </section>
