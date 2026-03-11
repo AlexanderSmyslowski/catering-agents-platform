@@ -1,5 +1,6 @@
 import {
   startTransition,
+  type CSSProperties,
   type DragEvent,
   useDeferredValue,
   useEffect,
@@ -274,6 +275,19 @@ function buildProductionQuestions(spec?: Record<string, unknown>): string[] {
   return [...new Set(questions)];
 }
 
+function estimateProcessingDurationMs(file: File): number {
+  const fileSizeMb = file.size / (1024 * 1024);
+  const estimated = 3500 + fileSizeMb * 1800;
+  return Math.max(4000, Math.min(18000, Math.round(estimated)));
+}
+
+function formatEta(seconds: number): string {
+  if (seconds <= 1) {
+    return "weniger als 1 Sekunde";
+  }
+  return `${seconds} Sekunden`;
+}
+
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
   const baseUrl = useMemo(() => getBaseUrl(), []);
@@ -308,6 +322,12 @@ export function App() {
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string>();
   const [dragActive, setDragActive] = useState(false);
+  const [activeDocumentName, setActiveDocumentName] = useState<string>();
+  const [documentPhase, setDocumentPhase] = useState<"idle" | "analysing" | "done">("idle");
+  const [documentProgress, setDocumentProgress] = useState(0);
+  const [documentEtaSeconds, setDocumentEtaSeconds] = useState<number | undefined>();
+  const [documentEstimatedDurationMs, setDocumentEstimatedDurationMs] = useState(0);
+  const [documentStartedAt, setDocumentStartedAt] = useState<number | undefined>();
   const [editingEventType, setEditingEventType] = useState("");
   const [editingEventDate, setEditingEventDate] = useState("");
   const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
@@ -427,6 +447,24 @@ export function App() {
     [focusedProductionSpec]
   );
 
+  useEffect(() => {
+    if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const elapsed = Date.now() - documentStartedAt;
+      const ratio = Math.min(elapsed / documentEstimatedDurationMs, 0.92);
+      const remainingMs = Math.max(documentEstimatedDurationMs - elapsed, 500);
+      setDocumentProgress(Math.max(8, Math.round(ratio * 100)));
+      setDocumentEtaSeconds(Math.max(1, Math.ceil(remainingMs / 1000)));
+    }, 180);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [documentEstimatedDurationMs, documentPhase, documentStartedAt]);
+
   function clearMessages() {
     setError(undefined);
     setNotice(undefined);
@@ -476,32 +514,22 @@ export function App() {
       return;
     }
 
-    setSubmitting(true);
-    clearMessages();
-    try {
-      const response = await createAcceptedSpecFromDocument(intakeFile, intakeChannel);
-      const specId = extractAcceptedSpecId(response);
-      if (specId) {
-        setFocusedProductionSpecId(specId);
-      }
-      setIntakeFile(null);
-      setDragActive(false);
-      await refreshDashboard();
-      setNotice("Dokument wurde in eine operative Spezifikation überführt.");
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    await processIncomingProductionFile(intakeFile, intakeChannel);
   }
 
   async function processIncomingProductionFile(file: File, channel: IntakeDocumentChannel) {
+    const estimatedDurationMs = estimateProcessingDurationMs(file);
     setSubmitting(true);
     clearMessages();
     setIntakeFile(file);
     setIntakeChannel(channel);
+    setActiveDocumentName(file.name);
+    setDocumentPhase("analysing");
+    setDocumentProgress(8);
+    setDocumentEtaSeconds(Math.max(1, Math.ceil(estimatedDurationMs / 1000)));
+    setDocumentEstimatedDurationMs(estimatedDurationMs);
+    setDocumentStartedAt(Date.now());
+    setNotice(`Dokument ${file.name} wird analysiert...`);
 
     try {
       const response = await createAcceptedSpecFromDocument(file, channel);
@@ -511,10 +539,18 @@ export function App() {
       }
       setIntakeFile(null);
       setDragActive(false);
+      setDocumentPhase("done");
+      setDocumentProgress(100);
+      setDocumentEtaSeconds(0);
       await refreshDashboard();
       setNotice(`Dokument ${file.name} wurde übernommen und analysiert.`);
     } catch (submitError) {
       setIntakeFile(file);
+      setDocumentPhase("idle");
+      setDocumentProgress(0);
+      setDocumentEtaSeconds(undefined);
+      setDocumentEstimatedDurationMs(0);
+      setDocumentStartedAt(undefined);
       setError(
         submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
       );
@@ -1219,6 +1255,51 @@ export function App() {
               <span className="drag-drop-zone__cta">Datei auswählen</span>
             </label>
             {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
+            {documentPhase === "analysing" && activeDocumentName ? (
+              <div className="progress-panel">
+                <div
+                  className="progress-ring"
+                  style={
+                    {
+                      "--progress-angle": `${Math.max(0, Math.min(documentProgress, 100)) * 3.6}deg`
+                    } as CSSProperties
+                  }
+                >
+                  <span>{documentProgress}%</span>
+                </div>
+                <div className="progress-panel__content">
+                  <p className="processing-note">Analyse läuft für {activeDocumentName} ...</p>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-bar__fill"
+                      style={{ width: `${Math.max(0, Math.min(documentProgress, 100))}%` }}
+                    />
+                  </div>
+                  <p className="helper-text">
+                    Geschätzte Restzeit: {formatEta(documentEtaSeconds ?? 1)}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            {documentPhase === "done" && activeDocumentName ? (
+              <div className="progress-panel">
+                <div
+                  className="progress-ring progress-ring--done"
+                  style={{ "--progress-angle": "360deg" } as CSSProperties}
+                >
+                  <span>100%</span>
+                </div>
+                <div className="progress-panel__content">
+                  <p className="processing-note processing-note--success">
+                    Analyse abgeschlossen für {activeDocumentName}.
+                  </p>
+                  <div className="progress-bar">
+                    <div className="progress-bar__fill" style={{ width: "100%" }} />
+                  </div>
+                  <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+                </div>
+              </div>
+            ) : null}
             <div className="action-row">
               <select
                 className="operator-input"
@@ -1340,7 +1421,9 @@ export function App() {
               </>
             ) : (
               <p className="helper-text">
-                Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten.
+                {documentPhase === "analysing"
+                  ? "Der Agent wertet das hochgeladene Dokument gerade aus und erzeugt daraus operative Veranstaltungsdaten."
+                  : "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten."}
               </p>
             )}
             {filteredSpecs.length > 1 ? (
