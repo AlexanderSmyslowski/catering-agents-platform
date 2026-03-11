@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 import {
   ingredientGroupHints,
   SCHEMA_VERSION,
@@ -72,8 +72,17 @@ function parseInstructions(value: unknown): string[] {
         return [item];
       }
 
-      if (item && typeof item === "object" && "text" in item && typeof item.text === "string") {
-        return [item.text];
+      if (item && typeof item === "object") {
+        if ("text" in item && typeof item.text === "string") {
+          return [item.text];
+        }
+
+        if (
+          "itemListElement" in item &&
+          Array.isArray((item as { itemListElement?: unknown[] }).itemListElement)
+        ) {
+          return parseInstructions((item as { itemListElement?: unknown[] }).itemListElement);
+        }
       }
 
       return [];
@@ -88,6 +97,32 @@ function parseInstructions(value: unknown): string[] {
   }
 
   return [];
+}
+
+function parseYieldServings(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const match = value.match(/(\d{1,3})/);
+    return match ? Number(match[1]) : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const parsed = parseYieldServings(entry);
+      if (parsed) {
+        return parsed;
+      }
+    }
+  }
+
+  if (value && typeof value === "object" && "value" in value) {
+    return parseYieldServings((value as { value?: unknown }).value);
+  }
+
+  return undefined;
 }
 
 function flattenJsonLd(input: unknown): Record<string, unknown>[] {
@@ -213,9 +248,10 @@ export function candidateToRecipe(
 
 export async function fetchRecipeCandidateFromUrl(url: string): Promise<WebRecipeCandidate | undefined> {
   const response = await fetch(url, {
-    signal: AbortSignal.timeout(2500),
+    signal: AbortSignal.timeout(5000),
     headers: {
-      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) CateringAgentsBot/0.1"
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) CateringAgentsBot/0.1",
+      "accept-language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7"
     }
   });
 
@@ -224,8 +260,11 @@ export async function fetchRecipeCandidateFromUrl(url: string): Promise<WebRecip
   }
 
   const html = await response.text();
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on("jsdomError", () => undefined);
   const dom = new JSDOM(html, {
-    url
+    url,
+    virtualConsole
   });
 
   const jsonLdRecipe = findRecipeJsonLd(dom.window.document);
@@ -243,10 +282,7 @@ export async function fetchRecipeCandidateFromUrl(url: string): Promise<WebRecip
       instruction
     }));
 
-    const recipeYieldText =
-      typeof jsonLdRecipe.recipeYield === "string" ? jsonLdRecipe.recipeYield : "";
-    const yieldMatch = recipeYieldText.match(/(\d{1,3})/);
-    const servings = yieldMatch ? Number(yieldMatch[1]) : undefined;
+    const servings = parseYieldServings(jsonLdRecipe.recipeYield);
 
     return {
       url,
