@@ -33,6 +33,11 @@ import {
   type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
+import {
+  buildProductionAssumptions,
+  buildProductionQuestions,
+  getSpecLabel
+} from "./production-language.js";
 
 type AppRoute = "home" | "offer" | "production";
 
@@ -97,18 +102,6 @@ function getBaseUrl(): string {
   return window.location.origin;
 }
 
-function translateEventType(value?: string): string {
-  const labels: Record<string, string> = {
-    conference: "Konferenz",
-    meeting: "Besprechung",
-    reception: "Empfang",
-    dinner: "Abendessen",
-    fair: "Messe",
-    workshop: "Arbeitsseminar"
-  };
-  return value ? labels[value] ?? value : "Veranstaltung";
-}
-
 function translateReadiness(value?: string): string {
   const labels: Record<string, string> = {
     complete: "vollständig",
@@ -144,12 +137,6 @@ function translateApprovalState(value?: string): string {
     rejected: "abgelehnt"
   };
   return value ? labels[value] ?? value : "-";
-}
-
-function getSpecLabel(spec: Record<string, unknown>): string {
-  const event = spec.event as Record<string, unknown> | undefined;
-  const attendees = spec.attendees as Record<string, unknown> | undefined;
-  return `${translateEventType(String(event?.type ?? ""))} · ${attendees?.expected ?? "?"} Teilnehmende · ${event?.date ?? "offen"}`;
 }
 
 function formatCounts(counts: Record<string, number>): string {
@@ -214,66 +201,6 @@ function channelForFile(file: File): IntakeDocumentChannel {
   return "text";
 }
 
-function stringListFromUnknown(input: unknown): string[] {
-  if (!Array.isArray(input)) {
-    return [];
-  }
-  return input.map((item) => String(item)).filter(Boolean);
-}
-
-function messageListFromUnknown(input: unknown): string[] {
-  if (!Array.isArray(input)) {
-    return [];
-  }
-  return input
-    .map((item) => {
-      if (item && typeof item === "object" && "message" in item) {
-        return String((item as { message?: unknown }).message ?? "");
-      }
-      return String(item ?? "");
-    })
-    .filter(Boolean);
-}
-
-function buildProductionQuestions(spec?: Record<string, unknown>): string[] {
-  if (!spec) {
-    return ["Bitte ziehe zuerst ein Angebot hinein oder lade eine Datei hoch."];
-  }
-
-  const event = spec.event as Record<string, unknown> | undefined;
-  const attendees = spec.attendees as Record<string, unknown> | undefined;
-  const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
-  const missingFields = stringListFromUnknown(spec.missingFields);
-  const readiness = String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "");
-  const questions: string[] = [];
-
-  if (!event?.date) {
-    questions.push("Welches Veranstaltungsdatum gilt verbindlich für die Produktion?");
-  }
-  if (!attendees?.expected) {
-    questions.push("Mit welcher verbindlichen Teilnehmerzahl soll kalkuliert und produziert werden?");
-  }
-  if (!event?.serviceForm) {
-    questions.push("Welche Serviceform gilt: Buffet, Menü, Flying oder Ausgabe?");
-  }
-  if (menuPlan.length === 0) {
-    questions.push("Welche Gerichte oder Komponenten sollen konkret produziert werden?");
-  }
-
-  for (const field of missingFields) {
-    questions.push(`Bitte klären: ${field}`);
-  }
-
-  if (questions.length === 0 && readiness === "partial") {
-    questions.push("Bitte prüfe die Annahmen des Agenten, bevor die Produktion final freigegeben wird.");
-  }
-
-  if (questions.length === 0 && readiness === "insufficient") {
-    questions.push("Es fehlen noch Angaben, bevor belastbare Mengen und Einkaufslisten berechnet werden können.");
-  }
-
-  return [...new Set(questions)];
-}
 
 function estimateProcessingDurationMs(file: File): number {
   const fileSizeMb = file.size / (1024 * 1024);
@@ -443,7 +370,7 @@ export function App() {
   );
 
   const productionAssumptions = useMemo(
-    () => messageListFromUnknown(focusedProductionSpec?.assumptions),
+    () => buildProductionAssumptions(focusedProductionSpec),
     [focusedProductionSpec]
   );
 
