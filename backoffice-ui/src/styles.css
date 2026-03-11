@@ -85,6 +85,15 @@ button {
   box-shadow: 0 10px 30px rgba(164, 91, 33, 0.28);
 }
 
+.secondary-button {
+  background: linear-gradient(120deg, #7a6241, #b08e67);
+  box-shadow: 0 8px 24px rgba(93, 70, 38, 0.18);
+}
+
+.destructive-button {
+  background: linear-gradient(120deg, #8c2d1c, #c05034);
+}
+
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;

@@ -21,6 +21,11 @@ interface RecipeTextImportBody {
   sourceRef?: string;
 }
 
+interface RecipeReviewBody {
+  decision: "approve" | "verify" | "reject";
+  note?: string;
+}
+
 function multipartFieldValue(
   fields: Record<string, unknown>,
   fieldName: string
@@ -215,6 +220,14 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     await repository.save(recipe);
     return reply.code(201).send({ recipe });
   });
+
+  app.patch<{ Params: { recipeId: string }; Body: RecipeReviewBody }>(
+    "/v1/production/recipes/:recipeId/review",
+    async (request, reply) => {
+      const recipe = await repository.reviewRecipe(request.params.recipeId, request.body);
+      return reply.send({ recipe });
+    }
+  );
 
   return app;
 }

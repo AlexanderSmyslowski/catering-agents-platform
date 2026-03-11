@@ -8,6 +8,7 @@ export interface DashboardState {
 }
 
 export type RecipeUploadTarget = "offer" | "production";
+export type RecipeReviewDecision = "approve" | "verify" | "reject";
 
 export interface ServiceHealth {
   service: string;
@@ -123,6 +124,22 @@ export async function uploadRecipeFile(
   }
 
   return (await response.json()) as { recipe: Record<string, unknown> };
+}
+
+export async function reviewRecipe(
+  target: RecipeUploadTarget,
+  recipeId: string,
+  decision: RecipeReviewDecision
+) {
+  const endpoint =
+    target === "offer"
+      ? `/api/offers/v1/offers/recipes/${recipeId}/review`
+      : `/api/production/v1/production/recipes/${recipeId}/review`;
+
+  return fetchJson<{ recipe: Record<string, unknown> }>(endpoint, {
+    method: "PATCH",
+    body: JSON.stringify({ decision })
+  });
 }
 
 export async function seedDemoData() {

@@ -7,7 +7,11 @@ import {
 } from "./persistence.js";
 import { internalRecipes } from "./fixtures/sample-data.js";
 import { ingredientGroupHints, unitNormalization } from "./taxonomies/defaults.js";
-import { SCHEMA_VERSION, type Recipe } from "./types.js";
+import {
+  SCHEMA_VERSION,
+  type Recipe,
+  type RecipeReviewDecision
+} from "./types.js";
 import { validateRecipe } from "./validation.js";
 
 function slugify(value: string): string {
@@ -375,6 +379,10 @@ export class RecipeLibrary {
     );
 
     return (await this.recipes.list())
+      .filter((recipe) =>
+        recipe.source.approvalState === "approved_internal" ||
+        recipe.source.approvalState === "auto_usable"
+      )
       .map((recipe) => {
         const rightTokens = new Set(
           recipe.name
@@ -397,6 +405,53 @@ export class RecipeLibrary {
 
   async get(recipeId: string): Promise<Recipe | undefined> {
     return this.recipes.get(recipeId);
+  }
+
+  async reviewRecipe(
+    recipeId: string,
+    input: {
+      decision: RecipeReviewDecision;
+      note?: string;
+    }
+  ): Promise<Recipe> {
+    const recipe = await this.get(recipeId);
+    if (!recipe) {
+      throw new Error(`Recipe ${recipeId} not found.`);
+    }
+
+    const source = { ...recipe.source };
+    if (input.decision === "approve") {
+      source.approvalState = "approved_internal";
+      source.tier =
+        source.tier === "internal_verified" ? "internal_verified" : "internal_approved";
+      source.qualityScore = Math.max(source.qualityScore, 0.85);
+      source.fitScore = Math.max(source.fitScore, 0.85);
+      source.extractionCompleteness = Math.max(source.extractionCompleteness, 0.9);
+    } else if (input.decision === "verify") {
+      source.approvalState = "approved_internal";
+      source.tier = "internal_verified";
+      source.qualityScore = Math.max(source.qualityScore, 0.95);
+      source.fitScore = Math.max(source.fitScore, 0.9);
+      source.extractionCompleteness = Math.max(source.extractionCompleteness, 0.95);
+    } else {
+      source.approvalState = "rejected";
+    }
+
+    source.licenseNote = [
+      recipe.source.licenseNote,
+      `Review decision: ${input.decision}.`,
+      input.note?.trim()
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const reviewed = validateRecipe({
+      ...recipe,
+      source
+    });
+
+    await this.save(reviewed);
+    return reviewed;
   }
 
   async list(): Promise<Recipe[]> {

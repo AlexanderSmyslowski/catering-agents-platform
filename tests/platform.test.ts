@@ -299,6 +299,172 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("promotes reviewed internet recipes into the approved shared library", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/review-me",
+        title: "Harissa Bowl",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Harissa Bowl",
+          baseYield: {
+            servings: 8,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "chickpeas",
+              name: "Chickpeas",
+              quantity: {
+                amount: 800,
+                unit: "g"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Mix and season."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 8
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: false,
+          hasYield: true,
+          ingredientCount: 3,
+          stepCount: 1,
+          mappedIngredientRatio: 0.45
+        }
+      }
+    ]);
+    const discovery = new RecipeDiscoveryService(repository, provider);
+    const productionApp = buildProductionApp({
+      repository,
+      discoveryService: discovery,
+      dataRoot
+    });
+
+    const firstPlanResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: specWithComponent("Harissa Bowl")
+      }
+    });
+
+    expect(firstPlanResponse.json().productionPlan.readiness.status).toBe("partial");
+
+    const reviewedRecipeId = firstPlanResponse.json().productionPlan.recipeSelections[0].recipeId;
+    const offerApp = buildOfferApp({
+      rootDir: dataRoot
+    });
+    const reviewResponse = await offerApp.inject({
+      method: "PATCH",
+      url: `/v1/offers/recipes/${reviewedRecipeId}/review`,
+      payload: {
+        decision: "approve"
+      }
+    });
+
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(reviewResponse.json().recipe.source.approvalState).toBe("approved_internal");
+    expect(reviewResponse.json().recipe.source.tier).toBe("internal_approved");
+    await offerApp.close();
+
+    const secondPlanResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: specWithComponent("Harissa Bowl")
+      }
+    });
+
+    expect(secondPlanResponse.json().productionPlan.recipeSelections[0].recipeId).toBe(
+      reviewedRecipeId
+    );
+    expect(secondPlanResponse.json().productionPlan.recipeSelections[0].sourceTier).toBe(
+      "internal_approved"
+    );
+    expect(secondPlanResponse.json().productionPlan.unresolvedItems).toHaveLength(0);
+
+    await productionApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("excludes rejected recipes from future planning", async () => {
+    const dataRoot = createDataRoot();
+    const offerApp = buildOfferApp({
+      rootDir: dataRoot
+    });
+
+    const uploadResponse = await offerApp.inject({
+      method: "POST",
+      url: "/v1/offers/recipes/import-text",
+      payload: {
+        recipeName: "Smoked Pepper Dip",
+        text: [
+          "Smoked Pepper Dip",
+          "Ingredients",
+          "500 g Paprika",
+          "200 ml Olive Oil",
+          "Instructions",
+          "1. Blend ingredients.",
+          "2. Chill before service."
+        ].join("\n")
+      }
+    });
+
+    const recipeId = uploadResponse.json().recipe.recipeId;
+    await offerApp.close();
+
+    const productionApp = buildProductionApp({
+      dataRoot,
+      discoveryService: new RecipeDiscoveryService(
+        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        new FakeWebProvider([])
+      )
+    });
+
+    const rejectResponse = await productionApp.inject({
+      method: "PATCH",
+      url: `/v1/production/recipes/${recipeId}/review`,
+      payload: {
+        decision: "reject"
+      }
+    });
+
+    expect(rejectResponse.statusCode).toBe(200);
+    expect(rejectResponse.json().recipe.source.approvalState).toBe("rejected");
+
+    const planResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: specWithComponent("Smoked Pepper Dip")
+      }
+    });
+
+    expect(planResponse.json().productionPlan.recipeSelections[0].recipeId).toBeUndefined();
+    expect(planResponse.json().productionPlan.unresolvedItems[0]).toContain(
+      "No recipe candidate found"
+    );
+
+    await productionApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("exposes health endpoints and idempotent demo seeding across services", async () => {
     const dataRoot = createDataRoot();
     const intakeApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));

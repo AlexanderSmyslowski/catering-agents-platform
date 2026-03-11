@@ -65,6 +65,8 @@ Die Rezeptbibliothek kann jetzt von beiden Agenten aus erweitert werden:
 - `POST /v1/production/recipes/upload` fuer Datei-Uploads ueber den Produktionsagenten
 - beide Pfade schreiben in dieselbe persistierte Rezeptbibliothek
 - fuer Tests und interne Automationen existieren zusaetzlich die JSON-Endpunkte `.../recipes/import-text`
+- `PATCH /v1/offers/recipes/:recipeId/review` und `PATCH /v1/production/recipes/:recipeId/review` erlauben Freigabe, Verifizierung oder Ablehnung
+- `review_required` und `rejected` Rezepte werden nicht still weiter als interne Kandidaten verwendet
 
 Fuer frische Deployments stehen ausserdem Admin-Endpunkte bereit:
 

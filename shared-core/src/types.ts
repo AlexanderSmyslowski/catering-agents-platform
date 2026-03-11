@@ -13,6 +13,7 @@ export type RecipeApprovalState =
   | "auto_usable"
   | "review_required"
   | "rejected";
+export type RecipeReviewDecision = "approve" | "verify" | "reject";
 
 export interface Money {
   amount: number;
@@ -367,4 +368,3 @@ export interface WebRecipeCandidate {
     mappedIngredientRatio: number;
   };
 }
-

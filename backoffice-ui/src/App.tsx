@@ -17,9 +17,11 @@ import {
   offerExportUrl,
   productionExportUrl,
   purchaseListExportUrl,
+  reviewRecipe,
   seedDemoData,
   uploadRecipeFile,
   type DashboardState,
+  type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
 
@@ -225,6 +227,25 @@ export function App() {
     }
   }
 
+  async function handleRecipeReview(
+    target: "offer" | "production",
+    recipeId: string,
+    decision: RecipeReviewDecision
+  ) {
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await reviewRecipe(target, recipeId, decision);
+      await refreshDashboard();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Failed to review recipe."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <DashboardShell title="Catering Operations Backoffice">
       <section className="hero-panel">
@@ -397,7 +418,39 @@ export function App() {
             {dashboard.recipes.slice(0, 8).map((recipe) => (
               <li key={String(recipe.recipeId)}>
                 <strong>{String(recipe.name)}</strong>
-                <p>{String((recipe.source as Record<string, unknown>)?.tier ?? "-")}</p>
+                <p>
+                  {String((recipe.source as Record<string, unknown>)?.tier ?? "-")} |{" "}
+                  {String((recipe.source as Record<string, unknown>)?.approvalState ?? "-")}
+                </p>
+                <div className="action-row">
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() =>
+                      void handleRecipeReview("production", String(recipe.recipeId), "approve")
+                    }
+                  >
+                    Freigeben
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() =>
+                      void handleRecipeReview("production", String(recipe.recipeId), "verify")
+                    }
+                  >
+                    Verifizieren
+                  </button>
+                  <button
+                    className="secondary-button destructive-button"
+                    disabled={submitting}
+                    onClick={() =>
+                      void handleRecipeReview("production", String(recipe.recipeId), "reject")
+                    }
+                  >
+                    Ablehnen
+                  </button>
+                </div>
               </li>
             ))}
             {dashboard.recipes.length === 0 ? <li>No recipes yet.</li> : null}
