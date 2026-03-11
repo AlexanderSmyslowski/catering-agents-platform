@@ -30,11 +30,11 @@ const OPERATOR_NAME_STORAGE_KEY = "catering.operatorName";
 
 function getDefaultOperatorName(): string {
   if (typeof window === "undefined") {
-    return "Backoffice-Mitarbeiter";
+    return "Mitarbeiter";
   }
 
   const stored = window.localStorage.getItem(OPERATOR_NAME_STORAGE_KEY)?.trim();
-  return stored || "Backoffice-Mitarbeiter";
+  return stored || "Mitarbeiter";
 }
 
 function buildHeaders(initHeaders?: HeadersInit, includeJsonContentType = true): Headers {
@@ -226,7 +226,7 @@ export function readOperatorName(): string {
 }
 
 export function persistOperatorName(name: string): string {
-  const trimmed = name.trim() || "Backoffice-Mitarbeiter";
+  const trimmed = name.trim() || "Mitarbeiter";
   if (typeof window !== "undefined") {
     window.localStorage.setItem(OPERATOR_NAME_STORAGE_KEY, trimmed);
   }

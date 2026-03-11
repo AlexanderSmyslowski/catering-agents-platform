@@ -72,19 +72,19 @@ const emptyHealth: ServiceHealthState = {
 function translateEventType(value?: string): string {
   const labels: Record<string, string> = {
     conference: "Konferenz",
-    meeting: "Meeting",
+    meeting: "Besprechung",
     reception: "Empfang",
-    dinner: "Dinner",
+    dinner: "Abendessen",
     fair: "Messe",
-    workshop: "Workshop"
+    workshop: "Arbeitsseminar"
   };
-  return value ? labels[value] ?? value : "Event";
+  return value ? labels[value] ?? value : "Veranstaltung";
 }
 
 function translateReadiness(value?: string): string {
   const labels: Record<string, string> = {
-    complete: "vollstaendig",
-    partial: "teilweise vollstaendig",
+    complete: "vollständig",
+    partial: "teilweise vollständig",
     insufficient: "unzureichend"
   };
   return value ? labels[value] ?? value : "-";
@@ -103,7 +103,7 @@ function translateRecipeTier(value?: string): string {
     internal_verified: "intern verifiziert",
     digitized_cookbook: "digitalisiertes Kochbuch",
     internal_approved: "intern freigegeben",
-    internet_fallback: "Internet-Fallback"
+    internet_fallback: "Internet-Ausweichquelle"
   };
   return value ? labels[value] ?? value : "-";
 }
@@ -112,7 +112,7 @@ function translateApprovalState(value?: string): string {
   const labels: Record<string, string> = {
     approved_internal: "intern freigegeben",
     auto_usable: "automatisch nutzbar",
-    review_required: "Pruefung noetig",
+    review_required: "Prüfung nötig",
     rejected: "abgelehnt"
   };
   return value ? labels[value] ?? value : "-";
@@ -127,17 +127,17 @@ function getSpecLabel(spec: Record<string, unknown>): string {
 function formatCounts(counts: Record<string, number>): string {
   const entries = Object.entries(counts);
   if (entries.length === 0) {
-    return "Keine Zaehler";
+    return "Keine Zähler";
   }
 
   const labels: Record<string, string> = {
     requests: "Anfragen",
     acceptedSpecs: "Spezifikationen",
-    offerDrafts: "Angebotsentwuerfe",
-    productionPlans: "Produktionsplaene",
+    offerDrafts: "Angebotsentwürfe",
+    productionPlans: "Produktionspläne",
     purchaseLists: "Einkaufslisten",
     recipes: "Rezepte",
-    auditEvents: "Audit-Eintraege"
+    auditEvents: "Änderungen"
   };
 
   return entries
@@ -470,7 +470,7 @@ export function App() {
       await refreshDashboard();
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "Rezeptpruefung konnte nicht gespeichert werden."
+        submitError instanceof Error ? submitError.message : "Rezeptprüfung konnte nicht gespeichert werden."
       );
     } finally {
       setSubmitting(false);
@@ -483,41 +483,41 @@ export function App() {
   }
 
   return (
-    <DashboardShell title="Catering Backoffice">
+    <DashboardShell title="Catering-Arbeitsoberfläche">
       <section className="hero-panel">
         <div>
           <p className="eyebrow">Gemeinsamer Live-Betrieb</p>
-          <h2>Angebot, Intake und Produktion arbeiten jetzt auf denselben persistenten Vertragsdaten.</h2>
+          <h2>Angebot, Erfassung und Produktion arbeiten jetzt auf denselben persistenten Vertragsdaten.</h2>
           <p className="lede">
-            Das Dashboard spricht die echten Service-APIs an und erlaubt es, Intake-Spezifikationen
-            zu erzeugen, Angebotsentwuerfe zu erstellen und Produktionsplaene direkt im Browser auszuloesen.
+            Das Dashboard spricht die echten Service-APIs an und erlaubt es, Erfassungs-Spezifikationen
+            zu erzeugen, Angebotsentwürfe zu erstellen und Produktionspläne direkt im Browser auszulösen.
           </p>
         </div>
         <div className="metrics-grid">
           <StatusCard
             title="Operative Spezifikationen"
-            body={`${dashboard.acceptedSpecs.length} persistierte Event-Spezifikationen sind fuer die operative Nutzung verfuegbar.`}
+            body={`${dashboard.acceptedSpecs.length} persistierte Veranstaltungsspezifikationen sind für die operative Nutzung verfügbar.`}
           />
           <StatusCard
-            title="Angebotsentwuerfe"
-            body={`${dashboard.offerDrafts.length} kundenfaehige Entwuerfe stehen bereit.`}
+            title="Angebotsentwürfe"
+            body={`${dashboard.offerDrafts.length} kundenfähige Entwürfe stehen bereit.`}
           />
           <StatusCard
-            title="Produktionsplaene"
-            body={`${dashboard.productionPlans.length} Kuechenplaene mit verknuepften Einkaufslisten sind vorhanden.`}
+            title="Produktionspläne"
+            body={`${dashboard.productionPlans.length} Küchenpläne mit verknüpften Einkaufslisten sind vorhanden.`}
           />
           <StatusCard
             title="Rezeptbestand"
-            body={`${dashboard.recipes.length} Rezepte sind hinterlegt, inklusive Internet-Fallbacks.`}
+            body={`${dashboard.recipes.length} Rezepte sind hinterlegt, einschließlich Internet-Ausweichquellen.`}
           />
           <StatusCard
-            title="Audit-Trail"
+            title="Änderungsprotokoll"
             body={`${dashboard.auditEvents.length} letzte Aktionen sind mit Bearbeiter-Zuordnung erfasst.`}
           />
         </div>
         <div className="metrics-grid">
           <StatusCard
-            title="Intake-Status"
+            title="Erfassungsstatus"
             body={`${translateHealthStatus(serviceHealth.intake.status)} | ${formatCounts(serviceHealth.intake.counts)}`}
           />
           <StatusCard
@@ -538,8 +538,8 @@ export function App() {
       <section className="wide-grid">
         <article className="panel form-panel">
           <header>
-            <p className="eyebrow">Manueller Intake</p>
-            <h3>Freitext in ein AcceptedEventSpec normalisieren</h3>
+            <p className="eyebrow">Manuelle Erfassung</p>
+            <h3>Freitext in eine operative Spezifikation umwandeln</h3>
           </header>
           <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
           <div className="action-row">
@@ -550,12 +550,12 @@ export function App() {
           <div className="divider" />
           <header>
             <p className="eyebrow">Strukturiertes Formular</p>
-            <h3>AcceptedEventSpec direkt manuell erfassen</h3>
+            <h3>Operative Spezifikation direkt manuell erfassen</h3>
           </header>
           <input
             value={manualEventType}
             onChange={(event) => setManualEventType(event.target.value)}
-            placeholder="Eventtyp, z. B. conference"
+            placeholder="Veranstaltungstyp, z. B. Konferenz"
           />
           <input
             value={manualEventDate}
@@ -570,12 +570,12 @@ export function App() {
           <input
             value={manualServiceForm}
             onChange={(event) => setManualServiceForm(event.target.value)}
-            placeholder="Serviceform, z. B. buffet"
+            placeholder="Serviceform, z. B. Buffet"
           />
           <input
             value={manualMenuItems}
             onChange={(event) => setManualMenuItems(event.target.value)}
-            placeholder="Menuepunkte kommasepariert"
+            placeholder="Menüpunkte kommasepariert"
           />
           <input
             value={manualCustomerName}
@@ -585,12 +585,12 @@ export function App() {
           <input
             value={manualVenueName}
             onChange={(event) => setManualVenueName(event.target.value)}
-            placeholder="Ort / Venue"
+            placeholder="Ort / Veranstaltungsort"
           />
           <textarea
             value={manualNotes}
             onChange={(event) => setManualNotes(event.target.value)}
-            placeholder="Interne Notizen oder Einschraenkungen"
+            placeholder="Interne Notizen oder Einschränkungen"
           />
           <div className="action-row">
             <button disabled={submitting} onClick={() => void handleManualSpecSubmit()}>
@@ -599,7 +599,7 @@ export function App() {
           </div>
           <div className="divider" />
           <header>
-            <p className="eyebrow">Dokumenten-Intake</p>
+            <p className="eyebrow">Dokumentenerfassung</p>
             <h3>PDF-, E-Mail- oder Textdateien hochladen</h3>
           </header>
           <select
@@ -618,20 +618,20 @@ export function App() {
             onChange={(event) => setIntakeFile(event.target.files?.[0] ?? null)}
           />
           <p className="helper-text">
-            Diese Schicht fuehrt manuelle Dateien direkt in dasselbe AcceptedEventSpec wie der Agent-1-Pfad.
+            Diese Schicht führt manuelle Dateien direkt in dieselbe operative Spezifikation wie der Angebotsweg.
           </p>
           <div className="action-row">
             <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
               Dokument normalisieren
             </button>
           </div>
-          {intakeFile ? <p className="helper-text">Ausgewaehlt: {intakeFile.name}</p> : null}
+          {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
         </article>
 
         <article className="panel form-panel">
           <header>
             <p className="eyebrow">Angebotsbereich</p>
-            <h3>Angebotsentwurf aus Freitext erstellen</h3>
+            <h3>Angebot aus Freitext erstellen</h3>
           </header>
           <textarea value={offerText} onChange={(event) => setOfferText(event.target.value)} />
           <button disabled={submitting} onClick={() => void handleOfferSubmit()}>
@@ -656,7 +656,7 @@ export function App() {
             onChange={(event) => setRecipeFile(event.target.files?.[0] ?? null)}
           />
           <p className="helper-text">
-            Uploads ueber Angebots- oder Produktionsagent erweitern dieselbe Rezeptbibliothek.
+            Hochgeladene Dateien über Angebots- oder Produktionsbereich erweitern dieselbe Rezeptbibliothek.
           </p>
           <div className="action-row">
             <button disabled={submitting} onClick={() => void handleRecipeUpload("offer")}>
@@ -666,7 +666,7 @@ export function App() {
               Zur Produktion hochladen
             </button>
           </div>
-          {recipeFile ? <p className="helper-text">Ausgewaehlt: {recipeFile.name}</p> : null}
+          {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
         </article>
       </section>
 
@@ -679,7 +679,7 @@ export function App() {
         />
         <input
           className="search"
-          placeholder="Spezifikationen, Plaene oder Entwuerfe filtern"
+          placeholder="Spezifikationen, Pläne oder Entwürfe filtern"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -696,8 +696,8 @@ export function App() {
       <section className="wide-grid">
         <article className="panel">
           <header>
-            <p className="eyebrow">AcceptedEventSpec</p>
-            <h3>Operative Event-Eingaben</h3>
+            <p className="eyebrow">Operative Spezifikation</p>
+            <h3>Operative Veranstaltungsdaten</h3>
           </header>
           <ul className="item-list">
             {filteredSpecs.map((spec) => (
@@ -718,7 +718,7 @@ export function App() {
                     disabled={submitting}
                     onClick={() => beginSpecEdit(spec)}
                   >
-                    Nachbearbeiten
+                    Bearbeiten
                   </button>
                 </div>
               </li>
@@ -736,7 +736,7 @@ export function App() {
                 <input
                   value={editingEventType}
                   onChange={(event) => setEditingEventType(event.target.value)}
-                  placeholder="Eventtyp, z. B. conference"
+                  placeholder="Veranstaltungstyp, z. B. Konferenz"
                 />
                 <input
                   value={editingEventDate}
@@ -751,12 +751,12 @@ export function App() {
                 <input
                   value={editingServiceForm}
                   onChange={(event) => setEditingServiceForm(event.target.value)}
-                  placeholder="Serviceform, z. B. buffet"
+                  placeholder="Serviceform, z. B. Buffet"
                 />
                 <textarea
                   value={editingMenuItems}
                   onChange={(event) => setEditingMenuItems(event.target.value)}
-                  placeholder="Menuepunkte kommasepariert"
+                  placeholder="Menüpunkte kommasepariert"
                 />
                 <div className="action-row">
                   <button disabled={submitting} onClick={() => void handleSaveSpecEdit()}>
@@ -777,8 +777,8 @@ export function App() {
 
         <article className="panel">
           <header>
-            <p className="eyebrow">Audit-Trail</p>
-            <h3>Letzte Bearbeitungsschritte ueber alle Services</h3>
+            <p className="eyebrow">Änderungsprotokoll</p>
+            <h3>Letzte Bearbeitungsschritte über alle Dienste</h3>
           </header>
           <ul className="item-list compact">
             {filteredAuditEvents.map((entry) => (
@@ -790,14 +790,14 @@ export function App() {
                 </p>
               </li>
             ))}
-            {filteredAuditEvents.length === 0 ? <li>Noch keine Audit-Eintraege vorhanden.</li> : null}
+            {filteredAuditEvents.length === 0 ? <li>Noch keine Änderungen vorhanden.</li> : null}
           </ul>
         </article>
 
         <article className="panel">
           <header>
             <p className="eyebrow">Produktion</p>
-            <h3>Kuechenausgabe und Rezeptcache</h3>
+            <h3>Küchenausgabe und Rezeptbestand</h3>
           </header>
           <ul className="item-list compact">
             {filteredPlans.map((plan) => (
@@ -810,7 +810,7 @@ export function App() {
                     disabled={submitting}
                     onClick={() => setSelectedPlanId(String(plan.planId))}
                   >
-                    Details
+                    Einzelheiten
                   </button>
                 </div>
                 <a
@@ -829,7 +829,7 @@ export function App() {
           {selectedPlan ? (
             <>
               <header>
-                <p className="eyebrow">Plan-Details</p>
+                <p className="eyebrow">Plan-Einzelheiten</p>
                 <h3>{String(selectedPlan.planId)}</h3>
               </header>
               <p>
@@ -899,8 +899,8 @@ export function App() {
 
         <article className="panel">
           <header>
-            <p className="eyebrow">Angebotsentwuerfe</p>
-            <h3>Aktuelle kaufmaennische Ergebnisse</h3>
+            <p className="eyebrow">Angebotsentwürfe</p>
+            <h3>Aktuelle kaufmännische Ergebnisse</h3>
           </header>
           <ul className="item-list compact">
             {dashboard.offerDrafts.map((draft) => (
@@ -913,7 +913,7 @@ export function App() {
                     disabled={submitting}
                     onClick={() => setSelectedDraftId(String(draft.draftId))}
                   >
-                    Details
+                    Einzelheiten
                   </button>
                   {Array.isArray(draft.variantSet)
                     ? draft.variantSet.map((variant) => {
@@ -930,7 +930,7 @@ export function App() {
                               )
                             }
                           >
-                            {`Als Spezifikation uebernehmen: ${String(variantRecord.label ?? variantRecord.variantId)}`}
+                            {`Als Spezifikation übernehmen: ${String(variantRecord.label ?? variantRecord.variantId)}`}
                           </button>
                         );
                       })
@@ -946,13 +946,13 @@ export function App() {
                 </a>
               </li>
             ))}
-            {dashboard.offerDrafts.length === 0 ? <li>Noch keine Angebotsentwuerfe vorhanden.</li> : null}
+            {dashboard.offerDrafts.length === 0 ? <li>Noch keine Angebotsentwürfe vorhanden.</li> : null}
           </ul>
           {selectedDraft ? (
             <>
               <div className="divider" />
               <header>
-                <p className="eyebrow">Entwurfs-Details</p>
+                <p className="eyebrow">Entwurfs-Einzelheiten</p>
                 <h3>{String(selectedDraft.draftId)}</h3>
               </header>
               <p>{String(selectedDraft.eventSummary ?? "-")}</p>
@@ -965,7 +965,7 @@ export function App() {
         <article className="panel">
           <header>
             <p className="eyebrow">Einkaufslisten</p>
-            <h3>CSV-faehige Beschaffungslisten</h3>
+            <h3>CSV-fähige Beschaffungslisten</h3>
           </header>
           <ul className="item-list compact">
             {dashboard.purchaseLists.map((purchaseList) => (
@@ -988,7 +988,7 @@ export function App() {
       </section>
 
       <footer className="footer-note">
-        {loading ? "Live-Plattformdaten werden geladen..." : "Live-Daten aus Intake-, Angebots- und Produktionsservice geladen."}
+        {loading ? "Aktuelle Plattformdaten werden geladen..." : "Aktuelle Daten aus Erfassungs-, Angebots- und Produktionsdienst geladen."}
       </footer>
     </DashboardShell>
   );
