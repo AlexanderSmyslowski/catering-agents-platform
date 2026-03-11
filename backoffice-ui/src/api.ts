@@ -107,33 +107,25 @@ export async function createAcceptedSpecFromText(text: string) {
   });
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  for (const value of bytes) {
-    binary += String.fromCharCode(value);
-  }
-  return btoa(binary);
-}
-
 export async function createAcceptedSpecFromDocument(
   file: File,
   channel: IntakeDocumentChannel
 ) {
-  return fetchJson<Record<string, unknown>>("/api/intake/v1/intake/documents", {
+  const formData = new FormData();
+  formData.append("channel", channel);
+  formData.append("file", file, file.name);
+
+  const response = await fetch("/api/intake/v1/intake/documents/upload", {
     method: "POST",
-    body: JSON.stringify({
-      channel,
-      documents: [
-        {
-          filename: file.name,
-          mimeType: file.type || "text/plain",
-          contentBase64: await fileToBase64(file)
-        }
-      ]
-    })
+    body: formData,
+    headers: buildHeaders(undefined, false)
   });
+
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+
+  return (await response.json()) as Record<string, unknown>;
 }
 
 export async function updateAcceptedSpec(

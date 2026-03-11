@@ -142,6 +142,42 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("accepts multipart document uploads for the browser-driven intake path", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+    const address = await app.listen({ port: 0, host: "127.0.0.1" });
+    const formData = new FormData();
+    formData.append("channel", "pdf_upload");
+    formData.append(
+      "file",
+      new Blob(
+        [
+          "Lunch am 2026-05-14 fuer 120 Teilnehmer mit Buffet, Dessert und Kaffeestation."
+        ],
+        { type: "text/plain" }
+      ),
+      "angebot.txt"
+    );
+
+    const response = await fetch(`${address}/v1/intake/documents/upload`, {
+      method: "POST",
+      body: formData
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      acceptedEventSpec: AcceptedEventSpec;
+      eventRequest: EventRequest;
+    };
+    expect(body.eventRequest.rawInputs[0].kind).toBe("text");
+    expect(body.acceptedEventSpec.attendees.expected).toBe(120);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("allows manual enrichment of AcceptedEventSpec data through the intake service", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({

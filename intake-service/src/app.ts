@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import {
   actorNameFromHeaders,
@@ -44,6 +44,12 @@ interface ManualSpecBody {
   customerName?: string;
   venueName?: string;
   notes?: string;
+}
+
+interface MultipartDocumentUpload {
+  requestId?: string;
+  channel?: EventRequest["source"]["channel"];
+  documents: DocumentInput[];
 }
 
 function rawInputKindForMimeType(
@@ -133,6 +139,120 @@ function actorForRequest(request: { headers: Record<string, string | string[] | 
   };
 }
 
+function multipartFieldValue(
+  fields: Record<string, unknown>,
+  fieldName: string
+): string | undefined {
+  const field = fields[fieldName] as { value?: string } | Array<{ value?: string }> | undefined;
+  if (Array.isArray(field)) {
+    return field[0]?.value;
+  }
+
+  return field?.value;
+}
+
+async function extractMultipartDocuments(
+  request: FastifyRequest
+): Promise<MultipartDocumentUpload> {
+  const multipartRequest = request as FastifyRequest & {
+    isMultipart: () => boolean;
+    parts: () => AsyncIterable<{
+      type: "file" | "field";
+      fieldname: string;
+      filename?: string;
+      mimetype?: string;
+      value?: string;
+      toBuffer?: () => Promise<Buffer>;
+    }>;
+  };
+
+  if (!multipartRequest.isMultipart()) {
+    throw new Error("Es wurde kein Multipart-Upload gesendet.");
+  }
+
+  const documents: DocumentInput[] = [];
+  let channel: EventRequest["source"]["channel"] | undefined;
+  let requestId: string | undefined;
+
+  for await (const part of multipartRequest.parts()) {
+    if (part.type === "file") {
+      if (!part.toBuffer || !part.filename) {
+        continue;
+      }
+
+      documents.push({
+        filename: part.filename,
+        mimeType: part.mimetype ?? "application/octet-stream",
+        content: await part.toBuffer()
+      });
+      continue;
+    }
+
+    if (part.fieldname === "channel" && typeof part.value === "string") {
+      channel = part.value as EventRequest["source"]["channel"];
+    }
+    if (part.fieldname === "requestId" && typeof part.value === "string") {
+      requestId = part.value;
+    }
+  }
+
+  if (documents.length === 0) {
+    throw new Error("Es wurde keine Dokumentdatei mitgesendet.");
+  }
+
+  return {
+    requestId,
+    channel,
+    documents
+  };
+}
+
+async function normalizeUploadedDocuments(
+  payload: { documents: DocumentInput[]; requestId?: string; channel?: EventRequest["source"]["channel"] }
+) {
+  const extracted = await Promise.all(
+    payload.documents.map(async (document, index) => ({
+      documentId: `${payload.requestId ?? "document"}-${index + 1}`,
+      mimeType: document.mimeType,
+      text: await extractTextFromDocument(document)
+    }))
+  );
+
+  const eventRequest: EventRequest = {
+    schemaVersion: "1.0.0",
+    requestId: payload.requestId ?? `request-${Date.now()}`,
+    source: {
+      channel: payload.channel ?? "pdf_upload",
+      receivedAt: new Date().toISOString()
+    },
+    rawInputs: extracted.map((item) => ({
+      kind: rawInputKindForMimeType(item.mimeType),
+      content: item.text,
+      mimeType: item.mimeType,
+      documentId: item.documentId
+    }))
+  };
+
+  const validatedRequest = validateEventRequest(eventRequest);
+  const spec = validateAcceptedEventSpec(
+    normalizeEventRequestToSpec(validatedRequest, {
+      sourceType:
+        validatedRequest.source.channel === "email"
+          ? "email"
+          : validatedRequest.source.channel === "pdf_upload"
+            ? "pdf"
+            : "manual_input",
+      reference: validatedRequest.requestId,
+      commercialState: "manual"
+    })
+  );
+
+  return {
+    eventRequest: validatedRequest,
+    acceptedEventSpec: spec
+  };
+}
+
 export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   const options = isIntakeStore(input) ? { store: input } : input;
   const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
@@ -150,7 +270,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool
     });
-const app = Fastify({
+  const app = Fastify({
     logger: false,
     bodyLimit: 25 * 1024 * 1024
   });
@@ -229,63 +349,52 @@ const app = Fastify({
       mimeType: document.mimeType,
       content: Buffer.from(document.contentBase64, "base64")
     }));
+    const normalized = await normalizeUploadedDocuments({
+      documents,
+      requestId: body.requestId,
+      channel: body.channel
+    });
 
-    const extracted = await Promise.all(
-      documents.map(async (document, index) => ({
-        documentId: `${body.requestId ?? "document"}-${index + 1}`,
-        mimeType: document.mimeType,
-        text: await extractTextFromDocument(document)
-      }))
-    );
-
-    const eventRequest: EventRequest = {
-      schemaVersion: "1.0.0",
-      requestId: body.requestId ?? `request-${Date.now()}`,
-      source: {
-        channel: body.channel ?? "pdf_upload",
-        receivedAt: new Date().toISOString()
-      },
-      rawInputs: extracted.map((item) => ({
-        kind: rawInputKindForMimeType(item.mimeType),
-        content: item.text,
-        mimeType: item.mimeType,
-        documentId: item.documentId
-      }))
-    };
-
-    const validatedRequest = validateEventRequest(eventRequest);
-    const spec = validateAcceptedEventSpec(
-      normalizeEventRequestToSpec(validatedRequest, {
-        sourceType:
-          validatedRequest.source.channel === "email"
-            ? "email"
-            : validatedRequest.source.channel === "pdf_upload"
-              ? "pdf"
-              : "manual_input",
-        reference: validatedRequest.requestId,
-        commercialState: "manual"
-      })
-    );
-
-    await store.saveRequest(validatedRequest);
-    await store.saveSpec(spec);
+    await store.saveRequest(normalized.eventRequest);
+    await store.saveSpec(normalized.acceptedEventSpec);
     await auditLog.log({
       action: "intake.documents_normalized",
       entityType: "AcceptedEventSpec",
-      entityId: spec.specId,
+      entityId: normalized.acceptedEventSpec.specId,
       actor: actorForRequest(request),
       summary: `${documents.length} hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert.`,
       details: {
-        requestId: validatedRequest.requestId,
+        requestId: normalized.eventRequest.requestId,
         documentCount: documents.length,
-        readiness: spec.readiness.status
+        readiness: normalized.acceptedEventSpec.readiness.status,
+        uploadMode: "json_base64"
       }
     });
 
-    return reply.code(201).send({
-      eventRequest: validatedRequest,
-      acceptedEventSpec: spec
+    return reply.code(201).send(normalized);
+  });
+
+  app.post("/v1/intake/documents/upload", async (request, reply) => {
+    const upload = await extractMultipartDocuments(request);
+    const normalized = await normalizeUploadedDocuments(upload);
+
+    await store.saveRequest(normalized.eventRequest);
+    await store.saveSpec(normalized.acceptedEventSpec);
+    await auditLog.log({
+      action: "intake.documents_normalized",
+      entityType: "AcceptedEventSpec",
+      entityId: normalized.acceptedEventSpec.specId,
+      actor: actorForRequest(request),
+      summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload in AcceptedEventSpec normalisiert.`,
+      details: {
+        requestId: normalized.eventRequest.requestId,
+        documentCount: upload.documents.length,
+        readiness: normalized.acceptedEventSpec.readiness.status,
+        uploadMode: "multipart"
+      }
     });
+
+    return reply.code(201).send(normalized);
   });
 
   app.post<{ Body: ManualSpecBody }>("/v1/intake/specs/manual", async (request, reply) => {
