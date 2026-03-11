@@ -33,6 +33,13 @@ interface SpecUpdateBody {
   serviceForm?: string;
   eventType?: string;
   menuItems?: string[];
+  componentUpdates?: Array<{
+    componentId: string;
+    menuCategory?: "classic" | "vegetarian" | "vegan";
+    productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
+    purchasedElements?: string[];
+    notes?: string;
+  }>;
 }
 
 interface ManualSpecBody {
@@ -76,6 +83,16 @@ function normalizeMenuItems(input: string[] | undefined): string[] | undefined {
   return items.length > 0 ? items : [];
 }
 
+function dietaryTagsForCategory(category?: "classic" | "vegetarian" | "vegan"): string[] {
+  if (category === "vegan") {
+    return ["vegan"];
+  }
+  if (category === "vegetarian") {
+    return ["vegetarian"];
+  }
+  return [];
+}
+
 function applySpecUpdates(
   spec: AcceptedEventSpec,
   body: SpecUpdateBody
@@ -84,6 +101,9 @@ function applySpecUpdates(
   const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
   const nextAttendeeCount = body.attendeeCount ?? spec.attendees.expected;
   const nextMenuItems = normalizeMenuItems(body.menuItems);
+  const componentUpdates = new Map(
+    (body.componentUpdates ?? []).map((item) => [item.componentId, item])
+  );
 
   const nextSpec = {
     ...spec,
@@ -107,16 +127,43 @@ function applySpecUpdates(
         ? spec.menuPlan.map((item) => ({
             ...item,
             serviceStyle: nextServiceForm,
-            servings: nextAttendeeCount
+            servings: nextAttendeeCount,
+            menuCategory: componentUpdates.get(item.componentId)?.menuCategory ?? item.menuCategory,
+            dietaryTags:
+              componentUpdates.get(item.componentId)?.menuCategory
+                ? dietaryTagsForCategory(componentUpdates.get(item.componentId)?.menuCategory)
+                : item.dietaryTags,
+            productionDecision: componentUpdates.get(item.componentId)
+              ? {
+                  mode: componentUpdates.get(item.componentId)?.productionMode,
+                  purchasedElements: componentUpdates.get(item.componentId)?.purchasedElements,
+                  notes: componentUpdates.get(item.componentId)?.notes
+                }
+              : item.productionDecision
           }))
         : nextMenuItems.map((label, index) => ({
             componentId: `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
             label,
             course: spec.menuPlan[index]?.course ?? "main",
+            menuCategory:
+              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory ??
+              spec.menuPlan[index]?.menuCategory,
             serviceStyle: nextServiceForm,
             desiredRecipeTags: spec.menuPlan[index]?.desiredRecipeTags ?? (nextEventType ? [nextEventType] : []),
             servings: nextAttendeeCount,
-            dietaryTags: spec.menuPlan[index]?.dietaryTags ?? []
+            dietaryTags:
+              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory
+                ? dietaryTagsForCategory(componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory)
+                : spec.menuPlan[index]?.dietaryTags ?? [],
+            productionDecision:
+              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")
+                ? {
+                    mode: componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.productionMode,
+                    purchasedElements:
+                      componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.purchasedElements,
+                    notes: componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.notes
+                  }
+                : spec.menuPlan[index]?.productionDecision
           }))
   };
 

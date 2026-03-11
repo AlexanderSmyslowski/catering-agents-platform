@@ -177,6 +177,7 @@ export const commonSchema = {
         componentId: { type: "string" },
         label: { type: "string" },
         course: { type: "string" },
+        menuCategory: { enum: ["classic", "vegetarian", "vegan"] },
         serviceStyle: { type: "string" },
         desiredRecipeTags: {
           type: "array",
@@ -186,6 +187,20 @@ export const commonSchema = {
         dietaryTags: {
           type: "array",
           items: { type: "string" }
+        },
+        productionDecision: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            mode: {
+              enum: ["scratch", "hybrid", "convenience_purchase", "external_finished"]
+            },
+            purchasedElements: {
+              type: "array",
+              items: { type: "string" }
+            },
+            notes: { type: "string" }
+          }
         }
       }
     },
@@ -281,4 +296,3 @@ export const commonSchema = {
     }
   }
 } as const;
-

@@ -41,6 +41,13 @@ import {
 
 type AppRoute = "home" | "offer" | "production";
 
+type ComponentEditState = {
+  menuCategory: string;
+  productionMode: string;
+  purchasedElements: string;
+  notes: string;
+};
+
 const emptyState: DashboardState = {
   intakeRequests: [],
   acceptedSpecs: [],
@@ -261,6 +268,7 @@ export function App() {
   const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
   const [editingServiceForm, setEditingServiceForm] = useState("");
   const [editingMenuItems, setEditingMenuItems] = useState("");
+  const [editingComponentStates, setEditingComponentStates] = useState<Record<string, ComponentEditState>>({});
   const deferredSearch = useDeferredValue(search);
 
   const refreshDashboard = useEffectEvent(async () => {
@@ -286,7 +294,7 @@ export function App() {
 
   useEffect(() => {
     void refreshDashboard();
-  }, [refreshDashboard]);
+  }, []);
 
   const filteredSpecs = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
@@ -528,6 +536,7 @@ export function App() {
   async function handleCreatePlan(spec: Record<string, unknown>) {
     setSubmitting(true);
     clearMessages();
+    setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
     try {
       const response = await createProductionPlan(spec);
       const planId = extractProductionPlanId(response);
@@ -549,6 +558,26 @@ export function App() {
     const event = spec.event as Record<string, unknown> | undefined;
     const attendees = spec.attendees as Record<string, unknown> | undefined;
     const menuPlan = Array.isArray(spec.menuPlan) ? (spec.menuPlan as Array<Record<string, unknown>>) : [];
+    const nextComponentStates = Object.fromEntries(
+      menuPlan.map((item) => {
+        const productionDecision =
+          item.productionDecision && typeof item.productionDecision === "object"
+            ? (item.productionDecision as Record<string, unknown>)
+            : undefined;
+
+        return [
+          String(item.componentId),
+          {
+            menuCategory: String(item.menuCategory ?? ""),
+            productionMode: String(productionDecision?.mode ?? ""),
+            purchasedElements: Array.isArray(productionDecision?.purchasedElements)
+              ? productionDecision?.purchasedElements.map((entry) => String(entry)).join(", ")
+              : "",
+            notes: String(productionDecision?.notes ?? "")
+          } satisfies ComponentEditState
+        ];
+      })
+    );
 
     setEditingSpecId(String(spec.specId));
     setDismissedProductionAnswerSpecId(undefined);
@@ -558,6 +587,7 @@ export function App() {
     setEditingAttendeeCount(String(attendees?.expected ?? ""));
     setEditingServiceForm(String(event?.serviceForm ?? ""));
     setEditingMenuItems(menuPlan.map((item) => String(item.label ?? "")).filter(Boolean).join(", "));
+    setEditingComponentStates(nextComponentStates);
   }
 
   function beginSpecEdit(spec: Record<string, unknown>) {
@@ -576,6 +606,20 @@ export function App() {
     setEditingAttendeeCount("");
     setEditingServiceForm("");
     setEditingMenuItems("");
+    setEditingComponentStates({});
+  }
+
+  function updateEditingComponentState(componentId: string, patch: Partial<ComponentEditState>) {
+    setEditingComponentStates((current) => ({
+      ...current,
+      [componentId]: {
+        menuCategory: current[componentId]?.menuCategory ?? "",
+        productionMode: current[componentId]?.productionMode ?? "",
+        purchasedElements: current[componentId]?.purchasedElements ?? "",
+        notes: current[componentId]?.notes ?? "",
+        ...patch
+      }
+    }));
   }
 
   async function handleSaveSpecEdit() {
@@ -594,7 +638,28 @@ export function App() {
         menuItems: editingMenuItems
           .split(",")
           .map((item) => item.trim())
-          .filter(Boolean)
+          .filter(Boolean),
+        componentUpdates: Object.entries(editingComponentStates).map(([componentId, state]) => ({
+          componentId,
+          menuCategory:
+            state.menuCategory === "classic" ||
+            state.menuCategory === "vegetarian" ||
+            state.menuCategory === "vegan"
+              ? state.menuCategory
+              : undefined,
+          productionMode:
+            state.productionMode === "scratch" ||
+            state.productionMode === "hybrid" ||
+            state.productionMode === "convenience_purchase" ||
+            state.productionMode === "external_finished"
+              ? state.productionMode
+              : undefined,
+          purchasedElements: state.purchasedElements
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+          notes: state.notes.trim() || undefined
+        }))
       });
       resetSpecEdit(false);
       await refreshDashboard();
@@ -1439,6 +1504,92 @@ export function App() {
                       <p className="helper-text">
                         Mehrere Gerichte bitte durch Komma trennen. Diese Angaben aktualisieren direkt die operative Spezifikation.
                       </p>
+                      {Array.isArray(focusedProductionSpec.menuPlan) && focusedProductionSpec.menuPlan.length > 0 ? (
+                        <>
+                          <div className="divider" />
+                          <header>
+                            <p className="eyebrow">Gericht für Gericht</p>
+                            <h4 className="subsection-title">Klassifikation und Herstellungsart festlegen</h4>
+                          </header>
+                          <div className="component-answer-list">
+                            {focusedProductionSpec.menuPlan.map((entry) => {
+                              const component = entry as Record<string, unknown>;
+                              const componentId = String(component.componentId ?? "");
+                              const state = editingComponentStates[componentId] ?? {
+                                menuCategory: "",
+                                productionMode: "",
+                                purchasedElements: "",
+                                notes: ""
+                              };
+
+                              return (
+                                <article key={componentId} className="component-answer-card">
+                                  <strong>{String(component.label ?? componentId)}</strong>
+                                  <div className="answer-grid">
+                                    <label className="field-block">
+                                      <span>Kategorie im Angebot</span>
+                                      <select
+                                        value={state.menuCategory}
+                                        onChange={(event) =>
+                                          updateEditingComponentState(componentId, {
+                                            menuCategory: event.target.value
+                                          })
+                                        }
+                                      >
+                                        <option value="">Bitte wählen</option>
+                                        <option value="classic">klassisch</option>
+                                        <option value="vegetarian">vegetarisch</option>
+                                        <option value="vegan">vegan</option>
+                                      </select>
+                                    </label>
+                                    <label className="field-block">
+                                      <span>Herstellungsart</span>
+                                      <select
+                                        value={state.productionMode}
+                                        onChange={(event) =>
+                                          updateEditingComponentState(componentId, {
+                                            productionMode: event.target.value
+                                          })
+                                        }
+                                      >
+                                        <option value="">Bitte wählen</option>
+                                        <option value="scratch">Eigenproduktion</option>
+                                        <option value="hybrid">Hybrid</option>
+                                        <option value="convenience_purchase">Convenience-Zukauf</option>
+                                        <option value="external_finished">Fertigprodukt / extern</option>
+                                      </select>
+                                    </label>
+                                  </div>
+                                  <label className="field-block">
+                                    <span>Zugekaufte Bestandteile</span>
+                                    <input
+                                      value={state.purchasedElements}
+                                      onChange={(event) =>
+                                        updateEditingComponentState(componentId, {
+                                          purchasedElements: event.target.value
+                                        })
+                                      }
+                                      placeholder="z. B. Teig, Blätterteig, fertiger Boden, Saucenbasis"
+                                    />
+                                  </label>
+                                  <label className="field-block">
+                                    <span>Interne Notiz</span>
+                                    <input
+                                      value={state.notes}
+                                      onChange={(event) =>
+                                        updateEditingComponentState(componentId, {
+                                          notes: event.target.value
+                                        })
+                                      }
+                                      placeholder="optional"
+                                    />
+                                  </label>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        </>
+                      ) : null}
                     </>
                   ) : null}
                 </div>

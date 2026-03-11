@@ -10,6 +10,8 @@ import type {
 import { SCHEMA_VERSION } from "../types.js";
 import { evaluateReadiness } from "./readiness.js";
 
+type InferredMenuItem = Pick<MenuComponent, "label" | "menuCategory" | "dietaryTags">;
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -38,10 +40,66 @@ function detectServiceForm(text: string, eventType: string): string {
 }
 
 function parseAttendees(text: string): number | undefined {
-  const attendeeMatch =
-    text.match(/(\d{1,4})\s*(gäste|gaeste|teilnehmer|personen|people)/i) ??
-    text.match(/für\s+(\d{1,4})/i);
-  return attendeeMatch ? Number(attendeeMatch[1]) : undefined;
+  const directMatch =
+    text.match(/\b(?:für|fuer)\s+(\d{1,4})\s*(?:gäste|gaeste|teilnehmer|personen|people)?\b/i) ??
+    text.match(/\b(\d{1,4})\s*(?:gäste|gaeste|teilnehmer|personen|people)\b/i);
+  if (directMatch) {
+    return Number(directMatch[1]);
+  }
+
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const scoredCandidates = lines.flatMap((line) => {
+    const candidates = [...line.matchAll(/\b(\d{1,4})\s*x\b/gi)];
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    const normalized = line.toLowerCase();
+    return candidates.map((match) => {
+      const count = Number(match[1]);
+      let score = 0;
+
+      if (count >= 20) {
+        score += 3;
+      }
+      if (count <= 10) {
+        score -= 4;
+      }
+      if (/(catering|get together|quick lunch|lunch|buffet|menü|menu|mittag)/i.test(normalized)) {
+        score += 8;
+      }
+      if (/(teilnehmer|gäste|gaeste|personen|people)/i.test(normalized)) {
+        score += 6;
+      }
+      if (/€|eur|gesamt/.test(normalized)) {
+        score += 2;
+      }
+      if (/(lieferung|transport|personalkosten|stehtische|buffetinfrastruktur|tischdecken|geschirr|hauptspeisenteller|aufbau|abbau|umbau|rücklauf|husse|reinigungskosten)/i.test(normalized)) {
+        score -= 7;
+      }
+      if (/(pax|personaleinsatz|stunden|stunde|\d+h\b|hall of fame)/i.test(normalized)) {
+        score -= 8;
+      }
+
+      return {
+        count,
+        score
+      };
+    });
+  });
+
+  const bestCandidate = scoredCandidates.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+    return right.count - left.count;
+  })[0];
+
+  return bestCandidate && bestCandidate.score >= 5 ? bestCandidate.count : undefined;
 }
 
 function parseDate(text: string): string | undefined {
@@ -59,36 +117,172 @@ function parseDate(text: string): string | undefined {
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
-function extractMenuLabels(text: string, fallbackKeywords: string[]): string[] {
+function sanitizeMenuLine(line: string): string {
+  return line
+    .replace(/\t+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[&•\-\s]+/, "")
+    .replace(/\s*\|\s*$/, "")
+    .trim();
+}
+
+function inferMenuCategoryFromText(
+  line: string
+): MenuComponent["menuCategory"] | undefined {
+  if (/(^|[^a-z])(vegan)([^a-z]|$)/i.test(line)) {
+    return "vegan";
+  }
+  if (/(vegetarisch|vegetarian)/i.test(line)) {
+    return "vegetarian";
+  }
+  if (/(traditionell|klassisch|classic)/i.test(line)) {
+    return "classic";
+  }
+  return undefined;
+}
+
+function requiresExplicitCategoryDecision(line: string): boolean {
+  const normalized = sanitizeMenuLine(line).toLowerCase();
+  return /^(brot(\s*&\s*baguette)?|baguette|br[öo]tchen|brotkorb|butter|dips?|saucen?)$/i.test(
+    normalized
+  );
+}
+
+function dietaryTagsForCategory(
+  category?: MenuComponent["menuCategory"]
+): string[] {
+  if (category === "vegan") {
+    return ["vegan"];
+  }
+  if (category === "vegetarian") {
+    return ["vegetarian"];
+  }
+  return [];
+}
+
+function looksLikeMenuHeading(line: string): boolean {
+  return /^(quick lunch|lunch|traditionell|vegan|vegetarisch|dessert|buffet|menü|menu)(\s*\|\s*\d+%?)?$/i.test(
+    line
+  );
+}
+
+function isMenuNoise(line: string): boolean {
+  return /(?:uhr|gesamt|kosten|position|beschreibung|personalkosten|lieferung|transport|aufbau|abbau|umbau|rücklauf|personaleinsatz|hall of fame|hauptspeisenteller|stehttische|stehtische|geschirr|tischdecken|reinigungskosten|stunden|stunde)/i.test(
+    line
+  );
+}
+
+function extractStructuredMenuSection(text: string): InferredMenuItem[] {
+  const sectionMatch = text.match(
+    /\n\s*(?:QUICK\s+LUNCH|LUNCHBUFFET|LUNCHMENÜ|MITTAGESSEN|MENÜ|MENU|BUFFET)\s*\|?\s*([\s\S]{0,2500}?)(?:\n\s*KOSTENÜBERSICHT|\n\s*POSITIONBESCHREIBUNG|\n\s*GESAMTKOSTEN|\n\s*DETAILS\s*\|)/i
+  );
+
+  if (!sectionMatch?.[1]) {
+    return [];
+  }
+
+  const lines = sectionMatch[1]
+    .split(/\n+/)
+    .map((line) => sanitizeMenuLine(line))
+    .filter(Boolean);
+
+  const detected: InferredMenuItem[] = [];
+  let activeCategory: MenuComponent["menuCategory"] | undefined;
+
+  for (const line of lines) {
+    const headingCategory = inferMenuCategoryFromText(line);
+    if (looksLikeMenuHeading(line) || /%/.test(line)) {
+      activeCategory = headingCategory ?? activeCategory;
+      continue;
+    }
+    if (isMenuNoise(line) || /^\d/.test(line) || /€/.test(line)) {
+      continue;
+    }
+    if (!/[a-zäöüß]/i.test(line)) {
+      continue;
+    }
+
+    const explicitCategory = inferMenuCategoryFromText(line);
+    const lineCategory =
+      explicitCategory ??
+      (activeCategory && !requiresExplicitCategoryDecision(line) ? activeCategory : undefined);
+    detected.push({
+      label: line,
+      menuCategory: lineCategory,
+      dietaryTags: dietaryTagsForCategory(lineCategory)
+    });
+  }
+
+  const byLabel = new Map<string, InferredMenuItem>();
+  for (const item of detected) {
+    byLabel.set(item.label, byLabel.get(item.label) ?? item);
+  }
+
+  return [...byLabel.values()];
+}
+
+function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMenuItem[] {
+  const structuredSectionLabels = extractStructuredMenuSection(text);
+  if (structuredSectionLabels.length > 0) {
+    return structuredSectionLabels.slice(0, 12);
+  }
+
   const lines = text
     .split(/\n|,/)
-    .map((line) => line.trim())
+    .map((line) => sanitizeMenuLine(line))
     .filter(Boolean);
 
   const detected = lines.flatMap((line) => {
-    const directMatch = line.match(
-      /\b(?:mit|includes?|serves?|menu|menü)\s+(.+)$/i
-    );
+    const directMatch = line.match(/\b(?:mit|includes?|serves?|menu|menü)\s+(.+)$/i);
 
     if (directMatch?.[1]) {
       return directMatch[1]
         .split(/\bund\b|&|\/|;/i)
-        .map((entry) => entry.trim().replace(/\.$/, ""))
-        .filter(Boolean);
+        .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
+        .filter(Boolean)
+        .map((label) => ({
+          label,
+          menuCategory: inferMenuCategoryFromText(label),
+          dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))
+        }));
     }
 
-    return /(buffet|salat|suppe|kaffee|croissant|dessert|fingerfood|wein|snack|menü)/i.test(
+    return /(buffet|salat|suppe|kaffee|croissant|dessert|fingerfood|wein|snack|menü|baguette|brot|kuchen|curry)/i.test(
       line
-    )
-      ? [line]
+    ) && !isMenuNoise(line)
+      ? [
+          {
+            label: line,
+            menuCategory: inferMenuCategoryFromText(line),
+            dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(line))
+          }
+        ]
       : [];
   });
 
   if (detected.length > 0) {
-    return detected.slice(0, 5);
+    const byLabel = new Map<string, InferredMenuItem>();
+    for (const item of detected) {
+      byLabel.set(item.label, byLabel.get(item.label) ?? item);
+    }
+    return [...byLabel.values()].slice(0, 12);
   }
 
-  return fallbackKeywords;
+  return fallbackKeywords.map((label) => ({
+    label,
+    menuCategory: inferMenuCategoryFromText(label),
+    dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))
+  }));
+}
+
+function detectCourse(label: string): string {
+  if (/(dessert|kuchen|mousse|creme|tarte|brownie|schokolade|pudding)/i.test(label)) {
+    return "dessert";
+  }
+  if (/(salat|suppe|starter)/i.test(label)) {
+    return "starter";
+  }
+  return "main";
 }
 
 function inferInfrastructure(eventType: string, desiredInfrastructure?: InfrastructureRequirement[]): InfrastructureRequirement[] {
@@ -126,10 +320,14 @@ export function normalizeEventRequestToSpec(
   const serviceForm = request.event?.serviceForm ?? detectServiceForm(rawText, eventType);
   const attendees = request.attendees?.expected ?? parseAttendees(rawText);
   const eventDate = request.event?.date ?? parseDate(rawText);
-  const menuLabels =
+  const menuItems =
     request.source.channel === "manual_form" && (request.desiredCatering?.length ?? 0) > 0
-      ? request.desiredCatering!.map((item) => item.label)
-      : extractMenuLabels(
+      ? request.desiredCatering!.map((item) => ({
+          label: item.label,
+          menuCategory: inferMenuCategoryFromText(item.label),
+          dietaryTags: item.dietaryTags ?? dietaryTagsForCategory(inferMenuCategoryFromText(item.label))
+        }))
+      : extractMenuItems(
           rawText,
           request.desiredCatering?.map((item) => item.label) ?? defaults.defaultMenuKeywords
         );
@@ -171,15 +369,15 @@ export function normalizeEventRequestToSpec(
     });
   }
 
-  const menuPlan: MenuComponent[] = menuLabels.map((label, index) => ({
-    componentId: `${slugify(label)}-${index + 1}`,
-    label,
-    course:
-      /dessert/i.test(label) ? "dessert" : /salat|suppe|starter/i.test(label) ? "starter" : "main",
+  const menuPlan: MenuComponent[] = menuItems.map((item, index) => ({
+    componentId: `${slugify(item.label)}-${index + 1}`,
+    label: item.label,
+    course: detectCourse(item.label),
+    menuCategory: item.menuCategory,
     serviceStyle: serviceForm,
     desiredRecipeTags: [eventType],
     servings: attendees,
-    dietaryTags: []
+    dietaryTags: item.dietaryTags ?? []
   }));
 
   const spec: AcceptedEventSpec = {

@@ -37,6 +37,27 @@ export function translateServiceForm(value?: string): string {
   return value ? labels[value] ?? value : "offen";
 }
 
+export function translateMenuCategory(value?: string): string {
+  const labels: Record<string, string> = {
+    classic: "klassisch",
+    vegetarian: "vegetarisch",
+    vegan: "vegan"
+  };
+
+  return value ? labels[value] ?? value : "offen";
+}
+
+export function translateProductionMode(value?: string): string {
+  const labels: Record<string, string> = {
+    scratch: "Eigenproduktion",
+    hybrid: "Hybrid",
+    convenience_purchase: "Convenience-Zukauf",
+    external_finished: "Fertigprodukt / extern"
+  };
+
+  return value ? labels[value] ?? value : "offen";
+}
+
 function translateFieldLabel(field?: string): string {
   const labels: Record<string, string> = {
     "event.date": "Veranstaltungsdatum",
@@ -177,6 +198,49 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
   }
   if (menuPlan.length === 0) {
     addFieldQuestion("menuPlan");
+  }
+
+  const unresolvedSourcing = menuPlan.some((item) => {
+    const component = asRecord(item);
+    const productionDecision = asRecord(component?.productionDecision);
+    return !productionDecision?.mode;
+  });
+
+  if (unresolvedSourcing) {
+    questions.push(
+      "Bitte je Gericht festlegen, ob es eigenproduziert, hybrid gefertigt, als Convenience-Komponente zugekauft oder als Fertigprodukt beschafft wird."
+    );
+  }
+
+  const unresolvedConvenienceParts = menuPlan.some((item) => {
+    const component = asRecord(item);
+    const productionDecision = asRecord(component?.productionDecision);
+    const mode = typeof productionDecision?.mode === "string" ? productionDecision.mode : "";
+    const purchasedElements = Array.isArray(productionDecision?.purchasedElements)
+      ? productionDecision.purchasedElements
+      : [];
+
+    return (
+      (mode === "hybrid" || mode === "convenience_purchase") &&
+      purchasedElements.length === 0
+    );
+  });
+
+  if (unresolvedConvenienceParts) {
+    questions.push(
+      "Bitte bei Hybrid- oder Convenience-Gerichten angeben, welche Bestandteile zugekauft werden, zum Beispiel Teig, fertiger Boden oder Saucenbasis."
+    );
+  }
+
+  const unresolvedCategories = menuPlan.some((item) => {
+    const component = asRecord(item);
+    return !component?.menuCategory;
+  });
+
+  if (unresolvedCategories) {
+    questions.push(
+      "Bitte je Gericht kennzeichnen, ob es klassisch, vegetarisch oder vegan ist, wenn das aus dem Angebot nicht eindeutig hervorgeht."
+    );
   }
 
   for (const field of missingFields) {

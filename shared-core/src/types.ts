@@ -166,10 +166,16 @@ export interface MenuComponent {
   componentId: string;
   label: string;
   course?: string;
+  menuCategory?: "classic" | "vegetarian" | "vegan";
   serviceStyle?: string;
   desiredRecipeTags?: string[];
   servings?: number;
   dietaryTags?: string[];
+  productionDecision?: {
+    mode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
+    purchasedElements?: string[];
+    notes?: string;
+  };
 }
 
 export interface SourceLineage {

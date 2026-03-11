@@ -37,8 +37,8 @@ export function evaluateReadiness(spec: {
       status,
       reasons:
         missingFields.length === 0
-          ? ["All required production fields are present."]
-          : missingFields.map((field) => `Missing or incomplete field: ${field}`)
+          ? ["Alle Pflichtangaben für die Produktionsplanung sind vorhanden."]
+          : missingFields.map((field) => `Fehlende oder unvollständige Angabe: ${field}`)
     },
     missingFields
   };
@@ -69,4 +69,3 @@ export function withEvaluatedReadiness(spec: AcceptedEventSpec): AcceptedEventSp
     missingFields
   };
 }
-

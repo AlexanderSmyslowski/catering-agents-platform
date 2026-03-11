@@ -27,7 +27,7 @@ function stationFor(label: string): string {
 function prepWindowFor(spec: AcceptedEventSpec): string {
   return spec.event.date
     ? `${spec.event.date} T-1`
-    : "Schedule missing, prep window requires review";
+    : "Zeitfenster offen, Produktionsvorlauf bitte manuell prüfen";
 }
 
 function gnPlanFor(servings: number): { container: string; count: number }[] {
@@ -52,6 +52,54 @@ export async function buildProductionArtifacts(
 
   for (const component of eventSpec.menuPlan) {
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
+    const productionMode = component.productionDecision?.mode;
+    const purchasedElements = component.productionDecision?.purchasedElements ?? [];
+
+    if (!component.menuCategory) {
+      recipeSelections.push({
+        componentId: component.componentId,
+        selectionReason: "Gerichtsklassifikation fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.",
+        autoUsedInternetRecipe: false
+      });
+      unresolvedItems.push(`Klassifikation für ${component.label} fehlt.`);
+      continue;
+    }
+
+    if (!productionMode) {
+      recipeSelections.push({
+        componentId: component.componentId,
+        selectionReason:
+          "Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.",
+        autoUsedInternetRecipe: false
+      });
+      unresolvedItems.push(`Herstellungsentscheidung für ${component.label} fehlt.`);
+      continue;
+    }
+
+    if ((productionMode === "hybrid" || productionMode === "convenience_purchase") && purchasedElements.length === 0) {
+      recipeSelections.push({
+        componentId: component.componentId,
+        selectionReason:
+          "Hybrid-/Convenience-Entscheidung ist gesetzt, aber die zugekauften Bestandteile sind noch nicht benannt.",
+        autoUsedInternetRecipe: false
+      });
+      unresolvedItems.push(`Zugekaufte Bestandteile für ${component.label} fehlen.`);
+      continue;
+    }
+
+    if (productionMode === "convenience_purchase" || productionMode === "external_finished") {
+      recipeSelections.push({
+        componentId: component.componentId,
+        selectionReason:
+          productionMode === "convenience_purchase"
+            ? "Komponente ist als Convenience-Zukauf markiert und wird nicht über Rezeptlogik aufgelöst."
+            : "Komponente ist als Fertigprodukt markiert und wird nicht über Rezeptlogik aufgelöst.",
+        autoUsedInternetRecipe: false
+      });
+      unresolvedItems.push(`Beschaffungsmenge für ${component.label} manuell prüfen.`);
+      continue;
+    }
+
     const resolution = await discoveryService.resolveRecipe(component, eventSpec);
     recipeSelections.push(resolution.selection);
     unresolvedItems.push(...resolution.unresolvedItems);
@@ -76,7 +124,7 @@ export async function buildProductionArtifacts(
       instructions: batch.steps.map((step) => `${step.index}. ${step.instruction}`)
     });
     timeline.push({
-      label: `Prepare ${component.label}`,
+      label: `${component.label} vorbereiten`,
       at: batch.prepWindow
     });
   }
@@ -103,4 +151,3 @@ export async function buildProductionArtifacts(
     purchaseList
   };
 }
-

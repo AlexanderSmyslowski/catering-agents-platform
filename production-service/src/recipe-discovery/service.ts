@@ -24,15 +24,91 @@ function normalizeTokens(value: string): string[] {
     .filter(Boolean);
 }
 
+function commonPrefixLength(left: string, right: string): number {
+  const max = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < max && left[index] === right[index]) {
+    index += 1;
+  }
+  return index;
+}
+
+function tokensRoughlyMatch(left: string, right: string): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (left.length >= 4 && right.length >= 4 && (left.includes(right) || right.includes(left))) {
+    return true;
+  }
+
+  return commonPrefixLength(left, right) >= 5;
+}
+
+function cleanedSearchLabel(label: string): string {
+  const segments = label
+    .split("|")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  const keptSegments = segments.filter((segment) => {
+    const normalized = segment.toLowerCase();
+    if (/^(de\s*luxe?|de\s*lux|frischged[öo]ns|topping)$/i.test(normalized)) {
+      return false;
+    }
+    return true;
+  });
+
+  const merged = keptSegments.length > 0 ? keptSegments.join(" ") : label;
+  return merged
+    .replace(/[&/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildSearchQueries(
+  component: MenuComponent,
+  eventSpec: AcceptedEventSpec,
+  locale: "de" | "en"
+): string[] {
+  const cleanedLabel = cleanedSearchLabel(component.label);
+  const classificationHint =
+    component.menuCategory === "vegan"
+      ? locale === "de"
+        ? "vegan"
+        : "vegan"
+      : component.menuCategory === "vegetarian"
+        ? locale === "de"
+          ? "vegetarisch"
+          : "vegetarian"
+        : "";
+  const baseQueries =
+    locale === "de"
+      ? [
+          `${cleanedLabel} ${classificationHint} rezept`,
+          `${cleanedLabel} ${classificationHint} rezept ${eventSpec.servicePlan.serviceForm}`,
+          `${cleanedLabel} ${classificationHint} ${eventSpec.servicePlan.eventType} rezept`
+        ]
+      : [
+          `${cleanedLabel} ${classificationHint} recipe`,
+          `${cleanedLabel} ${classificationHint} recipe ${eventSpec.servicePlan.serviceForm}`,
+          `${cleanedLabel} ${classificationHint} catering recipe`
+        ];
+
+  return [...new Set(baseQueries.map((query) => query.replace(/\s+/g, " ").trim()))];
+}
+
 function fitScoreForRecipe(
   recipeName: string,
   component: MenuComponent,
   eventSpec: AcceptedEventSpec
 ): number {
-  const recipeTokens = new Set(normalizeTokens(recipeName));
+  const recipeTokens = normalizeTokens(recipeName);
   const componentTokens = normalizeTokens(component.label);
   const overlap =
-    componentTokens.filter((token) => recipeTokens.has(token)).length /
+    componentTokens.filter((token) =>
+      recipeTokens.some((recipeToken) => tokensRoughlyMatch(token, recipeToken))
+    ).length /
     Math.max(componentTokens.length, 1);
   const eventBoost = eventSpec.servicePlan.serviceForm === component.serviceStyle ? 0.1 : 0;
   return Math.min(1, overlap + eventBoost);
@@ -93,7 +169,7 @@ export class RecipeDiscoveryService {
         selection: {
           componentId: component.componentId,
           recipeId: internalWinner.recipeId,
-          selectionReason: "Matched internal recipe repository.",
+          selectionReason: "Passendes Rezept in der internen Bibliothek gefunden.",
           autoUsedInternetRecipe: false,
           sourceTier: internalWinner.source.tier,
           qualityScore: internalWinner.source.qualityScore,
@@ -111,45 +187,52 @@ export class RecipeDiscoveryService {
     let webSearchFailed = false;
 
     for (const locale of locales) {
-      const query: RecipeSearchQuery = {
-        component,
-        eventSpec,
-        locale,
-        query:
-          locale === "de"
-            ? `${component.label} rezept ${eventSpec.servicePlan.serviceForm} ${eventSpec.servicePlan.eventType}`
-            : `${component.label} recipe ${eventSpec.servicePlan.serviceForm} catering`
-      };
+      for (const queryText of buildSearchQueries(component, eventSpec, locale)) {
+        const query: RecipeSearchQuery = {
+          component,
+          eventSpec,
+          locale,
+          query: queryText
+        };
 
-      let searchResults: WebRecipeCandidate[] = [];
-      try {
-        searchResults = await this.webProvider.searchRecipes(query);
-      } catch {
-        webSearchFailed = true;
-      }
-      for (const candidate of searchResults) {
-        const qualityScore = qualityScoreForCandidate(candidate);
-        const fitScore = fitScoreForRecipe(candidate.title, component, eventSpec);
-        const extractionCompleteness = extractionCompletenessForCandidate(candidate);
-        const autoUsable =
-          qualityScore >= 0.75 &&
-          fitScore >= 0.8 &&
-          extractionCompleteness >= 0.9 &&
-          candidate.qualitySignals.hasYield &&
-          candidate.qualitySignals.mappedIngredientRatio >= 0.9;
+        let searchResults: WebRecipeCandidate[] = [];
+        try {
+          searchResults = await this.webProvider.searchRecipes(query);
+        } catch {
+          webSearchFailed = true;
+        }
 
-        const materialized = candidateToRecipe(candidate, component, eventSpec, locale, {
-          qualityScore,
-          fitScore,
-          extractionCompleteness,
-          autoUsable
-        });
+        for (const candidate of searchResults) {
+          const qualityScore = qualityScoreForCandidate(candidate);
+          const fitScore = fitScoreForRecipe(candidate.title, component, eventSpec);
+          if (fitScore < 0.2) {
+            continue;
+          }
+          const extractionCompleteness = extractionCompletenessForCandidate(candidate);
+          const autoUsable =
+            qualityScore >= 0.75 &&
+            fitScore >= 0.8 &&
+            extractionCompleteness >= 0.9 &&
+            candidate.qualitySignals.hasYield &&
+            candidate.qualitySignals.mappedIngredientRatio >= 0.9;
 
-        if (materialized) {
-          candidates.push({
-            recipe: validateRecipe(materialized),
-            query
+          const materialized = candidateToRecipe(candidate, component, eventSpec, locale, {
+            qualityScore,
+            fitScore,
+            extractionCompleteness,
+            autoUsable
           });
+
+          if (materialized) {
+            candidates.push({
+              recipe: validateRecipe(materialized),
+              query
+            });
+          }
+        }
+
+        if (candidates.length > 0) {
+          break;
         }
       }
 

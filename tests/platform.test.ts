@@ -47,10 +47,67 @@ function baseEventRequest(text: string): EventRequest {
   };
 }
 
+function lunchOfferPdfText(): string {
+  return `THE ONE
+Hallo Ihr Lieben,
+bitte findet anbei das Angebot für Euer Lunch am 04.03.2026 ab 12.00 Uhr (?) bei Euch im Haus.
+
+ORGANISATION | ABLAUFPLANUNG | 04.03.2026
+04.03.2026
+09.00 Uhr - 12.00 Uhr Anlieferungen, Umbau & Aufbau
+12.00 Uhr - 13.00 Uhr Buffetbetreuung, Rücklauf
+
+QUICK LUNCH |
+TRADITIONELL | 80%
+KALBSBULETTEN | SCHMORZWIEBELN
+KARTOFFELSALAT | DE LUX
+NUDELSALAT | FRISCHGEDÖNS
+KRAUT-KAROTTENSALAT | NUSS-TOPPING
+VEGAN | 20%
+MANDEL-CURRY | BASMATIREIS & KORIANDER-TOPPING
+ZUCCHINI | PILZE | ZUCKERSCHOTEN | BABY-PAK-CHOI
+& WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE
+BROT & BAGUETTE |
+DESSERT |
+SCHOKOLADENKUCHEN | vegan
+
+KOSTENÜBERSICHT | DETAILS |
+7 Catering Get Together |
+22,50 € | 120 x
+8 Gesamtkosten: 4.191,25 €`;
+}
+
 function specWithComponent(label: string): AcceptedEventSpec {
-  return normalizeEventRequestToSpec(
+  const spec = normalizeEventRequestToSpec(
     baseEventRequest(`Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit ${label}.`)
   );
+
+  return {
+    ...spec,
+    menuPlan: spec.menuPlan.map((item) => ({
+      ...item,
+      menuCategory: item.menuCategory ?? "classic",
+      productionDecision: {
+        mode: "scratch"
+      }
+    }))
+  };
+}
+
+function withProductionDecision(
+  spec: AcceptedEventSpec,
+  category: "classic" | "vegetarian" | "vegan" = "classic"
+): AcceptedEventSpec {
+  return {
+    ...spec,
+    menuPlan: spec.menuPlan.map((item) => ({
+      ...item,
+      menuCategory: item.menuCategory ?? category,
+      productionDecision: item.productionDecision ?? {
+        mode: "scratch"
+      }
+    }))
+  };
 }
 
 function createDataRoot(): string {
@@ -111,6 +168,38 @@ describe("catering agents platform", () => {
     expect(body.acceptedEventSpec.readiness.status).toBe("complete");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("extracts attendees and the full lunch menu from structured offer text", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-lunch-pdf",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-11T10:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          content: lunchOfferPdfText(),
+          mimeType: "application/pdf",
+          documentId: "document-1"
+        }
+      ]
+    });
+
+    const labels = spec.menuPlan.map((item) => item.label);
+
+    expect(spec.event.type).toBe("lunch");
+    expect(spec.event.date).toBe("2026-03-04");
+    expect(spec.attendees.expected).toBe(120);
+    expect(labels).toContain("KALBSBULETTEN | SCHMORZWIEBELN");
+    expect(labels).toContain("BROT & BAGUETTE");
+    expect(labels).toContain("SCHOKOLADENKUCHEN | vegan");
+    expect(labels.some((label) => /Buffetbetreuung/i.test(label))).toBe(false);
+    expect(spec.menuPlan.find((item) => item.label.includes("KALBSBULETTEN"))?.menuCategory).toBe("classic");
+    expect(spec.menuPlan.find((item) => item.label.includes("MANDEL-CURRY"))?.menuCategory).toBe("vegan");
+    expect(spec.menuPlan.find((item) => item.label.includes("SCHOKOLADENKUCHEN"))?.dietaryTags).toContain("vegan");
   });
 
   it("accepts larger uploaded intake documents without failing on body size limits", async () => {
@@ -217,6 +306,54 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("stores per-component category and sourcing decisions on AcceptedEventSpec", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Quiche"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const componentId = createdSpec.menuPlan[0].componentId;
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      payload: {
+        componentUpdates: [
+          {
+            componentId,
+            menuCategory: "vegetarian",
+            productionMode: "hybrid",
+            purchasedElements: ["Teig"]
+          }
+        ]
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    const updatedComponent = updateResponse.json().acceptedEventSpec.menuPlan[0];
+    expect(updatedComponent.menuCategory).toBe("vegetarian");
+    expect(updatedComponent.dietaryTags).toContain("vegetarian");
+    expect(updatedComponent.productionDecision.mode).toBe("hybrid");
+    expect(updatedComponent.productionDecision.purchasedElements).toContain("Teig");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("creates an AcceptedEventSpec directly from a structured manual form", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
@@ -302,6 +439,73 @@ describe("catering agents platform", () => {
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_verified");
     expect(body.purchaseList.items.length).toBeGreaterThan(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("requires category and sourcing decisions before recipe resolution starts", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildProductionApp({
+      dataRoot,
+      discoveryService: new RecipeDiscoveryService(
+        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        new FakeWebProvider([
+          {
+            url: "https://example.com/quiche",
+            title: "Quiche Rezept",
+            recipe: {
+              schemaVersion: SCHEMA_VERSION,
+              recipeId: "",
+              name: "Quiche Rezept",
+              source: undefined,
+              baseYield: {
+                servings: 8,
+                unit: "servings"
+              },
+              ingredients: [
+                {
+                  ingredientId: "eggs-1",
+                  name: "Eier",
+                  quantity: { amount: 6, unit: "pcs" },
+                  group: "protein",
+                  purchaseUnit: "pcs",
+                  normalizedUnit: "pcs"
+                }
+              ],
+              steps: [{ index: 1, instruction: "Backen." }],
+              scalingRules: { defaultLossFactor: 1.08, batchSize: 8 },
+              allergens: [],
+              dietTags: []
+            },
+            qualitySignals: {
+              structuredData: true,
+              hasYield: true,
+              ingredientCount: 1,
+              stepCount: 1,
+              mappedIngredientRatio: 1
+            }
+          }
+        ])
+      )
+    });
+
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche.")
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Gerichtsklassifikation fehlt");
+    expect(body.productionPlan.productionBatches).toHaveLength(0);
+
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -644,7 +848,11 @@ describe("catering agents platform", () => {
       rootDir: dataRoot
     });
     const productionApp = buildProductionApp({
-      dataRoot
+      dataRoot,
+      discoveryService: new RecipeDiscoveryService(
+        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        new FakeWebProvider([])
+      )
     });
     const exportApp = buildPrintExportApp({
       rootDir: dataRoot
@@ -1078,7 +1286,10 @@ describe("catering agents platform", () => {
         text: "Universitaetskonferenz am 2026-07-01 fuer 80 Teilnehmer mit Linseneintopf und Kaffee."
       }
     });
-    const acceptedEventSpec = intakeResponse.json().acceptedEventSpec;
+    const acceptedEventSpec = withProductionDecision(
+      intakeResponse.json().acceptedEventSpec,
+      "vegan"
+    );
     await intakeApp.close();
 
     const offerApp = buildOfferApp(new OfferStore({ pgPool: pool }));
@@ -1201,7 +1412,11 @@ describe("catering agents platform", () => {
       rootDir: dataRoot
     });
     const productionApp = buildProductionApp({
-      dataRoot
+      dataRoot,
+      discoveryService: new RecipeDiscoveryService(
+        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        new FakeWebProvider([])
+      )
     });
 
     const offerResponse = await offerApp.inject({
@@ -1235,7 +1450,7 @@ describe("catering agents platform", () => {
         "x-actor-name": "Operations"
       },
       payload: {
-        eventSpec: intakeResponse.json().acceptedEventSpec
+        eventSpec: withProductionDecision(intakeResponse.json().acceptedEventSpec)
       }
     });
     expect(productionResponse.statusCode).toBe(201);

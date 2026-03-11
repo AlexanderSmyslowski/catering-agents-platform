@@ -136,6 +136,13 @@ export async function updateAcceptedSpec(
     serviceForm?: string;
     eventType?: string;
     menuItems?: string[];
+    componentUpdates?: Array<{
+      componentId: string;
+      menuCategory?: "classic" | "vegetarian" | "vegan";
+      productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
+      purchasedElements?: string[];
+      notes?: string;
+    }>;
   }
 ) {
   return fetchJson<{ acceptedEventSpec: Record<string, unknown> }>(

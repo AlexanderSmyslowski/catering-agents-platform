@@ -206,9 +206,9 @@ export function candidateToRecipe(
 
 export async function fetchRecipeCandidateFromUrl(url: string): Promise<WebRecipeCandidate | undefined> {
   const response = await fetch(url, {
-    signal: AbortSignal.timeout(800),
+    signal: AbortSignal.timeout(2500),
     headers: {
-      "user-agent": "CateringAgentsBot/0.1 (+internal MVP recipe discovery)"
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) CateringAgentsBot/0.1"
     }
   });
 
