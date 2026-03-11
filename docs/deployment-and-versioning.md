@@ -31,6 +31,8 @@ Empfohlene Hetzner-MVP-Topologie:
 - `/` -> gebaute `backoffice-ui`
 - PostgreSQL auf derselben VM oder als separater Hetzner-Dienst
 
+Im Repo liegt dafuer jetzt eine lauffaehige Compose-Basis unter [platform-infra/docker-compose.yml](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/platform-infra/docker-compose.yml) mit separatem Web-Proxy und PostgreSQL.
+
 Das ist sinnvoll, weil:
 
 - beide Rollen dieselbe Plattform im Browser nutzen koennen

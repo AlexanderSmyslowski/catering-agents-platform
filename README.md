@@ -59,6 +59,22 @@ Die Web-App bietet Exportlinks fuer:
 - Produktionsblatt-HTML
 - Einkaufslisten-CSV
 
+## Docker / Hetzner-MVP
+
+Fuer einen zentralen Serverbetrieb liegt unter [platform-infra/README.md](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/platform-infra/README.md) eine Compose-Basis mit:
+
+- PostgreSQL
+- Intake-, Offer-, Production- und Export-Service
+- Nginx-Web-Frontend mit Reverse-Proxy auf die APIs
+
+Start:
+
+```bash
+cd platform-infra
+cp .env.example .env
+docker compose up --build -d
+```
+
 ## Checkpoints
 
 Einen reproduzierbaren Zwischenstand erzeugst du mit:

@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-catering_agents}
+      POSTGRES_USER: ${POSTGRES_USER:-catering}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  intake:
+    build:
+      context: ..
+      dockerfile: platform-infra/docker/Dockerfile.runtime
+    restart: unless-stopped
+    environment:
+      CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      INTAKE_PORT: 3101
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "dev:intake"]
+
+  offer:
+    build:
+      context: ..
+      dockerfile: platform-infra/docker/Dockerfile.runtime
+    restart: unless-stopped
+    environment:
+      CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      OFFER_PORT: 3102
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "dev:offer"]
+
+  production:
+    build:
+      context: ..
+      dockerfile: platform-infra/docker/Dockerfile.runtime
+    restart: unless-stopped
+    environment:
+      CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      PRODUCTION_PORT: 3103
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "dev:production"]
+
+  exports:
+    build:
+      context: ..
+      dockerfile: platform-infra/docker/Dockerfile.runtime
+    restart: unless-stopped
+    environment:
+      CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      PRINT_EXPORT_PORT: 3104
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "dev:exports"]
+
+  web:
+    build:
+      context: ..
+      dockerfile: platform-infra/docker/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - intake
+      - offer
+      - production
+      - exports
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  postgres_data:
