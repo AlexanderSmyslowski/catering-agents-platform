@@ -126,6 +126,7 @@ Fuer reproduzierbare Zwischenstaende gilt:
 - jeder Checkpoint muss `npm run build` und `npm test` erfolgreich bestehen
 - relevante Architekturentscheidungen werden in `docs/` festgehalten
 - spaetere Datenimporte und Stammdaten-Bootstrap-Skripte werden versioniert im Repo abgelegt
+- fuer bestehende Catering-Rezeptordner gibt es jetzt den versionierten Bulk-Import `npm run import:recipes:caterings -- "<pfad>"`
 
 ## GitHub Actions
 

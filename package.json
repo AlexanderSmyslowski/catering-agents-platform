@@ -14,6 +14,7 @@
     "build": "tsc --noEmit && npm --workspace @catering/backoffice-ui run build",
     "test": "vitest run",
     "checkpoint": "bash ./scripts/create-checkpoint.sh",
+    "import:recipes:caterings": "tsx scripts/import-catering-recipes.ts",
     "local:start": "bash ./scripts/start-local-stack.sh --seed-demo",
     "local:stop": "bash ./scripts/stop-local-stack.sh",
     "local:status": "bash ./scripts/status-local-stack.sh",

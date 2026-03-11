@@ -84,9 +84,18 @@ Die Rezeptbibliothek kann jetzt von beiden Agenten aus erweitert werden:
 - `POST /v1/offers/recipes/upload` fuer Datei-Uploads ueber den Angebotsagenten
 - `POST /v1/production/recipes/upload` fuer Datei-Uploads ueber den Produktionsagenten
 - beide Pfade schreiben in dieselbe persistierte Rezeptbibliothek
+- `.pages`-Rezeptdateien werden beim Import jetzt ueber Quick-Look-Preview-PDFs textlich ausgelesen
 - fuer Tests und interne Automationen existieren zusaetzlich die JSON-Endpunkte `.../recipes/import-text`
 - `PATCH /v1/offers/recipes/:recipeId/review` und `PATCH /v1/production/recipes/:recipeId/review` erlauben Freigabe, Verifizierung oder Ablehnung
 - `review_required` und `rejected` Rezepte werden nicht still weiter als interne Kandidaten verwendet
+
+Fuer einen Bulk-Import eures bestehenden Catering-Rezeptbestands:
+
+```bash
+npm run import:recipes:caterings -- "/Users/alexandersmyslowski/Library/Mobile Documents/com~apple~CloudDocs/Dateien/THE ONE von Alexander/Buchhaltung/Caterings"
+```
+
+Der Import scannt bevorzugt Rezeptdateien in `Rezepte`-Ordnern, bevorzugt PDF vor `.pages`, schreibt in dieselbe persistierte Rezeptbibliothek und verbessert dadurch direkt die internen Treffer fuer Agent 2.
 
 Fuer frische Deployments stehen ausserdem Admin-Endpunkte bereit:
 

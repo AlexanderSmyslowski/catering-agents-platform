@@ -1,7 +1,13 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import pdf from "pdf-parse";
 import type { DocumentInput } from "./types.js";
 
 const PDF_PARSE_TIMEOUT_MS = 3000;
+const execFileAsync = promisify(execFile);
 
 function decodeText(buffer: Buffer): string {
   return buffer.toString("utf8").replace(/\0/g, "").trim();
@@ -44,7 +50,54 @@ async function parsePdfWithTimeout(buffer: Buffer): Promise<string> {
   ]);
 }
 
+async function extractTextFromPagesPreview(document: DocumentInput): Promise<string> {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "catering-pages-"));
+  const inputPath = path.join(tempRoot, document.filename || "document.pages");
+  const outputDir = path.join(tempRoot, "preview");
+
+  try {
+    await writeFile(inputPath, document.content);
+    await execFileAsync("qlmanage", ["-o", outputDir, "-p", inputPath]);
+
+    const previewEntries = await readdir(outputDir, { withFileTypes: true });
+    const previewDir = previewEntries.find((entry) => entry.isDirectory() && entry.name.endsWith(".qlpreview"));
+    if (!previewDir) {
+      return "";
+    }
+
+    const attachmentDir = path.join(outputDir, previewDir.name);
+    const attachmentFiles = (await readdir(attachmentDir))
+      .filter((name) => name.toLowerCase().endsWith(".pdf"))
+      .sort();
+
+    const extractedParts: string[] = [];
+    for (const attachment of attachmentFiles) {
+      const attachmentBuffer = await readFile(path.join(attachmentDir, attachment));
+      const text = await parsePdfWithTimeout(attachmentBuffer);
+      if (text) {
+        extractedParts.push(text);
+      }
+    }
+
+    return extractedParts.join("\n").trim();
+  } catch {
+    return "";
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 export async function extractTextFromDocument(document: DocumentInput): Promise<string> {
+  const filename = document.filename.toLowerCase();
+  if (filename.endsWith(".pages")) {
+    const text = await extractTextFromPagesPreview(document);
+    if (text) {
+      return text;
+    }
+
+    return fallbackDocumentText(document.content);
+  }
+
   if (document.mimeType.includes("pdf")) {
     try {
       const text = await parsePdfWithTimeout(document.content);

@@ -17,6 +17,30 @@ const tierWeight: Record<Recipe["source"]["tier"], number> = {
   internet_fallback: 1
 };
 
+const trustedRecipeHosts = [
+  "chefkoch.de",
+  "allrecipes.com",
+  "noracooks.com",
+  "thebigmansworld.com",
+  "itdoesnttastelikechicken.com",
+  "biancazapatka.com",
+  "lovingitvegan.com",
+  "rainbowplantlife.com",
+  "simplyrecipes.com",
+  "spendwithpennies.com",
+  "einfachkochen.de",
+  "essen-und-trinken.de",
+  "emmikochteinfach.de",
+  "eat.de",
+  "lecker.de",
+  "veggie-einhorn.de",
+  "kraeuter-buch.de",
+  "kochideenzeit.de",
+  "omasrezepte.de",
+  "ndr.de",
+  "gutekueche.at"
+];
+
 const culinaryTokenExpansions: Record<string, string[]> = {
   schokoladenkuchen: ["chocolate", "cake"],
   kuchen: ["cake"],
@@ -27,9 +51,9 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   kartoffelsalat: ["potato", "salad"],
   nudelsalat: ["pasta", "salad"],
   salat: ["salad"],
-  krautsalat: ["coleslaw", "salad"],
-  karottensalat: ["carrot", "salad"],
-  kraut: ["cabbage"],
+  krautsalat: ["coleslaw", "salad", "kraut"],
+  karottensalat: ["carrot", "salad", "krautsalat"],
+  kraut: ["cabbage", "krautsalat"],
   karotte: ["carrot"],
   karotten: ["carrot"],
   möhre: ["carrot"],
@@ -61,9 +85,34 @@ const culinaryTokenExpansions: Record<string, string[]> = {
 const veganCuePattern = /\b(vegan|pflanzlich|plant[- ]based|dairy[- ]free|eggless)\b/i;
 const vegetarianCuePattern = /\b(vegetarisch|vegetarian)\b/i;
 const nonVeganIngredientPattern =
-  /\b(milch|sahne|butter|ei|eier|joghurt|käse|kaese|quark|honig|gelatine|gelatin|chicken|beef|pork|ham|bacon|sausage|salami|fish|lachs|schinken|speck|huhn|rind|kalb|puten|thunfisch)\b/i;
+  /\b(milch|sahne|butter|ei|eier|joghurt|käse|kaese|quark|honig|gelatine|gelatin|parmesan|mozzarella|feta|gouda|brie|camembert|shrimp|prawn|prawns|garnel|garnele|garnelen|arnele|scampi|chicken|beef|pork|ham|bacon|sausage|salami|fish|lachs|schinken|speck|huhn|rind|kalb|puten|thunfisch|anchov|worcestershire)\b/i;
 const meatIngredientPattern =
-  /\b(chicken|beef|pork|ham|bacon|sausage|salami|fish|lachs|schinken|speck|huhn|rind|kalb|puten|thunfisch)\b/i;
+  /\b(chicken|beef|pork|ham|bacon|sausage|salami|fish|lachs|schinken|speck|huhn|rind|kalb|puten|thunfisch|garnel|garnele|garnelen|arnele|shrimp|prawn|prawns|scampi|anchov)\b/i;
+
+type MenuCategoryCompatibility = {
+  compatible: boolean;
+  inferredDietTags: string[];
+  confidence: "explicit" | "ingredients" | "none";
+};
+
+const collectionLikeRecipePattern =
+  /\b(top\s*\d+|\d+\s+(extra\s+schnelle|schnelle|beste|best|easy|einfache?)\s+(kuchen|recipes?|desserts?|salate)|ideen|ideas|sammlung|collection|best of|die leckersten|die besten)\b/i;
+
+const genericPrimaryTokens = new Set([
+  "vegan",
+  "vegetarian",
+  "vegetarisch",
+  "klassisch",
+  "classic",
+  "mit",
+  "und",
+  "de",
+  "luxe",
+  "deluxe",
+  "topping",
+  "frischgedons",
+  "frischgedoens"
+]);
 
 function normalizeTokens(value: string): string[] {
   const baseTokens = value
@@ -76,6 +125,48 @@ function normalizeTokens(value: string): string[] {
     expanded.add(token);
     for (const extra of culinaryTokenExpansions[token] ?? []) {
       expanded.add(extra);
+    }
+  }
+
+  return [...expanded];
+}
+
+function normalizeComparableText(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ß/g, "ss")
+    .toLowerCase();
+}
+
+function rawComparableTokens(value: string): string[] {
+  return normalizeComparableText(value).split(/[^a-z0-9]+/i).filter(Boolean);
+}
+
+function deriveCompoundStemTokens(token: string): string[] {
+  const stems: string[] = [];
+  const suffixes = ["kuchen", "salat", "suppe", "curry", "quiche"];
+
+  for (const suffix of suffixes) {
+    if (token.length > suffix.length + 3 && token.endsWith(suffix)) {
+      const stem = token.slice(0, -suffix.length);
+      if (stem.length >= 4) {
+        stems.push(stem);
+      }
+    }
+  }
+
+  return stems;
+}
+
+function searchableSpecificTokens(value: string): string[] {
+  const tokens = rawComparableTokens(value);
+  const expanded = new Set<string>();
+
+  for (const token of tokens) {
+    expanded.add(token);
+    for (const stem of deriveCompoundStemTokens(token)) {
+      expanded.add(stem);
     }
   }
 
@@ -97,6 +188,14 @@ function tokensRoughlyMatch(left: string, right: string): boolean {
   }
 
   if (left.length >= 4 && right.length >= 4 && (left.includes(right) || right.includes(left))) {
+    return true;
+  }
+
+  return commonPrefixLength(left, right) >= 5;
+}
+
+function tokensSpecificallyMatch(left: string, right: string): boolean {
+  if (left === right) {
     return true;
   }
 
@@ -126,6 +225,36 @@ function cleanedSearchLabel(label: string): string {
 
 function primarySearchSegment(label: string): string {
   return label.split("|")[0]?.trim() || label.trim();
+}
+
+function specificPrimaryFocusTokens(component: MenuComponent): string[] {
+  const primarySegment = primarySearchSegment(component.label);
+  const archetypes = new Set(
+    [
+      dishArchetypeForComponent(component, "de"),
+      dishArchetypeForComponent(component, "en")
+    ]
+      .filter(Boolean)
+      .flatMap((value) => normalizeTokens(value as string))
+  );
+  const focus = new Set<string>();
+
+  for (const token of rawComparableTokens(primarySegment)) {
+    if (genericPrimaryTokens.has(token) || archetypes.has(token)) {
+      continue;
+    }
+
+    focus.add(token);
+    for (const stem of deriveCompoundStemTokens(token)) {
+      focus.add(stem);
+    }
+  }
+
+  return [...focus];
+}
+
+function leadSpecificPrimaryToken(component: MenuComponent): string | undefined {
+  return specificPrimaryFocusTokens(component)[0];
 }
 
 function translateLabelForLocale(label: string, locale: "de" | "en"): string {
@@ -293,20 +422,89 @@ function buildSearchQueries(
 }
 
 function fitScoreForRecipe(
-  recipeName: string,
+  recipeText: string,
   component: MenuComponent,
   eventSpec: AcceptedEventSpec
 ): number {
-  const recipeTokens = normalizeTokens(recipeName);
+  const recipeTokens = normalizeTokens(recipeText);
   const componentTokens = componentSearchTokens(component);
+  const primaryTokens = normalizeTokens(primarySearchSegment(component.label));
+  const normalizedRecipeText = recipeText.toLowerCase();
+  const normalizedPrimarySegment = primarySearchSegment(component.label).toLowerCase();
   const overlap =
     componentTokens.filter((token) =>
       recipeTokens.some((recipeToken) => tokensRoughlyMatch(token, recipeToken))
     ).length /
     Math.max(componentTokens.length, 1);
+  const primaryOverlap =
+    primaryTokens.filter((token) =>
+      recipeTokens.some((recipeToken) => tokensRoughlyMatch(token, recipeToken))
+    ).length /
+    Math.max(primaryTokens.length, 1);
   const eventBoost = eventSpec.servicePlan.serviceForm === component.serviceStyle ? 0.1 : 0;
-  const categoryBoost = categoryBoostForText(recipeName, component);
-  return Math.min(1, Math.max(0, overlap + eventBoost + categoryBoost));
+  const categoryBoost = categoryBoostForText(recipeText, component);
+  const phraseBoost = normalizedPrimarySegment && normalizedRecipeText.includes(normalizedPrimarySegment) ? 0.2 : 0;
+  return Math.min(1, Math.max(0, overlap + primaryOverlap * 0.35 + phraseBoost + eventBoost + categoryBoost));
+}
+
+function primaryMatchScore(recipeText: string, component: MenuComponent): number {
+  const recipeTokens = normalizeTokens(recipeText);
+  const primaryTokens = normalizeTokens(primarySearchSegment(component.label));
+
+  if (primaryTokens.length === 0) {
+    return 1;
+  }
+
+  return (
+    primaryTokens.filter((token) =>
+      recipeTokens.some((recipeToken) => tokensRoughlyMatch(token, recipeToken))
+    ).length / Math.max(primaryTokens.length, 1)
+  );
+}
+
+function specificPrimaryMatchScore(recipeText: string, component: MenuComponent): number {
+  const focusTokens = specificPrimaryFocusTokens(component);
+  if (focusTokens.length === 0) {
+    return 1;
+  }
+
+  const recipeTokens = searchableSpecificTokens(recipeText);
+  return (
+    focusTokens.filter((token) =>
+      recipeTokens.some((recipeToken) => tokensSpecificallyMatch(token, recipeToken))
+    ).length / Math.max(focusTokens.length, 1)
+  );
+}
+
+function hostnameFor(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function trustedSourceBoost(url: string): number {
+  const hostname = hostnameFor(url);
+  return trustedRecipeHosts.some((host) => hostname === host || hostname.endsWith(`.${host}`))
+    ? 0.08
+    : 0;
+}
+
+function candidateRecipeText(candidate: WebRecipeCandidate): string {
+  const ingredients = (candidate.recipe?.ingredients ?? []).map((ingredient) => ingredient.name).join(" ");
+  return `${candidate.title} ${candidate.recipe?.name ?? ""} ${candidate.url} ${ingredients}`;
+}
+
+function recipeSearchText(recipe: Recipe): string {
+  const ingredients = recipe.ingredients.map((ingredient) => ingredient.name).join(" ");
+  return `${recipe.name} ${recipe.source.reference} ${(recipe.dietTags ?? []).join(" ")} ${ingredients}`;
+}
+
+function isCollectionLikeCandidate(candidate: WebRecipeCandidate): boolean {
+  return collectionLikeRecipePattern.test(
+    `${candidate.title} ${candidate.recipe?.name ?? ""} ${candidate.url}`
+  );
 }
 
 function componentSearchTokens(component: MenuComponent): string[] {
@@ -352,17 +550,25 @@ function categoryBoostForText(
   return hasCategoryCue(text, component.menuCategory) ? 0.2 : -0.05;
 }
 
-function candidateSupportsMenuCategory(
+function evaluateMenuCategoryCompatibility(
   candidate: WebRecipeCandidate,
   component: MenuComponent
-): boolean {
+): MenuCategoryCompatibility {
   if (!component.menuCategory) {
-    return true;
+    return {
+      compatible: true,
+      inferredDietTags: [],
+      confidence: "none"
+    };
   }
 
   const text = `${candidate.title} ${candidate.url} ${(candidate.recipe?.dietTags ?? []).join(" ")}`;
   if (hasCategoryCue(text, component.menuCategory)) {
-    return true;
+    return {
+      compatible: true,
+      inferredDietTags: [component.menuCategory],
+      confidence: "explicit"
+    };
   }
 
   const ingredientNames = (candidate.recipe?.ingredients ?? [])
@@ -370,6 +576,71 @@ function candidateSupportsMenuCategory(
     .join(" ")
     .toLowerCase();
 
+  if (!ingredientNames) {
+    return {
+      compatible: false,
+      inferredDietTags: [],
+      confidence: "none"
+    };
+  }
+
+  if (component.menuCategory === "vegan") {
+    if (nonVeganIngredientPattern.test(ingredientNames)) {
+      return {
+        compatible: false,
+        inferredDietTags: [],
+        confidence: "none"
+      };
+    }
+
+    return {
+      compatible: true,
+      inferredDietTags: ["vegan"],
+      confidence: "ingredients"
+    };
+  }
+
+  if (component.menuCategory === "vegetarian") {
+    if (meatIngredientPattern.test(ingredientNames)) {
+      return {
+        compatible: false,
+        inferredDietTags: [],
+        confidence: "none"
+      };
+    }
+
+    return {
+      compatible: true,
+      inferredDietTags: ["vegetarian"],
+      confidence: "ingredients"
+    };
+  }
+
+  return {
+    compatible: true,
+    inferredDietTags: [],
+    confidence: "none"
+  };
+}
+
+function candidateSupportsMenuCategory(
+  candidate: WebRecipeCandidate,
+  component: MenuComponent
+): boolean {
+  return evaluateMenuCategoryCompatibility(candidate, component).compatible;
+}
+
+function recipeSupportsMenuCategory(recipe: Recipe, component: MenuComponent): boolean {
+  if (!component.menuCategory) {
+    return true;
+  }
+
+  const text = `${recipe.name} ${recipe.source.reference} ${(recipe.dietTags ?? []).join(" ")}`;
+  if (hasCategoryCue(text, component.menuCategory)) {
+    return true;
+  }
+
+  const ingredientNames = recipe.ingredients.map((ingredient) => ingredient.name).join(" ").toLowerCase();
   if (!ingredientNames) {
     return false;
   }
@@ -392,7 +663,14 @@ function qualityScoreForCandidate(candidate: WebRecipeCandidate): number {
   const ingredientScore = Math.min(0.2, signals.ingredientCount / 20);
   const stepScore = Math.min(0.2, signals.stepCount / 10);
   const mappingScore = signals.mappedIngredientRatio * 0.1;
-  return Number((structured + yieldScore + ingredientScore + stepScore + mappingScore).toFixed(2));
+  const sourceScore = trustedSourceBoost(candidate.url);
+  const collectionPenalty = isCollectionLikeCandidate(candidate) ? 0.25 : 0;
+  return Number(
+    Math.max(
+      0,
+      Math.min(1, structured + yieldScore + ingredientScore + stepScore + mappingScore + sourceScore - collectionPenalty)
+    ).toFixed(2)
+  );
 }
 
 function extractionCompletenessForCandidate(candidate: WebRecipeCandidate): number {
@@ -429,30 +707,68 @@ export class RecipeDiscoveryService {
     component: MenuComponent,
     eventSpec: AcceptedEventSpec
   ): Promise<RecipeResolution> {
-    const internalCandidates = (await this.repository.findCandidates(component)).sort(
-      (left, right) => {
+    const repositoryCandidates = await this.repository.findCandidates(component);
+    const internalCandidates = repositoryCandidates
+      .filter((recipe) => recipeSupportsMenuCategory(recipe, component))
+      .map((recipe, index) => ({
+        recipe,
+        repositoryRank: index,
+        fitScore: fitScoreForRecipe(recipeSearchText(recipe), component, eventSpec),
+        primaryScore: primaryMatchScore(recipeSearchText(recipe), component),
+        specificPrimaryScore: specificPrimaryMatchScore(recipeSearchText(recipe), component),
+        leadNameScore: (() => {
+          const leadToken = leadSpecificPrimaryToken(component);
+          if (!leadToken) {
+            return 0;
+          }
+
+          return searchableSpecificTokens(recipe.name).some((token) =>
+            tokensSpecificallyMatch(leadToken, token)
+          )
+            ? 1
+            : 0;
+        })()
+      }))
+      .filter(
+        (candidate) =>
+          (candidate.fitScore >= 0.75 ||
+            (candidate.repositoryRank === 0 &&
+              candidate.leadNameScore === 1 &&
+              candidate.fitScore >= 0.55)) &&
+          (candidate.primaryScore >= 0.5 || candidate.leadNameScore === 1) &&
+          (candidate.specificPrimaryScore >= 0.34 || candidate.leadNameScore === 1)
+      )
+      .sort((left, right) => {
+        const tierDifference =
+          tierWeight[right.recipe.source.tier] - tierWeight[left.recipe.source.tier];
+        if (tierDifference !== 0) {
+          return tierDifference;
+        }
+
+        const rankDifference = left.repositoryRank - right.repositoryRank;
+        if (rankDifference !== 0) {
+          return rankDifference;
+        }
+
         const leftScore =
-          tierWeight[left.source.tier] +
-          fitScoreForRecipe(left.name, component, eventSpec);
+          left.fitScore + left.specificPrimaryScore * 0.5 + left.leadNameScore * 0.35;
         const rightScore =
-          tierWeight[right.source.tier] +
-          fitScoreForRecipe(right.name, component, eventSpec);
+          right.fitScore + right.specificPrimaryScore * 0.5 + right.leadNameScore * 0.35;
         return rightScore - leftScore;
-      }
-    );
+      });
 
     const internalWinner = internalCandidates[0];
-    if (internalWinner) {
+    if (internalWinner?.recipe) {
       return {
-        recipe: internalWinner,
+        recipe: internalWinner.recipe,
         selection: {
           componentId: component.componentId,
-          recipeId: internalWinner.recipeId,
+          recipeId: internalWinner.recipe.recipeId,
           selectionReason: "Passendes Rezept in der internen Bibliothek gefunden.",
           autoUsedInternetRecipe: false,
-          sourceTier: internalWinner.source.tier,
-          qualityScore: internalWinner.source.qualityScore,
-          fitScore: fitScoreForRecipe(internalWinner.name, component, eventSpec)
+          sourceTier: internalWinner.recipe.source.tier,
+          qualityScore: internalWinner.recipe.source.qualityScore,
+          fitScore: internalWinner.fitScore
         },
         unresolvedItems: []
       };
@@ -486,24 +802,33 @@ export class RecipeDiscoveryService {
             continue;
           }
 
+          if (
+            isCollectionLikeCandidate(candidate) &&
+            (candidate.qualitySignals.stepCount < 4 || candidate.qualitySignals.ingredientCount < 6)
+          ) {
+            continue;
+          }
+
           const qualityScore = qualityScoreForCandidate(candidate);
-          const fitScore = fitScoreForRecipe(candidate.title, component, eventSpec);
+          const compatibility = evaluateMenuCategoryCompatibility(candidate, component);
+          const fitScore = fitScoreForRecipe(candidateRecipeText(candidate), component, eventSpec);
           if (fitScore < 0.2) {
             continue;
           }
           const extractionCompleteness = extractionCompletenessForCandidate(candidate);
           const autoUsable =
             qualityScore >= 0.75 &&
-            fitScore >= 0.8 &&
+            fitScore >= (compatibility.confidence === "explicit" ? 0.72 : 0.8) &&
             extractionCompleteness >= 0.9 &&
             candidate.qualitySignals.hasYield &&
-            candidate.qualitySignals.mappedIngredientRatio >= 0.9;
+            candidate.qualitySignals.mappedIngredientRatio >= 0.85;
 
           const materialized = candidateToRecipe(candidate, component, eventSpec, locale, {
             qualityScore,
             fitScore,
             extractionCompleteness,
-            autoUsable
+            autoUsable,
+            inferredDietTags: compatibility.inferredDietTags
           });
 
           if (materialized) {
@@ -529,8 +854,8 @@ export class RecipeDiscoveryService {
     }
 
     const winner = candidates.sort((left, right) => {
-      const leftScore = left.recipe.source.qualityScore + left.recipe.source.fitScore;
-      const rightScore = right.recipe.source.qualityScore + right.recipe.source.fitScore;
+      const leftScore = left.recipe.source.qualityScore * 1.4 + left.recipe.source.fitScore;
+      const rightScore = right.recipe.source.qualityScore * 1.4 + right.recipe.source.fitScore;
       return rightScore - leftScore;
     })[0];
 

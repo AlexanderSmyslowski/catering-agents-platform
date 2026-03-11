@@ -45,7 +45,7 @@ function parseIngredientLine(line: string, index: number): IngredientLine | unde
   }
 
   const match = normalized.match(
-    /^([\d.,/]+)?\s*(kg|g|ml|l|pcs|stück|stueck)?\s*(.+)$/i
+    /^([\d.,/]+)?\s*(kg|g|mg|ml|cl|dl|l|pcs|stück|stueck|el|tl|cup|cups|tbsp|tsp)?(?=\s|$)\s*(.+)$/i
   );
 
   const amount = match?.[1] ? Number(match[1].replace(",", ".")) : 1;
@@ -203,6 +203,7 @@ export function candidateToRecipe(
     fitScore: number;
     extractionCompleteness: number;
     autoUsable: boolean;
+    inferredDietTags?: string[];
   }
 ): Recipe | undefined {
   const partial = candidate.recipe;
@@ -210,12 +211,7 @@ export function candidateToRecipe(
     return undefined;
   }
 
-  const inferredDietTags = new Set(partial.dietTags ?? []);
-  if (component.menuCategory === "vegan") {
-    inferredDietTags.add("vegan");
-  } else if (component.menuCategory === "vegetarian") {
-    inferredDietTags.add("vegetarian");
-  }
+  const inferredDietTags = new Set([...(partial.dietTags ?? []), ...(scores.inferredDietTags ?? [])]);
 
   return {
     schemaVersion: SCHEMA_VERSION,
