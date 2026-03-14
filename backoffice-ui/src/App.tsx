@@ -49,6 +49,7 @@ type ComponentEditState = {
   menuCategory: string;
   productionMode: string;
   purchasedElements: string;
+  recipeOverrideId: string;
   notes: string;
 };
 
@@ -210,6 +211,56 @@ function channelForFile(file: File): IntakeDocumentChannel {
     return "pdf_upload";
   }
   return "text";
+}
+
+function normalizeRecipeSuggestionText(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ß/g, "ss")
+    .toLowerCase();
+}
+
+function recipeSuggestionsForComponent(
+  label: string,
+  recipes: Array<Record<string, unknown>>
+): Array<{ recipeId: string; name: string }> {
+  const tokens = normalizeRecipeSuggestionText(label)
+    .split(/[^a-z0-9]+/i)
+    .filter((token) => token.length >= 4)
+    .filter((token) => !["vegan", "classic", "klassisch", "vegetarian", "vegetarisch", "topping"].includes(token));
+
+  return recipes
+    .map((recipe) => {
+      const recipeId = String(recipe.recipeId ?? "");
+      const name = String(recipe.name ?? recipeId);
+      const haystack = normalizeRecipeSuggestionText(
+        `${name} ${String((recipe.source as Record<string, unknown> | undefined)?.reference ?? "")}`
+      );
+      const score = tokens.filter((token) => haystack.includes(token)).length;
+      return {
+        recipeId,
+        name,
+        score
+      };
+    })
+    .filter((item) => item.recipeId && item.score > 0)
+    .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name, "de"))
+    .slice(0, 6)
+    .map(({ recipeId, name }) => ({ recipeId, name }));
+}
+
+function resolveRecipeNameById(
+  recipeId: string,
+  recipes: Array<Record<string, unknown>>
+): string | undefined {
+  const match = recipes.find((recipe) => String(recipe.recipeId ?? "") === recipeId);
+  if (!match) {
+    return undefined;
+  }
+
+  const recipeName = String(match.name ?? "").trim();
+  return recipeName || recipeId;
 }
 
 
@@ -805,6 +856,7 @@ export function App() {
             purchasedElements: Array.isArray(productionDecision?.purchasedElements)
               ? productionDecision?.purchasedElements.map((entry) => String(entry)).join(", ")
               : "",
+            recipeOverrideId: String(item.recipeOverrideId ?? ""),
             notes: String(productionDecision?.notes ?? "")
           } satisfies ComponentEditState
         ];
@@ -848,6 +900,7 @@ export function App() {
         menuCategory: current[componentId]?.menuCategory ?? "",
         productionMode: current[componentId]?.productionMode ?? "",
         purchasedElements: current[componentId]?.purchasedElements ?? "",
+        recipeOverrideId: current[componentId]?.recipeOverrideId ?? "",
         notes: current[componentId]?.notes ?? "",
         ...patch
       }
@@ -875,6 +928,7 @@ export function App() {
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
+        recipeOverrideId: state.recipeOverrideId.trim() || "",
         notes: state.notes.trim() || undefined
       }));
 
@@ -1772,12 +1826,31 @@ export function App() {
                                 menuCategory: "",
                                 productionMode: "",
                                 purchasedElements: "",
+                                recipeOverrideId: "",
                                 notes: ""
                               };
+                              const componentLabel = String(component.label ?? componentId);
+                              const recipeSuggestions = recipeSuggestionsForComponent(
+                                componentLabel,
+                                dashboard.recipes
+                              );
+                              const selectedRecipeName = state.recipeOverrideId
+                                ? resolveRecipeNameById(state.recipeOverrideId, dashboard.recipes)
+                                : undefined;
+                              const recipeOptions = [...recipeSuggestions];
+                              if (
+                                state.recipeOverrideId &&
+                                !recipeOptions.some((item) => item.recipeId === state.recipeOverrideId)
+                              ) {
+                                recipeOptions.unshift({
+                                  recipeId: state.recipeOverrideId,
+                                  name: selectedRecipeName ?? `Rezept ${state.recipeOverrideId}`
+                                });
+                              }
 
                               return (
                                 <article key={componentId} className="component-answer-card">
-                                  <strong>{String(component.label ?? componentId)}</strong>
+                                  <strong>{componentLabel}</strong>
                                   <div className="answer-grid">
                                     <label className="field-block">
                                       <span>Kategorie im Angebot</span>
@@ -1813,6 +1886,34 @@ export function App() {
                                       </select>
                                     </label>
                                   </div>
+                                  <label className="field-block">
+                                    <span>Rezept gezielt aus Bibliothek zuweisen</span>
+                                    <select
+                                      value={state.recipeOverrideId}
+                                      onChange={(event) =>
+                                        updateEditingComponentState(componentId, {
+                                          recipeOverrideId: event.target.value
+                                        })
+                                      }
+                                    >
+                                      <option value="">Automatisch suchen</option>
+                                      {recipeOptions.map((option) => (
+                                        <option key={option.recipeId} value={option.recipeId}>
+                                          {option.name} ({option.recipeId})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  {recipeOptions.length > 0 ? (
+                                    <p className="helper-text">
+                                      Vorgeschlagene Bibliotheksrezepte:{" "}
+                                      {recipeOptions.map((option) => option.name).join(", ")}
+                                    </p>
+                                  ) : (
+                                    <p className="helper-text">
+                                      Für diese Bezeichnung wurden noch keine naheliegenden Bibliotheksrezepte gefunden.
+                                    </p>
+                                  )}
                                   <label className="field-block">
                                     <span>Zugekaufte Bestandteile</span>
                                     <input

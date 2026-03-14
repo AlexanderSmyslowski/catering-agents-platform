@@ -141,6 +141,7 @@ export async function updateAcceptedSpec(
       menuCategory?: "classic" | "vegetarian" | "vegan";
       productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
       purchasedElements?: string[];
+      recipeOverrideId?: string;
       notes?: string;
     }>;
   }

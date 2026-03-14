@@ -797,6 +797,39 @@ export class RecipeDiscoveryService {
     private readonly webProvider: WebRecipeSearchProvider
   ) {}
 
+  async resolveRecipeOverride(
+    recipeId: string,
+    component: MenuComponent
+  ): Promise<RecipeResolution> {
+    const recipe = await this.repository.get(recipeId);
+    if (!recipe) {
+      return {
+        selection: {
+          componentId: component.componentId,
+          selectionReason: `Das manuell hinterlegte Rezept ${recipeId} wurde in der Bibliothek nicht gefunden.`,
+          searchTrace: [`Manuelle Rezeptzuweisung: ${recipeId}`, "Bibliothekstreffer: nicht gefunden."],
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: [`Rezeptzuweisung ${recipeId} für ${component.label} ist ungültig.`]
+      };
+    }
+
+    return {
+      recipe,
+      selection: {
+        componentId: component.componentId,
+        recipeId: recipe.recipeId,
+        selectionReason: "Rezept wurde manuell aus der Bibliothek zugewiesen.",
+        searchTrace: [`Manuelle Rezeptzuweisung: ${recipe.name} (${recipe.recipeId}).`],
+        autoUsedInternetRecipe: false,
+        sourceTier: recipe.source.tier,
+        qualityScore: recipe.source.qualityScore,
+        fitScore: recipe.source.fitScore
+      },
+      unresolvedItems: []
+    };
+  }
+
   async resolveRecipe(
     component: MenuComponent,
     eventSpec: AcceptedEventSpec

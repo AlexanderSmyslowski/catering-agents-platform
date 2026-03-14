@@ -171,6 +171,7 @@ export interface MenuComponent {
   desiredRecipeTags?: string[];
   servings?: number;
   dietaryTags?: string[];
+  recipeOverrideId?: string;
   productionDecision?: {
     mode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];

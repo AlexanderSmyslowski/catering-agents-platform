@@ -179,6 +179,7 @@ export const commonSchema = {
         course: { type: "string" },
         menuCategory: { enum: ["classic", "vegetarian", "vegan"] },
         serviceStyle: { type: "string" },
+        recipeOverrideId: { type: "string" },
         desiredRecipeTags: {
           type: "array",
           items: { type: "string" }

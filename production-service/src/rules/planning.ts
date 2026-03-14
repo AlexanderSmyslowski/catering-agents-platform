@@ -169,7 +169,9 @@ export async function buildProductionArtifacts(
 
     procurementItems.push(...procurementItemsForComponent(component, servings));
 
-    const resolution = await discoveryService.resolveRecipe(component, eventSpec);
+    const resolution = component.recipeOverrideId
+      ? await discoveryService.resolveRecipeOverride(component.recipeOverrideId, component)
+      : await discoveryService.resolveRecipe(component, eventSpec);
     recipeSelections.push(resolution.selection);
     unresolvedItems.push(...resolution.unresolvedItems);
 

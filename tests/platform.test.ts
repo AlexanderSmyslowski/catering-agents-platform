@@ -376,6 +376,96 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("uses a manually assigned library recipe before any automatic recipe search", async () => {
+    const dataRoot = createDataRoot();
+    const intakeApp = buildIntakeApp({
+      rootDir: dataRoot
+    });
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const productionApp = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+
+    const uploadResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/recipes/import-text",
+      payload: {
+        recipeName: "Wildkräutersalat mit Petersilien-Vinaigrette",
+        text: [
+          "Wildkräutersalat mit Petersilien-Vinaigrette",
+          "Zutaten",
+          "500 g Wildkräuter",
+          "120 ml Olivenöl",
+          "40 ml Zitronensaft",
+          "1 Bund Petersilie",
+          "Zubereitung",
+          "1. Wildkräuter waschen.",
+          "2. Petersilie fein hacken und mit Öl und Zitronensaft verrühren.",
+          "3. Vor dem Service mischen."
+        ].join("\n")
+      }
+    });
+
+    expect(uploadResponse.statusCode).toBe(201);
+    const recipeId = String(uploadResponse.json().recipe.recipeId);
+
+    const createResponse = await intakeApp.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Spezialsalat vom Haus"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const componentId = String(createdSpec.menuPlan[0].componentId);
+
+    const updateResponse = await intakeApp.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      payload: {
+        componentUpdates: [
+          {
+            componentId,
+            menuCategory: "vegan",
+            productionMode: "scratch",
+            recipeOverrideId: recipeId
+          }
+        ]
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json().acceptedEventSpec.menuPlan[0].recipeOverrideId).toBe(recipeId);
+
+    const planResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: updateResponse.json().acceptedEventSpec
+      }
+    });
+
+    expect(planResponse.statusCode).toBe(201);
+    expect(planResponse.json().productionPlan.recipeSelections[0].recipeId).toBe(recipeId);
+    expect(planResponse.json().productionPlan.recipeSelections[0].selectionReason).toContain(
+      "manuell aus der Bibliothek"
+    );
+    expect(planResponse.json().productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
+    expect(planResponse.json().productionPlan.unresolvedItems).toHaveLength(0);
+
+    await intakeApp.close();
+    await productionApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("creates an AcceptedEventSpec directly from a structured manual form", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({

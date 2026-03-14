@@ -38,6 +38,7 @@ interface SpecUpdateBody {
     menuCategory?: "classic" | "vegetarian" | "vegan";
     productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];
+    recipeOverrideId?: string;
     notes?: string;
   }>;
 }
@@ -104,6 +105,21 @@ function applySpecUpdates(
   const componentUpdates = new Map(
     (body.componentUpdates ?? []).map((item) => [item.componentId, item])
   );
+  const nextRecipeOverrideId = (
+    componentId: string,
+    currentRecipeOverrideId?: string
+  ) => {
+    const componentUpdate = componentUpdates.get(componentId);
+    if (!componentUpdate) {
+      return currentRecipeOverrideId;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(componentUpdate, "recipeOverrideId")) {
+      return currentRecipeOverrideId;
+    }
+
+    return componentUpdate.recipeOverrideId?.trim() || undefined;
+  };
 
   const nextSpec = {
     ...spec,
@@ -133,6 +149,7 @@ function applySpecUpdates(
               componentUpdates.get(item.componentId)?.menuCategory
                 ? dietaryTagsForCategory(componentUpdates.get(item.componentId)?.menuCategory)
                 : item.dietaryTags,
+            recipeOverrideId: nextRecipeOverrideId(item.componentId, item.recipeOverrideId),
             productionDecision: componentUpdates.get(item.componentId)
               ? {
                   mode: componentUpdates.get(item.componentId)?.productionMode,
@@ -155,6 +172,10 @@ function applySpecUpdates(
               componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory
                 ? dietaryTagsForCategory(componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory)
                 : spec.menuPlan[index]?.dietaryTags ?? [],
+            recipeOverrideId: nextRecipeOverrideId(
+              spec.menuPlan[index]?.componentId ?? "",
+              spec.menuPlan[index]?.recipeOverrideId
+            ),
             productionDecision:
               componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")
                 ? {
