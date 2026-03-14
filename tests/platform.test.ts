@@ -111,6 +111,27 @@ function withProductionDecision(
   };
 }
 
+function singleComponentSpec(
+  label: string,
+  category: "classic" | "vegetarian" | "vegan" = "classic"
+): AcceptedEventSpec {
+  const spec = specWithComponent(label);
+  return {
+    ...spec,
+    menuPlan: [
+      {
+        ...spec.menuPlan[0],
+        label,
+        menuCategory: category,
+        dietaryTags: category === "classic" ? [] : [category],
+        productionDecision: {
+          mode: "scratch"
+        }
+      }
+    ]
+  };
+}
+
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-"));
 }
@@ -1078,14 +1099,7 @@ describe("catering agents platform", () => {
       discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
       dataRoot
     });
-    const spec = withProductionDecision(
-      normalizeEventRequestToSpec(
-        baseEventRequest(
-          "Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Wildkräutersalat und Petersilien-Vinaigrette."
-        )
-      ),
-      "vegan"
-    );
+    const spec = singleComponentSpec("WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE", "vegan");
 
     const response = await app.inject({
       method: "POST",
@@ -1348,6 +1362,238 @@ describe("catering agents platform", () => {
     expect(storedRecipe?.name).toBe("Vegan Wild Herb Salad with Parsley Vinaigrette");
     expect(storedRecipe?.dietTags).toContain("vegan");
     expect(storedRecipe?.name).not.toContain("Wildkräutersalat Rezept");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("rejects generic mixed salad internet recipes for a specific wild herb salad component", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/mixed-salad",
+        title: "Bunter gemischter Salat - einfach und schnell",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Bunter gemischter Salat",
+          baseYield: {
+            servings: 4,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "lettuce",
+              name: "Blattsalat",
+              quantity: { amount: 200, unit: "g" },
+              group: "produce",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "tomato",
+              name: "Tomate",
+              quantity: { amount: 2, unit: "pcs" },
+              group: "produce",
+              purchaseUnit: "pcs",
+              normalizedUnit: "pcs"
+            }
+          ],
+          steps: [{ index: 1, instruction: "Alles mischen." }],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 4
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 6,
+          stepCount: 2,
+          mappedIngredientRatio: 0.9
+        }
+      }
+    ]);
+    const discovery = new RecipeDiscoveryService(repository, provider);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: discovery,
+      dataRoot
+    });
+    const spec = singleComponentSpec("WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("rejects lava cakes for a Schokoladenkuchen component", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/vegan-lava-cakes",
+        title: "Vegan Chocolate Lava Cakes",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Vegan Chocolate Lava Cakes",
+          baseYield: {
+            servings: 6,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "dark-chocolate",
+              name: "Dark chocolate",
+              quantity: { amount: 250, unit: "g" },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "flour",
+              name: "Flour",
+              quantity: { amount: 120, unit: "g" },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            }
+          ],
+          steps: [{ index: 1, instruction: "Backen." }],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 6
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 8,
+          stepCount: 4,
+          mappedIngredientRatio: 0.92
+        }
+      }
+    ]);
+    const discovery = new RecipeDiscoveryService(repository, provider);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: discovery,
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Schokoladenkuchen vegan.")
+      ),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("rejects chocolate-covered strawberries for a Schokoladenkuchen component", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/chocolate-covered-strawberries",
+        title: "Chocolate covered strawberries",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Chocolate covered strawberries",
+          baseYield: {
+            servings: 8,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "strawberries",
+              name: "Strawberries",
+              quantity: { amount: 500, unit: "g" },
+              group: "produce",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "chocolate",
+              name: "Dark chocolate",
+              quantity: { amount: 300, unit: "g" },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            }
+          ],
+          steps: [{ index: 1, instruction: "Erdbeeren schokolieren." }],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 8
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 6,
+          stepCount: 3,
+          mappedIngredientRatio: 0.9
+        }
+      }
+    ]);
+    const discovery = new RecipeDiscoveryService(repository, provider);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: discovery,
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Schokoladenkuchen vegan.")
+      ),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });

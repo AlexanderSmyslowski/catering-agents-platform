@@ -2070,6 +2070,9 @@ export function App() {
                         const componentLabel = String(component?.label ?? componentId);
                         const qualityScore = formatPercent(selectionRecord.qualityScore);
                         const fitScore = formatPercent(selectionRecord.fitScore);
+                        const searchTrace = Array.isArray(selectionRecord.searchTrace)
+                          ? selectionRecord.searchTrace.map((entry) => String(entry))
+                          : [];
                         return (
                           <li key={componentId}>
                             <strong>{componentLabel}</strong>
@@ -2092,6 +2095,16 @@ export function App() {
                                 {qualityScore ? `Qualität ${qualityScore}` : "Qualität offen"}
                                 {fitScore ? ` · Passung ${fitScore}` : ""}
                               </p>
+                            ) : null}
+                            {searchTrace.length > 0 ? (
+                              <div className="search-trace">
+                                <p className="helper-text">Suchspur:</p>
+                                <ul className="item-list compact trace-list">
+                                  {searchTrace.map((entry) => (
+                                    <li key={`${componentId}-${entry}`}>{entry}</li>
+                                  ))}
+                                </ul>
+                              </div>
                             ) : null}
                           </li>
                         );

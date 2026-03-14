@@ -292,6 +292,7 @@ export interface RecipeSelection {
   recipeId?: string;
   selectionReason: string;
   searchQuery?: string;
+  searchTrace?: string[];
   autoUsedInternetRecipe: boolean;
   sourceTier?: RecipeTier;
   qualityScore?: number;

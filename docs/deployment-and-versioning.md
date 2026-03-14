@@ -56,6 +56,7 @@ Empfohlener Betriebsmodus:
 - Rezepte aus Uploads oder Internet-Fallbacks koennen in der Rezeptliste freigegeben, verifiziert oder abgelehnt werden
 - Service-Gesundheit und Demo-Seeding sind ueber die Admin-Pfade in der Web-App sichtbar
 - die Web-App fuehrt einen Operator-Namen lokal und sendet ihn bei mutierenden Aktionen mit, damit Audit-Eintraege personell nachvollziehbar bleiben
+- bei Produktionsplaenen wird pro Gericht eine Suchspur angezeigt, damit interne Treffer, Websuchen und Verwerfungsgruende nachvollziehbar bleiben
 - Rollen und Rechte werden in der App und vor dem Reverse Proxy geregelt
 
 Fuer die lokale MVP-Nutzung gibt es jetzt auch einen Ein-Kommando-Start:

@@ -114,6 +114,7 @@ Angebotsvarianten koennen ausserdem direkt aus der UI in operative `AcceptedEven
 Unvollstaendige `AcceptedEventSpec`-Datensaetze lassen sich im Intake-Bereich nun direkt im Backoffice nachbearbeiten und erneut validieren.
 Zusatzlich gibt es jetzt einen strukturierten manuellen Intake-Pfad, der ohne Freitext direkt ein `AcceptedEventSpec` aus Formularfeldern erzeugt.
 Die Web-App zeigt ausserdem Detailansichten fuer Angebotsentwuerfe und Produktionsplaene, damit operative Inhalte direkt lesbar sind.
+Bei Produktionslaeufen ist nun auch eine Suchspur je Gericht sichtbar: interne Kandidaten, ausgefuehrte Websuchen und Verwerfungsgruende werden direkt an der Rezeptauswahl angezeigt.
 
 ## Docker / Hetzner-MVP
 

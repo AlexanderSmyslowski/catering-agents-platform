@@ -119,6 +119,10 @@ export const productionPlanSchema = {
           recipeId: { type: "string" },
           selectionReason: { type: "string" },
           searchQuery: { type: "string" },
+          searchTrace: {
+            type: "array",
+            items: { type: "string" }
+          },
           autoUsedInternetRecipe: { type: "boolean" },
           sourceTier: {
             enum: [
@@ -139,4 +143,3 @@ export const productionPlanSchema = {
     }
   }
 } as const;
-

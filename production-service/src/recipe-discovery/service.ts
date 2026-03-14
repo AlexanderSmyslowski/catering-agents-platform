@@ -62,8 +62,11 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   nüsse: ["nuts"],
   wildkräutersalat: ["herb", "salad"],
   wildkraeutersalat: ["herb", "salad"],
+  wildkrautersalat: ["wild", "herb", "salad"],
   wildkräuter: ["herbs"],
+  wildkrauter: ["wild", "herbs"],
   petersilie: ["parsley"],
+  petersilien: ["parsley"],
   vinaigrette: ["vinaigrette"],
   brot: ["bread"],
   baguette: ["baguette"],
@@ -257,6 +260,33 @@ function leadSpecificPrimaryToken(component: MenuComponent): string | undefined 
   return specificPrimaryFocusTokens(component)[0];
 }
 
+function webSpecificFocusTokens(component: MenuComponent): string[] {
+  const archetypes = new Set(
+    [
+      dishArchetypeForComponent(component, "de"),
+      dishArchetypeForComponent(component, "en")
+    ]
+      .filter(Boolean)
+      .flatMap((value) => normalizeTokens(value as string))
+  );
+  const expanded = new Set<string>();
+
+  for (const token of specificPrimaryFocusTokens(component)) {
+    if (genericPrimaryTokens.has(token) || archetypes.has(token)) {
+      continue;
+    }
+
+    expanded.add(token);
+    for (const synonym of culinaryTokenExpansions[token] ?? []) {
+      if (!genericPrimaryTokens.has(synonym) && !archetypes.has(synonym)) {
+        expanded.add(synonym);
+      }
+    }
+  }
+
+  return [...expanded];
+}
+
 function translateLabelForLocale(label: string, locale: "de" | "en"): string {
   if (locale !== "en") {
     return label;
@@ -351,12 +381,21 @@ function genericSearchSeeds(
 
   if (/schokoladenkuchen|schokokuchen/.test(normalized)) {
     seeds.add(locale === "de" ? "schokoladenkuchen" : "chocolate cake");
+    seeds.add(locale === "de" ? "veganer schokoladenkuchen" : "vegan chocolate cake");
+    if (component.serviceStyle === "buffet") {
+      seeds.add(locale === "de" ? "schokoladen blechkuchen" : "chocolate sheet cake");
+    }
   }
   if (/kraut|karott/.test(normalized)) {
     seeds.add(locale === "de" ? "karotten krautsalat" : "coleslaw cabbage carrot");
   }
   if (/wildkräuter|wildkraeuter|wild.*salat|kräutersalat|kraeutersalat/.test(normalized)) {
     seeds.add(locale === "de" ? "wildkräutersalat" : "herb salad");
+    seeds.add(
+      locale === "de"
+        ? "wildkräutersalat petersilien vinaigrette"
+        : "wild herb salad parsley vinaigrette"
+    );
   }
   if (/zucchini|pilze|pilz|pak-choi|zuckerschoten/.test(normalized)) {
     seeds.add(locale === "de" ? "gemüsepfanne" : "vegetable stir fry");
@@ -415,7 +454,14 @@ function buildSearchQueries(
   return [
     ...new Set(
       baseQueries
-        .map((query) => query.replace(/\s+/g, " ").trim())
+        .map((query) =>
+          query
+            .replace(/\s+/g, " ")
+            .trim()
+            .split(" ")
+            .filter((token, index, tokens) => token && token !== tokens[index - 1])
+            .join(" ")
+        )
         .filter((query) => query.length > 0)
     )
   ];
@@ -474,6 +520,54 @@ function specificPrimaryMatchScore(recipeText: string, component: MenuComponent)
       recipeTokens.some((recipeToken) => tokensSpecificallyMatch(token, recipeToken))
     ).length / Math.max(focusTokens.length, 1)
   );
+}
+
+function webSpecificMatchScore(recipeText: string, component: MenuComponent): number {
+  const focusTokens = webSpecificFocusTokens(component);
+  if (focusTokens.length === 0) {
+    return 1;
+  }
+
+  const recipeTokens = [
+    ...new Set([...searchableSpecificTokens(recipeText), ...normalizeTokens(recipeText)])
+  ];
+  return (
+    focusTokens.filter((token) =>
+      recipeTokens.some((recipeToken) => tokensSpecificallyMatch(token, recipeToken))
+    ).length / Math.max(focusTokens.length, 1)
+  );
+}
+
+function candidateFormMismatch(candidateText: string, component: MenuComponent): boolean {
+  const normalized = normalizeComparableText(candidateText);
+  const query = normalizeComparableText(component.label);
+  const archetype = dishArchetypeForComponent(component, "en") ?? dishArchetypeForComponent(component, "de");
+
+  if (/(schokoladenkuchen|kuchen|cake)/.test(query)) {
+    if (/\b(lava cake|lava cakes|brownie|brownies|muffin|muffins|cupcake|cupcakes|cookie|cookies)\b/.test(normalized)) {
+      return true;
+    }
+    if (
+      /\b(chocolate covered strawberries|strawberry|strawberries|erdbeer|erdbeeren|truffles|mousse|pudding)\b/.test(
+        normalized
+      ) &&
+      !/\b(cake|kuchen|sheet cake|blechkuchen)\b/.test(normalized)
+    ) {
+      return true;
+    }
+  }
+
+  if (/(wildkrauter|wildkr[aä]uter|petersilien|vinaigrette)/.test(query)) {
+    if (/\b(gemischter salat|mixed salad|garden salad|beilagensalat)\b/.test(normalized)) {
+      return true;
+    }
+  }
+
+  if (archetype === "cake" && !/\b(cake|kuchen|sheet cake|blechkuchen)\b/.test(normalized)) {
+    return true;
+  }
+
+  return false;
 }
 
 function hostnameFor(url: string): string {
@@ -707,6 +801,12 @@ export class RecipeDiscoveryService {
     component: MenuComponent,
     eventSpec: AcceptedEventSpec
   ): Promise<RecipeResolution> {
+    const searchTrace: string[] = [];
+    const pushTrace = (message: string) => {
+      if (searchTrace.length < 12) {
+        searchTrace.push(message);
+      }
+    };
     const repositoryCandidates = await this.repository.findCandidates(component);
     const internalCandidates = repositoryCandidates
       .filter((recipe) => recipeSupportsMenuCategory(recipe, component))
@@ -757,8 +857,20 @@ export class RecipeDiscoveryService {
         return rightScore - leftScore;
       });
 
+    if (repositoryCandidates.length > 0) {
+      pushTrace(
+        `Interne Kandidaten: ${repositoryCandidates
+          .slice(0, 3)
+          .map((recipe) => recipe.name)
+          .join(", ")}`
+      );
+    } else {
+      pushTrace("Interne Kandidaten: keine Treffer.");
+    }
+
     const internalWinner = internalCandidates[0];
     if (internalWinner?.recipe) {
+      pushTrace(`Interner Treffer gewählt: ${internalWinner.recipe.name}.`);
       return {
         recipe: internalWinner.recipe,
         selection: {
@@ -766,6 +878,7 @@ export class RecipeDiscoveryService {
           recipeId: internalWinner.recipe.recipeId,
           selectionReason: "Passendes Rezept in der internen Bibliothek gefunden.",
           autoUsedInternetRecipe: false,
+          searchTrace,
           sourceTier: internalWinner.recipe.source.tier,
           qualityScore: internalWinner.recipe.source.qualityScore,
           fitScore: internalWinner.fitScore
@@ -792,13 +905,16 @@ export class RecipeDiscoveryService {
 
         let searchResults: WebRecipeCandidate[] = [];
         try {
+          pushTrace(`Websuche: ${query.query}`);
           searchResults = await this.webProvider.searchRecipes(query);
         } catch {
           webSearchFailed = true;
+          pushTrace(`Websuche fehlgeschlagen: ${query.query}`);
         }
 
         for (const candidate of searchResults) {
           if (!candidateSupportsMenuCategory(candidate, component)) {
+            pushTrace(`Verworfen: ${candidate.title} (Kategorie passt nicht).`);
             continue;
           }
 
@@ -806,13 +922,24 @@ export class RecipeDiscoveryService {
             isCollectionLikeCandidate(candidate) &&
             (candidate.qualitySignals.stepCount < 4 || candidate.qualitySignals.ingredientCount < 6)
           ) {
+            pushTrace(`Verworfen: ${candidate.title} (Sammlungs-/Übersichtsseite).`);
             continue;
           }
 
           const qualityScore = qualityScoreForCandidate(candidate);
           const compatibility = evaluateMenuCategoryCompatibility(candidate, component);
           const fitScore = fitScoreForRecipe(candidateRecipeText(candidate), component, eventSpec);
+          const specificFitScore = webSpecificMatchScore(candidateRecipeText(candidate), component);
           if (fitScore < 0.2) {
+            pushTrace(`Verworfen: ${candidate.title} (zu geringe Textpassung).`);
+            continue;
+          }
+          if (specificFitScore === 0) {
+            pushTrace(`Verworfen: ${candidate.title} (keine Fachbegriffe des Gerichts getroffen).`);
+            continue;
+          }
+          if (candidateFormMismatch(candidateRecipeText(candidate), component)) {
+            pushTrace(`Verworfen: ${candidate.title} (falsches Rezeptformat).`);
             continue;
           }
           const extractionCompleteness = extractionCompletenessForCandidate(candidate);
@@ -879,6 +1006,7 @@ export class RecipeDiscoveryService {
               : component.menuCategory === "vegetarian"
                 ? "Es konnte kein interner oder externer vegetarischer Rezeptkandidat belastbar validiert werden."
                 : "Es konnte kein interner oder externer Rezeptkandidat belastbar validiert werden.",
+          searchTrace,
           autoUsedInternetRecipe: false
         },
         unresolvedItems: [unresolvedReason]
@@ -886,6 +1014,7 @@ export class RecipeDiscoveryService {
     }
 
     await this.repository.save(winner.recipe);
+    pushTrace(`Webtreffer gewählt: ${winner.recipe.name}.`);
 
     const unresolvedItems =
       winner.recipe.source.approvalState === "review_required"
@@ -902,6 +1031,7 @@ export class RecipeDiscoveryService {
             ? "Internet-Ausweichrezept mit ausreichender Qualität automatisch ausgewählt."
             : "Internet-Ausweichrezept ausgewählt, aber zur Prüfung markiert.",
         searchQuery: winner.query.query,
+        searchTrace,
         autoUsedInternetRecipe: winner.recipe.source.approvalState === "auto_usable",
         sourceTier: winner.recipe.source.tier,
         qualityScore: winner.recipe.source.qualityScore,

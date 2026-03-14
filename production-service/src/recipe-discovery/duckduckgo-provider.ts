@@ -9,7 +9,7 @@ type SearchResultLink = {
 };
 
 const recipeCuePattern =
-  /\b(rezept|recipe|salat|salad|curry|cake|kuchen|suppe|soup|bread|brot|baguette|vinaigrette|dessert|gem[uü]sepfanne|wildkr[aä]uter|krautsalat|karottensalat|coleslaw|pfanne)\b/i;
+  /\b(rezept|recipe|salat|salad|curry|cake|kuchen|suppe|soup|bread|brot|baguette|vinaigrette|dessert|gem[uü]sepfanne|wildkr[aä]uter|wild herb|parsley|krautsalat|karottensalat|coleslaw|pfanne)\b/i;
 const collectionPagePattern =
   /\b(top\s*\d+|\d+\s+(extra\s+schnelle|schnelle|beste|best|easy|einfache?)\b|best\s+\w+\s+(recipes?|salads?|cakes?|desserts?)|ideen|ideas|sammlung|collection|best of|die leckersten|die besten)\b/i;
 
@@ -100,6 +100,17 @@ function prioritizedHostsForQuery(query: RecipeSearchQuery): string[] {
     for (const host of ["essen-und-trinken.de", "chefkoch.de", "eat.de", "gutekueche.at"]) {
       hosts.add(host);
     }
+    if (query.component.menuCategory === "vegan") {
+      for (const host of [
+        "noracooks.com",
+        "rainbowplantlife.com",
+        "lovingitvegan.com",
+        "biancazapatka.com",
+        "veggie-einhorn.de"
+      ]) {
+        hosts.add(host);
+      }
+    }
   }
 
   if (/curry|gem[uü]sepfanne|pak-choi|zucchini|pilze|bread|brot|baguette/.test(label)) {
@@ -126,13 +137,23 @@ function searchResultScore(result: SearchResultLink, query: RecipeSearchQuery): 
       : query.component.menuCategory === "vegetarian" && /\b(vegetarisch|vegetarian|vegan)\b/i.test(haystack)
         ? 1
         : 0;
+  const herbBoost =
+    /wildkr[aä]uter|wild herb|parsley|petersilie|vinaigrette/i.test(haystack) &&
+    /wildkr[aä]uter|wild herb|parsley|petersilie|vinaigrette/i.test(query.query)
+      ? 1.25
+      : 0;
+  const cakeFormBoost =
+    /schokoladenkuchen|schokokuchen|chocolate cake|sheet cake|blechkuchen/i.test(haystack) &&
+    /schokoladenkuchen|schokokuchen|chocolate cake|sheet cake|blechkuchen/i.test(query.query)
+      ? 1.25
+      : 0;
   const collectionPenalty = /\b(top\s*\d+|sammlung|collection|ideen|ideas|besten|best of|die besten)\b/i.test(
     haystack
   )
     ? 3
     : 0;
 
-  return trustedBoost + explicitCategoryBoost + tokenOverlap - collectionPenalty;
+  return trustedBoost + explicitCategoryBoost + herbBoost + cakeFormBoost + tokenOverlap - collectionPenalty;
 }
 
 function isLikelyRecipeResult(result: SearchResultLink): boolean {
