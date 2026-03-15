@@ -105,6 +105,52 @@ function procurementItemsForComponent(
   return [];
 }
 
+function purchasedElementsSummary(component: AcceptedEventSpec["menuPlan"][number]): string {
+  const purchasedElements = component.productionDecision?.purchasedElements ?? [];
+  return purchasedElements.length > 0 ? purchasedElements.join(", ") : "noch offen";
+}
+
+function procurementKitchenSheet(
+  component: AcceptedEventSpec["menuPlan"][number],
+  servings: number
+): ProductionPlan["kitchenSheets"][number] {
+  const mode = component.productionDecision?.mode;
+  const modeLabel =
+    mode === "convenience_purchase"
+      ? "Convenience-Zukauf"
+      : mode === "external_finished"
+        ? "Fertigprodukt / externer Bezug"
+        : "Beschaffung";
+
+  return {
+    title: `${component.label} - ${modeLabel}`,
+    instructions: [
+      `Menge einplanen: ${servings} Portionen.`,
+      `Beschaffung laut Herstellungsart: ${modeLabel}.`,
+      `Zugekaufte Bestandteile: ${purchasedElementsSummary(component)}.`,
+      "Lieferquelle und Gebinde vor Bestellung kurz prüfen.",
+      "Komponente vor Service optisch und mengenmäßig gegen das Angebot prüfen."
+    ]
+  };
+}
+
+function unresolvedKitchenSheet(
+  component: AcceptedEventSpec["menuPlan"][number],
+  servings: number,
+  reason: string
+): ProductionPlan["kitchenSheets"][number] {
+  return {
+    title: `${component.label} - Rezeptklärung nötig`,
+    instructions: [
+      `Aktuell geplant für ${servings} Portionen.`,
+      reason,
+      "Für diese Komponente liegt derzeit noch kein belastbares Rezept vor.",
+      "Bitte Bibliotheksrezept zuweisen, neues Rezept hochladen oder Herstellungsart auf Beschaffung umstellen.",
+      "Danach die Produktionsplanung erneut starten."
+    ]
+  };
+}
+
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
   discoveryService: RecipeDiscoveryService
@@ -123,34 +169,52 @@ export async function buildProductionArtifacts(
     const purchasedElements = component.productionDecision?.purchasedElements ?? [];
 
     if (!component.menuCategory) {
+      const reason = "Gerichtsklassifikation fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.";
       recipeSelections.push({
         componentId: component.componentId,
-        selectionReason: "Gerichtsklassifikation fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.",
+        selectionReason: reason,
         autoUsedInternetRecipe: false
       });
       unresolvedItems.push(`Klassifikation für ${component.label} fehlt.`);
+      kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
+      timeline.push({
+        label: `${component.label} fachlich klären`,
+        at: prepWindowFor(eventSpec)
+      });
       continue;
     }
 
     if (!productionMode) {
+      const reason =
+        "Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.";
       recipeSelections.push({
         componentId: component.componentId,
-        selectionReason:
-          "Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.",
+        selectionReason: reason,
         autoUsedInternetRecipe: false
       });
       unresolvedItems.push(`Herstellungsentscheidung für ${component.label} fehlt.`);
+      kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
+      timeline.push({
+        label: `${component.label} Herstellungsart klären`,
+        at: prepWindowFor(eventSpec)
+      });
       continue;
     }
 
     if ((productionMode === "hybrid" || productionMode === "convenience_purchase") && purchasedElements.length === 0) {
+      const reason =
+        "Hybrid-/Convenience-Entscheidung ist gesetzt, aber die zugekauften Bestandteile sind noch nicht benannt.";
       recipeSelections.push({
         componentId: component.componentId,
-        selectionReason:
-          "Hybrid-/Convenience-Entscheidung ist gesetzt, aber die zugekauften Bestandteile sind noch nicht benannt.",
+        selectionReason: reason,
         autoUsedInternetRecipe: false
       });
       unresolvedItems.push(`Zugekaufte Bestandteile für ${component.label} fehlen.`);
+      kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
+      timeline.push({
+        label: `${component.label} Beschaffungsanteil klären`,
+        at: prepWindowFor(eventSpec)
+      });
       continue;
     }
 
@@ -164,6 +228,14 @@ export async function buildProductionArtifacts(
             : "Komponente ist als Fertigprodukt markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen.",
         autoUsedInternetRecipe: false
       });
+      kitchenSheets.push(procurementKitchenSheet(component, servings));
+      timeline.push({
+        label:
+          productionMode === "convenience_purchase"
+            ? `${component.label} beschaffen`
+            : `${component.label} extern disponieren`,
+        at: prepWindowFor(eventSpec)
+      });
       continue;
     }
 
@@ -176,6 +248,17 @@ export async function buildProductionArtifacts(
     unresolvedItems.push(...resolution.unresolvedItems);
 
     if (!resolution.recipe || servings <= 0) {
+      kitchenSheets.push(
+        unresolvedKitchenSheet(
+          component,
+          servings,
+          resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden."
+        )
+      );
+      timeline.push({
+        label: `${component.label} Rezeptklärung`,
+        at: prepWindowFor(eventSpec)
+      });
       continue;
     }
 
@@ -192,7 +275,12 @@ export async function buildProductionArtifacts(
     productionBatches.push(batch);
     kitchenSheets.push({
       title: `${component.label} - ${resolution.recipe.name}`,
-      instructions: batch.steps.map((step) => `${step.index}. ${step.instruction}`)
+      instructions: [
+        ...batch.steps.map((step) => `${step.index}. ${step.instruction}`),
+        ...(productionMode === "hybrid"
+          ? [`Zukaufteil separat disponieren: ${purchasedElementsSummary(component)}.`]
+          : [])
+      ]
     });
     timeline.push({
       label: `${component.label} vorbereiten`,

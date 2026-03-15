@@ -610,11 +610,17 @@ describe("catering agents platform", () => {
     const body = response.json();
     expect(body.productionPlan.readiness.status).toBe("complete");
     expect(body.productionPlan.productionBatches.length).toBeGreaterThan(0);
+    expect(body.productionPlan.kitchenSheets.length).toBeGreaterThanOrEqual(2);
     expect(
       body.productionPlan.recipeSelections.find(
         (entry: { componentId: string }) => entry.componentId === "brot-baguette-2"
       ).selectionReason
     ).toContain("Einkaufsliste");
+    expect(
+      body.productionPlan.kitchenSheets.some((sheet: { title: string }) =>
+        sheet.title.includes("BROT & BAGUETTE")
+      )
+    ).toBe(true);
     expect(
       body.purchaseList.items.some((item: { displayName: string }) =>
         item.displayName.includes("Kaffeefilter")
@@ -623,6 +629,40 @@ describe("catering agents platform", () => {
     expect(
       body.purchaseList.items.some((item: { displayName: string }) => item.displayName.includes("Baguette"))
     ).toBe(true);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("creates clarification sheets when recipe resolution remains open", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("Mystery Bowl", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.productionBatches).toHaveLength(0);
+    expect(body.productionPlan.kitchenSheets).toHaveLength(1);
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Rezeptklärung nötig");
+    expect(
+      body.productionPlan.kitchenSheets[0].instructions.some((instruction: string) =>
+        instruction.includes("belastbares Rezept")
+      )
+    ).toBe(true);
+    expect(body.productionPlan.unresolvedItems.length).toBeGreaterThan(0);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });

@@ -314,12 +314,14 @@ function renderPlanList(
         const relatedSpec = specById.get(String(plan.eventSpecId ?? ""));
         const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
         const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
+        const sheetCount = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets.length : 0;
         return (
           <li key={String(plan.planId)}>
             <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Produktionsplan"}</strong>
             <p>
               Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}
-              {" · "}Produktionsblätter: {batchCount}
+              {" · "}Arbeitsblätter: {sheetCount}
+              {" · "}Rezeptblätter: {batchCount}
               {" · "}Offene Punkte: {unresolvedCount}
             </p>
             <div className="action-row">
@@ -2141,8 +2143,8 @@ export function App() {
                         )
                       )}`
                     : ""}
-                  {" · "}Produktionsblätter:{" "}
-                  {Array.isArray(selectedPlan.productionBatches) ? selectedPlan.productionBatches.length : 0}
+                  {" · "}Arbeitsblätter: {Array.isArray(selectedPlan.kitchenSheets) ? selectedPlan.kitchenSheets.length : 0}
+                  {" · "}Rezeptblätter: {Array.isArray(selectedPlan.productionBatches) ? selectedPlan.productionBatches.length : 0}
                 </p>
                 {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0 ? (
                   <>
@@ -2156,10 +2158,13 @@ export function App() {
                 ) : (
                   <p>Offene Punkte: keine</p>
                 )}
-                {Array.isArray(selectedPlan.productionBatches) && selectedPlan.productionBatches.length === 0 ? (
+                {Array.isArray(selectedPlan.productionBatches) &&
+                selectedPlan.productionBatches.length === 0 &&
+                Array.isArray(selectedPlan.kitchenSheets) &&
+                selectedPlan.kitchenSheets.length > 0 ? (
                   <p className="helper-text">
-                    Belastbare Produktionsblätter entstehen erst, wenn für alle relevanten Komponenten ein nutzbares
-                    Rezept oder eine eindeutige Beschaffungsentscheidung vorliegt.
+                    Es liegen bereits operative Arbeitsblätter vor. Rezeptblätter entstehen zusätzlich, sobald für die
+                    offenen Komponenten ein belastbares Rezept oder eine eindeutige Beschaffungsentscheidung vorliegt.
                   </p>
                 ) : null}
                 <ul className="item-list compact">
@@ -2212,6 +2217,35 @@ export function App() {
                       })
                     : null}
                 </ul>
+                {Array.isArray(selectedPlan.kitchenSheets) && selectedPlan.kitchenSheets.length > 0 ? (
+                  <>
+                    <div className="divider" />
+                    <header>
+                      <p className="eyebrow">Arbeitsblätter</p>
+                      <h4 className="subsection-title">Küche, Beschaffung und Klärungen</h4>
+                    </header>
+                    <ul className="item-list compact">
+                      {selectedPlan.kitchenSheets.map((sheet, sheetIndex) => {
+                        const sheetRecord = sheet as Record<string, unknown>;
+                        const instructions = Array.isArray(sheetRecord.instructions)
+                          ? sheetRecord.instructions.map((entry) => String(entry))
+                          : [];
+                        return (
+                          <li key={`${String(sheetRecord.title ?? "Arbeitsblatt")}-${sheetIndex}`}>
+                            <strong>{String(sheetRecord.title ?? "Arbeitsblatt")}</strong>
+                            <ul className="item-list compact trace-list">
+                              {instructions.map((instruction) => (
+                                <li key={`${String(sheetRecord.title ?? "Arbeitsblatt")}-${instruction}`}>
+                                  {instruction}
+                                </li>
+                              ))}
+                            </ul>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : null}
               </>
             ) : null}
           </article>
