@@ -62,6 +62,7 @@ Empfohlener Betriebsmodus:
 Fuer die lokale MVP-Nutzung gibt es jetzt auch einen Ein-Kommando-Start:
 
 - `npm run local:start` startet UI, Intake, Offer, Production und Export mit gemeinsamem `CATERING_DATA_ROOT`
+- lokal laufen die Dienste in getrennten `screen`-Sitzungen mit automatischem Neustart pro Dienst
 - `npm run local:status` zeigt den aktuellen lokalen Stack-Status
 - `npm run local:stop` beendet den lokalen Stack wieder
 

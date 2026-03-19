@@ -2,31 +2,32 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
-
-stop_pid_file() {
-  local name="$1"
-  local pid_file="${RUNTIME_DIR}/${name}.pid"
-
-  if [[ ! -f "${pid_file}" ]]; then
-    return 0
+stop_screen_session() {
+  local session_name="$1"
+  if (screen -ls 2>/dev/null || true) | grep -q "\\.${session_name}[[:space:]]"; then
+    echo "Stoppe ${session_name}..."
+    screen -S "${session_name}" -X quit || true
   fi
-
-  local pid
-  pid="$(cat "${pid_file}")"
-  if kill -0 "${pid}" >/dev/null 2>&1; then
-    echo "Stoppe ${name} (${pid})..."
-    kill "${pid}" >/dev/null 2>&1 || true
-  fi
-
-  rm -f "${pid_file}"
 }
 
-stop_pid_file "ui"
-stop_pid_file "exports"
-stop_pid_file "production"
-stop_pid_file "offer"
-stop_pid_file "intake"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  launchctl bootout "gui/$(id -u)/com.cateringagents.ui" >/dev/null 2>&1 || true
+  launchctl bootout "gui/$(id -u)/com.cateringagents.exports" >/dev/null 2>&1 || true
+  launchctl bootout "gui/$(id -u)/com.cateringagents.production" >/dev/null 2>&1 || true
+  launchctl bootout "gui/$(id -u)/com.cateringagents.offer" >/dev/null 2>&1 || true
+  launchctl bootout "gui/$(id -u)/com.cateringagents.intake" >/dev/null 2>&1 || true
+  rm -f \
+    "${HOME}/Library/LaunchAgents/com.cateringagents.intake.plist" \
+    "${HOME}/Library/LaunchAgents/com.cateringagents.offer.plist" \
+    "${HOME}/Library/LaunchAgents/com.cateringagents.production.plist" \
+    "${HOME}/Library/LaunchAgents/com.cateringagents.exports.plist" \
+    "${HOME}/Library/LaunchAgents/com.cateringagents.ui.plist"
+fi
+
+stop_screen_session "catering-ui"
+stop_screen_session "catering-exports"
+stop_screen_session "catering-production"
+stop_screen_session "catering-offer"
+stop_screen_session "catering-intake"
 
 echo "Lokaler Stack gestoppt."

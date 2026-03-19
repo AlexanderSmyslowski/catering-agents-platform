@@ -32,6 +32,8 @@ Fuer den kompletten lokalen Stack mit Demo-Daten:
 npm run local:start
 ```
 
+Der lokale Stack laeuft dabei bewusst in getrennten `screen`-Sitzungen mit automatischem Neustart pro Dienst. Dadurch bleiben UI und Agenten auch dann erreichbar, wenn das startende Terminal oder die Codex-Sitzung endet.
+
 Status und Stop:
 
 ```bash
