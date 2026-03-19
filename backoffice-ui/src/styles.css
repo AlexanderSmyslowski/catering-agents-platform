@@ -126,6 +126,62 @@ select {
   flex-wrap: wrap;
 }
 
+.agent-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.agent-shortcut {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-height: 5.5rem;
+  padding: 1rem 1.1rem;
+  border-radius: 1.35rem;
+  text-decoration: none;
+  color: #05111f;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 248, 253, 0.78)),
+    linear-gradient(130deg, rgba(198, 223, 255, 0.25), rgba(255, 255, 255, 0));
+  border: 1px solid rgba(15, 23, 34, 0.08);
+  box-shadow:
+    0 14px 36px rgba(31, 57, 89, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.agent-shortcut strong {
+  font-size: 1.02rem;
+  letter-spacing: -0.02em;
+}
+
+.agent-shortcut span {
+  color: rgba(15, 23, 34, 0.68);
+  font-size: 0.94rem;
+}
+
+.agent-shortcut:hover,
+.agent-shortcut:focus-visible {
+  transform: translateY(-1px);
+  box-shadow:
+    0 18px 42px rgba(31, 57, 89, 0.11),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  border-color: rgba(42, 93, 157, 0.18);
+}
+
+.agent-shortcut--active {
+  background:
+    linear-gradient(180deg, rgba(239, 247, 255, 0.96), rgba(233, 243, 255, 0.88)),
+    linear-gradient(135deg, rgba(111, 177, 255, 0.18), rgba(255, 255, 255, 0));
+  border-color: rgba(59, 116, 186, 0.22);
+}
+
 .nav-link,
 .button-link {
   display: inline-flex;

@@ -1119,6 +1119,21 @@ export function App() {
     }
   ];
 
+  const agentShortcutButtons = [
+    {
+      href: "/angebot",
+      title: "Angebotsagent öffnen",
+      description: "Anfragen strukturieren und Angebote erstellen",
+      active: route === "offer"
+    },
+    {
+      href: "/produktion",
+      title: "Produktionsagent öffnen",
+      description: "Rezepte, Küchenplanung und Einkaufslisten",
+      active: route === "production"
+    }
+  ];
+
   return (
     <DashboardShell title={getRouteTitle(route)} subtitle={getRouteSubtitle(route)}>
       <section className="masthead-card">
@@ -1151,6 +1166,18 @@ export function App() {
               Aktualisieren
             </button>
           </div>
+        </div>
+        <div className="agent-shortcuts" aria-label="Direkteinstieg Agenten">
+          {agentShortcutButtons.map((button) => (
+            <a
+              key={button.href}
+              className={button.active ? "agent-shortcut agent-shortcut--active" : "agent-shortcut"}
+              href={button.href}
+            >
+              <strong>{button.title}</strong>
+              <span>{button.description}</span>
+            </a>
+          ))}
         </div>
 
         {route === "home" ? (
