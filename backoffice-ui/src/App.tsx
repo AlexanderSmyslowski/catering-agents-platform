@@ -1,6 +1,7 @@
 import {
   startTransition,
   type CSSProperties,
+  type ChangeEvent,
   type DragEvent,
   useDeferredValue,
   useEffect,
@@ -404,6 +405,7 @@ export function App() {
   const [editingComponentStates, setEditingComponentStates] = useState<Record<string, ComponentEditState>>({});
   const deferredSearch = useDeferredValue(search);
   const productionResultsRef = useRef<HTMLDivElement | null>(null);
+  const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDashboard = useEffectEvent(async () => {
     setLoading(true);
@@ -1012,6 +1014,47 @@ export function App() {
     route
   ]);
 
+  useEffect(() => {
+    if (route !== "production") {
+      return;
+    }
+
+    const handleWindowDragOver = (event: globalThis.DragEvent) => {
+      if (!event.dataTransfer?.types?.includes("Files")) {
+        return;
+      }
+      event.preventDefault();
+      setDragActive(true);
+    };
+
+    const handleWindowDrop = (event: globalThis.DragEvent) => {
+      if (!event.dataTransfer?.files?.length) {
+        return;
+      }
+      event.preventDefault();
+      setDragActive(false);
+      const file = event.dataTransfer.files[0];
+      setIntakeFile(file);
+      void processIncomingProductionFile(file, channelForFile(file));
+    };
+
+    const handleWindowDragLeave = (event: globalThis.DragEvent) => {
+      if (event.relatedTarget === null) {
+        setDragActive(false);
+      }
+    };
+
+    window.addEventListener("dragover", handleWindowDragOver);
+    window.addEventListener("drop", handleWindowDrop);
+    window.addEventListener("dragleave", handleWindowDragLeave);
+
+    return () => {
+      window.removeEventListener("dragover", handleWindowDragOver);
+      window.removeEventListener("drop", handleWindowDrop);
+      window.removeEventListener("dragleave", handleWindowDragLeave);
+    };
+  }, [route]);
+
   async function handlePromoteDraft(draftId: string, variantId?: string) {
     setSubmitting(true);
     clearMessages();
@@ -1099,7 +1142,23 @@ export function App() {
     if (!file) {
       return;
     }
+    setIntakeFile(file);
     void processIncomingProductionFile(file, channelForFile(file));
+  }
+
+  function handleProductionFileSelection(event: ChangeEvent<HTMLInputElement>) {
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      return;
+    }
+    setDragActive(false);
+    setIntakeFile(nextFile);
+    void processIncomingProductionFile(nextFile, channelForFile(nextFile));
+    event.target.value = "";
+  }
+
+  function openProductionFilePicker() {
+    productionUploadInputRef.current?.click();
   }
 
   const routeCards = [
@@ -1590,6 +1649,20 @@ export function App() {
       {route === "production" ? (
         <section className="wide-grid">
           <article className="panel form-panel">
+            <div className="upload-shortcut-bar">
+              <div>
+                <p className="eyebrow">Schnellimport</p>
+                <strong>Datei hochladen oder einfach irgendwo auf dieser Seite ablegen</strong>
+                <p className="helper-text">
+                  Der Upload bleibt dauerhaft sichtbar. Drag & Drop reagiert jetzt auf die gesamte Produktionsansicht.
+                </p>
+              </div>
+              <div className="action-row">
+                <button type="button" disabled={submitting} onClick={openProductionFilePicker}>
+                  Datei hochladen
+                </button>
+              </div>
+            </div>
             <header>
               <p className="eyebrow">Schritt 1</p>
               <h3>Angebot hineinziehen oder hochladen</h3>
@@ -1604,17 +1677,11 @@ export function App() {
               onDrop={handleProductionDrop}
             >
               <input
+                ref={productionUploadInputRef}
                 className="visually-hidden"
                 type="file"
                 accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
-                onChange={(event) => {
-                  const nextFile = event.target.files?.[0] ?? null;
-                  if (!nextFile) {
-                    return;
-                  }
-                  setDragActive(false);
-                  void processIncomingProductionFile(nextFile, channelForFile(nextFile));
-                }}
+                onChange={handleProductionFileSelection}
               />
               <span className="eyebrow">Drag & Drop</span>
               <strong>Angebot, E-Mail oder Textdatei hier ablegen</strong>
