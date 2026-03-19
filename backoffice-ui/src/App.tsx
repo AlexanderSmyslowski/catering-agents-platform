@@ -384,6 +384,7 @@ export function App() {
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string>();
+  const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [activeDocumentName, setActiveDocumentName] = useState<string>();
   const [documentPhase, setDocumentPhase] = useState<"idle" | "analysing" | "done">("idle");
@@ -515,6 +516,10 @@ export function App() {
   );
 
   const focusedProductionSpec = useMemo(() => {
+    if (productionWorkspaceCleared) {
+      return undefined;
+    }
+
     const preferred = focusedProductionSpecId
       ? dashboard.acceptedSpecs.find((spec) => String(spec.specId) === focusedProductionSpecId)
       : undefined;
@@ -523,11 +528,15 @@ export function App() {
       filteredSpecs[filteredSpecs.length - 1] ??
       dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1]
     );
-  }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId]);
+  }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared]);
 
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
 
   const currentSpecPlans = useMemo(() => {
+    if (productionWorkspaceCleared) {
+      return [];
+    }
+
     if (!currentProductionSpecId) {
       return orderedPlans;
     }
@@ -535,16 +544,20 @@ export function App() {
       (plan) => String(plan.eventSpecId ?? "") === currentProductionSpecId
     );
     return matchingPlans.length > 0 ? matchingPlans : orderedPlans;
-  }, [currentProductionSpecId, orderedPlans]);
+  }, [currentProductionSpecId, orderedPlans, productionWorkspaceCleared]);
 
   const archivedPlans = useMemo(() => {
-    if (!currentProductionSpecId) {
+    if (!currentProductionSpecId || productionWorkspaceCleared) {
       return [];
     }
     return orderedPlans.filter((plan) => String(plan.eventSpecId ?? "") !== currentProductionSpecId);
-  }, [currentProductionSpecId, orderedPlans]);
+  }, [currentProductionSpecId, orderedPlans, productionWorkspaceCleared]);
 
   const currentSpecPurchaseLists = useMemo(() => {
+    if (productionWorkspaceCleared) {
+      return [];
+    }
+
     if (!currentProductionSpecId) {
       return orderedPurchaseLists;
     }
@@ -552,24 +565,26 @@ export function App() {
       (purchaseList) => String(purchaseList.eventSpecId ?? "") === currentProductionSpecId
     );
     return matchingLists.length > 0 ? matchingLists : orderedPurchaseLists;
-  }, [currentProductionSpecId, orderedPurchaseLists]);
+  }, [currentProductionSpecId, orderedPurchaseLists, productionWorkspaceCleared]);
 
   const archivedPurchaseLists = useMemo(() => {
-    if (!currentProductionSpecId) {
+    if (!currentProductionSpecId || productionWorkspaceCleared) {
       return [];
     }
     return orderedPurchaseLists.filter(
       (purchaseList) => String(purchaseList.eventSpecId ?? "") !== currentProductionSpecId
     );
-  }, [currentProductionSpecId, orderedPurchaseLists]);
+  }, [currentProductionSpecId, orderedPurchaseLists, productionWorkspaceCleared]);
 
   const selectedPlan = useMemo(
     () =>
-      currentSpecPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
-      orderedPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
-      currentSpecPlans[0] ??
-      orderedPlans[0],
-    [currentSpecPlans, orderedPlans, selectedPlanId]
+      productionWorkspaceCleared
+        ? undefined
+        : currentSpecPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
+          orderedPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
+          currentSpecPlans[0] ??
+          orderedPlans[0],
+    [currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId]
   );
 
   const selectedPlanSpec = useMemo(() => {
@@ -640,8 +655,35 @@ export function App() {
     setNotice(undefined);
   }
 
+  function clearProductionWorkspace() {
+    setProductionWorkspaceCleared(true);
+    setIntakeFile(null);
+    setDragActive(false);
+    setActiveDocumentName(undefined);
+    setDocumentPhase("idle");
+    setDocumentProgress(0);
+    setDocumentEtaSeconds(undefined);
+    setDocumentEstimatedDurationMs(0);
+    setDocumentStartedAt(undefined);
+    setFocusedProductionSpecId(undefined);
+    setSelectedPlanId(undefined);
+    setPlanPhase("idle");
+    setPlanProgress(0);
+    setPlanEtaSeconds(undefined);
+    setPlanEstimatedDurationMs(0);
+    setPlanStartedAt(undefined);
+    setPlanningSpecLabel(undefined);
+    resetSpecEdit(false);
+    if (productionUploadInputRef.current) {
+      productionUploadInputRef.current.value = "";
+    }
+    clearMessages();
+    setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+  }
+
   async function handleIntakeSubmit() {
     setSubmitting(true);
+    setProductionWorkspaceCleared(false);
     clearMessages();
     try {
       const response = await createAcceptedSpecFromText(intakeText);
@@ -690,6 +732,7 @@ export function App() {
   async function processIncomingProductionFile(file: File, channel: IntakeDocumentChannel) {
     const estimatedDurationMs = estimateProcessingDurationMs(file);
     setSubmitting(true);
+    setProductionWorkspaceCleared(false);
     clearMessages();
     setIntakeFile(file);
     setIntakeChannel(channel);
@@ -731,6 +774,7 @@ export function App() {
 
   async function handleManualSpecSubmit() {
     setSubmitting(true);
+    setProductionWorkspaceCleared(false);
     clearMessages();
     try {
       const response = await createAcceptedSpecFromManualForm({
@@ -769,6 +813,7 @@ export function App() {
 
   async function handleCreatePlan(spec: Record<string, unknown>) {
     setSubmitting(true);
+    setProductionWorkspaceCleared(false);
     clearMessages();
     try {
       let specForPlanning = spec;
@@ -843,6 +888,7 @@ export function App() {
     );
 
     setEditingSpecId(String(spec.specId));
+    setProductionWorkspaceCleared(false);
     setDismissedProductionAnswerSpecId(undefined);
     setFocusedProductionSpecId(String(spec.specId));
     setEditingEventType(String(event?.type ?? ""));
@@ -932,6 +978,7 @@ export function App() {
     const response = await updateAcceptedSpec(editingSpecId, buildCurrentSpecUpdateInput());
     const updatedSpec = response.acceptedEventSpec;
     const updatedSpecId = String(updatedSpec.specId ?? editingSpecId);
+    setProductionWorkspaceCleared(false);
     setFocusedProductionSpecId(updatedSpecId);
     resetSpecEdit(false);
     await refreshDashboard();
@@ -1641,6 +1688,14 @@ export function App() {
                 <button type="button" disabled={submitting} onClick={openProductionFilePicker}>
                   Datei hochladen
                 </button>
+                <button
+                  type="button"
+                  className="secondary-button destructive-button"
+                  disabled={submitting}
+                  onClick={clearProductionWorkspace}
+                >
+                  Löschen
+                </button>
               </div>
             </div>
             <header>
@@ -2050,10 +2105,12 @@ export function App() {
               <p className="helper-text">
                 {documentPhase === "analysing"
                   ? "Der Agent wertet das hochgeladene Dokument gerade aus und erzeugt daraus operative Veranstaltungsdaten."
+                  : productionWorkspaceCleared
+                    ? "Der aktuelle Vorgang wurde geleert. Nach einem neuen Upload erscheinen hier wieder die Rückfragen des Agenten."
                   : "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten."}
               </p>
             )}
-            {filteredSpecs.length > 1 ? (
+            {!productionWorkspaceCleared && filteredSpecs.length > 1 ? (
               <>
                 <div className="divider" />
                 <header>
@@ -2068,7 +2125,10 @@ export function App() {
                         <button
                           className="secondary-button"
                           disabled={submitting}
-                          onClick={() => setFocusedProductionSpecId(String(spec.specId))}
+                          onClick={() => {
+                            setProductionWorkspaceCleared(false);
+                            setFocusedProductionSpecId(String(spec.specId));
+                          }}
                         >
                           Für Rückfragen öffnen
                         </button>
@@ -2184,14 +2244,20 @@ export function App() {
             <header>
               <p className="eyebrow">Aktueller Vorgang</p>
               <h4 className="subsection-title">
-                {focusedProductionSpec ? getSpecLabel(focusedProductionSpec) : "Neuester Produktionslauf"}
+                {focusedProductionSpec
+                  ? getSpecLabel(focusedProductionSpec)
+                  : productionWorkspaceCleared
+                    ? "Kein aktiver Vorgang"
+                    : "Neuester Produktionslauf"}
               </h4>
             </header>
             <p className="helper-text">
-              Hier erscheinen nur die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere Läufe stehen weiter unten.
+              {productionWorkspaceCleared
+                ? "Die Ergebnisfelder wurden geleert. Ein neuer Upload oder eine neue Erfassung füllt diesen Bereich wieder."
+                : "Hier erscheinen nur die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere Läufe stehen weiter unten."}
             </p>
-            {renderPlanList(currentSpecPlans, specById, submitting, setSelectedPlanId)}
-            {archivedPlans.length > 0 ? (
+            {!productionWorkspaceCleared ? renderPlanList(currentSpecPlans, specById, submitting, setSelectedPlanId) : null}
+            {!productionWorkspaceCleared && archivedPlans.length > 0 ? (
               <>
                 <div className="divider" />
                 <header>
