@@ -241,6 +241,19 @@ select {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
+.production-layout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.production-column {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
 .compact-metrics .status-card {
   min-height: 0;
 }
@@ -756,6 +769,10 @@ button:disabled {
 
 @media (max-width: 960px) {
   .hero-detail-card {
+    grid-template-columns: 1fr;
+  }
+
+  .production-layout {
     grid-template-columns: 1fr;
   }
 }

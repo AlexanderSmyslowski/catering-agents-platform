@@ -404,7 +404,6 @@ export function App() {
   const [editingMenuItems, setEditingMenuItems] = useState("");
   const [editingComponentStates, setEditingComponentStates] = useState<Record<string, ComponentEditState>>({});
   const deferredSearch = useDeferredValue(search);
-  const productionResultsRef = useRef<HTMLDivElement | null>(null);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDashboard = useEffectEvent(async () => {
@@ -636,19 +635,6 @@ export function App() {
     };
   }, [planEstimatedDurationMs, planPhase, planStartedAt]);
 
-  const scrollToProductionResults = useEffectEvent((behavior: ScrollBehavior = "smooth") => {
-    if (route !== "production") {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      productionResultsRef.current?.scrollIntoView({
-        behavior,
-        block: "start"
-      });
-    });
-  });
-
   function clearMessages() {
     setError(undefined);
     setNotice(undefined);
@@ -806,7 +792,6 @@ export function App() {
       setPlanStartedAt(Date.now());
       setSelectedPlanId(undefined);
       setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
-      scrollToProductionResults("auto");
       const response = await createProductionPlan(specForPlanning);
       const planId = extractProductionPlanId(response);
       if (planId) {
@@ -1641,7 +1626,8 @@ export function App() {
       ) : null}
 
       {route === "production" ? (
-        <section className="wide-grid">
+        <section className="production-layout">
+          <div className="production-column">
           <article className="panel form-panel">
             <div className="upload-shortcut-bar">
               <div>
@@ -1806,7 +1792,8 @@ export function App() {
               Spezifikation anlegen
             </button>
           </article>
-
+          </div>
+          <div className="production-column">
           <article className="panel form-panel question-panel production-step-card">
             <header>
               <p className="eyebrow">Schritt 2</p>
@@ -2136,9 +2123,9 @@ export function App() {
               </>
             ) : null}
           </article>
-
+          </div>
+          <div className="production-column">
           <article className="panel production-step-card">
-            <div ref={productionResultsRef} />
             <header>
               <p className="eyebrow">Schritt 3</p>
               <h3>Berechnete Ergebnisse</h3>
@@ -2462,6 +2449,7 @@ export function App() {
               </>
             ) : null}
           </article>
+          </div>
         </section>
       ) : null}
 
