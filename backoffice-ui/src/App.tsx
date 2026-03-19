@@ -649,16 +649,6 @@ export function App() {
     });
   });
 
-  useEffect(() => {
-    if (route !== "production") {
-      return;
-    }
-
-    if (planPhase === "planning" || planPhase === "done") {
-      scrollToProductionResults(planPhase === "done" ? "smooth" : "auto");
-    }
-  }, [planPhase, route, scrollToProductionResults]);
-
   function clearMessages() {
     setError(undefined);
     setNotice(undefined);
@@ -1358,8 +1348,12 @@ export function App() {
         </section>
       ) : null}
 
-      {error ? <p className="error-banner">{error}</p> : null}
-      {notice ? <p className="notice-banner">{notice}</p> : null}
+      {error || notice ? (
+        <div className="toast-stack" aria-live="polite">
+          {error ? <p className="error-banner">{error}</p> : null}
+          {notice ? <p className="notice-banner">{notice}</p> : null}
+        </div>
+      ) : null}
 
       {route === "home" ? (
         <section className="wide-grid">
@@ -1411,7 +1405,7 @@ export function App() {
 
       {route === "offer" ? (
         <section className="wide-grid">
-          <article className="panel form-panel">
+          <article className="panel form-panel production-step-card">
             <header>
               <p className="eyebrow">Kundenanfrage</p>
               <h3>Freitext in eine operative Spezifikation überführen</h3>
@@ -1690,52 +1684,54 @@ export function App() {
               </p>
               <span className="drag-drop-zone__cta">Datei auswählen</span>
             </label>
-            {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
-            {documentPhase === "analysing" && activeDocumentName ? (
-              <div className="progress-panel">
-                <div
-                  className="progress-ring"
-                  style={
-                    {
-                      "--progress-angle": `${Math.max(0, Math.min(documentProgress, 100)) * 3.6}deg`
-                    } as CSSProperties
-                  }
-                >
-                  <span>{documentProgress}%</span>
-                </div>
-                <div className="progress-panel__content">
-                  <p className="processing-note">Analyse läuft für {activeDocumentName} ...</p>
-                  <div className="progress-bar">
-                    <div
-                      className="progress-bar__fill"
-                      style={{ width: `${Math.max(0, Math.min(documentProgress, 100))}%` }}
-                    />
+            <div className="activity-slot">
+              {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
+              {documentPhase === "analysing" && activeDocumentName ? (
+                <div className="progress-panel">
+                  <div
+                    className="progress-ring"
+                    style={
+                      {
+                        "--progress-angle": `${Math.max(0, Math.min(documentProgress, 100)) * 3.6}deg`
+                      } as CSSProperties
+                    }
+                  >
+                    <span>{documentProgress}%</span>
                   </div>
-                  <p className="helper-text">
-                    Geschätzte Restzeit: {formatEta(documentEtaSeconds ?? 1)}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-            {documentPhase === "done" && activeDocumentName ? (
-              <div className="progress-panel">
-                <div
-                  className="progress-ring progress-ring--done"
-                  style={{ "--progress-angle": "360deg" } as CSSProperties}
-                >
-                  <span>100%</span>
-                </div>
-                <div className="progress-panel__content">
-                  <p className="processing-note processing-note--success">
-                    Analyse abgeschlossen für {activeDocumentName}.
-                  </p>
-                  <div className="progress-bar">
-                    <div className="progress-bar__fill" style={{ width: "100%" }} />
+                  <div className="progress-panel__content">
+                    <p className="processing-note">Analyse läuft für {activeDocumentName} ...</p>
+                    <div className="progress-bar">
+                      <div
+                        className="progress-bar__fill"
+                        style={{ width: `${Math.max(0, Math.min(documentProgress, 100))}%` }}
+                      />
+                    </div>
+                    <p className="helper-text">
+                      Geschätzte Restzeit: {formatEta(documentEtaSeconds ?? 1)}
+                    </p>
                   </div>
-                  <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+              {documentPhase === "done" && activeDocumentName ? (
+                <div className="progress-panel">
+                  <div
+                    className="progress-ring progress-ring--done"
+                    style={{ "--progress-angle": "360deg" } as CSSProperties}
+                  >
+                    <span>100%</span>
+                  </div>
+                  <div className="progress-panel__content">
+                    <p className="processing-note processing-note--success">
+                      Analyse abgeschlossen für {activeDocumentName}.
+                    </p>
+                    <div className="progress-bar">
+                      <div className="progress-bar__fill" style={{ width: "100%" }} />
+                    </div>
+                    <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <div className="action-row">
               <select
                 className="operator-input"
@@ -1811,7 +1807,7 @@ export function App() {
             </button>
           </article>
 
-          <article className="panel form-panel question-panel">
+          <article className="panel form-panel question-panel production-step-card">
             <header>
               <p className="eyebrow">Schritt 2</p>
               <h3>Rückfragen des Agenten</h3>
@@ -2141,61 +2137,63 @@ export function App() {
             ) : null}
           </article>
 
-          <article className="panel">
+          <article className="panel production-step-card">
             <div ref={productionResultsRef} />
             <header>
               <p className="eyebrow">Schritt 3</p>
               <h3>Berechnete Ergebnisse</h3>
             </header>
-            {planPhase === "planning" && planningSpecLabel ? (
-              <div className="progress-panel">
-                <div
-                  className="progress-ring"
-                  style={
-                    {
-                      "--progress-angle": `${Math.max(0, Math.min(planProgress, 100)) * 3.6}deg`
-                    } as CSSProperties
-                  }
-                >
-                  <span>{planProgress}%</span>
-                </div>
-                <div className="progress-panel__content">
-                  <p className="processing-note">
-                    Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen für {planningSpecLabel} ...
-                  </p>
-                  <div className="progress-bar">
-                    <div
-                      className="progress-bar__fill"
-                      style={{ width: `${Math.max(0, Math.min(planProgress, 100))}%` }}
-                    />
+            <div className="activity-slot">
+              {planPhase === "planning" && planningSpecLabel ? (
+                <div className="progress-panel">
+                  <div
+                    className="progress-ring"
+                    style={
+                      {
+                        "--progress-angle": `${Math.max(0, Math.min(planProgress, 100)) * 3.6}deg`
+                      } as CSSProperties
+                    }
+                  >
+                    <span>{planProgress}%</span>
                   </div>
-                  <p className="helper-text">
-                    Geschätzte Restzeit: {formatEta(planEtaSeconds ?? 1)}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-            {planPhase === "done" && planningSpecLabel ? (
-              <div className="progress-panel">
-                <div
-                  className="progress-ring progress-ring--done"
-                  style={{ "--progress-angle": "360deg" } as CSSProperties}
-                >
-                  <span>100%</span>
-                </div>
-                <div className="progress-panel__content">
-                  <p className="processing-note processing-note--success">
-                    Produktionsplan wurde für {planningSpecLabel} erzeugt.
-                  </p>
-                  <div className="progress-bar">
-                    <div className="progress-bar__fill" style={{ width: "100%" }} />
+                  <div className="progress-panel__content">
+                    <p className="processing-note">
+                      Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen für {planningSpecLabel} ...
+                    </p>
+                    <div className="progress-bar">
+                      <div
+                        className="progress-bar__fill"
+                        style={{ width: `${Math.max(0, Math.min(planProgress, 100))}%` }}
+                      />
+                    </div>
+                    <p className="helper-text">
+                      Geschätzte Restzeit: {formatEta(planEtaSeconds ?? 1)}
+                    </p>
                   </div>
-                  <p className="helper-text">
-                    Die Rezepte, Produktionsschritte und Einkaufspositionen wurden aktualisiert.
-                  </p>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+              {planPhase === "done" && planningSpecLabel ? (
+                <div className="progress-panel">
+                  <div
+                    className="progress-ring progress-ring--done"
+                    style={{ "--progress-angle": "360deg" } as CSSProperties}
+                  >
+                    <span>100%</span>
+                  </div>
+                  <div className="progress-panel__content">
+                    <p className="processing-note processing-note--success">
+                      Produktionsplan wurde für {planningSpecLabel} erzeugt.
+                    </p>
+                    <div className="progress-bar">
+                      <div className="progress-bar__fill" style={{ width: "100%" }} />
+                    </div>
+                    <p className="helper-text">
+                      Die Rezepte, Produktionsschritte und Einkaufspositionen wurden aktualisiert.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <header>
               <p className="eyebrow">Aktueller Vorgang</p>
               <h4 className="subsection-title">

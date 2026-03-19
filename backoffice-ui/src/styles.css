@@ -549,6 +549,17 @@ button:disabled {
   letter-spacing: -0.02em;
 }
 
+.production-step-card {
+  align-content: start;
+}
+
+.activity-slot {
+  min-height: 12rem;
+  display: grid;
+  align-content: start;
+  gap: 0.8rem;
+}
+
 .question-panel {
   align-content: start;
 }
@@ -710,6 +721,20 @@ button:disabled {
   border-radius: 1.25rem;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 16px 36px rgba(31, 57, 89, 0.15);
+}
+
+.toast-stack {
+  position: sticky;
+  top: 1rem;
+  z-index: 40;
+  display: grid;
+  gap: 0.75rem;
+  pointer-events: none;
+}
+
+.toast-stack > * {
+  pointer-events: auto;
 }
 
 .error-banner {
@@ -753,5 +778,9 @@ button:disabled {
 
   .masthead-actions > * {
     flex: 1 1 auto;
+  }
+
+  .activity-slot {
+    min-height: 0;
   }
 }
