@@ -856,6 +856,12 @@ export interface RecipeResolution {
   unresolvedItems: string[];
 }
 
+type UnresolvedRecipeClarification =
+  | "variant_unclear"
+  | "internal_recipe_missing"
+  | "production_mode_decision"
+  | "generic";
+
 function isBakeryProcurementComponent(component: MenuComponent): boolean {
   const normalized = normalizeComparableText(component.label);
   return /(brot|baguette)/.test(normalized) && !/focaccia/.test(normalized);
@@ -864,6 +870,96 @@ function isBakeryProcurementComponent(component: MenuComponent): boolean {
 function isHybridBakeryClarificationComponent(component: MenuComponent): boolean {
   const normalized = normalizeComparableText(component.label);
   return /focaccia/.test(normalized);
+}
+
+function needsVariantClarification(component: MenuComponent): boolean {
+  const normalized = normalizeComparableText(component.label);
+  return /\b(auswahl|variation|variationen|sorten|sortiment|mix|assortment|assorted|oder)\b/.test(
+    normalized
+  );
+}
+
+function hasClearDishArchetype(component: MenuComponent): boolean {
+  return Boolean(
+    dishArchetypeForComponent(component, "de") || dishArchetypeForComponent(component, "en")
+  );
+}
+
+function unresolvedRecipeClarificationKind(
+  component: MenuComponent,
+  input: {
+    repositoryCandidatesFound: boolean;
+    externalCandidatesSeen: boolean;
+    webSearchFailed: boolean;
+  }
+): UnresolvedRecipeClarification {
+  if (needsVariantClarification(component)) {
+    return "variant_unclear";
+  }
+
+  if (input.externalCandidatesSeen || input.webSearchFailed) {
+    return "production_mode_decision";
+  }
+
+  if (hasClearDishArchetype(component) || input.repositoryCandidatesFound) {
+    return "internal_recipe_missing";
+  }
+
+  return "generic";
+}
+
+function recipeCategoryHint(component: MenuComponent): string {
+  return component.menuCategory === "vegan"
+    ? "veganer "
+    : component.menuCategory === "vegetarian"
+      ? "vegetarischer "
+      : "";
+}
+
+function unresolvedRecipeTexts(
+  component: MenuComponent,
+  input: {
+    repositoryCandidatesFound: boolean;
+    externalCandidatesSeen: boolean;
+    webSearchFailed: boolean;
+  }
+): { selectionReason: string; unresolvedItem: string } {
+  const categoryHint = recipeCategoryHint(component);
+  const kind = unresolvedRecipeClarificationKind(component, input);
+
+  if (kind === "variant_unclear") {
+    return {
+      selectionReason: `Variante / Ausführung für ${component.label} ist noch unklar. Bitte die gewünschte Ausführung festlegen, damit Produktion und Einkauf belastbar weitergeplant werden können.`,
+      unresolvedItem: `Variante / Ausführung für ${component.label} klären: gewünschte Ausführung festlegen.`
+    };
+  }
+
+  if (kind === "internal_recipe_missing") {
+    return {
+      selectionReason: `Für ${component.label} ist die Speise grundsätzlich klar, aber es fehlt noch eine belastbare interne Rezeptgrundlage. Bitte ein internes Rezept zuweisen oder neu anlegen.`,
+      unresolvedItem: `Internes Rezept für ${component.label} zuweisen oder neu anlegen.`
+    };
+  }
+
+  if (kind === "production_mode_decision") {
+    return {
+      selectionReason: `Für ${component.label} muss als Nächstes die Herstellungsart entschieden werden: Eigenproduktion oder Zukauf. Danach kann Rezeptwahl oder Beschaffung belastbar festgelegt werden.`,
+      unresolvedItem: `Herstellungsart für ${component.label} entscheiden: Eigenproduktion oder Zukauf.`
+    };
+  }
+
+  return {
+    selectionReason: input.webSearchFailed
+      ? "Es konnte kein interner Rezeptkandidat gefunden werden und die Internetrecherche ist fehlgeschlagen."
+      : component.menuCategory === "vegan"
+        ? "Es konnte kein interner oder externer veganer Rezeptkandidat belastbar validiert werden."
+        : component.menuCategory === "vegetarian"
+          ? "Es konnte kein interner oder externer vegetarischer Rezeptkandidat belastbar validiert werden."
+          : "Es konnte kein interner oder externer Rezeptkandidat belastbar validiert werden.",
+    unresolvedItem: input.webSearchFailed
+      ? `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden, Internetrecherche fehlgeschlagen.`
+      : `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden.`
+  };
 }
 
 function isStrongRecipeCandidate(recipe: Recipe): boolean {
@@ -1059,6 +1155,7 @@ export class RecipeDiscoveryService {
       query: RecipeSearchQuery;
     }[] = [];
     let webSearchFailed = false;
+    let externalCandidatesSeen = false;
 
     for (const locale of locales) {
       for (const queryText of buildSearchQueries(component, eventSpec, locale)) {
@@ -1073,6 +1170,9 @@ export class RecipeDiscoveryService {
         try {
           pushTrace(`Websuche: ${query.query}`);
           searchResults = await this.webProvider.searchRecipes(query);
+          if (searchResults.length > 0) {
+            externalCandidatesSeen = true;
+          }
         } catch {
           webSearchFailed = true;
           pushTrace(`Websuche fehlgeschlagen: ${query.query}`);
@@ -1165,29 +1265,19 @@ export class RecipeDiscoveryService {
     })[0];
 
     if (!winner) {
-      const categoryHint =
-        component.menuCategory === "vegan"
-          ? "veganer "
-          : component.menuCategory === "vegetarian"
-            ? "vegetarischer "
-            : "";
-      const unresolvedReason = webSearchFailed
-        ? `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden, Internetrecherche fehlgeschlagen.`
-        : `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden.`;
+      const unresolved = unresolvedRecipeTexts(component, {
+        repositoryCandidatesFound: repositoryCandidates.length > 0,
+        externalCandidatesSeen,
+        webSearchFailed
+      });
       return {
         selection: {
           componentId: component.componentId,
-          selectionReason: webSearchFailed
-            ? "Es konnte kein interner Rezeptkandidat gefunden werden und die Internetrecherche ist fehlgeschlagen."
-            : component.menuCategory === "vegan"
-              ? "Es konnte kein interner oder externer veganer Rezeptkandidat belastbar validiert werden."
-              : component.menuCategory === "vegetarian"
-                ? "Es konnte kein interner oder externer vegetarischer Rezeptkandidat belastbar validiert werden."
-                : "Es konnte kein interner oder externer Rezeptkandidat belastbar validiert werden.",
+          selectionReason: unresolved.selectionReason,
           searchTrace,
           autoUsedInternetRecipe: false
         },
-        unresolvedItems: [unresolvedReason]
+        unresolvedItems: [unresolved.unresolvedItem]
       };
     }
 

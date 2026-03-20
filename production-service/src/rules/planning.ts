@@ -165,6 +165,45 @@ function unresolvedKitchenSheet(
     };
   }
 
+  if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {
+    return {
+      title: `${component.label} - Variante klären`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte die gewünschte Ausführung oder Variante eindeutig festlegen.",
+        "Danach kann Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
+  if (/interne Rezeptgrundlage|Internes Rezept .* zuweisen oder neu anlegen/i.test(reason)) {
+    return {
+      title: `${component.label} - Internes Rezept fehlt`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte Bibliotheksrezept zuweisen oder ein neues internes Rezept anlegen.",
+        "Erst danach sind Produktionsanweisungen und Einkaufsliste belastbar.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
+  if (/Herstellungsart .* Eigenproduktion oder Zukauf/i.test(reason)) {
+    return {
+      title: `${component.label} - Herstellungsart entscheiden`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte entscheiden: Eigenproduktion oder Zukauf.",
+        "Danach Rezeptwahl oder Beschaffung konkret festlegen.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
   return {
     title: `${component.label} - Rezeptklärung nötig`,
     instructions: [
@@ -187,6 +226,18 @@ function unresolvedTimelineLabel(
 
   if (/focaccia/i.test(component.label)) {
     return `${component.label} Herstellungsart klären`;
+  }
+
+  if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {
+    return `${component.label} Variante klären`;
+  }
+
+  if (/interne Rezeptgrundlage|Internes Rezept .* zuweisen oder neu anlegen/i.test(reason)) {
+    return `${component.label} internes Rezept klären`;
+  }
+
+  if (/Herstellungsart .* Eigenproduktion oder Zukauf/i.test(reason)) {
+    return `${component.label} Herstellungsart entscheiden`;
   }
 
   return `${component.label} Rezeptklärung`;

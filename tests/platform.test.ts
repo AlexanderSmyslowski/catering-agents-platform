@@ -778,6 +778,139 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("flags ambiguous variants with a targeted variant clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("QUICHE AUSWAHL", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Variante / Ausführung");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Ausführung");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Variante klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("flags clear dishes without an internal recipe as an internal recipe gap", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("ROTE LINSENSUPPE", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Internes Rezept");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Internes Rezept fehlt");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("turns unresolved fallback cases into a production-mode decision", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/vegan-lava-cakes",
+        title: "Vegan Chocolate Lava Cakes",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Vegan Chocolate Lava Cakes",
+          baseYield: {
+            servings: 6,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "dark-chocolate",
+              name: "Dark chocolate",
+              quantity: { amount: 250, unit: "g" },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "flour",
+              name: "Flour",
+              quantity: { amount: 120, unit: "g" },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            }
+          ],
+          steps: [{ index: 1, instruction: "Backen." }],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 6
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 8,
+          stepCount: 4,
+          mappedIngredientRatio: 0.92
+        }
+      }
+    ]);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Schokoladenkuchen vegan.")
+      ),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Eigenproduktion oder Zukauf");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Herstellungsart entscheiden");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("requires category and sourcing decisions before recipe resolution starts", async () => {
     const dataRoot = createDataRoot();
     const app = buildProductionApp({
@@ -1062,7 +1195,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.readiness.status).toBe("partial");
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("belastbar validiert");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1306,7 +1439,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("belastbar validiert");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1478,7 +1611,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1655,7 +1788,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("belastbar validiert");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
     expect(body.productionPlan.unresolvedItems.join(" ")).toContain("ROTE BETE TARTE");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1907,7 +2040,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1986,7 +2119,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -2065,7 +2198,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
