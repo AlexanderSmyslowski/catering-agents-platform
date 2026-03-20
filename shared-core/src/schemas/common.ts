@@ -112,6 +112,7 @@ export const commonSchema = {
       properties: {
         expected: { type: "integer", minimum: 0 },
         guaranteed: { type: "integer", minimum: 0 },
+        productionPax: { type: "integer", minimum: 0 },
         dietaryMix: {
           type: "object",
           additionalProperties: { type: "integer", minimum: 0 }

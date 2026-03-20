@@ -290,7 +290,8 @@ export async function buildProductionArtifacts(
   const unresolvedItems: string[] = [...(eventSpec.missingFields ?? [])];
 
   for (const component of eventSpec.menuPlan) {
-    const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
+    const servings =
+      component.servings ?? eventSpec.attendees.productionPax ?? eventSpec.attendees.expected ?? 0;
     const productionMode = component.productionDecision?.mode;
     const purchasedElements = component.productionDecision?.purchasedElements ?? [];
 

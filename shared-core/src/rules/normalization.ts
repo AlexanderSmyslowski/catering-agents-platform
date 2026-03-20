@@ -447,6 +447,7 @@ export function normalizeEventRequestToSpec(
     attendees: {
       expected: attendees,
       guaranteed: request.attendees?.guaranteed,
+      productionPax: request.attendees?.productionPax,
       dietaryMix: request.attendees?.dietaryMix
     },
     venue: request.venue,

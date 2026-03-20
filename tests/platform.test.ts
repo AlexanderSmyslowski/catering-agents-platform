@@ -455,7 +455,8 @@ describe("catering agents platform", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json().acceptedEventSpec.readiness.status).toBe("complete");
-    expect(updateResponse.json().acceptedEventSpec.attendees.expected).toBe(48);
+    expect(updateResponse.json().acceptedEventSpec.attendees.expected).toBeUndefined();
+    expect(updateResponse.json().acceptedEventSpec.attendees.productionPax).toBe(48);
     expect(updateResponse.json().acceptedEventSpec.menuPlan).toHaveLength(2);
 
     await app.close();
@@ -648,6 +649,65 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("uses productionPax as the current operational servings value after a manual attendee update", async () => {
+    const dataRoot = createDataRoot();
+    const intakeApp = buildIntakeApp({
+      rootDir: dataRoot
+    });
+    const productionApp = buildProductionApp({
+      repository: new InMemoryRecipeRepository([], { rootDir: dataRoot }),
+      dataRoot
+    });
+
+    const createResponse = await intakeApp.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    expect(createdSpec.attendees.expected).toBe(40);
+    expect(createdSpec.attendees.productionPax).toBeUndefined();
+
+    const updateResponse = await intakeApp.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    const updatedSpec = updateResponse.json().acceptedEventSpec;
+    expect(updatedSpec.attendees.expected).toBe(40);
+    expect(updatedSpec.attendees.productionPax).toBe(55);
+    expect(updatedSpec.menuPlan[0].servings).toBe(55);
+
+    const planResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: updatedSpec
+      }
+    });
+
+    expect(planResponse.statusCode).toBe(201);
+    expect(planResponse.json().productionPlan.kitchenSheets[0].instructions[0]).toContain(
+      "55 Portionen"
+    );
+
+    await intakeApp.close();
+    await productionApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("creates an AcceptedEventSpec directly from a structured manual form", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
@@ -675,6 +735,7 @@ describe("catering agents platform", () => {
     expect(body.eventRequest.rawInputs[0].kind).toBe("form");
     expect(body.acceptedEventSpec.readiness.status).toBe("complete");
     expect(body.acceptedEventSpec.attendees.expected).toBe(75);
+    expect(body.acceptedEventSpec.attendees.productionPax).toBeUndefined();
     expect(body.acceptedEventSpec.menuPlan).toHaveLength(3);
     expect(body.acceptedEventSpec.customer.name).toBe("Universitaet Heidelberg");
 

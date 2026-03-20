@@ -107,6 +107,7 @@ export interface EventInfo {
 export interface AttendeeInfo {
   expected?: number;
   guaranteed?: number;
+  productionPax?: number;
   dietaryMix?: Record<string, number>;
 }
 

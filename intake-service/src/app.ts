@@ -104,7 +104,9 @@ function applySpecUpdates(
 ) {
   const nextEventType = body.eventType?.trim() || spec.event.type || spec.servicePlan.eventType;
   const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
-  const nextAttendeeCount = body.attendeeCount ?? spec.attendees.expected;
+  const nextOfferPax = spec.attendees.expected;
+  const nextProductionPax = body.attendeeCount ?? spec.attendees.productionPax;
+  const nextOperationalPax = nextProductionPax ?? nextOfferPax;
   const nextMenuItems = normalizeMenuItems(body.menuItems);
   const componentUpdates = new Map(
     (body.componentUpdates ?? []).map((item) => [item.componentId, item])
@@ -135,7 +137,8 @@ function applySpecUpdates(
     },
     attendees: {
       ...spec.attendees,
-      expected: nextAttendeeCount
+      expected: nextOfferPax,
+      productionPax: nextProductionPax
     },
     servicePlan: {
       ...spec.servicePlan,
@@ -147,7 +150,7 @@ function applySpecUpdates(
         ? spec.menuPlan.map((item) => ({
             ...item,
             serviceStyle: nextServiceForm,
-            servings: nextAttendeeCount,
+            servings: nextOperationalPax,
             menuCategory: componentUpdates.get(item.componentId)?.menuCategory ?? item.menuCategory,
             dietaryTags:
               componentUpdates.get(item.componentId)?.menuCategory
@@ -171,7 +174,7 @@ function applySpecUpdates(
               spec.menuPlan[index]?.menuCategory,
             serviceStyle: nextServiceForm,
             desiredRecipeTags: spec.menuPlan[index]?.desiredRecipeTags ?? (nextEventType ? [nextEventType] : []),
-            servings: nextAttendeeCount,
+            servings: nextOperationalPax,
             dietaryTags:
               componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory
                 ? dietaryTagsForCategory(componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory)
@@ -587,7 +590,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         summary: "AcceptedEventSpec manuell nachbearbeitet.",
         details: {
           eventDate: updatedSpec.event.date,
-          attendeeCount: updatedSpec.attendees.expected,
+          attendeeCount: updatedSpec.attendees.productionPax ?? updatedSpec.attendees.expected,
           serviceForm: updatedSpec.servicePlan.serviceForm,
           readiness: updatedSpec.readiness.status
         }
