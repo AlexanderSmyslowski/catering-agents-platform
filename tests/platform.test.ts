@@ -230,10 +230,10 @@ describe("catering agents platform", () => {
     expect(spec.menuPlan.find((item) => item.label.includes("SCHOKOLADENKUCHEN"))?.dietaryTags).toContain("vegan");
   });
 
-  it("adds a defensive uncertainty when commercial progress and open selection markers occur together", () => {
+  it("adds a defensive uncertainty for menu blocks with explicit open selection markers", () => {
     const spec = normalizeEventRequestToSpec({
       schemaVersion: SCHEMA_VERSION,
-      requestId: "request-progress-open-selection",
+      requestId: "request-open-selection-block",
       source: {
         channel: "pdf_upload",
         receivedAt: "2026-03-21T09:00:00.000Z"
@@ -243,7 +243,6 @@ describe("catering agents platform", () => {
           kind: "pdf",
           mimeType: "application/pdf",
           content: [
-            "Auftragsbestätigung",
             "Lunch am 21.03.2026 fuer 60 Teilnehmer.",
             "DESSERT zur Auswahl: Mousse oder Obstsalat"
           ].join("\n")
@@ -255,7 +254,7 @@ describe("catering agents platform", () => {
       spec.uncertainties?.some(
         (entry) =>
           entry.field === "menuPlan" &&
-          /menschliche bestaetigung noetig/i.test(
+          /auswahl, alternative oder beispiel|menschlich bestaetigt/i.test(
             entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
           )
       )
@@ -263,10 +262,10 @@ describe("catering agents platform", () => {
     expect(spec.readiness.status).toBe("complete");
   });
 
-  it("adds the same defensive uncertainty for updated offers with example dishes", () => {
+  it("adds the same defensive uncertainty for menu blocks with example dishes", () => {
     const spec = normalizeEventRequestToSpec({
       schemaVersion: SCHEMA_VERSION,
-      requestId: "request-updated-example-dishes",
+      requestId: "request-example-dishes-block",
       source: {
         channel: "text",
         receivedAt: "2026-03-21T09:00:00.000Z"
@@ -276,9 +275,7 @@ describe("catering agents platform", () => {
           kind: "text",
           mimeType: "text/plain",
           content: [
-            "aktualisiertes Angebot",
-            "Lunch am 2026-05-12 fuer 60 Teilnehmer.",
-            "Canapes zum Beispiel Lachs oder Hummus"
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer mit Fingerfood zum Beispiel Lachs oder Hummus."
           ].join("\n")
         }
       ]
@@ -288,7 +285,7 @@ describe("catering agents platform", () => {
       spec.uncertainties?.some(
         (entry) =>
           entry.field === "menuPlan" &&
-          /offene speiseauswahl/i.test(
+          /auswahl, alternative oder beispiel|menschlich bestaetigt/i.test(
             entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
           )
       )
@@ -296,10 +293,10 @@ describe("catering agents platform", () => {
     expect(spec.readiness.status).toBe("complete");
   });
 
-  it("does not add the defensive uncertainty for commercial markers without open selection", () => {
+  it("does not add the defensive uncertainty for clear final menu blocks", () => {
     const spec = normalizeEventRequestToSpec({
       schemaVersion: SCHEMA_VERSION,
-      requestId: "request-commercial-only",
+      requestId: "request-clear-final-block",
       source: {
         channel: "text",
         receivedAt: "2026-03-21T09:00:00.000Z"
@@ -309,7 +306,6 @@ describe("catering agents platform", () => {
           kind: "text",
           mimeType: "text/plain",
           content: [
-            "finalisierte Kostenübersicht",
             "Lunch am 2026-05-12 fuer 60 Teilnehmer mit Tomatensuppe."
           ].join("\n")
         }
@@ -320,17 +316,17 @@ describe("catering agents platform", () => {
       spec.uncertainties?.some(
         (entry) =>
           entry.field === "menuPlan" &&
-          /offene speiseauswahl|menschliche bestaetigung noetig/i.test(
+          /auswahl, alternative oder beispiel|menschlich bestaetigt/i.test(
             entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
           )
       )
     ).toBe(false);
   });
 
-  it("does not add the defensive uncertainty for open selection markers without commercial progress", () => {
+  it("does not add the defensive uncertainty for composed but explicit production menu blocks", () => {
     const spec = normalizeEventRequestToSpec({
       schemaVersion: SCHEMA_VERSION,
-      requestId: "request-open-only",
+      requestId: "request-composed-production-block",
       source: {
         channel: "text",
         receivedAt: "2026-03-21T09:00:00.000Z"
@@ -341,7 +337,7 @@ describe("catering agents platform", () => {
           mimeType: "text/plain",
           content: [
             "Lunch am 2026-05-12 fuer 60 Teilnehmer.",
-            "Suppe wahlweise Tomate oder Kürbis"
+            "KALBSBULETTEN | SCHMORZWIEBELN"
           ].join("\n")
         }
       ]
@@ -351,7 +347,7 @@ describe("catering agents platform", () => {
       spec.uncertainties?.some(
         (entry) =>
           entry.field === "menuPlan" &&
-          /offene speiseauswahl|menschliche bestaetigung noetig/i.test(
+          /auswahl, alternative oder beispiel|menschlich bestaetigt/i.test(
             entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
           )
       )

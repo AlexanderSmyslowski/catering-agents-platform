@@ -275,28 +275,21 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
   }));
 }
 
-function hasOpenOfferBlockMarkers(text: string): boolean {
-  const normalized = text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function hasNonFinalMenuBlockMarkers(label: string): boolean {
+  const raw = label.toLowerCase();
+  const normalized = label.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
   return (
+    raw.includes("bitte wählen sie") ||
+    raw.includes("bitte waehlen sie") ||
     normalized.includes("bitte wahlen sie") ||
     normalized.includes("je nach auswahl") ||
     normalized.includes("zur auswahl") ||
     normalized.includes("wahlweise") ||
     normalized.includes("zum beispiel") ||
     normalized.includes("beispielsweise") ||
+    /\bz\s*\.\s*b\s*\./.test(raw) ||
     /\balternative(n)?\s*\d+(?:\s*\/\s*\d+)?\b/.test(normalized)
-  );
-}
-
-function hasCommercialProgressMarkers(text: string): boolean {
-  const normalized = text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-  return (
-    normalized.includes("auftragsbestatigung") ||
-    normalized.includes("aktualisiertes angebot") ||
-    normalized.includes("uberarbeitetes angebot") ||
-    normalized.includes("finalisierte kostenubersicht")
   );
 }
 
@@ -394,14 +387,14 @@ export function normalizeEventRequestToSpec(
     });
   }
 
-  if (hasOpenOfferBlockMarkers(rawText) && hasCommercialProgressMarkers(rawText)) {
+  if (menuItems.some((item) => hasNonFinalMenuBlockMarkers(item.label))) {
     uncertainties.push({
       field: "menuPlan",
       message:
-        "Der Dokumenttext wirkt kaufmaennisch oder dokumentseitig fortgeschritten, enthaelt aber noch offene Speiseauswahl. Menschliche Bestaetigung noetig, bevor Speisebloecke als belastbarer Produktionsinput behandelt werden.",
+        "Mindestens ein Speiseblock wirkt wie Auswahl, Alternative oder Beispiel und sollte vor belastbarer Produktionsplanung menschlich bestaetigt werden.",
       severity: "medium",
       suggestedQuestion:
-        "Welche Speisen sind in diesem Block verbindlich ausgewaehlt und damit produktionsfinal?"
+        "Welche Speisebloecke sind bereits verbindlich ausgewaehlt und damit belastbarer Produktionsinput?"
     });
   }
 
