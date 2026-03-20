@@ -54,6 +54,10 @@ interface ManualSpecBody {
   notes?: string;
 }
 
+interface ArchiveSpecBody {
+  reason?: string;
+}
+
 interface MultipartDocumentUpload {
   requestId?: string;
   channel?: EventRequest["source"]["channel"];
@@ -591,6 +595,33 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
       return reply.send({
         acceptedEventSpec: updatedSpec
+      });
+    }
+  );
+
+  app.post<{ Params: { specId: string }; Body: ArchiveSpecBody }>(
+    "/v1/intake/specs/:specId/archive",
+    async (request, reply) => {
+      const archived = await store.archiveSpec(request.params.specId);
+      if (!archived) {
+        return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
+      }
+
+      await auditLog.log({
+        action: "intake.spec_archived",
+        entityType: "AcceptedEventSpec",
+        entityId: archived.spec.specId,
+        actor: actorForRequest(request),
+        summary: "AcceptedEventSpec als verworfen archiviert.",
+        details: {
+          archivedAt: archived.archivedAt,
+          reason: request.body?.reason?.trim() || "nicht angegeben"
+        }
+      });
+
+      return reply.send({
+        specId: archived.spec.specId,
+        archivedAt: archived.archivedAt
       });
     }
   );

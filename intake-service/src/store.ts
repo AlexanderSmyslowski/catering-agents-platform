@@ -6,10 +6,37 @@ import {
   type EventRequest
 } from "@catering/shared-core";
 
+interface StoredSpecRecord {
+  specId: string;
+  spec: AcceptedEventSpec;
+  archivedAt?: string;
+}
+
+function isStoredSpecRecord(value: unknown): value is StoredSpecRecord {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "specId" in value &&
+      "spec" in value &&
+      typeof (value as { specId?: unknown }).specId === "string"
+  );
+}
+
+function normalizeStoredSpecRecord(value: StoredSpecRecord | AcceptedEventSpec): StoredSpecRecord {
+  if (isStoredSpecRecord(value)) {
+    return value;
+  }
+
+  return {
+    specId: value.specId,
+    spec: value
+  };
+}
+
 export class IntakeStore {
   private readonly requests: PersistentCollection<EventRequest>;
 
-  private readonly specs: PersistentCollection<AcceptedEventSpec>;
+  private readonly specs: PersistentCollection<StoredSpecRecord>;
 
   readonly storageOptions?: CollectionStorageOptions;
 
@@ -22,9 +49,10 @@ export class IntakeStore {
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
     });
-    this.specs = createPersistentCollection<AcceptedEventSpec>({
+    this.specs = createPersistentCollection<StoredSpecRecord>({
       collectionName: "intake/specs",
-      getId: (spec) => spec.specId,
+      getId: (record) => record.specId,
+      validate: normalizeStoredSpecRecord,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
@@ -36,11 +64,21 @@ export class IntakeStore {
   }
 
   async saveSpec(spec: AcceptedEventSpec): Promise<void> {
-    await this.specs.set(spec);
+    const existing = await this.specs.get(spec.specId);
+    await this.specs.set({
+      specId: spec.specId,
+      spec,
+      archivedAt: existing?.archivedAt
+    });
   }
 
   async getSpec(specId: string): Promise<AcceptedEventSpec | undefined> {
-    return this.specs.get(specId);
+    const record = await this.specs.get(specId);
+    if (!record || record.archivedAt) {
+      return undefined;
+    }
+
+    return record.spec;
   }
 
   async listRequests(): Promise<EventRequest[]> {
@@ -48,6 +86,25 @@ export class IntakeStore {
   }
 
   async listSpecs(): Promise<AcceptedEventSpec[]> {
-    return this.specs.list();
+    const records = await this.specs.list();
+    return records.filter((record) => !record.archivedAt).map((record) => record.spec);
+  }
+
+  async archiveSpec(specId: string): Promise<{ spec: AcceptedEventSpec; archivedAt: string } | undefined> {
+    const record = await this.specs.get(specId);
+    if (!record || record.archivedAt) {
+      return undefined;
+    }
+
+    const archivedAt = new Date().toISOString();
+    await this.specs.set({
+      ...record,
+      archivedAt
+    });
+
+    return {
+      spec: record.spec,
+      archivedAt
+    };
   }
 }

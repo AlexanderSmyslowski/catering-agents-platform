@@ -13,6 +13,7 @@ import {
 import { DashboardShell } from "../components/dashboard-shell.js";
 import { StatusCard } from "../components/status-card.js";
 import {
+  archiveAcceptedSpec,
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
   createAcceptedSpecFromText,
@@ -655,7 +656,7 @@ export function App() {
     setNotice(undefined);
   }
 
-  function clearProductionWorkspace() {
+  function clearProductionWorkspaceView() {
     setProductionWorkspaceCleared(true);
     setIntakeFile(null);
     setDragActive(false);
@@ -678,7 +679,30 @@ export function App() {
       productionUploadInputRef.current.value = "";
     }
     clearMessages();
-    setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+  }
+
+  async function clearProductionWorkspace() {
+    const specIdToArchive =
+      editingSpecId ||
+      String(focusedProductionSpec?.specId ?? "").trim() ||
+      focusedProductionSpecId;
+
+    setSubmitting(true);
+    clearMessages();
+    try {
+      if (specIdToArchive) {
+        await archiveAcceptedSpec(specIdToArchive, "Vom Bediener als Fehlupload verworfen.");
+        await refreshDashboard();
+      }
+      clearProductionWorkspaceView();
+      setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Vorgang konnte nicht verworfen werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleIntakeSubmit() {

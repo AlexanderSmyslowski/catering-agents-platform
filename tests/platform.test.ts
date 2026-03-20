@@ -328,6 +328,54 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("archives an AcceptedEventSpec and filters it out of active intake lists", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/normalize",
+      payload: {
+        text: "Lunch am 2026-06-18 fuer 40 Teilnehmer mit Buffet und Tomatensuppe."
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const archiveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/specs/${createdSpec.specId}/archive`,
+      payload: {
+        reason: "Fehlupload"
+      }
+    });
+
+    expect(archiveResponse.statusCode).toBe(200);
+    expect(archiveResponse.json().specId).toBe(createdSpec.specId);
+    expect(archiveResponse.json().archivedAt).toBeTruthy();
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/v1/intake/specs"
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().items).toHaveLength(0);
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/specs/${createdSpec.specId}`
+    });
+
+    expect(getResponse.statusCode).toBe(404);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("stores per-component category and sourcing decisions on AcceptedEventSpec", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({

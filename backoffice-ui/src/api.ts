@@ -155,6 +155,13 @@ export async function updateAcceptedSpec(
   );
 }
 
+export async function archiveAcceptedSpec(specId: string, reason?: string) {
+  return fetchJson<{ specId: string; archivedAt: string }>(`/api/intake/v1/intake/specs/${specId}/archive`, {
+    method: "POST",
+    body: JSON.stringify(reason?.trim() ? { reason } : {})
+  });
+}
+
 export async function createAcceptedSpecFromManualForm(input: {
   eventType?: string;
   eventDate?: string;
