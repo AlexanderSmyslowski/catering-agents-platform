@@ -275,6 +275,31 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
   }));
 }
 
+function hasOpenOfferBlockMarkers(text: string): boolean {
+  const normalized = text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  return (
+    normalized.includes("bitte wahlen sie") ||
+    normalized.includes("je nach auswahl") ||
+    normalized.includes("zur auswahl") ||
+    normalized.includes("wahlweise") ||
+    normalized.includes("zum beispiel") ||
+    normalized.includes("beispielsweise") ||
+    /\balternative(n)?\s*\d+(?:\s*\/\s*\d+)?\b/.test(normalized)
+  );
+}
+
+function hasCommercialProgressMarkers(text: string): boolean {
+  const normalized = text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  return (
+    normalized.includes("auftragsbestatigung") ||
+    normalized.includes("aktualisiertes angebot") ||
+    normalized.includes("uberarbeitetes angebot") ||
+    normalized.includes("finalisierte kostenubersicht")
+  );
+}
+
 function detectCourse(label: string): string {
   if (/(dessert|kuchen|mousse|creme|tarte|brownie|schokolade|pudding)/i.test(label)) {
     return "dessert";
@@ -366,6 +391,17 @@ export function normalizeEventRequestToSpec(
       message: "No event date or service window was found.",
       severity: "high",
       suggestedQuestion: "An welchem Datum findet das Event statt?"
+    });
+  }
+
+  if (hasOpenOfferBlockMarkers(rawText) && hasCommercialProgressMarkers(rawText)) {
+    uncertainties.push({
+      field: "menuPlan",
+      message:
+        "Der Dokumenttext wirkt kaufmaennisch oder dokumentseitig fortgeschritten, enthaelt aber noch offene Speiseauswahl. Menschliche Bestaetigung noetig, bevor Speisebloecke als belastbarer Produktionsinput behandelt werden.",
+      severity: "medium",
+      suggestedQuestion:
+        "Welche Speisen sind in diesem Block verbindlich ausgewaehlt und damit produktionsfinal?"
     });
   }
 

@@ -230,6 +230,134 @@ describe("catering agents platform", () => {
     expect(spec.menuPlan.find((item) => item.label.includes("SCHOKOLADENKUCHEN"))?.dietaryTags).toContain("vegan");
   });
 
+  it("adds a defensive uncertainty when commercial progress and open selection markers occur together", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-progress-open-selection",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Auftragsbestätigung",
+            "Lunch am 21.03.2026 fuer 60 Teilnehmer.",
+            "DESSERT zur Auswahl: Mousse oder Obstsalat"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /menschliche bestaetigung noetig/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(true);
+    expect(spec.readiness.status).toBe("complete");
+  });
+
+  it("adds the same defensive uncertainty for updated offers with example dishes", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-updated-example-dishes",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: [
+            "aktualisiertes Angebot",
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer.",
+            "Canapes zum Beispiel Lachs oder Hummus"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /offene speiseauswahl/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(true);
+    expect(spec.readiness.status).toBe("complete");
+  });
+
+  it("does not add the defensive uncertainty for commercial markers without open selection", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-commercial-only",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: [
+            "finalisierte Kostenübersicht",
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer mit Tomatensuppe."
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /offene speiseauswahl|menschliche bestaetigung noetig/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(false);
+  });
+
+  it("does not add the defensive uncertainty for open selection markers without commercial progress", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-open-only",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: [
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer.",
+            "Suppe wahlweise Tomate oder Kürbis"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /offene speiseauswahl|menschliche bestaetigung noetig/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(false);
+  });
+
   it("accepts larger uploaded intake documents without failing on body size limits", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
