@@ -805,6 +805,114 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("marks 'Bitte wählen Sie' blocks as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("QUICHE | Bitte wählen Sie: Spinat oder Lauch", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks 'Alternative 1 / 2' blocks as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("SUPPE Alternative 1 / 2", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks 'je nach Auswahl' blocks as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("DESSERT je nach Auswahl", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("does not treat a normal component with the word Alternative as an open selection", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("VEGANE KÄSE-ALTERNATIVE", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).not.toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).not.toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).not.toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("flags clear dishes without an internal recipe as an internal recipe gap", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });

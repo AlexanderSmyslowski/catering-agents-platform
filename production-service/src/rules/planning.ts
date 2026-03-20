@@ -165,6 +165,19 @@ function unresolvedKitchenSheet(
     };
   }
 
+  if (/offene Auswahl \/ Alternative|offene Auswahl|Alternative verbindlich festlegen/i.test(reason)) {
+    return {
+      title: `${component.label} - Auswahl klären`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte die gewünschte Speise oder Alternative verbindlich festlegen.",
+        "Erst danach kann Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
   if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {
     return {
       title: `${component.label} - Variante klären`,
@@ -226,6 +239,10 @@ function unresolvedTimelineLabel(
 
   if (/focaccia/i.test(component.label)) {
     return `${component.label} Herstellungsart klären`;
+  }
+
+  if (/offene Auswahl \/ Alternative|offene Auswahl|Alternative verbindlich festlegen/i.test(reason)) {
+    return `${component.label} Auswahl klären`;
   }
 
   if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {

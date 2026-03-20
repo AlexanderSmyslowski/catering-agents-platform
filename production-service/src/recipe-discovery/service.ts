@@ -872,6 +872,19 @@ function isHybridBakeryClarificationComponent(component: MenuComponent): boolean
   return /focaccia/.test(normalized);
 }
 
+function hasOpenSelectionMarkers(component: MenuComponent): boolean {
+  const raw = component.label.toLowerCase();
+  const normalized = normalizeComparableText(component.label);
+  return (
+    raw.includes("bitte wählen sie") ||
+    raw.includes("bitte waehlen sie") ||
+    raw.includes("je nach auswahl") ||
+    normalized.includes("bitte wahlen sie") ||
+    normalized.includes("je nach auswahl") ||
+    /\balternative(n)?\s*\d+(?:\s*\/\s*\d+)?\b/.test(normalized)
+  );
+}
+
 function needsVariantClarification(component: MenuComponent): boolean {
   const normalized = normalizeComparableText(component.label);
   return /\b(auswahl|variation|variationen|sorten|sortiment|mix|assortment|assorted|oder)\b/.test(
@@ -893,6 +906,10 @@ function unresolvedRecipeClarificationKind(
     webSearchFailed: boolean;
   }
 ): UnresolvedRecipeClarification {
+  if (hasOpenSelectionMarkers(component)) {
+    return "variant_unclear";
+  }
+
   if (needsVariantClarification(component)) {
     return "variant_unclear";
   }
@@ -928,6 +945,13 @@ function unresolvedRecipeTexts(
   const kind = unresolvedRecipeClarificationKind(component, input);
 
   if (kind === "variant_unclear") {
+    if (hasOpenSelectionMarkers(component)) {
+      return {
+        selectionReason: `Für ${component.label} enthält das Angebot noch eine offene Auswahl / Alternative. Bitte zuerst die gewünschte Speise verbindlich festlegen, bevor Rezept, Produktion und Einkauf belastbar geplant werden.`,
+        unresolvedItem: `Auswahl für ${component.label} klären: gewünschte Alternative verbindlich festlegen.`
+      };
+    }
+
     return {
       selectionReason: `Variante / Ausführung für ${component.label} ist noch unklar. Bitte die gewünschte Ausführung festlegen, damit Produktion und Einkauf belastbar weitergeplant werden können.`,
       unresolvedItem: `Variante / Ausführung für ${component.label} klären: gewünschte Ausführung festlegen.`
@@ -1049,6 +1073,24 @@ export class RecipeDiscoveryService {
         unresolvedItems: [
           `Focaccia für ${component.label} klären: Variante und Herstellungsart festlegen.`
         ]
+      };
+    }
+
+    if (hasOpenSelectionMarkers(component)) {
+      pushTrace("Offener Auswahl-/Alternativblock erkannt.");
+      const unresolved = unresolvedRecipeTexts(component, {
+        repositoryCandidatesFound: false,
+        externalCandidatesSeen: false,
+        webSearchFailed: false
+      });
+      return {
+        selection: {
+          componentId: component.componentId,
+          selectionReason: unresolved.selectionReason,
+          searchTrace,
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: [unresolved.unresolvedItem]
       };
     }
 
