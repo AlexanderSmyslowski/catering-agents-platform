@@ -647,6 +647,13 @@ export function App() {
     [focusedProductionSpec]
   );
 
+  const productionUncertaintyCount = useMemo(() => {
+    if (!focusedProductionSpec || !Array.isArray(focusedProductionSpec.uncertainties)) {
+      return 0;
+    }
+    return focusedProductionSpec.uncertainties.length;
+  }, [focusedProductionSpec]);
+
   const currentEditingSpec = useMemo(() => {
     if (!editingSpecId) {
       return undefined;
@@ -1936,6 +1943,12 @@ export function App() {
                       String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
                     )}
                   </p>
+                  {productionUncertaintyCount > 0 ? (
+                    <p className="helper-text">
+                      Operativ zu klären: {productionUncertaintyCount} Hinweis
+                      {productionUncertaintyCount === 1 ? "" : "e"}.
+                    </p>
+                  ) : null}
                   <ul className="question-list">
                     {productionQuestions.map((question) => (
                       <li key={question}>{question}</li>
