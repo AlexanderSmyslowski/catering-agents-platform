@@ -265,6 +265,38 @@ function resolveRecipeNameById(
   return recipeName || recipeId;
 }
 
+function paxStatusText(spec?: Record<string, unknown>): string | undefined {
+  if (!spec) {
+    return undefined;
+  }
+
+  const attendees =
+    spec.attendees && typeof spec.attendees === "object"
+      ? (spec.attendees as Record<string, unknown>)
+      : undefined;
+  const offerPax =
+    typeof attendees?.expected === "number" && Number.isFinite(attendees.expected)
+      ? attendees.expected
+      : undefined;
+  const productionPax =
+    typeof attendees?.productionPax === "number" && Number.isFinite(attendees.productionPax)
+      ? attendees.productionPax
+      : undefined;
+
+  if (productionPax !== undefined) {
+    if (offerPax !== undefined) {
+      return `Angebots-Pax: ${offerPax}. Produktions-Pax: ${productionPax}. Manuelle Überschreibung aktiv.`;
+    }
+    return `Produktions-Pax: ${productionPax}. Manuelle Überschreibung aktiv.`;
+  }
+
+  if (offerPax !== undefined) {
+    return `Angebots-Pax: ${offerPax}. Aktuell wird dieser Wert für Produktion und Einkauf verwendet.`;
+  }
+
+  return "Noch kein Angebots-Pax erkannt. Bitte den aktuellen Arbeitswert für Produktion und Einkauf setzen.";
+}
+
 
 function estimateProcessingDurationMs(file: File): number {
   const fileSizeMb = file.size / (1024 * 1024);
@@ -615,6 +647,22 @@ export function App() {
     [focusedProductionSpec]
   );
 
+  const currentEditingSpec = useMemo(() => {
+    if (!editingSpecId) {
+      return undefined;
+    }
+
+    return (
+      specById.get(editingSpecId) ??
+      (editingSpecId === String(focusedProductionSpec?.specId ?? "") ? focusedProductionSpec : undefined)
+    );
+  }, [editingSpecId, focusedProductionSpec, specById]);
+
+  const editingPaxStatusText = useMemo(
+    () => paxStatusText(currentEditingSpec),
+    [currentEditingSpec]
+  );
+
   useEffect(() => {
     if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {
       return;
@@ -917,7 +965,7 @@ export function App() {
     setFocusedProductionSpecId(String(spec.specId));
     setEditingEventType(String(event?.type ?? ""));
     setEditingEventDate(String(event?.date ?? ""));
-    setEditingAttendeeCount(String(attendees?.expected ?? ""));
+    setEditingAttendeeCount(String(attendees?.productionPax ?? attendees?.expected ?? ""));
     setEditingServiceForm(String(event?.serviceForm ?? ""));
     setEditingMenuItems(menuPlan.map((item) => String(item.label ?? "")).filter(Boolean).join(", "));
     setEditingComponentStates(nextComponentStates);
@@ -1942,6 +1990,7 @@ export function App() {
                             inputMode="numeric"
                             placeholder="120"
                           />
+                          {editingPaxStatusText ? <p className="helper-text">{editingPaxStatusText}</p> : null}
                         </label>
                         <label className="field-block">
                           <span>Serviceform</span>
@@ -2185,6 +2234,7 @@ export function App() {
                     onChange={(event) => setEditingAttendeeCount(event.target.value)}
                     placeholder="Teilnehmerzahl"
                   />
+                  {editingPaxStatusText ? <p className="helper-text">{editingPaxStatusText}</p> : null}
                   <input
                     value={editingServiceForm}
                     onChange={(event) => setEditingServiceForm(event.target.value)}
