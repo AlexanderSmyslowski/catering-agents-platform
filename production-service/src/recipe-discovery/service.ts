@@ -880,6 +880,12 @@ function hasOpenSelectionMarkers(component: MenuComponent): boolean {
     raw.includes("bitte wählen sie") ||
     raw.includes("bitte waehlen sie") ||
     raw.includes("je nach auswahl") ||
+    normalized.includes("zur auswahl") ||
+    normalized.includes("wahlweise") ||
+    normalized.includes("zum beispiel") ||
+    normalized.includes("beispielsweise") ||
+    /\bz\s*\.\s*b\s*\./.test(raw) ||
+    /\b(wahlweise|zur auswahl)\b.*\boder\b|\boder\b.*\b(wahlweise|zur auswahl)\b/.test(normalized) ||
     normalized.includes("bitte wahlen sie") ||
     normalized.includes("je nach auswahl") ||
     /\balternative(n)?\s*\d+(?:\s*\/\s*\d+)?\b/.test(normalized)
@@ -904,7 +910,7 @@ function isCompositeMenuLineClarificationComponent(component: MenuComponent): bo
 
 function needsVariantClarification(component: MenuComponent): boolean {
   const normalized = normalizeComparableText(component.label);
-  return /\b(auswahl|variation|variationen|sorten|sortiment|mix|assortment|assorted|oder)\b/.test(
+  return /\b(auswahl|variation|variationen|sorten|sortiment|mix|assortment|assorted)\b/.test(
     normalized
   );
 }
