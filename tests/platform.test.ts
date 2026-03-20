@@ -31,6 +31,12 @@ class FakeWebProvider implements WebRecipeSearchProvider {
   }
 }
 
+class ThrowingWebProvider implements WebRecipeSearchProvider {
+  async searchRecipes(): Promise<WebRecipeCandidate[]> {
+    throw new Error("search should not run");
+  }
+}
+
 function baseEventRequest(text: string): EventRequest {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -712,6 +718,62 @@ describe("catering agents platform", () => {
     ).toBe(true);
     expect(body.productionPlan.unresolvedItems.length).toBeGreaterThan(0);
 
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("treats bread and baguette as a bakery procurement case without recipe matching or web search", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("BROT & BAGUETTE", "classic");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Zukauf vom Bäcker");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Bäckerbestellung");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Bäcker-Zukauf");
+    expect(body.productionPlan.kitchenSheets[0].instructions.join(" ")).toContain("kein Rezept");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("keeps filled focaccia components as a targeted clarification instead of forcing recipe or purchase", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("BELEGTE FOCACCIA MIT OFENGEMÜSE", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart und Variante");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Herstellungsart");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Herstellungsart klären");
+    expect(body.productionPlan.kitchenSheets[0].instructions.join(" ")).toContain("Eigenproduktion oder Zukauf");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });

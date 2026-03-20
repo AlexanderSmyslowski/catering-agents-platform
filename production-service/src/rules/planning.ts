@@ -139,6 +139,32 @@ function unresolvedKitchenSheet(
   servings: number,
   reason: string
 ): ProductionPlan["kitchenSheets"][number] {
+  if (/bäcker|b[aä]cker|zukauf vom b[aä]cker/i.test(reason)) {
+    return {
+      title: `${component.label} - Bäcker-Zukauf`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte die Bäckerbestellung mit Sorte, Menge und Lieferzeit abstimmen.",
+        "Für diese Komponente wird kein Rezept und keine Internetrecherche benötigt.",
+        "Danach die Komponente als Beschaffung/Zukauf weiterführen."
+      ]
+    };
+  }
+
+  if (/focaccia/i.test(component.label)) {
+    return {
+      title: `${component.label} - Herstellungsart klären`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte entscheiden: Eigenproduktion oder Zukauf.",
+        "Falls Eigenproduktion gewünscht ist: internes Rezept zuweisen oder neues Rezept anlegen.",
+        "Danach die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
   return {
     title: `${component.label} - Rezeptklärung nötig`,
     instructions: [
@@ -149,6 +175,21 @@ function unresolvedKitchenSheet(
       "Danach die Produktionsplanung erneut starten."
     ]
   };
+}
+
+function unresolvedTimelineLabel(
+  component: AcceptedEventSpec["menuPlan"][number],
+  reason: string
+): string {
+  if (/bäcker|b[aä]cker|zukauf vom b[aä]cker/i.test(reason)) {
+    return `${component.label} beschaffen`;
+  }
+
+  if (/focaccia/i.test(component.label)) {
+    return `${component.label} Herstellungsart klären`;
+  }
+
+  return `${component.label} Rezeptklärung`;
 }
 
 export async function buildProductionArtifacts(
@@ -256,7 +297,10 @@ export async function buildProductionArtifacts(
         )
       );
       timeline.push({
-        label: `${component.label} Rezeptklärung`,
+        label: unresolvedTimelineLabel(
+          component,
+          resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden."
+        ),
         at: prepWindowFor(eventSpec)
       });
       continue;

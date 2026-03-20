@@ -856,6 +856,16 @@ export interface RecipeResolution {
   unresolvedItems: string[];
 }
 
+function isBakeryProcurementComponent(component: MenuComponent): boolean {
+  const normalized = normalizeComparableText(component.label);
+  return /(brot|baguette)/.test(normalized) && !/focaccia/.test(normalized);
+}
+
+function isHybridBakeryClarificationComponent(component: MenuComponent): boolean {
+  const normalized = normalizeComparableText(component.label);
+  return /focaccia/.test(normalized);
+}
+
 function isStrongRecipeCandidate(recipe: Recipe): boolean {
   return (
     recipe.source.approvalState === "auto_usable" ||
@@ -913,6 +923,39 @@ export class RecipeDiscoveryService {
         searchTrace.push(message);
       }
     };
+
+    if (isBakeryProcurementComponent(component)) {
+      pushTrace("Komponente als Bäcker-Zukauf erkannt.");
+      return {
+        selection: {
+          componentId: component.componentId,
+          selectionReason:
+            "Brot/Baguette wird als Zukauf vom Bäcker behandelt. Kein Rezept-Matching und keine Internetrecherche nötig.",
+          searchTrace,
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: [
+          `Bäckerbestellung für ${component.label} klären: Sorte und Menge als Zukauf festlegen.`
+        ]
+      };
+    }
+
+    if (isHybridBakeryClarificationComponent(component)) {
+      pushTrace("Komponente als hybride Backware erkannt.");
+      return {
+        selection: {
+          componentId: component.componentId,
+          selectionReason:
+            "Für diese Focaccia-Komponente muss Herstellungsart und Variante geklärt werden: Eigenproduktion oder Zukauf; falls Eigenproduktion, internes Rezept zuweisen oder neues Rezept anlegen.",
+          searchTrace,
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: [
+          `Focaccia für ${component.label} klären: Variante und Herstellungsart festlegen.`
+        ]
+      };
+    }
+
     const repositoryCandidates = await this.repository.findCandidates(component);
     const internalCandidates = repositoryCandidates
       .filter((recipe) => recipeSupportsMenuCategory(recipe, component))
