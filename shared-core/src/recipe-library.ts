@@ -26,6 +26,7 @@ const searchTokenExpansions: Record<string, string[]> = {
   feta: ["schafskaese"],
   schafskase: ["feta"],
   quiche: ["tarte"],
+  tarte: ["quiche"],
   sauce: ["sosse"],
   sosse: ["sauce"],
   weisswein: ["wein"],
@@ -45,6 +46,13 @@ const searchTokenExpansions: Record<string, string[]> = {
   wildkrautersalat: ["wild", "herb", "salad"],
   wildkrauter: ["wild", "herbs"],
   petersilien: ["parsley"],
+  petersilienvinaigrette: ["parsley", "vinaigrette"],
+  vinaigrette: ["petersilienvinaigrette"],
+  schokoladenkuchen: ["chocolate", "cake", "schokokuchen"],
+  schokokuchen: ["schokoladenkuchen", "chocolate", "cake"],
+  baguette: ["bread", "brot"],
+  brot: ["bread", "baguette"],
+  nusstopping: ["nuts", "topping", "nuss"],
   cake: ["kuchen"],
   kuchen: ["cake"]
 };

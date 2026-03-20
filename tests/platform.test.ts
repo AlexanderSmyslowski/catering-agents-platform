@@ -1250,6 +1250,132 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("uses a controlled external fallback when only a generic internal vegan cake exists", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Veganer Kuchen",
+        filename: "Veganer Kuchen.pages",
+        sourceRef: "test:veganer-kuchen",
+        text: [
+          "Veganer Kuchen",
+          "Zutaten",
+          "500 g Mehl",
+          "300 g Zucker",
+          "300 ml Pflanzenmilch",
+          "Zubereitung",
+          "1. Alles mischen.",
+          "2. Backen."
+        ].join("\n")
+      })
+    );
+
+    const provider = new FakeWebProvider([
+      {
+        url: "https://noracooks.com/vegan-chocolate-cake",
+        title: "Vegan Chocolate Cake",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Vegan Chocolate Cake",
+          baseYield: {
+            servings: 12,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "flour",
+              name: "Flour",
+              quantity: {
+                amount: 500,
+                unit: "g"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "cocoa",
+              name: "Cocoa powder",
+              quantity: {
+                amount: 120,
+                unit: "g"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "plant-milk",
+              name: "Plant milk",
+              quantity: {
+                amount: 400,
+                unit: "ml"
+              },
+              group: "dairy",
+              purchaseUnit: "l",
+              normalizedUnit: "ml"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Dry ingredients mischen."
+            },
+            {
+              index: 2,
+              instruction: "Flüssige Zutaten einarbeiten und backen."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 12
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 11,
+          stepCount: 5,
+          mappedIngredientRatio: 0.95
+        }
+      }
+    ]);
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Schokoladenkuchen vegan.")
+      ),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
+    const storedRecipe = await repository.get(recipeId);
+    expect(storedRecipe?.name).toBe("Vegan Chocolate Cake");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Internet-Ausweichrezept");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("does not mistake an unrelated internal salad for Wildkräutersalat mit Petersilien-Vinaigrette", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
@@ -1363,6 +1489,112 @@ describe("catering agents platform", () => {
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
     const storedRecipe = await repository.get(recipeId);
     expect(storedRecipe?.name).toContain("Krautsalat mit Apfel");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("keeps a creative tarte component unresolved instead of forcing standard tart matches", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Quiche Lorraine",
+        filename: "Quiche Lorraine.pages",
+        sourceRef: "test:quiche-lorraine",
+        text: [
+          "Quiche Lorraine",
+          "Zutaten",
+          "1 Teig",
+          "300 g Speck",
+          "4 Eier",
+          "200 ml Sahne",
+          "Zubereitung",
+          "1. Fuellung anruehren.",
+          "2. Backen."
+        ].join("\n")
+      })
+    );
+
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/savory-tart",
+        title: "Savory tart recipe",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Savory tart recipe",
+          baseYield: {
+            servings: 8,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "pastry",
+              name: "Pastry",
+              quantity: {
+                amount: 1,
+                unit: "pcs"
+              },
+              group: "dry_goods",
+              purchaseUnit: "pcs",
+              normalizedUnit: "pcs"
+            },
+            {
+              ingredientId: "filling",
+              name: "Filling",
+              quantity: {
+                amount: 500,
+                unit: "g"
+              },
+              group: "misc",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Assemble and bake."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 8
+          },
+          allergens: [],
+          dietTags: ["vegetarian"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 6,
+          stepCount: 2,
+          mappedIngredientRatio: 0.9
+        }
+      }
+    ]);
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      dataRoot
+    });
+    const spec = singleComponentSpec("ROTE BETE TARTE", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("belastbar validiert");
+    expect(body.productionPlan.unresolvedItems.join(" ")).toContain("ROTE BETE TARTE");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });

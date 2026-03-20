@@ -42,6 +42,8 @@ const trustedRecipeHosts = [
 ];
 
 const culinaryTokenExpansions: Record<string, string[]> = {
+  quiche: ["tarte"],
+  tarte: ["quiche"],
   schokoladenkuchen: ["chocolate", "cake"],
   kuchen: ["cake"],
   schokolade: ["chocolate"],
@@ -67,9 +69,11 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   wildkrauter: ["wild", "herbs"],
   petersilie: ["parsley"],
   petersilien: ["parsley"],
+  petersilienvinaigrette: ["parsley", "vinaigrette"],
   vinaigrette: ["vinaigrette"],
   brot: ["bread"],
   baguette: ["baguette"],
+  nusstopping: ["nuts", "topping", "nuss"],
   kalbsbuletten: ["veal", "meatballs"],
   buletten: ["meatballs"],
   curry: ["curry"],
@@ -570,6 +574,75 @@ function candidateFormMismatch(candidateText: string, component: MenuComponent):
   return false;
 }
 
+function hasMinimumOperationalRecipeStructure(recipe: Recipe): boolean {
+  return (
+    Array.isArray(recipe.ingredients) &&
+    recipe.ingredients.length > 0 &&
+    Array.isArray(recipe.steps) &&
+    recipe.steps.some((step) => step.instruction.trim().length > 0) &&
+    Number(recipe.baseYield?.servings ?? 0) > 0
+  );
+}
+
+function requiresStrictInternalMatch(component: MenuComponent): boolean {
+  const normalized = normalizeComparableText(component.label);
+  return /quiche|tarte|schokoladenkuchen|schokokuchen|wildkraut|kraut|karott|salat|vinaigrette|brot|baguette/.test(
+    normalized
+  );
+}
+
+function genericInternalRecipeMismatch(recipe: Recipe, component: MenuComponent): boolean {
+  const recipeText = normalizeComparableText(recipeSearchText(recipe));
+  const query = normalizeComparableText(component.label);
+  const focusTokens = specificPrimaryFocusTokens(component);
+  const recipeTokens = searchableSpecificTokens(recipeSearchText(recipe));
+
+  if (
+    requiresStrictInternalMatch(component) &&
+    focusTokens.length > 0 &&
+    !focusTokens.some((token) =>
+      recipeTokens.some((candidateToken) => tokensSpecificallyMatch(token, candidateToken))
+    )
+  ) {
+    return true;
+  }
+
+  if (/(wildkrauter|wildkr[aä]uter|petersilien|vinaigrette)/.test(query)) {
+    return !/(wildkrauter|wildkr[aä]uter|parsley|petersilien|vinaigrette|krauter|herb)/.test(recipeText);
+  }
+
+  if (/(kraut|karott)/.test(query)) {
+    return !/(kraut|cabbage|karott|carrot|coleslaw)/.test(recipeText);
+  }
+
+  if (/(schokoladenkuchen|schokokuchen)/.test(query)) {
+    return !/(schokolad|chocolate|schoko)/.test(recipeText);
+  }
+
+  if (/(quiche|tarte)/.test(query)) {
+    return !/(quiche|tarte)/.test(recipeText);
+  }
+
+  if (/(brot|baguette)/.test(query)) {
+    return !/(brot|bread|baguette)/.test(recipeText);
+  }
+
+  return false;
+}
+
+function isControlledExternalFallbackCandidate(
+  component: MenuComponent,
+  qualityScore: number,
+  extractionCompleteness: number,
+  specificFitScore: number
+): boolean {
+  if (!requiresStrictInternalMatch(component)) {
+    return true;
+  }
+
+  return qualityScore >= 0.45 && extractionCompleteness >= 0.45 && specificFitScore > 0;
+}
+
 function hostnameFor(url: string): string {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -862,15 +935,28 @@ export class RecipeDiscoveryService {
             : 0;
         })()
       }))
-      .filter(
-        (candidate) =>
-          (candidate.fitScore >= 0.75 ||
-            (candidate.repositoryRank === 0 &&
-              candidate.leadNameScore === 1 &&
-              candidate.fitScore >= 0.55)) &&
-          (candidate.primaryScore >= 0.5 || candidate.leadNameScore === 1) &&
-          (candidate.specificPrimaryScore >= 0.34 || candidate.leadNameScore === 1)
-      )
+      .filter((candidate) => {
+        const minimalStructure = hasMinimumOperationalRecipeStructure(candidate.recipe);
+        const strictMatchRequired = requiresStrictInternalMatch(component);
+        const genericMismatch = genericInternalRecipeMismatch(candidate.recipe, component);
+        const fitAccepted =
+          candidate.fitScore >= 0.75 ||
+          (candidate.repositoryRank === 0 && candidate.leadNameScore === 1 && candidate.fitScore >= 0.55);
+        const primaryAccepted = candidate.primaryScore >= 0.5 || candidate.leadNameScore === 1;
+        const specificAccepted = candidate.specificPrimaryScore >= 0.34 || candidate.leadNameScore === 1;
+        const strictSpecificAccepted =
+          candidate.leadNameScore === 1 ||
+          (candidate.fitScore >= 0.7 && candidate.specificPrimaryScore >= 0.55);
+
+        return (
+          minimalStructure &&
+          fitAccepted &&
+          primaryAccepted &&
+          specificAccepted &&
+          (!strictMatchRequired || strictSpecificAccepted) &&
+          !genericMismatch
+        );
+      })
       .sort((left, right) => {
         const tierDifference =
           tierWeight[right.recipe.source.tier] - tierWeight[left.recipe.source.tier];
@@ -918,6 +1004,10 @@ export class RecipeDiscoveryService {
         },
         unresolvedItems: []
       };
+    }
+
+    if (repositoryCandidates.length > 0) {
+      pushTrace("Interne Kandidaten verworfen: keine belastbare interne Rezeptgrundlage.");
     }
 
     const locales: ("de" | "en")[] = ["de", "en"];
@@ -993,8 +1083,20 @@ export class RecipeDiscoveryService {
 
           if (materialized) {
             try {
+              const validated = validateRecipe(materialized);
+              if (
+                !isControlledExternalFallbackCandidate(
+                  component,
+                  qualityScore,
+                  extractionCompleteness,
+                  specificFitScore
+                )
+              ) {
+                pushTrace(`Verworfen: ${candidate.title} (kein belastbarer Ausweichtreffer).`);
+                continue;
+              }
               candidates.push({
-                recipe: validateRecipe(materialized),
+                recipe: validated,
                 query
               });
             } catch {
