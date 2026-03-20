@@ -913,6 +913,106 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("flags composed main dish and sauce lines as a separate component clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("KALBSBULETTEN | SCHMORZWIEBELN", "classic");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Bestandteile");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Bestandteile klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("flags composed dish, side, and topping lines as a separate component clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("MANDEL-CURRY | BASMATIREIS & KORIANDER-TOPPING", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Beilage/Sauce/Topping");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Bestandteile klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("flags salad and vinaigrette lines as a separate component clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Ananas Salat",
+        filename: "Ananas Salat.pdf",
+        sourceRef: "test:ananas-salat",
+        text: [
+          "Ananas Salat",
+          "Zutaten",
+          "1 Ananas",
+          "1 Gurke",
+          "1 rote Zwiebel",
+          "Zubereitung",
+          "1. Alles klein schneiden.",
+          "2. Marinieren."
+        ].join("\n")
+      })
+    );
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Bestandteile klären");
+    expect(body.productionPlan.productionBatches).toHaveLength(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("flags clear dishes without an internal recipe as an internal recipe gap", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
@@ -934,6 +1034,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).not.toContain("mehrere Bestandteile");
     expect(body.productionPlan.unresolvedItems[0]).toContain("Internes Rezept");
     expect(body.productionPlan.kitchenSheets[0].title).toContain("Internes Rezept fehlt");
     await app.close();
@@ -1719,7 +1820,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -2148,7 +2249,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });

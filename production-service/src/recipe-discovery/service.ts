@@ -857,6 +857,7 @@ export interface RecipeResolution {
 }
 
 type UnresolvedRecipeClarification =
+  | "composed_component_clarification"
   | "variant_unclear"
   | "internal_recipe_missing"
   | "production_mode_decision"
@@ -885,6 +886,22 @@ function hasOpenSelectionMarkers(component: MenuComponent): boolean {
   );
 }
 
+function isCompositeMenuLineClarificationComponent(component: MenuComponent): boolean {
+  const segments = component.label
+    .split("|")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length < 2) {
+    return false;
+  }
+
+  const [, ...restSegments] = segments;
+  const accompanimentText = normalizeComparableText(restSegments.join(" "));
+
+  return /\b(schmorzwiebeln?|reis|rice|topping|vinaigrette|dressing)\b/.test(accompanimentText);
+}
+
 function needsVariantClarification(component: MenuComponent): boolean {
   const normalized = normalizeComparableText(component.label);
   return /\b(auswahl|variation|variationen|sorten|sortiment|mix|assortment|assorted|oder)\b/.test(
@@ -908,6 +925,10 @@ function unresolvedRecipeClarificationKind(
 ): UnresolvedRecipeClarification {
   if (hasOpenSelectionMarkers(component)) {
     return "variant_unclear";
+  }
+
+  if (isCompositeMenuLineClarificationComponent(component)) {
+    return "composed_component_clarification";
   }
 
   if (needsVariantClarification(component)) {
@@ -955,6 +976,13 @@ function unresolvedRecipeTexts(
     return {
       selectionReason: `Variante / Ausführung für ${component.label} ist noch unklar. Bitte die gewünschte Ausführung festlegen, damit Produktion und Einkauf belastbar weitergeplant werden können.`,
       unresolvedItem: `Variante / Ausführung für ${component.label} klären: gewünschte Ausführung festlegen.`
+    };
+  }
+
+  if (kind === "composed_component_clarification") {
+    return {
+      selectionReason: `Für ${component.label} enthält die Angebotszeile mehrere Bestandteile. Bitte Hauptkomponente und Beilage/Sauce/Topping zuerst separat festlegen, bevor Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.`,
+      unresolvedItem: `Bestandteile für ${component.label} klären: Hauptkomponente und Beilage/Sauce/Topping separat festlegen.`
     };
   }
 

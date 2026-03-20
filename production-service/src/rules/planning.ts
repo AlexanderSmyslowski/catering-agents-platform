@@ -178,6 +178,19 @@ function unresolvedKitchenSheet(
     };
   }
 
+  if (/mehrere Bestandteile|Beilage\/Sauce\/Topping separat festlegen/i.test(reason)) {
+    return {
+      title: `${component.label} - Bestandteile klären`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte Hauptkomponente und Beilage/Sauce/Topping operativ getrennt festlegen.",
+        "Erst danach kann Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
   if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {
     return {
       title: `${component.label} - Variante klären`,
@@ -243,6 +256,10 @@ function unresolvedTimelineLabel(
 
   if (/offene Auswahl \/ Alternative|offene Auswahl|Alternative verbindlich festlegen/i.test(reason)) {
     return `${component.label} Auswahl klären`;
+  }
+
+  if (/mehrere Bestandteile|Beilage\/Sauce\/Topping separat festlegen/i.test(reason)) {
+    return `${component.label} Bestandteile klären`;
   }
 
   if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {
