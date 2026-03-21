@@ -1782,6 +1782,33 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("classifies Quiche Spinat Feta as vegetarian before production planning", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche Spinat Feta.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche Spinat Feta");
+    expect(spec.menuPlan[0]?.menuCategory).toBe("vegetarian");
+  });
+
+  it("classifies Quiche Lorraine as classic before production planning", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche Lorraine.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche Lorraine");
+    expect(spec.menuPlan[0]?.menuCategory).toBe("classic");
+  });
+
+  it("keeps plain Quiche without a forced category", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche");
+    expect(spec.menuPlan[0]?.menuCategory).toBeUndefined();
+  });
+
   it("falls back to internet recipes and auto-uses high confidence results", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });

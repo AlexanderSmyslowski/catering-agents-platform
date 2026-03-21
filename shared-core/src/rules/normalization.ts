@@ -129,11 +129,21 @@ function sanitizeMenuLine(line: string): string {
 function inferMenuCategoryFromText(
   line: string
 ): MenuComponent["menuCategory"] | undefined {
+  const normalized = line.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
   if (/(^|[^a-z])(vegan)([^a-z]|$)/i.test(line)) {
     return "vegan";
   }
   if (/(vegetarisch|vegetarian)/i.test(line)) {
     return "vegetarian";
+  }
+  if (/\bquiche\b/.test(normalized)) {
+    if (/\b(spinat|feta|schafskase|schafskaese)\b/.test(normalized)) {
+      return "vegetarian";
+    }
+    if (/\b(lorraine|schinken|speck)\b/.test(normalized)) {
+      return "classic";
+    }
   }
   if (/(traditionell|klassisch|classic)/i.test(line)) {
     return "classic";
