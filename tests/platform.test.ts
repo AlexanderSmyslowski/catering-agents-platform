@@ -1050,6 +1050,60 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("treats 'DE LUX' right-side modifiers as a targeted variant clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("KARTOFFELSALAT | DE LUX", "classic");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Variante / Ausführung");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Ausführung");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Variante klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("treats 'FRISCHGEDÖNS' right-side modifiers as a targeted variant clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("NUDELSALAT | FRISCHGEDÖNS", "classic");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Variante / Ausführung");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Ausführung");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Variante klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("marks 'Bitte wählen Sie' blocks as open selections before recipe matching", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
@@ -1362,6 +1416,32 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
     expect(body.productionPlan.kitchenSheets[0].title).toContain("Bestandteile klären");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("does not treat '| vegan' dish modifiers as variant clarification in this iteration", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("SCHOKOLADENKUCHEN | vegan", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).not.toContain("Variante / Ausführung");
+    expect(body.productionPlan.kitchenSheets[0].title).not.toContain("Variante klären");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });

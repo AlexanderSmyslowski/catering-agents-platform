@@ -908,7 +908,27 @@ function isCompositeMenuLineClarificationComponent(component: MenuComponent): bo
   return /\b(schmorzwiebeln?|reis|rice|topping|vinaigrette|dressing)\b/.test(accompanimentText);
 }
 
+function hasExplicitModifierVariantMarker(component: MenuComponent): boolean {
+  const segments = component.label
+    .split("|")
+    .map((segment) => normalizeComparableText(segment).trim())
+    .filter(Boolean);
+
+  if (segments.length < 2) {
+    return false;
+  }
+
+  const [, ...restSegments] = segments;
+  const modifierText = restSegments.join(" ");
+
+  return /^(de\s*luxe?|de\s*lux|frischgedons|frischgedoens)$/.test(modifierText);
+}
+
 function needsVariantClarification(component: MenuComponent): boolean {
+  if (hasExplicitModifierVariantMarker(component)) {
+    return true;
+  }
+
   const normalized = normalizeComparableText(component.label);
   return /\b(auswahl|variation|variationen|sorten|sortiment|mix|assortment|assorted)\b/.test(
     normalized
