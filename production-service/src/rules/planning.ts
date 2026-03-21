@@ -191,6 +191,19 @@ function unresolvedKitchenSheet(
     };
   }
 
+  if (/Komponenten ohne klaren Gerichtskern|belastbare Produktionsspeise festlegen/i.test(reason)) {
+    return {
+      title: `${component.label} - Speise konkretisieren`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte zuerst das eigentliche Gericht oder die belastbare Produktionsspeise festlegen.",
+        "Erst danach kann Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
   if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {
     return {
       title: `${component.label} - Variante klären`,
@@ -260,6 +273,10 @@ function unresolvedTimelineLabel(
 
   if (/mehrere Bestandteile|Beilage\/Sauce\/Topping separat festlegen/i.test(reason)) {
     return `${component.label} Bestandteile klären`;
+  }
+
+  if (/Komponenten ohne klaren Gerichtskern|belastbare Produktionsspeise festlegen/i.test(reason)) {
+    return `${component.label} Speise konkretisieren`;
   }
 
   if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {

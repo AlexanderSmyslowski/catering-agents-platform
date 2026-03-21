@@ -1420,6 +1420,33 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("treats the known vegetable component list as a clarification to concretize the dish first", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("ZUCCHINI | PILZE | ZUCKERSCHOTEN | BABY-PAK-CHOI", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Komponenten ohne klaren Gerichtskern");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("belastbare Produktionsspeise");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Speise konkretisieren");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("does not treat '| vegan' dish modifiers as variant clarification in this iteration", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });

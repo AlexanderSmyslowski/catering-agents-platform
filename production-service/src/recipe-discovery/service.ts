@@ -858,6 +858,7 @@ export interface RecipeResolution {
 
 type UnresolvedRecipeClarification =
   | "composed_component_clarification"
+  | "component_list_clarification"
   | "variant_unclear"
   | "internal_recipe_missing"
   | "production_mode_decision"
@@ -908,6 +909,25 @@ function isCompositeMenuLineClarificationComponent(component: MenuComponent): bo
   return /\b(schmorzwiebeln?|reis|rice|topping|vinaigrette|dressing)\b/.test(accompanimentText);
 }
 
+function isKnownComponentListClarificationComponent(component: MenuComponent): boolean {
+  const segments = component.label
+    .split("|")
+    .map((segment) =>
+      normalizeComparableText(segment)
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+
+  return (
+    segments.length === 4 &&
+    segments[0] === "zucchini" &&
+    segments[1] === "pilze" &&
+    segments[2] === "zuckerschoten" &&
+    segments[3] === "baby pak choi"
+  );
+}
+
 function hasExplicitModifierVariantMarker(component: MenuComponent): boolean {
   const segments = component.label
     .split("|")
@@ -955,6 +975,10 @@ function unresolvedRecipeClarificationKind(
 
   if (isCompositeMenuLineClarificationComponent(component)) {
     return "composed_component_clarification";
+  }
+
+  if (isKnownComponentListClarificationComponent(component)) {
+    return "component_list_clarification";
   }
 
   if (needsVariantClarification(component)) {
@@ -1009,6 +1033,13 @@ function unresolvedRecipeTexts(
     return {
       selectionReason: `Für ${component.label} enthält die Angebotszeile mehrere Bestandteile. Bitte Hauptkomponente und Beilage/Sauce/Topping zuerst separat festlegen, bevor Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.`,
       unresolvedItem: `Bestandteile für ${component.label} klären: Hauptkomponente und Beilage/Sauce/Topping separat festlegen.`
+    };
+  }
+
+  if (kind === "component_list_clarification") {
+    return {
+      selectionReason: `Für ${component.label} enthält die Angebotszeile derzeit nur Komponenten ohne klaren Gerichtskern. Bitte zuerst die gewünschte Speise konkretisieren, bevor Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.`,
+      unresolvedItem: `Speise für ${component.label} konkretisieren: Gericht oder belastbare Produktionsspeise festlegen.`
     };
   }
 
