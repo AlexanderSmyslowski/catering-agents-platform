@@ -180,6 +180,39 @@ function looksLikeStandaloneFallbackHeading(line: string): boolean {
   return /^dessert$/i.test(line);
 }
 
+function isObviousNonMenuLine(line: string): boolean {
+  const normalized = line.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  if (
+    /^(positionbeschreibung|ab\s+\d+[.,]\d{2}|gesamt\s*:|gesamtkosten\s*:?)\b/.test(normalized) ||
+    /^\d+\s*€(?:\s|$)/.test(normalized)
+  ) {
+    return true;
+  }
+
+  if (
+    /(buffetinfrastruktur|menuschilder|weinglaser|besteck|geschirr|ausgabepersonal|dekoration)\b/.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /^(conference catering|business premiumbuffet|hauptspeisen\s*&\s*beilagen|vorspeisenvariationen)$/.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+
+  if (/^conference getranke und snacks einkalkuliert\.?$/.test(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
 function isMenuNoise(line: string): boolean {
   return /(?:uhr|gesamt|kosten|position|beschreibung|personalkosten|lieferung|transport|aufbau|abbau|umbau|rücklauf|personaleinsatz|hall of fame|hauptspeisenteller|stehttische|stehtische|geschirr|tischdecken|reinigungskosten|stunden|stunde)/i.test(
     line
@@ -209,7 +242,7 @@ function extractStructuredMenuSection(text: string): InferredMenuItem[] {
       activeCategory = headingCategory ?? activeCategory;
       continue;
     }
-    if (isMenuNoise(line) || /^\d/.test(line) || /€/.test(line)) {
+    if (isMenuNoise(line) || isObviousNonMenuLine(line) || /^\d/.test(line) || /€/.test(line)) {
       continue;
     }
     if (!/[a-zäöüß]/i.test(line)) {
@@ -247,13 +280,22 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
     .filter(Boolean);
 
   const detected = lines.flatMap((line) => {
+    if (isObviousNonMenuLine(line)) {
+      return [];
+    }
+
     const directMatch = line.match(/\b(?:mit|includes?|serves?|menu|menü)\s+(.+)$/i);
 
     if (directMatch?.[1]) {
       return directMatch[1]
         .split(/\bund\b|&|\/|;/i)
         .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
-        .filter((label) => Boolean(label) && !looksLikeStandaloneFallbackHeading(label))
+        .filter(
+          (label) =>
+            Boolean(label) &&
+            !looksLikeStandaloneFallbackHeading(label) &&
+            !isObviousNonMenuLine(label)
+        )
         .map((label) => ({
           label,
           menuCategory: inferMenuCategoryFromText(label),
@@ -267,7 +309,7 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
 
     return /(buffet|salat|suppe|kaffee|croissant|dessert|fingerfood|wein|snack|menü|baguette|brot|kuchen|curry)/i.test(
       line
-    ) && !isMenuNoise(line)
+    ) && !isMenuNoise(line) && !isObviousNonMenuLine(line)
       ? [
           {
             label: line,

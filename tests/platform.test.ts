@@ -549,6 +549,92 @@ describe("catering agents platform", () => {
     expect(spec.menuPlan.some((item) => item.label === "SCHOKOLADENKUCHEN")).toBe(true);
   });
 
+  it("filters obvious non-menu infrastructure and pricing lines from fallback extraction", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-non-menu-filtering",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: [
+            "Konferenz am 2026-05-12 fuer 60 Teilnehmer.",
+            "Buffetinfrastruktur",
+            "Menüschilder",
+            "Weingläser",
+            "ab 19,90",
+            "SCHOKOLADENKUCHEN"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "Buffetinfrastruktur")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "Menüschilder")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "Weingläser")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "ab 19,90")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "SCHOKOLADENKUCHEN")).toBe(true);
+  });
+
+  it("filters obvious non-menu module headings from structured menu extraction", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-structured-non-menu-filtering",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer.",
+            "QUICK LUNCH |",
+            "TRADITIONELL | 100%",
+            "Business PremiumBuffet",
+            "Vorspeisenvariationen",
+            "Hauptspeisen & Beilagen",
+            "KALBSBULETTEN | SCHMORZWIEBELN",
+            "SCHOKOLADENKUCHEN",
+            "KOSTENÜBERSICHT | DETAILS |"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "Business PremiumBuffet")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "Vorspeisenvariationen")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "Hauptspeisen & Beilagen")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "KALBSBULETTEN | SCHMORZWIEBELN")).toBe(true);
+    expect(spec.menuPlan.some((item) => item.label === "SCHOKOLADENKUCHEN")).toBe(true);
+  });
+
+  it("does not yet filter food-adjacent fallback edge cases like Kaffee or Salate", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-food-adjacent-edges",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: ["Konferenz am 2026-05-12 fuer 60 Teilnehmer.", "Kaffee", "Salate"].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "Kaffee")).toBe(true);
+    expect(spec.menuPlan.some((item) => item.label === "Salate")).toBe(true);
+  });
+
   it("accepts larger uploaded intake documents without failing on body size limits", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
