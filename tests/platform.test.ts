@@ -1800,6 +1800,24 @@ describe("catering agents platform", () => {
     expect(spec.menuPlan[0]?.menuCategory).toBe("classic");
   });
 
+  it("classifies Quiche Schinken as classic before production planning", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche Schinken.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche Schinken");
+    expect(spec.menuPlan[0]?.menuCategory).toBe("classic");
+  });
+
+  it("classifies Quiche mit Speck as classic before production planning", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche mit Speck.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche mit Speck");
+    expect(spec.menuPlan[0]?.menuCategory).toBe("classic");
+  });
+
   it("keeps plain Quiche without a forced category", () => {
     const spec = normalizeEventRequestToSpec(
       baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche.")
