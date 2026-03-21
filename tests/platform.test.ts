@@ -1573,9 +1573,9 @@ describe("catering agents platform", () => {
 
     expect(response.statusCode).toBe(201);
     const body = response.json();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
-    expect(body.productionPlan.unresolvedItems[0]).toContain("Eigenproduktion oder Zukauf");
-    expect(body.productionPlan.kitchenSheets[0].title).toContain("Herstellungsart entscheiden");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Internes Rezept");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Internes Rezept fehlt");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1864,7 +1864,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.readiness.status).toBe("partial");
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -2788,7 +2788,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -2867,7 +2867,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });

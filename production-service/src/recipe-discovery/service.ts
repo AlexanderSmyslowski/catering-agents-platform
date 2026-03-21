@@ -969,6 +969,9 @@ function unresolvedRecipeClarificationKind(
     webSearchFailed: boolean;
   }
 ): UnresolvedRecipeClarification {
+  const hasResolvedProductionMode = component.productionDecision?.mode === "scratch";
+  const hasReliableDishCore = hasClearDishArchetype(component) || input.repositoryCandidatesFound;
+
   if (hasOpenSelectionMarkers(component)) {
     return "variant_unclear";
   }
@@ -985,11 +988,15 @@ function unresolvedRecipeClarificationKind(
     return "variant_unclear";
   }
 
+  if (hasResolvedProductionMode && hasReliableDishCore) {
+    return "internal_recipe_missing";
+  }
+
   if (input.externalCandidatesSeen || input.webSearchFailed) {
     return "production_mode_decision";
   }
 
-  if (hasClearDishArchetype(component) || input.repositoryCandidatesFound) {
+  if (hasReliableDishCore) {
     return "internal_recipe_missing";
   }
 
