@@ -180,8 +180,24 @@ function looksLikeStandaloneFallbackHeading(line: string): boolean {
   return /^dessert$/i.test(line);
 }
 
+function normalizedComparableText(line: string): string {
+  return line.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function isExplicitSelectionBlockStarter(line: string): boolean {
+  const normalized = normalizedComparableText(line);
+  return (
+    normalized.includes("bitte wahlen sie") &&
+    (/maximal zwei speisen/.test(normalized) ||
+      /2 sorten aus/.test(normalized) ||
+      /eine hauptspeise aus/.test(normalized) ||
+      normalized === "bitte wahlen sie" ||
+      /\bbitte wahlen sie\b/.test(normalized))
+  );
+}
+
 function isObviousNonMenuLine(line: string): boolean {
-  const normalized = line.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const normalized = normalizedComparableText(line);
 
   if (
     /^(positionbeschreibung|ab\s+\d+[.,]\d{2}|gesamt\s*:|gesamtkosten\s*:?)\b/.test(normalized) ||
@@ -213,6 +229,66 @@ function isObviousNonMenuLine(line: string): boolean {
   return false;
 }
 
+function isSelectionBlockBoundary(line: string): boolean {
+  return (
+    looksLikeMenuHeading(line) ||
+    /%/.test(line) ||
+    isMenuNoise(line) ||
+    isObviousNonMenuLine(line) ||
+    /^\d/.test(line) ||
+    /€/.test(line) ||
+    /^(kostenübersicht|organisation|referenzen)\b/i.test(line)
+  );
+}
+
+function coalesceExplicitSelectionBlocks(lines: string[]): string[] {
+  const merged: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (!isExplicitSelectionBlockStarter(line)) {
+      merged.push(line);
+      continue;
+    }
+
+    const parts = [line];
+    let consumedFollowers = 0;
+
+    for (let nextIndex = index + 1; nextIndex < lines.length; nextIndex += 1) {
+      const nextLine = lines[nextIndex];
+      if (isSelectionBlockBoundary(nextLine)) {
+        break;
+      }
+
+      const normalized = normalizedComparableText(nextLine);
+      const looksLikeOptionLine =
+        normalized === "oder" ||
+        /^(fleisch|vegetarisch|vegan|dessert|hauptspeise|vorspeise|salate?)\b/.test(normalized) ||
+        /\|/.test(nextLine) ||
+        /(pasta|curry|hahnchen|hähnchen|gulasch|ochsenb|panna cotta|obstkorb|tortiglioni|sandw|baguette|ciabatta|flute)/i.test(
+          nextLine
+        );
+
+      if (!looksLikeOptionLine) {
+        break;
+      }
+
+      parts.push(nextLine);
+      consumedFollowers += 1;
+
+      if (consumedFollowers >= 4 || parts.join(" / ").length >= 320) {
+        break;
+      }
+    }
+
+    merged.push(parts.join(" / "));
+    index += consumedFollowers;
+  }
+
+  return merged;
+}
+
 function isMenuNoise(line: string): boolean {
   return /(?:uhr|gesamt|kosten|position|beschreibung|personalkosten|lieferung|transport|aufbau|abbau|umbau|rücklauf|personaleinsatz|hall of fame|hauptspeisenteller|stehttische|stehtische|geschirr|tischdecken|reinigungskosten|stunden|stunde)/i.test(
     line
@@ -228,10 +304,12 @@ function extractStructuredMenuSection(text: string): InferredMenuItem[] {
     return [];
   }
 
-  const lines = sectionMatch[1]
+  const lines = coalesceExplicitSelectionBlocks(
+    sectionMatch[1]
     .split(/\n+/)
     .map((line) => sanitizeMenuLine(line))
-    .filter(Boolean);
+    .filter(Boolean)
+  );
 
   const detected: InferredMenuItem[] = [];
   let activeCategory: MenuComponent["menuCategory"] | undefined;
@@ -240,6 +318,14 @@ function extractStructuredMenuSection(text: string): InferredMenuItem[] {
     const headingCategory = inferMenuCategoryFromText(line);
     if (looksLikeMenuHeading(line) || /%/.test(line)) {
       activeCategory = headingCategory ?? activeCategory;
+      continue;
+    }
+    if (isExplicitSelectionBlockStarter(line)) {
+      detected.push({
+        label: line,
+        menuCategory: activeCategory,
+        dietaryTags: dietaryTagsForCategory(activeCategory)
+      });
       continue;
     }
     if (isMenuNoise(line) || isObviousNonMenuLine(line) || /^\d/.test(line) || /€/.test(line)) {
@@ -274,10 +360,12 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
     return structuredSectionLabels.slice(0, 12);
   }
 
-  const lines = text
+  const lines = coalesceExplicitSelectionBlocks(
+    text
     .split(/\n|,/)
     .map((line) => sanitizeMenuLine(line))
-    .filter(Boolean);
+    .filter(Boolean)
+  );
 
   const detected = lines.flatMap((line) => {
     if (isObviousNonMenuLine(line)) {
@@ -305,6 +393,16 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
 
     if (looksLikeStandaloneFallbackHeading(line)) {
       return [];
+    }
+
+    if (isExplicitSelectionBlockStarter(line)) {
+      return [
+        {
+          label: line,
+          menuCategory: inferMenuCategoryFromText(line),
+          dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(line))
+        }
+      ];
     }
 
     return /(buffet|salat|suppe|kaffee|croissant|dessert|fingerfood|wein|snack|menü|baguette|brot|kuchen|curry)/i.test(

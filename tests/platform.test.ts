@@ -635,6 +635,156 @@ describe("catering agents platform", () => {
     expect(spec.menuPlan.some((item) => item.label === "Salate")).toBe(true);
   });
 
+  it("keeps an explicit Hall-style multi-line selection block together", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-hall-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Lunch am 16.06.2025 fuer 30 Teilnehmer.",
+            "QUICK LUNCH |",
+            "16.06.2025 Bitte wählen Sie maximal zwei Speisen",
+            "Salate |",
+            "Sommersalat | frisch | knackig | zweierlei Saucen und Vinaigrette",
+            "Pasta Spinat-Sahne-Sauce | vegetarisch | Nuss-Topping",
+            "KOSTENÜBERSICHT | DETAILS |"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const selectionBlock = spec.menuPlan.find((item) => /Bitte wählen Sie maximal zwei Speisen/i.test(item.label));
+    expect(selectionBlock?.label).toContain("Salate");
+    expect(selectionBlock?.label).toContain("Sommersalat");
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /auswahl, alternative oder beispiel/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(true);
+  });
+
+  it("keeps an explicit dessert selection block together", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-dessert-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Lunch am 10.03.2025 fuer 40 Teilnehmer.",
+            "QUICK LUNCH |",
+            "DESSERT | BITTE WÄHLEN SIE",
+            "Panna-Cotta | Beerensauce",
+            "Obstkorb | saisonale Früchte",
+            "KOSTENÜBERSICHT | DETAILS |"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const selectionBlock = spec.menuPlan.find((item) => /BITTE WÄHLEN SIE/i.test(item.label));
+    expect(selectionBlock?.label).toContain("Panna-Cotta");
+    expect(selectionBlock?.label).toContain("Obstkorb");
+  });
+
+  it("keeps an explicit Hollenbach-style sandwich selection block together", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-sandwich-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Meeting am 30.11.2023 fuer 11 Teilnehmer.",
+            "QUICK LUNCH |",
+            "Sandw(h)ich Bitte wählen Sie 2 Sorten aus.",
+            "Foccacia | Serrano | gequetschter Tomate | Rauke & Parmesan",
+            "Baguette | gegrillte Zucchini & Aubergine | Paprika-Chili | Rauke & Parmesan",
+            "Ciabatta | Mozzarella | getrocknete Tomaten | Basilikum",
+            "KOSTENÜBERSICHT | DETAILS |"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const selectionBlock = spec.menuPlan.find((item) => /Bitte wählen Sie 2 Sorten aus/i.test(item.label));
+    expect(selectionBlock?.label).toContain("Foccacia");
+    expect(selectionBlock?.label).toContain("Baguette");
+  });
+
+  it("keeps an explicit Bojovic-style main dish selection block together", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-main-dish-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Meeting am 06.05.2025 fuer 20 Teilnehmer.",
+            "Hauptspeise | bitte wählen Sie eine Hauptspeise aus",
+            "Zart geschmortes Gulasch | Butterspätzle | Rosmaringemüse",
+            "oder",
+            "Slow Cooked Ochsenbäckchen | Kartoffelgratin | grüne Bohnen",
+            "Dessert | in Minigläschen"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const selectionBlock = spec.menuPlan.find((item) => /eine Hauptspeise aus/i.test(item.label));
+    expect(selectionBlock?.label).toContain("Gulasch");
+    expect(selectionBlock?.label).toContain("Ochsenbäckchen");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: withProductionDecision(spec, "classic")
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().productionPlan.unresolvedItems).toContain(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("accepts larger uploaded intake documents without failing on body size limits", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
