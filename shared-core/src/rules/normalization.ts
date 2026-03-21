@@ -166,6 +166,10 @@ function looksLikeMenuHeading(line: string): boolean {
   );
 }
 
+function looksLikeStandaloneFallbackHeading(line: string): boolean {
+  return /^dessert$/i.test(line);
+}
+
 function isMenuNoise(line: string): boolean {
   return /(?:uhr|gesamt|kosten|position|beschreibung|personalkosten|lieferung|transport|aufbau|abbau|umbau|rücklauf|personaleinsatz|hall of fame|hauptspeisenteller|stehttische|stehtische|geschirr|tischdecken|reinigungskosten|stunden|stunde)/i.test(
     line
@@ -239,12 +243,16 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
       return directMatch[1]
         .split(/\bund\b|&|\/|;/i)
         .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
-        .filter(Boolean)
+        .filter((label) => Boolean(label) && !looksLikeStandaloneFallbackHeading(label))
         .map((label) => ({
           label,
           menuCategory: inferMenuCategoryFromText(label),
           dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))
         }));
+    }
+
+    if (looksLikeStandaloneFallbackHeading(line)) {
+      return [];
     }
 
     return /(buffet|salat|suppe|kaffee|croissant|dessert|fingerfood|wein|snack|menü|baguette|brot|kuchen|curry)/i.test(

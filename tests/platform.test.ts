@@ -354,6 +354,66 @@ describe("catering agents platform", () => {
     ).toBe(false);
   });
 
+  it("does not keep pure DESSERT headings as fallback menu entries", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-dessert-heading",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: ["Konferenz am 2026-05-12 fuer 60 Teilnehmer.", "DESSERT"].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "DESSERT")).toBe(false);
+  });
+
+  it("keeps BROT & BAGUETTE in fallback extraction", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-bread",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: ["Konferenz am 2026-05-12 fuer 60 Teilnehmer.", "BROT & BAGUETTE"].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "BROT & BAGUETTE")).toBe(true);
+  });
+
+  it("keeps real dessert dishes in fallback extraction", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-dessert-dish",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: ["Konferenz am 2026-05-12 fuer 60 Teilnehmer.", "SCHOKOLADENKUCHEN"].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "SCHOKOLADENKUCHEN")).toBe(true);
+  });
+
   it("accepts larger uploaded intake documents without failing on body size limits", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
