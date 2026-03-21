@@ -305,6 +305,9 @@ export async function buildProductionArtifacts(
   const timeline: ProductionPlan["timeline"] = [];
   const recipeSelections: ProductionPlan["recipeSelections"] = [];
   const unresolvedItems: string[] = [...(eventSpec.missingFields ?? [])];
+  const hasMenuPlanUncertainty = (eventSpec.uncertainties ?? []).some(
+    (entry) => entry.field === "menuPlan"
+  );
 
   for (const component of eventSpec.menuPlan) {
     const servings =
@@ -433,6 +436,12 @@ export async function buildProductionArtifacts(
       label: `${component.label} vorbereiten`,
       at: batch.prepWindow
     });
+  }
+
+  if (hasMenuPlanUncertainty) {
+    unresolvedItems.push(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
   }
 
   const readiness = mergeReadiness(eventSpec.readiness, unresolvedItems);

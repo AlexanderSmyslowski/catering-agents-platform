@@ -354,6 +354,141 @@ describe("catering agents platform", () => {
     ).toBe(false);
   });
 
+  it("carries explicit menuPlan uncertainties into production unresolvedItems", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec({
+        schemaVersion: SCHEMA_VERSION,
+        requestId: "request-open-selection-plan-hint",
+        source: {
+          channel: "pdf_upload",
+          receivedAt: "2026-03-21T09:00:00.000Z"
+        },
+        rawInputs: [
+          {
+            kind: "pdf",
+            mimeType: "application/pdf",
+            content: [
+              "Lunch am 21.03.2026 fuer 60 Teilnehmer.",
+              "DESSERT zur Auswahl: Mousse oder Obstsalat"
+            ].join("\n")
+          }
+        ]
+      }),
+      "vegetarian"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().productionPlan.unresolvedItems).toContain(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("carries mixed maturity menuPlan uncertainties into production unresolvedItems", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec({
+        schemaVersion: SCHEMA_VERSION,
+        requestId: "request-mixed-maturity-plan-hint",
+        source: {
+          channel: "pdf_upload",
+          receivedAt: "2026-03-21T09:00:00.000Z"
+        },
+        rawInputs: [
+          {
+            kind: "pdf",
+            mimeType: "application/pdf",
+            content: [
+              "Auftragsbestätigung Lunch am 21.03.2026 fuer 60 Teilnehmer.",
+              "DESSERT zur Auswahl: Mousse oder Obstsalat"
+            ].join("\n")
+          }
+        ]
+      }),
+      "vegetarian"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().productionPlan.unresolvedItems).toContain(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("does not add the production unresolvedItems hint for clear final menu blocks", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec({
+        schemaVersion: SCHEMA_VERSION,
+        requestId: "request-clear-final-plan-hint",
+        source: {
+          channel: "text",
+          receivedAt: "2026-03-21T09:00:00.000Z"
+        },
+        rawInputs: [
+          {
+            kind: "text",
+            mimeType: "text/plain",
+            content: "Lunch am 2026-05-12 fuer 60 Teilnehmer mit Tomatensuppe."
+          }
+        ]
+      }),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().productionPlan.unresolvedItems).not.toContain(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("does not keep pure DESSERT headings as fallback menu entries", () => {
     const spec = normalizeEventRequestToSpec({
       schemaVersion: SCHEMA_VERSION,
