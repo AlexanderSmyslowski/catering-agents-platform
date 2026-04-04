@@ -1,4 +1,7 @@
-import type { EventRequest } from "./types.js";
+import { validateAcceptedEventSpec } from "./validation.js";
+import { normalizeEventRequestToSpec } from "./rules/normalization.js";
+import { withEvaluatedReadiness } from "./rules/readiness.js";
+import type { AcceptedEventSpec, EventDemand, EventRequest } from "./types.js";
 import { SCHEMA_VERSION } from "./types.js";
 
 export function createEventRequestFromText(input: {
@@ -86,4 +89,89 @@ export function createEventRequestFromManualForm(input: {
     })),
     constraints: input.notes?.trim() ? [input.notes.trim()] : undefined
   };
+}
+
+function eventDemandText(input: EventDemand): string {
+  const lines = [
+    input.eventType ? `Eventtyp: ${input.eventType}` : undefined,
+    input.date ? `Datum: ${input.date}` : undefined,
+    `Teilnehmer: ${input.pax}`,
+    `Serviceform: ${input.serviceForm}`,
+    `Wunsch: ${input.menuOrServiceWish}`,
+    ...(input.restrictions ?? []).map((item) => `Einschraenkung: ${item}`)
+  ].filter(Boolean);
+
+  return lines.join("\n");
+}
+
+export function createAcceptedEventSpecFromEventDemand(input: EventDemand): AcceptedEventSpec {
+  const eventRequest = createEventRequestFromText({
+    requestId: input.demandId,
+    channel: "api",
+    rawText: eventDemandText(input)
+  });
+
+  eventRequest.event = {
+    type: input.eventType,
+    date: input.date,
+    serviceForm: input.serviceForm
+  };
+  eventRequest.attendees = {
+    expected: input.pax
+  };
+  eventRequest.constraints = input.restrictions;
+  eventRequest.customer = input.customerType
+    ? {
+        segment: input.customerType
+      }
+    : undefined;
+
+  const normalized = normalizeEventRequestToSpec(eventRequest, {
+    sourceType: "manual_input",
+    reference: input.demandId,
+    commercialState: "manual"
+  });
+
+  const eventType = input.eventType?.trim() || normalized.event.type || normalized.servicePlan.eventType;
+  const serviceForm = input.serviceForm.trim();
+
+  const spec: AcceptedEventSpec = {
+    ...normalized,
+    event: {
+      ...normalized.event,
+      type: eventType,
+      date: input.date?.trim() || normalized.event.date,
+      serviceForm
+    },
+    attendees: {
+      ...normalized.attendees,
+      expected: input.pax
+    },
+    budgetContext: input.budgetContext?.targetBudget
+      ? {
+          ...normalized.budgetContext,
+          targetBudget: input.budgetContext.targetBudget
+        }
+      : normalized.budgetContext,
+    customer: input.customerType
+      ? {
+          ...normalized.customer,
+          segment: input.customerType
+        }
+      : normalized.customer,
+    productionConstraints: input.restrictions,
+    servicePlan: {
+      ...normalized.servicePlan,
+      eventType,
+      serviceForm
+    },
+    menuPlan: normalized.menuPlan.map((item) => ({
+      ...item,
+      serviceStyle: serviceForm,
+      desiredRecipeTags: eventType ? [eventType] : item.desiredRecipeTags,
+      servings: input.pax
+    }))
+  };
+
+  return validateAcceptedEventSpec(withEvaluatedReadiness(spec));
 }

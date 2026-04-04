@@ -26,6 +26,21 @@ function stationFor(label: string): string {
   return "hot-kitchen";
 }
 
+function translateAllergenTag(value: string): string {
+  const labels: Record<string, string> = {
+    milk: "Milch",
+    gluten: "Gluten",
+    nuts: "Schalenfrüchte",
+    egg: "Ei"
+  };
+
+  return labels[value] ?? value;
+}
+
+function allergensSummary(allergens: string[]): string {
+  return allergens.map((entry) => translateAllergenTag(entry)).join(", ");
+}
+
 function prepWindowFor(spec: AcceptedEventSpec): string {
   return spec.event.date
     ? `${spec.event.date} T-1`
@@ -423,10 +438,24 @@ export async function buildProductionArtifacts(
     };
 
     productionBatches.push(batch);
+    const allergenInstructions =
+      resolution.recipe.allergenStatus === "known" && resolution.recipe.allergens.length > 0
+        ? [`Bekannte Allergene laut Rezept: ${allergensSummary(resolution.recipe.allergens)}.`]
+        : resolution.recipe.allergenStatus === "unknown"
+          ? [
+              "Allergeninformation im verwendeten Rezept ist noch nicht belastbar gepflegt. Vor Einsatz und Kennzeichnung bitte prüfen."
+            ]
+          : [];
+
+    if (resolution.recipe.allergenStatus === "unknown") {
+      unresolvedItems.push(`Allergeninformation für ${component.label} ist noch nicht belastbar gepflegt.`);
+    }
+
     kitchenSheets.push({
       title: `${component.label} - ${resolution.recipe.name}`,
       instructions: [
         ...batch.steps.map((step) => `${step.index}. ${step.instruction}`),
+        ...allergenInstructions,
         ...(productionMode === "hybrid"
           ? [`Zukaufteil separat disponieren: ${purchasedElementsSummary(component)}.`]
           : [])

@@ -5,6 +5,7 @@ import {
   AuditLogStore,
   type CollectionStorageOptions,
   createEventRequestFromManualForm,
+  validateEventDemand,
   getDemoIntakeRequests,
   normalizeEventRequestToSpec,
   withEvaluatedReadiness,
@@ -12,10 +13,18 @@ import {
   validateEventRequest,
   type AcceptedEventSpec,
   type DocumentInput,
+  type EventDemand,
   type EventRequest
 } from "@catering/shared-core";
 import { buildEventRequestFromText, extractTextFromDocument } from "./extraction.js";
-import { IntakeStore } from "./store.js";
+import {
+  IntakeStore,
+  type ApprovalRequestRecord,
+  type ApprovalRole,
+  type DocumentImportRecord,
+  type ExtractedContextRecord,
+  type ExtractedField
+} from "./store.js";
 
 interface DocumentBody {
   documents: {
@@ -58,6 +67,26 @@ interface ArchiveSpecBody {
   reason?: string;
 }
 
+interface ApprovalDecisionBody {
+  note?: string;
+}
+
+interface EventDemandBody {
+  pax: number;
+  serviceForm: string;
+  menuOrServiceWish: string;
+  eventType?: string;
+  date?: string;
+  budgetContext?: {
+    targetBudget?: {
+      amount: number;
+      currency: string;
+    };
+  };
+  customerType?: "company" | "university" | "public" | "private" | "unknown";
+  restrictions?: string[];
+}
+
 interface MultipartDocumentUpload {
   requestId?: string;
   channel?: EventRequest["source"]["channel"];
@@ -86,6 +115,34 @@ function normalizeMenuItems(input: string[] | undefined): string[] | undefined {
 
   const items = input.map((item) => item.trim()).filter(Boolean);
   return items.length > 0 ? items : [];
+}
+
+function normalizeRestrictions(input: string[] | undefined): string[] | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const items = input.map((item) => item.trim()).filter(Boolean);
+  return items.length > 0 ? items : [];
+}
+
+function eventDemandFromBody(demandId: string, body: EventDemandBody): EventDemand {
+  return validateEventDemand({
+    schemaVersion: "1.0.0",
+    demandId,
+    pax: body.pax,
+    serviceForm: body.serviceForm?.trim() ?? "",
+    menuOrServiceWish: body.menuOrServiceWish?.trim() ?? "",
+    eventType: body.eventType?.trim() || undefined,
+    date: body.date?.trim() || undefined,
+    budgetContext: body.budgetContext?.targetBudget
+      ? {
+          targetBudget: body.budgetContext.targetBudget
+        }
+      : undefined,
+    customerType: body.customerType,
+    restrictions: normalizeRestrictions(body.restrictions)
+  });
 }
 
 function dietaryTagsForCategory(category?: "classic" | "vegetarian" | "vegan"): string[] {
@@ -196,6 +253,98 @@ function applySpecUpdates(
   };
 
   return withEvaluatedReadiness(nextSpec);
+}
+
+function roleFromHeaders(
+  headers: Record<string, string | string[] | undefined>
+): ApprovalRole {
+  const raw = headers["x-actor-role"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return "Approver";
+  }
+  if (
+    value === "KitchenEditor" ||
+    value === "ProcurementEditor" ||
+    value === "Approver"
+  ) {
+    return value;
+  }
+  throw new Error("Unbekannte Rolle.");
+}
+
+function criticalFieldsForSpecUpdate(body: SpecUpdateBody): string[] {
+  const criticalFields = new Set<string>();
+
+  if (Object.prototype.hasOwnProperty.call(body, "eventDate")) {
+    criticalFields.add("eventDate");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "attendeeCount")) {
+    criticalFields.add("attendeeCount");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "serviceForm")) {
+    criticalFields.add("serviceForm");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "eventType")) {
+    criticalFields.add("eventType");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "menuItems")) {
+    criticalFields.add("menuItems");
+  }
+
+  for (const update of body.componentUpdates ?? []) {
+    if (Object.prototype.hasOwnProperty.call(update, "menuCategory")) {
+      criticalFields.add("menuCategory");
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "productionMode")) {
+      criticalFields.add("productionMode");
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "purchasedElements")) {
+      criticalFields.add("purchasedElements");
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "recipeOverrideId")) {
+      criticalFields.add("recipeOverrideId");
+    }
+  }
+
+  return [...criticalFields];
+}
+
+function isHarmlessNotesOnlyUpdate(body: SpecUpdateBody): boolean {
+  const topLevelKeys = Object.keys(body);
+  if (topLevelKeys.length === 0) {
+    return false;
+  }
+
+  return topLevelKeys.every((key) => key === "componentUpdates") &&
+    (body.componentUpdates ?? []).length > 0 &&
+    (body.componentUpdates ?? []).every((update) => {
+      const keys = Object.keys(update);
+      return (
+        keys.length > 0 &&
+        keys.every((key) => key === "componentId" || key === "notes")
+      );
+    });
+}
+
+function approvalRequestForBlockedSpecUpdate(
+  specId: string,
+  body: SpecUpdateBody,
+  actor: { name: string },
+  role: ApprovalRole
+): ApprovalRequestRecord {
+  return {
+    approvalRequestId: `approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    specId,
+    status: "pending",
+    requestedAt: new Date().toISOString(),
+    requestedBy: {
+      name: actor.name,
+      role
+    },
+    criticalFields: criticalFieldsForSpecUpdate(body),
+    requestedChange: body as Record<string, unknown>
+  };
 }
 
 export interface IntakeAppOptions extends CollectionStorageOptions {
@@ -322,7 +471,91 @@ async function normalizeUploadedDocuments(
     })
   );
 
+  const documentImport: DocumentImportRecord = {
+    documentImportId: `document-import-${validatedRequest.requestId}`,
+    requestId: validatedRequest.requestId,
+    sourceChannel: validatedRequest.source.channel,
+    createdAt: new Date().toISOString(),
+    documents: payload.documents.map((document, index) => ({
+      documentId: extracted[index]?.documentId ?? `${validatedRequest.requestId}-${index + 1}`,
+      filename: document.filename,
+      mimeType: document.mimeType,
+      sizeBytes: document.content.byteLength,
+      extractedTextPreview: extracted[index]?.text.slice(0, 240) ?? ""
+    }))
+  };
+
+  const fieldStatusFor = <T,>(
+    value: T | undefined,
+    options?: {
+      missingFieldCodes?: string[];
+      uncertaintyFields?: string[];
+      note?: string;
+    }
+  ): ExtractedField<T> => {
+    const missing = (options?.missingFieldCodes ?? []).some((field) =>
+      spec.missingFields?.includes(field)
+    );
+    const uncertain = (options?.uncertaintyFields ?? []).some((field) =>
+      spec.uncertainties?.some((entry) => entry.field === field)
+    );
+
+    if (value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0)) {
+      return {
+        status: "missing",
+        note: options?.note
+      };
+    }
+
+    return {
+      value,
+      status: missing || uncertain ? "uncertain" : "extracted",
+      note: options?.note
+    };
+  };
+
+  const extractedContext: ExtractedContextRecord = {
+    extractedContextId: `extracted-context-${validatedRequest.requestId}`,
+    documentImportId: documentImport.documentImportId,
+    requestId: validatedRequest.requestId,
+    specId: spec.specId,
+    status: "draft",
+    fields: {
+      pax: fieldStatusFor(spec.attendees.expected, {
+        missingFieldCodes: ["attendees.expected"],
+        uncertaintyFields: ["attendees.expected"]
+      }),
+      serviceForm: fieldStatusFor(spec.servicePlan.serviceForm, {
+        note: "Automatisch aus Dokumenttext oder Eventtyp abgeleitet."
+      }),
+      menuOrServiceWish: fieldStatusFor(
+        spec.menuPlan.map((item) => item.label).filter(Boolean).join(", "),
+        {
+          missingFieldCodes: ["menuPlan"],
+          uncertaintyFields: ["menuPlan"]
+        }
+      ),
+      budgetTarget: fieldStatusFor(spec.budgetContext?.targetBudget, {
+        missingFieldCodes: ["budgetContext.targetBudget"]
+      }),
+      eventType: fieldStatusFor(spec.servicePlan.eventType, {
+        note: "Automatisch aus Dokumenttext oder Defaults abgeleitet."
+      }),
+      date: fieldStatusFor(spec.event.date, {
+        missingFieldCodes: ["event.date"],
+        uncertaintyFields: ["event.date"]
+      }),
+      restrictions: fieldStatusFor(spec.productionConstraints, {
+        missingFieldCodes: ["productionConstraints"]
+      })
+    },
+    uncertainties: (spec.uncertainties ?? []).map((entry) => entry.message),
+    missingFields: spec.missingFields ?? []
+  };
+
   return {
+    documentImport,
+    extractedContext,
     eventRequest: validatedRequest,
     acceptedEventSpec: spec
   };
@@ -353,9 +586,13 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   app.register(multipart);
 
   app.get("/health", async (_request, reply) => {
-    const [requests, specs, auditEvents] = await Promise.all([
+    const [requests, eventDemands, specs, approvalRequests, documentImports, extractedContexts, auditEvents] = await Promise.all([
       store.listRequests(),
+      store.listEventDemands(),
       store.listSpecs(),
+      store.listApprovalRequests(),
+      store.listDocumentImports(),
+      store.listExtractedContexts(),
       auditLog.count()
     ]);
     return reply.send({
@@ -364,7 +601,11 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       timestamp: new Date().toISOString(),
       counts: {
         requests: requests.length,
+        eventDemands: eventDemands.length,
         acceptedSpecs: specs.length,
+        approvalRequests: approvalRequests.length,
+        documentImports: documentImports.length,
+        extractedContexts: extractedContexts.length,
         auditEvents
       }
     });
@@ -431,17 +672,20 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
 
     await store.saveRequest(normalized.eventRequest);
+    await store.saveDocumentImport(normalized.documentImport);
+    await store.saveExtractedContext(normalized.extractedContext);
     await store.saveSpec(normalized.acceptedEventSpec);
     await auditLog.log({
-      action: "intake.documents_normalized",
-      entityType: "AcceptedEventSpec",
-      entityId: normalized.acceptedEventSpec.specId,
+      action: "intake.documents_imported",
+      entityType: "DocumentImport",
+      entityId: normalized.documentImport.documentImportId,
       actor: actorForRequest(request),
-      summary: `${documents.length} hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert.`,
+      summary: `${documents.length} hochgeladene(s) Dokument(e) als Extraktionsentwurf übernommen.`,
       details: {
         requestId: normalized.eventRequest.requestId,
         documentCount: documents.length,
         readiness: normalized.acceptedEventSpec.readiness.status,
+        extractedContextId: normalized.extractedContext.extractedContextId,
         uploadMode: "json_base64"
       }
     });
@@ -454,17 +698,20 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     const normalized = await normalizeUploadedDocuments(upload);
 
     await store.saveRequest(normalized.eventRequest);
+    await store.saveDocumentImport(normalized.documentImport);
+    await store.saveExtractedContext(normalized.extractedContext);
     await store.saveSpec(normalized.acceptedEventSpec);
     await auditLog.log({
-      action: "intake.documents_normalized",
-      entityType: "AcceptedEventSpec",
-      entityId: normalized.acceptedEventSpec.specId,
+      action: "intake.documents_imported",
+      entityType: "DocumentImport",
+      entityId: normalized.documentImport.documentImportId,
       actor: actorForRequest(request),
-      summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload in AcceptedEventSpec normalisiert.`,
+      summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload als Extraktionsentwurf übernommen.`,
       details: {
         requestId: normalized.eventRequest.requestId,
         documentCount: upload.documents.length,
         readiness: normalized.acceptedEventSpec.readiness.status,
+        extractedContextId: normalized.extractedContext.extractedContextId,
         uploadMode: "multipart"
       }
     });
@@ -557,6 +804,111 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
   });
 
+  app.post<{ Body: EventDemandBody }>("/v1/intake/event-demands", async (request, reply) => {
+    const eventDemand = eventDemandFromBody(`event-demand-${Date.now()}`, request.body);
+    await store.saveEventDemand(eventDemand);
+    await auditLog.log({
+      action: "intake.event_demand_created",
+      entityType: "EventDemand",
+      entityId: eventDemand.demandId,
+      actor: actorForRequest(request),
+      summary: "EventDemand angelegt.",
+      details: {
+        pax: eventDemand.pax,
+        serviceForm: eventDemand.serviceForm
+      }
+    });
+
+    return reply.code(201).send({
+      eventDemand
+    });
+  });
+
+  app.get("/v1/intake/event-demands", async (_request, reply) => {
+    return reply.send({
+      items: await store.listEventDemands()
+    });
+  });
+
+  app.get("/v1/intake/document-imports", async (_request, reply) => {
+    return reply.send({
+      items: await store.listDocumentImports()
+    });
+  });
+
+  app.get<{ Params: { documentImportId: string } }>(
+    "/v1/intake/document-imports/:documentImportId",
+    async (request, reply) => {
+      const documentImport = await store.getDocumentImport(request.params.documentImportId);
+      if (!documentImport) {
+        return reply.code(404).send({ message: "DocumentImport nicht gefunden." });
+      }
+
+      return reply.send(documentImport);
+    }
+  );
+
+  app.get("/v1/intake/extracted-contexts", async (_request, reply) => {
+    return reply.send({
+      items: await store.listExtractedContexts()
+    });
+  });
+
+  app.get<{ Params: { extractedContextId: string } }>(
+    "/v1/intake/extracted-contexts/:extractedContextId",
+    async (request, reply) => {
+      const extractedContext = await store.getExtractedContext(request.params.extractedContextId);
+      if (!extractedContext) {
+        return reply.code(404).send({ message: "ExtractedContext nicht gefunden." });
+      }
+
+      return reply.send(extractedContext);
+    }
+  );
+
+  app.get("/v1/intake/approval-requests", async (_request, reply) => {
+    return reply.send({
+      items: await store.listApprovalRequests()
+    });
+  });
+
+  app.get<{ Params: { demandId: string } }>("/v1/intake/event-demands/:demandId", async (request, reply) => {
+    const eventDemand = await store.getEventDemand(request.params.demandId);
+    if (!eventDemand) {
+      return reply.code(404).send({ message: "EventDemand nicht gefunden." });
+    }
+
+    return reply.send(eventDemand);
+  });
+
+  app.patch<{ Params: { demandId: string }; Body: EventDemandBody }>(
+    "/v1/intake/event-demands/:demandId",
+    async (request, reply) => {
+      const existing = await store.getEventDemand(request.params.demandId);
+      if (!existing) {
+        return reply.code(404).send({ message: "EventDemand nicht gefunden." });
+      }
+
+      const eventDemand = eventDemandFromBody(existing.demandId, request.body);
+      await store.saveEventDemand(eventDemand);
+      await auditLog.log({
+        action: "intake.event_demand_updated",
+        entityType: "EventDemand",
+        entityId: eventDemand.demandId,
+        actor: actorForRequest(request),
+        summary: "EventDemand aktualisiert.",
+        details: {
+          pax: eventDemand.pax,
+          serviceForm: eventDemand.serviceForm
+        }
+      });
+
+      return reply.send({
+        eventDemand
+      });
+    }
+  );
+
   app.get("/v1/intake/specs", async (_request, reply) => {
     return reply.send({
       items: await store.listSpecs()
@@ -580,23 +932,128 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
       }
 
+      let role: ApprovalRole;
+      try {
+        role = roleFromHeaders(request.headers);
+      } catch (error) {
+        return reply.code(400).send({
+          message: error instanceof Error ? error.message : "Unbekannte Rolle."
+        });
+      }
+
+      const actor = actorForRequest(request);
+      const criticalFields = criticalFieldsForSpecUpdate(request.body);
+      if (criticalFields.length > 0 && role !== "Approver") {
+        const approvalRequest = approvalRequestForBlockedSpecUpdate(
+          spec.specId,
+          request.body,
+          actor,
+          role
+        );
+        await store.saveApprovalRequest(approvalRequest);
+        await auditLog.log({
+          action: "intake.spec_update_blocked",
+          entityType: "ApprovalRequest",
+          entityId: approvalRequest.approvalRequestId,
+          actor,
+          summary: "Kritische Änderung an AcceptedEventSpec zur Freigabe vorgelegt.",
+          details: {
+            specId: spec.specId,
+            role,
+            criticalFields: criticalFields.join(", ")
+          }
+        });
+        return reply.code(409).send({
+          message: "Kritische Änderungen sind freigabepflichtig.",
+          requiresApproval: true,
+          approvalRequest
+        });
+      }
+
       const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
       await store.saveSpec(updatedSpec);
       await auditLog.log({
         action: "intake.spec_updated",
         entityType: "AcceptedEventSpec",
         entityId: updatedSpec.specId,
-        actor: actorForRequest(request),
+        actor,
         summary: "AcceptedEventSpec manuell nachbearbeitet.",
         details: {
           eventDate: updatedSpec.event.date,
           attendeeCount: updatedSpec.attendees.productionPax ?? updatedSpec.attendees.expected,
           serviceForm: updatedSpec.servicePlan.serviceForm,
-          readiness: updatedSpec.readiness.status
+          readiness: updatedSpec.readiness.status,
+          blocked: false,
+          harmlessNotesOnly: isHarmlessNotesOnlyUpdate(request.body)
         }
       });
 
       return reply.send({
+        acceptedEventSpec: updatedSpec
+      });
+    }
+  );
+
+  app.post<{ Params: { approvalRequestId: string }; Body: ApprovalDecisionBody }>(
+    "/v1/intake/approval-requests/:approvalRequestId/approve",
+    async (request, reply) => {
+      let role: ApprovalRole;
+      try {
+        role = roleFromHeaders(request.headers);
+      } catch (error) {
+        return reply.code(400).send({
+          message: error instanceof Error ? error.message : "Unbekannte Rolle."
+        });
+      }
+
+      if (role !== "Approver") {
+        return reply.code(403).send({ message: "Nur Approver duerfen Freigaben erteilen." });
+      }
+
+      const approvalRequest = await store.getApprovalRequest(request.params.approvalRequestId);
+      if (!approvalRequest) {
+        return reply.code(404).send({ message: "ApprovalRequest nicht gefunden." });
+      }
+      if (approvalRequest.status !== "pending") {
+        return reply.code(409).send({ message: "ApprovalRequest ist bereits bearbeitet." });
+      }
+
+      const spec = await store.getSpec(approvalRequest.specId);
+      if (!spec) {
+        return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
+      }
+
+      const updatedSpec = validateAcceptedEventSpec(
+        applySpecUpdates(spec, approvalRequest.requestedChange as SpecUpdateBody)
+      );
+      const actor = actorForRequest(request);
+      const approvedRequest: ApprovalRequestRecord = {
+        ...approvalRequest,
+        status: "approved",
+        approvedAt: new Date().toISOString(),
+        approvedBy: {
+          name: actor.name,
+          role
+        }
+      };
+
+      await store.saveSpec(updatedSpec);
+      await store.saveApprovalRequest(approvedRequest);
+      await auditLog.log({
+        action: "intake.spec_update_approved",
+        entityType: "ApprovalRequest",
+        entityId: approvedRequest.approvalRequestId,
+        actor,
+        summary: "Freigabepflichtige AcceptedEventSpec-Änderung freigegeben.",
+        details: {
+          specId: updatedSpec.specId,
+          criticalFields: approvedRequest.criticalFields.join(", "),
+          note: request.body.note?.trim() || undefined
+        }
+      });
+
+      return reply.send({
+        approvalRequest: approvedRequest,
         acceptedEventSpec: updatedSpec
       });
     }

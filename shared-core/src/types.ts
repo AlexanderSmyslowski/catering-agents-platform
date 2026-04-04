@@ -218,6 +218,21 @@ export interface AcceptedEventSpec {
   evidence?: Evidence[];
 }
 
+export interface EventDemand {
+  schemaVersion: string;
+  demandId: string;
+  pax: number;
+  serviceForm: string;
+  menuOrServiceWish: string;
+  eventType?: string;
+  date?: string;
+  budgetContext?: {
+    targetBudget?: Money;
+  };
+  customerType?: CustomerSegment;
+  restrictions?: string[];
+}
+
 export interface OfferVariant {
   variantId: string;
   label: string;
@@ -286,6 +301,7 @@ export interface Recipe {
     batchSize?: number;
   };
   allergens: string[];
+  allergenStatus?: "known" | "unknown";
   dietTags: string[];
 }
 
@@ -376,6 +392,16 @@ export interface RecipeSearchQuery {
   eventSpec: AcceptedEventSpec;
   locale: "de" | "en";
   query: string;
+}
+
+export interface YieldProfile {
+  id: string;
+  scopeType: "ingredient";
+  scopeId: string;
+  yieldFactor: number;
+  sourceType: string;
+  note?: string;
+  isActive: boolean;
 }
 
 export interface WebRecipeCandidate {

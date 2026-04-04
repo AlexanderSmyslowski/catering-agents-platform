@@ -13,6 +13,7 @@ export const recipeSchema = {
     "steps",
     "scalingRules",
     "allergens",
+    "allergenStatus",
     "dietTags"
   ],
   properties: {
@@ -58,10 +59,13 @@ export const recipeSchema = {
       type: "array",
       items: { type: "string" }
     },
+    allergenStatus: {
+      type: "string",
+      enum: ["known", "unknown"]
+    },
     dietTags: {
       type: "array",
       items: { type: "string" }
     }
   }
 } as const;
-

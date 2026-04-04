@@ -11,9 +11,11 @@ import {
   useState
 } from "react";
 import { DashboardShell } from "../components/dashboard-shell.js";
+import { ExtractedContextPanel } from "../components/extracted-context-panel.js";
 import { StatusCard } from "../components/status-card.js";
 import {
   archiveAcceptedSpec,
+  approveApprovalRequest,
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
   createAcceptedSpecFromText,
@@ -21,18 +23,22 @@ import {
   createProductionPlan,
   loadDashboardState,
   loadServiceHealth,
-  offerExportUrl,
+  offerPrintUrl,
   persistOperatorName,
+  persistOperatorRole,
   promoteOfferDraft,
-  productionExportUrl,
-  purchaseListExportUrl,
+  productionPrintUrl,
+  purchaseListCsvUrl,
+  purchaseListPrintUrl,
   readOperatorName,
+  readOperatorRole,
   reviewRecipe,
   seedDemoData,
   updateAcceptedSpec,
   uploadRecipeFile,
   type DashboardState,
   type IntakeDocumentChannel,
+  type OperatorRole,
   type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
@@ -58,6 +64,8 @@ type ComponentEditState = {
 const emptyState: DashboardState = {
   intakeRequests: [],
   acceptedSpecs: [],
+  approvalRequests: [],
+  extractedContexts: [],
   offerDrafts: [],
   productionPlans: [],
   purchaseLists: [],
@@ -336,6 +344,21 @@ function formatPercent(value?: unknown): string | undefined {
   return `${Math.round(numeric * 100)} %`;
 }
 
+function formatPurchasePreviewLine(item: Record<string, unknown>): string {
+  const purchaseQty = item.purchaseQty;
+  const purchaseUnit = String(item.purchaseUnit ?? "").trim();
+  const group = String(item.group ?? "").trim();
+  const supplierHint = String(item.supplierHint ?? "").trim();
+
+  const quantityPart =
+    typeof purchaseQty === "number" || typeof purchaseQty === "string"
+      ? `${purchaseQty} ${purchaseUnit}`.trim()
+      : purchaseUnit || "Menge offen";
+
+  const metaParts = [quantityPart, group || undefined, supplierHint || undefined].filter(Boolean);
+  return metaParts.join(" · ");
+}
+
 function renderPlanList(
   plans: Array<Record<string, unknown>>,
   specById: Map<string, Record<string, unknown>>,
@@ -369,11 +392,11 @@ function renderPlanList(
             </div>
             <a
               className="ghost-link"
-              href={productionExportUrl(String(plan.planId))}
+              href={productionPrintUrl(String(plan.planId))}
               target="_blank"
               rel="noreferrer"
             >
-              Produktionsblatt exportieren
+              Produktionsplan drucken / als PDF öffnen
             </a>
           </li>
         );
@@ -393,6 +416,7 @@ export function App() {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [operatorName, setOperatorName] = useState(() => readOperatorName());
+  const [operatorRole, setOperatorRole] = useState<OperatorRole>(() => readOperatorRole());
   const [intakeText, setIntakeText] = useState(
     "Konferenz am 2026-06-18 für 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
   );
@@ -505,6 +529,16 @@ export function App() {
     );
   }, [dashboard.offerDrafts, deferredSearch]);
 
+  const filteredApprovalRequests = useMemo(() => {
+    const query = deferredSearch.trim().toLowerCase();
+    if (!query) {
+      return dashboard.approvalRequests;
+    }
+    return dashboard.approvalRequests.filter((request) =>
+      JSON.stringify(request).toLowerCase().includes(query)
+    );
+  }, [dashboard.approvalRequests, deferredSearch]);
+
   const filteredRecipes = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
     if (!query) {
@@ -543,6 +577,14 @@ export function App() {
     [dashboard.acceptedSpecs]
   );
 
+  const pendingApprovalRequests = useMemo(
+    () =>
+      filteredApprovalRequests.filter(
+        (request) => String(request.status ?? "") === "pending"
+      ),
+    [filteredApprovalRequests]
+  );
+
   const selectedDraft = useMemo(
     () => dashboard.offerDrafts.find((draft) => String(draft.draftId) === selectedDraftId),
     [dashboard.offerDrafts, selectedDraftId]
@@ -564,6 +606,16 @@ export function App() {
   }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared]);
 
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
+
+  const focusedExtractedContext = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return undefined;
+    }
+
+    return [...dashboard.extractedContexts]
+      .reverse()
+      .find((context) => String(context.specId ?? "") === currentProductionSpecId);
+  }, [currentProductionSpecId, dashboard.extractedContexts]);
 
   const currentSpecPlans = useMemo(() => {
     if (productionWorkspaceCleared) {
@@ -903,6 +955,9 @@ export function App() {
         const updatedSpec = await persistCurrentSpecEdit({ quiet: true });
         if (updatedSpec) {
           specForPlanning = updatedSpec;
+        } else {
+          setNotice("Kritische Änderung wurde zuerst zur Freigabe vorgelegt. Berechnung startet erst nach Freigabe.");
+          return;
         }
       }
 
@@ -1055,7 +1110,18 @@ export function App() {
     }
 
     const response = await updateAcceptedSpec(editingSpecId, buildCurrentSpecUpdateInput());
+    if (response.requiresApproval && response.approvalRequest) {
+      await refreshDashboard();
+      if (!options?.quiet) {
+        setNotice("Kritische Änderung wurde zur Freigabe vorgelegt.");
+      }
+      return undefined;
+    }
+
     const updatedSpec = response.acceptedEventSpec;
+    if (!updatedSpec) {
+      return undefined;
+    }
     const updatedSpecId = String(updatedSpec.specId ?? editingSpecId);
     setProductionWorkspaceCleared(false);
     setFocusedProductionSpecId(updatedSpecId);
@@ -1231,9 +1297,34 @@ export function App() {
     }
   }
 
+  async function handleApproveRequest(approvalRequestId: string) {
+    setSubmitting(true);
+    clearMessages();
+    try {
+      const response = await approveApprovalRequest(approvalRequestId);
+      const updatedSpecId = String(response.acceptedEventSpec.specId ?? "");
+      if (updatedSpecId) {
+        setFocusedProductionSpecId(updatedSpecId);
+      }
+      await refreshDashboard();
+      setNotice("Freigabe wurde erteilt und die Änderung übernommen.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Freigabe konnte nicht gespeichert werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleOperatorNameChange(value: string) {
     const persisted = persistOperatorName(value);
     setOperatorName(persisted);
+  }
+
+  function handleOperatorRoleChange(value: OperatorRole) {
+    const persisted = persistOperatorRole(value);
+    setOperatorRole(persisted);
   }
 
   function handleProductionDrop(event: DragEvent<HTMLLabelElement>) {
@@ -1319,6 +1410,15 @@ export function App() {
               value={operatorName}
               onChange={(event) => handleOperatorNameChange(event.target.value)}
             />
+            <select
+              className="operator-input"
+              value={operatorRole}
+              onChange={(event) => handleOperatorRoleChange(event.target.value as OperatorRole)}
+            >
+              <option value="KitchenEditor">KitchenEditor</option>
+              <option value="ProcurementEditor">ProcurementEditor</option>
+              <option value="Approver">Approver</option>
+            </select>
             <button disabled={loading || submitting} onClick={() => void handleSeedDemoData()}>
               Demo-Daten laden
             </button>
@@ -1655,11 +1755,11 @@ export function App() {
                   </div>
                   <a
                     className="ghost-link"
-                    href={offerExportUrl(String(draft.draftId))}
+                    href={offerPrintUrl(String(draft.draftId))}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Angebot exportieren
+                    Angebot drucken / als PDF öffnen
                   </a>
                 </li>
               ))}
@@ -1964,6 +2064,9 @@ export function App() {
                       </ul>
                     </>
                   ) : null}
+                  {focusedExtractedContext ? (
+                    <ExtractedContextPanel extractedContext={focusedExtractedContext} />
+                  ) : null}
                   {editingSpecId === String(focusedProductionSpec.specId) ? (
                     <>
                       <div className="divider" />
@@ -2186,6 +2289,49 @@ export function App() {
                       : "Berechnung starten"}
                   </button>
                 </div>
+                {pendingApprovalRequests.length > 0 ? (
+                  <>
+                    <div className="divider" />
+                    <header>
+                      <p className="eyebrow">Offene Freigaben</p>
+                      <h4 className="subsection-title">Blockierte kritische Änderungen</h4>
+                    </header>
+                    <ul className="item-list compact">
+                      {pendingApprovalRequests.slice(0, 6).map((request) => {
+                        const relatedSpec = specById.get(String(request.specId ?? ""));
+                        const criticalFields = Array.isArray(request.criticalFields)
+                          ? request.criticalFields.map((entry) => String(entry))
+                          : [];
+                        const requestedBy = request.requestedBy as Record<string, unknown> | undefined;
+                        return (
+                          <li key={String(request.approvalRequestId)}>
+                            <strong>{relatedSpec ? getSpecLabel(relatedSpec) : String(request.specId ?? "Freigabe")}</strong>
+                            <p className="helper-text">
+                              Status: {String(request.status ?? "-")} · Angefragt von{" "}
+                              {String(requestedBy?.name ?? "-")} · Rolle {String(requestedBy?.role ?? "-")}
+                            </p>
+                            <p className="helper-text">
+                              Änderung: {criticalFields.length > 0 ? criticalFields.join(", ") : "kritische Änderung"}
+                            </p>
+                            {operatorRole === "Approver" ? (
+                              <div className="action-row">
+                                <button
+                                  className="secondary-button"
+                                  disabled={submitting}
+                                  onClick={() => void handleApproveRequest(String(request.approvalRequestId))}
+                                >
+                                  Freigeben
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="helper-text">Freigabe kann nur durch einen Approver ausgelöst werden.</p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : null}
               </>
             ) : (
               <p className="helper-text">
@@ -2361,7 +2507,7 @@ export function App() {
                   <p className="eyebrow">Plandetails</p>
                   <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
                 </header>
-                <p className="helper-text">
+                <p className="helper-text plan-meta">
                   Status:{" "}
                   {translateReadiness(
                     String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
@@ -2379,14 +2525,14 @@ export function App() {
                   {" · "}Rezeptblätter: {Array.isArray(selectedPlan.productionBatches) ? selectedPlan.productionBatches.length : 0}
                 </p>
                 {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0 ? (
-                  <>
+                  <div className="mobile-callout mobile-callout--warning">
                     <p>Offene Punkte:</p>
                     <ul className="item-list compact">
                       {selectedPlan.unresolvedItems.map((entry) => (
                         <li key={String(entry)}>{String(entry)}</li>
                       ))}
                     </ul>
-                  </>
+                  </div>
                 ) : (
                   <p>Offene Punkte: keine</p>
                 )}
@@ -2399,7 +2545,7 @@ export function App() {
                     offenen Komponenten ein belastbares Rezept oder eine eindeutige Beschaffungsentscheidung vorliegt.
                   </p>
                 ) : null}
-                <ul className="item-list compact">
+                <ul className="item-list compact mobile-detail-list">
                   {Array.isArray(selectedPlan.recipeSelections)
                     ? selectedPlan.recipeSelections.map((selection) => {
                         const selectionRecord = selection as Record<string, unknown>;
@@ -2456,7 +2602,7 @@ export function App() {
                       <p className="eyebrow">Arbeitsblätter</p>
                       <h4 className="subsection-title">Küche, Beschaffung und Klärungen</h4>
                     </header>
-                    <ul className="item-list compact">
+                    <ul className="item-list compact mobile-detail-list">
                       {selectedPlan.kitchenSheets.map((sheet, sheetIndex) => {
                         const sheetRecord = sheet as Record<string, unknown>;
                         const instructions = Array.isArray(sheetRecord.instructions)
@@ -2478,6 +2624,110 @@ export function App() {
                     </ul>
                   </>
                 ) : null}
+              </>
+            ) : null}
+          </article>
+
+          <article className="panel">
+            <header>
+              <p className="eyebrow">Operative Führungsansicht</p>
+              <h3>Einkaufslisten für Beschaffung und Druck</h3>
+            </header>
+            <ul className="item-list compact mobile-purchase-list">
+              {currentSpecPurchaseLists.map((purchaseList) => {
+                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                const previewItems = Array.isArray(purchaseList.items)
+                  ? purchaseList.items.map((entry) => entry as Record<string, unknown>).slice(0, 4)
+                  : [];
+                return (
+                  <li key={String(purchaseList.purchaseListId)} className="mobile-purchase-card">
+                    <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                    <p className="purchase-card__meta">
+                      Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}
+                    </p>
+                    {previewItems.length > 0 ? (
+                      <ul className="item-list compact purchase-preview-list">
+                        {previewItems.map((item) => (
+                          <li key={String(item.ingredientId ?? item.displayName ?? "position")}>
+                            <strong>{String(item.displayName ?? "Artikel")}</strong>
+                            <p className="helper-text">{formatPurchasePreviewLine(item)}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <div className="action-row">
+                      <a
+                        className="ghost-link"
+                        href={purchaseListPrintUrl(String(purchaseList.purchaseListId))}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Einkaufsliste drucken / als PDF öffnen
+                      </a>
+                      <a
+                        className="ghost-link"
+                        href={purchaseListCsvUrl(String(purchaseList.purchaseListId))}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Einkaufsliste als CSV herunterladen
+                      </a>
+                    </div>
+                  </li>
+                );
+              })}
+              {currentSpecPurchaseLists.length === 0 ? (
+                <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li>
+              ) : null}
+            </ul>
+            {archivedPurchaseLists.length > 0 ? (
+              <>
+                <div className="divider" />
+                <p className="eyebrow">Ältere Einkaufslisten</p>
+                <ul className="item-list compact mobile-purchase-list">
+                  {archivedPurchaseLists.map((purchaseList) => {
+                    const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                    const previewItems = Array.isArray(purchaseList.items)
+                      ? purchaseList.items.map((entry) => entry as Record<string, unknown>).slice(0, 3)
+                      : [];
+                    return (
+                      <li key={String(purchaseList.purchaseListId)} className="mobile-purchase-card">
+                        <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                        <p className="purchase-card__meta">
+                          Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}
+                        </p>
+                        {previewItems.length > 0 ? (
+                          <ul className="item-list compact purchase-preview-list">
+                            {previewItems.map((item) => (
+                              <li key={String(item.ingredientId ?? item.displayName ?? "position")}>
+                                <strong>{String(item.displayName ?? "Artikel")}</strong>
+                                <p className="helper-text">{formatPurchasePreviewLine(item)}</p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <div className="action-row">
+                          <a
+                            className="ghost-link"
+                            href={purchaseListPrintUrl(String(purchaseList.purchaseListId))}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Einkaufsliste drucken / als PDF öffnen
+                          </a>
+                          <a
+                            className="ghost-link"
+                            href={purchaseListCsvUrl(String(purchaseList.purchaseListId))}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Einkaufsliste als CSV herunterladen
+                          </a>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </>
             ) : null}
           </article>
@@ -2551,57 +2801,6 @@ export function App() {
             </ul>
           </article>
 
-          <article className="panel">
-            <header>
-              <p className="eyebrow">Einkaufslisten</p>
-              <h3>CSV-fähige Beschaffungslisten</h3>
-            </header>
-            <ul className="item-list compact">
-              {currentSpecPurchaseLists.map((purchaseList) => {
-                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                return (
-                <li key={String(purchaseList.purchaseListId)}>
-                  <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                  <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                  <a
-                    className="ghost-link"
-                    href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Einkaufsliste herunterladen
-                  </a>
-                </li>
-              );
-              })}
-              {currentSpecPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li> : null}
-            </ul>
-            {archivedPurchaseLists.length > 0 ? (
-              <>
-                <div className="divider" />
-                <p className="eyebrow">Ältere Einkaufslisten</p>
-                <ul className="item-list compact">
-                  {archivedPurchaseLists.map((purchaseList) => {
-                    const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                    return (
-                      <li key={String(purchaseList.purchaseListId)}>
-                        <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                        <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                        <a
-                          className="ghost-link"
-                          href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Einkaufsliste herunterladen
-                        </a>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            ) : null}
-          </article>
           </div>
         </section>
       ) : null}

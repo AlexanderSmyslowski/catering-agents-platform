@@ -584,6 +584,7 @@ export function parseUploadedRecipeText(input: {
     allergens: [
       ...new Set([...detectAllergens(text), ...detectAllergens(sections.allergens.join(" "))])
     ],
+    allergenStatus: sections.allergens.length > 0 ? "known" : "unknown",
     dietTags: [
       ...new Set([...detectDietTags(text), ...detectDietTags(sections.diets.join(" "))])
     ]

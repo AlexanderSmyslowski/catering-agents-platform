@@ -5,9 +5,14 @@ import { describe, expect, it } from "vitest";
 import { newDb } from "pg-mem";
 import {
   SCHEMA_VERSION,
+  YieldProfileLibrary,
+  calculateYieldQuantities,
+  createAcceptedEventSpecFromEventDemand,
   normalizeEventRequestToSpec,
   parseUploadedRecipeText,
+  validateYieldProfile,
   type AcceptedEventSpec,
+  type EventDemand,
   type EventRequest,
   type RecipeSearchQuery,
   type WebRecipeCandidate
@@ -19,7 +24,9 @@ import {
   InMemoryRecipeRepository,
   ProductionStore,
   RecipeDiscoveryService,
-  buildProductionApp
+  buildProductionApp,
+  createRecipeWebSearchProvider,
+  resolveRecipeWebSearchProviderName
 } from "@catering/production-service";
 import type { WebRecipeSearchProvider } from "@catering/production-service";
 
@@ -117,6 +124,67 @@ function withProductionDecision(
   };
 }
 
+describe("production web provider selection", () => {
+  it("resolves the configured recipe web provider name for the MVP", () => {
+    expect(resolveRecipeWebSearchProviderName()).toBe("duckduckgo");
+    expect(resolveRecipeWebSearchProviderName("duckduckgo")).toBe("duckduckgo");
+    expect(resolveRecipeWebSearchProviderName("disabled")).toBe("disabled");
+    expect(resolveRecipeWebSearchProviderName("unknown-provider")).toBe("duckduckgo");
+  });
+
+  it("creates a disabled recipe web provider that returns no candidates", async () => {
+    const { providerName, provider } = createRecipeWebSearchProvider("disabled");
+    const eventSpec = singleComponentSpec("Tomatensuppe");
+
+    expect(providerName).toBe("disabled");
+    await expect(
+      provider.searchRecipes({
+        query: "Tomatensuppe Rezept",
+        locale: "de",
+        eventSpec,
+        component: {
+          componentId: "component-1",
+          label: "Tomatensuppe",
+          menuCategory: "classic"
+        }
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("tracks uploaded recipe allergens as known only when explicitly declared", () => {
+    const knownRecipe = parseUploadedRecipeText({
+      filename: "gratin.txt",
+      text: [
+        "Kartoffelgratin",
+        "Zutaten",
+        "1 kg Kartoffeln",
+        "300 ml Sahne",
+        "100 g Käse",
+        "Zubereitung",
+        "1. Backen.",
+        "Allergene",
+        "Milch"
+      ].join("\n")
+    });
+
+    const unknownRecipe = parseUploadedRecipeText({
+      filename: "salsa.txt",
+      text: [
+        "Tomatensalsa",
+        "Zutaten",
+        "1 kg Tomaten",
+        "100 ml Olivenöl",
+        "Zubereitung",
+        "1. Vermengen."
+      ].join("\n")
+    });
+
+    expect(knownRecipe.allergenStatus).toBe("known");
+    expect(knownRecipe.allergens).toContain("milk");
+    expect(unknownRecipe.allergenStatus).toBe("unknown");
+  });
+});
+
 function singleComponentSpec(
   label: string,
   category: "classic" | "vegetarian" | "vegan" = "classic"
@@ -140,6 +208,87 @@ function singleComponentSpec(
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-"));
+}
+
+describe("yield phase 1", () => {
+  it("calculates gross and waste quantities from net quantity and yield factor", () => {
+    expect(calculateYieldQuantities(8, 0.8)).toEqual({
+      netQty: 8,
+      yieldFactor: 0.8,
+      grossQty: 10,
+      wasteQty: 2
+    });
+  });
+
+  it("validates yield profiles for the V1 ingredient scope", () => {
+    expect(
+      validateYieldProfile({
+        id: "yield-profile-1",
+        scopeType: "ingredient",
+        scopeId: "carrot",
+        yieldFactor: 0.86,
+        sourceType: "manual",
+        isActive: true
+      }).yieldFactor
+    ).toBe(0.86);
+
+    expect(() =>
+      validateYieldProfile({
+        id: "yield-profile-invalid",
+        scopeType: "ingredient",
+        scopeId: "carrot",
+        yieldFactor: 1.2,
+        sourceType: "manual",
+        isActive: true
+      })
+    ).toThrow(/yieldProfile|yieldFactor/i);
+  });
+
+  it("persists and resolves the active ingredient yield profile", async () => {
+    const dataRoot = createDataRoot();
+    const library = new YieldProfileLibrary({ rootDir: dataRoot });
+
+    await library.save({
+      id: "yield-profile-1",
+      scopeType: "ingredient",
+      scopeId: "carrot",
+      yieldFactor: 0.82,
+      sourceType: "manual",
+      note: "geschält",
+      isActive: false
+    });
+    await library.save({
+      id: "yield-profile-2",
+      scopeType: "ingredient",
+      scopeId: "carrot",
+      yieldFactor: 0.88,
+      sourceType: "manual",
+      note: "geputzt",
+      isActive: true
+    });
+
+    const restartedLibrary = new YieldProfileLibrary({ rootDir: dataRoot });
+    const activeProfile = await restartedLibrary.getActiveIngredientYieldProfile("carrot");
+
+    expect(activeProfile?.id).toBe("yield-profile-2");
+    expect(activeProfile?.yieldFactor).toBe(0.88);
+
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+});
+
+function sampleEventDemand(overrides: Partial<EventDemand> = {}): EventDemand {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    demandId: "event-demand-1",
+    pax: 48,
+    serviceForm: "buffet",
+    menuOrServiceWish: "Tomatensuppe und Brot",
+    eventType: "lunch",
+    date: "2026-07-15",
+    restrictions: ["vegetarische Option"],
+    ...overrides
+  };
 }
 
 describe("catering agents platform", () => {
@@ -192,9 +341,224 @@ describe("catering agents platform", () => {
     const body = response.json();
     expect(body.eventRequest.rawInputs[0].kind).toBe("text");
     expect(body.eventRequest.rawInputs[0].mimeType).toBe("text/plain");
+    expect(body.documentImport.documentImportId).toContain("document-import-");
+    expect(body.documentImport.documents[0].filename).toBe("angebot.txt");
+    expect(body.extractedContext.status).toBe("draft");
+    expect(body.extractedContext.fields.pax.value).toBe(24);
+    expect(body.extractedContext.fields.pax.status).toBe("extracted");
+    expect(body.extractedContext.fields.menuOrServiceWish.value).toContain("Kaffeepause");
     expect(body.acceptedEventSpec.attendees.expected).toBe(24);
     expect(body.acceptedEventSpec.readiness.status).toBe("complete");
     await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks missing or uncertain extraction results explicitly in the extracted context draft", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/intake/documents",
+      payload: {
+        channel: "text",
+        documents: [
+          {
+            filename: "unklar.txt",
+            mimeType: "text/plain",
+            contentBase64: Buffer.from(
+              "Event ohne Datum und ohne klare Teilnehmerzahl, bitte später abstimmen.",
+              "utf8"
+            ).toString("base64")
+          }
+        ]
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.extractedContext.status).toBe("draft");
+    expect(body.extractedContext.fields.pax.status).toBe("missing");
+    expect(body.extractedContext.fields.date.status).toBe("missing");
+    expect(body.extractedContext.uncertainties.some((entry: string) => /participant count|datum/i.test(entry))).toBe(
+      true
+    );
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists document imports and extracted contexts across intake app restarts", async () => {
+    const dataRoot = createDataRoot();
+    const firstApp = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await firstApp.inject({
+      method: "POST",
+      url: "/v1/intake/documents",
+      payload: {
+        channel: "text",
+        documents: [
+          {
+            filename: "angebot.txt",
+            mimeType: "text/plain",
+            contentBase64: Buffer.from(
+              "Meeting am 2026-05-14 fuer 24 Teilnehmer mit Kaffeepause und Croissants.",
+              "utf8"
+            ).toString("base64")
+          }
+        ]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const documentImportId = createResponse.json().documentImport.documentImportId;
+    const extractedContextId = createResponse.json().extractedContext.extractedContextId;
+    await firstApp.close();
+
+    const restartedApp = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const importsResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/intake/document-imports"
+    });
+    const extractedContextsResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/intake/extracted-contexts"
+    });
+    const importGetResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/intake/document-imports/${documentImportId}`
+    });
+    const extractedContextGetResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/intake/extracted-contexts/${extractedContextId}`
+    });
+
+    expect(importsResponse.statusCode).toBe(200);
+    expect(importsResponse.json().items).toHaveLength(1);
+    expect(extractedContextsResponse.statusCode).toBe(200);
+    expect(extractedContextsResponse.json().items).toHaveLength(1);
+    expect(importGetResponse.statusCode).toBe(200);
+    expect(importGetResponse.json().documentImportId).toBe(documentImportId);
+    expect(extractedContextGetResponse.statusCode).toBe(200);
+    expect(extractedContextGetResponse.json().extractedContextId).toBe(extractedContextId);
+
+    await restartedApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("creates, validates and updates EventDemand records via the intake API", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/event-demands",
+      payload: {
+        pax: 75,
+        serviceForm: "buffet",
+        menuOrServiceWish: "Lunchbuffet mit Suppe und Dessert",
+        eventType: "lunch",
+        date: "2026-06-10",
+        budgetContext: {
+          targetBudget: {
+            amount: 1500,
+            currency: "EUR"
+          }
+        },
+        customerType: "company",
+        restrictions: ["ohne Schwein", "vegetarische Option"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdDemand = createResponse.json().eventDemand;
+    expect(createdDemand.pax).toBe(75);
+    expect(createdDemand.serviceForm).toBe("buffet");
+    expect(createdDemand.menuOrServiceWish).toContain("Lunchbuffet");
+
+    const invalidResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/event-demands",
+      payload: {
+        pax: 0,
+        serviceForm: "",
+        menuOrServiceWish: ""
+      }
+    });
+
+    expect(invalidResponse.statusCode).toBe(500);
+    expect(invalidResponse.body).toContain("Schema validation failed");
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/event-demands/${createdDemand.demandId}`,
+      payload: {
+        pax: 90,
+        serviceForm: "plated",
+        menuOrServiceWish: "Menü mit vegetarischer Alternative",
+        restrictions: ["glutenarme Option"]
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json().eventDemand.pax).toBe(90);
+    expect(updateResponse.json().eventDemand.serviceForm).toBe("plated");
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/v1/intake/event-demands"
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().items).toHaveLength(1);
+    expect(listResponse.json().items[0].menuOrServiceWish).toContain("Menü");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists EventDemand records across intake app restarts", async () => {
+    const dataRoot = createDataRoot();
+    const firstApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+
+    const createResponse = await firstApp.inject({
+      method: "POST",
+      url: "/v1/intake/event-demands",
+      payload: {
+        pax: 40,
+        serviceForm: "buffet",
+        menuOrServiceWish: "Kaffeepause mit Snacks",
+        customerType: "public"
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const demandId = createResponse.json().eventDemand.demandId;
+    await firstApp.close();
+
+    const restartedApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+    const listResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/intake/event-demands"
+    });
+    const getResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/intake/event-demands/${demandId}`
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().items).toHaveLength(1);
+    expect(getResponse.statusCode).toBe(200);
+    expect(getResponse.json().demandId).toBe(demandId);
+
+    await restartedApp.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
@@ -396,6 +760,54 @@ describe("catering agents platform", () => {
     expect(response.json().productionPlan.unresolvedItems).toContain(
       "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
     );
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("derives a deterministic AcceptedEventSpec from EventDemand", () => {
+    const spec = createAcceptedEventSpecFromEventDemand(
+      sampleEventDemand({
+        menuOrServiceWish: "Tomatensuppe und Brot",
+        pax: 48
+      })
+    );
+
+    expect(spec.specId).toBe("spec-event-demand-1");
+    expect(spec.attendees.expected).toBe(48);
+    expect(spec.event.serviceForm).toBe("buffet");
+    expect(spec.servicePlan.serviceForm).toBe("buffet");
+    expect(spec.menuPlan.length).toBeGreaterThan(0);
+    expect(spec.menuPlan.every((item) => item.servings === 48)).toBe(true);
+    expect(spec.menuPlan.some((item) => /tomatensuppe|brot/i.test(item.label))).toBe(true);
+  });
+
+  it("creates a ProductionPlan directly from EventDemand", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
+    const discoveryService = new RecipeDiscoveryService(repository, new ThrowingWebProvider());
+    const app = buildProductionApp({
+      discoveryService,
+      store: new ProductionStore({ rootDir: dataRoot })
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans/from-event-demand",
+      payload: {
+        eventDemand: sampleEventDemand({
+          menuOrServiceWish: "Tomatensuppe",
+          pax: 32
+        })
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.acceptedEventSpec.attendees.expected).toBe(32);
+    expect(body.acceptedEventSpec.menuPlan.every((item: { servings?: number }) => item.servings === 32)).toBe(true);
+    expect(body.productionPlan.eventSpecId).toBe(body.acceptedEventSpec.specId);
+    expect(body.productionPlan.recipeSelections.length).toBeGreaterThan(0);
+
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1013,7 +1425,9 @@ describe("catering agents platform", () => {
           "Zubereitung",
           "1. Wildkräuter waschen.",
           "2. Petersilie fein hacken und mit Öl und Zitronensaft verrühren.",
-          "3. Vor dem Service mischen."
+          "3. Vor dem Service mischen.",
+          "Allergene",
+          "Keine"
         ].join("\n")
       }
     });
@@ -1132,6 +1546,147 @@ describe("catering agents platform", () => {
 
     await intakeApp.close();
     await productionApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("blocks critical AcceptedEventSpec updates for non-approvers and allows harmless notes", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const componentId = String(createdSpec.menuPlan[0].componentId);
+
+    const notesResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        componentUpdates: [
+          {
+            componentId,
+            notes: "Ohne Sellerie anrichten."
+          }
+        ]
+      }
+    });
+
+    expect(notesResponse.statusCode).toBe(200);
+    expect(notesResponse.json().acceptedEventSpec.menuPlan[0].productionDecision.notes).toBe(
+      "Ohne Sellerie anrichten."
+    );
+
+    const blockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(blockedResponse.statusCode).toBe(409);
+    expect(blockedResponse.json().requiresApproval).toBe(true);
+    expect(blockedResponse.json().approvalRequest.status).toBe("pending");
+    expect(blockedResponse.json().approvalRequest.criticalFields).toContain("attendeeCount");
+
+    const pendingListResponse = await app.inject({
+      method: "GET",
+      url: "/v1/intake/approval-requests"
+    });
+
+    expect(pendingListResponse.statusCode).toBe(200);
+    expect(pendingListResponse.json().items).toHaveLength(1);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("requires Approver role to release blocked AcceptedEventSpec updates", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const blockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(blockedResponse.statusCode).toBe(409);
+    const approvalRequestId = String(blockedResponse.json().approvalRequest.approvalRequestId);
+
+    const forbiddenApproveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/approval-requests/${approvalRequestId}/approve`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {}
+    });
+
+    expect(forbiddenApproveResponse.statusCode).toBe(403);
+
+    const approveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/approval-requests/${approvalRequestId}/approve`,
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {
+        note: "Mengenanpassung freigegeben."
+      }
+    });
+
+    expect(approveResponse.statusCode).toBe(200);
+    expect(approveResponse.json().approvalRequest.status).toBe("approved");
+    expect(approveResponse.json().acceptedEventSpec.attendees.productionPax).toBe(55);
+
+    await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
@@ -1947,6 +2502,83 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     expect(body.productionPlan.unresolvedItems[0]).toContain("Internes Rezept");
     expect(body.productionPlan.kitchenSheets[0].title).toContain("Internes Rezept fehlt");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks unknown allergen information in the production plan instead of treating it as harmless", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/tomatensuppe-unknown-allergens",
+        title: "Tomatensuppe Rezept",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Tomatensuppe Rezept",
+          baseYield: {
+            servings: 10,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "tomatoes",
+              name: "Tomatoes",
+              quantity: { amount: 1, unit: "kg" },
+              group: "produce",
+              purchaseUnit: "kg",
+              normalizedUnit: "kg"
+            }
+          ],
+          steps: [{ index: 1, instruction: "Kochen." }],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 10
+          },
+          allergens: [],
+          allergenStatus: "unknown",
+          dietTags: []
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 12,
+          stepCount: 6,
+          mappedIngredientRatio: 0.95
+        }
+      }
+    ]);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      dataRoot
+    });
+    const spec = specWithComponent("Tomatensuppe");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(
+      body.productionPlan.unresolvedItems.some((entry: string) =>
+        /Allergeninformation für .*Tomatensuppe.*noch nicht belastbar gepflegt/i.test(entry)
+      )
+    ).toBe(true);
+    expect(
+      body.productionPlan.kitchenSheets.some((sheet: { instructions?: string[] }) =>
+        (sheet.instructions ?? []).some((instruction) =>
+          /Allergeninformation im verwendeten Rezept ist noch nicht belastbar gepflegt/i.test(instruction)
+        )
+      )
+    ).toBe(true);
+
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -4006,6 +4638,10 @@ describe("catering agents platform", () => {
       method: "GET",
       url: `/v1/exports/purchase-lists/${productionPayload.purchaseList.purchaseListId}/csv`
     });
+    const purchasePrintResponse = await exportApp.inject({
+      method: "GET",
+      url: `/v1/exports/purchase-lists/${productionPayload.purchaseList.purchaseListId}/html`
+    });
 
     expect(offerExportResponse.statusCode).toBe(200);
     expect(offerExportResponse.headers["content-type"]).toContain("text/html");
@@ -4022,6 +4658,11 @@ describe("catering agents platform", () => {
     expect(purchaseExportResponse.body).toContain(
       '"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"'
     );
+
+    expect(purchasePrintResponse.statusCode).toBe(200);
+    expect(purchasePrintResponse.headers["content-type"]).toContain("text/html");
+    expect(purchasePrintResponse.body).toContain("Einkaufsliste");
+    expect(purchasePrintResponse.body).toContain(String(productionPayload.purchaseList.purchaseListId));
 
     await exportApp.close();
     rmSync(dataRoot, { recursive: true, force: true });

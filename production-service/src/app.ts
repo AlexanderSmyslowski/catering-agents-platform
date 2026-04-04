@@ -3,14 +3,20 @@ import multipart from "@fastify/multipart";
 import {
   actorNameFromHeaders,
   AuditLogStore,
+  createAcceptedEventSpecFromEventDemand,
   extractTextFromDocument,
   getDemoProductionSpecs,
   parseUploadedRecipeText,
+  validateEventDemand,
   validateAcceptedEventSpec,
   type AcceptedEventSpec,
+  type EventDemand,
   type Queryable
 } from "@catering/shared-core";
-import { DuckDuckGoRecipeSearchProvider } from "./recipe-discovery/duckduckgo-provider.js";
+import {
+  createRecipeWebSearchProvider,
+  type RecipeWebSearchProviderName
+} from "./recipe-discovery/provider-selection.js";
 import { RecipeDiscoveryService } from "./recipe-discovery/service.js";
 import { InMemoryRecipeRepository } from "./repositories/in-memory-recipe-repository.js";
 import { ProductionStore } from "./repositories/production-store.js";
@@ -26,6 +32,10 @@ interface RecipeTextImportBody {
 interface RecipeReviewBody {
   decision: "approve" | "verify" | "reject";
   note?: string;
+}
+
+interface EventDemandPlanBody {
+  eventDemand: EventDemand;
 }
 
 function multipartFieldValue(
@@ -82,6 +92,7 @@ async function recipeImportFromMultipart(
 export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
   discoveryService?: RecipeDiscoveryService;
+  recipeWebSearchProviderName?: RecipeWebSearchProviderName | string;
   store?: ProductionStore;
   auditLog?: AuditLogStore;
   dataRoot?: string;
@@ -104,9 +115,10 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
+  const configuredProvider = createRecipeWebSearchProvider(options.recipeWebSearchProviderName);
   const discoveryService =
     options.discoveryService ??
-    new RecipeDiscoveryService(repository, new DuckDuckGoRecipeSearchProvider());
+    new RecipeDiscoveryService(repository, configuredProvider.provider);
   const store =
     options.store ??
     new ProductionStore({
@@ -145,6 +157,10 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
         purchaseLists: purchaseLists.length,
         recipes: recipes.length,
         auditEvents
+      },
+      integrations: {
+        recipeWebSearchProvider:
+          options.discoveryService ? "custom" : configuredProvider.providerName
       }
     });
   });
@@ -169,6 +185,37 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     });
     return reply.code(201).send(artifacts);
   });
+
+  app.post<{ Body: EventDemandPlanBody }>(
+    "/v1/production/plans/from-event-demand",
+    async (request, reply) => {
+      const eventDemand = validateEventDemand(request.body.eventDemand);
+      const eventSpec = validateAcceptedEventSpec(
+        createAcceptedEventSpecFromEventDemand(eventDemand)
+      );
+      const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
+      await store.savePlan(artifacts.productionPlan);
+      await store.savePurchaseList(artifacts.purchaseList);
+      await auditLog.log({
+        action: "production.plan_created_from_event_demand",
+        entityType: "ProductionPlan",
+        entityId: artifacts.productionPlan.planId,
+        actor: actorForRequest(request),
+        summary: `Produktionsplan fuer ${eventDemand.demandId} aus EventDemand erstellt.`,
+        details: {
+          demandId: eventDemand.demandId,
+          specId: eventSpec.specId,
+          readiness: artifacts.productionPlan.readiness.status,
+          recipeSelections: artifacts.productionPlan.recipeSelections.length
+        }
+      });
+      return reply.code(201).send({
+        eventDemand,
+        acceptedEventSpec: eventSpec,
+        ...artifacts
+      });
+    }
+  );
 
   app.post("/v1/production/seed-demo", async (request, reply) => {
     const seeded = [];

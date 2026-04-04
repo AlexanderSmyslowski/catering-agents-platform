@@ -63,7 +63,9 @@ test.describe("Produktionsagent Smoke", () => {
     ).toBeVisible();
 
     await expect(stepThree(page).locator("h4").filter({ hasText: specLabel }).first()).toBeVisible();
-    await expect(stepThree(page).getByRole("link", { name: "Produktionsblatt exportieren" }).first()).toBeVisible();
+    await expect(
+      stepThree(page).getByRole("link", { name: "Produktionsplan drucken / als PDF öffnen" }).first()
+    ).toBeVisible();
   });
 
   test("leert mit Löschen die Rückfragen und Ergebnisse des aktuellen Vorgangs", async ({ page }) => {

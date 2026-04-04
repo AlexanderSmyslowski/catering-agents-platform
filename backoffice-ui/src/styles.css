@@ -407,11 +407,17 @@ button:disabled {
 
 .ghost-link {
   display: inline-flex;
-  margin-top: 0.45rem;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.85rem;
+  padding: 0.72rem 1rem;
+  margin-top: 0.15rem;
   color: #0f1722;
   text-decoration: none;
   font-size: 0.94rem;
-  border-bottom: 1px solid rgba(15, 23, 34, 0.18);
+  border: 1px solid rgba(15, 23, 34, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .form-panel {
@@ -629,6 +635,50 @@ button:disabled {
   border: 1px solid rgba(15, 23, 34, 0.08);
 }
 
+.plan-meta {
+  display: block;
+}
+
+.mobile-callout {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(15, 23, 34, 0.08);
+  background: rgba(249, 251, 255, 0.82);
+}
+
+.mobile-callout--warning {
+  background: rgba(255, 248, 235, 0.88);
+  border-color: rgba(199, 144, 39, 0.2);
+}
+
+.mobile-detail-list > li,
+.mobile-purchase-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(15, 23, 34, 0.08);
+}
+
+.purchase-card__meta {
+  margin: 0;
+  color: rgba(15, 23, 34, 0.76);
+}
+
+.purchase-preview-list {
+  gap: 0.55rem;
+}
+
+.purchase-preview-list li {
+  padding: 0.75rem 0.8rem;
+  border-radius: 0.9rem;
+  background: rgba(248, 251, 255, 0.88);
+  border: 1px solid rgba(15, 23, 34, 0.06);
+}
+
 .processing-note {
   margin: 0;
   padding: 0.9rem 1rem;
@@ -799,5 +849,47 @@ button:disabled {
 
   .activity-slot {
     min-height: 0;
+  }
+
+  .panel,
+  .masthead-card,
+  .toolbar {
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .question-window,
+  .drag-drop-zone,
+  .component-answer-card,
+  .mobile-detail-list > li,
+  .mobile-purchase-card,
+  .mobile-callout {
+    padding: 0.9rem;
+    border-radius: 1rem;
+  }
+
+  .action-row,
+  .hero-pills {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .action-row > *,
+  .hero-pills > * {
+    width: 100%;
+  }
+
+  .question-list {
+    padding-left: 1rem;
+  }
+
+  .plan-meta {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .purchase-preview-list li {
+    padding: 0.7rem 0.75rem;
   }
 }
