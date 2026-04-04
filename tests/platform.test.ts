@@ -4,22 +4,26 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { newDb } from "pg-mem";
 import {
+  aggregatePurchaseList,
   SCHEMA_VERSION,
   YieldProfileLibrary,
   calculateYieldQuantities,
   createAcceptedEventSpecFromEventDemand,
+  normalizePurchaseQuantity,
   normalizeEventRequestToSpec,
   parseUploadedRecipeText,
   validateYieldProfile,
   type AcceptedEventSpec,
   type EventDemand,
   type EventRequest,
+  type ProductionBatch,
+  type ProductionPlan,
   type RecipeSearchQuery,
   type WebRecipeCandidate
 } from "@catering/shared-core";
 import { IntakeStore, buildIntakeApp } from "@catering/intake-service";
 import { OfferStore, buildOfferApp } from "@catering/offer-service";
-import { buildPrintExportApp } from "@catering/print-export";
+import { buildPrintExportApp, renderProductionPlanHtml } from "@catering/print-export";
 import {
   InMemoryRecipeRepository,
   ProductionStore,
@@ -274,6 +278,509 @@ describe("yield phase 1", () => {
     expect(activeProfile?.yieldFactor).toBe(0.88);
 
     rmSync(dataRoot, { recursive: true, force: true });
+  });
+});
+
+describe("yield phase 2", () => {
+  it("applies an active ingredient yield profile in the production batch snapshot", async () => {
+    const dataRoot = createDataRoot();
+    const yieldProfiles = new YieldProfileLibrary({ rootDir: dataRoot });
+    await yieldProfiles.save({
+      id: "yield-carrot-1",
+      scopeType: "ingredient",
+      scopeId: "carrot",
+      yieldFactor: 0.8,
+      sourceType: "manual",
+      isActive: true
+    });
+
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/karottensuppe",
+        title: "Karottensuppe",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Karottensuppe",
+          baseYield: {
+            servings: 10,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "carrot",
+              name: "Karotten",
+              quantity: {
+                amount: 2,
+                unit: "kg"
+              },
+              group: "vegetables",
+              purchaseUnit: "kg",
+              normalizedUnit: "kg"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Karotten kochen."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1,
+            batchSize: 10
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 5,
+          stepCount: 3,
+          mappedIngredientRatio: 0.9
+        }
+      }
+    ]);
+
+    const app = buildProductionApp({
+      dataRoot,
+      discoveryService: new RecipeDiscoveryService(
+        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        provider
+      )
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: singleComponentSpec("Karottensuppe", "vegan")
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const ingredient = body.productionPlan.productionBatches[0].ingredients[0];
+    const purchaseItem = body.purchaseList.items.find(
+      (item: { ingredientId: string }) => item.ingredientId === "carrot"
+    );
+
+    expect(ingredient.quantity.amount).toBe(15);
+    expect(ingredient.appliedYield).toEqual({
+      netQty: 12,
+      yieldFactorApplied: 0.8,
+      grossQty: 15,
+      wasteQty: 3,
+      sourceTypeApplied: "manual",
+      sourceRefId: "yield-carrot-1",
+      missingYield: false
+    });
+    expect(purchaseItem?.normalizedQty).toBe(15);
+    expect(
+      body.productionPlan.unresolvedItems.some((item: string) => /Yield-Profil fehlt/i.test(item))
+    ).toBe(false);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks missing yield explicitly without inventing a default", async () => {
+    const dataRoot = createDataRoot();
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/zwiebelsuppe",
+        title: "Zwiebelsuppe",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Zwiebelsuppe",
+          baseYield: {
+            servings: 10,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "onion",
+              name: "Zwiebeln",
+              quantity: {
+                amount: 1,
+                unit: "kg"
+              },
+              group: "vegetables",
+              purchaseUnit: "kg",
+              normalizedUnit: "kg"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Zwiebeln anschwitzen."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1,
+            batchSize: 10
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 4,
+          stepCount: 3,
+          mappedIngredientRatio: 0.9
+        }
+      }
+    ]);
+
+    const app = buildProductionApp({
+      dataRoot,
+      discoveryService: new RecipeDiscoveryService(
+        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        provider
+      )
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: singleComponentSpec("Zwiebelsuppe", "vegan")
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const ingredient = body.productionPlan.productionBatches[0].ingredients[0];
+    const purchaseItem = body.purchaseList.items.find(
+      (item: { ingredientId: string }) => item.ingredientId === "onion"
+    );
+
+    expect(ingredient.quantity.amount).toBe(6);
+    expect(ingredient.appliedYield).toEqual({
+      netQty: 6,
+      sourceTypeApplied: "missing",
+      missingYield: true
+    });
+    expect(purchaseItem?.normalizedQty).toBe(6);
+    expect(
+      body.productionPlan.unresolvedItems.some((item: string) => /Yield-Profil fehlt/i.test(item))
+    ).toBe(false);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+});
+
+describe("yield phase 3", () => {
+  it("renders applied yield visibly in the production plan export", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-yield-visible",
+      eventSpecId: "spec-1",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [
+        {
+          batchId: "batch-1",
+          componentId: "karottensuppe",
+          recipeId: "recipe-1",
+          scaledYield: {
+            amount: 10,
+            unit: "servings"
+          },
+          batchCount: 1,
+          lossFactor: 1,
+          gnPlan: [
+            {
+              container: "GN 1/2",
+              count: 1
+            }
+          ],
+          station: "hot-kitchen",
+          prepWindow: "2026-04-05 T-1",
+          ingredients: [
+            {
+              ingredientId: "carrot",
+              name: "Karotten",
+              quantity: {
+                amount: 15,
+                unit: "kg"
+              },
+              group: "vegetables",
+              appliedYield: {
+                netQty: 12,
+                yieldFactorApplied: 0.8,
+                grossQty: 15,
+                wasteQty: 3,
+                sourceTypeApplied: "manual",
+                sourceRefId: "yield-carrot-1",
+                missingYield: false
+              }
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Karotten kochen."
+            }
+          ]
+        }
+      ],
+      timeline: [],
+      kitchenSheets: [],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).toContain("Yield-Status der Zutaten");
+    expect(html).toContain("Karotten");
+    expect(html).toContain("netto 12 kg");
+    expect(html).toContain("brutto 15 kg");
+    expect(html).toContain("Verschnitt 3 kg");
+    expect(html).toContain("Faktor 0.8");
+  });
+
+  it("renders missing yield visibly in the production plan export", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-yield-missing",
+      eventSpecId: "spec-2",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [
+        {
+          batchId: "batch-2",
+          componentId: "zwiebelsuppe",
+          recipeId: "recipe-2",
+          scaledYield: {
+            amount: 10,
+            unit: "servings"
+          },
+          batchCount: 1,
+          lossFactor: 1,
+          gnPlan: [
+            {
+              container: "GN 1/2",
+              count: 1
+            }
+          ],
+          station: "hot-kitchen",
+          prepWindow: "2026-04-05 T-1",
+          ingredients: [
+            {
+              ingredientId: "onion",
+              name: "Zwiebeln",
+              quantity: {
+                amount: 6,
+                unit: "kg"
+              },
+              group: "vegetables",
+              appliedYield: {
+                netQty: 6,
+                sourceTypeApplied: "missing",
+                missingYield: true
+              }
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Zwiebeln anschwitzen."
+            }
+          ]
+        }
+      ],
+      timeline: [],
+      kitchenSheets: [],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).toContain("Yield-Status der Zutaten");
+    expect(html).toContain("Zwiebeln");
+    expect(html).toContain("Yield fehlt");
+    expect(html).toContain("netto 6 kg");
+    expect(html).not.toContain("brutto 6 kg");
+  });
+});
+
+describe("unit transformation phase 1", () => {
+  it("transforms simple production quantities into a deterministic purchase normal form", () => {
+    expect(normalizePurchaseQuantity(750, "g")).toEqual({
+      normalizedQty: 0.75,
+      normalizedUnit: "kg",
+      status: "converted",
+      sourceUnit: "g"
+    });
+
+    expect(normalizePurchaseQuantity(1250, "ml")).toEqual({
+      normalizedQty: 1.25,
+      normalizedUnit: "l",
+      status: "converted",
+      sourceUnit: "ml"
+    });
+  });
+
+  it("keeps identity cases stable in the purchase normal form", () => {
+    expect(normalizePurchaseQuantity(2.5, "kg")).toEqual({
+      normalizedQty: 2.5,
+      normalizedUnit: "kg",
+      status: "identity",
+      sourceUnit: "kg"
+    });
+
+    expect(normalizePurchaseQuantity(12, "pcs")).toEqual({
+      normalizedQty: 12,
+      normalizedUnit: "pcs",
+      status: "identity",
+      sourceUnit: "pcs"
+    });
+  });
+
+  it("keeps non-transformable units explicit without inventing a conversion", () => {
+    expect(normalizePurchaseQuantity(3, "tray")).toEqual({
+      normalizedQty: 3,
+      normalizedUnit: "tray",
+      status: "untransformed",
+      sourceUnit: "tray"
+    });
+  });
+
+  it("applies the unit transformation hook during purchase aggregation", () => {
+    const batch: ProductionBatch = {
+      batchId: "batch-unit-transform",
+      componentId: "component-1",
+      recipeId: "recipe-1",
+      scaledYield: {
+        amount: 10,
+        unit: "servings"
+      },
+      batchCount: 1,
+      lossFactor: 1,
+      gnPlan: [
+        {
+          container: "GN 1/2",
+          count: 1
+        }
+      ],
+      station: "hot-kitchen",
+      prepWindow: "2026-04-05 T-1",
+      ingredients: [
+        {
+          ingredientId: "flour",
+          name: "Flour",
+          quantity: {
+            amount: 750,
+            unit: "g"
+          },
+          group: "dry_goods"
+        },
+        {
+          ingredientId: "stock",
+          name: "Stock",
+          quantity: {
+            amount: 1250,
+            unit: "ml"
+          },
+          group: "dry_goods"
+        },
+        {
+          ingredientId: "tray-item",
+          name: "Tray Item",
+          quantity: {
+            amount: 3,
+            unit: "tray"
+          },
+          group: "misc"
+        }
+      ],
+      steps: []
+    };
+
+    const purchaseList = aggregatePurchaseList("spec-unit-transform", [batch]);
+    const flour = purchaseList.items.find((item) => item.ingredientId === "flour");
+    const stock = purchaseList.items.find((item) => item.ingredientId === "stock");
+    const trayItem = purchaseList.items.find((item) => item.ingredientId === "tray-item");
+
+    expect(flour).toMatchObject({
+      normalizedQty: 0.75,
+      normalizedUnit: "kg",
+      purchaseQty: 0.75,
+      purchaseUnit: "kg"
+    });
+    expect(stock).toMatchObject({
+      normalizedQty: 1.25,
+      normalizedUnit: "l",
+      purchaseQty: 1.25,
+      purchaseUnit: "l"
+    });
+    expect(trayItem).toMatchObject({
+      normalizedQty: 3,
+      normalizedUnit: "tray",
+      purchaseQty: 3,
+      purchaseUnit: "tray"
+    });
+  });
+});
+
+describe("visible allergen display", () => {
+  it("renders existing allergen hints visibly in the production plan export", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-allergens-visible",
+      eventSpecId: "spec-allergens-1",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [],
+      timeline: [],
+      kitchenSheets: [
+        {
+          title: "Kartoffelgratin - Rezept",
+          instructions: [
+            "1. Backen.",
+            "Bekannte Allergene laut Rezept: Milch, Gluten."
+          ]
+        }
+      ],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).toContain("Allergenhinweise");
+    expect(html).toContain("Bekannte Allergene laut Rezept: Milch, Gluten.");
+  });
+
+  it("does not create a false allergen section when no allergen information exists", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-allergens-none",
+      eventSpecId: "spec-allergens-2",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [],
+      timeline: [],
+      kitchenSheets: [
+        {
+          title: "Tomatensuppe - Rezept",
+          instructions: ["1. Kochen.", "2. Abschmecken."]
+        }
+      ],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).not.toContain("Allergenhinweise");
+    expect(html).not.toContain("keine Allergene");
   });
 });
 

@@ -1,38 +1,24 @@
 import { ingredientGroupHints } from "../taxonomies/defaults.js";
 import type { ProductionBatch, PurchaseItem, PurchaseList } from "../types.js";
 import { SCHEMA_VERSION } from "../types.js";
-
-function purchaseUnitFor(unit: string): string {
-  if (unit === "g") {
-    return "kg";
-  }
-
-  return unit;
-}
-
-function purchaseQtyFor(amount: number, unit: string): number {
-  if (unit === "g") {
-    return Number((amount / 1000).toFixed(2));
-  }
-
-  return Number(amount.toFixed(2));
-}
+import { normalizePurchaseQuantity } from "./unit-transform.js";
 
 function aggregatePurchaseItem(
   aggregate: Map<string, PurchaseItem>,
   item: PurchaseItem
 ) {
-  const key = `${item.ingredientId}:${item.normalizedUnit}`;
+  const transformed = normalizePurchaseQuantity(item.normalizedQty, item.normalizedUnit);
+  const key = `${item.ingredientId}:${transformed.normalizedUnit}`;
   const existing = aggregate.get(key);
-  const normalizedQty = item.normalizedQty + (existing?.normalizedQty ?? 0);
+  const normalizedQty = transformed.normalizedQty + (existing?.normalizedQty ?? 0);
 
   aggregate.set(key, {
     ingredientId: item.ingredientId,
     displayName: item.displayName,
     normalizedQty: Number(normalizedQty.toFixed(2)),
-    normalizedUnit: item.normalizedUnit,
-    purchaseQty: purchaseQtyFor(normalizedQty, item.normalizedUnit),
-    purchaseUnit: purchaseUnitFor(item.normalizedUnit),
+    normalizedUnit: transformed.normalizedUnit,
+    purchaseQty: Number(normalizedQty.toFixed(2)),
+    purchaseUnit: transformed.normalizedUnit,
     group: item.group,
     supplierHint: item.supplierHint ?? existing?.supplierHint,
     sourceRecipes: [...new Set([...(existing?.sourceRecipes ?? []), ...item.sourceRecipes])],
@@ -74,13 +60,17 @@ export function aggregatePurchaseList(
 
   for (const batch of batches) {
     for (const ingredient of batch.ingredients) {
+      const transformed = normalizePurchaseQuantity(
+        ingredient.quantity.amount,
+        ingredient.quantity.unit
+      );
       aggregatePurchaseItem(aggregate, {
         ingredientId: ingredient.ingredientId,
         displayName: ingredient.name,
-        normalizedQty: ingredient.quantity.amount,
-        normalizedUnit: ingredient.quantity.unit,
-        purchaseQty: purchaseQtyFor(ingredient.quantity.amount, ingredient.quantity.unit),
-        purchaseUnit: purchaseUnitFor(ingredient.quantity.unit),
+        normalizedQty: transformed.normalizedQty,
+        normalizedUnit: transformed.normalizedUnit,
+        purchaseQty: transformed.normalizedQty,
+        purchaseUnit: transformed.normalizedUnit,
         group: ingredient.group,
         supplierHint: ingredient.group === "beverages" ? "Metro Drinks" : "Metro Fresh",
         sourceRecipes: [batch.recipeId],

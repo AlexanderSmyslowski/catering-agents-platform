@@ -1,3 +1,5 @@
+import type { AppliedYield, YieldProfile } from "../types.js";
+
 /*
  * Yield / Ausbeute / Verschnitt in V1:
  * - netQty: benoetigte verwendbare Menge in der Produktion
@@ -53,5 +55,32 @@ export function calculateYieldQuantities(
     yieldFactor: normalizedYieldFactor,
     grossQty,
     wasteQty
+  };
+}
+
+export function createAppliedYield(
+  netQty: number,
+  profile?: Pick<YieldProfile, "id" | "yieldFactor" | "sourceType">
+): AppliedYield {
+  const roundedNetQty = roundYieldQuantity(netQty);
+
+  if (!profile) {
+    return {
+      netQty: roundedNetQty,
+      sourceTypeApplied: "missing",
+      missingYield: true
+    };
+  }
+
+  const quantities = calculateYieldQuantities(roundedNetQty, profile.yieldFactor);
+
+  return {
+    netQty: quantities.netQty,
+    yieldFactorApplied: quantities.yieldFactor,
+    grossQty: quantities.grossQty,
+    wasteQty: quantities.wasteQty,
+    sourceTypeApplied: profile.sourceType,
+    sourceRefId: profile.id,
+    missingYield: false
   };
 }

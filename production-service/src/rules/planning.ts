@@ -1,5 +1,6 @@
 import {
   aggregatePurchaseList,
+  createAppliedYield,
   mergeReadiness,
   procurementGroupFor,
   SCHEMA_VERSION,
@@ -10,9 +11,14 @@ import {
   type AcceptedEventSpec,
   type PurchaseItem,
   type ProductionPlan,
-  type PurchaseList
+  type PurchaseList,
+  type YieldProfileLibrary
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
+
+interface ProductionPlanningOptions {
+  yieldProfiles?: YieldProfileLibrary;
+}
 
 function stationFor(label: string): string {
   if (/salat|dessert/i.test(label)) {
@@ -118,6 +124,41 @@ function procurementItemsForComponent(
   }
 
   return [];
+}
+
+async function applyYieldToBatchIngredients(
+  batch: ProductionPlan["productionBatches"][number],
+  yieldProfiles?: YieldProfileLibrary
+): Promise<ProductionPlan["productionBatches"][number]> {
+  const ingredients = await Promise.all(
+    batch.ingredients.map(async (ingredient) => {
+      const profile = yieldProfiles
+        ? await yieldProfiles.getActiveIngredientYieldProfile(ingredient.ingredientId)
+        : undefined;
+      const appliedYield = createAppliedYield(ingredient.quantity.amount, profile);
+
+      if (appliedYield.missingYield) {
+        return {
+          ...ingredient,
+          appliedYield
+        };
+      }
+
+      return {
+        ...ingredient,
+        quantity: {
+          ...ingredient.quantity,
+          amount: appliedYield.grossQty ?? ingredient.quantity.amount
+        },
+        appliedYield
+      };
+    })
+  );
+
+  return {
+    ...batch,
+    ingredients
+  };
 }
 
 function purchasedElementsSummary(component: AcceptedEventSpec["menuPlan"][number]): string {
@@ -311,7 +352,8 @@ function unresolvedTimelineLabel(
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
-  discoveryService: RecipeDiscoveryService
+  discoveryService: RecipeDiscoveryService,
+  options: ProductionPlanningOptions = {}
 ): Promise<{ productionPlan: ProductionPlan; purchaseList: PurchaseList }> {
   const eventSpec = validateAcceptedEventSpec(eventSpecInput);
   const productionBatches: ProductionPlan["productionBatches"] = [];
@@ -429,13 +471,17 @@ export async function buildProductionArtifacts(
 
     const draftBatch = toProductionBatch(resolution.recipe, component.componentId, servings);
     const batchId = `batch-${eventSpec.specId}-${component.componentId}`;
-    const batch = {
+    const batchWithoutYield = {
       batchId,
       ...draftBatch,
       station: stationFor(component.label),
       prepWindow: prepWindowFor(eventSpec),
       gnPlan: gnPlanFor(servings)
     };
+    const batch = await applyYieldToBatchIngredients(
+      batchWithoutYield,
+      options.yieldProfiles
+    );
 
     productionBatches.push(batch);
     const allergenInstructions =

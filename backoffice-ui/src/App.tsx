@@ -359,6 +359,57 @@ function formatPurchasePreviewLine(item: Record<string, unknown>): string {
   return metaParts.join(" · ");
 }
 
+function formatQuantityValue(value: unknown): string {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "-";
+  }
+
+  return Number.isInteger(numeric) ? String(numeric) : String(Number(numeric.toFixed(4)));
+}
+
+function formatYieldStatusLine(ingredient: Record<string, unknown>): string {
+  const quantity = ingredient.quantity as Record<string, unknown> | undefined;
+  const appliedYield = ingredient.appliedYield as Record<string, unknown> | undefined;
+  if (!quantity || !appliedYield) {
+    return "";
+  }
+
+  const unit = String(quantity.unit ?? "").trim();
+  if (appliedYield.missingYield === true) {
+    return `Yield fehlt · netto ${formatQuantityValue(appliedYield.netQty)} ${unit}`.trim();
+  }
+
+  const parts = [
+    `netto ${formatQuantityValue(appliedYield.netQty)} ${unit}`.trim(),
+    `brutto ${formatQuantityValue(appliedYield.grossQty)} ${unit}`.trim(),
+    `Verschnitt ${formatQuantityValue(appliedYield.wasteQty)} ${unit}`.trim()
+  ];
+  const yieldFactor = appliedYield.yieldFactorApplied;
+  if (typeof yieldFactor === "number" || typeof yieldFactor === "string") {
+    parts.push(`Faktor ${formatQuantityValue(yieldFactor)}`);
+  }
+
+  return parts.join(" · ");
+}
+
+function extractAllergenNotices(plan: Record<string, unknown>): string[] {
+  const kitchenSheets = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets : [];
+  const notices = kitchenSheets.flatMap((sheet) => {
+    const instructions = Array.isArray((sheet as Record<string, unknown>).instructions)
+      ? ((sheet as Record<string, unknown>).instructions as unknown[]).map((entry) => String(entry))
+      : [];
+
+    return instructions.filter(
+      (instruction) =>
+        /^Bekannte Allergene laut Rezept:/i.test(instruction) ||
+        /Allergeninformation .* noch nicht belastbar gepflegt/i.test(instruction)
+    );
+  });
+
+  return [...new Set(notices)];
+}
+
 function renderPlanList(
   plans: Array<Record<string, unknown>>,
   specById: Map<string, Record<string, unknown>>,
@@ -2502,6 +2553,31 @@ export function App() {
             ) : null}
             {selectedPlan ? (
               <>
+                {(() => {
+                  const allergenNotices = extractAllergenNotices(selectedPlan);
+                  return allergenNotices.length > 0 ? (
+                    <>
+                      <div className="divider" />
+                      <header>
+                        <p className="eyebrow">Allergenhinweise</p>
+                        <h4 className="subsection-title">Vorhandene Rezeptsignale</h4>
+                      </header>
+                      <ul className="item-list compact mobile-detail-list allergen-notice-list">
+                        {allergenNotices.map((notice) => {
+                          const isWarning = /noch nicht belastbar gepflegt/i.test(notice);
+                          return (
+                            <li
+                              key={notice}
+                              className={isWarning ? "allergen-notice allergen-notice--warning" : "allergen-notice"}
+                            >
+                              {notice}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : null;
+                })()}
                 <div className="divider" />
                 <header>
                   <p className="eyebrow">Plandetails</p>
@@ -2617,6 +2693,57 @@ export function App() {
                                   {instruction}
                                 </li>
                               ))}
+                            </ul>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : null}
+                {Array.isArray(selectedPlan.productionBatches) &&
+                selectedPlan.productionBatches.some((batch) =>
+                  Array.isArray((batch as Record<string, unknown>).ingredients) &&
+                  ((batch as Record<string, unknown>).ingredients as unknown[]).some((ingredient) =>
+                    Boolean((ingredient as Record<string, unknown>).appliedYield)
+                  )
+                ) ? (
+                  <>
+                    <div className="divider" />
+                    <header>
+                      <p className="eyebrow">Yield-Status</p>
+                      <h4 className="subsection-title">Netto, Brutto und fehlende Yield-Profile</h4>
+                    </header>
+                    <ul className="item-list compact mobile-detail-list">
+                      {selectedPlan.productionBatches.map((batch) => {
+                        const batchRecord = batch as Record<string, unknown>;
+                        const ingredients = Array.isArray(batchRecord.ingredients)
+                          ? batchRecord.ingredients
+                              .map((entry) => entry as Record<string, unknown>)
+                              .filter((entry) => Boolean(entry.appliedYield))
+                          : [];
+
+                        if (ingredients.length === 0) {
+                          return null;
+                        }
+
+                        return (
+                          <li key={`yield-${String(batchRecord.batchId ?? batchRecord.componentId ?? "batch")}`}>
+                            <strong>{String(batchRecord.componentId ?? "Produktionsposition")}</strong>
+                            <ul className="item-list compact trace-list yield-status-list">
+                              {ingredients.map((ingredient) => {
+                                const ingredientName = String(ingredient.name ?? ingredient.ingredientId ?? "Zutat");
+                                const appliedYield = ingredient.appliedYield as Record<string, unknown>;
+                                const isMissing = appliedYield?.missingYield === true;
+                                return (
+                                  <li
+                                    key={`${String(batchRecord.batchId ?? "batch")}-${ingredientName}`}
+                                    className={isMissing ? "yield-status-item yield-status-item--missing" : "yield-status-item"}
+                                  >
+                                    <strong>{ingredientName}</strong>
+                                    <p className="helper-text">{formatYieldStatusLine(ingredient)}</p>
+                                  </li>
+                                );
+                              })}
                             </ul>
                           </li>
                         );

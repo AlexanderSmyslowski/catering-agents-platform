@@ -5,6 +5,7 @@ import type {
   CollectionStorageOptions,
   OfferDraft,
   ProductionPlan,
+  ProductionIngredientLine,
   PurchaseList
 } from "@catering/shared-core";
 
@@ -37,16 +38,92 @@ export function renderOfferHtml(draft: OfferDraft): string {
   ].join("");
 }
 
+function formatYieldValue(value?: number): string {
+  return typeof value === "number" ? String(value) : "-";
+}
+
+function renderYieldStatusHtml(ingredient: ProductionIngredientLine): string {
+  const appliedYield = ingredient.appliedYield;
+  if (!appliedYield) {
+    return "";
+  }
+
+  if (appliedYield.missingYield) {
+    return `<p class="yield-note yield-note--warning">Yield fehlt: netto ${escapeHtml(
+      formatYieldValue(appliedYield.netQty)
+    )} ${escapeHtml(ingredient.quantity.unit)} bleibt ohne Schätzung stehen.</p>`;
+  }
+
+  return `<p class="yield-note">Yield: netto ${escapeHtml(
+    formatYieldValue(appliedYield.netQty)
+  )} ${escapeHtml(ingredient.quantity.unit)} → brutto ${escapeHtml(
+    formatYieldValue(appliedYield.grossQty)
+  )} ${escapeHtml(ingredient.quantity.unit)} · Verschnitt ${escapeHtml(
+    formatYieldValue(appliedYield.wasteQty)
+  )} ${escapeHtml(ingredient.quantity.unit)} · Faktor ${escapeHtml(
+    formatYieldValue(appliedYield.yieldFactorApplied)
+  )}</p>`;
+}
+
+function allergenNoticesForPlan(plan: ProductionPlan): string[] {
+  return [...new Set(
+    plan.kitchenSheets.flatMap((sheet) =>
+      sheet.instructions.filter(
+        (instruction) =>
+          /^Bekannte Allergene laut Rezept:/i.test(instruction) ||
+          /Allergeninformation .* noch nicht belastbar gepflegt/i.test(instruction)
+      )
+    )
+  )];
+}
+
 export function renderProductionPlanHtml(plan: ProductionPlan): string {
+  const allergenNotices = allergenNoticesForPlan(plan);
   return [
-    "<html><body>",
+    "<html><head><meta charset=\"utf-8\" /><title>Produktionsplan</title><style>",
+    "body{font-family:Arial,sans-serif;margin:32px;color:#1f2937;}",
+    "h1,h2,h3{margin:0 0 12px;}",
+    "p{margin:4px 0 12px;}",
+    "section{margin-top:24px;break-inside:avoid;}",
+    "ol,ul{margin:8px 0 0 20px;padding:0;}",
+    ".yield-list{margin-top:12px;padding:0;list-style:none;}",
+    ".yield-list li{margin:0 0 10px;padding:10px 12px;border:1px solid #d1d5db;border-radius:12px;background:#f8fafc;}",
+    ".yield-note{margin:4px 0 0;color:#334155;font-size:14px;}",
+    ".yield-note--warning{color:#9a3412;font-weight:600;}",
+    ".allergen-list{margin:0;padding:0;list-style:none;}",
+    ".allergen-list li{margin:0 0 10px;padding:10px 12px;border:1px solid #d1d5db;border-radius:12px;background:#f8fafc;}",
+    ".allergen-list li.warning{border-color:#fdba74;background:#fff7ed;color:#9a3412;font-weight:600;}",
+    "</style></head><body>",
     `<h1>Produktionsplan ${plan.planId}</h1>`,
     `<p>Status: ${plan.readiness.status}</p>`,
+    ...(allergenNotices.length > 0
+      ? [
+          `<section><h2>Allergenhinweise</h2><ul class="allergen-list">${allergenNotices
+            .map(
+              (notice) =>
+                `<li class="${
+                  /noch nicht belastbar gepflegt/i.test(notice) ? "warning" : ""
+                }">${escapeHtml(notice)}</li>`
+            )
+            .join("")}</ul></section>`
+        ]
+      : []),
     ...plan.productionBatches.map(
       (batch) =>
         `<section><h2>${batch.componentId}</h2><p>Station: ${batch.station}</p><ol>${batch.steps
           .map((step) => `<li>${step.instruction}</li>`)
-          .join("")}</ol></section>`
+          .join("")}</ol>${
+            batch.ingredients.length > 0
+              ? `<h3>Yield-Status der Zutaten</h3><ul class="yield-list">${batch.ingredients
+                  .map(
+                    (ingredient) =>
+                      `<li><strong>${escapeHtml(ingredient.name)}</strong><p>Menge im Batch: ${escapeHtml(
+                        formatYieldValue(ingredient.quantity.amount)
+                      )} ${escapeHtml(ingredient.quantity.unit)}</p>${renderYieldStatusHtml(ingredient)}</li>`
+                  )
+                  .join("")}</ul>`
+              : ""
+          }</section>`
     ),
     "</body></html>"
   ].join("");

@@ -243,6 +243,38 @@ export const commonSchema = {
         normalizedUnit: { type: "string" }
       }
     },
+    appliedYield: {
+      type: "object",
+      additionalProperties: false,
+      required: ["netQty", "sourceTypeApplied", "missingYield"],
+      properties: {
+        netQty: { type: "number", minimum: 0 },
+        yieldFactorApplied: {
+          type: "number",
+          exclusiveMinimum: 0,
+          maximum: 1
+        },
+        grossQty: { type: "number", minimum: 0 },
+        wasteQty: { type: "number", minimum: 0 },
+        sourceTypeApplied: { type: "string" },
+        sourceRefId: { type: "string" },
+        missingYield: { type: "boolean" }
+      }
+    },
+    productionIngredientLine: {
+      type: "object",
+      additionalProperties: false,
+      required: ["ingredientId", "name", "quantity", "group"],
+      properties: {
+        ingredientId: { type: "string" },
+        name: { type: "string" },
+        quantity: { $ref: "#/$defs/quantity" },
+        group: { type: "string" },
+        purchaseUnit: { type: "string" },
+        normalizedUnit: { type: "string" },
+        appliedYield: { $ref: "#/$defs/appliedYield" }
+      }
+    },
     recipeStep: {
       type: "object",
       additionalProperties: false,

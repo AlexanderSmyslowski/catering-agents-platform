@@ -265,6 +265,20 @@ export interface IngredientLine {
   normalizedUnit?: string;
 }
 
+export interface AppliedYield {
+  netQty: number;
+  yieldFactorApplied?: number;
+  grossQty?: number;
+  wasteQty?: number;
+  sourceTypeApplied: string;
+  sourceRefId?: string;
+  missingYield: boolean;
+}
+
+export interface ProductionIngredientLine extends IngredientLine {
+  appliedYield?: AppliedYield;
+}
+
 export interface RecipeStep {
   index: number;
   instruction: string;
@@ -330,7 +344,7 @@ export interface ProductionBatch {
   }[];
   station: string;
   prepWindow: string;
-  ingredients: IngredientLine[];
+  ingredients: ProductionIngredientLine[];
   steps: RecipeStep[];
 }
 

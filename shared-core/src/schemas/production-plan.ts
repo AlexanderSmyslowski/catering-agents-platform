@@ -65,7 +65,7 @@ export const productionPlanSchema = {
           ingredients: {
             type: "array",
             items: {
-              $ref: "https://schemas.catering.local/common.json#/$defs/ingredientLine"
+              $ref: "https://schemas.catering.local/common.json#/$defs/productionIngredientLine"
             }
           },
           steps: {

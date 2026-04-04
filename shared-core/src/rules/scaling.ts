@@ -1,4 +1,10 @@
-import type { IngredientLine, ProductionBatch, Quantity, Recipe, RecipeStep } from "../types.js";
+import type {
+  ProductionBatch,
+  ProductionIngredientLine,
+  Quantity,
+  Recipe,
+  RecipeStep
+} from "../types.js";
 
 function roundQuantity(amount: number): number {
   return Number(amount.toFixed(2));
@@ -6,7 +12,7 @@ function roundQuantity(amount: number): number {
 
 export interface ScaledRecipeResult {
   scaledYield: Quantity;
-  ingredients: IngredientLine[];
+  ingredients: ProductionIngredientLine[];
   steps: RecipeStep[];
   batchCount: number;
 }
@@ -55,4 +61,3 @@ export function toProductionBatch(
     steps: scaled.steps
   };
 }
-

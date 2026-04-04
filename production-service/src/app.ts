@@ -9,6 +9,7 @@ import {
   parseUploadedRecipeText,
   validateEventDemand,
   validateAcceptedEventSpec,
+  YieldProfileLibrary,
   type AcceptedEventSpec,
   type EventDemand,
   type Queryable
@@ -126,6 +127,11 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
+  const yieldProfiles = new YieldProfileLibrary({
+    rootDir: options.dataRoot,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
   const auditLog =
     options.auditLog ??
     new AuditLogStore({
@@ -167,7 +173,9 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   app.post<{ Body: { eventSpec: AcceptedEventSpec } }>("/v1/production/plans", async (request, reply) => {
     const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
-    const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
+    const artifacts = await buildProductionArtifacts(eventSpec, discoveryService, {
+      yieldProfiles
+    });
     await store.savePlan(artifacts.productionPlan);
     await store.savePurchaseList(artifacts.purchaseList);
     await auditLog.log({
@@ -193,7 +201,9 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       const eventSpec = validateAcceptedEventSpec(
         createAcceptedEventSpecFromEventDemand(eventDemand)
       );
-      const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
+      const artifacts = await buildProductionArtifacts(eventSpec, discoveryService, {
+        yieldProfiles
+      });
       await store.savePlan(artifacts.productionPlan);
       await store.savePurchaseList(artifacts.purchaseList);
       await auditLog.log({
@@ -220,7 +230,9 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.post("/v1/production/seed-demo", async (request, reply) => {
     const seeded = [];
     for (const spec of getDemoProductionSpecs()) {
-      const artifacts = await buildProductionArtifacts(spec, discoveryService);
+      const artifacts = await buildProductionArtifacts(spec, discoveryService, {
+        yieldProfiles
+      });
       await store.savePlan(artifacts.productionPlan);
       await store.savePurchaseList(artifacts.purchaseList);
       seeded.push({
