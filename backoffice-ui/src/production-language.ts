@@ -91,6 +91,20 @@ function translateUncertaintyMessage(field?: string, message?: string): string |
   if (field === "event.date" || field === "event.date_or_schedule") {
     return "Im Dokument wurde kein belastbares Veranstaltungsdatum oder Servicefenster erkannt.";
   }
+  if (
+    field === "menuPlan" &&
+    message &&
+    /kaufmaennisch oder dokumentseitig fortgeschritten.*offene speiseauswahl/i.test(message)
+  ) {
+    return "Mindestens ein Speiseblock wirkt noch offen. Bitte vor der Produktionsplanung verbindlich bestätigen, welche Speisen in diesem Block gelten.";
+  }
+  if (
+    field === "menuPlan" &&
+    message &&
+    /mindestens ein speiseblock wirkt wie auswahl, alternative oder beispiel/i.test(message)
+  ) {
+    return "Mindestens ein Speiseblock wirkt wie Auswahl, Alternative oder Beispiel. Bitte vor der Produktionsplanung verbindlich bestätigen, welche Speisen daraus tatsächlich gelten.";
+  }
 
   if (!message) {
     return undefined;

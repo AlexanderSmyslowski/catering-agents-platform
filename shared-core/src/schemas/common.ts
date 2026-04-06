@@ -65,6 +65,9 @@ export const commonSchema = {
         }
       }
     },
+    ownershipContext: {
+      enum: ["customer", "production"]
+    },
     customer: {
       type: "object",
       additionalProperties: false,
@@ -112,6 +115,7 @@ export const commonSchema = {
       properties: {
         expected: { type: "integer", minimum: 0 },
         guaranteed: { type: "integer", minimum: 0 },
+        productionPax: { type: "integer", minimum: 0 },
         dietaryMix: {
           type: "object",
           additionalProperties: { type: "integer", minimum: 0 }
@@ -240,6 +244,51 @@ export const commonSchema = {
         group: { type: "string" },
         purchaseUnit: { type: "string" },
         normalizedUnit: { type: "string" }
+      }
+    },
+    appliedYield: {
+      type: "object",
+      additionalProperties: false,
+      required: ["netQty", "sourceTypeApplied", "missingYield"],
+      properties: {
+        netQty: { type: "number", minimum: 0 },
+        yieldFactorApplied: {
+          type: "number",
+          exclusiveMinimum: 0,
+          maximum: 1
+        },
+        grossQty: { type: "number", minimum: 0 },
+        wasteQty: { type: "number", minimum: 0 },
+        sourceTypeApplied: { type: "string" },
+        sourceRefId: { type: "string" },
+        missingYield: { type: "boolean" }
+      }
+    },
+    appliedPurchasingUnit: {
+      type: "object",
+      additionalProperties: false,
+      required: ["unitLabel", "unitSize", "baseUnit", "sourceTypeApplied", "missingRule"],
+      properties: {
+        unitLabel: { type: "string" },
+        unitSize: { type: "number", exclusiveMinimum: 0 },
+        baseUnit: { type: "string" },
+        sourceTypeApplied: { type: "string" },
+        sourceRefId: { type: "string" },
+        missingRule: { type: "boolean" }
+      }
+    },
+    productionIngredientLine: {
+      type: "object",
+      additionalProperties: false,
+      required: ["ingredientId", "name", "quantity", "group"],
+      properties: {
+        ingredientId: { type: "string" },
+        name: { type: "string" },
+        quantity: { $ref: "#/$defs/quantity" },
+        group: { type: "string" },
+        purchaseUnit: { type: "string" },
+        normalizedUnit: { type: "string" },
+        appliedYield: { $ref: "#/$defs/appliedYield" }
       }
     },
     recipeStep: {

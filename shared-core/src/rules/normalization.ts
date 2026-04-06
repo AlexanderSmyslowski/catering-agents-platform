@@ -129,11 +129,21 @@ function sanitizeMenuLine(line: string): string {
 function inferMenuCategoryFromText(
   line: string
 ): MenuComponent["menuCategory"] | undefined {
+  const normalized = line.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
   if (/(^|[^a-z])(vegan)([^a-z]|$)/i.test(line)) {
     return "vegan";
   }
   if (/(vegetarisch|vegetarian)/i.test(line)) {
     return "vegetarian";
+  }
+  if (/\bquiche\b/.test(normalized)) {
+    if (/\b(spinat|feta|schafskase|schafskaese)\b/.test(normalized)) {
+      return "vegetarian";
+    }
+    if (/\b(lorraine|schinken|speck)\b/.test(normalized)) {
+      return "classic";
+    }
   }
   if (/(traditionell|klassisch|classic)/i.test(line)) {
     return "classic";
@@ -166,6 +176,119 @@ function looksLikeMenuHeading(line: string): boolean {
   );
 }
 
+function looksLikeStandaloneFallbackHeading(line: string): boolean {
+  return /^dessert$/i.test(line);
+}
+
+function normalizedComparableText(line: string): string {
+  return line.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function isExplicitSelectionBlockStarter(line: string): boolean {
+  const normalized = normalizedComparableText(line);
+  return (
+    normalized.includes("bitte wahlen sie") &&
+    (/maximal zwei speisen/.test(normalized) ||
+      /2 sorten aus/.test(normalized) ||
+      /eine hauptspeise aus/.test(normalized) ||
+      normalized === "bitte wahlen sie" ||
+      /\bbitte wahlen sie\b/.test(normalized))
+  );
+}
+
+function isObviousNonMenuLine(line: string): boolean {
+  const normalized = normalizedComparableText(line);
+
+  if (
+    /^(positionbeschreibung|ab\s+\d+[.,]\d{2}|gesamt\s*:|gesamtkosten\s*:?)\b/.test(normalized) ||
+    /^\d+\s*€(?:\s|$)/.test(normalized)
+  ) {
+    return true;
+  }
+
+  if (
+    /(buffetinfrastruktur|menuschilder|weinglaser|besteck|geschirr|ausgabepersonal|dekoration)\b/.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /^(conference catering|business premiumbuffet|hauptspeisen\s*&\s*beilagen|vorspeisenvariationen)$/.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+
+  if (/^conference getranke und snacks einkalkuliert\.?$/.test(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isSelectionBlockBoundary(line: string): boolean {
+  return (
+    looksLikeMenuHeading(line) ||
+    /%/.test(line) ||
+    isMenuNoise(line) ||
+    isObviousNonMenuLine(line) ||
+    /^\d/.test(line) ||
+    /€/.test(line) ||
+    /^(kostenübersicht|organisation|referenzen)\b/i.test(line)
+  );
+}
+
+function coalesceExplicitSelectionBlocks(lines: string[]): string[] {
+  const merged: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (!isExplicitSelectionBlockStarter(line)) {
+      merged.push(line);
+      continue;
+    }
+
+    const parts = [line];
+    let consumedFollowers = 0;
+
+    for (let nextIndex = index + 1; nextIndex < lines.length; nextIndex += 1) {
+      const nextLine = lines[nextIndex];
+      if (isSelectionBlockBoundary(nextLine)) {
+        break;
+      }
+
+      const normalized = normalizedComparableText(nextLine);
+      const looksLikeOptionLine =
+        normalized === "oder" ||
+        /^(fleisch|vegetarisch|vegan|dessert|hauptspeise|vorspeise|salate?)\b/.test(normalized) ||
+        /\|/.test(nextLine) ||
+        /(pasta|curry|hahnchen|hähnchen|gulasch|ochsenb|panna cotta|obstkorb|tortiglioni|sandw|baguette|ciabatta|flute)/i.test(
+          nextLine
+        );
+
+      if (!looksLikeOptionLine) {
+        break;
+      }
+
+      parts.push(nextLine);
+      consumedFollowers += 1;
+
+      if (consumedFollowers >= 4 || parts.join(" / ").length >= 320) {
+        break;
+      }
+    }
+
+    merged.push(parts.join(" / "));
+    index += consumedFollowers;
+  }
+
+  return merged;
+}
+
 function isMenuNoise(line: string): boolean {
   return /(?:uhr|gesamt|kosten|position|beschreibung|personalkosten|lieferung|transport|aufbau|abbau|umbau|rücklauf|personaleinsatz|hall of fame|hauptspeisenteller|stehttische|stehtische|geschirr|tischdecken|reinigungskosten|stunden|stunde)/i.test(
     line
@@ -181,10 +304,12 @@ function extractStructuredMenuSection(text: string): InferredMenuItem[] {
     return [];
   }
 
-  const lines = sectionMatch[1]
+  const lines = coalesceExplicitSelectionBlocks(
+    sectionMatch[1]
     .split(/\n+/)
     .map((line) => sanitizeMenuLine(line))
-    .filter(Boolean);
+    .filter(Boolean)
+  );
 
   const detected: InferredMenuItem[] = [];
   let activeCategory: MenuComponent["menuCategory"] | undefined;
@@ -195,7 +320,15 @@ function extractStructuredMenuSection(text: string): InferredMenuItem[] {
       activeCategory = headingCategory ?? activeCategory;
       continue;
     }
-    if (isMenuNoise(line) || /^\d/.test(line) || /€/.test(line)) {
+    if (isExplicitSelectionBlockStarter(line)) {
+      detected.push({
+        label: line,
+        menuCategory: activeCategory,
+        dietaryTags: dietaryTagsForCategory(activeCategory)
+      });
+      continue;
+    }
+    if (isMenuNoise(line) || isObviousNonMenuLine(line) || /^\d/.test(line) || /€/.test(line)) {
       continue;
     }
     if (!/[a-zäöüß]/i.test(line)) {
@@ -227,19 +360,30 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
     return structuredSectionLabels.slice(0, 12);
   }
 
-  const lines = text
+  const lines = coalesceExplicitSelectionBlocks(
+    text
     .split(/\n|,/)
     .map((line) => sanitizeMenuLine(line))
-    .filter(Boolean);
+    .filter(Boolean)
+  );
 
   const detected = lines.flatMap((line) => {
+    if (isObviousNonMenuLine(line)) {
+      return [];
+    }
+
     const directMatch = line.match(/\b(?:mit|includes?|serves?|menu|menü)\s+(.+)$/i);
 
     if (directMatch?.[1]) {
       return directMatch[1]
         .split(/\bund\b|&|\/|;/i)
         .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
-        .filter(Boolean)
+        .filter(
+          (label) =>
+            Boolean(label) &&
+            !looksLikeStandaloneFallbackHeading(label) &&
+            !isObviousNonMenuLine(label)
+        )
         .map((label) => ({
           label,
           menuCategory: inferMenuCategoryFromText(label),
@@ -247,9 +391,23 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
         }));
     }
 
+    if (looksLikeStandaloneFallbackHeading(line)) {
+      return [];
+    }
+
+    if (isExplicitSelectionBlockStarter(line)) {
+      return [
+        {
+          label: line,
+          menuCategory: inferMenuCategoryFromText(line),
+          dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(line))
+        }
+      ];
+    }
+
     return /(buffet|salat|suppe|kaffee|croissant|dessert|fingerfood|wein|snack|menü|baguette|brot|kuchen|curry)/i.test(
       line
-    ) && !isMenuNoise(line)
+    ) && !isMenuNoise(line) && !isObviousNonMenuLine(line)
       ? [
           {
             label: line,
@@ -273,6 +431,24 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
     menuCategory: inferMenuCategoryFromText(label),
     dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))
   }));
+}
+
+function hasNonFinalMenuBlockMarkers(label: string): boolean {
+  const raw = label.toLowerCase();
+  const normalized = label.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  return (
+    raw.includes("bitte wählen sie") ||
+    raw.includes("bitte waehlen sie") ||
+    normalized.includes("bitte wahlen sie") ||
+    normalized.includes("je nach auswahl") ||
+    normalized.includes("zur auswahl") ||
+    normalized.includes("wahlweise") ||
+    normalized.includes("zum beispiel") ||
+    normalized.includes("beispielsweise") ||
+    /\bz\s*\.\s*b\s*\./.test(raw) ||
+    /\balternative(n)?\s*\d+(?:\s*\/\s*\d+)?\b/.test(normalized)
+  );
 }
 
 function detectCourse(label: string): string {
@@ -369,6 +545,17 @@ export function normalizeEventRequestToSpec(
     });
   }
 
+  if (menuItems.some((item) => hasNonFinalMenuBlockMarkers(item.label))) {
+    uncertainties.push({
+      field: "menuPlan",
+      message:
+        "Mindestens ein Speiseblock wirkt wie Auswahl, Alternative oder Beispiel und sollte vor belastbarer Produktionsplanung menschlich bestaetigt werden.",
+      severity: "medium",
+      suggestedQuestion:
+        "Welche Speisebloecke sind bereits verbindlich ausgewaehlt und damit belastbarer Produktionsinput?"
+    });
+  }
+
   const menuPlan: MenuComponent[] = menuItems.map((item, index) => ({
     componentId: `${slugify(item.label)}-${index + 1}`,
     label: item.label,
@@ -383,6 +570,7 @@ export function normalizeEventRequestToSpec(
   const spec: AcceptedEventSpec = {
     schemaVersion: SCHEMA_VERSION,
     specId: `spec-${request.requestId}`,
+    ownershipContext: "customer",
     lifecycle: {
       commercialState: opts?.commercialState ?? "manual"
     },
@@ -411,6 +599,7 @@ export function normalizeEventRequestToSpec(
     attendees: {
       expected: attendees,
       guaranteed: request.attendees?.guaranteed,
+      productionPax: request.attendees?.productionPax,
       dietaryMix: request.attendees?.dietaryMix
     },
     venue: request.venue,

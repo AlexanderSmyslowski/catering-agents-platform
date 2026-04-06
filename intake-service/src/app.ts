@@ -5,6 +5,7 @@ import {
   AuditLogStore,
   type CollectionStorageOptions,
   createEventRequestFromManualForm,
+  validateEventDemand,
   getDemoIntakeRequests,
   normalizeEventRequestToSpec,
   withEvaluatedReadiness,
@@ -12,10 +13,23 @@ import {
   validateEventRequest,
   type AcceptedEventSpec,
   type DocumentInput,
+  type EventDemand,
   type EventRequest
 } from "@catering/shared-core";
 import { buildEventRequestFromText, extractTextFromDocument } from "./extraction.js";
-import { IntakeStore } from "./store.js";
+import {
+  IntakeStore,
+  type ApprovalRequestRecord,
+  type ApprovalRole,
+  type DocumentImportRecord,
+  type ExtractedContextRecord,
+  type ExtractedField,
+  type SpecGovernanceStateRecord,
+  type SpecHistoryEntryRecord
+} from "./store.js";
+import { IntakeStoreAcceptedEventSpecAdapter } from "./spec-governance/accepted-event-spec-adapter.js";
+import { applyApprovalTrigger, type PersistedApprovalStatus } from "./spec-governance/approval-trigger.js";
+import { SpecGovernanceService } from "./spec-governance/spec-governance-service.js";
 
 interface DocumentBody {
   documents: {
@@ -54,6 +68,38 @@ interface ManualSpecBody {
   notes?: string;
 }
 
+interface ArchiveSpecBody {
+  reason?: string;
+}
+
+interface ApprovalDecisionBody {
+  note?: string;
+}
+
+interface FinalizeSpecGovernanceBody {
+  specId?: string;
+  changeSetId?: string;
+  confirmCriticalFinalize?: boolean;
+}
+
+let specHistorySequence = 0;
+
+interface EventDemandBody {
+  pax: number;
+  serviceForm: string;
+  menuOrServiceWish: string;
+  eventType?: string;
+  date?: string;
+  budgetContext?: {
+    targetBudget?: {
+      amount: number;
+      currency: string;
+    };
+  };
+  customerType?: "company" | "university" | "public" | "private" | "unknown";
+  restrictions?: string[];
+}
+
 interface MultipartDocumentUpload {
   requestId?: string;
   channel?: EventRequest["source"]["channel"];
@@ -84,6 +130,35 @@ function normalizeMenuItems(input: string[] | undefined): string[] | undefined {
   return items.length > 0 ? items : [];
 }
 
+function normalizeRestrictions(input: string[] | undefined): string[] | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const items = input.map((item) => item.trim()).filter(Boolean);
+  return items.length > 0 ? items : [];
+}
+
+function eventDemandFromBody(demandId: string, body: EventDemandBody): EventDemand {
+  return validateEventDemand({
+    schemaVersion: "1.0.0",
+    demandId,
+    ownershipContext: "customer",
+    pax: body.pax,
+    serviceForm: body.serviceForm?.trim() ?? "",
+    menuOrServiceWish: body.menuOrServiceWish?.trim() ?? "",
+    eventType: body.eventType?.trim() || undefined,
+    date: body.date?.trim() || undefined,
+    budgetContext: body.budgetContext?.targetBudget
+      ? {
+          targetBudget: body.budgetContext.targetBudget
+        }
+      : undefined,
+    customerType: body.customerType,
+    restrictions: normalizeRestrictions(body.restrictions)
+  });
+}
+
 function dietaryTagsForCategory(category?: "classic" | "vegetarian" | "vegan"): string[] {
   if (category === "vegan") {
     return ["vegan"];
@@ -100,7 +175,9 @@ function applySpecUpdates(
 ) {
   const nextEventType = body.eventType?.trim() || spec.event.type || spec.servicePlan.eventType;
   const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
-  const nextAttendeeCount = body.attendeeCount ?? spec.attendees.expected;
+  const nextOfferPax = spec.attendees.expected;
+  const nextProductionPax = body.attendeeCount ?? spec.attendees.productionPax;
+  const nextOperationalPax = nextProductionPax ?? nextOfferPax;
   const nextMenuItems = normalizeMenuItems(body.menuItems);
   const componentUpdates = new Map(
     (body.componentUpdates ?? []).map((item) => [item.componentId, item])
@@ -131,7 +208,8 @@ function applySpecUpdates(
     },
     attendees: {
       ...spec.attendees,
-      expected: nextAttendeeCount
+      expected: nextOfferPax,
+      productionPax: nextProductionPax
     },
     servicePlan: {
       ...spec.servicePlan,
@@ -143,7 +221,7 @@ function applySpecUpdates(
         ? spec.menuPlan.map((item) => ({
             ...item,
             serviceStyle: nextServiceForm,
-            servings: nextAttendeeCount,
+            servings: nextOperationalPax,
             menuCategory: componentUpdates.get(item.componentId)?.menuCategory ?? item.menuCategory,
             dietaryTags:
               componentUpdates.get(item.componentId)?.menuCategory
@@ -167,7 +245,7 @@ function applySpecUpdates(
               spec.menuPlan[index]?.menuCategory,
             serviceStyle: nextServiceForm,
             desiredRecipeTags: spec.menuPlan[index]?.desiredRecipeTags ?? (nextEventType ? [nextEventType] : []),
-            servings: nextAttendeeCount,
+            servings: nextOperationalPax,
             dietaryTags:
               componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory
                 ? dietaryTagsForCategory(componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory)
@@ -191,6 +269,111 @@ function applySpecUpdates(
   return withEvaluatedReadiness(nextSpec);
 }
 
+function roleFromHeaders(
+  headers: Record<string, string | string[] | undefined>
+): ApprovalRole {
+  const raw = headers["x-actor-role"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return "Approver";
+  }
+  if (
+    value === "KitchenEditor" ||
+    value === "ProcurementEditor" ||
+    value === "Approver"
+  ) {
+    return value;
+  }
+  throw new Error("Unbekannte Rolle.");
+}
+
+function criticalFieldsForSpecUpdate(body: SpecUpdateBody): string[] {
+  const criticalFields = new Set<string>();
+
+  if (Object.prototype.hasOwnProperty.call(body, "eventDate")) {
+    criticalFields.add("eventDate");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "attendeeCount")) {
+    criticalFields.add("attendeeCount");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "serviceForm")) {
+    criticalFields.add("serviceForm");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "eventType")) {
+    criticalFields.add("eventType");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "menuItems")) {
+    criticalFields.add("menuItems");
+  }
+
+  for (const update of body.componentUpdates ?? []) {
+    if (Object.prototype.hasOwnProperty.call(update, "menuCategory")) {
+      criticalFields.add("menuCategory");
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "productionMode")) {
+      criticalFields.add("productionMode");
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "purchasedElements")) {
+      criticalFields.add("purchasedElements");
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "recipeOverrideId")) {
+      criticalFields.add("recipeOverrideId");
+    }
+  }
+
+  return [...criticalFields];
+}
+
+function isHarmlessNotesOnlyUpdate(body: SpecUpdateBody): boolean {
+  const topLevelKeys = Object.keys(body);
+  if (topLevelKeys.length === 0) {
+    return false;
+  }
+
+  return topLevelKeys.every((key) => key === "componentUpdates") &&
+    (body.componentUpdates ?? []).length > 0 &&
+    (body.componentUpdates ?? []).every((update) => {
+      const keys = Object.keys(update);
+      return (
+        keys.length > 0 &&
+        keys.every((key) => key === "componentId" || key === "notes")
+      );
+    });
+}
+
+function approvalRequestForBlockedSpecUpdate(
+  specId: string,
+  body: SpecUpdateBody,
+  actor: { name: string },
+  role: ApprovalRole
+): ApprovalRequestRecord {
+  return {
+    approvalRequestId: `approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    specId,
+    status: "pending",
+    requestedAt: new Date().toISOString(),
+    requestedBy: {
+      name: actor.name,
+      role
+    },
+    criticalFields: criticalFieldsForSpecUpdate(body),
+    requestedChange: body as Record<string, unknown>
+  };
+}
+
+function createSpecHistoryEntry(
+  input: Omit<SpecHistoryEntryRecord, "historyEntryId" | "at" | "sequence">
+): SpecHistoryEntryRecord {
+  const at = new Date().toISOString();
+  specHistorySequence += 1;
+  return {
+    historyEntryId: `history-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    at,
+    sequence: specHistorySequence,
+    ...input
+  };
+}
+
 export interface IntakeAppOptions extends CollectionStorageOptions {
   store?: IntakeStore;
   auditLog?: AuditLogStore;
@@ -205,6 +388,45 @@ function actorForRequest(request: { headers: Record<string, string | string[] | 
     name: actorNameFromHeaders(request.headers, "Intake-Mitarbeiter"),
     source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
   };
+}
+
+function effectiveApprovalStatus(
+  state: SpecGovernanceStateRecord | undefined
+): PersistedApprovalStatus {
+  return state?.approvalStatus ?? "approved";
+}
+
+function buildSpecGovernanceState(input: {
+  specId: string;
+  approvalStatus: PersistedApprovalStatus;
+  highestImpactLevel?: SpecGovernanceStateRecord["highestImpactLevel"];
+  summary?: string | null;
+  latestApprovalRequestId?: string;
+}): SpecGovernanceStateRecord {
+  return {
+    specId: input.specId,
+    approvalStatus: input.approvalStatus,
+    updatedAt: new Date().toISOString(),
+    highestImpactLevel: input.highestImpactLevel ?? null,
+    summary: input.summary ?? undefined,
+    latestApprovalRequestId: input.latestApprovalRequestId
+  };
+}
+
+function selectVisibleChangeSet(
+  changeSets: Awaited<ReturnType<IntakeStore["listSpecChangeSetsForSpec"]>>
+) {
+  const openChangeSet = changeSets.find((record) => record.status === "open");
+  if (openChangeSet) {
+    return openChangeSet;
+  }
+
+  return [...changeSets]
+    .sort(
+      (left, right) =>
+        String(right.finalizedAt ?? "").localeCompare(String(left.finalizedAt ?? "")) ||
+        String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? ""))
+    )[0];
 }
 
 function multipartFieldValue(
@@ -315,7 +537,91 @@ async function normalizeUploadedDocuments(
     })
   );
 
+  const documentImport: DocumentImportRecord = {
+    documentImportId: `document-import-${validatedRequest.requestId}`,
+    requestId: validatedRequest.requestId,
+    sourceChannel: validatedRequest.source.channel,
+    createdAt: new Date().toISOString(),
+    documents: payload.documents.map((document, index) => ({
+      documentId: extracted[index]?.documentId ?? `${validatedRequest.requestId}-${index + 1}`,
+      filename: document.filename,
+      mimeType: document.mimeType,
+      sizeBytes: document.content.byteLength,
+      extractedTextPreview: extracted[index]?.text.slice(0, 240) ?? ""
+    }))
+  };
+
+  const fieldStatusFor = <T,>(
+    value: T | undefined,
+    options?: {
+      missingFieldCodes?: string[];
+      uncertaintyFields?: string[];
+      note?: string;
+    }
+  ): ExtractedField<T> => {
+    const missing = (options?.missingFieldCodes ?? []).some((field) =>
+      spec.missingFields?.includes(field)
+    );
+    const uncertain = (options?.uncertaintyFields ?? []).some((field) =>
+      spec.uncertainties?.some((entry) => entry.field === field)
+    );
+
+    if (value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0)) {
+      return {
+        status: "missing",
+        note: options?.note
+      };
+    }
+
+    return {
+      value,
+      status: missing || uncertain ? "uncertain" : "extracted",
+      note: options?.note
+    };
+  };
+
+  const extractedContext: ExtractedContextRecord = {
+    extractedContextId: `extracted-context-${validatedRequest.requestId}`,
+    documentImportId: documentImport.documentImportId,
+    requestId: validatedRequest.requestId,
+    specId: spec.specId,
+    status: "draft",
+    fields: {
+      pax: fieldStatusFor(spec.attendees.expected, {
+        missingFieldCodes: ["attendees.expected"],
+        uncertaintyFields: ["attendees.expected"]
+      }),
+      serviceForm: fieldStatusFor(spec.servicePlan.serviceForm, {
+        note: "Automatisch aus Dokumenttext oder Eventtyp abgeleitet."
+      }),
+      menuOrServiceWish: fieldStatusFor(
+        spec.menuPlan.map((item) => item.label).filter(Boolean).join(", "),
+        {
+          missingFieldCodes: ["menuPlan"],
+          uncertaintyFields: ["menuPlan"]
+        }
+      ),
+      budgetTarget: fieldStatusFor(spec.budgetContext?.targetBudget, {
+        missingFieldCodes: ["budgetContext.targetBudget"]
+      }),
+      eventType: fieldStatusFor(spec.servicePlan.eventType, {
+        note: "Automatisch aus Dokumenttext oder Defaults abgeleitet."
+      }),
+      date: fieldStatusFor(spec.event.date, {
+        missingFieldCodes: ["event.date"],
+        uncertaintyFields: ["event.date"]
+      }),
+      restrictions: fieldStatusFor(spec.productionConstraints, {
+        missingFieldCodes: ["productionConstraints"]
+      })
+    },
+    uncertainties: (spec.uncertainties ?? []).map((entry) => entry.message),
+    missingFields: spec.missingFields ?? []
+  };
+
   return {
+    documentImport,
+    extractedContext,
     eventRequest: validatedRequest,
     acceptedEventSpec: spec
   };
@@ -342,13 +648,22 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     logger: false,
     bodyLimit: 25 * 1024 * 1024
   });
+  const specGovernance = new SpecGovernanceService(
+    new IntakeStoreAcceptedEventSpecAdapter(store),
+    store
+  );
 
   app.register(multipart);
 
   app.get("/health", async (_request, reply) => {
-    const [requests, specs, auditEvents] = await Promise.all([
+    const [requests, eventDemands, specs, approvalRequests, documentImports, extractedContexts, specHistoryEntries, auditEvents] = await Promise.all([
       store.listRequests(),
+      store.listEventDemands(),
       store.listSpecs(),
+      store.listApprovalRequests(),
+      store.listDocumentImports(),
+      store.listExtractedContexts(),
+      store.listSpecHistoryEntries(),
       auditLog.count()
     ]);
     return reply.send({
@@ -357,7 +672,12 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       timestamp: new Date().toISOString(),
       counts: {
         requests: requests.length,
+        eventDemands: eventDemands.length,
         acceptedSpecs: specs.length,
+        approvalRequests: approvalRequests.length,
+        documentImports: documentImports.length,
+        extractedContexts: extractedContexts.length,
+        specHistoryEntries: specHistoryEntries.length,
         auditEvents
       }
     });
@@ -424,17 +744,20 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
 
     await store.saveRequest(normalized.eventRequest);
+    await store.saveDocumentImport(normalized.documentImport);
+    await store.saveExtractedContext(normalized.extractedContext);
     await store.saveSpec(normalized.acceptedEventSpec);
     await auditLog.log({
-      action: "intake.documents_normalized",
-      entityType: "AcceptedEventSpec",
-      entityId: normalized.acceptedEventSpec.specId,
+      action: "intake.documents_imported",
+      entityType: "DocumentImport",
+      entityId: normalized.documentImport.documentImportId,
       actor: actorForRequest(request),
-      summary: `${documents.length} hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert.`,
+      summary: `${documents.length} hochgeladene(s) Dokument(e) als Extraktionsentwurf übernommen.`,
       details: {
         requestId: normalized.eventRequest.requestId,
         documentCount: documents.length,
         readiness: normalized.acceptedEventSpec.readiness.status,
+        extractedContextId: normalized.extractedContext.extractedContextId,
         uploadMode: "json_base64"
       }
     });
@@ -447,17 +770,20 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     const normalized = await normalizeUploadedDocuments(upload);
 
     await store.saveRequest(normalized.eventRequest);
+    await store.saveDocumentImport(normalized.documentImport);
+    await store.saveExtractedContext(normalized.extractedContext);
     await store.saveSpec(normalized.acceptedEventSpec);
     await auditLog.log({
-      action: "intake.documents_normalized",
-      entityType: "AcceptedEventSpec",
-      entityId: normalized.acceptedEventSpec.specId,
+      action: "intake.documents_imported",
+      entityType: "DocumentImport",
+      entityId: normalized.documentImport.documentImportId,
       actor: actorForRequest(request),
-      summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload in AcceptedEventSpec normalisiert.`,
+      summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload als Extraktionsentwurf übernommen.`,
       details: {
         requestId: normalized.eventRequest.requestId,
         documentCount: upload.documents.length,
         readiness: normalized.acceptedEventSpec.readiness.status,
+        extractedContextId: normalized.extractedContext.extractedContextId,
         uploadMode: "multipart"
       }
     });
@@ -483,6 +809,16 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     await store.saveRequest(eventRequest);
     await store.saveSpec(spec);
+    await store.saveSpecHistoryEntry(
+      createSpecHistoryEntry({
+        eventType: "spec_manual_created",
+        specId: spec.specId,
+        entityType: "AcceptedEventSpec",
+        entityRefId: spec.specId,
+        summary: "Operative Spezifikation manuell angelegt.",
+        actor: actorForRequest(request)
+      })
+    );
     await auditLog.log({
       action: "intake.manual_spec_created",
       entityType: "AcceptedEventSpec",
@@ -550,6 +886,216 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
   });
 
+  app.post<{ Body: EventDemandBody }>("/v1/intake/event-demands", async (request, reply) => {
+    const eventDemand = eventDemandFromBody(`event-demand-${Date.now()}`, request.body);
+    await store.saveEventDemand(eventDemand);
+    await auditLog.log({
+      action: "intake.event_demand_created",
+      entityType: "EventDemand",
+      entityId: eventDemand.demandId,
+      actor: actorForRequest(request),
+      summary: "EventDemand angelegt.",
+      details: {
+        pax: eventDemand.pax,
+        serviceForm: eventDemand.serviceForm
+      }
+    });
+
+    return reply.code(201).send({
+      eventDemand
+    });
+  });
+
+  app.get("/v1/intake/event-demands", async (_request, reply) => {
+    return reply.send({
+      items: await store.listEventDemands()
+    });
+  });
+
+  app.get("/v1/intake/document-imports", async (_request, reply) => {
+    return reply.send({
+      items: await store.listDocumentImports()
+    });
+  });
+
+  app.get<{ Params: { documentImportId: string } }>(
+    "/v1/intake/document-imports/:documentImportId",
+    async (request, reply) => {
+      const documentImport = await store.getDocumentImport(request.params.documentImportId);
+      if (!documentImport) {
+        return reply.code(404).send({ message: "DocumentImport nicht gefunden." });
+      }
+
+      return reply.send(documentImport);
+    }
+  );
+
+  app.get("/v1/intake/extracted-contexts", async (_request, reply) => {
+    return reply.send({
+      items: await store.listExtractedContexts()
+    });
+  });
+
+  app.get<{ Params: { extractedContextId: string } }>(
+    "/v1/intake/extracted-contexts/:extractedContextId",
+    async (request, reply) => {
+      const extractedContext = await store.getExtractedContext(request.params.extractedContextId);
+      if (!extractedContext) {
+        return reply.code(404).send({ message: "ExtractedContext nicht gefunden." });
+      }
+
+      return reply.send(extractedContext);
+    }
+  );
+
+  app.get("/v1/intake/approval-requests", async (_request, reply) => {
+    return reply.send({
+      items: await store.listApprovalRequests()
+    });
+  });
+
+  app.get<{ Querystring: { specId?: string } }>("/v1/intake/spec-governance", async (request, reply) => {
+    const specId = request.query.specId?.trim();
+    const scopedSpec = specId ? await store.getSpec(specId) : undefined;
+    const specs = specId ? (scopedSpec ? [scopedSpec] : []) : await store.listSpecs();
+
+    const items = await Promise.all(
+      specs
+        .filter((entry): entry is AcceptedEventSpec => Boolean(entry))
+        .map(async (entry) => {
+          const [governanceState, changeSets] = await Promise.all([
+            store.getSpecGovernanceState(entry.specId),
+            store.listSpecChangeSetsForSpec(entry.specId)
+          ]);
+          const visibleChangeSet = selectVisibleChangeSet(changeSets);
+
+          return {
+            specId: entry.specId,
+            approvalStatus: governanceState?.approvalStatus ?? "approved",
+            updatedAt: governanceState?.updatedAt,
+            latestApprovalRequestId: governanceState?.latestApprovalRequestId,
+            changeSet: visibleChangeSet
+              ? {
+                  changeSetId: visibleChangeSet.changeSetId,
+                  status: visibleChangeSet.status,
+                  summary: visibleChangeSet.summary,
+                  highestImpactLevel: visibleChangeSet.highestImpactLevel,
+                  activeRuleKeys: visibleChangeSet.activeRuleKeys,
+                  updatedAt: visibleChangeSet.updatedAt,
+                  updatedBy: visibleChangeSet.updatedBy,
+                  finalizedAt: visibleChangeSet.finalizedAt,
+                  finalizedBy: visibleChangeSet.finalizedBy
+                }
+              : null
+          };
+        })
+    );
+
+    return reply.send({ items });
+  });
+
+  app.post<{ Body: FinalizeSpecGovernanceBody }>("/v1/intake/spec-governance/finalize", async (request, reply) => {
+    const specId = request.body.specId?.trim();
+    const changeSetId = request.body.changeSetId?.trim();
+    const confirmCriticalFinalize = request.body.confirmCriticalFinalize === true;
+
+    if (!specId && !changeSetId) {
+      return reply.code(400).send({
+        message: "Es muss eine specId oder changeSetId uebergeben werden."
+      });
+    }
+
+    const openChangeSet = changeSetId
+      ? await store.getSpecChangeSet(changeSetId)
+      : specId
+        ? await store.getOpenSpecChangeSetForSpec(specId)
+        : undefined;
+
+    if (
+      openChangeSet?.status === "open" &&
+      openChangeSet.highestImpactLevel === "L3" &&
+      !confirmCriticalFinalize
+    ) {
+      return reply.code(409).send({
+        message: "Dieses ChangeSet enthält kritische Änderungen (L3) und muss explizit bestätigt werden."
+      });
+    }
+
+    try {
+      const finalizedChangeSet = await specGovernance.finalizeChangeSet({
+        specId,
+        changeSetId,
+        actorName: actorForRequest(request).name
+      });
+
+      return reply.send({
+        changeSet: {
+          changeSetId: finalizedChangeSet.changeSetId,
+          specId: finalizedChangeSet.specId,
+          status: finalizedChangeSet.status,
+          summary: finalizedChangeSet.summary,
+          highestImpactLevel: finalizedChangeSet.highestImpactLevel,
+          activeRuleKeys: finalizedChangeSet.activeRuleKeys,
+          updatedAt: finalizedChangeSet.updatedAt,
+          updatedBy: finalizedChangeSet.updatedBy,
+          finalizedAt: finalizedChangeSet.finalizedAt,
+          finalizedBy: finalizedChangeSet.finalizedBy
+        }
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "ChangeSet konnte nicht finalisiert werden.";
+      const statusCode = /Kein offenes SpecChangeSet gefunden/.test(message) ? 409 : 400;
+      return reply.code(statusCode).send({ message });
+    }
+  });
+
+  app.get<{ Querystring: { specId?: string } }>("/v1/intake/spec-history", async (request, reply) => {
+    const specId = request.query.specId?.trim();
+    return reply.send({
+      items: specId
+        ? await store.listSpecHistoryEntriesForSpec(specId)
+        : await store.listSpecHistoryEntries()
+    });
+  });
+
+  app.get<{ Params: { demandId: string } }>("/v1/intake/event-demands/:demandId", async (request, reply) => {
+    const eventDemand = await store.getEventDemand(request.params.demandId);
+    if (!eventDemand) {
+      return reply.code(404).send({ message: "EventDemand nicht gefunden." });
+    }
+
+    return reply.send(eventDemand);
+  });
+
+  app.patch<{ Params: { demandId: string }; Body: EventDemandBody }>(
+    "/v1/intake/event-demands/:demandId",
+    async (request, reply) => {
+      const existing = await store.getEventDemand(request.params.demandId);
+      if (!existing) {
+        return reply.code(404).send({ message: "EventDemand nicht gefunden." });
+      }
+
+      const eventDemand = eventDemandFromBody(existing.demandId, request.body);
+      await store.saveEventDemand(eventDemand);
+      await auditLog.log({
+        action: "intake.event_demand_updated",
+        entityType: "EventDemand",
+        entityId: eventDemand.demandId,
+        actor: actorForRequest(request),
+        summary: "EventDemand aktualisiert.",
+        details: {
+          pax: eventDemand.pax,
+          serviceForm: eventDemand.serviceForm
+        }
+      });
+
+      return reply.send({
+        eventDemand
+      });
+    }
+  );
+
   app.get("/v1/intake/specs", async (_request, reply) => {
     return reply.send({
       items: await store.listSpecs()
@@ -573,24 +1119,270 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
       }
 
+      let role: ApprovalRole;
+      try {
+        role = roleFromHeaders(request.headers);
+      } catch (error) {
+        return reply.code(400).send({
+          message: error instanceof Error ? error.message : "Unbekannte Rolle."
+        });
+      }
+
+      const actor = actorForRequest(request);
       const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
+      const governanceState = await store.getSpecGovernanceState(spec.specId);
+      const governanceResult = await specGovernance.classifyAndTrack({
+        specId: spec.specId,
+        nextDocument: updatedSpec,
+        actorName: actor.name
+      });
+      const approvalOutcome = applyApprovalTrigger({
+        currentApprovalStatus: effectiveApprovalStatus(governanceState),
+        items: governanceResult.classifiedChangeSet.items
+      });
+      const criticalFields = criticalFieldsForSpecUpdate(request.body);
+      if (approvalOutcome.newApprovalStatus === "pending_reapproval" && role !== "Approver") {
+        const existingPendingApprovalRequest = (await store.listApprovalRequests()).find(
+          (record) => record.specId === spec.specId && record.status === "pending"
+        );
+        const approvalRequest = existingPendingApprovalRequest
+          ? {
+              ...existingPendingApprovalRequest,
+              requestedAt: new Date().toISOString(),
+              requestedBy: {
+                name: actor.name,
+                role
+              },
+              criticalFields,
+              requestedChange: request.body as Record<string, unknown>
+            }
+          : approvalRequestForBlockedSpecUpdate(
+              spec.specId,
+              request.body,
+              actor,
+              role
+            );
+        await store.saveApprovalRequest(approvalRequest);
+        await store.saveSpecGovernanceState(
+          buildSpecGovernanceState({
+            specId: spec.specId,
+            approvalStatus: approvalOutcome.newApprovalStatus,
+            highestImpactLevel: governanceResult.finalizedChangeSet.highestImpactLevel,
+            summary: governanceResult.finalizedChangeSet.summary,
+            latestApprovalRequestId: approvalRequest.approvalRequestId
+          })
+        );
+        await store.saveSpecHistoryEntry(
+          createSpecHistoryEntry({
+            eventType: "approval_requested",
+            specId: spec.specId,
+            entityType: "ApprovalRequest",
+            entityRefId: approvalRequest.approvalRequestId,
+            summary: "Freigabe für kritische Änderung angefordert.",
+            actor: {
+              ...actor,
+              role
+            },
+            detail:
+              approvalRequest.criticalFields.length > 0
+                ? approvalRequest.criticalFields.join(", ")
+                : undefined
+          })
+        );
+        await auditLog.log({
+          action: "intake.spec_update_blocked",
+          entityType: "ApprovalRequest",
+          entityId: approvalRequest.approvalRequestId,
+          actor,
+          summary: "Kritische Änderung an AcceptedEventSpec zur Freigabe vorgelegt.",
+          details: {
+            specId: spec.specId,
+            role,
+            criticalFields: criticalFields.join(", ")
+          }
+        });
+        return reply.code(409).send({
+          message: "Kritische Änderungen sind freigabepflichtig.",
+          requiresApproval: true,
+          approvalRequest,
+          governanceState: {
+            approvalStatus: approvalOutcome.newApprovalStatus,
+            highestImpactLevel: governanceResult.finalizedChangeSet.highestImpactLevel,
+            summary: governanceResult.finalizedChangeSet.summary
+          }
+        });
+      }
+
       await store.saveSpec(updatedSpec);
+      await store.saveSpecGovernanceState(
+        buildSpecGovernanceState({
+          specId: updatedSpec.specId,
+          approvalStatus: role === "Approver" ? "approved" : approvalOutcome.newApprovalStatus,
+          highestImpactLevel: governanceResult.finalizedChangeSet.highestImpactLevel,
+          summary: governanceResult.finalizedChangeSet.summary
+        })
+      );
+      await store.saveSpecHistoryEntry(
+        createSpecHistoryEntry({
+          eventType: "spec_updated",
+          specId: updatedSpec.specId,
+          entityType: "AcceptedEventSpec",
+          entityRefId: updatedSpec.specId,
+          summary: isHarmlessNotesOnlyUpdate(request.body)
+            ? "Operative Spezifikation ergänzt."
+            : "Operative Spezifikation wesentlich geändert.",
+          actor: {
+            ...actor,
+            role
+          },
+          detail: criticalFields.length > 0 ? criticalFields.join(", ") : undefined
+        })
+      );
       await auditLog.log({
         action: "intake.spec_updated",
         entityType: "AcceptedEventSpec",
         entityId: updatedSpec.specId,
-        actor: actorForRequest(request),
+        actor,
         summary: "AcceptedEventSpec manuell nachbearbeitet.",
         details: {
           eventDate: updatedSpec.event.date,
-          attendeeCount: updatedSpec.attendees.expected,
+          attendeeCount: updatedSpec.attendees.productionPax ?? updatedSpec.attendees.expected,
           serviceForm: updatedSpec.servicePlan.serviceForm,
-          readiness: updatedSpec.readiness.status
+          readiness: updatedSpec.readiness.status,
+          blocked: false,
+          harmlessNotesOnly: isHarmlessNotesOnlyUpdate(request.body)
         }
       });
 
       return reply.send({
         acceptedEventSpec: updatedSpec
+      });
+    }
+  );
+
+  app.post<{ Params: { approvalRequestId: string }; Body: ApprovalDecisionBody }>(
+    "/v1/intake/approval-requests/:approvalRequestId/approve",
+    async (request, reply) => {
+      let role: ApprovalRole;
+      try {
+        role = roleFromHeaders(request.headers);
+      } catch (error) {
+        return reply.code(400).send({
+          message: error instanceof Error ? error.message : "Unbekannte Rolle."
+        });
+      }
+
+      if (role !== "Approver") {
+        return reply.code(403).send({ message: "Nur Approver duerfen Freigaben erteilen." });
+      }
+
+      const approvalRequest = await store.getApprovalRequest(request.params.approvalRequestId);
+      if (!approvalRequest) {
+        return reply.code(404).send({ message: "ApprovalRequest nicht gefunden." });
+      }
+      if (approvalRequest.status !== "pending") {
+        return reply.code(409).send({ message: "ApprovalRequest ist bereits bearbeitet." });
+      }
+
+      const spec = await store.getSpec(approvalRequest.specId);
+      if (!spec) {
+        return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
+      }
+
+      const updatedSpec = validateAcceptedEventSpec(
+        applySpecUpdates(spec, approvalRequest.requestedChange as SpecUpdateBody)
+      );
+      const actor = actorForRequest(request);
+      const approvedRequest: ApprovalRequestRecord = {
+        ...approvalRequest,
+        status: "approved",
+        approvedAt: new Date().toISOString(),
+        approvedBy: {
+          name: actor.name,
+          role
+        }
+      };
+
+      await store.saveSpec(updatedSpec);
+      await store.saveApprovalRequest(approvedRequest);
+      await store.saveSpecGovernanceState(
+        buildSpecGovernanceState({
+          specId: updatedSpec.specId,
+          approvalStatus: "approved",
+          highestImpactLevel: "L3",
+          summary: "Freigabepflichtige Änderung freigegeben.",
+          latestApprovalRequestId: approvedRequest.approvalRequestId
+        })
+      );
+      await store.saveSpecHistoryEntry(
+        createSpecHistoryEntry({
+          eventType: "approval_approved",
+          specId: updatedSpec.specId,
+          entityType: "ApprovalRequest",
+          entityRefId: approvedRequest.approvalRequestId,
+          summary: "Freigabepflichtige Änderung freigegeben.",
+          actor: {
+            ...actor,
+            role
+          },
+          detail: approvedRequest.criticalFields.join(", ")
+        })
+      );
+      await auditLog.log({
+        action: "intake.spec_update_approved",
+        entityType: "ApprovalRequest",
+        entityId: approvedRequest.approvalRequestId,
+        actor,
+        summary: "Freigabepflichtige AcceptedEventSpec-Änderung freigegeben.",
+        details: {
+          specId: updatedSpec.specId,
+          criticalFields: approvedRequest.criticalFields.join(", "),
+          note: request.body.note?.trim() || undefined
+        }
+      });
+
+      return reply.send({
+        approvalRequest: approvedRequest,
+        acceptedEventSpec: updatedSpec
+      });
+    }
+  );
+
+  app.post<{ Params: { specId: string }; Body: ArchiveSpecBody }>(
+    "/v1/intake/specs/:specId/archive",
+    async (request, reply) => {
+      const archived = await store.archiveSpec(request.params.specId);
+      if (!archived) {
+        return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
+      }
+
+      await store.saveSpecHistoryEntry(
+        createSpecHistoryEntry({
+          eventType: "spec_archived",
+          specId: archived.spec.specId,
+          entityType: "AcceptedEventSpec",
+          entityRefId: archived.spec.specId,
+          summary: "Operative Spezifikation archiviert.",
+          actor: actorForRequest(request),
+          detail: request.body?.reason?.trim() || undefined
+        })
+      );
+
+      await auditLog.log({
+        action: "intake.spec_archived",
+        entityType: "AcceptedEventSpec",
+        entityId: archived.spec.specId,
+        actor: actorForRequest(request),
+        summary: "AcceptedEventSpec als verworfen archiviert.",
+        details: {
+          archivedAt: archived.archivedAt,
+          reason: request.body?.reason?.trim() || "nicht angegeben"
+        }
+      });
+
+      return reply.send({
+        specId: archived.spec.specId,
+        archivedAt: archived.archivedAt
       });
     }
   );

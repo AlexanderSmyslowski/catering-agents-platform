@@ -107,6 +107,7 @@ export interface EventInfo {
 export interface AttendeeInfo {
   expected?: number;
   guaranteed?: number;
+  productionPax?: number;
   dietaryMix?: Record<string, number>;
 }
 
@@ -191,9 +192,12 @@ export interface ServicePlan {
   modules: ServiceModule[];
 }
 
+export type OwnershipContext = "customer" | "production";
+
 export interface AcceptedEventSpec {
   schemaVersion: string;
   specId: string;
+  ownershipContext: OwnershipContext;
   lifecycle: {
     commercialState: CommercialState;
   };
@@ -215,6 +219,22 @@ export interface AcceptedEventSpec {
   missingFields?: string[];
   uncertainties?: Uncertainty[];
   evidence?: Evidence[];
+}
+
+export interface EventDemand {
+  schemaVersion: string;
+  demandId: string;
+  ownershipContext: OwnershipContext;
+  pax: number;
+  serviceForm: string;
+  menuOrServiceWish: string;
+  eventType?: string;
+  date?: string;
+  budgetContext?: {
+    targetBudget?: Money;
+  };
+  customerType?: CustomerSegment;
+  restrictions?: string[];
 }
 
 export interface OfferVariant {
@@ -247,6 +267,20 @@ export interface IngredientLine {
   group: string;
   purchaseUnit?: string;
   normalizedUnit?: string;
+}
+
+export interface AppliedYield {
+  netQty: number;
+  yieldFactorApplied?: number;
+  grossQty?: number;
+  wasteQty?: number;
+  sourceTypeApplied: string;
+  sourceRefId?: string;
+  missingYield: boolean;
+}
+
+export interface ProductionIngredientLine extends IngredientLine {
+  appliedYield?: AppliedYield;
 }
 
 export interface RecipeStep {
@@ -285,6 +319,7 @@ export interface Recipe {
     batchSize?: number;
   };
   allergens: string[];
+  allergenStatus?: "known" | "unknown";
   dietTags: string[];
 }
 
@@ -313,7 +348,7 @@ export interface ProductionBatch {
   }[];
   station: string;
   prepWindow: string;
-  ingredients: IngredientLine[];
+  ingredients: ProductionIngredientLine[];
   steps: RecipeStep[];
 }
 
@@ -330,6 +365,7 @@ export interface TimelineEntry {
 export interface ProductionPlan {
   schemaVersion: string;
   planId: string;
+  ownershipContext: OwnershipContext;
   eventSpecId: string;
   readiness: Readiness;
   productionBatches: ProductionBatch[];
@@ -346,6 +382,14 @@ export interface PurchaseItem {
   normalizedUnit: string;
   purchaseQty: number;
   purchaseUnit: string;
+  appliedPurchasingUnit?: {
+    unitLabel: string;
+    unitSize: number;
+    baseUnit: string;
+    sourceTypeApplied: string;
+    sourceRefId?: string;
+    missingRule: boolean;
+  };
   group: string;
   supplierHint?: string;
   sourceRecipes: string[];
@@ -375,6 +419,28 @@ export interface RecipeSearchQuery {
   eventSpec: AcceptedEventSpec;
   locale: "de" | "en";
   query: string;
+}
+
+export interface YieldProfile {
+  id: string;
+  scopeType: "ingredient";
+  scopeId: string;
+  yieldFactor: number;
+  sourceType: string;
+  note?: string;
+  isActive: boolean;
+}
+
+export interface PurchasingUnitProfile {
+  id: string;
+  scopeType: "ingredient";
+  scopeId: string;
+  baseUnit: string;
+  unitLabel: string;
+  unitSize: number;
+  sourceType: string;
+  note?: string;
+  isActive: boolean;
 }
 
 export interface WebRecipeCandidate {

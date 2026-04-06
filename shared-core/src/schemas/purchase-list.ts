@@ -38,6 +38,9 @@ export const purchaseListSchema = {
           normalizedUnit: { type: "string" },
           purchaseQty: { type: "number", minimum: 0 },
           purchaseUnit: { type: "string" },
+          appliedPurchasingUnit: {
+            $ref: "https://schemas.catering.local/common.json#/$defs/appliedPurchasingUnit"
+          },
           group: { type: "string" },
           supplierHint: { type: "string" },
           sourceRecipes: {
@@ -63,4 +66,3 @@ export const purchaseListSchema = {
     }
   }
 } as const;
-

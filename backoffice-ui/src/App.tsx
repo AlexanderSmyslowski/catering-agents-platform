@@ -11,27 +11,35 @@ import {
   useState
 } from "react";
 import { DashboardShell } from "../components/dashboard-shell.js";
+import { ExtractedContextPanel } from "../components/extracted-context-panel.js";
 import { StatusCard } from "../components/status-card.js";
 import {
+  archiveAcceptedSpec,
+  approveApprovalRequest,
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
   createAcceptedSpecFromText,
   createOfferFromText,
   createProductionPlan,
+  finalizeSpecGovernanceChangeSet,
   loadDashboardState,
   loadServiceHealth,
-  offerExportUrl,
+  offerPrintUrl,
   persistOperatorName,
+  persistOperatorRole,
   promoteOfferDraft,
-  productionExportUrl,
-  purchaseListExportUrl,
+  productionPrintUrl,
+  purchaseListCsvUrl,
+  purchaseListPrintUrl,
   readOperatorName,
+  readOperatorRole,
   reviewRecipe,
   seedDemoData,
   updateAcceptedSpec,
   uploadRecipeFile,
   type DashboardState,
   type IntakeDocumentChannel,
+  type OperatorRole,
   type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
@@ -57,6 +65,10 @@ type ComponentEditState = {
 const emptyState: DashboardState = {
   intakeRequests: [],
   acceptedSpecs: [],
+  approvalRequests: [],
+  specGovernanceEntries: [],
+  specHistoryEntries: [],
+  extractedContexts: [],
   offerDrafts: [],
   productionPlans: [],
   purchaseLists: [],
@@ -124,6 +136,14 @@ function translateReadiness(value?: string): string {
   return value ? labels[value] ?? value : "-";
 }
 
+function translateOwnershipContext(value?: string): string {
+  const labels: Record<string, string> = {
+    customer: "Kundenstand",
+    production: "Produktionsstand"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
 function translateHealthStatus(value?: string): string {
   const labels: Record<string, string> = {
     ok: "bereit",
@@ -150,6 +170,81 @@ function translateApprovalState(value?: string): string {
     rejected: "abgelehnt"
   };
   return value ? labels[value] ?? value : "-";
+}
+
+function translateGovernanceStatus(value?: string): string {
+  const labels: Record<string, string> = {
+    approved: "freigegeben",
+    pending_reapproval: "erneute Freigabe nötig",
+    rejected: "abgelehnt"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+function translateImpactLevel(value?: string): string {
+  const labels: Record<string, string> = {
+    L1: "L1",
+    L2: "L2",
+    L3: "L3"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+export function translateGovernanceRuleKey(value: string): string {
+  const labels: Record<string, string> = {
+    guest_count: "Mengen",
+    allergens: "Allergene",
+    event_timing: "Zeitfenster",
+    recipe_swap: "Gerichte/Rezeptur",
+    prices: "Kalkulation",
+    notes: "Hinweise/Texte",
+    yield: "Ausbeute",
+    procurement_units_equivalent: "Gebinde",
+    unit_conversion_with_qty_effect: "Mengenumrechnung"
+  };
+  return labels[value] ?? value;
+}
+
+export function shouldConfirmFinalizeChangeSet(
+  changeSet: Record<string, unknown> | undefined
+): boolean {
+  return (
+    String(changeSet?.status ?? "") === "open" &&
+    String(changeSet?.highestImpactLevel ?? "") === "L3"
+  );
+}
+
+export function mapFinalizeGovernanceErrorMessage(message: string): string {
+  if (/Kein offenes SpecChangeSet gefunden/.test(message)) {
+    return "Es gibt kein offenes ChangeSet mehr zum Finalisieren.";
+  }
+
+  if (/kritische Änderungen \(L3\).*explizit bestätigt/.test(message)) {
+    return "Dieses kritische ChangeSet muss vor dem Finalisieren ausdrücklich bestätigt werden.";
+  }
+
+  return message;
+}
+
+export function buildFinalizeGovernanceRequest(input: {
+  specId?: string;
+  changeSetId?: string;
+  changeSet?: Record<string, unknown>;
+}) {
+  return {
+    specId: input.specId,
+    changeSetId: input.changeSetId,
+    confirmCriticalFinalize: shouldConfirmFinalizeChangeSet(input.changeSet)
+  };
+}
+
+export function isCriticalOpenGovernanceChangeSet(
+  changeSet: Record<string, unknown> | undefined
+): boolean {
+  return (
+    String(changeSet?.status ?? "") === "open" &&
+    String(changeSet?.highestImpactLevel ?? "") === "L3"
+  );
 }
 
 function formatCounts(counts: Record<string, number>): string {
@@ -264,6 +359,38 @@ function resolveRecipeNameById(
   return recipeName || recipeId;
 }
 
+function paxStatusText(spec?: Record<string, unknown>): string | undefined {
+  if (!spec) {
+    return undefined;
+  }
+
+  const attendees =
+    spec.attendees && typeof spec.attendees === "object"
+      ? (spec.attendees as Record<string, unknown>)
+      : undefined;
+  const offerPax =
+    typeof attendees?.expected === "number" && Number.isFinite(attendees.expected)
+      ? attendees.expected
+      : undefined;
+  const productionPax =
+    typeof attendees?.productionPax === "number" && Number.isFinite(attendees.productionPax)
+      ? attendees.productionPax
+      : undefined;
+
+  if (productionPax !== undefined) {
+    if (offerPax !== undefined) {
+      return `Angebots-Pax: ${offerPax}. Produktions-Pax: ${productionPax}. Manuelle Überschreibung aktiv.`;
+    }
+    return `Produktions-Pax: ${productionPax}. Manuelle Überschreibung aktiv.`;
+  }
+
+  if (offerPax !== undefined) {
+    return `Angebots-Pax: ${offerPax}. Aktuell wird dieser Wert für Produktion und Einkauf verwendet.`;
+  }
+
+  return "Noch kein Angebots-Pax erkannt. Bitte den aktuellen Arbeitswert für Produktion und Einkauf setzen.";
+}
+
 
 function estimateProcessingDurationMs(file: File): number {
   const fileSizeMb = file.size / (1024 * 1024);
@@ -303,6 +430,102 @@ function formatPercent(value?: unknown): string | undefined {
   return `${Math.round(numeric * 100)} %`;
 }
 
+function formatPurchasePreviewLine(item: Record<string, unknown>): string {
+  const rawQty = item.normalizedQty;
+  const rawUnit = String(item.normalizedUnit ?? "").trim();
+  const purchaseQty = item.purchaseQty;
+  const purchaseUnit = String(item.purchaseUnit ?? "").trim();
+  const group = String(item.group ?? "").trim();
+  const supplierHint = String(item.supplierHint ?? "").trim();
+  const appliedPurchasingUnit =
+    item.appliedPurchasingUnit && typeof item.appliedPurchasingUnit === "object"
+      ? (item.appliedPurchasingUnit as Record<string, unknown>)
+      : undefined;
+
+  const rawPart =
+    typeof rawQty === "number" || typeof rawQty === "string"
+      ? `Roh ${rawQty} ${rawUnit}`.trim()
+      : rawUnit || "Rohmenge offen";
+
+  const orderPart =
+    typeof purchaseQty === "number" || typeof purchaseQty === "string"
+      ? `Bestellung ${purchaseQty} ${purchaseUnit}`.trim()
+      : purchaseUnit || "Menge offen";
+
+  const rulePart =
+    appliedPurchasingUnit &&
+    (typeof appliedPurchasingUnit.unitSize === "number" || typeof appliedPurchasingUnit.unitSize === "string")
+      ? `1 ${String(appliedPurchasingUnit.unitLabel ?? "").trim()} = ${appliedPurchasingUnit.unitSize} ${String(
+          appliedPurchasingUnit.baseUnit ?? ""
+        ).trim()}`.trim()
+      : undefined;
+
+  const metaParts = [rawPart, orderPart, rulePart, group || undefined, supplierHint || undefined].filter(Boolean);
+  return metaParts.join(" · ");
+}
+
+function formatQuantityValue(value: unknown): string {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "-";
+  }
+
+  return Number.isInteger(numeric) ? String(numeric) : String(Number(numeric.toFixed(4)));
+}
+
+function formatYieldStatusLine(ingredient: Record<string, unknown>): string {
+  const quantity = ingredient.quantity as Record<string, unknown> | undefined;
+  const appliedYield = ingredient.appliedYield as Record<string, unknown> | undefined;
+  if (!quantity || !appliedYield) {
+    return "";
+  }
+
+  const unit = String(quantity.unit ?? "").trim();
+  if (appliedYield.missingYield === true) {
+    return `Yield fehlt · netto ${formatQuantityValue(appliedYield.netQty)} ${unit}`.trim();
+  }
+
+  const parts = [
+    `netto ${formatQuantityValue(appliedYield.netQty)} ${unit}`.trim(),
+    `brutto ${formatQuantityValue(appliedYield.grossQty)} ${unit}`.trim(),
+    `Verschnitt ${formatQuantityValue(appliedYield.wasteQty)} ${unit}`.trim()
+  ];
+  const yieldFactor = appliedYield.yieldFactorApplied;
+  if (typeof yieldFactor === "number" || typeof yieldFactor === "string") {
+    parts.push(`Faktor ${formatQuantityValue(yieldFactor)}`);
+  }
+
+  return parts.join(" · ");
+}
+
+function extractAllergenNotices(plan: Record<string, unknown>): string[] {
+  const kitchenSheets = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets : [];
+  const notices = kitchenSheets.flatMap((sheet) => {
+    const instructions = Array.isArray((sheet as Record<string, unknown>).instructions)
+      ? ((sheet as Record<string, unknown>).instructions as unknown[]).map((entry) => String(entry))
+      : [];
+
+    return instructions.filter(
+      (instruction) =>
+        /^Bekannte Allergene laut Rezept:/i.test(instruction) ||
+        /Allergeninformation .* noch nicht belastbar gepflegt/i.test(instruction)
+    );
+  });
+
+  return [...new Set(notices)];
+}
+
+function translateSpecHistoryEventType(value?: string): string {
+  const labels: Record<string, string> = {
+    spec_manual_created: "manuell angelegt",
+    spec_updated: "geändert",
+    approval_requested: "Freigabe angefordert",
+    approval_approved: "Freigabe erteilt",
+    spec_archived: "archiviert"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
 function renderPlanList(
   plans: Array<Record<string, unknown>>,
   specById: Map<string, Record<string, unknown>>,
@@ -336,11 +559,11 @@ function renderPlanList(
             </div>
             <a
               className="ghost-link"
-              href={productionExportUrl(String(plan.planId))}
+              href={productionPrintUrl(String(plan.planId))}
               target="_blank"
               rel="noreferrer"
             >
-              Produktionsblatt exportieren
+              Produktionsplan drucken / als PDF öffnen
             </a>
           </li>
         );
@@ -360,6 +583,7 @@ export function App() {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [operatorName, setOperatorName] = useState(() => readOperatorName());
+  const [operatorRole, setOperatorRole] = useState<OperatorRole>(() => readOperatorRole());
   const [intakeText, setIntakeText] = useState(
     "Konferenz am 2026-06-18 für 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
   );
@@ -472,6 +696,16 @@ export function App() {
     );
   }, [dashboard.offerDrafts, deferredSearch]);
 
+  const filteredApprovalRequests = useMemo(() => {
+    const query = deferredSearch.trim().toLowerCase();
+    if (!query) {
+      return dashboard.approvalRequests;
+    }
+    return dashboard.approvalRequests.filter((request) =>
+      JSON.stringify(request).toLowerCase().includes(query)
+    );
+  }, [dashboard.approvalRequests, deferredSearch]);
+
   const filteredRecipes = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
     if (!query) {
@@ -510,6 +744,14 @@ export function App() {
     [dashboard.acceptedSpecs]
   );
 
+  const pendingApprovalRequests = useMemo(
+    () =>
+      filteredApprovalRequests.filter(
+        (request) => String(request.status ?? "") === "pending"
+      ),
+    [filteredApprovalRequests]
+  );
+
   const selectedDraft = useMemo(
     () => dashboard.offerDrafts.find((draft) => String(draft.draftId) === selectedDraftId),
     [dashboard.offerDrafts, selectedDraftId]
@@ -531,6 +773,37 @@ export function App() {
   }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared]);
 
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
+
+  const focusedExtractedContext = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return undefined;
+    }
+
+    return [...dashboard.extractedContexts]
+      .reverse()
+      .find((context) => String(context.specId ?? "") === currentProductionSpecId);
+  }, [currentProductionSpecId, dashboard.extractedContexts]);
+
+  const focusedSpecHistoryEntries = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return [];
+    }
+
+    return dashboard.specHistoryEntries
+      .filter((entry) => String(entry.specId ?? "") === currentProductionSpecId)
+      .slice()
+      .sort((left, right) => String(right.at ?? "").localeCompare(String(left.at ?? "")));
+  }, [currentProductionSpecId, dashboard.specHistoryEntries]);
+
+  const focusedSpecGovernanceEntry = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return undefined;
+    }
+
+    return dashboard.specGovernanceEntries.find(
+      (entry) => String(entry.specId ?? "") === currentProductionSpecId
+    );
+  }, [currentProductionSpecId, dashboard.specGovernanceEntries]);
 
   const currentSpecPlans = useMemo(() => {
     if (productionWorkspaceCleared) {
@@ -614,6 +887,29 @@ export function App() {
     [focusedProductionSpec]
   );
 
+  const productionUncertaintyCount = useMemo(() => {
+    if (!focusedProductionSpec || !Array.isArray(focusedProductionSpec.uncertainties)) {
+      return 0;
+    }
+    return focusedProductionSpec.uncertainties.length;
+  }, [focusedProductionSpec]);
+
+  const currentEditingSpec = useMemo(() => {
+    if (!editingSpecId) {
+      return undefined;
+    }
+
+    return (
+      specById.get(editingSpecId) ??
+      (editingSpecId === String(focusedProductionSpec?.specId ?? "") ? focusedProductionSpec : undefined)
+    );
+  }, [editingSpecId, focusedProductionSpec, specById]);
+
+  const editingPaxStatusText = useMemo(
+    () => paxStatusText(currentEditingSpec),
+    [currentEditingSpec]
+  );
+
   useEffect(() => {
     if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {
       return;
@@ -655,7 +951,7 @@ export function App() {
     setNotice(undefined);
   }
 
-  function clearProductionWorkspace() {
+  function clearProductionWorkspaceView() {
     setProductionWorkspaceCleared(true);
     setIntakeFile(null);
     setDragActive(false);
@@ -678,7 +974,30 @@ export function App() {
       productionUploadInputRef.current.value = "";
     }
     clearMessages();
-    setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+  }
+
+  async function clearProductionWorkspace() {
+    const specIdToArchive =
+      editingSpecId ||
+      String(focusedProductionSpec?.specId ?? "").trim() ||
+      focusedProductionSpecId;
+
+    setSubmitting(true);
+    clearMessages();
+    try {
+      if (specIdToArchive) {
+        await archiveAcceptedSpec(specIdToArchive, "Vom Bediener als Fehlupload verworfen.");
+        await refreshDashboard();
+      }
+      clearProductionWorkspaceView();
+      setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Vorgang konnte nicht verworfen werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleIntakeSubmit() {
@@ -824,6 +1143,9 @@ export function App() {
         const updatedSpec = await persistCurrentSpecEdit({ quiet: true });
         if (updatedSpec) {
           specForPlanning = updatedSpec;
+        } else {
+          setNotice("Kritische Änderung wurde zuerst zur Freigabe vorgelegt. Berechnung startet erst nach Freigabe.");
+          return;
         }
       }
 
@@ -893,7 +1215,7 @@ export function App() {
     setFocusedProductionSpecId(String(spec.specId));
     setEditingEventType(String(event?.type ?? ""));
     setEditingEventDate(String(event?.date ?? ""));
-    setEditingAttendeeCount(String(attendees?.expected ?? ""));
+    setEditingAttendeeCount(String(attendees?.productionPax ?? attendees?.expected ?? ""));
     setEditingServiceForm(String(event?.serviceForm ?? ""));
     setEditingMenuItems(menuPlan.map((item) => String(item.label ?? "")).filter(Boolean).join(", "));
     setEditingComponentStates(nextComponentStates);
@@ -976,7 +1298,18 @@ export function App() {
     }
 
     const response = await updateAcceptedSpec(editingSpecId, buildCurrentSpecUpdateInput());
+    if (response.requiresApproval && response.approvalRequest) {
+      await refreshDashboard();
+      if (!options?.quiet) {
+        setNotice("Kritische Änderung wurde zur Freigabe vorgelegt.");
+      }
+      return undefined;
+    }
+
     const updatedSpec = response.acceptedEventSpec;
+    if (!updatedSpec) {
+      return undefined;
+    }
     const updatedSpecId = String(updatedSpec.specId ?? editingSpecId);
     setProductionWorkspaceCleared(false);
     setFocusedProductionSpecId(updatedSpecId);
@@ -1152,9 +1485,64 @@ export function App() {
     }
   }
 
+  async function handleApproveRequest(approvalRequestId: string) {
+    setSubmitting(true);
+    clearMessages();
+    try {
+      const response = await approveApprovalRequest(approvalRequestId);
+      const updatedSpecId = String(response.acceptedEventSpec.specId ?? "");
+      if (updatedSpecId) {
+        setFocusedProductionSpecId(updatedSpecId);
+      }
+      await refreshDashboard();
+      setNotice("Freigabe wurde erteilt und die Änderung übernommen.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Freigabe konnte nicht gespeichert werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleFinalizeGovernanceChangeSet(input: {
+    specId?: string;
+    changeSetId?: string;
+    changeSet?: Record<string, unknown>;
+  }) {
+    if (
+      shouldConfirmFinalizeChangeSet(input.changeSet) &&
+      typeof window !== "undefined" &&
+      !window.confirm("Dieses ChangeSet enthält kritische Änderungen (L3). Änderungen wirklich finalisieren?")
+    ) {
+      return;
+    }
+
+    setSubmitting(true);
+    clearMessages();
+    try {
+      await finalizeSpecGovernanceChangeSet(buildFinalizeGovernanceRequest(input));
+      await refreshDashboard();
+      setNotice("Änderungen wurden finalisiert.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? mapFinalizeGovernanceErrorMessage(submitError.message)
+          : "Änderungsspur konnte nicht abgeschlossen werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleOperatorNameChange(value: string) {
     const persisted = persistOperatorName(value);
     setOperatorName(persisted);
+  }
+
+  function handleOperatorRoleChange(value: OperatorRole) {
+    const persisted = persistOperatorRole(value);
+    setOperatorRole(persisted);
   }
 
   function handleProductionDrop(event: DragEvent<HTMLLabelElement>) {
@@ -1240,6 +1628,15 @@ export function App() {
               value={operatorName}
               onChange={(event) => handleOperatorNameChange(event.target.value)}
             />
+            <select
+              className="operator-input"
+              value={operatorRole}
+              onChange={(event) => handleOperatorRoleChange(event.target.value as OperatorRole)}
+            >
+              <option value="KitchenEditor">KitchenEditor</option>
+              <option value="ProcurementEditor">ProcurementEditor</option>
+              <option value="Approver">Approver</option>
+            </select>
             <button disabled={loading || submitting} onClick={() => void handleSeedDemoData()}>
               Demo-Daten laden
             </button>
@@ -1576,11 +1973,11 @@ export function App() {
                   </div>
                   <a
                     className="ghost-link"
-                    href={offerExportUrl(String(draft.draftId))}
+                    href={offerPrintUrl(String(draft.draftId))}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Angebot exportieren
+                    Angebot drucken / als PDF öffnen
                   </a>
                 </li>
               ))}
@@ -1864,6 +2261,12 @@ export function App() {
                       String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
                     )}
                   </p>
+                  {productionUncertaintyCount > 0 ? (
+                    <p className="helper-text">
+                      Operativ zu klären: {productionUncertaintyCount} Hinweis
+                      {productionUncertaintyCount === 1 ? "" : "e"}.
+                    </p>
+                  ) : null}
                   <ul className="question-list">
                     {productionQuestions.map((question) => (
                       <li key={question}>{question}</li>
@@ -1877,6 +2280,144 @@ export function App() {
                           <li key={item}>{item}</li>
                         ))}
                       </ul>
+                    </>
+                  ) : null}
+                  {focusedExtractedContext ? (
+                    <ExtractedContextPanel extractedContext={focusedExtractedContext} />
+                  ) : null}
+                  {focusedSpecHistoryEntries.length > 0 ? (
+                    <>
+                      <div className="divider" />
+                      <header>
+                        <p className="eyebrow">Verlauf</p>
+                        <h4 className="subsection-title">Änderungen und Freigaben</h4>
+                      </header>
+                      <ul className="item-list compact history-list">
+                        {focusedSpecHistoryEntries.slice(0, 8).map((entry) => {
+                          const actor = entry.actor as Record<string, unknown> | undefined;
+                          const detail = String(entry.detail ?? "").trim();
+                          return (
+                            <li key={String(entry.historyEntryId)}>
+                              <strong>{translateSpecHistoryEventType(String(entry.eventType ?? ""))}</strong>
+                              <p className="helper-text">
+                                {String(entry.at ?? "-")} · {String(actor?.name ?? "-")}
+                                {actor?.role ? ` · ${String(actor.role)}` : ""}
+                              </p>
+                              <p>{String(entry.summary ?? "-")}</p>
+                              {detail ? <p className="helper-text">Details: {detail}</p> : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : null}
+                  {focusedSpecGovernanceEntry ? (
+                    <>
+                      <div className="divider" />
+                      <header>
+                        <p className="eyebrow">Governance</p>
+                        <h4 className="subsection-title">Freigabe- und Änderungsspur</h4>
+                      </header>
+                      <div
+                        className={`mobile-callout governance-callout${
+                          String(focusedSpecGovernanceEntry.approvalStatus ?? "") === "pending_reapproval"
+                            ? " governance-callout--pending"
+                            : ""
+                        }${
+                          isCriticalOpenGovernanceChangeSet(
+                            (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>) ?? undefined
+                          )
+                            ? " governance-callout--critical-open"
+                            : ""
+                        }`}
+                      >
+                        <p className="helper-text">
+                          Status:{" "}
+                          <strong>
+                            {translateGovernanceStatus(
+                              String(focusedSpecGovernanceEntry.approvalStatus ?? "")
+                            )}
+                          </strong>
+                        </p>
+                        {focusedSpecGovernanceEntry.changeSet ? (
+                          <>
+                            <p>
+                              <strong>
+                                {String(
+                                  (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>).summary ??
+                                    "Änderungsspur"
+                                )}
+                              </strong>
+                            </p>
+                            <p className="helper-text">
+                              ChangeSet:{" "}
+                              {String(
+                                (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>).status === "open"
+                                  ? "offen"
+                                  : "finalisiert"
+                              )}{" "}
+                              · Impact{" "}
+                              {translateImpactLevel(
+                                String(
+                                  (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>)
+                                    .highestImpactLevel ?? ""
+                                )
+                              )}
+                            </p>
+                            {isCriticalOpenGovernanceChangeSet(
+                              (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>) ?? undefined
+                            ) ? (
+                              <>
+                                <p className="governance-critical-label">Kritische Änderung</p>
+                                <p className="helper-text governance-critical-note">
+                                  Dieses offene ChangeSet enthält kritische Änderungen und sollte bewusst
+                                  geprüft und finalisiert werden.
+                                </p>
+                              </>
+                            ) : null}
+                            {Array.isArray(
+                              (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>).activeRuleKeys
+                            ) &&
+                            (
+                              (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>)
+                                .activeRuleKeys as unknown[]
+                            ).length > 0 ? (
+                              <p className="helper-text">
+                                Bereiche:{" "}
+                                {(
+                                  (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>)
+                                    .activeRuleKeys as unknown[]
+                                )
+                                  .map((entry) => translateGovernanceRuleKey(String(entry)))
+                                  .join(", ")}
+                              </p>
+                            ) : null}
+                            {(focusedSpecGovernanceEntry.changeSet as Record<string, unknown>).status === "open" ? (
+                              <div className="action-row">
+                                <button
+                                  className="secondary-button"
+                                  disabled={loading || submitting}
+                                  onClick={() =>
+                                    void handleFinalizeGovernanceChangeSet({
+                                      specId: currentProductionSpecId,
+                                      changeSetId: String(
+                                        (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>)
+                                          .changeSetId ?? ""
+                                      ),
+                                      changeSet:
+                                        (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>) ?? undefined
+                                    })
+                                  }
+                                >
+                                  Änderungen finalisieren
+                                </button>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <p className="helper-text">Keine offene oder zuletzt finalisierte Änderungsspur.</p>
+                        )}
+                      </div>
                     </>
                   ) : null}
                   {editingSpecId === String(focusedProductionSpec.specId) ? (
@@ -1918,6 +2459,7 @@ export function App() {
                             inputMode="numeric"
                             placeholder="120"
                           />
+                          {editingPaxStatusText ? <p className="helper-text">{editingPaxStatusText}</p> : null}
                         </label>
                         <label className="field-block">
                           <span>Serviceform</span>
@@ -2100,6 +2642,49 @@ export function App() {
                       : "Berechnung starten"}
                   </button>
                 </div>
+                {pendingApprovalRequests.length > 0 ? (
+                  <>
+                    <div className="divider" />
+                    <header>
+                      <p className="eyebrow">Offene Freigaben</p>
+                      <h4 className="subsection-title">Blockierte kritische Änderungen</h4>
+                    </header>
+                    <ul className="item-list compact">
+                      {pendingApprovalRequests.slice(0, 6).map((request) => {
+                        const relatedSpec = specById.get(String(request.specId ?? ""));
+                        const criticalFields = Array.isArray(request.criticalFields)
+                          ? request.criticalFields.map((entry) => String(entry))
+                          : [];
+                        const requestedBy = request.requestedBy as Record<string, unknown> | undefined;
+                        return (
+                          <li key={String(request.approvalRequestId)}>
+                            <strong>{relatedSpec ? getSpecLabel(relatedSpec) : String(request.specId ?? "Freigabe")}</strong>
+                            <p className="helper-text">
+                              Status: {String(request.status ?? "-")} · Angefragt von{" "}
+                              {String(requestedBy?.name ?? "-")} · Rolle {String(requestedBy?.role ?? "-")}
+                            </p>
+                            <p className="helper-text">
+                              Änderung: {criticalFields.length > 0 ? criticalFields.join(", ") : "kritische Änderung"}
+                            </p>
+                            {operatorRole === "Approver" ? (
+                              <div className="action-row">
+                                <button
+                                  className="secondary-button"
+                                  disabled={submitting}
+                                  onClick={() => void handleApproveRequest(String(request.approvalRequestId))}
+                                >
+                                  Freigeben
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="helper-text">Freigabe kann nur durch einen Approver ausgelöst werden.</p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : null}
               </>
             ) : (
               <p className="helper-text">
@@ -2161,6 +2746,7 @@ export function App() {
                     onChange={(event) => setEditingAttendeeCount(event.target.value)}
                     placeholder="Teilnehmerzahl"
                   />
+                  {editingPaxStatusText ? <p className="helper-text">{editingPaxStatusText}</p> : null}
                   <input
                     value={editingServiceForm}
                     onChange={(event) => setEditingServiceForm(event.target.value)}
@@ -2269,12 +2855,52 @@ export function App() {
             ) : null}
             {selectedPlan ? (
               <>
+                {(() => {
+                  const allergenNotices = extractAllergenNotices(selectedPlan);
+                  return allergenNotices.length > 0 ? (
+                    <>
+                      <div className="divider" />
+                      <header>
+                        <p className="eyebrow">Allergenhinweise</p>
+                        <h4 className="subsection-title">Vorhandene Rezeptsignale</h4>
+                      </header>
+                      <ul className="item-list compact mobile-detail-list allergen-notice-list">
+                        {allergenNotices.map((notice) => {
+                          const isWarning = /noch nicht belastbar gepflegt/i.test(notice);
+                          return (
+                            <li
+                              key={notice}
+                              className={isWarning ? "allergen-notice allergen-notice--warning" : "allergen-notice"}
+                            >
+                              {notice}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : null;
+                })()}
                 <div className="divider" />
                 <header>
                   <p className="eyebrow">Plandetails</p>
                   <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
                 </header>
-                <p className="helper-text">
+                <p className="helper-text context-note">
+                  Kundenstand:{" "}
+                  {translateOwnershipContext(
+                    selectedPlanSpec
+                      ? String(
+                          (selectedPlanSpec as Record<string, unknown>).ownershipContext ?? "customer"
+                        )
+                      : "customer"
+                  )}
+                  {" · "}Produktionsstand:{" "}
+                  {translateOwnershipContext(
+                    String((selectedPlan as Record<string, unknown>).ownershipContext ?? "production")
+                  )}
+                  {" · "}Produktionsableitungen ersetzen nicht stillschweigend die kundenfuehrende Wahrheit.
+                </p>
+                <p className="helper-text plan-meta">
                   Status:{" "}
                   {translateReadiness(
                     String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
@@ -2292,14 +2918,14 @@ export function App() {
                   {" · "}Rezeptblätter: {Array.isArray(selectedPlan.productionBatches) ? selectedPlan.productionBatches.length : 0}
                 </p>
                 {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0 ? (
-                  <>
+                  <div className="mobile-callout mobile-callout--warning">
                     <p>Offene Punkte:</p>
                     <ul className="item-list compact">
                       {selectedPlan.unresolvedItems.map((entry) => (
                         <li key={String(entry)}>{String(entry)}</li>
                       ))}
                     </ul>
-                  </>
+                  </div>
                 ) : (
                   <p>Offene Punkte: keine</p>
                 )}
@@ -2312,7 +2938,7 @@ export function App() {
                     offenen Komponenten ein belastbares Rezept oder eine eindeutige Beschaffungsentscheidung vorliegt.
                   </p>
                 ) : null}
-                <ul className="item-list compact">
+                <ul className="item-list compact mobile-detail-list">
                   {Array.isArray(selectedPlan.recipeSelections)
                     ? selectedPlan.recipeSelections.map((selection) => {
                         const selectionRecord = selection as Record<string, unknown>;
@@ -2369,7 +2995,7 @@ export function App() {
                       <p className="eyebrow">Arbeitsblätter</p>
                       <h4 className="subsection-title">Küche, Beschaffung und Klärungen</h4>
                     </header>
-                    <ul className="item-list compact">
+                    <ul className="item-list compact mobile-detail-list">
                       {selectedPlan.kitchenSheets.map((sheet, sheetIndex) => {
                         const sheetRecord = sheet as Record<string, unknown>;
                         const instructions = Array.isArray(sheetRecord.instructions)
@@ -2391,6 +3017,161 @@ export function App() {
                     </ul>
                   </>
                 ) : null}
+                {Array.isArray(selectedPlan.productionBatches) &&
+                selectedPlan.productionBatches.some((batch) =>
+                  Array.isArray((batch as Record<string, unknown>).ingredients) &&
+                  ((batch as Record<string, unknown>).ingredients as unknown[]).some((ingredient) =>
+                    Boolean((ingredient as Record<string, unknown>).appliedYield)
+                  )
+                ) ? (
+                  <>
+                    <div className="divider" />
+                    <header>
+                      <p className="eyebrow">Yield-Status</p>
+                      <h4 className="subsection-title">Netto, Brutto und fehlende Yield-Profile</h4>
+                    </header>
+                    <ul className="item-list compact mobile-detail-list">
+                      {selectedPlan.productionBatches.map((batch) => {
+                        const batchRecord = batch as Record<string, unknown>;
+                        const ingredients = Array.isArray(batchRecord.ingredients)
+                          ? batchRecord.ingredients
+                              .map((entry) => entry as Record<string, unknown>)
+                              .filter((entry) => Boolean(entry.appliedYield))
+                          : [];
+
+                        if (ingredients.length === 0) {
+                          return null;
+                        }
+
+                        return (
+                          <li key={`yield-${String(batchRecord.batchId ?? batchRecord.componentId ?? "batch")}`}>
+                            <strong>{String(batchRecord.componentId ?? "Produktionsposition")}</strong>
+                            <ul className="item-list compact trace-list yield-status-list">
+                              {ingredients.map((ingredient) => {
+                                const ingredientName = String(ingredient.name ?? ingredient.ingredientId ?? "Zutat");
+                                const appliedYield = ingredient.appliedYield as Record<string, unknown>;
+                                const isMissing = appliedYield?.missingYield === true;
+                                return (
+                                  <li
+                                    key={`${String(batchRecord.batchId ?? "batch")}-${ingredientName}`}
+                                    className={isMissing ? "yield-status-item yield-status-item--missing" : "yield-status-item"}
+                                  >
+                                    <strong>{ingredientName}</strong>
+                                    <p className="helper-text">{formatYieldStatusLine(ingredient)}</p>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </article>
+
+          <article className="panel">
+            <header>
+              <p className="eyebrow">Operative Führungsansicht</p>
+              <h3>Einkaufslisten für Beschaffung und Druck</h3>
+            </header>
+            <ul className="item-list compact mobile-purchase-list">
+              {currentSpecPurchaseLists.map((purchaseList) => {
+                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                const previewItems = Array.isArray(purchaseList.items)
+                  ? purchaseList.items.map((entry) => entry as Record<string, unknown>).slice(0, 4)
+                  : [];
+                return (
+                  <li key={String(purchaseList.purchaseListId)} className="mobile-purchase-card">
+                    <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                    <p className="purchase-card__meta">
+                      Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}
+                    </p>
+                    {previewItems.length > 0 ? (
+                      <ul className="item-list compact purchase-preview-list">
+                        {previewItems.map((item) => (
+                          <li key={String(item.ingredientId ?? item.displayName ?? "position")}>
+                            <strong>{String(item.displayName ?? "Artikel")}</strong>
+                            <p className="helper-text">{formatPurchasePreviewLine(item)}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <div className="action-row">
+                      <a
+                        className="ghost-link"
+                        href={purchaseListPrintUrl(String(purchaseList.purchaseListId))}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Einkaufsliste drucken / als PDF öffnen
+                      </a>
+                      <a
+                        className="ghost-link"
+                        href={purchaseListCsvUrl(String(purchaseList.purchaseListId))}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Einkaufsliste als CSV herunterladen
+                      </a>
+                    </div>
+                  </li>
+                );
+              })}
+              {currentSpecPurchaseLists.length === 0 ? (
+                <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li>
+              ) : null}
+            </ul>
+            {archivedPurchaseLists.length > 0 ? (
+              <>
+                <div className="divider" />
+                <p className="eyebrow">Ältere Einkaufslisten</p>
+                <ul className="item-list compact mobile-purchase-list">
+                  {archivedPurchaseLists.map((purchaseList) => {
+                    const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                    const previewItems = Array.isArray(purchaseList.items)
+                      ? purchaseList.items.map((entry) => entry as Record<string, unknown>).slice(0, 3)
+                      : [];
+                    return (
+                      <li key={String(purchaseList.purchaseListId)} className="mobile-purchase-card">
+                        <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                        <p className="purchase-card__meta">
+                          Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}
+                        </p>
+                        {previewItems.length > 0 ? (
+                          <ul className="item-list compact purchase-preview-list">
+                            {previewItems.map((item) => (
+                              <li key={String(item.ingredientId ?? item.displayName ?? "position")}>
+                                <strong>{String(item.displayName ?? "Artikel")}</strong>
+                                <p className="helper-text">{formatPurchasePreviewLine(item)}</p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <div className="action-row">
+                          <a
+                            className="ghost-link"
+                            href={purchaseListPrintUrl(String(purchaseList.purchaseListId))}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Einkaufsliste drucken / als PDF öffnen
+                          </a>
+                          <a
+                            className="ghost-link"
+                            href={purchaseListCsvUrl(String(purchaseList.purchaseListId))}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Einkaufsliste als CSV herunterladen
+                          </a>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </>
             ) : null}
           </article>
@@ -2464,57 +3245,6 @@ export function App() {
             </ul>
           </article>
 
-          <article className="panel">
-            <header>
-              <p className="eyebrow">Einkaufslisten</p>
-              <h3>CSV-fähige Beschaffungslisten</h3>
-            </header>
-            <ul className="item-list compact">
-              {currentSpecPurchaseLists.map((purchaseList) => {
-                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                return (
-                <li key={String(purchaseList.purchaseListId)}>
-                  <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                  <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                  <a
-                    className="ghost-link"
-                    href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Einkaufsliste herunterladen
-                  </a>
-                </li>
-              );
-              })}
-              {currentSpecPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li> : null}
-            </ul>
-            {archivedPurchaseLists.length > 0 ? (
-              <>
-                <div className="divider" />
-                <p className="eyebrow">Ältere Einkaufslisten</p>
-                <ul className="item-list compact">
-                  {archivedPurchaseLists.map((purchaseList) => {
-                    const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                    return (
-                      <li key={String(purchaseList.purchaseListId)}>
-                        <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                        <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                        <a
-                          className="ghost-link"
-                          href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Einkaufsliste herunterladen
-                        </a>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            ) : null}
-          </article>
           </div>
         </section>
       ) : null}

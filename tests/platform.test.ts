@@ -4,30 +4,55 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { newDb } from "pg-mem";
 import {
+  aggregatePurchaseList,
+  PurchasingUnitProfileLibrary,
   SCHEMA_VERSION,
+  YieldProfileLibrary,
+  calculateYieldQuantities,
+  createAcceptedEventSpecFromEventDemand,
+  normalizePurchaseQuantity,
   normalizeEventRequestToSpec,
   parseUploadedRecipeText,
+  validatePurchasingUnitProfile,
+  validateYieldProfile,
   type AcceptedEventSpec,
+  type EventDemand,
   type EventRequest,
+  type ProductionBatch,
+  type ProductionPlan,
   type RecipeSearchQuery,
   type WebRecipeCandidate
 } from "@catering/shared-core";
 import { IntakeStore, buildIntakeApp } from "@catering/intake-service";
 import { OfferStore, buildOfferApp } from "@catering/offer-service";
-import { buildPrintExportApp } from "@catering/print-export";
+import {
+  buildPrintExportApp,
+  renderProductionPlanHtml,
+  renderPurchaseListHtml
+} from "@catering/print-export";
 import {
   InMemoryRecipeRepository,
   ProductionStore,
   RecipeDiscoveryService,
-  buildProductionApp
+  buildProductionApp,
+  createRecipeWebSearchProvider,
+  resolveRecipeWebSearchProviderName
 } from "@catering/production-service";
 import type { WebRecipeSearchProvider } from "@catering/production-service";
+import { IntakeStoreAcceptedEventSpecAdapter } from "../intake-service/src/spec-governance/accepted-event-spec-adapter.js";
+import { SpecGovernanceService } from "../intake-service/src/spec-governance/spec-governance-service.js";
 
 class FakeWebProvider implements WebRecipeSearchProvider {
   constructor(private readonly candidates: WebRecipeCandidate[]) {}
 
   async searchRecipes(_query: RecipeSearchQuery): Promise<WebRecipeCandidate[]> {
     return this.candidates;
+  }
+}
+
+class ThrowingWebProvider implements WebRecipeSearchProvider {
+  async searchRecipes(): Promise<WebRecipeCandidate[]> {
+    throw new Error("search should not run");
   }
 }
 
@@ -111,6 +136,67 @@ function withProductionDecision(
   };
 }
 
+describe("production web provider selection", () => {
+  it("resolves the configured recipe web provider name for the MVP", () => {
+    expect(resolveRecipeWebSearchProviderName()).toBe("duckduckgo");
+    expect(resolveRecipeWebSearchProviderName("duckduckgo")).toBe("duckduckgo");
+    expect(resolveRecipeWebSearchProviderName("disabled")).toBe("disabled");
+    expect(resolveRecipeWebSearchProviderName("unknown-provider")).toBe("duckduckgo");
+  });
+
+  it("creates a disabled recipe web provider that returns no candidates", async () => {
+    const { providerName, provider } = createRecipeWebSearchProvider("disabled");
+    const eventSpec = singleComponentSpec("Tomatensuppe");
+
+    expect(providerName).toBe("disabled");
+    await expect(
+      provider.searchRecipes({
+        query: "Tomatensuppe Rezept",
+        locale: "de",
+        eventSpec,
+        component: {
+          componentId: "component-1",
+          label: "Tomatensuppe",
+          menuCategory: "classic"
+        }
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("tracks uploaded recipe allergens as known only when explicitly declared", () => {
+    const knownRecipe = parseUploadedRecipeText({
+      filename: "gratin.txt",
+      text: [
+        "Kartoffelgratin",
+        "Zutaten",
+        "1 kg Kartoffeln",
+        "300 ml Sahne",
+        "100 g Käse",
+        "Zubereitung",
+        "1. Backen.",
+        "Allergene",
+        "Milch"
+      ].join("\n")
+    });
+
+    const unknownRecipe = parseUploadedRecipeText({
+      filename: "salsa.txt",
+      text: [
+        "Tomatensalsa",
+        "Zutaten",
+        "1 kg Tomaten",
+        "100 ml Olivenöl",
+        "Zubereitung",
+        "1. Vermengen."
+      ].join("\n")
+    });
+
+    expect(knownRecipe.allergenStatus).toBe("known");
+    expect(knownRecipe.allergens).toContain("milk");
+    expect(unknownRecipe.allergenStatus).toBe("unknown");
+  });
+});
+
 function singleComponentSpec(
   label: string,
   category: "classic" | "vegetarian" | "vegan" = "classic"
@@ -134,6 +220,768 @@ function singleComponentSpec(
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-"));
+}
+
+describe("yield phase 1", () => {
+  it("calculates gross and waste quantities from net quantity and yield factor", () => {
+    expect(calculateYieldQuantities(8, 0.8)).toEqual({
+      netQty: 8,
+      yieldFactor: 0.8,
+      grossQty: 10,
+      wasteQty: 2
+    });
+  });
+
+  it("validates yield profiles for the V1 ingredient scope", () => {
+    expect(
+      validateYieldProfile({
+        id: "yield-profile-1",
+        scopeType: "ingredient",
+        scopeId: "carrot",
+        yieldFactor: 0.86,
+        sourceType: "manual",
+        isActive: true
+      }).yieldFactor
+    ).toBe(0.86);
+
+    expect(() =>
+      validateYieldProfile({
+        id: "yield-profile-invalid",
+        scopeType: "ingredient",
+        scopeId: "carrot",
+        yieldFactor: 1.2,
+        sourceType: "manual",
+        isActive: true
+      })
+    ).toThrow(/yieldProfile|yieldFactor/i);
+  });
+
+  it("persists and resolves the active ingredient yield profile", async () => {
+    const dataRoot = createDataRoot();
+    const library = new YieldProfileLibrary({ rootDir: dataRoot });
+
+    await library.save({
+      id: "yield-profile-1",
+      scopeType: "ingredient",
+      scopeId: "carrot",
+      yieldFactor: 0.82,
+      sourceType: "manual",
+      note: "geschält",
+      isActive: false
+    });
+    await library.save({
+      id: "yield-profile-2",
+      scopeType: "ingredient",
+      scopeId: "carrot",
+      yieldFactor: 0.88,
+      sourceType: "manual",
+      note: "geputzt",
+      isActive: true
+    });
+
+    const restartedLibrary = new YieldProfileLibrary({ rootDir: dataRoot });
+    const activeProfile = await restartedLibrary.getActiveIngredientYieldProfile("carrot");
+
+    expect(activeProfile?.id).toBe("yield-profile-2");
+    expect(activeProfile?.yieldFactor).toBe(0.88);
+
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+});
+
+describe("yield phase 2", () => {
+  it("applies an active ingredient yield profile in the production batch snapshot", async () => {
+    const dataRoot = createDataRoot();
+    const yieldProfiles = new YieldProfileLibrary({ rootDir: dataRoot });
+    await yieldProfiles.save({
+      id: "yield-carrot-1",
+      scopeType: "ingredient",
+      scopeId: "carrot",
+      yieldFactor: 0.8,
+      sourceType: "manual",
+      isActive: true
+    });
+
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/karottensuppe",
+        title: "Karottensuppe",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Karottensuppe",
+          baseYield: {
+            servings: 10,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "carrot",
+              name: "Karotten",
+              quantity: {
+                amount: 2,
+                unit: "kg"
+              },
+              group: "vegetables",
+              purchaseUnit: "kg",
+              normalizedUnit: "kg"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Karotten kochen."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1,
+            batchSize: 10
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 5,
+          stepCount: 3,
+          mappedIngredientRatio: 0.9
+        }
+      }
+    ]);
+
+    const app = buildProductionApp({
+      dataRoot,
+      discoveryService: new RecipeDiscoveryService(
+        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        provider
+      )
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: singleComponentSpec("Karottensuppe", "vegan")
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const ingredient = body.productionPlan.productionBatches[0].ingredients[0];
+    const purchaseItem = body.purchaseList.items.find(
+      (item: { ingredientId: string }) => item.ingredientId === "carrot"
+    );
+
+    expect(ingredient.quantity.amount).toBe(15);
+    expect(ingredient.appliedYield).toEqual({
+      netQty: 12,
+      yieldFactorApplied: 0.8,
+      grossQty: 15,
+      wasteQty: 3,
+      sourceTypeApplied: "manual",
+      sourceRefId: "yield-carrot-1",
+      missingYield: false
+    });
+    expect(purchaseItem?.normalizedQty).toBe(15);
+    expect(
+      body.productionPlan.unresolvedItems.some((item: string) => /Yield-Profil fehlt/i.test(item))
+    ).toBe(false);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks missing yield explicitly without inventing a default", async () => {
+    const dataRoot = createDataRoot();
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/zwiebelsuppe",
+        title: "Zwiebelsuppe",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Zwiebelsuppe",
+          baseYield: {
+            servings: 10,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "onion",
+              name: "Zwiebeln",
+              quantity: {
+                amount: 1,
+                unit: "kg"
+              },
+              group: "vegetables",
+              purchaseUnit: "kg",
+              normalizedUnit: "kg"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Zwiebeln anschwitzen."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1,
+            batchSize: 10
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 4,
+          stepCount: 3,
+          mappedIngredientRatio: 0.9
+        }
+      }
+    ]);
+
+    const app = buildProductionApp({
+      dataRoot,
+      discoveryService: new RecipeDiscoveryService(
+        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        provider
+      )
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: singleComponentSpec("Zwiebelsuppe", "vegan")
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const ingredient = body.productionPlan.productionBatches[0].ingredients[0];
+    const purchaseItem = body.purchaseList.items.find(
+      (item: { ingredientId: string }) => item.ingredientId === "onion"
+    );
+
+    expect(ingredient.quantity.amount).toBe(6);
+    expect(ingredient.appliedYield).toEqual({
+      netQty: 6,
+      sourceTypeApplied: "missing",
+      missingYield: true
+    });
+    expect(purchaseItem?.normalizedQty).toBe(6);
+    expect(
+      body.productionPlan.unresolvedItems.some((item: string) => /Yield-Profil fehlt/i.test(item))
+    ).toBe(false);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+});
+
+describe("yield phase 3", () => {
+  it("renders applied yield visibly in the production plan export", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-yield-visible",
+      ownershipContext: "production",
+      eventSpecId: "spec-1",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [
+        {
+          batchId: "batch-1",
+          componentId: "karottensuppe",
+          recipeId: "recipe-1",
+          scaledYield: {
+            amount: 10,
+            unit: "servings"
+          },
+          batchCount: 1,
+          lossFactor: 1,
+          gnPlan: [
+            {
+              container: "GN 1/2",
+              count: 1
+            }
+          ],
+          station: "hot-kitchen",
+          prepWindow: "2026-04-05 T-1",
+          ingredients: [
+            {
+              ingredientId: "carrot",
+              name: "Karotten",
+              quantity: {
+                amount: 15,
+                unit: "kg"
+              },
+              group: "vegetables",
+              appliedYield: {
+                netQty: 12,
+                yieldFactorApplied: 0.8,
+                grossQty: 15,
+                wasteQty: 3,
+                sourceTypeApplied: "manual",
+                sourceRefId: "yield-carrot-1",
+                missingYield: false
+              }
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Karotten kochen."
+            }
+          ]
+        }
+      ],
+      timeline: [],
+      kitchenSheets: [],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).toContain("Yield-Status der Zutaten");
+    expect(html).toContain("Karotten");
+    expect(html).toContain("netto 12 kg");
+    expect(html).toContain("brutto 15 kg");
+    expect(html).toContain("Verschnitt 3 kg");
+    expect(html).toContain("Faktor 0.8");
+  });
+
+  it("renders missing yield visibly in the production plan export", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-yield-missing",
+      ownershipContext: "production",
+      eventSpecId: "spec-2",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [
+        {
+          batchId: "batch-2",
+          componentId: "zwiebelsuppe",
+          recipeId: "recipe-2",
+          scaledYield: {
+            amount: 10,
+            unit: "servings"
+          },
+          batchCount: 1,
+          lossFactor: 1,
+          gnPlan: [
+            {
+              container: "GN 1/2",
+              count: 1
+            }
+          ],
+          station: "hot-kitchen",
+          prepWindow: "2026-04-05 T-1",
+          ingredients: [
+            {
+              ingredientId: "onion",
+              name: "Zwiebeln",
+              quantity: {
+                amount: 6,
+                unit: "kg"
+              },
+              group: "vegetables",
+              appliedYield: {
+                netQty: 6,
+                sourceTypeApplied: "missing",
+                missingYield: true
+              }
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Zwiebeln anschwitzen."
+            }
+          ]
+        }
+      ],
+      timeline: [],
+      kitchenSheets: [],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).toContain("Yield-Status der Zutaten");
+    expect(html).toContain("Zwiebeln");
+    expect(html).toContain("Yield fehlt");
+    expect(html).toContain("netto 6 kg");
+    expect(html).not.toContain("brutto 6 kg");
+  });
+});
+
+describe("unit transformation phase 1", () => {
+  it("transforms simple production quantities into a deterministic purchase normal form", () => {
+    expect(normalizePurchaseQuantity(750, "g")).toEqual({
+      normalizedQty: 0.75,
+      normalizedUnit: "kg",
+      status: "converted",
+      sourceUnit: "g"
+    });
+
+    expect(normalizePurchaseQuantity(1250, "ml")).toEqual({
+      normalizedQty: 1.25,
+      normalizedUnit: "l",
+      status: "converted",
+      sourceUnit: "ml"
+    });
+  });
+
+  it("keeps identity cases stable in the purchase normal form", () => {
+    expect(normalizePurchaseQuantity(2.5, "kg")).toEqual({
+      normalizedQty: 2.5,
+      normalizedUnit: "kg",
+      status: "identity",
+      sourceUnit: "kg"
+    });
+
+    expect(normalizePurchaseQuantity(12, "pcs")).toEqual({
+      normalizedQty: 12,
+      normalizedUnit: "pcs",
+      status: "identity",
+      sourceUnit: "pcs"
+    });
+  });
+
+  it("keeps non-transformable units explicit without inventing a conversion", () => {
+    expect(normalizePurchaseQuantity(3, "tray")).toEqual({
+      normalizedQty: 3,
+      normalizedUnit: "tray",
+      status: "untransformed",
+      sourceUnit: "tray"
+    });
+  });
+
+  it("applies the unit transformation hook during purchase aggregation", async () => {
+    const batch: ProductionBatch = {
+      batchId: "batch-unit-transform",
+      componentId: "component-1",
+      recipeId: "recipe-1",
+      scaledYield: {
+        amount: 10,
+        unit: "servings"
+      },
+      batchCount: 1,
+      lossFactor: 1,
+      gnPlan: [
+        {
+          container: "GN 1/2",
+          count: 1
+        }
+      ],
+      station: "hot-kitchen",
+      prepWindow: "2026-04-05 T-1",
+      ingredients: [
+        {
+          ingredientId: "flour",
+          name: "Flour",
+          quantity: {
+            amount: 750,
+            unit: "g"
+          },
+          group: "dry_goods"
+        },
+        {
+          ingredientId: "stock",
+          name: "Stock",
+          quantity: {
+            amount: 1250,
+            unit: "ml"
+          },
+          group: "dry_goods"
+        },
+        {
+          ingredientId: "tray-item",
+          name: "Tray Item",
+          quantity: {
+            amount: 3,
+            unit: "tray"
+          },
+          group: "misc"
+        }
+      ],
+      steps: []
+    };
+
+    const purchaseList = await aggregatePurchaseList("spec-unit-transform", [batch]);
+    const flour = purchaseList.items.find((item) => item.ingredientId === "flour");
+    const stock = purchaseList.items.find((item) => item.ingredientId === "stock");
+    const trayItem = purchaseList.items.find((item) => item.ingredientId === "tray-item");
+
+    expect(flour).toMatchObject({
+      normalizedQty: 0.75,
+      normalizedUnit: "kg",
+      purchaseQty: 0.75,
+      purchaseUnit: "kg"
+    });
+    expect(stock).toMatchObject({
+      normalizedQty: 1.25,
+      normalizedUnit: "l",
+      purchaseQty: 1.25,
+      purchaseUnit: "l"
+    });
+    expect(trayItem).toMatchObject({
+      normalizedQty: 3,
+      normalizedUnit: "tray",
+      purchaseQty: 3,
+      purchaseUnit: "tray"
+    });
+  });
+});
+
+describe("purchasing unit transformation mvp 1", () => {
+  it("validates and persists ingredient-based purchasing unit profiles", async () => {
+    const dataRoot = createDataRoot();
+    const library = new PurchasingUnitProfileLibrary({ rootDir: dataRoot });
+
+    expect(
+      validatePurchasingUnitProfile({
+        id: "purchase-unit-potato-1",
+        scopeType: "ingredient",
+        scopeId: "potato",
+        baseUnit: "kg",
+        unitLabel: "Sack",
+        unitSize: 25,
+        sourceType: "explicit",
+        isActive: true
+      }).unitLabel
+    ).toBe("Sack");
+
+    await library.save({
+      id: "purchase-unit-potato-1",
+      scopeType: "ingredient",
+      scopeId: "potato",
+      baseUnit: "kg",
+      unitLabel: "Sack",
+      unitSize: 25,
+      sourceType: "explicit",
+      isActive: true
+    });
+
+    const restartedLibrary = new PurchasingUnitProfileLibrary({ rootDir: dataRoot });
+    const activeProfile = await restartedLibrary.getActiveIngredientPurchasingUnitProfile("potato", "kg");
+
+    expect(activeProfile?.unitLabel).toBe("Sack");
+    expect(activeProfile?.unitSize).toBe(25);
+
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("derives order units from normalized raw quantity when a purchasing unit rule exists", async () => {
+    const dataRoot = createDataRoot();
+    const library = new PurchasingUnitProfileLibrary({ rootDir: dataRoot });
+    await library.save({
+      id: "purchase-unit-potato-2",
+      scopeType: "ingredient",
+      scopeId: "potato",
+      baseUnit: "kg",
+      unitLabel: "Sack",
+      unitSize: 25,
+      sourceType: "explicit",
+      isActive: true
+    });
+
+    const batch: ProductionBatch = {
+      batchId: "batch-purchase-unit-transform",
+      componentId: "component-potato",
+      recipeId: "recipe-potato",
+      scaledYield: {
+        amount: 10,
+        unit: "servings"
+      },
+      batchCount: 1,
+      lossFactor: 1,
+      gnPlan: [
+        {
+          container: "GN 1/2",
+          count: 1
+        }
+      ],
+      station: "hot-kitchen",
+      prepWindow: "2026-04-05 T-1",
+      ingredients: [
+        {
+          ingredientId: "potato",
+          name: "Kartoffeln",
+          quantity: {
+            amount: 30,
+            unit: "kg"
+          },
+          group: "produce"
+        }
+      ],
+      steps: []
+    };
+
+    const purchaseList = await aggregatePurchaseList(
+      "spec-purchase-unit-transform",
+      [batch],
+      [],
+      { purchasingUnits: library }
+    );
+    const potatoes = purchaseList.items.find((item) => item.ingredientId === "potato");
+
+    expect(potatoes).toMatchObject({
+      normalizedQty: 30,
+      normalizedUnit: "kg",
+      purchaseQty: 2,
+      purchaseUnit: "Sack",
+      appliedPurchasingUnit: {
+        unitLabel: "Sack",
+        unitSize: 25,
+        baseUnit: "kg",
+        sourceTypeApplied: "explicit",
+        sourceRefId: "purchase-unit-potato-2",
+        missingRule: false
+      }
+    });
+
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("renders purchasing unit information visibly in the purchase list export", () => {
+    const html = renderPurchaseListHtml({
+      schemaVersion: SCHEMA_VERSION,
+      purchaseListId: "purchase-purchasing-unit-visible",
+      eventSpecId: "spec-purchasing-unit-visible",
+      items: [
+        {
+          ingredientId: "potato",
+          displayName: "Kartoffeln",
+          normalizedQty: 30,
+          normalizedUnit: "kg",
+          purchaseQty: 2,
+          purchaseUnit: "Sack",
+          appliedPurchasingUnit: {
+            unitLabel: "Sack",
+            unitSize: 25,
+            baseUnit: "kg",
+            sourceTypeApplied: "explicit",
+            sourceRefId: "purchase-unit-potato-3",
+            missingRule: false
+          },
+          group: "produce",
+          supplierHint: "Metro Fresh",
+          sourceRecipes: ["recipe-potato"],
+          mappingConfidence: 0.95
+        }
+      ],
+      groupingMode: "group",
+      totals: {
+        itemCount: 1,
+        groups: ["produce"]
+      }
+    });
+
+    expect(html).toContain("Rohmenge");
+    expect(html).toContain("30 kg");
+    expect(html).toContain("2 Sack");
+    expect(html).toContain("1 Sack = 25 kg");
+    expect(html).toContain("Regel explicit");
+  });
+});
+
+describe("visible allergen display", () => {
+  it("renders existing allergen hints visibly in the production plan export", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-allergens-visible",
+      ownershipContext: "production",
+      eventSpecId: "spec-allergens-1",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [],
+      timeline: [],
+      kitchenSheets: [
+        {
+          title: "Kartoffelgratin - Rezept",
+          instructions: [
+            "1. Backen.",
+            "Bekannte Allergene laut Rezept: Milch, Gluten."
+          ]
+        }
+      ],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).toContain("Allergenhinweise");
+    expect(html).toContain("Bekannte Allergene laut Rezept: Milch, Gluten.");
+  });
+
+  it("does not create a false allergen section when no allergen information exists", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-allergens-none",
+      ownershipContext: "production",
+      eventSpecId: "spec-allergens-2",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [],
+      timeline: [],
+      kitchenSheets: [
+        {
+          title: "Tomatensuppe - Rezept",
+          instructions: ["1. Kochen.", "2. Abschmecken."]
+        }
+      ],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).not.toContain("Allergenhinweise");
+    expect(html).not.toContain("keine Allergene");
+  });
+
+  it("renders the production context visibly without treating it as customer truth", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-context-visible",
+      ownershipContext: "production",
+      eventSpecId: "spec-context-1",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [],
+      timeline: [],
+      kitchenSheets: [],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).toContain("Kontext: Produktionsstand");
+    expect(html).toContain("Operative Ableitung, nicht kundenfuehrende Wahrheit.");
+  });
+});
+
+function sampleEventDemand(overrides: Partial<EventDemand> = {}): EventDemand {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    demandId: "event-demand-1",
+    ownershipContext: "customer",
+    pax: 48,
+    serviceForm: "buffet",
+    menuOrServiceWish: "Tomatensuppe und Brot",
+    eventType: "lunch",
+    date: "2026-07-15",
+    restrictions: ["vegetarische Option"],
+    ...overrides
+  };
 }
 
 describe("catering agents platform", () => {
@@ -186,9 +1034,224 @@ describe("catering agents platform", () => {
     const body = response.json();
     expect(body.eventRequest.rawInputs[0].kind).toBe("text");
     expect(body.eventRequest.rawInputs[0].mimeType).toBe("text/plain");
+    expect(body.documentImport.documentImportId).toContain("document-import-");
+    expect(body.documentImport.documents[0].filename).toBe("angebot.txt");
+    expect(body.extractedContext.status).toBe("draft");
+    expect(body.extractedContext.fields.pax.value).toBe(24);
+    expect(body.extractedContext.fields.pax.status).toBe("extracted");
+    expect(body.extractedContext.fields.menuOrServiceWish.value).toContain("Kaffeepause");
     expect(body.acceptedEventSpec.attendees.expected).toBe(24);
     expect(body.acceptedEventSpec.readiness.status).toBe("complete");
     await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks missing or uncertain extraction results explicitly in the extracted context draft", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/intake/documents",
+      payload: {
+        channel: "text",
+        documents: [
+          {
+            filename: "unklar.txt",
+            mimeType: "text/plain",
+            contentBase64: Buffer.from(
+              "Event ohne Datum und ohne klare Teilnehmerzahl, bitte später abstimmen.",
+              "utf8"
+            ).toString("base64")
+          }
+        ]
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.extractedContext.status).toBe("draft");
+    expect(body.extractedContext.fields.pax.status).toBe("missing");
+    expect(body.extractedContext.fields.date.status).toBe("missing");
+    expect(body.extractedContext.uncertainties.some((entry: string) => /participant count|datum/i.test(entry))).toBe(
+      true
+    );
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists document imports and extracted contexts across intake app restarts", async () => {
+    const dataRoot = createDataRoot();
+    const firstApp = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await firstApp.inject({
+      method: "POST",
+      url: "/v1/intake/documents",
+      payload: {
+        channel: "text",
+        documents: [
+          {
+            filename: "angebot.txt",
+            mimeType: "text/plain",
+            contentBase64: Buffer.from(
+              "Meeting am 2026-05-14 fuer 24 Teilnehmer mit Kaffeepause und Croissants.",
+              "utf8"
+            ).toString("base64")
+          }
+        ]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const documentImportId = createResponse.json().documentImport.documentImportId;
+    const extractedContextId = createResponse.json().extractedContext.extractedContextId;
+    await firstApp.close();
+
+    const restartedApp = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const importsResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/intake/document-imports"
+    });
+    const extractedContextsResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/intake/extracted-contexts"
+    });
+    const importGetResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/intake/document-imports/${documentImportId}`
+    });
+    const extractedContextGetResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/intake/extracted-contexts/${extractedContextId}`
+    });
+
+    expect(importsResponse.statusCode).toBe(200);
+    expect(importsResponse.json().items).toHaveLength(1);
+    expect(extractedContextsResponse.statusCode).toBe(200);
+    expect(extractedContextsResponse.json().items).toHaveLength(1);
+    expect(importGetResponse.statusCode).toBe(200);
+    expect(importGetResponse.json().documentImportId).toBe(documentImportId);
+    expect(extractedContextGetResponse.statusCode).toBe(200);
+    expect(extractedContextGetResponse.json().extractedContextId).toBe(extractedContextId);
+
+    await restartedApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("creates, validates and updates EventDemand records via the intake API", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/event-demands",
+      payload: {
+        pax: 75,
+        serviceForm: "buffet",
+        menuOrServiceWish: "Lunchbuffet mit Suppe und Dessert",
+        eventType: "lunch",
+        date: "2026-06-10",
+        budgetContext: {
+          targetBudget: {
+            amount: 1500,
+            currency: "EUR"
+          }
+        },
+        customerType: "company",
+        restrictions: ["ohne Schwein", "vegetarische Option"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdDemand = createResponse.json().eventDemand;
+    expect(createdDemand.pax).toBe(75);
+    expect(createdDemand.serviceForm).toBe("buffet");
+    expect(createdDemand.menuOrServiceWish).toContain("Lunchbuffet");
+
+    const invalidResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/event-demands",
+      payload: {
+        pax: 0,
+        serviceForm: "",
+        menuOrServiceWish: ""
+      }
+    });
+
+    expect(invalidResponse.statusCode).toBe(500);
+    expect(invalidResponse.body).toContain("Schema validation failed");
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/event-demands/${createdDemand.demandId}`,
+      payload: {
+        pax: 90,
+        serviceForm: "plated",
+        menuOrServiceWish: "Menü mit vegetarischer Alternative",
+        restrictions: ["glutenarme Option"]
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json().eventDemand.pax).toBe(90);
+    expect(updateResponse.json().eventDemand.serviceForm).toBe("plated");
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/v1/intake/event-demands"
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().items).toHaveLength(1);
+    expect(listResponse.json().items[0].menuOrServiceWish).toContain("Menü");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists EventDemand records across intake app restarts", async () => {
+    const dataRoot = createDataRoot();
+    const firstApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+
+    const createResponse = await firstApp.inject({
+      method: "POST",
+      url: "/v1/intake/event-demands",
+      payload: {
+        pax: 40,
+        serviceForm: "buffet",
+        menuOrServiceWish: "Kaffeepause mit Snacks",
+        customerType: "public"
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const demandId = createResponse.json().eventDemand.demandId;
+    await firstApp.close();
+
+    const restartedApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+    const listResponse = await restartedApp.inject({
+      method: "GET",
+      url: "/v1/intake/event-demands"
+    });
+    const getResponse = await restartedApp.inject({
+      method: "GET",
+      url: `/v1/intake/event-demands/${demandId}`
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().items).toHaveLength(1);
+    expect(getResponse.statusCode).toBe(200);
+    expect(getResponse.json().demandId).toBe(demandId);
+
+    await restartedApp.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
@@ -222,6 +1285,613 @@ describe("catering agents platform", () => {
     expect(spec.menuPlan.find((item) => item.label.includes("KALBSBULETTEN"))?.menuCategory).toBe("classic");
     expect(spec.menuPlan.find((item) => item.label.includes("MANDEL-CURRY"))?.menuCategory).toBe("vegan");
     expect(spec.menuPlan.find((item) => item.label.includes("SCHOKOLADENKUCHEN"))?.dietaryTags).toContain("vegan");
+  });
+
+  it("adds a defensive uncertainty for menu blocks with explicit open selection markers", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-open-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Lunch am 21.03.2026 fuer 60 Teilnehmer.",
+            "DESSERT zur Auswahl: Mousse oder Obstsalat"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /auswahl, alternative oder beispiel|menschlich bestaetigt/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(true);
+    expect(spec.readiness.status).toBe("complete");
+  });
+
+  it("adds the same defensive uncertainty for menu blocks with example dishes", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-example-dishes-block",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: [
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer mit Fingerfood zum Beispiel Lachs oder Hummus."
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /auswahl, alternative oder beispiel|menschlich bestaetigt/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(true);
+    expect(spec.readiness.status).toBe("complete");
+  });
+
+  it("does not add the defensive uncertainty for clear final menu blocks", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-clear-final-block",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: [
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer mit Tomatensuppe."
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /auswahl, alternative oder beispiel|menschlich bestaetigt/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(false);
+  });
+
+  it("does not add the defensive uncertainty for composed but explicit production menu blocks", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-composed-production-block",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: [
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer.",
+            "KALBSBULETTEN | SCHMORZWIEBELN"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /auswahl, alternative oder beispiel|menschlich bestaetigt/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(false);
+  });
+
+  it("carries explicit menuPlan uncertainties into production unresolvedItems", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec({
+        schemaVersion: SCHEMA_VERSION,
+        requestId: "request-open-selection-plan-hint",
+        source: {
+          channel: "pdf_upload",
+          receivedAt: "2026-03-21T09:00:00.000Z"
+        },
+        rawInputs: [
+          {
+            kind: "pdf",
+            mimeType: "application/pdf",
+            content: [
+              "Lunch am 21.03.2026 fuer 60 Teilnehmer.",
+              "DESSERT zur Auswahl: Mousse oder Obstsalat"
+            ].join("\n")
+          }
+        ]
+      }),
+      "vegetarian"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().productionPlan.unresolvedItems).toContain(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("derives a deterministic AcceptedEventSpec from EventDemand", () => {
+    const spec = createAcceptedEventSpecFromEventDemand(
+      sampleEventDemand({
+        menuOrServiceWish: "Tomatensuppe und Brot",
+        pax: 48
+      })
+    );
+
+    expect(spec.specId).toBe("spec-event-demand-1");
+    expect(spec.ownershipContext).toBe("customer");
+    expect(spec.attendees.expected).toBe(48);
+    expect(spec.event.serviceForm).toBe("buffet");
+    expect(spec.servicePlan.serviceForm).toBe("buffet");
+    expect(spec.menuPlan.length).toBeGreaterThan(0);
+    expect(spec.menuPlan.every((item) => item.servings === 48)).toBe(true);
+    expect(spec.menuPlan.some((item) => /tomatensuppe|brot/i.test(item.label))).toBe(true);
+  });
+
+  it("creates a ProductionPlan directly from EventDemand", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
+    const discoveryService = new RecipeDiscoveryService(repository, new ThrowingWebProvider());
+    const app = buildProductionApp({
+      discoveryService,
+      store: new ProductionStore({ rootDir: dataRoot })
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans/from-event-demand",
+      payload: {
+        eventDemand: sampleEventDemand({
+          menuOrServiceWish: "Tomatensuppe",
+          pax: 32
+        })
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.eventDemand.ownershipContext).toBe("customer");
+    expect(body.acceptedEventSpec.ownershipContext).toBe("customer");
+    expect(body.productionPlan.ownershipContext).toBe("production");
+    expect(body.acceptedEventSpec.attendees.expected).toBe(32);
+    expect(body.acceptedEventSpec.menuPlan.every((item: { servings?: number }) => item.servings === 32)).toBe(true);
+    expect(body.productionPlan.eventSpecId).toBe(body.acceptedEventSpec.specId);
+    expect(body.productionPlan.recipeSelections.length).toBeGreaterThan(0);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("carries mixed maturity menuPlan uncertainties into production unresolvedItems", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec({
+        schemaVersion: SCHEMA_VERSION,
+        requestId: "request-mixed-maturity-plan-hint",
+        source: {
+          channel: "pdf_upload",
+          receivedAt: "2026-03-21T09:00:00.000Z"
+        },
+        rawInputs: [
+          {
+            kind: "pdf",
+            mimeType: "application/pdf",
+            content: [
+              "Auftragsbestätigung Lunch am 21.03.2026 fuer 60 Teilnehmer.",
+              "DESSERT zur Auswahl: Mousse oder Obstsalat"
+            ].join("\n")
+          }
+        ]
+      }),
+      "vegetarian"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().productionPlan.unresolvedItems).toContain(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("does not add the production unresolvedItems hint for clear final menu blocks", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec({
+        schemaVersion: SCHEMA_VERSION,
+        requestId: "request-clear-final-plan-hint",
+        source: {
+          channel: "text",
+          receivedAt: "2026-03-21T09:00:00.000Z"
+        },
+        rawInputs: [
+          {
+            kind: "text",
+            mimeType: "text/plain",
+            content: "Lunch am 2026-05-12 fuer 60 Teilnehmer mit Tomatensuppe."
+          }
+        ]
+      }),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().productionPlan.unresolvedItems).not.toContain(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("does not keep pure DESSERT headings as fallback menu entries", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-dessert-heading",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: ["Konferenz am 2026-05-12 fuer 60 Teilnehmer.", "DESSERT"].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "DESSERT")).toBe(false);
+  });
+
+  it("keeps BROT & BAGUETTE in fallback extraction", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-bread",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: ["Konferenz am 2026-05-12 fuer 60 Teilnehmer.", "BROT & BAGUETTE"].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "BROT & BAGUETTE")).toBe(true);
+  });
+
+  it("keeps real dessert dishes in fallback extraction", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-dessert-dish",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: ["Konferenz am 2026-05-12 fuer 60 Teilnehmer.", "SCHOKOLADENKUCHEN"].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "SCHOKOLADENKUCHEN")).toBe(true);
+  });
+
+  it("filters obvious non-menu infrastructure and pricing lines from fallback extraction", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-non-menu-filtering",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: [
+            "Konferenz am 2026-05-12 fuer 60 Teilnehmer.",
+            "Buffetinfrastruktur",
+            "Menüschilder",
+            "Weingläser",
+            "ab 19,90",
+            "SCHOKOLADENKUCHEN"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "Buffetinfrastruktur")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "Menüschilder")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "Weingläser")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "ab 19,90")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "SCHOKOLADENKUCHEN")).toBe(true);
+  });
+
+  it("filters obvious non-menu module headings from structured menu extraction", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-structured-non-menu-filtering",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Lunch am 2026-05-12 fuer 60 Teilnehmer.",
+            "QUICK LUNCH |",
+            "TRADITIONELL | 100%",
+            "Business PremiumBuffet",
+            "Vorspeisenvariationen",
+            "Hauptspeisen & Beilagen",
+            "KALBSBULETTEN | SCHMORZWIEBELN",
+            "SCHOKOLADENKUCHEN",
+            "KOSTENÜBERSICHT | DETAILS |"
+          ].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "Business PremiumBuffet")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "Vorspeisenvariationen")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "Hauptspeisen & Beilagen")).toBe(false);
+    expect(spec.menuPlan.some((item) => item.label === "KALBSBULETTEN | SCHMORZWIEBELN")).toBe(true);
+    expect(spec.menuPlan.some((item) => item.label === "SCHOKOLADENKUCHEN")).toBe(true);
+  });
+
+  it("does not yet filter food-adjacent fallback edge cases like Kaffee or Salate", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-fallback-food-adjacent-edges",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          mimeType: "text/plain",
+          content: ["Konferenz am 2026-05-12 fuer 60 Teilnehmer.", "Kaffee", "Salate"].join("\n")
+        }
+      ]
+    });
+
+    expect(spec.menuPlan.some((item) => item.label === "Kaffee")).toBe(true);
+    expect(spec.menuPlan.some((item) => item.label === "Salate")).toBe(true);
+  });
+
+  it("keeps an explicit Hall-style multi-line selection block together", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-hall-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Lunch am 16.06.2025 fuer 30 Teilnehmer.",
+            "QUICK LUNCH |",
+            "16.06.2025 Bitte wählen Sie maximal zwei Speisen",
+            "Salate |",
+            "Sommersalat | frisch | knackig | zweierlei Saucen und Vinaigrette",
+            "Pasta Spinat-Sahne-Sauce | vegetarisch | Nuss-Topping",
+            "KOSTENÜBERSICHT | DETAILS |"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const selectionBlock = spec.menuPlan.find((item) => /Bitte wählen Sie maximal zwei Speisen/i.test(item.label));
+    expect(selectionBlock?.label).toContain("Salate");
+    expect(selectionBlock?.label).toContain("Sommersalat");
+    expect(
+      spec.uncertainties?.some(
+        (entry) =>
+          entry.field === "menuPlan" &&
+          /auswahl, alternative oder beispiel/i.test(
+            entry.message.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          )
+      )
+    ).toBe(true);
+  });
+
+  it("keeps an explicit dessert selection block together", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-dessert-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Lunch am 10.03.2025 fuer 40 Teilnehmer.",
+            "QUICK LUNCH |",
+            "DESSERT | BITTE WÄHLEN SIE",
+            "Panna-Cotta | Beerensauce",
+            "Obstkorb | saisonale Früchte",
+            "KOSTENÜBERSICHT | DETAILS |"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const selectionBlock = spec.menuPlan.find((item) => /BITTE WÄHLEN SIE/i.test(item.label));
+    expect(selectionBlock?.label).toContain("Panna-Cotta");
+    expect(selectionBlock?.label).toContain("Obstkorb");
+  });
+
+  it("keeps an explicit Hollenbach-style sandwich selection block together", () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-sandwich-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Meeting am 30.11.2023 fuer 11 Teilnehmer.",
+            "QUICK LUNCH |",
+            "Sandw(h)ich Bitte wählen Sie 2 Sorten aus.",
+            "Foccacia | Serrano | gequetschter Tomate | Rauke & Parmesan",
+            "Baguette | gegrillte Zucchini & Aubergine | Paprika-Chili | Rauke & Parmesan",
+            "Ciabatta | Mozzarella | getrocknete Tomaten | Basilikum",
+            "KOSTENÜBERSICHT | DETAILS |"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const selectionBlock = spec.menuPlan.find((item) => /Bitte wählen Sie 2 Sorten aus/i.test(item.label));
+    expect(selectionBlock?.label).toContain("Foccacia");
+    expect(selectionBlock?.label).toContain("Baguette");
+  });
+
+  it("keeps an explicit Bojovic-style main dish selection block together", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-main-dish-selection-block",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          mimeType: "application/pdf",
+          content: [
+            "Meeting am 06.05.2025 fuer 20 Teilnehmer.",
+            "Hauptspeise | bitte wählen Sie eine Hauptspeise aus",
+            "Zart geschmortes Gulasch | Butterspätzle | Rosmaringemüse",
+            "oder",
+            "Slow Cooked Ochsenbäckchen | Kartoffelgratin | grüne Bohnen",
+            "Dessert | in Minigläschen"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const selectionBlock = spec.menuPlan.find((item) => /eine Hauptspeise aus/i.test(item.label));
+    expect(selectionBlock?.label).toContain("Gulasch");
+    expect(selectionBlock?.label).toContain("Ochsenbäckchen");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: withProductionDecision(spec, "classic")
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().productionPlan.unresolvedItems).toContain(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
   });
 
   it("accepts larger uploaded intake documents without failing on body size limits", async () => {
@@ -321,8 +1991,57 @@ describe("catering agents platform", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json().acceptedEventSpec.readiness.status).toBe("complete");
-    expect(updateResponse.json().acceptedEventSpec.attendees.expected).toBe(48);
+    expect(updateResponse.json().acceptedEventSpec.attendees.expected).toBeUndefined();
+    expect(updateResponse.json().acceptedEventSpec.attendees.productionPax).toBe(48);
     expect(updateResponse.json().acceptedEventSpec.menuPlan).toHaveLength(2);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("archives an AcceptedEventSpec and filters it out of active intake lists", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/normalize",
+      payload: {
+        text: "Lunch am 2026-06-18 fuer 40 Teilnehmer mit Buffet und Tomatensuppe."
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const archiveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/specs/${createdSpec.specId}/archive`,
+      payload: {
+        reason: "Fehlupload"
+      }
+    });
+
+    expect(archiveResponse.statusCode).toBe(200);
+    expect(archiveResponse.json().specId).toBe(createdSpec.specId);
+    expect(archiveResponse.json().archivedAt).toBeTruthy();
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/v1/intake/specs"
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().items).toHaveLength(0);
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/specs/${createdSpec.specId}`
+    });
+
+    expect(getResponse.statusCode).toBe(404);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -403,7 +2122,9 @@ describe("catering agents platform", () => {
           "Zubereitung",
           "1. Wildkräuter waschen.",
           "2. Petersilie fein hacken und mit Öl und Zitronensaft verrühren.",
-          "3. Vor dem Service mischen."
+          "3. Vor dem Service mischen.",
+          "Allergene",
+          "Keine"
         ].join("\n")
       }
     });
@@ -466,6 +2187,726 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("uses productionPax as the current operational servings value after a manual attendee update", async () => {
+    const dataRoot = createDataRoot();
+    const intakeApp = buildIntakeApp({
+      rootDir: dataRoot
+    });
+    const productionApp = buildProductionApp({
+      repository: new InMemoryRecipeRepository([], { rootDir: dataRoot }),
+      dataRoot
+    });
+
+    const createResponse = await intakeApp.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    expect(createdSpec.attendees.expected).toBe(40);
+    expect(createdSpec.attendees.productionPax).toBeUndefined();
+
+    const updateResponse = await intakeApp.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    const updatedSpec = updateResponse.json().acceptedEventSpec;
+    expect(updatedSpec.attendees.expected).toBe(40);
+    expect(updatedSpec.attendees.productionPax).toBe(55);
+    expect(updatedSpec.menuPlan[0].servings).toBe(55);
+
+    const planResponse = await productionApp.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: updatedSpec
+      }
+    });
+
+    expect(planResponse.statusCode).toBe(201);
+    expect(planResponse.json().productionPlan.kitchenSheets[0].instructions[0]).toContain(
+      "55 Portionen"
+    );
+
+    await intakeApp.close();
+    await productionApp.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("blocks critical AcceptedEventSpec updates for non-approvers and allows harmless notes", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const componentId = String(createdSpec.menuPlan[0].componentId);
+
+    const notesResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        componentUpdates: [
+          {
+            componentId,
+            notes: "Ohne Sellerie anrichten."
+          }
+        ]
+      }
+    });
+
+    expect(notesResponse.statusCode).toBe(200);
+    expect(notesResponse.json().acceptedEventSpec.menuPlan[0].productionDecision.notes).toBe(
+      "Ohne Sellerie anrichten."
+    );
+
+    const blockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(blockedResponse.statusCode).toBe(409);
+    expect(blockedResponse.json().requiresApproval).toBe(true);
+    expect(blockedResponse.json().approvalRequest.status).toBe("pending");
+    expect(blockedResponse.json().approvalRequest.criticalFields).toContain("attendeeCount");
+
+    const pendingListResponse = await app.inject({
+      method: "GET",
+      url: "/v1/intake/approval-requests"
+    });
+
+    expect(pendingListResponse.statusCode).toBe(200);
+    expect(pendingListResponse.json().items).toHaveLength(1);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("requires Approver role to release blocked AcceptedEventSpec updates", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const blockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(blockedResponse.statusCode).toBe(409);
+    const approvalRequestId = String(blockedResponse.json().approvalRequest.approvalRequestId);
+
+    const forbiddenApproveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/approval-requests/${approvalRequestId}/approve`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {}
+    });
+
+    expect(forbiddenApproveResponse.statusCode).toBe(403);
+
+    const approveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/approval-requests/${approvalRequestId}/approve`,
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {
+        note: "Mengenanpassung freigegeben."
+      }
+    });
+
+    expect(approveResponse.statusCode).toBe(200);
+    expect(approveResponse.json().approvalRequest.status).toBe("approved");
+    expect(approveResponse.json().acceptedEventSpec.attendees.productionPax).toBe(55);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists pending_reapproval state for blocked L3 changes and reuses the pending approval request", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const firstBlockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(firstBlockedResponse.statusCode).toBe(409);
+    expect(firstBlockedResponse.json().governanceState.approvalStatus).toBe("pending_reapproval");
+
+    const firstApprovalRequestId = String(firstBlockedResponse.json().approvalRequest.approvalRequestId);
+    const storedPendingState = await store.getSpecGovernanceState(createdSpec.specId);
+    expect(storedPendingState?.approvalStatus).toBe("pending_reapproval");
+    expect(storedPendingState?.latestApprovalRequestId).toBe(firstApprovalRequestId);
+
+    const secondBlockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        attendeeCount: 60
+      }
+    });
+
+    expect(secondBlockedResponse.statusCode).toBe(409);
+    expect(secondBlockedResponse.json().approvalRequest.approvalRequestId).toBe(firstApprovalRequestId);
+
+    const approvalRequests = await store.listApprovalRequests();
+    expect(
+      approvalRequests.filter(
+        (record) => record.specId === createdSpec.specId && record.status === "pending"
+      )
+    ).toHaveLength(1);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("resets governance state to approved after approving a pending reapproval request", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const blockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    const approvalRequestId = String(blockedResponse.json().approvalRequest.approvalRequestId);
+
+    const approveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/approval-requests/${approvalRequestId}/approve`,
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {
+        note: "Freigabe erteilt."
+      }
+    });
+
+    expect(approveResponse.statusCode).toBe(200);
+
+    const storedGovernanceState = await store.getSpecGovernanceState(createdSpec.specId);
+    expect(storedGovernanceState?.approvalStatus).toBe("approved");
+    expect(storedGovernanceState?.latestApprovalRequestId).toBe(approvalRequestId);
+    expect(storedGovernanceState?.highestImpactLevel).toBe("L3");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("blocks finalizing an open L3 change set without an explicit confirm flag", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(patchResponse.statusCode).toBe(409);
+
+    const openReadResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-governance?specId=${createdSpec.specId}`
+    });
+
+    expect(openReadResponse.statusCode).toBe(200);
+    expect(openReadResponse.json().items).toHaveLength(1);
+    expect(openReadResponse.json().items[0].approvalStatus).toBe("pending_reapproval");
+    expect(openReadResponse.json().items[0].changeSet).toMatchObject({
+      status: "open",
+      highestImpactLevel: "L3"
+    });
+    expect(openReadResponse.json().items[0].changeSet.activeRuleKeys).toContain("guest_count");
+
+    const finalizeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/spec-governance/finalize",
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {
+        specId: createdSpec.specId
+      }
+    });
+
+    expect(finalizeResponse.statusCode).toBe(409);
+    expect(finalizeResponse.json().message).toContain("kritische Änderungen (L3)");
+
+    const stillOpenReadResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-governance?specId=${createdSpec.specId}`
+    });
+
+    expect(stillOpenReadResponse.statusCode).toBe(200);
+    expect(stillOpenReadResponse.json().items[0].changeSet).toMatchObject({
+      status: "open",
+      highestImpactLevel: "L3"
+    });
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("finalizes an open L3 change set when the explicit confirm flag is provided", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(patchResponse.statusCode).toBe(409);
+
+    const finalizeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/spec-governance/finalize",
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {
+        specId: createdSpec.specId,
+        confirmCriticalFinalize: true
+      }
+    });
+
+    expect(finalizeResponse.statusCode).toBe(200);
+    expect(finalizeResponse.json().changeSet).toMatchObject({
+      specId: createdSpec.specId,
+      status: "finalized",
+      highestImpactLevel: "L3",
+      finalizedBy: "Leitung"
+    });
+
+    const finalizedReadResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-governance?specId=${createdSpec.specId}`
+    });
+
+    expect(finalizedReadResponse.statusCode).toBe(200);
+    expect(finalizedReadResponse.json().items[0].approvalStatus).toBe("pending_reapproval");
+    expect(finalizedReadResponse.json().items[0].changeSet).toMatchObject({
+      status: "finalized",
+      highestImpactLevel: "L3"
+    });
+    expect(finalizedReadResponse.json().items[0].changeSet.summary).toBeTruthy();
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("keeps L1/L2 change sets directly finalizable without the explicit confirm flag", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const governanceService = new SpecGovernanceService(
+      new IntakeStoreAcceptedEventSpecAdapter(store),
+      store
+    );
+
+    const trackedResult = await governanceService.classifyAndTrack({
+      specId: createdSpec.specId,
+      actorName: "Kueche",
+      nextDocument: {
+        ...createdSpec,
+        assumptions: [...(createdSpec.assumptions ?? []), "Buffetkarte sprachlich präzisiert."]
+      }
+    });
+
+    expect(trackedResult.openChangeSet).toBeTruthy();
+    expect(trackedResult.openChangeSet?.highestImpactLevel).toBe("L1");
+
+    const governanceReadResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-governance?specId=${createdSpec.specId}`
+    });
+
+    expect(governanceReadResponse.statusCode).toBe(200);
+    expect(governanceReadResponse.json().items[0].changeSet).toMatchObject({
+      status: "open"
+    });
+    expect(governanceReadResponse.json().items[0].changeSet.highestImpactLevel).not.toBe("L3");
+
+    const finalizeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/spec-governance/finalize",
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        specId: createdSpec.specId
+      }
+    });
+
+    expect(finalizeResponse.statusCode).toBe(200);
+    expect(finalizeResponse.json().changeSet.status).toBe("finalized");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("records a change history entry for direct AcceptedEventSpec updates", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const componentId = String(createdSpec.menuPlan[0].componentId);
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        componentUpdates: [
+          {
+            componentId,
+            notes: "Ohne Sellerie anrichten."
+          }
+        ]
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-history?specId=${createdSpec.specId}`
+    });
+
+    expect(historyResponse.statusCode).toBe(200);
+    expect(
+      historyResponse
+        .json()
+        .items.some(
+          (entry: { eventType: string; summary: string }) =>
+            entry.eventType === "spec_updated" &&
+            /Operative Spezifikation ergänzt\./.test(entry.summary)
+        )
+    ).toBe(true);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("records approval history entries for blocked and approved changes", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const blockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    const approvalRequestId = String(blockedResponse.json().approvalRequest.approvalRequestId);
+    const approveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/approval-requests/${approvalRequestId}/approve`,
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {}
+    });
+
+    expect(approveResponse.statusCode).toBe(200);
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-history?specId=${createdSpec.specId}`
+    });
+
+    const eventTypes = historyResponse
+      .json()
+      .items.map((entry: { eventType: string }) => entry.eventType);
+
+    expect(eventTypes).toContain("approval_requested");
+    expect(eventTypes).toContain("approval_approved");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("keeps spec history append-only and ordered for a spec", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const componentId = String(createdSpec.menuPlan[0].componentId);
+
+    await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        componentUpdates: [
+          {
+            componentId,
+            notes: "Ohne Sellerie anrichten."
+          }
+        ]
+      }
+    });
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/intake/specs/${createdSpec.specId}/archive`,
+      headers: {
+        "x-actor-name": "Leitung"
+      },
+      payload: {
+        reason: "Testfall"
+      }
+    });
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-history?specId=${createdSpec.specId}`
+    });
+
+    expect(historyResponse.statusCode).toBe(200);
+    expect(historyResponse.json().items.map((entry: { eventType: string }) => entry.eventType)).toEqual([
+      "spec_manual_created",
+      "spec_updated",
+      "spec_archived"
+    ]);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("creates an AcceptedEventSpec directly from a structured manual form", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
@@ -493,6 +2934,7 @@ describe("catering agents platform", () => {
     expect(body.eventRequest.rawInputs[0].kind).toBe("form");
     expect(body.acceptedEventSpec.readiness.status).toBe("complete");
     expect(body.acceptedEventSpec.attendees.expected).toBe(75);
+    expect(body.acceptedEventSpec.attendees.productionPax).toBeUndefined();
     expect(body.acceptedEventSpec.menuPlan).toHaveLength(3);
     expect(body.acceptedEventSpec.customer.name).toBe("Universitaet Heidelberg");
 
@@ -668,6 +3110,696 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("treats bread and baguette as a bakery procurement case without recipe matching or web search", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("BROT & BAGUETTE", "classic");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Zukauf vom Bäcker");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Bäckerbestellung");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Bäcker-Zukauf");
+    expect(body.productionPlan.kitchenSheets[0].instructions.join(" ")).toContain("kein Rezept");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("keeps filled focaccia components as a targeted clarification instead of forcing recipe or purchase", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("BELEGTE FOCACCIA MIT OFENGEMÜSE", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart und Variante");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Herstellungsart");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Herstellungsart klären");
+    expect(body.productionPlan.kitchenSheets[0].instructions.join(" ")).toContain("Eigenproduktion oder Zukauf");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("flags ambiguous variants with a targeted variant clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("QUICHE AUSWAHL", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Variante / Ausführung");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Ausführung");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Variante klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("treats 'DE LUX' right-side modifiers as a targeted variant clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("KARTOFFELSALAT | DE LUX", "classic");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Variante / Ausführung");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Ausführung");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Variante klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("treats 'FRISCHGEDÖNS' right-side modifiers as a targeted variant clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("NUDELSALAT | FRISCHGEDÖNS", "classic");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Variante / Ausführung");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Ausführung");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Variante klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks 'Bitte wählen Sie' blocks as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("QUICHE | Bitte wählen Sie: Spinat oder Lauch", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks 'Alternative 1 / 2' blocks as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("SUPPE Alternative 1 / 2", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks 'je nach Auswahl' blocks as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("DESSERT je nach Auswahl", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks 'zur Auswahl' blocks as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("DESSERT zur Auswahl: Mousse oder Obstsalat", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks 'wahlweise' blocks as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("SUPPE wahlweise Tomate oder Kürbis", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks example dishes as open selections before recipe matching", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new ThrowingWebProvider()),
+      dataRoot
+    });
+    const spec = singleComponentSpec("CANAPES zum Beispiel Lachs oder Hummus", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("does not treat a normal component with the word Alternative as an open selection", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("VEGANE KÄSE-ALTERNATIVE", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).not.toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).not.toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).not.toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("does not treat normal dish labels containing 'oder' as open selections", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("ODERBRUCHER APFELKUCHEN", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).not.toContain("offene Auswahl / Alternative");
+    expect(body.productionPlan.unresolvedItems[0]).not.toContain("Alternative verbindlich festlegen");
+    expect(body.productionPlan.kitchenSheets[0].title).not.toContain("Auswahl klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("flags composed main dish and sauce lines as a separate component clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("KALBSBULETTEN | SCHMORZWIEBELN", "classic");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Bestandteile");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Bestandteile klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("flags composed dish, side, and topping lines as a separate component clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("MANDEL-CURRY | BASMATIREIS & KORIANDER-TOPPING", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Beilage/Sauce/Topping");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Bestandteile klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("flags salad and vinaigrette lines as a separate component clarification", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Ananas Salat",
+        filename: "Ananas Salat.pdf",
+        sourceRef: "test:ananas-salat",
+        text: [
+          "Ananas Salat",
+          "Zutaten",
+          "1 Ananas",
+          "1 Gurke",
+          "1 rote Zwiebel",
+          "Zubereitung",
+          "1. Alles klein schneiden.",
+          "2. Marinieren."
+        ].join("\n")
+      })
+    );
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Bestandteile klären");
+    expect(body.productionPlan.productionBatches).toHaveLength(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("treats the known vegetable component list as a clarification to concretize the dish first", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("ZUCCHINI | PILZE | ZUCKERSCHOTEN | BABY-PAK-CHOI", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Komponenten ohne klaren Gerichtskern");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("belastbare Produktionsspeise");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Speise konkretisieren");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("does not treat '| vegan' dish modifiers as variant clarification in this iteration", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("SCHOKOLADENKUCHEN | vegan", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).not.toContain("Variante / Ausführung");
+    expect(body.productionPlan.kitchenSheets[0].title).not.toContain("Variante klären");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("flags clear dishes without an internal recipe as an internal recipe gap", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("ROTE LINSENSUPPE", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).not.toContain("mehrere Bestandteile");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Internes Rezept");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Internes Rezept fehlt");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("turns unresolved fallback cases into a production-mode decision", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/vegan-lava-cakes",
+        title: "Vegan Chocolate Lava Cakes",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Vegan Chocolate Lava Cakes",
+          baseYield: {
+            servings: 6,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "dark-chocolate",
+              name: "Dark chocolate",
+              quantity: { amount: 250, unit: "g" },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "flour",
+              name: "Flour",
+              quantity: { amount: 120, unit: "g" },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            }
+          ],
+          steps: [{ index: 1, instruction: "Backen." }],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 6
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 8,
+          stepCount: 4,
+          mappedIngredientRatio: 0.92
+        }
+      }
+    ]);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Schokoladenkuchen vegan.")
+      ),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("Internes Rezept");
+    expect(body.productionPlan.kitchenSheets[0].title).toContain("Internes Rezept fehlt");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("marks unknown allergen information in the production plan instead of treating it as harmless", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/tomatensuppe-unknown-allergens",
+        title: "Tomatensuppe Rezept",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Tomatensuppe Rezept",
+          baseYield: {
+            servings: 10,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "tomatoes",
+              name: "Tomatoes",
+              quantity: { amount: 1, unit: "kg" },
+              group: "produce",
+              purchaseUnit: "kg",
+              normalizedUnit: "kg"
+            }
+          ],
+          steps: [{ index: 1, instruction: "Kochen." }],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 10
+          },
+          allergens: [],
+          allergenStatus: "unknown",
+          dietTags: []
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 12,
+          stepCount: 6,
+          mappedIngredientRatio: 0.95
+        }
+      }
+    ]);
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      dataRoot
+    });
+    const spec = specWithComponent("Tomatensuppe");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(
+      body.productionPlan.unresolvedItems.some((entry: string) =>
+        /Allergeninformation für .*Tomatensuppe.*noch nicht belastbar gepflegt/i.test(entry)
+      )
+    ).toBe(true);
+    expect(
+      body.productionPlan.kitchenSheets.some((sheet: { instructions?: string[] }) =>
+        (sheet.instructions ?? []).some((instruction) =>
+          /Allergeninformation im verwendeten Rezept ist noch nicht belastbar gepflegt/i.test(instruction)
+        )
+      )
+    ).toBe(true);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("requires category and sourcing decisions before recipe resolution starts", async () => {
     const dataRoot = createDataRoot();
     const app = buildProductionApp({
@@ -733,6 +3865,51 @@ describe("catering agents platform", () => {
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("classifies Quiche Spinat Feta as vegetarian before production planning", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche Spinat Feta.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche Spinat Feta");
+    expect(spec.menuPlan[0]?.menuCategory).toBe("vegetarian");
+  });
+
+  it("classifies Quiche Lorraine as classic before production planning", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche Lorraine.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche Lorraine");
+    expect(spec.menuPlan[0]?.menuCategory).toBe("classic");
+  });
+
+  it("classifies Quiche Schinken as classic before production planning", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche Schinken.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche Schinken");
+    expect(spec.menuPlan[0]?.menuCategory).toBe("classic");
+  });
+
+  it("classifies Quiche mit Speck as classic before production planning", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche mit Speck.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche mit Speck");
+    expect(spec.menuPlan[0]?.menuCategory).toBe("classic");
+  });
+
+  it("keeps plain Quiche without a forced category", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche.")
+    );
+
+    expect(spec.menuPlan[0]?.label).toContain("Quiche");
+    expect(spec.menuPlan[0]?.menuCategory).toBeUndefined();
   });
 
   it("falls back to internet recipes and auto-uses high confidence results", async () => {
@@ -952,7 +4129,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.readiness.status).toBe("partial");
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("belastbar validiert");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1196,8 +4373,134 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("belastbar validiert");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("uses a controlled external fallback when only a generic internal vegan cake exists", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Veganer Kuchen",
+        filename: "Veganer Kuchen.pages",
+        sourceRef: "test:veganer-kuchen",
+        text: [
+          "Veganer Kuchen",
+          "Zutaten",
+          "500 g Mehl",
+          "300 g Zucker",
+          "300 ml Pflanzenmilch",
+          "Zubereitung",
+          "1. Alles mischen.",
+          "2. Backen."
+        ].join("\n")
+      })
+    );
+
+    const provider = new FakeWebProvider([
+      {
+        url: "https://noracooks.com/vegan-chocolate-cake",
+        title: "Vegan Chocolate Cake",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Vegan Chocolate Cake",
+          baseYield: {
+            servings: 12,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "flour",
+              name: "Flour",
+              quantity: {
+                amount: 500,
+                unit: "g"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "cocoa",
+              name: "Cocoa powder",
+              quantity: {
+                amount: 120,
+                unit: "g"
+              },
+              group: "dry_goods",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            },
+            {
+              ingredientId: "plant-milk",
+              name: "Plant milk",
+              quantity: {
+                amount: 400,
+                unit: "ml"
+              },
+              group: "dairy",
+              purchaseUnit: "l",
+              normalizedUnit: "ml"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Dry ingredients mischen."
+            },
+            {
+              index: 2,
+              instruction: "Flüssige Zutaten einarbeiten und backen."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 12
+          },
+          allergens: [],
+          dietTags: ["vegan"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 11,
+          stepCount: 5,
+          mappedIngredientRatio: 0.95
+        }
+      }
+    ]);
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Schokoladenkuchen vegan.")
+      ),
+      "vegan"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
+    const storedRecipe = await repository.get(recipeId);
+    expect(storedRecipe?.name).toBe("Vegan Chocolate Cake");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Internet-Ausweichrezept");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1242,7 +4545,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
     expect(body.productionPlan.productionBatches).toHaveLength(0);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1315,6 +4618,112 @@ describe("catering agents platform", () => {
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
     const storedRecipe = await repository.get(recipeId);
     expect(storedRecipe?.name).toContain("Krautsalat mit Apfel");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("keeps a creative tarte component unresolved instead of forcing standard tart matches", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Quiche Lorraine",
+        filename: "Quiche Lorraine.pages",
+        sourceRef: "test:quiche-lorraine",
+        text: [
+          "Quiche Lorraine",
+          "Zutaten",
+          "1 Teig",
+          "300 g Speck",
+          "4 Eier",
+          "200 ml Sahne",
+          "Zubereitung",
+          "1. Fuellung anruehren.",
+          "2. Backen."
+        ].join("\n")
+      })
+    );
+
+    const provider = new FakeWebProvider([
+      {
+        url: "https://example.com/savory-tart",
+        title: "Savory tart recipe",
+        recipe: {
+          schemaVersion: SCHEMA_VERSION,
+          recipeId: "",
+          name: "Savory tart recipe",
+          baseYield: {
+            servings: 8,
+            unit: "servings"
+          },
+          ingredients: [
+            {
+              ingredientId: "pastry",
+              name: "Pastry",
+              quantity: {
+                amount: 1,
+                unit: "pcs"
+              },
+              group: "dry_goods",
+              purchaseUnit: "pcs",
+              normalizedUnit: "pcs"
+            },
+            {
+              ingredientId: "filling",
+              name: "Filling",
+              quantity: {
+                amount: 500,
+                unit: "g"
+              },
+              group: "misc",
+              purchaseUnit: "kg",
+              normalizedUnit: "g"
+            }
+          ],
+          steps: [
+            {
+              index: 1,
+              instruction: "Assemble and bake."
+            }
+          ],
+          scalingRules: {
+            defaultLossFactor: 1.05,
+            batchSize: 8
+          },
+          allergens: [],
+          dietTags: ["vegetarian"]
+        },
+        qualitySignals: {
+          structuredData: true,
+          hasYield: true,
+          ingredientCount: 6,
+          stepCount: 2,
+          mappedIngredientRatio: 0.9
+        }
+      }
+    ]);
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, provider),
+      dataRoot
+    });
+    const spec = singleComponentSpec("ROTE BETE TARTE", "vegetarian");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("Herstellungsart");
+    expect(body.productionPlan.unresolvedItems.join(" ")).toContain("ROTE BETE TARTE");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1565,7 +4974,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("mehrere Bestandteile");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1644,7 +5053,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1723,7 +5132,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBeUndefined();
-    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("veganer");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("interne Rezeptgrundlage");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -2446,6 +5855,10 @@ describe("catering agents platform", () => {
       method: "GET",
       url: `/v1/exports/purchase-lists/${productionPayload.purchaseList.purchaseListId}/csv`
     });
+    const purchasePrintResponse = await exportApp.inject({
+      method: "GET",
+      url: `/v1/exports/purchase-lists/${productionPayload.purchaseList.purchaseListId}/html`
+    });
 
     expect(offerExportResponse.statusCode).toBe(200);
     expect(offerExportResponse.headers["content-type"]).toContain("text/html");
@@ -2460,8 +5873,13 @@ describe("catering agents platform", () => {
     expect(purchaseExportResponse.statusCode).toBe(200);
     expect(purchaseExportResponse.headers["content-type"]).toContain("text/csv");
     expect(purchaseExportResponse.body).toContain(
-      '"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"'
+      '"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","purchaseUnitSize","purchaseUnitBaseUnit","purchasingRuleSourceType","supplierHint"'
     );
+
+    expect(purchasePrintResponse.statusCode).toBe(200);
+    expect(purchasePrintResponse.headers["content-type"]).toContain("text/html");
+    expect(purchasePrintResponse.body).toContain("Einkaufsliste");
+    expect(purchasePrintResponse.body).toContain(String(productionPayload.purchaseList.purchaseListId));
 
     await exportApp.close();
     rmSync(dataRoot, { recursive: true, force: true });

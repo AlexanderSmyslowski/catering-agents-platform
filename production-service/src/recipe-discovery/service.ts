@@ -42,6 +42,8 @@ const trustedRecipeHosts = [
 ];
 
 const culinaryTokenExpansions: Record<string, string[]> = {
+  quiche: ["tarte"],
+  tarte: ["quiche"],
   schokoladenkuchen: ["chocolate", "cake"],
   kuchen: ["cake"],
   schokolade: ["chocolate"],
@@ -67,9 +69,11 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   wildkrauter: ["wild", "herbs"],
   petersilie: ["parsley"],
   petersilien: ["parsley"],
+  petersilienvinaigrette: ["parsley", "vinaigrette"],
   vinaigrette: ["vinaigrette"],
   brot: ["bread"],
   baguette: ["baguette"],
+  nusstopping: ["nuts", "topping", "nuss"],
   kalbsbuletten: ["veal", "meatballs"],
   buletten: ["meatballs"],
   curry: ["curry"],
@@ -570,6 +574,75 @@ function candidateFormMismatch(candidateText: string, component: MenuComponent):
   return false;
 }
 
+function hasMinimumOperationalRecipeStructure(recipe: Recipe): boolean {
+  return (
+    Array.isArray(recipe.ingredients) &&
+    recipe.ingredients.length > 0 &&
+    Array.isArray(recipe.steps) &&
+    recipe.steps.some((step) => step.instruction.trim().length > 0) &&
+    Number(recipe.baseYield?.servings ?? 0) > 0
+  );
+}
+
+function requiresStrictInternalMatch(component: MenuComponent): boolean {
+  const normalized = normalizeComparableText(component.label);
+  return /quiche|tarte|schokoladenkuchen|schokokuchen|wildkraut|kraut|karott|salat|vinaigrette|brot|baguette/.test(
+    normalized
+  );
+}
+
+function genericInternalRecipeMismatch(recipe: Recipe, component: MenuComponent): boolean {
+  const recipeText = normalizeComparableText(recipeSearchText(recipe));
+  const query = normalizeComparableText(component.label);
+  const focusTokens = specificPrimaryFocusTokens(component);
+  const recipeTokens = searchableSpecificTokens(recipeSearchText(recipe));
+
+  if (
+    requiresStrictInternalMatch(component) &&
+    focusTokens.length > 0 &&
+    !focusTokens.some((token) =>
+      recipeTokens.some((candidateToken) => tokensSpecificallyMatch(token, candidateToken))
+    )
+  ) {
+    return true;
+  }
+
+  if (/(wildkrauter|wildkr[aä]uter|petersilien|vinaigrette)/.test(query)) {
+    return !/(wildkrauter|wildkr[aä]uter|parsley|petersilien|vinaigrette|krauter|herb)/.test(recipeText);
+  }
+
+  if (/(kraut|karott)/.test(query)) {
+    return !/(kraut|cabbage|karott|carrot|coleslaw)/.test(recipeText);
+  }
+
+  if (/(schokoladenkuchen|schokokuchen)/.test(query)) {
+    return !/(schokolad|chocolate|schoko)/.test(recipeText);
+  }
+
+  if (/(quiche|tarte)/.test(query)) {
+    return !/(quiche|tarte)/.test(recipeText);
+  }
+
+  if (/(brot|baguette)/.test(query)) {
+    return !/(brot|bread|baguette)/.test(recipeText);
+  }
+
+  return false;
+}
+
+function isControlledExternalFallbackCandidate(
+  component: MenuComponent,
+  qualityScore: number,
+  extractionCompleteness: number,
+  specificFitScore: number
+): boolean {
+  if (!requiresStrictInternalMatch(component)) {
+    return true;
+  }
+
+  return qualityScore >= 0.45 && extractionCompleteness >= 0.45 && specificFitScore > 0;
+}
+
 function hostnameFor(url: string): string {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -783,6 +856,228 @@ export interface RecipeResolution {
   unresolvedItems: string[];
 }
 
+type UnresolvedRecipeClarification =
+  | "composed_component_clarification"
+  | "component_list_clarification"
+  | "variant_unclear"
+  | "internal_recipe_missing"
+  | "production_mode_decision"
+  | "generic";
+
+function isBakeryProcurementComponent(component: MenuComponent): boolean {
+  const normalized = normalizeComparableText(component.label);
+  return /(brot|baguette)/.test(normalized) && !/focaccia/.test(normalized);
+}
+
+function isHybridBakeryClarificationComponent(component: MenuComponent): boolean {
+  const normalized = normalizeComparableText(component.label);
+  return /focaccia/.test(normalized);
+}
+
+function hasOpenSelectionMarkers(component: MenuComponent): boolean {
+  const raw = component.label.toLowerCase();
+  const normalized = normalizeComparableText(component.label);
+  return (
+    raw.includes("bitte wählen sie") ||
+    raw.includes("bitte waehlen sie") ||
+    raw.includes("je nach auswahl") ||
+    normalized.includes("zur auswahl") ||
+    normalized.includes("wahlweise") ||
+    normalized.includes("zum beispiel") ||
+    normalized.includes("beispielsweise") ||
+    /\bz\s*\.\s*b\s*\./.test(raw) ||
+    /\b(wahlweise|zur auswahl)\b.*\boder\b|\boder\b.*\b(wahlweise|zur auswahl)\b/.test(normalized) ||
+    normalized.includes("bitte wahlen sie") ||
+    normalized.includes("je nach auswahl") ||
+    /\balternative(n)?\s*\d+(?:\s*\/\s*\d+)?\b/.test(normalized)
+  );
+}
+
+function isCompositeMenuLineClarificationComponent(component: MenuComponent): boolean {
+  const segments = component.label
+    .split("|")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length < 2) {
+    return false;
+  }
+
+  const [, ...restSegments] = segments;
+  const accompanimentText = normalizeComparableText(restSegments.join(" "));
+
+  return /\b(schmorzwiebeln?|reis|rice|topping|vinaigrette|dressing)\b/.test(accompanimentText);
+}
+
+function isKnownComponentListClarificationComponent(component: MenuComponent): boolean {
+  const segments = component.label
+    .split("|")
+    .map((segment) =>
+      normalizeComparableText(segment)
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+
+  return (
+    segments.length === 4 &&
+    segments[0] === "zucchini" &&
+    segments[1] === "pilze" &&
+    segments[2] === "zuckerschoten" &&
+    segments[3] === "baby pak choi"
+  );
+}
+
+function hasExplicitModifierVariantMarker(component: MenuComponent): boolean {
+  const segments = component.label
+    .split("|")
+    .map((segment) => normalizeComparableText(segment).trim())
+    .filter(Boolean);
+
+  if (segments.length < 2) {
+    return false;
+  }
+
+  const [, ...restSegments] = segments;
+  const modifierText = restSegments.join(" ");
+
+  return /^(de\s*luxe?|de\s*lux|frischgedons|frischgedoens)$/.test(modifierText);
+}
+
+function needsVariantClarification(component: MenuComponent): boolean {
+  if (hasExplicitModifierVariantMarker(component)) {
+    return true;
+  }
+
+  const normalized = normalizeComparableText(component.label);
+  return /\b(auswahl|variation|variationen|sorten|sortiment|mix|assortment|assorted)\b/.test(
+    normalized
+  );
+}
+
+function hasClearDishArchetype(component: MenuComponent): boolean {
+  return Boolean(
+    dishArchetypeForComponent(component, "de") || dishArchetypeForComponent(component, "en")
+  );
+}
+
+function unresolvedRecipeClarificationKind(
+  component: MenuComponent,
+  input: {
+    repositoryCandidatesFound: boolean;
+    externalCandidatesSeen: boolean;
+    webSearchFailed: boolean;
+  }
+): UnresolvedRecipeClarification {
+  const hasResolvedProductionMode = component.productionDecision?.mode === "scratch";
+  const hasReliableDishCore = hasClearDishArchetype(component) || input.repositoryCandidatesFound;
+
+  if (hasOpenSelectionMarkers(component)) {
+    return "variant_unclear";
+  }
+
+  if (isCompositeMenuLineClarificationComponent(component)) {
+    return "composed_component_clarification";
+  }
+
+  if (isKnownComponentListClarificationComponent(component)) {
+    return "component_list_clarification";
+  }
+
+  if (needsVariantClarification(component)) {
+    return "variant_unclear";
+  }
+
+  if (hasResolvedProductionMode && hasReliableDishCore) {
+    return "internal_recipe_missing";
+  }
+
+  if (input.externalCandidatesSeen || input.webSearchFailed) {
+    return "production_mode_decision";
+  }
+
+  if (hasReliableDishCore) {
+    return "internal_recipe_missing";
+  }
+
+  return "generic";
+}
+
+function recipeCategoryHint(component: MenuComponent): string {
+  return component.menuCategory === "vegan"
+    ? "veganer "
+    : component.menuCategory === "vegetarian"
+      ? "vegetarischer "
+      : "";
+}
+
+function unresolvedRecipeTexts(
+  component: MenuComponent,
+  input: {
+    repositoryCandidatesFound: boolean;
+    externalCandidatesSeen: boolean;
+    webSearchFailed: boolean;
+  }
+): { selectionReason: string; unresolvedItem: string } {
+  const categoryHint = recipeCategoryHint(component);
+  const kind = unresolvedRecipeClarificationKind(component, input);
+
+  if (kind === "variant_unclear") {
+    if (hasOpenSelectionMarkers(component)) {
+      return {
+        selectionReason: `Für ${component.label} enthält das Angebot noch eine offene Auswahl / Alternative. Bitte zuerst die gewünschte Speise verbindlich festlegen, bevor Rezept, Produktion und Einkauf belastbar geplant werden.`,
+        unresolvedItem: `Auswahl für ${component.label} klären: gewünschte Alternative verbindlich festlegen.`
+      };
+    }
+
+    return {
+      selectionReason: `Variante / Ausführung für ${component.label} ist noch unklar. Bitte die gewünschte Ausführung festlegen, damit Produktion und Einkauf belastbar weitergeplant werden können.`,
+      unresolvedItem: `Variante / Ausführung für ${component.label} klären: gewünschte Ausführung festlegen.`
+    };
+  }
+
+  if (kind === "composed_component_clarification") {
+    return {
+      selectionReason: `Für ${component.label} enthält die Angebotszeile mehrere Bestandteile. Bitte Hauptkomponente und Beilage/Sauce/Topping zuerst separat festlegen, bevor Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.`,
+      unresolvedItem: `Bestandteile für ${component.label} klären: Hauptkomponente und Beilage/Sauce/Topping separat festlegen.`
+    };
+  }
+
+  if (kind === "component_list_clarification") {
+    return {
+      selectionReason: `Für ${component.label} enthält die Angebotszeile derzeit nur Komponenten ohne klaren Gerichtskern. Bitte zuerst die gewünschte Speise konkretisieren, bevor Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.`,
+      unresolvedItem: `Speise für ${component.label} konkretisieren: Gericht oder belastbare Produktionsspeise festlegen.`
+    };
+  }
+
+  if (kind === "internal_recipe_missing") {
+    return {
+      selectionReason: `Für ${component.label} ist die Speise grundsätzlich klar, aber es fehlt noch eine belastbare interne Rezeptgrundlage. Bitte ein internes Rezept zuweisen oder neu anlegen.`,
+      unresolvedItem: `Internes Rezept für ${component.label} zuweisen oder neu anlegen.`
+    };
+  }
+
+  if (kind === "production_mode_decision") {
+    return {
+      selectionReason: `Für ${component.label} muss als Nächstes die Herstellungsart entschieden werden: Eigenproduktion oder Zukauf. Danach kann Rezeptwahl oder Beschaffung belastbar festgelegt werden.`,
+      unresolvedItem: `Herstellungsart für ${component.label} entscheiden: Eigenproduktion oder Zukauf.`
+    };
+  }
+
+  return {
+    selectionReason: input.webSearchFailed
+      ? "Es konnte kein interner Rezeptkandidat gefunden werden und die Internetrecherche ist fehlgeschlagen."
+      : component.menuCategory === "vegan"
+        ? "Es konnte kein interner oder externer veganer Rezeptkandidat belastbar validiert werden."
+        : component.menuCategory === "vegetarian"
+          ? "Es konnte kein interner oder externer vegetarischer Rezeptkandidat belastbar validiert werden."
+          : "Es konnte kein interner oder externer Rezeptkandidat belastbar validiert werden.",
+    unresolvedItem: input.webSearchFailed
+      ? `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden, Internetrecherche fehlgeschlagen.`
+      : `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden.`
+  };
+}
+
 function isStrongRecipeCandidate(recipe: Recipe): boolean {
   return (
     recipe.source.approvalState === "auto_usable" ||
@@ -840,6 +1135,57 @@ export class RecipeDiscoveryService {
         searchTrace.push(message);
       }
     };
+
+    if (isBakeryProcurementComponent(component)) {
+      pushTrace("Komponente als Bäcker-Zukauf erkannt.");
+      return {
+        selection: {
+          componentId: component.componentId,
+          selectionReason:
+            "Brot/Baguette wird als Zukauf vom Bäcker behandelt. Kein Rezept-Matching und keine Internetrecherche nötig.",
+          searchTrace,
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: [
+          `Bäckerbestellung für ${component.label} klären: Sorte und Menge als Zukauf festlegen.`
+        ]
+      };
+    }
+
+    if (isHybridBakeryClarificationComponent(component)) {
+      pushTrace("Komponente als hybride Backware erkannt.");
+      return {
+        selection: {
+          componentId: component.componentId,
+          selectionReason:
+            "Für diese Focaccia-Komponente muss Herstellungsart und Variante geklärt werden: Eigenproduktion oder Zukauf; falls Eigenproduktion, internes Rezept zuweisen oder neues Rezept anlegen.",
+          searchTrace,
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: [
+          `Focaccia für ${component.label} klären: Variante und Herstellungsart festlegen.`
+        ]
+      };
+    }
+
+    if (hasOpenSelectionMarkers(component)) {
+      pushTrace("Offener Auswahl-/Alternativblock erkannt.");
+      const unresolved = unresolvedRecipeTexts(component, {
+        repositoryCandidatesFound: false,
+        externalCandidatesSeen: false,
+        webSearchFailed: false
+      });
+      return {
+        selection: {
+          componentId: component.componentId,
+          selectionReason: unresolved.selectionReason,
+          searchTrace,
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: [unresolved.unresolvedItem]
+      };
+    }
+
     const repositoryCandidates = await this.repository.findCandidates(component);
     const internalCandidates = repositoryCandidates
       .filter((recipe) => recipeSupportsMenuCategory(recipe, component))
@@ -862,15 +1208,28 @@ export class RecipeDiscoveryService {
             : 0;
         })()
       }))
-      .filter(
-        (candidate) =>
-          (candidate.fitScore >= 0.75 ||
-            (candidate.repositoryRank === 0 &&
-              candidate.leadNameScore === 1 &&
-              candidate.fitScore >= 0.55)) &&
-          (candidate.primaryScore >= 0.5 || candidate.leadNameScore === 1) &&
-          (candidate.specificPrimaryScore >= 0.34 || candidate.leadNameScore === 1)
-      )
+      .filter((candidate) => {
+        const minimalStructure = hasMinimumOperationalRecipeStructure(candidate.recipe);
+        const strictMatchRequired = requiresStrictInternalMatch(component);
+        const genericMismatch = genericInternalRecipeMismatch(candidate.recipe, component);
+        const fitAccepted =
+          candidate.fitScore >= 0.75 ||
+          (candidate.repositoryRank === 0 && candidate.leadNameScore === 1 && candidate.fitScore >= 0.55);
+        const primaryAccepted = candidate.primaryScore >= 0.5 || candidate.leadNameScore === 1;
+        const specificAccepted = candidate.specificPrimaryScore >= 0.34 || candidate.leadNameScore === 1;
+        const strictSpecificAccepted =
+          candidate.leadNameScore === 1 ||
+          (candidate.fitScore >= 0.7 && candidate.specificPrimaryScore >= 0.55);
+
+        return (
+          minimalStructure &&
+          fitAccepted &&
+          primaryAccepted &&
+          specificAccepted &&
+          (!strictMatchRequired || strictSpecificAccepted) &&
+          !genericMismatch
+        );
+      })
       .sort((left, right) => {
         const tierDifference =
           tierWeight[right.recipe.source.tier] - tierWeight[left.recipe.source.tier];
@@ -920,12 +1279,17 @@ export class RecipeDiscoveryService {
       };
     }
 
+    if (repositoryCandidates.length > 0) {
+      pushTrace("Interne Kandidaten verworfen: keine belastbare interne Rezeptgrundlage.");
+    }
+
     const locales: ("de" | "en")[] = ["de", "en"];
     const candidates: {
       recipe: Recipe;
       query: RecipeSearchQuery;
     }[] = [];
     let webSearchFailed = false;
+    let externalCandidatesSeen = false;
 
     for (const locale of locales) {
       for (const queryText of buildSearchQueries(component, eventSpec, locale)) {
@@ -940,6 +1304,9 @@ export class RecipeDiscoveryService {
         try {
           pushTrace(`Websuche: ${query.query}`);
           searchResults = await this.webProvider.searchRecipes(query);
+          if (searchResults.length > 0) {
+            externalCandidatesSeen = true;
+          }
         } catch {
           webSearchFailed = true;
           pushTrace(`Websuche fehlgeschlagen: ${query.query}`);
@@ -993,8 +1360,20 @@ export class RecipeDiscoveryService {
 
           if (materialized) {
             try {
+              const validated = validateRecipe(materialized);
+              if (
+                !isControlledExternalFallbackCandidate(
+                  component,
+                  qualityScore,
+                  extractionCompleteness,
+                  specificFitScore
+                )
+              ) {
+                pushTrace(`Verworfen: ${candidate.title} (kein belastbarer Ausweichtreffer).`);
+                continue;
+              }
               candidates.push({
-                recipe: validateRecipe(materialized),
+                recipe: validated,
                 query
               });
             } catch {
@@ -1020,29 +1399,19 @@ export class RecipeDiscoveryService {
     })[0];
 
     if (!winner) {
-      const categoryHint =
-        component.menuCategory === "vegan"
-          ? "veganer "
-          : component.menuCategory === "vegetarian"
-            ? "vegetarischer "
-            : "";
-      const unresolvedReason = webSearchFailed
-        ? `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden, Internetrecherche fehlgeschlagen.`
-        : `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden.`;
+      const unresolved = unresolvedRecipeTexts(component, {
+        repositoryCandidatesFound: repositoryCandidates.length > 0,
+        externalCandidatesSeen,
+        webSearchFailed
+      });
       return {
         selection: {
           componentId: component.componentId,
-          selectionReason: webSearchFailed
-            ? "Es konnte kein interner Rezeptkandidat gefunden werden und die Internetrecherche ist fehlgeschlagen."
-            : component.menuCategory === "vegan"
-              ? "Es konnte kein interner oder externer veganer Rezeptkandidat belastbar validiert werden."
-              : component.menuCategory === "vegetarian"
-                ? "Es konnte kein interner oder externer vegetarischer Rezeptkandidat belastbar validiert werden."
-                : "Es konnte kein interner oder externer Rezeptkandidat belastbar validiert werden.",
+          selectionReason: unresolved.selectionReason,
           searchTrace,
           autoUsedInternetRecipe: false
         },
-        unresolvedItems: [unresolvedReason]
+        unresolvedItems: [unresolved.unresolvedItem]
       };
     }
 

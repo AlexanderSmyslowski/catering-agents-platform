@@ -52,6 +52,7 @@ Fuer PostgreSQL statt Dateispeicher:
 
 ```bash
 export CATERING_DATABASE_URL=postgresql://user:password@localhost:5432/catering_agents
+export CATERING_RECIPE_WEB_PROVIDER=duckduckgo
 ```
 
 Die interne Web-App laeuft im Dev-Modus ueber Vite auf Port `3200` und proxied standardmaessig auf:
@@ -67,6 +68,9 @@ Optional konfigurierbar ueber:
 - `VITE_OFFERS_PROXY_TARGET`
 - `VITE_PRODUCTION_PROXY_TARGET`
 - `VITE_EXPORTS_PROXY_TARGET`
+- `CATERING_RECIPE_WEB_PROVIDER`
+  - `duckduckgo` (Standard)
+  - `disabled` (keine Web-Rezeptsuche)
 
 Die Oberflaeche hat jetzt drei Einstiege:
 
@@ -74,12 +78,16 @@ Die Oberflaeche hat jetzt drei Einstiege:
 - `http://localhost:3200/angebot` fuer den Angebotsagenten
 - `http://localhost:3200/produktion` fuer den Produktionsagenten
 
-Die Web-App bietet Exportlinks fuer:
+Die Web-App bietet aktuell operative Exportlinks fuer:
 
-- Angebots-HTML
-- Produktionsblatt-HTML
-- Einkaufslisten-CSV
+- Angebot als druckbare HTML-Ansicht
+- Produktionsplan als druckbare HTML-Ansicht
+- Einkaufsliste als druckbare HTML-Ansicht
+- Einkaufsliste als CSV
 - einen sichtbaren Audit-Trail der letzten Operator-Aktionen
+
+Ein echter serverseitiger PDF-Renderer ist im MVP derzeit noch nicht vorhanden.
+Die PDF-Nutzung laeuft aktuell bewusst ueber die druckbaren HTML-Ansichten im Browser.
 
 Die Rezeptbibliothek kann jetzt von beiden Agenten aus erweitert werden:
 

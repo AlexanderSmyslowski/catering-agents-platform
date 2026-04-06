@@ -1,6 +1,10 @@
 export interface DashboardState {
   intakeRequests: Array<Record<string, unknown>>;
   acceptedSpecs: Array<Record<string, unknown>>;
+  approvalRequests: Array<Record<string, unknown>>;
+  specGovernanceEntries: Array<Record<string, unknown>>;
+  specHistoryEntries: Array<Record<string, unknown>>;
+  extractedContexts: Array<Record<string, unknown>>;
   offerDrafts: Array<Record<string, unknown>>;
   productionPlans: Array<Record<string, unknown>>;
   purchaseLists: Array<Record<string, unknown>>;
@@ -11,6 +15,7 @@ export interface DashboardState {
 export type RecipeUploadTarget = "offer" | "production";
 export type RecipeReviewDecision = "approve" | "verify" | "reject";
 export type IntakeDocumentChannel = "pdf_upload" | "email" | "text";
+export type OperatorRole = "KitchenEditor" | "ProcurementEditor" | "Approver";
 
 export interface ServiceHealth {
   service: string;
@@ -27,6 +32,7 @@ export interface ServiceHealthState {
 }
 
 const OPERATOR_NAME_STORAGE_KEY = "catering.operatorName";
+const OPERATOR_ROLE_STORAGE_KEY = "catering.operatorRole";
 
 function getDefaultOperatorName(): string {
   if (typeof window === "undefined") {
@@ -37,6 +43,23 @@ function getDefaultOperatorName(): string {
   return stored || "Mitarbeiter";
 }
 
+function getDefaultOperatorRole(): OperatorRole {
+  if (typeof window === "undefined") {
+    return "KitchenEditor";
+  }
+
+  const stored = window.localStorage.getItem(OPERATOR_ROLE_STORAGE_KEY);
+  if (
+    stored === "KitchenEditor" ||
+    stored === "ProcurementEditor" ||
+    stored === "Approver"
+  ) {
+    return stored;
+  }
+
+  return "KitchenEditor";
+}
+
 function buildHeaders(initHeaders?: HeadersInit, includeJsonContentType = true): Headers {
   const headers = new Headers(initHeaders);
   if (includeJsonContentType && !headers.has("content-type")) {
@@ -44,6 +67,9 @@ function buildHeaders(initHeaders?: HeadersInit, includeJsonContentType = true):
   }
   if (!headers.has("x-actor-name")) {
     headers.set("x-actor-name", getDefaultOperatorName());
+  }
+  if (!headers.has("x-actor-role")) {
+    headers.set("x-actor-role", getDefaultOperatorRole());
   }
   return headers;
 }
@@ -62,10 +88,26 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
 }
 
 export async function loadDashboardState(): Promise<DashboardState> {
-  const [intakeRequests, acceptedSpecs, offerDrafts, productionPlans, purchaseLists, recipes, auditEvents] =
+  const [
+    intakeRequests,
+    acceptedSpecs,
+    approvalRequests,
+    specGovernanceEntries,
+    specHistoryEntries,
+    extractedContexts,
+    offerDrafts,
+    productionPlans,
+    purchaseLists,
+    recipes,
+    auditEvents
+  ] =
     await Promise.all([
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/requests"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/specs"),
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/approval-requests"),
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/spec-governance"),
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/spec-history"),
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/extracted-contexts"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/offers/v1/offers/drafts"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/plans"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/purchase-lists"),
@@ -76,6 +118,10 @@ export async function loadDashboardState(): Promise<DashboardState> {
   return {
     intakeRequests: intakeRequests.items,
     acceptedSpecs: acceptedSpecs.items,
+    approvalRequests: approvalRequests.items,
+    specGovernanceEntries: specGovernanceEntries.items,
+    specHistoryEntries: specHistoryEntries.items,
+    extractedContexts: extractedContexts.items,
     offerDrafts: offerDrafts.items,
     productionPlans: productionPlans.items,
     purchaseLists: purchaseLists.items,
@@ -146,13 +192,31 @@ export async function updateAcceptedSpec(
     }>;
   }
 ) {
-  return fetchJson<{ acceptedEventSpec: Record<string, unknown> }>(
-    `/api/intake/v1/intake/specs/${specId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(input)
-    }
-  );
+  const response = await fetch(`/api/intake/v1/intake/specs/${specId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+    headers: buildHeaders()
+  });
+
+  const payload = (await response.json()) as {
+    acceptedEventSpec?: Record<string, unknown>;
+    approvalRequest?: Record<string, unknown>;
+    requiresApproval?: boolean;
+    message?: string;
+  };
+
+  if (!response.ok && response.status !== 409) {
+    throw new Error(payload.message || `${response.status} ${response.statusText}`);
+  }
+
+  return payload;
+}
+
+export async function archiveAcceptedSpec(specId: string, reason?: string) {
+  return fetchJson<{ specId: string; archivedAt: string }>(`/api/intake/v1/intake/specs/${specId}/archive`, {
+    method: "POST",
+    body: JSON.stringify(reason?.trim() ? { reason } : {})
+  });
 }
 
 export async function createAcceptedSpecFromManualForm(input: {
@@ -233,6 +297,40 @@ export function persistOperatorName(name: string): string {
   return trimmed;
 }
 
+export function readOperatorRole(): OperatorRole {
+  return getDefaultOperatorRole();
+}
+
+export function persistOperatorRole(role: OperatorRole): OperatorRole {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(OPERATOR_ROLE_STORAGE_KEY, role);
+  }
+  return role;
+}
+
+export async function approveApprovalRequest(approvalRequestId: string, note?: string) {
+  return fetchJson<{
+    approvalRequest: Record<string, unknown>;
+    acceptedEventSpec: Record<string, unknown>;
+  }>(`/api/intake/v1/intake/approval-requests/${approvalRequestId}/approve`, {
+    method: "POST",
+    body: JSON.stringify(note?.trim() ? { note } : {})
+  });
+}
+
+export async function finalizeSpecGovernanceChangeSet(input: {
+  specId?: string;
+  changeSetId?: string;
+  confirmCriticalFinalize?: boolean;
+}) {
+  return fetchJson<{
+    changeSet: Record<string, unknown>;
+  }>("/api/intake/v1/intake/spec-governance/finalize", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function reviewRecipe(
   target: RecipeUploadTarget,
   recipeId: string,
@@ -272,14 +370,18 @@ export async function seedDemoData() {
   };
 }
 
-export function offerExportUrl(draftId: string): string {
+export function offerPrintUrl(draftId: string): string {
   return `/api/exports/v1/exports/offers/${draftId}/html`;
 }
 
-export function productionExportUrl(planId: string): string {
+export function productionPrintUrl(planId: string): string {
   return `/api/exports/v1/exports/production-plans/${planId}/html`;
 }
 
-export function purchaseListExportUrl(purchaseListId: string): string {
+export function purchaseListCsvUrl(purchaseListId: string): string {
   return `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
+}
+
+export function purchaseListPrintUrl(purchaseListId: string): string {
+  return `/api/exports/v1/exports/purchase-lists/${purchaseListId}/html`;
 }

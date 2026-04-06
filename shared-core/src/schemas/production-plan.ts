@@ -6,6 +6,7 @@ export const productionPlanSchema = {
   required: [
     "schemaVersion",
     "planId",
+    "ownershipContext",
     "eventSpecId",
     "readiness",
     "productionBatches",
@@ -17,6 +18,9 @@ export const productionPlanSchema = {
   properties: {
     schemaVersion: { type: "string" },
     planId: { type: "string" },
+    ownershipContext: {
+      $ref: "https://schemas.catering.local/common.json#/$defs/ownershipContext"
+    },
     eventSpecId: { type: "string" },
     readiness: {
       $ref: "https://schemas.catering.local/common.json#/$defs/readiness"
@@ -65,7 +69,7 @@ export const productionPlanSchema = {
           ingredients: {
             type: "array",
             items: {
-              $ref: "https://schemas.catering.local/common.json#/$defs/ingredientLine"
+              $ref: "https://schemas.catering.local/common.json#/$defs/productionIngredientLine"
             }
           },
           steps: {

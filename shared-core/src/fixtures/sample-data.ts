@@ -56,6 +56,7 @@ export const internalRecipes: Recipe[] = [
       batchSize: 20
     },
     allergens: ["milk"],
+    allergenStatus: "known",
     dietTags: ["vegetarian", "gluten_free"]
   },
   {
@@ -112,7 +113,7 @@ export const internalRecipes: Recipe[] = [
       batchSize: 25
     },
     allergens: ["milk", "gluten"],
+    allergenStatus: "known",
     dietTags: ["vegetarian"]
   }
 ];
-

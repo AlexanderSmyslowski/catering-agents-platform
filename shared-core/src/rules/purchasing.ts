@@ -1,38 +1,71 @@
 import { ingredientGroupHints } from "../taxonomies/defaults.js";
-import type { ProductionBatch, PurchaseItem, PurchaseList } from "../types.js";
+import type {
+  ProductionBatch,
+  PurchaseItem,
+  PurchaseList,
+  PurchasingUnitProfile
+} from "../types.js";
 import { SCHEMA_VERSION } from "../types.js";
+import type { PurchasingUnitProfileLibrary } from "../purchasing-units.js";
+import { normalizePurchaseQuantity } from "./unit-transform.js";
 
-function purchaseUnitFor(unit: string): string {
-  if (unit === "g") {
-    return "kg";
-  }
-
-  return unit;
+function roundPurchaseNumber(value: number): number {
+  return Number(value.toFixed(2));
 }
 
-function purchaseQtyFor(amount: number, unit: string): number {
-  if (unit === "g") {
-    return Number((amount / 1000).toFixed(2));
+function applyPurchasingUnit(
+  rawQty: number,
+  rawUnit: string,
+  profile?: Pick<PurchasingUnitProfile, "id" | "unitLabel" | "unitSize" | "baseUnit" | "sourceType">
+): Pick<PurchaseItem, "purchaseQty" | "purchaseUnit" | "appliedPurchasingUnit"> {
+  if (!profile || profile.baseUnit !== rawUnit) {
+    return {
+      purchaseQty: roundPurchaseNumber(rawQty),
+      purchaseUnit: rawUnit,
+      appliedPurchasingUnit: undefined
+    };
   }
 
-  return Number(amount.toFixed(2));
+  return {
+    purchaseQty: Math.max(1, Math.ceil(rawQty / profile.unitSize)),
+    purchaseUnit: profile.unitLabel,
+    appliedPurchasingUnit: {
+      unitLabel: profile.unitLabel,
+      unitSize: profile.unitSize,
+      baseUnit: profile.baseUnit,
+      sourceTypeApplied: profile.sourceType,
+      sourceRefId: profile.id,
+      missingRule: false
+    }
+  };
 }
 
 function aggregatePurchaseItem(
   aggregate: Map<string, PurchaseItem>,
   item: PurchaseItem
 ) {
-  const key = `${item.ingredientId}:${item.normalizedUnit}`;
+  const transformed = normalizePurchaseQuantity(item.normalizedQty, item.normalizedUnit);
+  const key = `${item.ingredientId}:${transformed.normalizedUnit}`;
   const existing = aggregate.get(key);
-  const normalizedQty = item.normalizedQty + (existing?.normalizedQty ?? 0);
+  const normalizedQty = transformed.normalizedQty + (existing?.normalizedQty ?? 0);
+  const appliedPurchasingUnit = item.appliedPurchasingUnit ?? existing?.appliedPurchasingUnit;
+  const purchaseQty =
+    appliedPurchasingUnit && appliedPurchasingUnit.baseUnit === transformed.normalizedUnit
+      ? Math.max(1, Math.ceil(normalizedQty / appliedPurchasingUnit.unitSize))
+      : roundPurchaseNumber(normalizedQty);
+  const purchaseUnit =
+    appliedPurchasingUnit && appliedPurchasingUnit.baseUnit === transformed.normalizedUnit
+      ? appliedPurchasingUnit.unitLabel
+      : transformed.normalizedUnit;
 
   aggregate.set(key, {
     ingredientId: item.ingredientId,
     displayName: item.displayName,
-    normalizedQty: Number(normalizedQty.toFixed(2)),
-    normalizedUnit: item.normalizedUnit,
-    purchaseQty: purchaseQtyFor(normalizedQty, item.normalizedUnit),
-    purchaseUnit: purchaseUnitFor(item.normalizedUnit),
+    normalizedQty: roundPurchaseNumber(normalizedQty),
+    normalizedUnit: transformed.normalizedUnit,
+    purchaseQty,
+    purchaseUnit,
+    appliedPurchasingUnit,
     group: item.group,
     supplierHint: item.supplierHint ?? existing?.supplierHint,
     sourceRecipes: [...new Set([...(existing?.sourceRecipes ?? []), ...item.sourceRecipes])],
@@ -65,22 +98,41 @@ export function procurementGroupFor(value: string): string {
   return "misc";
 }
 
-export function aggregatePurchaseList(
+export async function aggregatePurchaseList(
   eventSpecId: string,
   batches: ProductionBatch[],
-  additionalItems: PurchaseItem[] = []
-): PurchaseList {
+  additionalItems: PurchaseItem[] = [],
+  options: {
+    purchasingUnits?: PurchasingUnitProfileLibrary;
+  } = {}
+): Promise<PurchaseList> {
   const aggregate = new Map<string, PurchaseItem>();
 
   for (const batch of batches) {
     for (const ingredient of batch.ingredients) {
+      const transformed = normalizePurchaseQuantity(
+        ingredient.quantity.amount,
+        ingredient.quantity.unit
+      );
+      const profile = options.purchasingUnits
+        ? await options.purchasingUnits.getActiveIngredientPurchasingUnitProfile(
+            ingredient.ingredientId,
+            transformed.normalizedUnit
+          )
+        : undefined;
+      const purchaseRule = applyPurchasingUnit(
+        transformed.normalizedQty,
+        transformed.normalizedUnit,
+        profile
+      );
       aggregatePurchaseItem(aggregate, {
         ingredientId: ingredient.ingredientId,
         displayName: ingredient.name,
-        normalizedQty: ingredient.quantity.amount,
-        normalizedUnit: ingredient.quantity.unit,
-        purchaseQty: purchaseQtyFor(ingredient.quantity.amount, ingredient.quantity.unit),
-        purchaseUnit: purchaseUnitFor(ingredient.quantity.unit),
+        normalizedQty: transformed.normalizedQty,
+        normalizedUnit: transformed.normalizedUnit,
+        purchaseQty: purchaseRule.purchaseQty,
+        purchaseUnit: purchaseRule.purchaseUnit,
+        appliedPurchasingUnit: purchaseRule.appliedPurchasingUnit,
         group: ingredient.group,
         supplierHint: ingredient.group === "beverages" ? "Metro Drinks" : "Metro Fresh",
         sourceRecipes: [batch.recipeId],

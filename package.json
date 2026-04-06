@@ -5,6 +5,7 @@
   "workspaces": [
     "shared-core",
     "intake-service",
+    "ingestion-service",
     "offer-service",
     "production-service",
     "print-export",
@@ -20,6 +21,7 @@
     "local:status": "bash ./scripts/status-local-stack.sh",
     "dev:ui": "npm --workspace @catering/backoffice-ui run dev",
     "dev:intake": "tsx intake-service/src/server.ts",
+    "dev:ingestion": "tsx ingestion-service/src/server.ts",
     "dev:offer": "tsx offer-service/src/server.ts",
     "dev:production": "tsx production-service/src/server.ts",
     "dev:exports": "tsx print-export/src/server.ts",
@@ -41,6 +43,7 @@
     "vite": "^7.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "@types/jsdom": "^28.0.0",
     "@types/node": "^24.3.0",
     "@types/pdf-parse": "^1.1.5",

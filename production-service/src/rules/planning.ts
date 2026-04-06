@@ -1,5 +1,6 @@
 import {
   aggregatePurchaseList,
+  createAppliedYield,
   mergeReadiness,
   procurementGroupFor,
   SCHEMA_VERSION,
@@ -10,9 +11,16 @@ import {
   type AcceptedEventSpec,
   type PurchaseItem,
   type ProductionPlan,
-  type PurchaseList
+  type PurchaseList,
+  type PurchasingUnitProfileLibrary,
+  type YieldProfileLibrary
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
+
+interface ProductionPlanningOptions {
+  yieldProfiles?: YieldProfileLibrary;
+  purchasingUnits?: PurchasingUnitProfileLibrary;
+}
 
 function stationFor(label: string): string {
   if (/salat|dessert/i.test(label)) {
@@ -24,6 +32,21 @@ function stationFor(label: string): string {
   }
 
   return "hot-kitchen";
+}
+
+function translateAllergenTag(value: string): string {
+  const labels: Record<string, string> = {
+    milk: "Milch",
+    gluten: "Gluten",
+    nuts: "Schalenfrüchte",
+    egg: "Ei"
+  };
+
+  return labels[value] ?? value;
+}
+
+function allergensSummary(allergens: string[]): string {
+  return allergens.map((entry) => translateAllergenTag(entry)).join(", ");
 }
 
 function prepWindowFor(spec: AcceptedEventSpec): string {
@@ -105,6 +128,41 @@ function procurementItemsForComponent(
   return [];
 }
 
+async function applyYieldToBatchIngredients(
+  batch: ProductionPlan["productionBatches"][number],
+  yieldProfiles?: YieldProfileLibrary
+): Promise<ProductionPlan["productionBatches"][number]> {
+  const ingredients = await Promise.all(
+    batch.ingredients.map(async (ingredient) => {
+      const profile = yieldProfiles
+        ? await yieldProfiles.getActiveIngredientYieldProfile(ingredient.ingredientId)
+        : undefined;
+      const appliedYield = createAppliedYield(ingredient.quantity.amount, profile);
+
+      if (appliedYield.missingYield) {
+        return {
+          ...ingredient,
+          appliedYield
+        };
+      }
+
+      return {
+        ...ingredient,
+        quantity: {
+          ...ingredient.quantity,
+          amount: appliedYield.grossQty ?? ingredient.quantity.amount
+        },
+        appliedYield
+      };
+    })
+  );
+
+  return {
+    ...batch,
+    ingredients
+  };
+}
+
 function purchasedElementsSummary(component: AcceptedEventSpec["menuPlan"][number]): string {
   const purchasedElements = component.productionDecision?.purchasedElements ?? [];
   return purchasedElements.length > 0 ? purchasedElements.join(", ") : "noch offen";
@@ -139,6 +197,110 @@ function unresolvedKitchenSheet(
   servings: number,
   reason: string
 ): ProductionPlan["kitchenSheets"][number] {
+  if (/bäcker|b[aä]cker|zukauf vom b[aä]cker/i.test(reason)) {
+    return {
+      title: `${component.label} - Bäcker-Zukauf`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte die Bäckerbestellung mit Sorte, Menge und Lieferzeit abstimmen.",
+        "Für diese Komponente wird kein Rezept und keine Internetrecherche benötigt.",
+        "Danach die Komponente als Beschaffung/Zukauf weiterführen."
+      ]
+    };
+  }
+
+  if (/focaccia/i.test(component.label)) {
+    return {
+      title: `${component.label} - Herstellungsart klären`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte entscheiden: Eigenproduktion oder Zukauf.",
+        "Falls Eigenproduktion gewünscht ist: internes Rezept zuweisen oder neues Rezept anlegen.",
+        "Danach die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
+  if (/offene Auswahl \/ Alternative|offene Auswahl|Alternative verbindlich festlegen/i.test(reason)) {
+    return {
+      title: `${component.label} - Auswahl klären`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte die gewünschte Speise oder Alternative verbindlich festlegen.",
+        "Erst danach kann Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
+  if (/mehrere Bestandteile|Beilage\/Sauce\/Topping separat festlegen/i.test(reason)) {
+    return {
+      title: `${component.label} - Bestandteile klären`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte Hauptkomponente und Beilage/Sauce/Topping operativ getrennt festlegen.",
+        "Erst danach kann Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
+  if (/Komponenten ohne klaren Gerichtskern|belastbare Produktionsspeise festlegen/i.test(reason)) {
+    return {
+      title: `${component.label} - Speise konkretisieren`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte zuerst das eigentliche Gericht oder die belastbare Produktionsspeise festlegen.",
+        "Erst danach kann Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
+  if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {
+    return {
+      title: `${component.label} - Variante klären`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte die gewünschte Ausführung oder Variante eindeutig festlegen.",
+        "Danach kann Rezeptwahl, Produktion und Einkauf belastbar weitergeführt werden.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
+  if (/interne Rezeptgrundlage|Internes Rezept .* zuweisen oder neu anlegen/i.test(reason)) {
+    return {
+      title: `${component.label} - Internes Rezept fehlt`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte Bibliotheksrezept zuweisen oder ein neues internes Rezept anlegen.",
+        "Erst danach sind Produktionsanweisungen und Einkaufsliste belastbar.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
+  if (/Herstellungsart .* Eigenproduktion oder Zukauf/i.test(reason)) {
+    return {
+      title: `${component.label} - Herstellungsart entscheiden`,
+      instructions: [
+        `Aktuell geplant für ${servings} Portionen.`,
+        reason,
+        "Bitte entscheiden: Eigenproduktion oder Zukauf.",
+        "Danach Rezeptwahl oder Beschaffung konkret festlegen.",
+        "Anschließend die Produktionsplanung erneut starten."
+      ]
+    };
+  }
+
   return {
     title: `${component.label} - Rezeptklärung nötig`,
     instructions: [
@@ -151,9 +313,49 @@ function unresolvedKitchenSheet(
   };
 }
 
+function unresolvedTimelineLabel(
+  component: AcceptedEventSpec["menuPlan"][number],
+  reason: string
+): string {
+  if (/bäcker|b[aä]cker|zukauf vom b[aä]cker/i.test(reason)) {
+    return `${component.label} beschaffen`;
+  }
+
+  if (/focaccia/i.test(component.label)) {
+    return `${component.label} Herstellungsart klären`;
+  }
+
+  if (/offene Auswahl \/ Alternative|offene Auswahl|Alternative verbindlich festlegen/i.test(reason)) {
+    return `${component.label} Auswahl klären`;
+  }
+
+  if (/mehrere Bestandteile|Beilage\/Sauce\/Topping separat festlegen/i.test(reason)) {
+    return `${component.label} Bestandteile klären`;
+  }
+
+  if (/Komponenten ohne klaren Gerichtskern|belastbare Produktionsspeise festlegen/i.test(reason)) {
+    return `${component.label} Speise konkretisieren`;
+  }
+
+  if (/Variante \/ Ausführung|Variante unklar/i.test(reason)) {
+    return `${component.label} Variante klären`;
+  }
+
+  if (/interne Rezeptgrundlage|Internes Rezept .* zuweisen oder neu anlegen/i.test(reason)) {
+    return `${component.label} internes Rezept klären`;
+  }
+
+  if (/Herstellungsart .* Eigenproduktion oder Zukauf/i.test(reason)) {
+    return `${component.label} Herstellungsart entscheiden`;
+  }
+
+  return `${component.label} Rezeptklärung`;
+}
+
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
-  discoveryService: RecipeDiscoveryService
+  discoveryService: RecipeDiscoveryService,
+  options: ProductionPlanningOptions = {}
 ): Promise<{ productionPlan: ProductionPlan; purchaseList: PurchaseList }> {
   const eventSpec = validateAcceptedEventSpec(eventSpecInput);
   const productionBatches: ProductionPlan["productionBatches"] = [];
@@ -162,9 +364,13 @@ export async function buildProductionArtifacts(
   const timeline: ProductionPlan["timeline"] = [];
   const recipeSelections: ProductionPlan["recipeSelections"] = [];
   const unresolvedItems: string[] = [...(eventSpec.missingFields ?? [])];
+  const hasMenuPlanUncertainty = (eventSpec.uncertainties ?? []).some(
+    (entry) => entry.field === "menuPlan"
+  );
 
   for (const component of eventSpec.menuPlan) {
-    const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
+    const servings =
+      component.servings ?? eventSpec.attendees.productionPax ?? eventSpec.attendees.expected ?? 0;
     const productionMode = component.productionDecision?.mode;
     const purchasedElements = component.productionDecision?.purchasedElements ?? [];
 
@@ -256,7 +462,10 @@ export async function buildProductionArtifacts(
         )
       );
       timeline.push({
-        label: `${component.label} Rezeptklärung`,
+        label: unresolvedTimelineLabel(
+          component,
+          resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden."
+        ),
         at: prepWindowFor(eventSpec)
       });
       continue;
@@ -264,19 +473,37 @@ export async function buildProductionArtifacts(
 
     const draftBatch = toProductionBatch(resolution.recipe, component.componentId, servings);
     const batchId = `batch-${eventSpec.specId}-${component.componentId}`;
-    const batch = {
+    const batchWithoutYield = {
       batchId,
       ...draftBatch,
       station: stationFor(component.label),
       prepWindow: prepWindowFor(eventSpec),
       gnPlan: gnPlanFor(servings)
     };
+    const batch = await applyYieldToBatchIngredients(
+      batchWithoutYield,
+      options.yieldProfiles
+    );
 
     productionBatches.push(batch);
+    const allergenInstructions =
+      resolution.recipe.allergenStatus === "known" && resolution.recipe.allergens.length > 0
+        ? [`Bekannte Allergene laut Rezept: ${allergensSummary(resolution.recipe.allergens)}.`]
+        : resolution.recipe.allergenStatus === "unknown"
+          ? [
+              "Allergeninformation im verwendeten Rezept ist noch nicht belastbar gepflegt. Vor Einsatz und Kennzeichnung bitte prüfen."
+            ]
+          : [];
+
+    if (resolution.recipe.allergenStatus === "unknown") {
+      unresolvedItems.push(`Allergeninformation für ${component.label} ist noch nicht belastbar gepflegt.`);
+    }
+
     kitchenSheets.push({
       title: `${component.label} - ${resolution.recipe.name}`,
       instructions: [
         ...batch.steps.map((step) => `${step.index}. ${step.instruction}`),
+        ...allergenInstructions,
         ...(productionMode === "hybrid"
           ? [`Zukaufteil separat disponieren: ${purchasedElementsSummary(component)}.`]
           : [])
@@ -288,10 +515,17 @@ export async function buildProductionArtifacts(
     });
   }
 
+  if (hasMenuPlanUncertainty) {
+    unresolvedItems.push(
+      "Mindestens ein Angebotsblock sollte vor belastbarer Produktionsplanung noch bestätigt werden."
+    );
+  }
+
   const readiness = mergeReadiness(eventSpec.readiness, unresolvedItems);
   const productionPlan = validateProductionPlan({
     schemaVersion: SCHEMA_VERSION,
     planId: `plan-${eventSpec.specId}`,
+    ownershipContext: "production",
     eventSpecId: eventSpec.specId,
     readiness,
     productionBatches,
@@ -302,7 +536,9 @@ export async function buildProductionArtifacts(
   });
 
   const purchaseList = validatePurchaseList(
-    aggregatePurchaseList(eventSpec.specId, productionBatches, procurementItems)
+    await aggregatePurchaseList(eventSpec.specId, productionBatches, procurementItems, {
+      purchasingUnits: options.purchasingUnits
+    })
   );
 
   return {

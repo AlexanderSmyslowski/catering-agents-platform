@@ -2,7 +2,7 @@ import type { AcceptedEventSpec, Readiness, ReadinessStatus } from "../types.js"
 
 export function evaluateReadiness(spec: {
   event?: { date?: string; schedule?: { start?: string }[]; serviceForm?: string };
-  attendees?: { expected?: number };
+  attendees?: { expected?: number; productionPax?: number };
   menuPlan?: { label: string }[];
   servicePlan?: { serviceForm?: string };
 }): { readiness: Readiness; missingFields: string[] } {
@@ -12,7 +12,8 @@ export function evaluateReadiness(spec: {
     missingFields.push("event.date_or_schedule");
   }
 
-  if (!spec.attendees?.expected || spec.attendees.expected <= 0) {
+  const effectiveAttendeeCount = spec.attendees?.productionPax ?? spec.attendees?.expected;
+  if (!effectiveAttendeeCount || effectiveAttendeeCount <= 0) {
     missingFields.push("attendees.expected");
   }
 

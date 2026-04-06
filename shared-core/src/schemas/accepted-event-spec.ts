@@ -6,6 +6,7 @@ export const acceptedEventSpecSchema = {
   required: [
     "schemaVersion",
     "specId",
+    "ownershipContext",
     "lifecycle",
     "readiness",
     "sourceLineage",
@@ -17,6 +18,9 @@ export const acceptedEventSpecSchema = {
   properties: {
     schemaVersion: { type: "string" },
     specId: { type: "string" },
+    ownershipContext: {
+      $ref: "https://schemas.catering.local/common.json#/$defs/ownershipContext"
+    },
     lifecycle: {
       type: "object",
       additionalProperties: false,
@@ -109,4 +113,3 @@ export const acceptedEventSpecSchema = {
     }
   }
 } as const;
-

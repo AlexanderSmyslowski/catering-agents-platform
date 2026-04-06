@@ -238,6 +238,7 @@ export function candidateToRecipe(
       batchSize: partial.baseYield.servings
     },
     allergens: partial.allergens ?? [],
+    allergenStatus: partial.allergenStatus ?? "known",
     dietTags: [...inferredDietTags]
   };
 }
@@ -309,6 +310,7 @@ export async function fetchRecipeCandidateFromUrl(url: string): Promise<WebRecip
           batchSize: servings ?? 8
         },
         allergens: [],
+        allergenStatus: "unknown",
         dietTags: []
       },
       qualitySignals: {
@@ -357,6 +359,7 @@ export async function fetchRecipeCandidateFromUrl(url: string): Promise<WebRecip
         batchSize: 8
       },
       allergens: [],
+      allergenStatus: "unknown",
       dietTags: []
     },
     qualitySignals: {
