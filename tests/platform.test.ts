@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { newDb } from "pg-mem";
 import {
   aggregatePurchaseList,
+  PurchasingUnitProfileLibrary,
   SCHEMA_VERSION,
   YieldProfileLibrary,
   calculateYieldQuantities,
@@ -12,6 +13,7 @@ import {
   normalizePurchaseQuantity,
   normalizeEventRequestToSpec,
   parseUploadedRecipeText,
+  validatePurchasingUnitProfile,
   validateYieldProfile,
   type AcceptedEventSpec,
   type EventDemand,
@@ -23,7 +25,11 @@ import {
 } from "@catering/shared-core";
 import { IntakeStore, buildIntakeApp } from "@catering/intake-service";
 import { OfferStore, buildOfferApp } from "@catering/offer-service";
-import { buildPrintExportApp, renderProductionPlanHtml } from "@catering/print-export";
+import {
+  buildPrintExportApp,
+  renderProductionPlanHtml,
+  renderPurchaseListHtml
+} from "@catering/print-export";
 import {
   InMemoryRecipeRepository,
   ProductionStore,
@@ -33,6 +39,8 @@ import {
   resolveRecipeWebSearchProviderName
 } from "@catering/production-service";
 import type { WebRecipeSearchProvider } from "@catering/production-service";
+import { IntakeStoreAcceptedEventSpecAdapter } from "../intake-service/src/spec-governance/accepted-event-spec-adapter.js";
+import { SpecGovernanceService } from "../intake-service/src/spec-governance/spec-governance-service.js";
 
 class FakeWebProvider implements WebRecipeSearchProvider {
   constructor(private readonly candidates: WebRecipeCandidate[]) {}
@@ -478,6 +486,7 @@ describe("yield phase 3", () => {
     const html = renderProductionPlanHtml({
       schemaVersion: SCHEMA_VERSION,
       planId: "plan-yield-visible",
+      ownershipContext: "production",
       eventSpecId: "spec-1",
       readiness: {
         status: "partial",
@@ -548,6 +557,7 @@ describe("yield phase 3", () => {
     const html = renderProductionPlanHtml({
       schemaVersion: SCHEMA_VERSION,
       planId: "plan-yield-missing",
+      ownershipContext: "production",
       eventSpecId: "spec-2",
       readiness: {
         status: "partial",
@@ -652,7 +662,7 @@ describe("unit transformation phase 1", () => {
     });
   });
 
-  it("applies the unit transformation hook during purchase aggregation", () => {
+  it("applies the unit transformation hook during purchase aggregation", async () => {
     const batch: ProductionBatch = {
       batchId: "batch-unit-transform",
       componentId: "component-1",
@@ -703,7 +713,7 @@ describe("unit transformation phase 1", () => {
       steps: []
     };
 
-    const purchaseList = aggregatePurchaseList("spec-unit-transform", [batch]);
+    const purchaseList = await aggregatePurchaseList("spec-unit-transform", [batch]);
     const flour = purchaseList.items.find((item) => item.ingredientId === "flour");
     const stock = purchaseList.items.find((item) => item.ingredientId === "stock");
     const trayItem = purchaseList.items.find((item) => item.ingredientId === "tray-item");
@@ -729,11 +739,164 @@ describe("unit transformation phase 1", () => {
   });
 });
 
+describe("purchasing unit transformation mvp 1", () => {
+  it("validates and persists ingredient-based purchasing unit profiles", async () => {
+    const dataRoot = createDataRoot();
+    const library = new PurchasingUnitProfileLibrary({ rootDir: dataRoot });
+
+    expect(
+      validatePurchasingUnitProfile({
+        id: "purchase-unit-potato-1",
+        scopeType: "ingredient",
+        scopeId: "potato",
+        baseUnit: "kg",
+        unitLabel: "Sack",
+        unitSize: 25,
+        sourceType: "explicit",
+        isActive: true
+      }).unitLabel
+    ).toBe("Sack");
+
+    await library.save({
+      id: "purchase-unit-potato-1",
+      scopeType: "ingredient",
+      scopeId: "potato",
+      baseUnit: "kg",
+      unitLabel: "Sack",
+      unitSize: 25,
+      sourceType: "explicit",
+      isActive: true
+    });
+
+    const restartedLibrary = new PurchasingUnitProfileLibrary({ rootDir: dataRoot });
+    const activeProfile = await restartedLibrary.getActiveIngredientPurchasingUnitProfile("potato", "kg");
+
+    expect(activeProfile?.unitLabel).toBe("Sack");
+    expect(activeProfile?.unitSize).toBe(25);
+
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("derives order units from normalized raw quantity when a purchasing unit rule exists", async () => {
+    const dataRoot = createDataRoot();
+    const library = new PurchasingUnitProfileLibrary({ rootDir: dataRoot });
+    await library.save({
+      id: "purchase-unit-potato-2",
+      scopeType: "ingredient",
+      scopeId: "potato",
+      baseUnit: "kg",
+      unitLabel: "Sack",
+      unitSize: 25,
+      sourceType: "explicit",
+      isActive: true
+    });
+
+    const batch: ProductionBatch = {
+      batchId: "batch-purchase-unit-transform",
+      componentId: "component-potato",
+      recipeId: "recipe-potato",
+      scaledYield: {
+        amount: 10,
+        unit: "servings"
+      },
+      batchCount: 1,
+      lossFactor: 1,
+      gnPlan: [
+        {
+          container: "GN 1/2",
+          count: 1
+        }
+      ],
+      station: "hot-kitchen",
+      prepWindow: "2026-04-05 T-1",
+      ingredients: [
+        {
+          ingredientId: "potato",
+          name: "Kartoffeln",
+          quantity: {
+            amount: 30,
+            unit: "kg"
+          },
+          group: "produce"
+        }
+      ],
+      steps: []
+    };
+
+    const purchaseList = await aggregatePurchaseList(
+      "spec-purchase-unit-transform",
+      [batch],
+      [],
+      { purchasingUnits: library }
+    );
+    const potatoes = purchaseList.items.find((item) => item.ingredientId === "potato");
+
+    expect(potatoes).toMatchObject({
+      normalizedQty: 30,
+      normalizedUnit: "kg",
+      purchaseQty: 2,
+      purchaseUnit: "Sack",
+      appliedPurchasingUnit: {
+        unitLabel: "Sack",
+        unitSize: 25,
+        baseUnit: "kg",
+        sourceTypeApplied: "explicit",
+        sourceRefId: "purchase-unit-potato-2",
+        missingRule: false
+      }
+    });
+
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("renders purchasing unit information visibly in the purchase list export", () => {
+    const html = renderPurchaseListHtml({
+      schemaVersion: SCHEMA_VERSION,
+      purchaseListId: "purchase-purchasing-unit-visible",
+      eventSpecId: "spec-purchasing-unit-visible",
+      items: [
+        {
+          ingredientId: "potato",
+          displayName: "Kartoffeln",
+          normalizedQty: 30,
+          normalizedUnit: "kg",
+          purchaseQty: 2,
+          purchaseUnit: "Sack",
+          appliedPurchasingUnit: {
+            unitLabel: "Sack",
+            unitSize: 25,
+            baseUnit: "kg",
+            sourceTypeApplied: "explicit",
+            sourceRefId: "purchase-unit-potato-3",
+            missingRule: false
+          },
+          group: "produce",
+          supplierHint: "Metro Fresh",
+          sourceRecipes: ["recipe-potato"],
+          mappingConfidence: 0.95
+        }
+      ],
+      groupingMode: "group",
+      totals: {
+        itemCount: 1,
+        groups: ["produce"]
+      }
+    });
+
+    expect(html).toContain("Rohmenge");
+    expect(html).toContain("30 kg");
+    expect(html).toContain("2 Sack");
+    expect(html).toContain("1 Sack = 25 kg");
+    expect(html).toContain("Regel explicit");
+  });
+});
+
 describe("visible allergen display", () => {
   it("renders existing allergen hints visibly in the production plan export", () => {
     const html = renderProductionPlanHtml({
       schemaVersion: SCHEMA_VERSION,
       planId: "plan-allergens-visible",
+      ownershipContext: "production",
       eventSpecId: "spec-allergens-1",
       readiness: {
         status: "partial",
@@ -762,6 +925,7 @@ describe("visible allergen display", () => {
     const html = renderProductionPlanHtml({
       schemaVersion: SCHEMA_VERSION,
       planId: "plan-allergens-none",
+      ownershipContext: "production",
       eventSpecId: "spec-allergens-2",
       readiness: {
         status: "partial",
@@ -782,12 +946,34 @@ describe("visible allergen display", () => {
     expect(html).not.toContain("Allergenhinweise");
     expect(html).not.toContain("keine Allergene");
   });
+
+  it("renders the production context visibly without treating it as customer truth", () => {
+    const html = renderProductionPlanHtml({
+      schemaVersion: SCHEMA_VERSION,
+      planId: "plan-context-visible",
+      ownershipContext: "production",
+      eventSpecId: "spec-context-1",
+      readiness: {
+        status: "partial",
+        reasons: []
+      },
+      productionBatches: [],
+      timeline: [],
+      kitchenSheets: [],
+      recipeSelections: [],
+      unresolvedItems: []
+    } satisfies ProductionPlan);
+
+    expect(html).toContain("Kontext: Produktionsstand");
+    expect(html).toContain("Operative Ableitung, nicht kundenfuehrende Wahrheit.");
+  });
 });
 
 function sampleEventDemand(overrides: Partial<EventDemand> = {}): EventDemand {
   return {
     schemaVersion: SCHEMA_VERSION,
     demandId: "event-demand-1",
+    ownershipContext: "customer",
     pax: 48,
     serviceForm: "buffet",
     menuOrServiceWish: "Tomatensuppe und Brot",
@@ -1280,6 +1466,7 @@ describe("catering agents platform", () => {
     );
 
     expect(spec.specId).toBe("spec-event-demand-1");
+    expect(spec.ownershipContext).toBe("customer");
     expect(spec.attendees.expected).toBe(48);
     expect(spec.event.serviceForm).toBe("buffet");
     expect(spec.servicePlan.serviceForm).toBe("buffet");
@@ -1310,6 +1497,9 @@ describe("catering agents platform", () => {
 
     expect(response.statusCode).toBe(201);
     const body = response.json();
+    expect(body.eventDemand.ownershipContext).toBe("customer");
+    expect(body.acceptedEventSpec.ownershipContext).toBe("customer");
+    expect(body.productionPlan.ownershipContext).toBe("production");
     expect(body.acceptedEventSpec.attendees.expected).toBe(32);
     expect(body.acceptedEventSpec.menuPlan.every((item: { servings?: number }) => item.servings === 32)).toBe(true);
     expect(body.productionPlan.eventSpecId).toBe(body.acceptedEventSpec.specId);
@@ -2192,6 +2382,526 @@ describe("catering agents platform", () => {
     expect(approveResponse.statusCode).toBe(200);
     expect(approveResponse.json().approvalRequest.status).toBe("approved");
     expect(approveResponse.json().acceptedEventSpec.attendees.productionPax).toBe(55);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("persists pending_reapproval state for blocked L3 changes and reuses the pending approval request", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const firstBlockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(firstBlockedResponse.statusCode).toBe(409);
+    expect(firstBlockedResponse.json().governanceState.approvalStatus).toBe("pending_reapproval");
+
+    const firstApprovalRequestId = String(firstBlockedResponse.json().approvalRequest.approvalRequestId);
+    const storedPendingState = await store.getSpecGovernanceState(createdSpec.specId);
+    expect(storedPendingState?.approvalStatus).toBe("pending_reapproval");
+    expect(storedPendingState?.latestApprovalRequestId).toBe(firstApprovalRequestId);
+
+    const secondBlockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        attendeeCount: 60
+      }
+    });
+
+    expect(secondBlockedResponse.statusCode).toBe(409);
+    expect(secondBlockedResponse.json().approvalRequest.approvalRequestId).toBe(firstApprovalRequestId);
+
+    const approvalRequests = await store.listApprovalRequests();
+    expect(
+      approvalRequests.filter(
+        (record) => record.specId === createdSpec.specId && record.status === "pending"
+      )
+    ).toHaveLength(1);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("resets governance state to approved after approving a pending reapproval request", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const blockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    const approvalRequestId = String(blockedResponse.json().approvalRequest.approvalRequestId);
+
+    const approveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/approval-requests/${approvalRequestId}/approve`,
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {
+        note: "Freigabe erteilt."
+      }
+    });
+
+    expect(approveResponse.statusCode).toBe(200);
+
+    const storedGovernanceState = await store.getSpecGovernanceState(createdSpec.specId);
+    expect(storedGovernanceState?.approvalStatus).toBe("approved");
+    expect(storedGovernanceState?.latestApprovalRequestId).toBe(approvalRequestId);
+    expect(storedGovernanceState?.highestImpactLevel).toBe("L3");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("blocks finalizing an open L3 change set without an explicit confirm flag", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(patchResponse.statusCode).toBe(409);
+
+    const openReadResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-governance?specId=${createdSpec.specId}`
+    });
+
+    expect(openReadResponse.statusCode).toBe(200);
+    expect(openReadResponse.json().items).toHaveLength(1);
+    expect(openReadResponse.json().items[0].approvalStatus).toBe("pending_reapproval");
+    expect(openReadResponse.json().items[0].changeSet).toMatchObject({
+      status: "open",
+      highestImpactLevel: "L3"
+    });
+    expect(openReadResponse.json().items[0].changeSet.activeRuleKeys).toContain("guest_count");
+
+    const finalizeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/spec-governance/finalize",
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {
+        specId: createdSpec.specId
+      }
+    });
+
+    expect(finalizeResponse.statusCode).toBe(409);
+    expect(finalizeResponse.json().message).toContain("kritische Änderungen (L3)");
+
+    const stillOpenReadResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-governance?specId=${createdSpec.specId}`
+    });
+
+    expect(stillOpenReadResponse.statusCode).toBe(200);
+    expect(stillOpenReadResponse.json().items[0].changeSet).toMatchObject({
+      status: "open",
+      highestImpactLevel: "L3"
+    });
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("finalizes an open L3 change set when the explicit confirm flag is provided", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    expect(patchResponse.statusCode).toBe(409);
+
+    const finalizeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/spec-governance/finalize",
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {
+        specId: createdSpec.specId,
+        confirmCriticalFinalize: true
+      }
+    });
+
+    expect(finalizeResponse.statusCode).toBe(200);
+    expect(finalizeResponse.json().changeSet).toMatchObject({
+      specId: createdSpec.specId,
+      status: "finalized",
+      highestImpactLevel: "L3",
+      finalizedBy: "Leitung"
+    });
+
+    const finalizedReadResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-governance?specId=${createdSpec.specId}`
+    });
+
+    expect(finalizedReadResponse.statusCode).toBe(200);
+    expect(finalizedReadResponse.json().items[0].approvalStatus).toBe("pending_reapproval");
+    expect(finalizedReadResponse.json().items[0].changeSet).toMatchObject({
+      status: "finalized",
+      highestImpactLevel: "L3"
+    });
+    expect(finalizedReadResponse.json().items[0].changeSet.summary).toBeTruthy();
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("keeps L1/L2 change sets directly finalizable without the explicit confirm flag", async () => {
+    const dataRoot = createDataRoot();
+    const store = new IntakeStore({ rootDir: dataRoot });
+    const app = buildIntakeApp(store);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const governanceService = new SpecGovernanceService(
+      new IntakeStoreAcceptedEventSpecAdapter(store),
+      store
+    );
+
+    const trackedResult = await governanceService.classifyAndTrack({
+      specId: createdSpec.specId,
+      actorName: "Kueche",
+      nextDocument: {
+        ...createdSpec,
+        assumptions: [...(createdSpec.assumptions ?? []), "Buffetkarte sprachlich präzisiert."]
+      }
+    });
+
+    expect(trackedResult.openChangeSet).toBeTruthy();
+    expect(trackedResult.openChangeSet?.highestImpactLevel).toBe("L1");
+
+    const governanceReadResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-governance?specId=${createdSpec.specId}`
+    });
+
+    expect(governanceReadResponse.statusCode).toBe(200);
+    expect(governanceReadResponse.json().items[0].changeSet).toMatchObject({
+      status: "open"
+    });
+    expect(governanceReadResponse.json().items[0].changeSet.highestImpactLevel).not.toBe("L3");
+
+    const finalizeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/spec-governance/finalize",
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        specId: createdSpec.specId
+      }
+    });
+
+    expect(finalizeResponse.statusCode).toBe(200);
+    expect(finalizeResponse.json().changeSet.status).toBe("finalized");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("records a change history entry for direct AcceptedEventSpec updates", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const componentId = String(createdSpec.menuPlan[0].componentId);
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        componentUpdates: [
+          {
+            componentId,
+            notes: "Ohne Sellerie anrichten."
+          }
+        ]
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-history?specId=${createdSpec.specId}`
+    });
+
+    expect(historyResponse.statusCode).toBe(200);
+    expect(
+      historyResponse
+        .json()
+        .items.some(
+          (entry: { eventType: string; summary: string }) =>
+            entry.eventType === "spec_updated" &&
+            /Operative Spezifikation ergänzt\./.test(entry.summary)
+        )
+    ).toBe(true);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("records approval history entries for blocked and approved changes", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+
+    const blockedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Einkauf",
+        "x-actor-role": "ProcurementEditor"
+      },
+      payload: {
+        attendeeCount: 55
+      }
+    });
+
+    const approvalRequestId = String(blockedResponse.json().approvalRequest.approvalRequestId);
+    const approveResponse = await app.inject({
+      method: "POST",
+      url: `/v1/intake/approval-requests/${approvalRequestId}/approve`,
+      headers: {
+        "x-actor-name": "Leitung",
+        "x-actor-role": "Approver"
+      },
+      payload: {}
+    });
+
+    expect(approveResponse.statusCode).toBe(200);
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-history?specId=${createdSpec.specId}`
+    });
+
+    const eventTypes = historyResponse
+      .json()
+      .items.map((entry: { eventType: string }) => entry.eventType);
+
+    expect(eventTypes).toContain("approval_requested");
+    expect(eventTypes).toContain("approval_approved");
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("keeps spec history append-only and ordered for a spec", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/specs/manual",
+      payload: {
+        eventType: "lunch",
+        eventDate: "2026-10-10",
+        attendeeCount: 40,
+        serviceForm: "buffet",
+        menuItems: ["Tomatensuppe"]
+      }
+    });
+
+    const createdSpec = createResponse.json().acceptedEventSpec;
+    const componentId = String(createdSpec.menuPlan[0].componentId);
+
+    await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      headers: {
+        "x-actor-name": "Kueche",
+        "x-actor-role": "KitchenEditor"
+      },
+      payload: {
+        componentUpdates: [
+          {
+            componentId,
+            notes: "Ohne Sellerie anrichten."
+          }
+        ]
+      }
+    });
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/intake/specs/${createdSpec.specId}/archive`,
+      headers: {
+        "x-actor-name": "Leitung"
+      },
+      payload: {
+        reason: "Testfall"
+      }
+    });
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/v1/intake/spec-history?specId=${createdSpec.specId}`
+    });
+
+    expect(historyResponse.statusCode).toBe(200);
+    expect(historyResponse.json().items.map((entry: { eventType: string }) => entry.eventType)).toEqual([
+      "spec_manual_created",
+      "spec_updated",
+      "spec_archived"
+    ]);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -5163,7 +5873,7 @@ describe("catering agents platform", () => {
     expect(purchaseExportResponse.statusCode).toBe(200);
     expect(purchaseExportResponse.headers["content-type"]).toContain("text/csv");
     expect(purchaseExportResponse.body).toContain(
-      '"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"'
+      '"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","purchaseUnitSize","purchaseUnitBaseUnit","purchasingRuleSourceType","supplierHint"'
     );
 
     expect(purchasePrintResponse.statusCode).toBe(200);

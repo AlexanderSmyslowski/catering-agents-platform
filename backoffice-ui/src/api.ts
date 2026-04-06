@@ -2,6 +2,8 @@ export interface DashboardState {
   intakeRequests: Array<Record<string, unknown>>;
   acceptedSpecs: Array<Record<string, unknown>>;
   approvalRequests: Array<Record<string, unknown>>;
+  specGovernanceEntries: Array<Record<string, unknown>>;
+  specHistoryEntries: Array<Record<string, unknown>>;
   extractedContexts: Array<Record<string, unknown>>;
   offerDrafts: Array<Record<string, unknown>>;
   productionPlans: Array<Record<string, unknown>>;
@@ -90,6 +92,8 @@ export async function loadDashboardState(): Promise<DashboardState> {
     intakeRequests,
     acceptedSpecs,
     approvalRequests,
+    specGovernanceEntries,
+    specHistoryEntries,
     extractedContexts,
     offerDrafts,
     productionPlans,
@@ -101,6 +105,8 @@ export async function loadDashboardState(): Promise<DashboardState> {
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/requests"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/specs"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/approval-requests"),
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/spec-governance"),
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/spec-history"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/extracted-contexts"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/offers/v1/offers/drafts"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/plans"),
@@ -113,6 +119,8 @@ export async function loadDashboardState(): Promise<DashboardState> {
     intakeRequests: intakeRequests.items,
     acceptedSpecs: acceptedSpecs.items,
     approvalRequests: approvalRequests.items,
+    specGovernanceEntries: specGovernanceEntries.items,
+    specHistoryEntries: specHistoryEntries.items,
     extractedContexts: extractedContexts.items,
     offerDrafts: offerDrafts.items,
     productionPlans: productionPlans.items,
@@ -307,6 +315,19 @@ export async function approveApprovalRequest(approvalRequestId: string, note?: s
   }>(`/api/intake/v1/intake/approval-requests/${approvalRequestId}/approve`, {
     method: "POST",
     body: JSON.stringify(note?.trim() ? { note } : {})
+  });
+}
+
+export async function finalizeSpecGovernanceChangeSet(input: {
+  specId?: string;
+  changeSetId?: string;
+  confirmCriticalFinalize?: boolean;
+}) {
+  return fetchJson<{
+    changeSet: Record<string, unknown>;
+  }>("/api/intake/v1/intake/spec-governance/finalize", {
+    method: "POST",
+    body: JSON.stringify(input)
   });
 }
 

@@ -7,6 +7,7 @@ import type {
   EventDemand,
   EventRequest,
   OfferDraft,
+  PurchasingUnitProfile,
   ProductionPlan,
   PurchaseList,
   Recipe,
@@ -40,6 +41,7 @@ type SchemaName =
   | "acceptedEventSpec"
   | "recipe"
   | "yieldProfile"
+  | "purchasingUnitProfile"
   | "productionPlan"
   | "purchaseList";
 
@@ -54,6 +56,7 @@ const schemaIds: Record<SchemaName, string> = {
   acceptedEventSpec: "https://schemas.catering.local/accepted-event-spec.json",
   recipe: "https://schemas.catering.local/recipe.json",
   yieldProfile: "https://schemas.catering.local/yield-profile.json",
+  purchasingUnitProfile: "https://schemas.catering.local/purchasing-unit-profile.json",
   productionPlan: "https://schemas.catering.local/production-plan.json",
   purchaseList: "https://schemas.catering.local/purchase-list.json"
 };
@@ -95,7 +98,12 @@ export function validateEventRequest(value: EventRequest): EventRequest {
 }
 
 export function validateEventDemand(value: EventDemand): EventDemand {
-  return assertValid("eventDemand", value);
+  const normalized = {
+    ...value,
+    ownershipContext: value.ownershipContext ?? "customer"
+  } as EventDemand;
+
+  return assertValid("eventDemand", normalized);
 }
 
 export function validateOfferDraft(value: OfferDraft): OfferDraft {
@@ -105,7 +113,12 @@ export function validateOfferDraft(value: OfferDraft): OfferDraft {
 export function validateAcceptedEventSpec(
   value: AcceptedEventSpec
 ): AcceptedEventSpec {
-  return assertValid("acceptedEventSpec", value);
+  const normalized = {
+    ...value,
+    ownershipContext: value.ownershipContext ?? "customer"
+  } as AcceptedEventSpec;
+
+  return assertValid("acceptedEventSpec", normalized);
 }
 
 export function validateRecipe(value: Recipe): Recipe {
@@ -121,8 +134,19 @@ export function validateYieldProfile(value: YieldProfile): YieldProfile {
   return assertValid("yieldProfile", value);
 }
 
+export function validatePurchasingUnitProfile(
+  value: PurchasingUnitProfile
+): PurchasingUnitProfile {
+  return assertValid("purchasingUnitProfile", value);
+}
+
 export function validateProductionPlan(value: ProductionPlan): ProductionPlan {
-  return assertValid("productionPlan", value);
+  const normalized = {
+    ...value,
+    ownershipContext: value.ownershipContext ?? "production"
+  } as ProductionPlan;
+
+  return assertValid("productionPlan", normalized);
 }
 
 export function validatePurchaseList(value: PurchaseList): PurchaseList {

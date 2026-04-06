@@ -3,10 +3,20 @@ export const eventDemandSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
-  required: ["schemaVersion", "demandId", "pax", "serviceForm", "menuOrServiceWish"],
+  required: [
+    "schemaVersion",
+    "demandId",
+    "ownershipContext",
+    "pax",
+    "serviceForm",
+    "menuOrServiceWish"
+  ],
   properties: {
     schemaVersion: { type: "string" },
     demandId: { type: "string" },
+    ownershipContext: {
+      $ref: "https://schemas.catering.local/common.json#/$defs/ownershipContext"
+    },
     pax: { type: "integer", minimum: 1 },
     serviceForm: { type: "string", minLength: 1 },
     menuOrServiceWish: { type: "string", minLength: 1 },

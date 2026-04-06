@@ -65,6 +65,9 @@ export const commonSchema = {
         }
       }
     },
+    ownershipContext: {
+      enum: ["customer", "production"]
+    },
     customer: {
       type: "object",
       additionalProperties: false,
@@ -259,6 +262,19 @@ export const commonSchema = {
         sourceTypeApplied: { type: "string" },
         sourceRefId: { type: "string" },
         missingYield: { type: "boolean" }
+      }
+    },
+    appliedPurchasingUnit: {
+      type: "object",
+      additionalProperties: false,
+      required: ["unitLabel", "unitSize", "baseUnit", "sourceTypeApplied", "missingRule"],
+      properties: {
+        unitLabel: { type: "string" },
+        unitSize: { type: "number", exclusiveMinimum: 0 },
+        baseUnit: { type: "string" },
+        sourceTypeApplied: { type: "string" },
+        sourceRefId: { type: "string" },
+        missingRule: { type: "boolean" }
       }
     },
     productionIngredientLine: {

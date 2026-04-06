@@ -77,6 +77,10 @@ function allergenNoticesForPlan(plan: ProductionPlan): string[] {
   )];
 }
 
+function describeOwnershipContext(context: ProductionPlan["ownershipContext"] | undefined): string {
+  return context === "customer" ? "Kundenstand" : "Produktionsstand";
+}
+
 export function renderProductionPlanHtml(plan: ProductionPlan): string {
   const allergenNotices = allergenNoticesForPlan(plan);
   return [
@@ -96,6 +100,9 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
     "</style></head><body>",
     `<h1>Produktionsplan ${plan.planId}</h1>`,
     `<p>Status: ${plan.readiness.status}</p>`,
+    `<p>Kontext: ${escapeHtml(
+      describeOwnershipContext(plan.ownershipContext)
+    )} · Operative Ableitung, nicht kundenfuehrende Wahrheit.</p>`,
     ...(allergenNotices.length > 0
       ? [
           `<section><h2>Allergenhinweise</h2><ul class="allergen-list">${allergenNotices
@@ -137,6 +144,9 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
     "normalizedUnit",
     "purchaseQty",
     "purchaseUnit",
+    "purchaseUnitSize",
+    "purchaseUnitBaseUnit",
+    "purchasingRuleSourceType",
     "supplierHint"
   ]
     .map(escapeCsv)
@@ -150,6 +160,9 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
       item.normalizedUnit,
       item.purchaseQty,
       item.purchaseUnit,
+      item.appliedPurchasingUnit?.unitSize ?? "",
+      item.appliedPurchasingUnit?.baseUnit ?? "",
+      item.appliedPurchasingUnit?.sourceTypeApplied ?? "",
       item.supplierHint ?? ""
     ]
       .map(escapeCsv)
@@ -176,7 +189,7 @@ export function renderPurchaseListHtml(list: PurchaseList): string {
           <thead>
             <tr>
               <th>Artikel</th>
-              <th>Menge</th>
+              <th>Rohmenge</th>
               <th>Einkauf</th>
               <th>Lieferhinweis</th>
             </tr>
@@ -188,7 +201,15 @@ export function renderPurchaseListHtml(list: PurchaseList): string {
                   <tr>
                     <td>${escapeHtml(item.displayName)}</td>
                     <td>${escapeHtml(item.normalizedQty)} ${escapeHtml(item.normalizedUnit)}</td>
-                    <td>${escapeHtml(item.purchaseQty)} ${escapeHtml(item.purchaseUnit)}</td>
+                    <td>${escapeHtml(item.purchaseQty)} ${escapeHtml(item.purchaseUnit)}${
+                      item.appliedPurchasingUnit
+                        ? `<div class="meta">1 ${escapeHtml(
+                            item.appliedPurchasingUnit.unitLabel
+                          )} = ${escapeHtml(item.appliedPurchasingUnit.unitSize)} ${escapeHtml(
+                            item.appliedPurchasingUnit.baseUnit
+                          )} · Regel ${escapeHtml(item.appliedPurchasingUnit.sourceTypeApplied)}</div>`
+                        : ""
+                    }</td>
                     <td>${escapeHtml(item.supplierHint ?? "-")}</td>
                   </tr>
                 `

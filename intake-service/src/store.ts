@@ -7,6 +7,9 @@ import {
   type EventDemand,
   type EventRequest
 } from "@catering/shared-core";
+import type { ImpactLevel } from "./spec-governance/spec-change-rules.js";
+import type { PersistedApprovalStatus } from "./spec-governance/approval-trigger.js";
+import type { SpecChangeSetRecord } from "./spec-governance/spec-change-set.js";
 
 interface StoredSpecRecord {
   specId: string;
@@ -32,6 +35,37 @@ export interface ApprovalRequestRecord {
     name: string;
     role: ApprovalRole;
   };
+}
+
+export interface SpecHistoryEntryRecord {
+  historyEntryId: string;
+  at: string;
+  sequence: number;
+  eventType:
+    | "spec_manual_created"
+    | "spec_updated"
+    | "approval_requested"
+    | "approval_approved"
+    | "spec_archived";
+  specId: string;
+  entityType: "AcceptedEventSpec" | "ApprovalRequest";
+  entityRefId: string;
+  summary: string;
+  actor?: {
+    name: string;
+    role?: ApprovalRole;
+    source?: string;
+  };
+  detail?: string;
+}
+
+export interface SpecGovernanceStateRecord {
+  specId: string;
+  approvalStatus: PersistedApprovalStatus;
+  updatedAt: string;
+  highestImpactLevel?: ImpactLevel | null;
+  summary?: string;
+  latestApprovalRequestId?: string;
 }
 
 export interface DocumentImportRecord {
@@ -107,6 +141,12 @@ export class IntakeStore {
 
   private readonly extractedContexts: PersistentCollection<ExtractedContextRecord>;
 
+  private readonly specHistoryEntries: PersistentCollection<SpecHistoryEntryRecord>;
+
+  private readonly specGovernanceStates: PersistentCollection<SpecGovernanceStateRecord>;
+
+  private readonly specChangeSets: PersistentCollection<SpecChangeSetRecord>;
+
   readonly storageOptions?: CollectionStorageOptions;
 
   constructor(options?: CollectionStorageOptions) {
@@ -150,6 +190,27 @@ export class IntakeStore {
     this.extractedContexts = createPersistentCollection<ExtractedContextRecord>({
       collectionName: "intake/extracted-contexts",
       getId: (record) => record.extractedContextId,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    });
+    this.specHistoryEntries = createPersistentCollection<SpecHistoryEntryRecord>({
+      collectionName: "intake/spec-history",
+      getId: (record) => record.historyEntryId,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    });
+    this.specGovernanceStates = createPersistentCollection<SpecGovernanceStateRecord>({
+      collectionName: "intake/spec-governance-state",
+      getId: (record) => record.specId,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    });
+    this.specChangeSets = createPersistentCollection<SpecChangeSetRecord>({
+      collectionName: "intake/spec-change-sets",
+      getId: (record) => record.changeSetId,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
@@ -228,6 +289,58 @@ export class IntakeStore {
 
   async listExtractedContexts(): Promise<ExtractedContextRecord[]> {
     return this.extractedContexts.list();
+  }
+
+  async saveSpecHistoryEntry(record: SpecHistoryEntryRecord): Promise<void> {
+    await this.specHistoryEntries.set(record);
+  }
+
+  async saveSpecGovernanceState(record: SpecGovernanceStateRecord): Promise<void> {
+    await this.specGovernanceStates.set(record);
+  }
+
+  async getSpecGovernanceState(specId: string): Promise<SpecGovernanceStateRecord | undefined> {
+    return this.specGovernanceStates.get(specId);
+  }
+
+  async saveSpecChangeSet(record: SpecChangeSetRecord): Promise<void> {
+    await this.specChangeSets.set(record);
+  }
+
+  async getSpecChangeSet(changeSetId: string): Promise<SpecChangeSetRecord | undefined> {
+    return this.specChangeSets.get(changeSetId);
+  }
+
+  async listSpecChangeSetsForSpec(specId: string): Promise<SpecChangeSetRecord[]> {
+    const records = await this.specChangeSets.list();
+    return records
+      .filter((record) => record.specId === specId)
+      .sort(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) ||
+          left.updatedAt.localeCompare(right.updatedAt) ||
+          left.changeSetId.localeCompare(right.changeSetId)
+      );
+  }
+
+  async getOpenSpecChangeSetForSpec(specId: string): Promise<SpecChangeSetRecord | undefined> {
+    const records = await this.listSpecChangeSetsForSpec(specId);
+    return records.find((record) => record.status === "open");
+  }
+
+  async listSpecHistoryEntries(): Promise<SpecHistoryEntryRecord[]> {
+    const records = await this.specHistoryEntries.list();
+    return records.sort(
+      (left, right) =>
+        left.at.localeCompare(right.at) ||
+        left.sequence - right.sequence ||
+        left.historyEntryId.localeCompare(right.historyEntryId)
+    );
+  }
+
+  async listSpecHistoryEntriesForSpec(specId: string): Promise<SpecHistoryEntryRecord[]> {
+    const records = await this.listSpecHistoryEntries();
+    return records.filter((record) => record.specId === specId);
   }
 
   async listSpecs(): Promise<AcceptedEventSpec[]> {

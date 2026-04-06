@@ -7,6 +7,7 @@ import {
   extractTextFromDocument,
   getDemoProductionSpecs,
   parseUploadedRecipeText,
+  PurchasingUnitProfileLibrary,
   validateEventDemand,
   validateAcceptedEventSpec,
   YieldProfileLibrary,
@@ -132,6 +133,11 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     databaseUrl: options.databaseUrl,
     pgPool: options.pgPool
   });
+  const purchasingUnits = new PurchasingUnitProfileLibrary({
+    rootDir: options.dataRoot,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
   const auditLog =
     options.auditLog ??
     new AuditLogStore({
@@ -174,7 +180,8 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.post<{ Body: { eventSpec: AcceptedEventSpec } }>("/v1/production/plans", async (request, reply) => {
     const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
     const artifacts = await buildProductionArtifacts(eventSpec, discoveryService, {
-      yieldProfiles
+      yieldProfiles,
+      purchasingUnits
     });
     await store.savePlan(artifacts.productionPlan);
     await store.savePurchaseList(artifacts.purchaseList);
@@ -202,7 +209,8 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
         createAcceptedEventSpecFromEventDemand(eventDemand)
       );
       const artifacts = await buildProductionArtifacts(eventSpec, discoveryService, {
-        yieldProfiles
+        yieldProfiles,
+        purchasingUnits
       });
       await store.savePlan(artifacts.productionPlan);
       await store.savePurchaseList(artifacts.purchaseList);
@@ -231,7 +239,8 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     const seeded = [];
     for (const spec of getDemoProductionSpecs()) {
       const artifacts = await buildProductionArtifacts(spec, discoveryService, {
-        yieldProfiles
+        yieldProfiles,
+        purchasingUnits
       });
       await store.savePlan(artifacts.productionPlan);
       await store.savePurchaseList(artifacts.purchaseList);

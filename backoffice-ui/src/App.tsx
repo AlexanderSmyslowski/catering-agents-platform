@@ -21,6 +21,7 @@ import {
   createAcceptedSpecFromText,
   createOfferFromText,
   createProductionPlan,
+  finalizeSpecGovernanceChangeSet,
   loadDashboardState,
   loadServiceHealth,
   offerPrintUrl,
@@ -65,6 +66,8 @@ const emptyState: DashboardState = {
   intakeRequests: [],
   acceptedSpecs: [],
   approvalRequests: [],
+  specGovernanceEntries: [],
+  specHistoryEntries: [],
   extractedContexts: [],
   offerDrafts: [],
   productionPlans: [],
@@ -133,6 +136,14 @@ function translateReadiness(value?: string): string {
   return value ? labels[value] ?? value : "-";
 }
 
+function translateOwnershipContext(value?: string): string {
+  const labels: Record<string, string> = {
+    customer: "Kundenstand",
+    production: "Produktionsstand"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
 function translateHealthStatus(value?: string): string {
   const labels: Record<string, string> = {
     ok: "bereit",
@@ -159,6 +170,81 @@ function translateApprovalState(value?: string): string {
     rejected: "abgelehnt"
   };
   return value ? labels[value] ?? value : "-";
+}
+
+function translateGovernanceStatus(value?: string): string {
+  const labels: Record<string, string> = {
+    approved: "freigegeben",
+    pending_reapproval: "erneute Freigabe nötig",
+    rejected: "abgelehnt"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+function translateImpactLevel(value?: string): string {
+  const labels: Record<string, string> = {
+    L1: "L1",
+    L2: "L2",
+    L3: "L3"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+export function translateGovernanceRuleKey(value: string): string {
+  const labels: Record<string, string> = {
+    guest_count: "Mengen",
+    allergens: "Allergene",
+    event_timing: "Zeitfenster",
+    recipe_swap: "Gerichte/Rezeptur",
+    prices: "Kalkulation",
+    notes: "Hinweise/Texte",
+    yield: "Ausbeute",
+    procurement_units_equivalent: "Gebinde",
+    unit_conversion_with_qty_effect: "Mengenumrechnung"
+  };
+  return labels[value] ?? value;
+}
+
+export function shouldConfirmFinalizeChangeSet(
+  changeSet: Record<string, unknown> | undefined
+): boolean {
+  return (
+    String(changeSet?.status ?? "") === "open" &&
+    String(changeSet?.highestImpactLevel ?? "") === "L3"
+  );
+}
+
+export function mapFinalizeGovernanceErrorMessage(message: string): string {
+  if (/Kein offenes SpecChangeSet gefunden/.test(message)) {
+    return "Es gibt kein offenes ChangeSet mehr zum Finalisieren.";
+  }
+
+  if (/kritische Änderungen \(L3\).*explizit bestätigt/.test(message)) {
+    return "Dieses kritische ChangeSet muss vor dem Finalisieren ausdrücklich bestätigt werden.";
+  }
+
+  return message;
+}
+
+export function buildFinalizeGovernanceRequest(input: {
+  specId?: string;
+  changeSetId?: string;
+  changeSet?: Record<string, unknown>;
+}) {
+  return {
+    specId: input.specId,
+    changeSetId: input.changeSetId,
+    confirmCriticalFinalize: shouldConfirmFinalizeChangeSet(input.changeSet)
+  };
+}
+
+export function isCriticalOpenGovernanceChangeSet(
+  changeSet: Record<string, unknown> | undefined
+): boolean {
+  return (
+    String(changeSet?.status ?? "") === "open" &&
+    String(changeSet?.highestImpactLevel ?? "") === "L3"
+  );
 }
 
 function formatCounts(counts: Record<string, number>): string {
@@ -345,17 +431,36 @@ function formatPercent(value?: unknown): string | undefined {
 }
 
 function formatPurchasePreviewLine(item: Record<string, unknown>): string {
+  const rawQty = item.normalizedQty;
+  const rawUnit = String(item.normalizedUnit ?? "").trim();
   const purchaseQty = item.purchaseQty;
   const purchaseUnit = String(item.purchaseUnit ?? "").trim();
   const group = String(item.group ?? "").trim();
   const supplierHint = String(item.supplierHint ?? "").trim();
+  const appliedPurchasingUnit =
+    item.appliedPurchasingUnit && typeof item.appliedPurchasingUnit === "object"
+      ? (item.appliedPurchasingUnit as Record<string, unknown>)
+      : undefined;
 
-  const quantityPart =
+  const rawPart =
+    typeof rawQty === "number" || typeof rawQty === "string"
+      ? `Roh ${rawQty} ${rawUnit}`.trim()
+      : rawUnit || "Rohmenge offen";
+
+  const orderPart =
     typeof purchaseQty === "number" || typeof purchaseQty === "string"
-      ? `${purchaseQty} ${purchaseUnit}`.trim()
+      ? `Bestellung ${purchaseQty} ${purchaseUnit}`.trim()
       : purchaseUnit || "Menge offen";
 
-  const metaParts = [quantityPart, group || undefined, supplierHint || undefined].filter(Boolean);
+  const rulePart =
+    appliedPurchasingUnit &&
+    (typeof appliedPurchasingUnit.unitSize === "number" || typeof appliedPurchasingUnit.unitSize === "string")
+      ? `1 ${String(appliedPurchasingUnit.unitLabel ?? "").trim()} = ${appliedPurchasingUnit.unitSize} ${String(
+          appliedPurchasingUnit.baseUnit ?? ""
+        ).trim()}`.trim()
+      : undefined;
+
+  const metaParts = [rawPart, orderPart, rulePart, group || undefined, supplierHint || undefined].filter(Boolean);
   return metaParts.join(" · ");
 }
 
@@ -408,6 +513,17 @@ function extractAllergenNotices(plan: Record<string, unknown>): string[] {
   });
 
   return [...new Set(notices)];
+}
+
+function translateSpecHistoryEventType(value?: string): string {
+  const labels: Record<string, string> = {
+    spec_manual_created: "manuell angelegt",
+    spec_updated: "geändert",
+    approval_requested: "Freigabe angefordert",
+    approval_approved: "Freigabe erteilt",
+    spec_archived: "archiviert"
+  };
+  return value ? labels[value] ?? value : "-";
 }
 
 function renderPlanList(
@@ -667,6 +783,27 @@ export function App() {
       .reverse()
       .find((context) => String(context.specId ?? "") === currentProductionSpecId);
   }, [currentProductionSpecId, dashboard.extractedContexts]);
+
+  const focusedSpecHistoryEntries = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return [];
+    }
+
+    return dashboard.specHistoryEntries
+      .filter((entry) => String(entry.specId ?? "") === currentProductionSpecId)
+      .slice()
+      .sort((left, right) => String(right.at ?? "").localeCompare(String(left.at ?? "")));
+  }, [currentProductionSpecId, dashboard.specHistoryEntries]);
+
+  const focusedSpecGovernanceEntry = useMemo(() => {
+    if (!currentProductionSpecId) {
+      return undefined;
+    }
+
+    return dashboard.specGovernanceEntries.find(
+      (entry) => String(entry.specId ?? "") === currentProductionSpecId
+    );
+  }, [currentProductionSpecId, dashboard.specGovernanceEntries]);
 
   const currentSpecPlans = useMemo(() => {
     if (productionWorkspaceCleared) {
@@ -1362,6 +1499,36 @@ export function App() {
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Freigabe konnte nicht gespeichert werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleFinalizeGovernanceChangeSet(input: {
+    specId?: string;
+    changeSetId?: string;
+    changeSet?: Record<string, unknown>;
+  }) {
+    if (
+      shouldConfirmFinalizeChangeSet(input.changeSet) &&
+      typeof window !== "undefined" &&
+      !window.confirm("Dieses ChangeSet enthält kritische Änderungen (L3). Änderungen wirklich finalisieren?")
+    ) {
+      return;
+    }
+
+    setSubmitting(true);
+    clearMessages();
+    try {
+      await finalizeSpecGovernanceChangeSet(buildFinalizeGovernanceRequest(input));
+      await refreshDashboard();
+      setNotice("Änderungen wurden finalisiert.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? mapFinalizeGovernanceErrorMessage(submitError.message)
+          : "Änderungsspur konnte nicht abgeschlossen werden."
       );
     } finally {
       setSubmitting(false);
@@ -2118,6 +2285,141 @@ export function App() {
                   {focusedExtractedContext ? (
                     <ExtractedContextPanel extractedContext={focusedExtractedContext} />
                   ) : null}
+                  {focusedSpecHistoryEntries.length > 0 ? (
+                    <>
+                      <div className="divider" />
+                      <header>
+                        <p className="eyebrow">Verlauf</p>
+                        <h4 className="subsection-title">Änderungen und Freigaben</h4>
+                      </header>
+                      <ul className="item-list compact history-list">
+                        {focusedSpecHistoryEntries.slice(0, 8).map((entry) => {
+                          const actor = entry.actor as Record<string, unknown> | undefined;
+                          const detail = String(entry.detail ?? "").trim();
+                          return (
+                            <li key={String(entry.historyEntryId)}>
+                              <strong>{translateSpecHistoryEventType(String(entry.eventType ?? ""))}</strong>
+                              <p className="helper-text">
+                                {String(entry.at ?? "-")} · {String(actor?.name ?? "-")}
+                                {actor?.role ? ` · ${String(actor.role)}` : ""}
+                              </p>
+                              <p>{String(entry.summary ?? "-")}</p>
+                              {detail ? <p className="helper-text">Details: {detail}</p> : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : null}
+                  {focusedSpecGovernanceEntry ? (
+                    <>
+                      <div className="divider" />
+                      <header>
+                        <p className="eyebrow">Governance</p>
+                        <h4 className="subsection-title">Freigabe- und Änderungsspur</h4>
+                      </header>
+                      <div
+                        className={`mobile-callout governance-callout${
+                          String(focusedSpecGovernanceEntry.approvalStatus ?? "") === "pending_reapproval"
+                            ? " governance-callout--pending"
+                            : ""
+                        }${
+                          isCriticalOpenGovernanceChangeSet(
+                            (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>) ?? undefined
+                          )
+                            ? " governance-callout--critical-open"
+                            : ""
+                        }`}
+                      >
+                        <p className="helper-text">
+                          Status:{" "}
+                          <strong>
+                            {translateGovernanceStatus(
+                              String(focusedSpecGovernanceEntry.approvalStatus ?? "")
+                            )}
+                          </strong>
+                        </p>
+                        {focusedSpecGovernanceEntry.changeSet ? (
+                          <>
+                            <p>
+                              <strong>
+                                {String(
+                                  (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>).summary ??
+                                    "Änderungsspur"
+                                )}
+                              </strong>
+                            </p>
+                            <p className="helper-text">
+                              ChangeSet:{" "}
+                              {String(
+                                (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>).status === "open"
+                                  ? "offen"
+                                  : "finalisiert"
+                              )}{" "}
+                              · Impact{" "}
+                              {translateImpactLevel(
+                                String(
+                                  (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>)
+                                    .highestImpactLevel ?? ""
+                                )
+                              )}
+                            </p>
+                            {isCriticalOpenGovernanceChangeSet(
+                              (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>) ?? undefined
+                            ) ? (
+                              <>
+                                <p className="governance-critical-label">Kritische Änderung</p>
+                                <p className="helper-text governance-critical-note">
+                                  Dieses offene ChangeSet enthält kritische Änderungen und sollte bewusst
+                                  geprüft und finalisiert werden.
+                                </p>
+                              </>
+                            ) : null}
+                            {Array.isArray(
+                              (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>).activeRuleKeys
+                            ) &&
+                            (
+                              (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>)
+                                .activeRuleKeys as unknown[]
+                            ).length > 0 ? (
+                              <p className="helper-text">
+                                Bereiche:{" "}
+                                {(
+                                  (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>)
+                                    .activeRuleKeys as unknown[]
+                                )
+                                  .map((entry) => translateGovernanceRuleKey(String(entry)))
+                                  .join(", ")}
+                              </p>
+                            ) : null}
+                            {(focusedSpecGovernanceEntry.changeSet as Record<string, unknown>).status === "open" ? (
+                              <div className="action-row">
+                                <button
+                                  className="secondary-button"
+                                  disabled={loading || submitting}
+                                  onClick={() =>
+                                    void handleFinalizeGovernanceChangeSet({
+                                      specId: currentProductionSpecId,
+                                      changeSetId: String(
+                                        (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>)
+                                          .changeSetId ?? ""
+                                      ),
+                                      changeSet:
+                                        (focusedSpecGovernanceEntry.changeSet as Record<string, unknown>) ?? undefined
+                                    })
+                                  }
+                                >
+                                  Änderungen finalisieren
+                                </button>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <p className="helper-text">Keine offene oder zuletzt finalisierte Änderungsspur.</p>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
                   {editingSpecId === String(focusedProductionSpec.specId) ? (
                     <>
                       <div className="divider" />
@@ -2583,6 +2885,21 @@ export function App() {
                   <p className="eyebrow">Plandetails</p>
                   <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
                 </header>
+                <p className="helper-text context-note">
+                  Kundenstand:{" "}
+                  {translateOwnershipContext(
+                    selectedPlanSpec
+                      ? String(
+                          (selectedPlanSpec as Record<string, unknown>).ownershipContext ?? "customer"
+                        )
+                      : "customer"
+                  )}
+                  {" · "}Produktionsstand:{" "}
+                  {translateOwnershipContext(
+                    String((selectedPlan as Record<string, unknown>).ownershipContext ?? "production")
+                  )}
+                  {" · "}Produktionsableitungen ersetzen nicht stillschweigend die kundenfuehrende Wahrheit.
+                </p>
                 <p className="helper-text plan-meta">
                   Status:{" "}
                   {translateReadiness(

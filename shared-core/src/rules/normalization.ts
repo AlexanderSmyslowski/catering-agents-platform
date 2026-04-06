@@ -570,6 +570,7 @@ export function normalizeEventRequestToSpec(
   const spec: AcceptedEventSpec = {
     schemaVersion: SCHEMA_VERSION,
     specId: `spec-${request.requestId}`,
+    ownershipContext: "customer",
     lifecycle: {
       commercialState: opts?.commercialState ?? "manual"
     },

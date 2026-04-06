@@ -5,6 +5,7 @@
   "workspaces": [
     "shared-core",
     "intake-service",
+    "ingestion-service",
     "offer-service",
     "production-service",
     "print-export",
@@ -20,6 +21,7 @@
     "local:status": "bash ./scripts/status-local-stack.sh",
     "dev:ui": "npm --workspace @catering/backoffice-ui run dev",
     "dev:intake": "tsx intake-service/src/server.ts",
+    "dev:ingestion": "tsx ingestion-service/src/server.ts",
     "dev:offer": "tsx offer-service/src/server.ts",
     "dev:production": "tsx production-service/src/server.ts",
     "dev:exports": "tsx print-export/src/server.ts",

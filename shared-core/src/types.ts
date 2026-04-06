@@ -192,9 +192,12 @@ export interface ServicePlan {
   modules: ServiceModule[];
 }
 
+export type OwnershipContext = "customer" | "production";
+
 export interface AcceptedEventSpec {
   schemaVersion: string;
   specId: string;
+  ownershipContext: OwnershipContext;
   lifecycle: {
     commercialState: CommercialState;
   };
@@ -221,6 +224,7 @@ export interface AcceptedEventSpec {
 export interface EventDemand {
   schemaVersion: string;
   demandId: string;
+  ownershipContext: OwnershipContext;
   pax: number;
   serviceForm: string;
   menuOrServiceWish: string;
@@ -361,6 +365,7 @@ export interface TimelineEntry {
 export interface ProductionPlan {
   schemaVersion: string;
   planId: string;
+  ownershipContext: OwnershipContext;
   eventSpecId: string;
   readiness: Readiness;
   productionBatches: ProductionBatch[];
@@ -377,6 +382,14 @@ export interface PurchaseItem {
   normalizedUnit: string;
   purchaseQty: number;
   purchaseUnit: string;
+  appliedPurchasingUnit?: {
+    unitLabel: string;
+    unitSize: number;
+    baseUnit: string;
+    sourceTypeApplied: string;
+    sourceRefId?: string;
+    missingRule: boolean;
+  };
   group: string;
   supplierHint?: string;
   sourceRecipes: string[];
@@ -413,6 +426,18 @@ export interface YieldProfile {
   scopeType: "ingredient";
   scopeId: string;
   yieldFactor: number;
+  sourceType: string;
+  note?: string;
+  isActive: boolean;
+}
+
+export interface PurchasingUnitProfile {
+  id: string;
+  scopeType: "ingredient";
+  scopeId: string;
+  baseUnit: string;
+  unitLabel: string;
+  unitSize: number;
   sourceType: string;
   note?: string;
   isActive: boolean;

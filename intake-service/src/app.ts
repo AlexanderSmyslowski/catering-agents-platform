@@ -23,8 +23,13 @@ import {
   type ApprovalRole,
   type DocumentImportRecord,
   type ExtractedContextRecord,
-  type ExtractedField
+  type ExtractedField,
+  type SpecGovernanceStateRecord,
+  type SpecHistoryEntryRecord
 } from "./store.js";
+import { IntakeStoreAcceptedEventSpecAdapter } from "./spec-governance/accepted-event-spec-adapter.js";
+import { applyApprovalTrigger, type PersistedApprovalStatus } from "./spec-governance/approval-trigger.js";
+import { SpecGovernanceService } from "./spec-governance/spec-governance-service.js";
 
 interface DocumentBody {
   documents: {
@@ -70,6 +75,14 @@ interface ArchiveSpecBody {
 interface ApprovalDecisionBody {
   note?: string;
 }
+
+interface FinalizeSpecGovernanceBody {
+  specId?: string;
+  changeSetId?: string;
+  confirmCriticalFinalize?: boolean;
+}
+
+let specHistorySequence = 0;
 
 interface EventDemandBody {
   pax: number;
@@ -130,6 +143,7 @@ function eventDemandFromBody(demandId: string, body: EventDemandBody): EventDema
   return validateEventDemand({
     schemaVersion: "1.0.0",
     demandId,
+    ownershipContext: "customer",
     pax: body.pax,
     serviceForm: body.serviceForm?.trim() ?? "",
     menuOrServiceWish: body.menuOrServiceWish?.trim() ?? "",
@@ -347,6 +361,19 @@ function approvalRequestForBlockedSpecUpdate(
   };
 }
 
+function createSpecHistoryEntry(
+  input: Omit<SpecHistoryEntryRecord, "historyEntryId" | "at" | "sequence">
+): SpecHistoryEntryRecord {
+  const at = new Date().toISOString();
+  specHistorySequence += 1;
+  return {
+    historyEntryId: `history-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    at,
+    sequence: specHistorySequence,
+    ...input
+  };
+}
+
 export interface IntakeAppOptions extends CollectionStorageOptions {
   store?: IntakeStore;
   auditLog?: AuditLogStore;
@@ -361,6 +388,45 @@ function actorForRequest(request: { headers: Record<string, string | string[] | 
     name: actorNameFromHeaders(request.headers, "Intake-Mitarbeiter"),
     source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
   };
+}
+
+function effectiveApprovalStatus(
+  state: SpecGovernanceStateRecord | undefined
+): PersistedApprovalStatus {
+  return state?.approvalStatus ?? "approved";
+}
+
+function buildSpecGovernanceState(input: {
+  specId: string;
+  approvalStatus: PersistedApprovalStatus;
+  highestImpactLevel?: SpecGovernanceStateRecord["highestImpactLevel"];
+  summary?: string | null;
+  latestApprovalRequestId?: string;
+}): SpecGovernanceStateRecord {
+  return {
+    specId: input.specId,
+    approvalStatus: input.approvalStatus,
+    updatedAt: new Date().toISOString(),
+    highestImpactLevel: input.highestImpactLevel ?? null,
+    summary: input.summary ?? undefined,
+    latestApprovalRequestId: input.latestApprovalRequestId
+  };
+}
+
+function selectVisibleChangeSet(
+  changeSets: Awaited<ReturnType<IntakeStore["listSpecChangeSetsForSpec"]>>
+) {
+  const openChangeSet = changeSets.find((record) => record.status === "open");
+  if (openChangeSet) {
+    return openChangeSet;
+  }
+
+  return [...changeSets]
+    .sort(
+      (left, right) =>
+        String(right.finalizedAt ?? "").localeCompare(String(left.finalizedAt ?? "")) ||
+        String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? ""))
+    )[0];
 }
 
 function multipartFieldValue(
@@ -582,17 +648,22 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     logger: false,
     bodyLimit: 25 * 1024 * 1024
   });
+  const specGovernance = new SpecGovernanceService(
+    new IntakeStoreAcceptedEventSpecAdapter(store),
+    store
+  );
 
   app.register(multipart);
 
   app.get("/health", async (_request, reply) => {
-    const [requests, eventDemands, specs, approvalRequests, documentImports, extractedContexts, auditEvents] = await Promise.all([
+    const [requests, eventDemands, specs, approvalRequests, documentImports, extractedContexts, specHistoryEntries, auditEvents] = await Promise.all([
       store.listRequests(),
       store.listEventDemands(),
       store.listSpecs(),
       store.listApprovalRequests(),
       store.listDocumentImports(),
       store.listExtractedContexts(),
+      store.listSpecHistoryEntries(),
       auditLog.count()
     ]);
     return reply.send({
@@ -606,6 +677,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         approvalRequests: approvalRequests.length,
         documentImports: documentImports.length,
         extractedContexts: extractedContexts.length,
+        specHistoryEntries: specHistoryEntries.length,
         auditEvents
       }
     });
@@ -737,6 +809,16 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     await store.saveRequest(eventRequest);
     await store.saveSpec(spec);
+    await store.saveSpecHistoryEntry(
+      createSpecHistoryEntry({
+        eventType: "spec_manual_created",
+        specId: spec.specId,
+        entityType: "AcceptedEventSpec",
+        entityRefId: spec.specId,
+        summary: "Operative Spezifikation manuell angelegt.",
+        actor: actorForRequest(request)
+      })
+    );
     await auditLog.log({
       action: "intake.manual_spec_created",
       entityType: "AcceptedEventSpec",
@@ -872,6 +954,111 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
   });
 
+  app.get<{ Querystring: { specId?: string } }>("/v1/intake/spec-governance", async (request, reply) => {
+    const specId = request.query.specId?.trim();
+    const scopedSpec = specId ? await store.getSpec(specId) : undefined;
+    const specs = specId ? (scopedSpec ? [scopedSpec] : []) : await store.listSpecs();
+
+    const items = await Promise.all(
+      specs
+        .filter((entry): entry is AcceptedEventSpec => Boolean(entry))
+        .map(async (entry) => {
+          const [governanceState, changeSets] = await Promise.all([
+            store.getSpecGovernanceState(entry.specId),
+            store.listSpecChangeSetsForSpec(entry.specId)
+          ]);
+          const visibleChangeSet = selectVisibleChangeSet(changeSets);
+
+          return {
+            specId: entry.specId,
+            approvalStatus: governanceState?.approvalStatus ?? "approved",
+            updatedAt: governanceState?.updatedAt,
+            latestApprovalRequestId: governanceState?.latestApprovalRequestId,
+            changeSet: visibleChangeSet
+              ? {
+                  changeSetId: visibleChangeSet.changeSetId,
+                  status: visibleChangeSet.status,
+                  summary: visibleChangeSet.summary,
+                  highestImpactLevel: visibleChangeSet.highestImpactLevel,
+                  activeRuleKeys: visibleChangeSet.activeRuleKeys,
+                  updatedAt: visibleChangeSet.updatedAt,
+                  updatedBy: visibleChangeSet.updatedBy,
+                  finalizedAt: visibleChangeSet.finalizedAt,
+                  finalizedBy: visibleChangeSet.finalizedBy
+                }
+              : null
+          };
+        })
+    );
+
+    return reply.send({ items });
+  });
+
+  app.post<{ Body: FinalizeSpecGovernanceBody }>("/v1/intake/spec-governance/finalize", async (request, reply) => {
+    const specId = request.body.specId?.trim();
+    const changeSetId = request.body.changeSetId?.trim();
+    const confirmCriticalFinalize = request.body.confirmCriticalFinalize === true;
+
+    if (!specId && !changeSetId) {
+      return reply.code(400).send({
+        message: "Es muss eine specId oder changeSetId uebergeben werden."
+      });
+    }
+
+    const openChangeSet = changeSetId
+      ? await store.getSpecChangeSet(changeSetId)
+      : specId
+        ? await store.getOpenSpecChangeSetForSpec(specId)
+        : undefined;
+
+    if (
+      openChangeSet?.status === "open" &&
+      openChangeSet.highestImpactLevel === "L3" &&
+      !confirmCriticalFinalize
+    ) {
+      return reply.code(409).send({
+        message: "Dieses ChangeSet enthält kritische Änderungen (L3) und muss explizit bestätigt werden."
+      });
+    }
+
+    try {
+      const finalizedChangeSet = await specGovernance.finalizeChangeSet({
+        specId,
+        changeSetId,
+        actorName: actorForRequest(request).name
+      });
+
+      return reply.send({
+        changeSet: {
+          changeSetId: finalizedChangeSet.changeSetId,
+          specId: finalizedChangeSet.specId,
+          status: finalizedChangeSet.status,
+          summary: finalizedChangeSet.summary,
+          highestImpactLevel: finalizedChangeSet.highestImpactLevel,
+          activeRuleKeys: finalizedChangeSet.activeRuleKeys,
+          updatedAt: finalizedChangeSet.updatedAt,
+          updatedBy: finalizedChangeSet.updatedBy,
+          finalizedAt: finalizedChangeSet.finalizedAt,
+          finalizedBy: finalizedChangeSet.finalizedBy
+        }
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "ChangeSet konnte nicht finalisiert werden.";
+      const statusCode = /Kein offenes SpecChangeSet gefunden/.test(message) ? 409 : 400;
+      return reply.code(statusCode).send({ message });
+    }
+  });
+
+  app.get<{ Querystring: { specId?: string } }>("/v1/intake/spec-history", async (request, reply) => {
+    const specId = request.query.specId?.trim();
+    return reply.send({
+      items: specId
+        ? await store.listSpecHistoryEntriesForSpec(specId)
+        : await store.listSpecHistoryEntries()
+    });
+  });
+
   app.get<{ Params: { demandId: string } }>("/v1/intake/event-demands/:demandId", async (request, reply) => {
     const eventDemand = await store.getEventDemand(request.params.demandId);
     if (!eventDemand) {
@@ -942,15 +1129,66 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       }
 
       const actor = actorForRequest(request);
+      const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
+      const governanceState = await store.getSpecGovernanceState(spec.specId);
+      const governanceResult = await specGovernance.classifyAndTrack({
+        specId: spec.specId,
+        nextDocument: updatedSpec,
+        actorName: actor.name
+      });
+      const approvalOutcome = applyApprovalTrigger({
+        currentApprovalStatus: effectiveApprovalStatus(governanceState),
+        items: governanceResult.classifiedChangeSet.items
+      });
       const criticalFields = criticalFieldsForSpecUpdate(request.body);
-      if (criticalFields.length > 0 && role !== "Approver") {
-        const approvalRequest = approvalRequestForBlockedSpecUpdate(
-          spec.specId,
-          request.body,
-          actor,
-          role
+      if (approvalOutcome.newApprovalStatus === "pending_reapproval" && role !== "Approver") {
+        const existingPendingApprovalRequest = (await store.listApprovalRequests()).find(
+          (record) => record.specId === spec.specId && record.status === "pending"
         );
+        const approvalRequest = existingPendingApprovalRequest
+          ? {
+              ...existingPendingApprovalRequest,
+              requestedAt: new Date().toISOString(),
+              requestedBy: {
+                name: actor.name,
+                role
+              },
+              criticalFields,
+              requestedChange: request.body as Record<string, unknown>
+            }
+          : approvalRequestForBlockedSpecUpdate(
+              spec.specId,
+              request.body,
+              actor,
+              role
+            );
         await store.saveApprovalRequest(approvalRequest);
+        await store.saveSpecGovernanceState(
+          buildSpecGovernanceState({
+            specId: spec.specId,
+            approvalStatus: approvalOutcome.newApprovalStatus,
+            highestImpactLevel: governanceResult.finalizedChangeSet.highestImpactLevel,
+            summary: governanceResult.finalizedChangeSet.summary,
+            latestApprovalRequestId: approvalRequest.approvalRequestId
+          })
+        );
+        await store.saveSpecHistoryEntry(
+          createSpecHistoryEntry({
+            eventType: "approval_requested",
+            specId: spec.specId,
+            entityType: "ApprovalRequest",
+            entityRefId: approvalRequest.approvalRequestId,
+            summary: "Freigabe für kritische Änderung angefordert.",
+            actor: {
+              ...actor,
+              role
+            },
+            detail:
+              approvalRequest.criticalFields.length > 0
+                ? approvalRequest.criticalFields.join(", ")
+                : undefined
+          })
+        );
         await auditLog.log({
           action: "intake.spec_update_blocked",
           entityType: "ApprovalRequest",
@@ -966,12 +1204,40 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         return reply.code(409).send({
           message: "Kritische Änderungen sind freigabepflichtig.",
           requiresApproval: true,
-          approvalRequest
+          approvalRequest,
+          governanceState: {
+            approvalStatus: approvalOutcome.newApprovalStatus,
+            highestImpactLevel: governanceResult.finalizedChangeSet.highestImpactLevel,
+            summary: governanceResult.finalizedChangeSet.summary
+          }
         });
       }
 
-      const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
       await store.saveSpec(updatedSpec);
+      await store.saveSpecGovernanceState(
+        buildSpecGovernanceState({
+          specId: updatedSpec.specId,
+          approvalStatus: role === "Approver" ? "approved" : approvalOutcome.newApprovalStatus,
+          highestImpactLevel: governanceResult.finalizedChangeSet.highestImpactLevel,
+          summary: governanceResult.finalizedChangeSet.summary
+        })
+      );
+      await store.saveSpecHistoryEntry(
+        createSpecHistoryEntry({
+          eventType: "spec_updated",
+          specId: updatedSpec.specId,
+          entityType: "AcceptedEventSpec",
+          entityRefId: updatedSpec.specId,
+          summary: isHarmlessNotesOnlyUpdate(request.body)
+            ? "Operative Spezifikation ergänzt."
+            : "Operative Spezifikation wesentlich geändert.",
+          actor: {
+            ...actor,
+            role
+          },
+          detail: criticalFields.length > 0 ? criticalFields.join(", ") : undefined
+        })
+      );
       await auditLog.log({
         action: "intake.spec_updated",
         entityType: "AcceptedEventSpec",
@@ -1039,6 +1305,29 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
       await store.saveSpec(updatedSpec);
       await store.saveApprovalRequest(approvedRequest);
+      await store.saveSpecGovernanceState(
+        buildSpecGovernanceState({
+          specId: updatedSpec.specId,
+          approvalStatus: "approved",
+          highestImpactLevel: "L3",
+          summary: "Freigabepflichtige Änderung freigegeben.",
+          latestApprovalRequestId: approvedRequest.approvalRequestId
+        })
+      );
+      await store.saveSpecHistoryEntry(
+        createSpecHistoryEntry({
+          eventType: "approval_approved",
+          specId: updatedSpec.specId,
+          entityType: "ApprovalRequest",
+          entityRefId: approvedRequest.approvalRequestId,
+          summary: "Freigabepflichtige Änderung freigegeben.",
+          actor: {
+            ...actor,
+            role
+          },
+          detail: approvedRequest.criticalFields.join(", ")
+        })
+      );
       await auditLog.log({
         action: "intake.spec_update_approved",
         entityType: "ApprovalRequest",
@@ -1066,6 +1355,18 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       if (!archived) {
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
       }
+
+      await store.saveSpecHistoryEntry(
+        createSpecHistoryEntry({
+          eventType: "spec_archived",
+          specId: archived.spec.specId,
+          entityType: "AcceptedEventSpec",
+          entityRefId: archived.spec.specId,
+          summary: "Operative Spezifikation archiviert.",
+          actor: actorForRequest(request),
+          detail: request.body?.reason?.trim() || undefined
+        })
+      );
 
       await auditLog.log({
         action: "intake.spec_archived",

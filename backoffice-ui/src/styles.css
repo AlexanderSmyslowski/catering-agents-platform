@@ -216,6 +216,13 @@ select {
   font-weight: 600;
 }
 
+.history-list li {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(15, 23, 34, 0.08);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.68);
+}
+
 .nav-link,
 .button-link {
   display: inline-flex;
@@ -685,6 +692,33 @@ button:disabled {
 .mobile-callout--warning {
   background: rgba(255, 248, 235, 0.88);
   border-color: rgba(199, 144, 39, 0.2);
+}
+
+.governance-callout {
+  margin-top: 0.55rem;
+}
+
+.governance-callout--pending {
+  background: rgba(255, 244, 230, 0.9);
+  border-color: rgba(194, 116, 18, 0.2);
+}
+
+.governance-callout--critical-open {
+  background: rgba(255, 241, 236, 0.94);
+  border-color: rgba(176, 72, 29, 0.24);
+}
+
+.governance-critical-label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(141, 52, 18, 0.92);
+}
+
+.governance-critical-note {
+  color: rgba(96, 42, 22, 0.92);
 }
 
 .mobile-detail-list > li,

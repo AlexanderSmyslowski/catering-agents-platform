@@ -12,12 +12,14 @@ import {
   type PurchaseItem,
   type ProductionPlan,
   type PurchaseList,
+  type PurchasingUnitProfileLibrary,
   type YieldProfileLibrary
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 
 interface ProductionPlanningOptions {
   yieldProfiles?: YieldProfileLibrary;
+  purchasingUnits?: PurchasingUnitProfileLibrary;
 }
 
 function stationFor(label: string): string {
@@ -523,6 +525,7 @@ export async function buildProductionArtifacts(
   const productionPlan = validateProductionPlan({
     schemaVersion: SCHEMA_VERSION,
     planId: `plan-${eventSpec.specId}`,
+    ownershipContext: "production",
     eventSpecId: eventSpec.specId,
     readiness,
     productionBatches,
@@ -533,7 +536,9 @@ export async function buildProductionArtifacts(
   });
 
   const purchaseList = validatePurchaseList(
-    aggregatePurchaseList(eventSpec.specId, productionBatches, procurementItems)
+    await aggregatePurchaseList(eventSpec.specId, productionBatches, procurementItems, {
+      purchasingUnits: options.purchasingUnits
+    })
   );
 
   return {

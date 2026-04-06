@@ -137,6 +137,7 @@ export function createAcceptedEventSpecFromEventDemand(input: EventDemand): Acce
 
   const spec: AcceptedEventSpec = {
     ...normalized,
+    ownershipContext: "customer",
     event: {
       ...normalized.event,
       type: eventType,
