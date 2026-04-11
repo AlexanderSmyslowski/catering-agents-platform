@@ -6,7 +6,7 @@ status: transition-reference
 repo: AlexanderSmyslowski/catering-agents-platform
 
 ## Zweck
-Diese Datei ist eine uebersichtlich erhaltene Uebergangs- und Referenzdatei. Die fuehrende Root-Memory-Datei ist wieder `memory.md`.
+Diese Datei ist eine uebersichtlich erhaltene Uebergangs- und Referenzdatei. Die fuehrende Root-Memory-Datei ist `memory.md`.
 
 ## Sofort lesen in neuer Session
 1. `memory.md`
@@ -43,14 +43,13 @@ Diese Datei ist eine uebersichtlich erhaltene Uebergangs- und Referenzdatei. Die
 
 ## Repo-Handoff
 - Fuehrende Arbeitsdateien im Repo:
-  - `memory_current.md`
+  - `memory.md`
   - `AGENTS.md`
   - `HANDOFF_PROMPT.md`
   - `docs/agent-memory/README.md`
 - Versionierte Snapshots liegen unter `docs/agent-memory/`, zuletzt:
   - `memory_v5.23_2026-04-11.md`
 
-## Hinweis zur alten memory.md
-- Die bestehende `memory.md` im Repo-Root ist derzeit nicht die aktuellste Fassung.
-- Grund ist eine technische Grenze des verfuegbaren GitHub-Connectors beim Ueberschreiben bestehender Dateien.
-- Bis zur direkten Behebung gilt **`memory_current.md` als Root-Datei mit aktuellem Stand**.
+## Hinweis zur memory.md
+- `memory.md` ist die fuehrende Root-Memory-Datei.
+- Diese Datei bleibt als Uebergangs- und Referenzdatei erhalten.
