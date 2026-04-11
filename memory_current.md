@@ -2,14 +2,14 @@
 
 version: 5.23
 date: 2026-04-11
-status: canonical-current-memory
+status: transition-reference
 repo: AlexanderSmyslowski/catering-agents-platform
 
 ## Zweck
-Diese Datei ist die kanonische aktuelle Root-Memory-Datei fuer das Repo, solange die bestehende `memory.md` technisch nicht direkt ueberschrieben werden kann.
+Diese Datei ist eine uebersichtlich erhaltene Uebergangs- und Referenzdatei. Die fuehrende Root-Memory-Datei ist wieder `memory.md`.
 
 ## Sofort lesen in neuer Session
-1. `memory_current.md`
+1. `memory.md`
 2. `AGENTS.md`
 3. `HANDOFF_PROMPT.md`
 4. `docs/agent-memory/README.md`
