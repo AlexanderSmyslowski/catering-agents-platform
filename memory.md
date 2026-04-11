@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.16
+version: 5.23
 date: 2026-04-11
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -8,6 +8,7 @@ repo: AlexanderSmyslowski/catering-agents-platform
 ## Zweck
 Diese Datei ist die fuehrende Kurzreferenz fuer neue Chatfenster, Hermes Agent, Codex 5.4 mini und andere Arbeitskontexte.
 Sie soll den aktuellen Projektstand, den Governance-Bauplan, die Leitplanken und den naechsten explizit beauftragten Schritt knapp und belastbar festhalten.
+Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 
 ## Repo-Kontext
 - Repository: `AlexanderSmyslowski/catering-agents-platform`
@@ -34,11 +35,12 @@ Sie soll den aktuellen Projektstand, den Governance-Bauplan, die Leitplanken und
   - keine Out-of-Scope-Themen still mitziehen
 
 ## Aktueller Gesamtstand
-- Der Governance-Pfad ist bis einschliesslich **Stufe 6b** umgesetzt und fachlich gruen / abnahmefaehig.
+- Der Governance-Pfad ist bis einschliesslich **Stufe 6c** umgesetzt und fachlich gruen / abnahmefaehig.
 - Die Umsetzung baut sauber sequenziell aufeinander auf.
 - Der Produktkern bleibt fuehrend; es wurde kein Prisma eingefuehrt.
 - Die aktuelle Phase ist ausdruecklich eine **Konsolidierungsphase** und nicht ein neuer Fachblock.
 - In dieser Phase gilt: keine neue Fachlogik, keine Vorgriffe auf spaetere Stufen, keine stillen Erweiterungen.
+- Stufe 6c ist der bereits umgesetzte read-only UX-/Transparenzschritt im bestehenden Governance-Kontext.
 
 ## Governance-Stand im Detail
 
@@ -117,8 +119,20 @@ Sie soll den aktuellen Projektstand, den Governance-Bauplan, die Leitplanken und
   - `unit_conversion_with_qty_effect` -> `Mengenumrechnung`
 - `summary` bleibt unveraendert
 
+### Stufe 6c - read-only Transparenz im bestehenden Governance-Callout
+- Status: fachlich gruen / abnahmefaehig
+- Kleine sichtbare Einordnung der vorhandenen Zustaende `open`, `finalized`, `approved` und `pending_reapproval`
+- Sichtbare Begriffe:
+  - `Offene Änderung`
+  - `Finalisierte Änderung`
+  - `Freigegeben`
+  - `Erneute Freigabe erforderlich`
+- Klarstellung im UI:
+  - `Finalisiert ist nicht gleich freigegeben.`
+- Keine neue Fachlogik, keine neue Freigabelogik, keine neue Persistenz, keine neuen API-Endpunkte
+
 ## Konsolidierungsstand
-- Der aktuelle Governance-Pfad ist bis einschliesslich Stufe 6b korrekt umgesetzt und fachlich gruen beziehungsweise abnahmefaehig.
+- Der aktuelle Governance-Pfad ist bis einschliesslich Stufe 6c korrekt umgesetzt und fachlich gruen beziehungsweise abnahmefaehig.
 - Die Umsetzung bleibt additiv zum bestehenden Produktkern und fuehrt keine neue Persistenzwelt oder Prisma ein.
 - `ApprovalRequestRecord` bleibt die einzige Freigabewahrheit.
 - `SpecGovernanceStateRecord` bildet die Statusspur, `SpecChangeSetRecord` bleibt die Aenderungseinheit.
@@ -127,7 +141,7 @@ Sie soll den aktuellen Projektstand, den Governance-Bauplan, die Leitplanken und
 - Die aktuelle Phase ist ausdruecklich eine Konsolidierungsphase ohne neue Fachlogik.
 
 ## Verbindlicher Mini-Referenzblock - Was aktuell gilt
-- Der Governance-Stand ist bis Stufe 6b abgeschlossen und fachlich gruen / abnahmefaehig.
+- Der Governance-Stand ist bis Stufe 6c abgeschlossen und fachlich gruen / abnahmefaehig.
 - `ApprovalRequestRecord` bleibt die fuehrende und einzige Freigabewahrheit.
 - `SpecGovernanceStateRecord` bleibt die Statusspur.
 - `SpecChangeSetRecord` bleibt die Aenderungseinheit.
@@ -154,8 +168,8 @@ Sie soll den aktuellen Projektstand, den Governance-Bauplan, die Leitplanken und
 - groessere Export-/UI-Ausweitung
 - neue Persistenzsysteme oder Prisma
 
-## Naechster explizit beauftragter Bauplan-Schritt - Stufe 6c
-- Status: fachlich beschrieben / noch nicht umgesetzt
+## Aktueller umgesetzter Bauplan-Schritt - Stufe 6c
+- Status: umgesetzt / fachlich gruen / abnahmefaehig
 - Typ: kleiner UX-/Transparenzschritt im bestehenden Governance-Callout
 - Ziel: bereits vorhandene Zustaende fachlich klarer sichtbar machen, ohne neue Fachlogik
 - Sichtbar einzuordnen:
@@ -208,8 +222,8 @@ Sie soll den aktuellen Projektstand, den Governance-Bauplan, die Leitplanken und
 - Neue Eintraege unten in der Versionshistorie anhaengen, bestehende Inhalte nicht still ueberschreiben.
 
 ## Versionshistorie
-### 5.16 - 2026-04-11
-- Fuehrende Repo-Memory-Datei fuer `AlexanderSmyslowski/catering-agents-platform` angelegt.
-- Aktuellen Governance-/Konsolidierungsstand 3a bis 6b uebernommen.
-- Stufe 6c als naechster explizit beauftragter Bauplan-Schritt ausformuliert.
-- Arbeitsregeln fuer neue Chats, Hermes Agent und Codex 5.4 mini festgehalten.
+### 5.23 - 2026-04-11
+- Root-Memory-Datei wieder als fuehrende Kurzreferenz festgelegt.
+- Governance-/Konsolidierungsstand bis einschliesslich Stufe 6c aktualisiert.
+- Stufe 6c als umgesetzter read-only UX-/Transparenzschritt dokumentiert.
+- Arbeitsregeln, Leitplanken und Handoff-Referenzen auf den konsolidierten Stand gebracht.
