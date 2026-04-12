@@ -28,8 +28,10 @@ Diese Datei richtet die Arbeit fuer ChatGPT, Hermes Agent, Codex 5.4 mini und ae
 - `ApprovalRequestRecord` bleibt fuehrende Freigabewahrheit.
 - `SpecGovernanceStateRecord` bleibt Statusspur.
 - `SpecChangeSetRecord` bleibt Aenderungseinheit.
-- Aktuell ist der Governance-Pfad bis Stufe 6b fachlich gruen.
-- Stufe 6c ist als naechster kleiner UX-/Transparenzschritt beschrieben, aber noch nicht umgesetzt.
+- Der Governance-Pfad ist bis einschliesslich Stufe 6c umgesetzt und fachlich gruen / abnahmefaehig.
+- Die aktuelle Phase ist eine Konsolidierungsphase ohne neue Fachlogik.
+- M1 Owned Memory Foundation ist im aktuellen Ausbaustand vorerst konsolidiert und abgeschlossen.
+- Keine neue Produktflaeche, keine neue Roadmap und keine Scope-Ausweitung ohne ausdruecklichen Auftrag.
 
 ## Memory-Disziplin
 - `memory.md` ist die fuehrende Kurzreferenz.
