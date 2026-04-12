@@ -170,7 +170,7 @@ Es beantwortet Fragen wie:
 ---
 
 ## Memory-Objekte
-
+## Memory-Objekte
 ## Deterministische Kernobjekte
 Diese Objekte sind fuehrend und muessen verlaesslich, stabil und referenzierbar sein.
 
@@ -188,6 +188,31 @@ Diese Objekte sind fuehrend und muessen verlaesslich, stabil und referenzierbar 
 - `MemoryReadRule`
 - `SkillDefinition`
 - `ResolverDefinition`
+
+### Konsolidierter M1-Stand und Dokumentationsrolle
+Die kanonische Architekturquelle fuer den Memory-Strang bleibt dieses Dokument: `docs/architecture/MEMORY_ARCHITECTURE.md`.
+
+M1 ist hier als vorerst konsolidiert und stabil zu lesen.
+
+In dieser konsolidierten M1-Fundation sind folgende interne Owned-Memory-Anker real verankert und fuehrend mitgefuehrt:
+- `SpecRecord`
+- `OpenIssueRecord`
+- `ProductionPlanRecord`
+
+`SpecRecord` und `OpenIssueRecord` sind hier die kanonisch beschriebenen Operational-Memory-Objekte. `ProductionPlanRecord` ist ein bereits real abgeleiteter interner Planungsanker im aktuellen Python-/Agent-Repo.
+
+`memory.md` bleibt in diesem Zusammenhang ausschliesslich Verweis-, Status- und Handoff-Anker. Es fasst den aktuellen Stand kompakt zusammen, benennt den Strang und verweist auf die kanonische Architektur. Es ist nicht die primäre Definitionsquelle fuer die Memory-Objekte.
+
+Eine spaetere Auslagerung einzelner Teilaspekte in eigene Architekturdokumente ist moeglich, aber fuer M1 noch nicht notwendig.
+
+### Operationale M1-Objekte
+- `SpecRecord`
+- `OpenIssueRecord`
+- `ProductionPlanRecord`
+
+### Weiter fuehrende, aber spaetere Kandidaten
+- `DecisionRecord`
+- `PreferenceRecord`
 
 ## Verdichtete / modellisch erzeugte Objekte
 Diese Objekte sind abgeleitet und duerfen die fuehrende Produktwahrheit nicht ersetzen.
