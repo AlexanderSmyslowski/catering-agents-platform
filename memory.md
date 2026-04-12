@@ -168,6 +168,10 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - groessere Export-/UI-Ausweitung
 - neue Persistenzsysteme oder Prisma
 
+## Memory-Strang-Hinweis
+- Die kanonische Architektur- und Objektdefinition fuer `SpecRecord` und `OpenIssueRecord` liegt in `docs/architecture/MEMORY_ARCHITECTURE.md`.
+- `memory.md` bleibt kompakter Status-, Verweis- und Handoff-Anker.
+
 ## Aktueller umgesetzter Bauplan-Schritt - Stufe 6c
 - Status: umgesetzt / fachlich gruen / abnahmefaehig
 - Typ: kleiner UX-/Transparenzschritt im bestehenden Governance-Callout
@@ -243,6 +247,60 @@ Festgelegt werden:
 - ein erster Resolver-Rahmen fuer gezieltes Kontextladen
 - ein erster Skill-Rahmen fuer offene, versionierbare Prozesskapseln
 
+### Abschlussstand M1 - Owned Memory Foundation
+
+Der aktuelle M1-Stand gilt als vorerst konsolidiert und stabil.
+
+#### Real verankerte interne Owned-Memory-Anker
+
+##### SpecRecord
+- als erster interner Owned-Memory-Anker im bestehenden Intake-/Spec-Kontext verankert
+- mit kleinem deterministischem Adapter
+- mit internem Guard
+- mit kleinem internem Nutzwert
+- ohne API-, Persistenz- oder UI-Ausweitung
+
+##### OpenIssueRecord
+- als zweiter interner Owned-Memory-Anker im bestehenden Intake-/Spec-Kontext verankert
+- mit kleinem internem Adapter
+- mit zwei realen internen Nutzungsorten
+- Signal-, Audit- und Mapping-Konsistenz zwischen den bestehenden Pfaden hergestellt
+- ohne Produktfläche nach außen
+
+##### ProductionPlanRecord
+- als dritter interner Owned-Memory-Anker im aktuellen Python-/Agent-Repo verankert
+- mit deterministischem Ableitungs-Helper
+- mit internem Call-Site-Punkt am Laufabschluss
+- mit kleiner Testabsicherung inklusive Fallback
+- mit lokaler interner TypedDict-Definition
+- weiterhin rein intern und ohne Außenwirkung
+
+#### Architektonische Einordnung
+
+Damit ist M1 nicht mehr nur Architekturdefinition, sondern ein realer interner Produktunterbau:
+- modellagnostisch
+- intern kontrolliert
+- nicht providergeführt
+- ohne neue Produktfläche
+- ohne neue Persistenzwelt
+- ohne neue öffentliche API
+
+#### Was bewusst noch nicht Teil von M1 ist
+- keine produktöffentliche Memory-Oberfläche
+- keine neue API für Memory-Records
+- keine Persistenzmigration
+- keine UI-Erweiterung
+- kein vollständiges Issue-System
+- kein vollständiges Produktionssystem
+- keine Workflow-Automation über diese Records
+- keine Provider-Abhängigkeit als Primärquelle
+
+#### Statusbewertung
+
+M1 kann im aktuellen Ausbaustand als vorerst erfolgreich stabilisiert und abgeschlossen gelten.
+
+Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produktmoment einen zusätzlichen Owned-Memory-Anker oder eine klar begrenzte interne Vertiefung tatsächlich trägt.
+
 ### Leitlinien
 
 - Session Context bleibt fluechtig und zustandsbezogen.
@@ -267,6 +325,13 @@ Festgelegt werden:
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+### 5.47 - 2026-04-11
+- M1 Owned Memory Foundation als vorerst konsolidiert und stabil abgeschlossen.
+- SpecRecord als erster interner Owned-Memory-Anker im Intake-/Spec-Kontext real verankert.
+- OpenIssueRecord als zweiter interner Owned-Memory-Anker mit zwei internen Nutzungsorten sowie Signal-, Audit- und Mapping-Konsistenz real verankert.
+- ProductionPlanRecord als dritter interner Owned-Memory-Anker im Python-/Agent-Repo mit deterministischem Helper, interner Call-Site, kleiner Testabsicherung und lokaler TypedDict-Definition real verankert.
+- Bestaetigt, dass alle drei Records weiterhin rein intern, modellagnostisch und ohne neue API-, Persistenz- oder UI-Fläche geführt werden.
+
 ### 5.32 - 2026-04-11
 - Neuer paralleler Architekturstrang Owned Memory & Harness Foundation aufgenommen.
 - Phase M1 als Architekturdefinition fuer modellagnostische Memory- und Harness-Grundlagen festgelegt.
