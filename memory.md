@@ -221,7 +221,58 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - `memory.md` bei jeder relevanten Neuerung versioniert fortschreiben.
 - Neue Eintraege unten in der Versionshistorie anhaengen, bestehende Inhalte nicht still ueberschreiben.
 
+## Neuer paralleler Architekturstrang
+
+### Owned Memory & Harness Foundation
+
+Zusätzlich zum laufenden Produkt- und Flow-Ausbau wird ein eigener Architekturstrang fuer modellagnostische Memory- und Harness-Grundlagen eingefuehrt.
+
+Ziel ist, Wissen, Kontext und wiederverwendbare Arbeitslogik in eigener Kontrolle zu halten, statt sie primaer an externe Modellanbieter, proprietaere Harnesses oder API-seitigen State zu binden.
+
+Dieser Strang baut nichts Bestehendes zurueck, sondern ergaenzt den bisherigen Produktpfad strategisch.
+
+### Phase M1 - Architekturdefinition
+
+Phase M1 ist bewusst noch keine Implementierungsphase, sondern eine saubere Architekturdefinition.
+
+Festgelegt werden:
+- die Trennung von Session Context, Operational Memory und Long-Term Memory
+- die fuehrenden Memory-Objekte
+- die Trennung zwischen deterministischer Speicherung und verdichteten Ableitungen
+- Ownership und Portabilitaet der Wissensbasis
+- ein erster Resolver-Rahmen fuer gezieltes Kontextladen
+- ein erster Skill-Rahmen fuer offene, versionierbare Prozesskapseln
+
+### Leitlinien
+
+- Session Context bleibt fluechtig und zustandsbezogen.
+- Operational Memory bleibt eng an konkrete Produktobjekte und Vorgaenge gebunden.
+- Long-Term Memory wird als verdichtete, wiederverwendbare Wissensschicht mit Quellenbezug gedacht.
+- Die eigentliche Wahrheit liegt in eigenen deterministischen Datenstrukturen, nicht im Provider.
+- Skills sollen als offene Prozesskapseln funktionieren, nicht als modellinterne Spezialtricks.
+- Resolver sollen Kontext gezielt laden, nicht Fachlogik ersetzen.
+- SkillDefinition und ResolverDefinition werden konzeptionell bereits als offene, versionierbare Artefakte gedacht.
+
+### Scope-Grenzen fuer Phase M1
+
+- keine neue API
+- keine neue Persistenzmigration
+- kein neuer Screen
+- keine Plattform-Ausweitung
+- keine Multi-Tenancy-Erweiterung
+- keine grossen Refactorings
+- keine Implementierung von Memory-Harness-Features ueber Definitionsniveau hinaus
+- nur Architekturgrenzen, Objektklassen, Ownership und Prioritaeten definieren
+- nur deterministische vs. verdichtete Speicherung sauber trennen
+- nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
+
 ## Versionshistorie
+### 5.32 - 2026-04-11
+- Neuer paralleler Architekturstrang Owned Memory & Harness Foundation aufgenommen.
+- Phase M1 als Architekturdefinition fuer modellagnostische Memory- und Harness-Grundlagen festgelegt.
+- Trennung von Session Context, Operational Memory und Long-Term Memory sowie Ownership-, Resolver- und Skill-Leitlinien dokumentiert.
+- Verweis auf die kanonische Architekturdatei docs/architecture/MEMORY_ARCHITECTURE.md.
+
 ### 5.23 - 2026-04-11
 - Root-Memory-Datei wieder als fuehrende Kurzreferenz festgelegt.
 - Governance-/Konsolidierungsstand bis einschliesslich Stufe 6c aktualisiert.
