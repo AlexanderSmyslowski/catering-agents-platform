@@ -1,3 +1,4 @@
+export * from "./access-control.js";
 export * from "./audit-log.js";
 export * from "./document-text.js";
 export * from "./fixtures/sample-data.js";
