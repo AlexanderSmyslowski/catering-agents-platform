@@ -24,6 +24,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 
 ## Projektkontext der aktuellen Arbeit
 - Aktuelles Arbeitsthema: Governance-Ausbau fuer Aenderungs-/Freigabehistorie, bewusst klein und sequenziell
+- P1 Rollen-/Rechte-Arbeit ist inzwischen real gestartet: `dab9e71` verankert die minimale zentrale Access-Control-Konvention, `66297ac` schuetzt die ersten Production-Pfade (`/v1/production/audit/events`, `/v1/production/seed-demo`) und schliesst die Caller passend an
 - Leitlinien bleiben bindend:
   - deterministischer, pruefbarer Produktkern
   - keine unnoetige Plattformbildung

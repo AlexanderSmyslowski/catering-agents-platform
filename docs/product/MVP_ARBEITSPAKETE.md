@@ -46,7 +46,7 @@ Aus dem aktuellen Repo-Stand und den führenden Dokumenten sind bereits belastba
 ### 3.2 Priorisierte MVP-Luecken
 
 Aus Pflichtenheft und Repo-Iststand ergeben sich aktuell vor allem diese Luecken:
-1. Rollen- und Rechtebild sind dokumentiert, aber nicht voll formalisiert.
+1. Rollen- und Rechtebild sind jetzt erst teilweise formalisiert: die zentrale Konvention und erste Production-Guards existieren, die restlichen relevanten Pfade sind noch nicht durchgehend angeschlossen.
 2. Die Bedienung des Kernpfads ist noch nicht durch eine schmale Browser-/Smoke-Abdeckung abgesichert.
 3. Der Betriebs- und Deployment-Rahmen ist dokumentiert, aber fuer MVP-Freigabe und Reproduzierbarkeit weiter zu haerten.
 4. Datenschutz-, Aufbewahrungs- und Autorisierungsfragen sind beschrieben, aber noch nicht voll operationalisiert.
@@ -62,10 +62,10 @@ Aus Pflichtenheft und Repo-Iststand ergeben sich aktuell vor allem diese Luecken
 Ein belastbares, repo-konsistentes Rollen- und Rechtebild fuer die internen Nutzerrollen herstellen.
 
 **Kurzbeschreibung:**
-Das Pflichtenheft benennt bereits Angebots-Ersteller, Produktionsplanung/Kueche und interne Operatoren. Dieses Paket praezisiert, welche Aktionen welche Rolle ausfuehren darf und wo Authentifizierung bzw. Autorisierung im aktuellen MVP tatsächlich greift.
+Das Pflichtenheft benennt bereits Angebots-Ersteller, Produktionsplanung/Kueche und interne Operatoren. Im Repo ist die erste zentrale Rollen-/Rechte-Konvention bereits verankert und erste Production-Pfade sind geschuetzt; dieses Paket praezisiert nun die verbleibenden Aktionen und Pfade, die noch an dieselbe Konvention angeschlossen werden muessen.
 
 **Begruendung:**
-Dies ist die wichtigste offene Grundlage, weil Sicherheit, Bedienbarkeit und Betrieb davon direkt abhaengen.
+Dies bleibt die wichtigste Grundlage, weil Sicherheit, Bedienbarkeit und Betrieb davon direkt abhaengen und die erste reale Verankerung jetzt anschlussfaehig fortgesetzt werden muss.
 
 **Abhaengigkeiten:**
 - `docs/product/PFLICHTENHEFT.md`
@@ -186,6 +186,8 @@ Diese Elemente sind als Arbeitsgrundlage bereits vorhanden und muessen nicht als
 - Governance bis 6c
 - konsolidierter M1-Stand
 - gruene bestehende Vitest-Absicherung
+- zentrale Rollen-/Rechte-Konvention im `shared-core`
+- geschuetzte Production-Pfade: `GET /v1/production/audit/events` und `POST /v1/production/seed-demo`
 
 ## 6. ausdruecklich nicht Teil des aktuellen MVP
 
@@ -202,7 +204,7 @@ Diese Elemente sind als Arbeitsgrundlage bereits vorhanden und muessen nicht als
 
 ## 7. Risiken / offene Punkte
 
-- Rollen- und Rechtebild ist noch nicht als volle Matrix operationalisiert.
+- Rollen- und Rechtebild ist erst teilweise operationalisiert; die naechsten relevanten Pfade muessen noch an die bestehende Konvention angeschlossen werden.
 - Browser-/Smoke-Absicherung ist im aktuellen Testkorridor noch nicht gleichwertig zum Unit-/Logikteststand.
 - Betriebs- und Deployment-Annahmen sind dokumentiert, aber fuer eine echte Freigabe noch weiter zu schliessen.
 - Datenschutz- und Aufbewahrungsfragen sind aktuell nur teilweise konkretisiert.

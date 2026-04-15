@@ -48,6 +48,16 @@ Die vorhandene Umsetzung deutet auf folgende Schutz- und Zuständigkeitslinien h
 - Rezept-Reviews schreiben in den Audit-Log.
 - Demo-Seed-Endpunkte sind als interne Betriebs-/Entwickleraktionen vorhanden.
 
+### 3.3 Bereits real umgesetzter P1-Fortschritt
+
+Seit den Commits `dab9e71` und `66297ac` ist P1 nicht mehr nur konzeptionell, sondern bereits teilweise im Code verankert:
+- im `shared-core` existiert eine minimale zentrale Rollen-/Rechte-Konvention
+- konkret geschuetzt sind jetzt die Production-Pfade
+  - `GET /v1/production/audit/events`
+  - `POST /v1/production/seed-demo`
+- die angeschlossenen Caller verwenden fuer diese Betriebswege den Betriebs-/Audit-Operator
+- eine kleine gezielte Testabsicherung ist vorhanden und gruen (`tests/production-audit-access.test.ts`)
+
 ## 4. bereits vorhandene implizite Rollen / Verantwortlichkeiten
 
 Aus den Dokumenten und dem Code lassen sich derzeit minimal folgende implizite Rollen erkennen:
@@ -154,7 +164,7 @@ Soll nicht:
 Offen ist derzeit insbesondere:
 - ob es neben den vier Minimalrollen noch eine echte Admin-Rolle braucht
 - ob Rollen nur fachlich benannt oder technisch hart durchgesetzt werden sollen
-- welche Endpunkte im MVP nur per Konvention und welche per Guard geschuetzt werden
+- welche weiteren Endpunkte im MVP noch per Guard geschuetzt werden sollen
 - wie fein die Rechte pro Fachaktion im UI und in den Services wirklich getrennt werden
 - welche Authentifizierungsform im MVP verbindlich gilt
 - wie Aufbewahrung, Datenschutz und Loeschkonzept final aussehen
@@ -163,16 +173,16 @@ Offen ist derzeit insbesondere:
 
 Der kleinste naechste Umsetzungsschritt fuer P1 ist:
 
-1. eine minimale, zentrale Rollen- und Rechte-Konvention als gemeinsame Quelle definieren
-2. `x-actor-name` in den Fach- und Betriebswegen gegen diese Konvention validieren oder praezisieren
-3. die drei Fachrollen plus Betriebs-/Audit-Operator in den bestehenden UI-/Servicepfaden klar abbilden
-4. die schutzbeduerftigen Admin-/Seed-/Audit-Pfade explizit markieren
+1. die noch ungeschuetzten mutierenden Fach- und Betriebswege entlang der bereits vorhandenen zentralen Konvention ebenfalls hart anschliessen
+2. `x-actor-name` auf diesen naechsten Pfaden gegen die Konvention weiter validieren bzw. praezisieren
+3. die drei Fachrollen plus Betriebs-/Audit-Operator in den bestehenden UI-/Servicepfaden konsistent abbilden
+4. die bereits angeschlossenen Production-Guards stabil halten und nur echte Restpfade nachziehen
 
 ### Warum genau dieser Schritt
 
-- Er ist klein und direkt an den existierenden Operator-Namen und Pfaden anschliessbar.
+- Er ist klein und direkt an die bereits angeschlossenen Production-Pfade anschliessbar.
 - Er erfindet keine neue Plattform- oder Enterprise-RBAC-Logik.
-- Er schliesst die groesste aktuelle Luecke: die implizite Rollenlage wird formal greifbar, ohne neue Produktflaeche zu erzeugen.
+- Er schliesst jetzt die naechste reale Luecke: nicht mehr die Grundkonvention, sondern die noch offenen Restpfade.
 
 ## 10. Einordnung
 
