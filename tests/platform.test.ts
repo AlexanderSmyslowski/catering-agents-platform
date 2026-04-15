@@ -12,7 +12,12 @@ import {
   type RecipeSearchQuery,
   type WebRecipeCandidate
 } from "@catering/shared-core";
-import { IntakeStore, buildIntakeApp } from "@catering/intake-service";
+import {
+  IntakeStore,
+  buildIntakeApp,
+  deriveOpenIssueRecordFromIntakeContext,
+  mapAcceptedEventSpecToSpecRecord
+} from "@catering/intake-service";
 import { OfferStore, buildOfferApp } from "@catering/offer-service";
 import { buildPrintExportApp } from "@catering/print-export";
 import {
@@ -137,6 +142,72 @@ function createDataRoot(): string {
 }
 
 describe("catering agents platform", () => {
+  it("maps AcceptedEventSpec to the minimal internal SpecRecord prototype", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Pasta und Salat.")
+    );
+
+    const specRecord = mapAcceptedEventSpecToSpecRecord(spec);
+
+    expect(specRecord).toEqual({
+      id: spec.specId,
+      title: "conference · 60 Teilnehmer · 2026-05-12",
+      status: "in_ueberarbeitung",
+      sourceRef: spec.sourceLineage[0].reference,
+      updatedAt: specRecord.updatedAt,
+      version: 1
+    });
+    expect(new Date(specRecord.updatedAt).toString()).not.toBe("Invalid Date");
+  });
+
+  it("derives the minimal internal OpenIssueRecord prototype from a manual note", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Pasta und Salat.")
+    );
+
+    const openIssueRecord = deriveOpenIssueRecordFromIntakeContext({
+      spec,
+      intakeRef: "manual-issue-1",
+      issueNotes: ["Rueckfrage zu Allergenen"]
+    });
+
+    expect(openIssueRecord).toEqual({
+      id: `${spec.specId}:open-issue`,
+      status: "open",
+      title: "Rueckfrage zu Allergenen",
+      sourceRef: "manual-issue-1",
+      specRef: spec.specId
+    });
+  });
+
+  it("returns null when no real open issue signal is present", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Pasta und Salat.")
+    );
+
+    expect(
+      deriveOpenIssueRecordFromIntakeContext({
+        spec,
+        intakeRef: "manual-issue-2",
+        issueNotes: ["Danke fuer die Rueckmeldung"]
+      })
+    ).toBeNull();
+  });
+
+  it("returns null for blank issue notes", () => {
+    const spec = normalizeEventRequestToSpec(
+      baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Pasta und Salat.")
+    );
+
+    expect(
+      deriveOpenIssueRecordFromIntakeContext({
+        spec,
+        intakeRef: "manual-issue-3",
+        issueNotes: ["   \n  "]
+      })
+    ).toBeNull();
+  });
+
   it("normalizes manual text into the canonical AcceptedEventSpec", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));

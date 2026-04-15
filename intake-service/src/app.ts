@@ -198,6 +198,111 @@ function applySpecUpdates(
   return withEvaluatedReadiness(nextSpec);
 }
 
+interface SpecRecord {
+  id: string;
+  title: string;
+  status: "angelegt" | "aktiv" | "in_ueberarbeitung" | "finalisiert" | "obsolet";
+  sourceRef: string;
+  updatedAt: string;
+  version: number;
+}
+
+interface OpenIssueRecord {
+  id: string;
+  status: "open" | "blocked" | "resolved";
+  title: string;
+  sourceRef: string;
+  specRef?: string;
+  intakeRef?: string;
+}
+
+export function mapAcceptedEventSpecToSpecRecord(spec: AcceptedEventSpec): SpecRecord {
+  const commercialState = spec.lifecycle.commercialState;
+  const status: SpecRecord["status"] =
+    commercialState === "accepted"
+      ? "aktiv"
+      : commercialState === "quoted"
+        ? "angelegt"
+        : "in_ueberarbeitung";
+  const parsedVersion = Number.parseInt(spec.schemaVersion, 10);
+  const eventType = typeof spec.event.type === "string" ? spec.event.type.trim() : "Spec";
+  const attendeeCount = spec.attendees.expected;
+  const eventDate = typeof spec.event.date === "string" ? spec.event.date.trim() : "";
+
+  return {
+    id: spec.specId,
+    title: `${eventType || "Spec"} · ${attendeeCount ?? "?"} Teilnehmer · ${eventDate || "offen"}`,
+    status,
+    sourceRef: spec.sourceLineage[0]?.reference ?? spec.specId,
+    updatedAt: new Date().toISOString(),
+    version: Number.isFinite(parsedVersion) && parsedVersion > 0 ? parsedVersion : 1
+  };
+}
+
+function normalizeOpenIssueSignal(parts: Array<string | undefined | null>): string | undefined {
+  const normalized = parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized || undefined;
+}
+
+function buildOpenIssueAuditDetails(openIssueRecord: OpenIssueRecord, specId: string) {
+  return {
+    specId,
+    sourceRef: openIssueRecord.sourceRef,
+    status: openIssueRecord.status
+  };
+}
+
+export function deriveOpenIssueRecordFromIntakeContext(params: {
+  spec: AcceptedEventSpec;
+  intakeRef: string;
+  issueNotes?: Array<string | undefined | null>;
+}): OpenIssueRecord | null {
+  const issueNote = normalizeOpenIssueSignal(params.issueNotes ?? []);
+  if (!issueNote) {
+    return null;
+  }
+
+  const lowerNote = issueNote.toLowerCase();
+  const hasIssueSignal = ["block", "rueckfrage", "rückfrage", "nacharbeit", "follow-up", "todo", "to do", "offen"].some(
+    (keyword) => lowerNote.includes(keyword)
+  );
+  if (!hasIssueSignal) {
+    return null;
+  }
+
+  const status: OpenIssueRecord["status"] = lowerNote.includes("block")
+    ? "blocked"
+    : lowerNote.includes("resolved") || lowerNote.includes("gelöst") || lowerNote.includes("geklärt") || lowerNote.includes("geklaert")
+      ? "resolved"
+      : "open";
+  const title = issueNote.length > 96 ? `${issueNote.slice(0, 93).trimEnd()}...` : issueNote;
+
+  return {
+    id: `${params.spec.specId}:open-issue`,
+    status,
+    title,
+    sourceRef: params.intakeRef,
+    specRef: params.spec.specId
+  };
+}
+
+function isUsableSpecRecord(record: SpecRecord): boolean {
+  return Boolean(
+    record.id.trim() &&
+      record.sourceRef.trim() &&
+      record.status.trim() &&
+      Number.isInteger(record.version) &&
+      record.version > 0 &&
+      !Number.isNaN(Date.parse(record.updatedAt))
+  );
+}
+
 export interface IntakeAppOptions extends CollectionStorageOptions {
   store?: IntakeStore;
   auditLog?: AuditLogStore;
@@ -212,6 +317,10 @@ function actorForRequest(request: { headers: Record<string, string | string[] | 
     name: actorNameFromHeaders(request.headers, "Intake-Mitarbeiter"),
     source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
   };
+}
+
+function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
 }
 
 function multipartFieldValue(
@@ -319,10 +428,6 @@ async function normalizeUploadedDocuments(
             : "manual_input",
       reference: validatedRequest.requestId,
       commercialState: "manual"
-function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
-  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
-}
-
     })
   );
 
@@ -402,6 +507,19 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       );
 
       await store.saveSpec(spec);
+      const specRecord = mapAcceptedEventSpecToSpecRecord(spec);
+      const usableSpecRecord = isUsableSpecRecord(specRecord);
+      if (!usableSpecRecord) {
+        app.log.warn(
+          {
+            specId: spec.specId,
+            sourceRef: specRecord.sourceRef,
+            status: specRecord.status,
+            version: specRecord.version
+          },
+          "SpecRecord-Guard: abgeleiteter SpecRecord ist nicht verwendbar."
+        );
+      }
       await auditLog.log({
         action: "intake.normalized",
         entityType: "AcceptedEventSpec",
@@ -411,7 +529,8 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         details: {
           requestId: eventRequest.requestId,
           channel: eventRequest.source.channel,
-          readiness: spec.readiness.status
+          readiness: spec.readiness.status,
+          specRecordUsable: usableSpecRecord
         }
       });
       return reply.code(201).send({
@@ -494,6 +613,21 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     await store.saveRequest(eventRequest);
     await store.saveSpec(spec);
+    const openIssueRecord = deriveOpenIssueRecordFromIntakeContext({
+      spec,
+      intakeRef: eventRequest.requestId,
+      issueNotes: [request.body.notes]
+    });
+    if (openIssueRecord) {
+      await auditLog.log({
+        action: "intake.open_issue_derived",
+        entityType: "OpenIssueRecord",
+        entityId: openIssueRecord.id,
+        actor: actorForRequest(request),
+        summary: "OpenIssueRecord intern aus manuellem Intake abgeleitet.",
+        details: buildOpenIssueAuditDetails(openIssueRecord, spec.specId)
+      });
+    }
     await auditLog.log({
       action: "intake.manual_spec_created",
       entityType: "AcceptedEventSpec",
@@ -555,6 +689,30 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
   });
 
+  app.post<{ Body: FinalizeSpecGovernanceBody }>("/v1/intake/spec-governance/finalize", async (request, reply) => {
+    if (!isOperationsAuditOperator(request)) {
+      return reply.code(403).send({
+        message: "Betriebs-/Audit-Operator erforderlich."
+      });
+    }
+
+    const specId = request.body.specId?.trim();
+    const changeSetId = request.body.changeSetId?.trim();
+
+    if (!specId && !changeSetId) {
+      return reply.code(400).send({
+        message: "Es muss eine specId oder changeSetId uebergeben werden."
+      });
+    }
+
+    return reply.send({
+      ok: true,
+      specId,
+      changeSetId,
+      confirmCriticalFinalize: request.body.confirmCriticalFinalize === true
+    });
+  });
+
   app.get("/v1/intake/requests", async (_request, reply) => {
     return reply.send({
       items: await store.listRequests()
@@ -586,6 +744,21 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
       const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
       await store.saveSpec(updatedSpec);
+      const openIssueRecord = deriveOpenIssueRecordFromIntakeContext({
+        spec: updatedSpec,
+        intakeRef: request.params.specId,
+        issueNotes: request.body.componentUpdates?.map((item) => item.notes) ?? []
+      });
+      if (openIssueRecord) {
+        await auditLog.log({
+          action: "intake.open_issue_derived",
+          entityType: "OpenIssueRecord",
+          entityId: openIssueRecord.id,
+          actor: actorForRequest(request),
+          summary: "OpenIssueRecord intern aus Spec-Nachbearbeitung abgeleitet.",
+          details: buildOpenIssueAuditDetails(openIssueRecord, updatedSpec.specId)
+        });
+      }
       await auditLog.log({
         action: "intake.spec_updated",
         entityType: "AcceptedEventSpec",
@@ -608,27 +781,3 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
   return app;
 }
-  app.post<{ Body: FinalizeSpecGovernanceBody }>("/v1/intake/spec-governance/finalize", async (request, reply) => {
-    if (!isOperationsAuditOperator(request)) {
-      return reply.code(403).send({
-        message: "Betriebs-/Audit-Operator erforderlich."
-      });
-    }
-
-    const specId = request.body.specId?.trim();
-    const changeSetId = request.body.changeSetId?.trim();
-
-    if (!specId && !changeSetId) {
-      return reply.code(400).send({
-        message: "Es muss eine specId oder changeSetId uebergeben werden."
-      });
-    }
-
-    return reply.send({
-      ok: true,
-      specId,
-      changeSetId,
-      confirmCriticalFinalize: request.body.confirmCriticalFinalize === true
-    });
-  });
-
