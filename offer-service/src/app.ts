@@ -10,6 +10,7 @@ import {
   parseUploadedRecipeText,
   RecipeLibrary,
   promoteOfferVariant,
+  resolveMinimalMvpRoleFromActorName,
   type CollectionStorageOptions,
   validateAcceptedEventSpec,
   validateEventRequest,
@@ -38,6 +39,10 @@ export interface OfferAppOptions extends CollectionStorageOptions {
 
 function isOfferStore(value: OfferStore | OfferAppOptions | undefined): value is OfferStore {
   return value instanceof OfferStore;
+}
+
+function isOfferOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "offer_operator";
 }
 
 function multipartFieldValue(
@@ -280,6 +285,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   app.patch<{ Params: { recipeId: string }; Body: RecipeReviewBody }>(
     "/v1/offers/recipes/:recipeId/review",
     async (request, reply) => {
+      if (!isOfferOperator(request)) {
+        return reply.code(403).send({
+          message: "Angebots-Operator erforderlich."
+        });
+      }
+
       const recipe = await recipeLibrary.reviewRecipe(request.params.recipeId, request.body);
       await auditLog.log({
         action: "recipe.reviewed",

@@ -1943,6 +1943,9 @@ describe("catering agents platform", () => {
     const reviewResponse = await offerApp.inject({
       method: "PATCH",
       url: `/v1/offers/recipes/${reviewedRecipeId}/review`,
+      headers: {
+        "x-actor-name": "Angebots-Mitarbeiter"
+      },
       payload: {
         decision: "approve"
       }
@@ -2010,6 +2013,9 @@ describe("catering agents platform", () => {
     const rejectResponse = await productionApp.inject({
       method: "PATCH",
       url: `/v1/production/recipes/${recipeId}/review`,
+      headers: {
+        "x-actor-name": "Produktions-Mitarbeiter"
+      },
       payload: {
         decision: "reject"
       }

@@ -29,6 +29,10 @@ interface RecipeReviewBody {
   note?: string;
 }
 
+function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
+}
+
 function multipartFieldValue(
   fields: Record<string, unknown>,
   fieldName: string
@@ -97,8 +101,8 @@ function actorForRequest(request: { headers: Record<string, string | string[] | 
   };
 }
 
-function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
-  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
+function isProductionOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "production_operator";
 }
 
 export function buildProductionApp(options: ProductionAppOptions = {}) {
@@ -318,6 +322,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.patch<{ Params: { recipeId: string }; Body: RecipeReviewBody }>(
     "/v1/production/recipes/:recipeId/review",
     async (request, reply) => {
+      if (!isProductionOperator(request)) {
+        return reply.code(403).send({
+          message: "Produktions-Operator erforderlich."
+        });
+      }
+
       const recipe = await repository.reviewRecipe(request.params.recipeId, request.body);
       await auditLog.log({
         action: "recipe.reviewed",
