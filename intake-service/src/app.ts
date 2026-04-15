@@ -214,6 +214,10 @@ function actorForRequest(request: { headers: Record<string, string | string[] | 
   };
 }
 
+function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
+}
+
 function multipartFieldValue(
   fields: Record<string, unknown>,
   fieldName: string
@@ -319,10 +323,6 @@ async function normalizeUploadedDocuments(
             : "manual_input",
       reference: validatedRequest.requestId,
       commercialState: "manual"
-function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
-  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
-}
-
     })
   );
 
@@ -606,8 +606,6 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     }
   );
 
-  return app;
-}
   app.post<{ Body: FinalizeSpecGovernanceBody }>("/v1/intake/spec-governance/finalize", async (request, reply) => {
     if (!isOperationsAuditOperator(request)) {
       return reply.code(403).send({
@@ -631,4 +629,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       confirmCriticalFinalize: request.body.confirmCriticalFinalize === true
     });
   });
+
+  return app;
+}
 

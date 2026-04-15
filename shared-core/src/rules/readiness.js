@@ -1,0 +1,49 @@
+export function evaluateReadiness(spec) {
+    const missingFields = [];
+    if (!spec.event?.date && !spec.event?.schedule?.some((slot) => slot.start)) {
+        missingFields.push("event.date_or_schedule");
+    }
+    if (!spec.attendees?.expected || spec.attendees.expected <= 0) {
+        missingFields.push("attendees.expected");
+    }
+    if (!spec.menuPlan || spec.menuPlan.length === 0) {
+        missingFields.push("menuPlan");
+    }
+    if (!spec.servicePlan?.serviceForm && !spec.event?.serviceForm) {
+        missingFields.push("servicePlan.serviceForm");
+    }
+    let status = "complete";
+    if (missingFields.length > 0) {
+        const coreMissing = ["event.date_or_schedule", "attendees.expected", "menuPlan"];
+        status = missingFields.some((field) => coreMissing.includes(field))
+            ? "insufficient"
+            : "partial";
+    }
+    return {
+        readiness: {
+            status,
+            reasons: missingFields.length === 0
+                ? ["Alle Pflichtangaben für die Produktionsplanung sind vorhanden."]
+                : missingFields.map((field) => `Fehlende oder unvollständige Angabe: ${field}`)
+        },
+        missingFields
+    };
+}
+export function mergeReadiness(current, extraIssues) {
+    if (extraIssues.length === 0) {
+        return current;
+    }
+    const status = current.status === "insufficient" ? "insufficient" : "partial";
+    return {
+        status,
+        reasons: [...current.reasons, ...extraIssues]
+    };
+}
+export function withEvaluatedReadiness(spec) {
+    const { readiness, missingFields } = evaluateReadiness(spec);
+    return {
+        ...spec,
+        readiness,
+        missingFields
+    };
+}
