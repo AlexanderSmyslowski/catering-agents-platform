@@ -27,6 +27,7 @@ export interface ServiceHealthState {
 }
 
 const OPERATOR_NAME_STORAGE_KEY = "catering.operatorName";
+const AUDIT_OPERATOR_NAME = "Betriebs-/Audit-Operator";
 
 function getDefaultOperatorName(): string {
   if (typeof window === "undefined") {
@@ -70,7 +71,11 @@ export async function loadDashboardState(): Promise<DashboardState> {
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/plans"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/purchase-lists"),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/recipes"),
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/audit/events?limit=30")
+      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/audit/events?limit=30", {
+        headers: {
+          "x-actor-name": AUDIT_OPERATOR_NAME
+        }
+      })
     ]);
 
   return {
@@ -253,15 +258,24 @@ export async function seedDemoData() {
   const [intake, offers, production] = await Promise.all([
     fetchJson<Record<string, unknown>>("/api/intake/v1/intake/seed-demo", {
       method: "POST",
-      body: "{}"
+      body: "{}",
+      headers: {
+        "x-actor-name": AUDIT_OPERATOR_NAME
+      }
     }),
     fetchJson<Record<string, unknown>>("/api/offers/v1/offers/seed-demo", {
       method: "POST",
-      body: "{}"
+      body: "{}",
+      headers: {
+        "x-actor-name": AUDIT_OPERATOR_NAME
+      }
     }),
     fetchJson<Record<string, unknown>>("/api/production/v1/production/seed-demo", {
       method: "POST",
-      body: "{}"
+      body: "{}",
+      headers: {
+        "x-actor-name": AUDIT_OPERATOR_NAME
+      }
     })
   ]);
 

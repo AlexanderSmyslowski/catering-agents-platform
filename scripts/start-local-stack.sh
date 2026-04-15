@@ -32,9 +32,13 @@ wait_for_url() {
 }
 
 seed_demo_data() {
-  curl -sf -X POST http://127.0.0.1:3101/v1/intake/seed-demo >/dev/null
-  curl -sf -X POST http://127.0.0.1:3102/v1/offers/seed-demo >/dev/null
-  curl -sf -X POST http://127.0.0.1:3103/v1/production/seed-demo >/dev/null
+  local audit_actor_name="Betriebs-/Audit-Operator"
+  curl -sf -X POST http://127.0.0.1:3101/v1/intake/seed-demo \
+    -H "x-actor-name: ${audit_actor_name}" >/dev/null
+  curl -sf -X POST http://127.0.0.1:3102/v1/offers/seed-demo \
+    -H "x-actor-name: ${audit_actor_name}" >/dev/null
+  curl -sf -X POST http://127.0.0.1:3103/v1/production/seed-demo \
+    -H "x-actor-name: ${audit_actor_name}" >/dev/null
   echo "Demo-Daten geladen."
 }
 

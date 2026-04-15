@@ -6,6 +6,7 @@ import {
   extractTextFromDocument,
   getDemoProductionSpecs,
   parseUploadedRecipeText,
+  resolveMinimalMvpRoleFromActorName,
   validateAcceptedEventSpec,
   type AcceptedEventSpec,
   type Queryable
@@ -96,6 +97,10 @@ function actorForRequest(request: { headers: Record<string, string | string[] | 
   };
 }
 
+function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
+}
+
 export function buildProductionApp(options: ProductionAppOptions = {}) {
   const repository =
     options.repository ??
@@ -171,6 +176,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.post("/v1/production/seed-demo", async (request, reply) => {
+    if (!isOperationsAuditOperator(request)) {
+      return reply.code(403).send({
+        message: "Betriebs-/Audit-Operator erforderlich."
+      });
+    }
+
     const seeded = [];
     for (const spec of getDemoProductionSpecs()) {
       const artifacts = await buildProductionArtifacts(spec, discoveryService);
@@ -236,6 +247,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.get<{ Querystring: { limit?: string } }>("/v1/production/audit/events", async (request, reply) => {
+    if (!isOperationsAuditOperator(request)) {
+      return reply.code(403).send({
+        message: "Betriebs-/Audit-Operator erforderlich."
+      });
+    }
+
     const limit = Number(request.query.limit ?? "50");
     const safeLimit = Number.isFinite(limit)
       ? Math.max(1, Math.min(200, Math.trunc(limit)))
