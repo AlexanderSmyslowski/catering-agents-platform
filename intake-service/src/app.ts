@@ -7,6 +7,7 @@ import {
   createEventRequestFromManualForm,
   getDemoIntakeRequests,
   normalizeEventRequestToSpec,
+  resolveMinimalMvpRoleFromActorName,
   withEvaluatedReadiness,
   validateAcceptedEventSpec,
   validateEventRequest,
@@ -52,6 +53,12 @@ interface ManualSpecBody {
   customerName?: string;
   venueName?: string;
   notes?: string;
+}
+
+interface FinalizeSpecGovernanceBody {
+  specId?: string;
+  changeSetId?: string;
+  confirmCriticalFinalize?: boolean;
 }
 
 interface MultipartDocumentUpload {
@@ -312,6 +319,10 @@ async function normalizeUploadedDocuments(
             : "manual_input",
       reference: validatedRequest.requestId,
       commercialState: "manual"
+function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
+}
+
     })
   );
 
@@ -597,3 +608,27 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
   return app;
 }
+  app.post<{ Body: FinalizeSpecGovernanceBody }>("/v1/intake/spec-governance/finalize", async (request, reply) => {
+    if (!isOperationsAuditOperator(request)) {
+      return reply.code(403).send({
+        message: "Betriebs-/Audit-Operator erforderlich."
+      });
+    }
+
+    const specId = request.body.specId?.trim();
+    const changeSetId = request.body.changeSetId?.trim();
+
+    if (!specId && !changeSetId) {
+      return reply.code(400).send({
+        message: "Es muss eine specId oder changeSetId uebergeben werden."
+      });
+    }
+
+    return reply.send({
+      ok: true,
+      specId,
+      changeSetId,
+      confirmCriticalFinalize: request.body.confirmCriticalFinalize === true
+    });
+  });
+
