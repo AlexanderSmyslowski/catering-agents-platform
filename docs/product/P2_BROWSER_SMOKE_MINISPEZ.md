@@ -1,0 +1,123 @@
+# P2 Browser-/Smoke-Absicherung der Kernpfade – Mini-Spezifikation
+
+Status: Mini-Spezifikation v0.1 auf Basis des aktuellen Repo-Iststands
+Stand: 2026-04-16
+
+## 1. Zweck der Mini-Spezifikation
+
+Diese Mini-Spezifikation beschreibt den kleinsten sinnvollen Browser-/Smoke-Korridor fuer die Catering Agents Platform.
+
+Sie erfindet keine neue Testarchitektur, sondern grenzt nur ein, welche vorhandenen Kernpfade fuer einen ersten, repo-gebundenen Smoke-Check sinnvoll sind und was dabei bewusst noch nicht Teil des Vorhabens ist.
+
+## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete und P5
+
+Grundlagen dieses Dokuments sind:
+- `docs/product/PFLICHTENHEFT.md`
+- `docs/product/MVP_ARBEITSPAKETE.md`
+- `docs/product/P5_MVP_ABGRENZUNG_MINISPEZ.md`
+- `memory.md`
+- `README.md`
+- der aktuelle Repo-Iststand in Backoffice-UI und lokalen Service-Skripten
+
+Wesentliche Ableitungen:
+- Das Pflichtenheft fordert eine interne, nachvollziehbare Betriebsplattform mit Backoffice-UI.
+- Die MVP-Arbeitspakete setzen P2 als schmale Browser-/Smoke-Absicherung nach der P1-Konsolidierung.
+- P5 schärft die MVP-Grenzen pro Kernbereich; P2 soll diese Grenzen nun praktisch mit einem kleinen Erreichbarkeitskorridor absichern.
+
+## 3. Aktueller Repo-Iststand fuer Browser-/Smoke-Absicherung
+
+### 3.1 Bereits vorhanden
+
+Im Repo existieren bereits folgende nutzbare Bausteine:
+- Backoffice-UI mit echten Routen fuer `/`, `/angebot` und `/produktion`
+- lokale UI auf Port `3200`
+- lokale Services mit Health-Endpunkten auf den Ports `3101` bis `3104`
+- lokaler Start ueber `npm run local:start`
+- Statuspruefung ueber `npm run local:status`
+- Stop ueber `npm run local:stop`
+- bestehender Deployment-Smoke-Check unter `platform-infra/scripts/smoke-check.sh`
+- gemeinsamer UI- und Service-Rahmen mit bereits vorhandenen Health- und Audit-Pfaden
+
+### 3.2 Nicht vorhanden bzw. nicht als eigene Browser-E2E-Infrastruktur ausgebaut
+
+Im aktuellen Repo-Stand ist keine grosse Browser-Testarchitektur als eigener Stack-Anker sichtbar, insbesondere:
+- kein dediziertes Playwright-Setup
+- kein dediziertes Cypress-Setup
+- keine breite Browser-Matrix als dokumentierter MVP-Standard
+
+Dafuer existieren bereits:
+- Vitest-basierte Tests fuer fachliche Pfade
+- jsdom- und Vite-Umfeld fuer die UI
+- kleine bestehende Shell-basierte Smoke-Skripte fuer Infrastruktur-Checks
+
+## 4. Empfohlene kleinste MVP-Kernpfade fuer erste Smoke-Checks
+
+Fuer die erste Smoke-Stufe sind die kleinsten sinnvollen Kernpfade:
+
+1. Backoffice-UI Startseite
+   - `http://127.0.0.1:3200/`
+2. Angebotsbereich
+   - `http://127.0.0.1:3200/angebot`
+3. Produktionsbereich
+   - `http://127.0.0.1:3200/produktion`
+4. lokale Service-Health-Ketten als minimale technische Rueckversicherung
+   - `http://127.0.0.1:3101/health`
+   - `http://127.0.0.1:3102/health`
+   - `http://127.0.0.1:3103/health`
+   - `http://127.0.0.1:3104/health`
+
+Diese Pfade sind klein genug fuer einen ersten Smoke-Korridor und gleichzeitig direkt an die reale Produktnutzung gebunden.
+
+## 5. Was in P2 der ersten Stufe explizit drin ist
+
+P2 der ersten Stufe umfasst nur:
+- Erreichbarkeit der zentralen Backoffice-Einstiege
+- minimale technische Erreichbarkeit der lokalen Kernservices
+- keine neue Produktlogik
+- keine neue Rollen- oder Rechtefunktionalitaet
+- keine neue API
+- keine neue Persistenz
+- keine breite Browser-Automation
+
+Der Fokus liegt auf "laeuft und ist erreichbar", nicht auf einer umfassenden funktionalen End-to-End-Validierung.
+
+## 6. Was bewusst noch nicht drin ist
+
+Bewusst nicht Teil von P2 in dieser Stufe:
+- vollständige Browser-E2E-Suite
+- grosse UI-Regression-Matrix
+- neue Testinfrastruktur oder neue Testlaufzeit-Tools
+- tiefe Interaktionen mit allen Formularen und Arbeitsflueßen
+- automatisierte fachliche Vollabdeckung fuer alle Servicepfade
+- neue Produktflaechen oder neue UI-Bereiche
+
+## 7. Technische Voraussetzungen / Blocker
+
+### 7.1 Voraussetzungen
+
+Fuer einen ersten Smoke-Check muessen lediglich die bestehenden lokalen Komponenten laufen:
+- `npm run local:start --seed-demo`
+- oder ein aequivalent gestarteter lokaler Stack
+
+### 7.2 Blocker
+
+Ein breiter Browser-Run ist aktuell blockiert bzw. nicht vorgesehen, weil:
+- kein dediziertes Browser-E2E-Setup im Repo verankert ist
+- P2 bewusst klein gehalten werden soll
+- die naechste echte Luecke eher in der schmalen Erreichbarkeits- und Statusabsicherung liegt als in einer neuen Testarchitektur
+
+## 8. Empfohlener kleinster erster Ausfuehrungsschritt
+
+Der kleinste sinnvolle erste Smoke-Schritt ist:
+1. lokalen Stack mit Demo-Daten starten
+2. die drei zentralen UI-Routen per HTTP auf Status 200 pruefen
+3. optional anschliessend die vier lokalen Health-Endpunkte pruefen
+
+Damit wird P2 als minimaler, repo-gebundener Smoke-Korridor validiert, ohne einen groesseren Testaufbau zu starten.
+
+## 9. Einordnung
+
+Dieses Dokument begrenzt P2 bewusst auf den kleinsten belastbaren Anfang.
+Es soll keine Browser-Strategie fuer das gesamte Produkt ausformulieren, sondern nur den naechsten realistischen Abschnitt fuer die Kernpfade festhalten.
+
+Alles darueber hinaus bleibt spaetere Teststrategie und muss separat begruendet werden.
