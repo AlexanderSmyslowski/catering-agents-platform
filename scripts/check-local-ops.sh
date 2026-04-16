@@ -63,4 +63,14 @@ fi
 printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${export_url}" "${export_anchor}"
 
 echo ""
-echo "Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health -> Export."
+echo "Bootstrapp-/Auditpruefung:"
+audit_url="http://127.0.0.1:3103/v1/production/audit/events?limit=5"
+audit_body="$(curl -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${audit_url}")"
+if [[ "${audit_body}" != *"production.seed_demo"* ]] || [[ "${audit_body}" != *"Betriebs-/Audit-Operator"* ]]; then
+  echo "  Audit-Check: erwarteter Seed-Demo-Eintrag fehlt (${audit_url})" >&2
+  exit 1
+fi
+printf '  Audit-Check: erreichbar (%s, enthält production.seed_demo und Betriebs-/Audit-Operator)\n' "${audit_url}"
+
+echo ""
+echo "Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health -> Export -> Bootstrap/Audit."
