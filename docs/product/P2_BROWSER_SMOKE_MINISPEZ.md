@@ -73,6 +73,11 @@ Zusätzlich wurde der zugehörige Einkaufslisten-Export als weiterer kleiner rea
 - Ziel: `http://127.0.0.1:3200/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv`
 - sichtbarer CSV-Anfang: `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
 
+Als weiterer kleiner read-only Nutzpfad wurde auch der Angebots-Export verifiziert:
+- `Angebot exportieren` fuer `draft-demo-offer-conference-buffet`
+- Ziel: `http://127.0.0.1:3200/api/exports/v1/exports/offers/draft-demo-offer-conference-buffet/html`
+- sichtbarer HTML-Anfang: `Angebot draft-demo-offer-conference-buffet` und die Leistungsbausteine des Angebots
+
 Damit ist eine minimale UI-nahe Service-Interaktion bestätigt, ohne eine neue Browser-/E2E-Infrastruktur oder breitere Pfadabdeckung aufzubauen.
 
 ## 4. Empfohlene kleinste MVP-Kernpfade fuer erste Smoke-Checks
