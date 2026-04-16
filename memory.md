@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.59
+version: 5.60
 date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -29,6 +29,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P3 Stufe 1 und 2 sind begonnen und mit reproduzierbarem lokalem Betriebscheck gehärtet
 - P4 zielt jetzt auf Audit-/Review-/Nachvollziehbarkeit: vorhandene Nachweise, Operator-Zuordnung und geschuetzte Kernpfade betriebsnah schaerfen
 - P4 Traceability wurde zusätzlich als kleiner Regressionstest `tests/p4-audit-traceability.test.ts` codiert und grün verifiziert; die Traceability umfasst Produktionsseed, Produktionsreview, Angebotsreview und Intake-Finalize
+- Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
 - Leitlinien bleiben bindend:
   - deterministischer, pruefbarer Produktkern
   - keine unnoetige Plattformbildung
