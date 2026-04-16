@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.49
+version: 5.50
 date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -23,8 +23,9 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
   - `backoffice-ui`
 
 ## Projektkontext der aktuellen Arbeit
-- Aktuelles Arbeitsthema: P2 als kleinster Browser-/Smoke-Korridor vorbereiten
+- Aktuelles Arbeitsthema: P2 als kleinster Browser-/Smoke-Korridor vorbereiten und inhaltlich nachziehen
 - P1 Rollen-/Rechte-Arbeit ist in einer ersten MVP-Stufe real verankert und gezielt verifiziert: zentrale Konvention im `shared-core` plus Guards fuer `/v1/production/audit/events`, `/v1/production/seed-demo`, `/v1/intake/spec-governance/finalize`, `/v1/offers/recipes/:recipeId/review` und `/v1/production/recipes/:recipeId/review`; kleiner Access-Control-Korridor ist gruen
+- P2 Stufe 1 ist real begonnen: die drei UI-Kernrouten und die vier lokalen Health-Endpunkte wurden bereits erfolgreich mit HTTP 200 verifiziert, und die gerenderte UI zeigt die erwartbaren Kernmarker im DOM
 - Leitlinien bleiben bindend:
   - deterministischer, pruefbarer Produktkern
   - keine unnoetige Plattformbildung
@@ -326,6 +327,11 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+### 5.50 - 2026-04-16
+- P2 Stufe 1 nun auch inhaltlich nachgezogen: die drei UI-Kernrouten und die vier Health-Endpunkte wurden erfolgreich mit HTTP 200 verifiziert.
+- Gerenderte UI-Marker fuer Startseite, Angebotsagent und Produktionsagent im Browser-Tool bestaetigt.
+- Dokumentiert, dass fuer diese Smoke-Stufe keine grosse Browser-/E2E-Infrastruktur notwendig war.
+
 ### 5.49 - 2026-04-16
 - P2 als kleinster Browser-/Smoke-Korridor fuer die Kernpfade vorbereitet.
 - Verankert, dass die erste Smoke-Stufe auf Backoffice-UI-Routen (`/`, `/angebot`, `/produktion`) plus lokale Health-Endpunkte aufbaut.

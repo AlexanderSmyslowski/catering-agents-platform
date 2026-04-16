@@ -38,6 +38,8 @@ Im Repo existieren bereits folgende nutzbare Bausteine:
 - bestehender Deployment-Smoke-Check unter `platform-infra/scripts/smoke-check.sh`
 - gemeinsamer UI- und Service-Rahmen mit bereits vorhandenen Health- und Audit-Pfaden
 
+Diese erste Smoke-Stufe wurde bereits real ausgefuehrt: die drei UI-Routen und die vier Health-Endpunkte lieferten jeweils HTTP 200, ohne dass dafuer eine grosse Browser-/E2E-Infrastruktur aufgebaut werden musste.
+
 ### 3.2 Nicht vorhanden bzw. nicht als eigene Browser-E2E-Infrastruktur ausgebaut
 
 Im aktuellen Repo-Stand ist keine grosse Browser-Testarchitektur als eigener Stack-Anker sichtbar, insbesondere:
@@ -49,6 +51,15 @@ Dafuer existieren bereits:
 - Vitest-basierte Tests fuer fachliche Pfade
 - jsdom- und Vite-Umfeld fuer die UI
 - kleine bestehende Shell-basierte Smoke-Skripte fuer Infrastruktur-Checks
+
+### 3.3 Zusätzlich klein inhaltlich geprüft
+
+Mit dem vorhandenen Browser-Tool wurde ausserdem einmalig die gerenderte UI betrachtet. Dabei zeigten die drei Kernrouten die erwartbaren Kernmarker im DOM:
+- Startseite: `Catering-Agenten`, `Angebotsagent`, `Produktionsagent`, `Gemeinsamer Regelkern`
+- `/angebot`: `Angebotsagent`, `Angebotsentwürfe`, `Operative Übergabe`
+- `/produktion`: `Produktionsagent`, `Produktionspläne`, `Einkaufslisten`, `Gemeinsamer Regelkern`
+
+Damit ist die kleinste inhaltliche Smoke-Erweiterung ohne neue Testarchitektur bereits zusätzlich bestätigt.
 
 ## 4. Empfohlene kleinste MVP-Kernpfade fuer erste Smoke-Checks
 
