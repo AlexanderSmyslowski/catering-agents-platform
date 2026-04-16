@@ -87,7 +87,7 @@ Dies bleibt die wichtigste Grundlage, weil Sicherheit, Bedienbarkeit und Betrieb
 Die wichtigsten End-to-End-Kernpfade im UI gegen offensichtliche Regressionsrisiken absichern.
 
 **Kurzbeschreibung:**
-Die bestehenden Vitest-Tests decken bereits zentrale Logik ab. Als naechster kleiner Schritt braucht der MVP eine schmale Browser- oder Smoke-Absicherung fuer die wichtigsten Benutzerwege im Backoffice.
+Die bestehenden Vitest-Tests decken bereits zentrale Logik ab. Als naechster kleiner Schritt braucht der MVP eine schmale Browser- oder Smoke-Absicherung fuer die wichtigsten Benutzerwege im Backoffice. Der aktuelle P2-Stand ist inzwischen real belegt mit drei UI-Routen, vier Health-Endpunkten und drei read-only Exportpfaden; das bleibt bewusst klein.
 
 **Begruendung:**
 Der Repo-Stand ist fachlich gruen, aber die UI- und Bedienkette ist noch nicht in einem gleichwertigen, schlanken Smoke-Korridor abgesichert.

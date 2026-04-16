@@ -78,7 +78,7 @@ Als weiterer kleiner read-only Nutzpfad wurde auch der Angebots-Export verifizie
 - Ziel: `http://127.0.0.1:3200/api/exports/v1/exports/offers/draft-demo-offer-conference-buffet/html`
 - sichtbarer HTML-Anfang: `Angebot draft-demo-offer-conference-buffet` und die Leistungsbausteine des Angebots
 
-Damit ist eine minimale UI-nahe Service-Interaktion bestätigt, ohne eine neue Browser-/E2E-Infrastruktur oder breitere Pfadabdeckung aufzubauen.
+Damit ist der erste P2-Smoke-Korridor jetzt real belegt: drei UI-Routen, vier Health-Endpunkte und drei read-only Nutzpfade sind nachgewiesen, ohne eine neue Browser-/E2E-Infrastruktur oder breitere Pfadabdeckung aufzubauen.
 
 ## 4. Empfohlene kleinste MVP-Kernpfade fuer erste Smoke-Checks
 
