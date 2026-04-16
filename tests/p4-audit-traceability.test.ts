@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildOfferApp } from "../offer-service/src/app.js";
 import { buildProductionApp } from "../production-service/src/app.js";
 
 function createDataRoot(): string {
@@ -15,7 +14,7 @@ const offerOperatorName = "Angebots-Mitarbeiter";
 describe("P4 audit and review traceability", () => {
   it("shows production seed-demo actions in the audit feed", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ rootDir: dataRoot });
+    const app = buildProductionApp({ dataRoot });
 
     try {
       const seedResponse = await app.inject({
@@ -54,7 +53,7 @@ describe("P4 audit and review traceability", () => {
 
   it("shows a production recipe review action in the shared audit feed", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ rootDir: dataRoot });
+    const app = buildProductionApp({ dataRoot });
 
     try {
       const importResponse = await app.inject({
