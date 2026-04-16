@@ -71,6 +71,7 @@ Zusätzlich ist der Nachvollziehbarkeitsweg nun als kleiner Regressionstest abge
 - Produktions-`seed-demo` erzeugt einen sichtbaren `production.seed_demo`-Audit-Eintrag
 - ein Produktions-Rezeptreview erzeugt einen sichtbaren `recipe.reviewed`-Eintrag im gleichen Audit-Kontext
 - beide Nachweise laufen ueber die vorhandene lokale App-/Service-Konfiguration ohne neue Infrastruktur
+- zusaetzlich ist ein kleiner Angebots-Rezeptreview-Nachweis als eigener Regressionstest codiert
 
 Damit ist der Audit-/Review-Korridor nicht nur manuell, sondern auch als kleiner reproduzierbarer Testlauf bestaetigt.
 
