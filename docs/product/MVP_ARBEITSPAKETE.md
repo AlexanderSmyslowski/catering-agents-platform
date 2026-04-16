@@ -2,7 +2,7 @@
 
 Status: Entwurf v0.1 auf Basis von `docs/product/PFLICHTENHEFT.md` und dem aktuellen Repo-Iststand
 
-Stand: 2026-04-11
+Stand: 2026-04-16
 
 ## 1. Zweck des Dokuments
 
@@ -46,7 +46,7 @@ Aus dem aktuellen Repo-Stand und den führenden Dokumenten sind bereits belastba
 ### 3.2 Priorisierte MVP-Luecken
 
 Aus Pflichtenheft und Repo-Iststand ergeben sich aktuell vor allem diese Luecken:
-1. Rollen- und Rechtebild sind jetzt erst teilweise formalisiert: die zentrale Konvention und erste Production-Guards existieren, die restlichen relevanten Pfade sind noch nicht durchgehend angeschlossen.
+1. Rollen- und Rechtebild sind in einer ersten MVP-Stufe real verankert: die zentrale Konvention und erste Guards existieren bereits, die restlichen relevanten Pfade sind noch nicht durchgehend angeschlossen.
 2. Die Bedienung des Kernpfads ist noch nicht durch eine schmale Browser-/Smoke-Abdeckung abgesichert.
 3. Der Betriebs- und Deployment-Rahmen ist dokumentiert, aber fuer MVP-Freigabe und Reproduzierbarkeit weiter zu haerten.
 4. Datenschutz-, Aufbewahrungs- und Autorisierungsfragen sind beschrieben, aber noch nicht voll operationalisiert.
@@ -62,7 +62,7 @@ Aus Pflichtenheft und Repo-Iststand ergeben sich aktuell vor allem diese Luecken
 Ein belastbares, repo-konsistentes Rollen- und Rechtebild fuer die internen Nutzerrollen herstellen.
 
 **Kurzbeschreibung:**
-Das Pflichtenheft benennt bereits Angebots-Ersteller, Produktionsplanung/Kueche und interne Operatoren. Im Repo ist die erste zentrale Rollen-/Rechte-Konvention bereits verankert und erste Production-Pfade sind geschuetzt; dieses Paket praezisiert nun die verbleibenden Aktionen und Pfade, die noch an dieselbe Konvention angeschlossen werden muessen.
+Das Pflichtenheft benennt bereits Angebots-Ersteller, Produktionsplanung/Kueche und interne Operatoren. Im Repo ist die erste zentrale Rollen-/Rechte-Konvention bereits verankert, die kleine Access-Control-Verifikation ist grün und die ersten MVP-Kernpfade sind geschützt; dieses Paket dokumentiert die bereits erreichte erste Stufe und haelt die Restgrenzen bewusst klein.
 
 **Begruendung:**
 Dies bleibt die wichtigste Grundlage, weil Sicherheit, Bedienbarkeit und Betrieb davon direkt abhaengen und die erste reale Verankerung jetzt anschlussfaehig fortgesetzt werden muss.
@@ -160,7 +160,7 @@ Der Produktkern ist nur dann intern belastbar, wenn Aenderungen und Entscheidung
 Den MVP-Kern gegen unbeabsichtigte Erweiterungen absichern.
 
 **Kurzbeschreibung:**
-Das Pflichtenheft benennt bereits den internen Kern und die expliziten Out-of-Scope-Punkte. Dieses Paket praezisiert die Abgrenzung pro Service- und UI-Bereich, damit Folgearbeit nicht implizit in neue Produktflaechen kippt.
+Das Pflichtenheft benennt bereits den internen Kern und die expliziten Out-of-Scope-Punkte. Dieses Paket praezisiert die Abgrenzung pro Service- und UI-Bereich, damit Folgearbeit nicht implizit in neue Produktflaechen kippt. Es ist der naechste Spezifikationsanker nach der P1-Konsolidierung.
 
 **Begruendung:**
 Nach dem aktuellen Konsolidierungsstand ist die wichtigste Schutzfunktion nicht Expansion, sondern saubere Begrenzung.
@@ -187,7 +187,8 @@ Diese Elemente sind als Arbeitsgrundlage bereits vorhanden und muessen nicht als
 - konsolidierter M1-Stand
 - gruene bestehende Vitest-Absicherung
 - zentrale Rollen-/Rechte-Konvention im `shared-core`
-- geschuetzte Production-Pfade: `GET /v1/production/audit/events` und `POST /v1/production/seed-demo`
+- geschützte MVP-Kernpfade: `GET /v1/production/audit/events`, `POST /v1/production/seed-demo`, `POST /v1/intake/spec-governance/finalize`, `PATCH /v1/offers/recipes/:recipeId/review`, `PATCH /v1/production/recipes/:recipeId/review`
+- grüne Access-Control-Verifikation: `tests/intake-finalize-access.test.ts`, `tests/production-audit-access.test.ts`, `tests/recipe-review-access.test.ts` (insgesamt 6 Tests)
 
 ## 6. ausdruecklich nicht Teil des aktuellen MVP
 

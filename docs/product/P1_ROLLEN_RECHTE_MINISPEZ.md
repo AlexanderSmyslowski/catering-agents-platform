@@ -1,14 +1,14 @@
 # P1 Rollen, Rechte und Autorisierung – Mini-Spezifikation
 
-Status: Entwurf v0.1 auf Basis des aktuellen Repo-Iststands
+Status: Konsolidierte Mini-Spezifikation v0.2 auf Basis des aktuellen Repo-Iststands
 
-Stand: 2026-04-11
+Stand: 2026-04-16
 
 ## 1. Zweck der Mini-Spezifikation
 
 Diese Mini-Spezifikation praezisiert das Arbeitspaket P1 aus `docs/product/MVP_ARBEITSPAKETE.md` fuer den aktuellen Repo-Stand.
 
-Ziel ist nicht eine vollstaendige Enterprise-RBAC-Architektur, sondern eine kleine, repo-verankerte und MVP-taugliche Klärung von Rollen, Rechten und Schutzbedarf.
+Ziel ist nicht eine vollstaendige Enterprise-RBAC-Architektur, sondern eine kleine, repo-verankerte und MVP-taugliche Klärung von Rollen, Rechten und Schutzbedarf. P1 ist dabei in einer ersten MVP-Stufe bereits real verankert und wird hier bewusst konsolidiert, nicht weiter aufgebläht.
 
 ## 2. Bezug auf Pflichtenheft und MVP-Arbeitspakete
 
@@ -22,7 +22,7 @@ Grundlage dieser Mini-Spezifikation sind:
 Relevante Ableitung:
 - P1 ist im MVP-Arbeitspaketplan als hoechstpriorisiertes Arbeitspaket markiert.
 - Das Pflichtenheft benennt Rollen, Audit, Review, Betrieb und Datenschutz als offene oder zu praezisierende Bereiche.
-- Der aktuelle Repo-Stand zeigt bereits implizite Rollen, aber noch kein formal geschlossenes Rechtebild.
+- Der aktuelle Repo-Stand zeigt bereits implizite Rollen und die erste formal verankerte Rechtebasis; der restliche Schutzumfang wird als Folgearbeit konsolidiert.
 
 ## 3. aktueller Repo-Iststand
 
@@ -50,13 +50,20 @@ Die vorhandene Umsetzung deutet auf folgende Schutz- und Zuständigkeitslinien h
 
 ### 3.3 Bereits real umgesetzter P1-Fortschritt
 
-Seit den Commits `dab9e71` und `66297ac` ist P1 nicht mehr nur konzeptionell, sondern bereits teilweise im Code verankert:
+Seit den Commits `dab9e71` und `66297ac` ist P1 in einer ersten MVP-Stufe real verankert und nicht mehr nur konzeptionell:
 - im `shared-core` existiert eine minimale zentrale Rollen-/Rechte-Konvention
-- konkret geschuetzt sind jetzt die Production-Pfade
+- konkret geschützt sind:
   - `GET /v1/production/audit/events`
   - `POST /v1/production/seed-demo`
-- die angeschlossenen Caller verwenden fuer diese Betriebswege den Betriebs-/Audit-Operator
-- eine kleine gezielte Testabsicherung ist vorhanden und gruen (`tests/production-audit-access.test.ts`)
+  - `POST /v1/intake/spec-governance/finalize`
+  - `PATCH /v1/offers/recipes/:recipeId/review`
+  - `PATCH /v1/production/recipes/:recipeId/review`
+- die angeschlossenen Caller verwenden für diese Betriebswege den Betriebs-/Audit-Operator
+- die kleine Access-Control-Verifikation ist grün:
+  - `tests/intake-finalize-access.test.ts`
+  - `tests/production-audit-access.test.ts`
+  - `tests/recipe-review-access.test.ts`
+  - insgesamt 6 Tests grün
 
 ## 4. bereits vorhandene implizite Rollen / Verantwortlichkeiten
 
@@ -171,18 +178,17 @@ Offen ist derzeit insbesondere:
 
 ## 9. empfohlener kleinster naechster Umsetzungsschritt fuer P1
 
-Der kleinste naechste Umsetzungsschritt fuer P1 ist:
+Der naechste Schritt ist fuer P1 bewusst keine weitere Aufblaehung, sondern die Konsolidierung des bereits real verankerten Minimalbilds.
 
-1. die noch ungeschuetzten mutierenden Fach- und Betriebswege entlang der bereits vorhandenen zentralen Konvention ebenfalls hart anschliessen
-2. `x-actor-name` auf diesen naechsten Pfaden gegen die Konvention weiter validieren bzw. praezisieren
-3. die drei Fachrollen plus Betriebs-/Audit-Operator in den bestehenden UI-/Servicepfaden konsistent abbilden
-4. die bereits angeschlossenen Production-Guards stabil halten und nur echte Restpfade nachziehen
+1. die bereits geschuetzten Kernpfade als Referenzstand stabil halten
+2. den jetzt dokumentierten Rollen-/Rechteanker nicht mit neuer RBAC-Komplexitaet ueberfrachten
+3. verbleibende Restpfade nur dann als eigener Folgeauftrag behandeln, wenn spaeter ein konkreter MVP-Bedarf belegt ist
 
 ### Warum genau dieser Schritt
 
-- Er ist klein und direkt an die bereits angeschlossenen Production-Pfade anschliessbar.
-- Er erfindet keine neue Plattform- oder Enterprise-RBAC-Logik.
-- Er schliesst jetzt die naechste reale Luecke: nicht mehr die Grundkonvention, sondern die noch offenen Restpfade.
+- P1 ist bereits in einer ersten MVP-Stufe real verankert.
+- Der Verifikationskorridor ist gruen.
+- Der naechste sinnvolle Fokus ist deshalb Begrenzung und Klarheit, nicht weiterer Aufbau.
 
 ## 10. Einordnung
 

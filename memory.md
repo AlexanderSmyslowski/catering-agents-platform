@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.23
-date: 2026-04-11
+version: 5.48
+date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -23,8 +23,8 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
   - `backoffice-ui`
 
 ## Projektkontext der aktuellen Arbeit
-- Aktuelles Arbeitsthema: Governance-Ausbau fuer Aenderungs-/Freigabehistorie, bewusst klein und sequenziell
-- P1 Rollen-/Rechte-Arbeit ist inzwischen real gestartet: `dab9e71` verankert die minimale zentrale Access-Control-Konvention, `66297ac` schuetzt die ersten Production-Pfade (`/v1/production/audit/events`, `/v1/production/seed-demo`) und schliesst die Caller passend an
+- Aktuelles Arbeitsthema: P1 konsolidieren und danach P5 als naechsten Spezifikationsanker vorbereiten
+- P1 Rollen-/Rechte-Arbeit ist in einer ersten MVP-Stufe real verankert und gezielt verifiziert: zentrale Konvention im `shared-core` plus Guards fuer `/v1/production/audit/events`, `/v1/production/seed-demo`, `/v1/intake/spec-governance/finalize`, `/v1/offers/recipes/:recipeId/review` und `/v1/production/recipes/:recipeId/review`; kleiner Access-Control-Korridor ist gruen
 - Leitlinien bleiben bindend:
   - deterministischer, pruefbarer Produktkern
   - keine unnoetige Plattformbildung
@@ -326,6 +326,12 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+### 5.48 - 2026-04-16
+- P1 als erste MVP-Stufe real verankert und gezielt verifiziert dokumentiert.
+- Minimale zentrale Access-Control-Konvention plus geschuetzte Pfade fuer Production-Audit, Production-Seed, Intake-Finalize und beide Recipe-Review-Wege festgehalten.
+- P5 als naechster Spezifikationsanker fuer die MVP-Abgrenzung pro Kernbereich vermerkt.
+- Root-Memory auf den konsolidierten P1- und P5-Stand nachgezogen.
+
 ### 5.47 - 2026-04-11
 - M1 Owned Memory Foundation als vorerst konsolidiert und stabil abgeschlossen.
 - SpecRecord als erster interner Owned-Memory-Anker im Intake-/Spec-Kontext real verankert.
