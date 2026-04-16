@@ -52,4 +52,15 @@ for entry in "${required_urls[@]}"; do
 done
 
 echo ""
-echo "Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health."
+echo "Exportpruefung:"
+export_url="http://127.0.0.1:3200/api/exports/v1/exports/production-plans/plan-spec-demo-production-coffee/html"
+export_anchor="Produktionsplan plan-spec-demo-production-coffee"
+export_body="$(curl -fsS "${export_url}")"
+if [[ "${export_body}" != *"${export_anchor}"* ]]; then
+  echo "  Export-Check: unerwarteter Inhalt (${export_url})" >&2
+  exit 1
+fi
+printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${export_url}" "${export_anchor}"
+
+echo ""
+echo "Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health -> Export."
