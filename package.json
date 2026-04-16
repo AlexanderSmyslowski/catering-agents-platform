@@ -18,6 +18,7 @@
     "local:start": "bash ./scripts/start-local-stack.sh --seed-demo",
     "local:stop": "bash ./scripts/stop-local-stack.sh",
     "local:status": "bash ./scripts/status-local-stack.sh",
+    "local:check": "bash ./scripts/check-local-ops.sh",
     "dev:ui": "npm --workspace @catering/backoffice-ui run dev",
     "dev:intake": "tsx intake-service/src/server.ts",
     "dev:offer": "tsx offer-service/src/server.ts",

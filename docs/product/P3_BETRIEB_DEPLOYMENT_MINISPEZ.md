@@ -37,6 +37,7 @@ Wesentliche Ableitungen:
 Im Repo sind bereits folgende Betriebswege und Annahmen sichtbar:
 - lokaler Ein-Kommando-Start ueber `npm run local:start`
 - lokaler Status ueber `npm run local:status`
+- reproduzierbarer lokaler Check ueber `npm run local:check`
 - lokaler Stop ueber `npm run local:stop`
 - `platform-infra/docker-compose.yml` als Compose-Basis fuer den servernahen Betrieb
 - `platform-infra/scripts/deploy-hetzner.sh` als reproduzierbarer Deploy-Run
@@ -114,9 +115,9 @@ Bewusst nicht Teil von P3 in dieser Stufe:
 ## 8. Empfohlener kleinster naechster P3-Schritt
 
 Der kleinste sinnvolle naechste Schritt ist eine knappe, repo-gebundene Betriebsabsicherung des lokalen Stack-Pfads:
-- Start
-- Status
-- Stop
+- Start ueber `npm run local:start`
+- Status ueber `npm run local:status`
+- Health ueber `npm run local:check`
 - plus ein bewusst kleiner Health-/Erreichbarkeitsnachweis
 
 Damit wird P3 in der ersten Stufe praktisch bestaetigt, ohne eine grosse Infra-Baustelle zu eroefnen.
