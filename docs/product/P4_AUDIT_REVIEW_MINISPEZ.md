@@ -64,6 +64,16 @@ Mit dem lokalen Stack wurde bereits ein kleiner Audit-Feed-Check ausgefuehrt:
 
 Damit ist der kleinste operative Audit-Nachweis direkt im bestehenden lokalen Betriebsrahmen bestaetigt.
 
+### 3.4 Kleine codierte Traceability-Absicherung
+
+Zusätzlich ist der Nachvollziehbarkeitsweg nun als kleiner Regressionstest abgesichert:
+- `tests/p4-audit-traceability.test.ts`
+- Produktions-`seed-demo` erzeugt einen sichtbaren `production.seed_demo`-Audit-Eintrag
+- ein Produktions-Rezeptreview erzeugt einen sichtbaren `recipe.reviewed`-Eintrag im gleichen Audit-Kontext
+- beide Nachweise laufen ueber die vorhandene lokale App-/Service-Konfiguration ohne neue Infrastruktur
+
+Damit ist der Audit-/Review-Korridor nicht nur manuell, sondern auch als kleiner reproduzierbarer Testlauf bestaetigt.
+
 ## 4. Bereits vorhandene Bausteine
 
 Bereits vorhandene Bausteine, die P4 nur operationalisieren, nicht neu erfinden soll:

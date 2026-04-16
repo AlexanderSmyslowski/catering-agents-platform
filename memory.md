@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.54
+version: 5.55
 date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -23,11 +23,12 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
   - `backoffice-ui`
 
 ## Projektkontext der aktuellen Arbeit
-- Aktuelles Arbeitsthema: P4 Audit-, Review- und Nachvollziehbarkeitsrahmen als kleinste repo-gebundene Mini-Spezifikation nachziehen
+- Aktuelles Arbeitsthema: P4 Audit-, Review- und Nachvollziehbarkeitsrahmen als kleiner zusammenhaengender Block weiter schärfen
 - P1 Rollen-/Rechte-Arbeit ist in einer ersten MVP-Stufe real verankert und gezielt verifiziert: zentrale Konvention im `shared-core` plus Guards fuer `/v1/production/audit/events`, `/v1/production/seed-demo`, `/v1/intake/spec-governance/finalize`, `/v1/offers/recipes/:recipeId/review` und `/v1/production/recipes/:recipeId/review`; kleiner Access-Control-Korridor ist gruen
 - P2 Stufe 1 und 2 sind real begonnen und verifiziert: UI-Kernrouten, Health-Endpunkte, DOM-Marker und ein kleiner Export-Link-Flow sind bestaetigt
 - P3 Stufe 1 und 2 sind begonnen und mit reproduzierbarem lokalem Betriebscheck gehärtet
 - P4 zielt jetzt auf Audit-/Review-/Nachvollziehbarkeit: vorhandene Nachweise, Operator-Zuordnung und geschuetzte Kernpfade betriebsnah schaerfen
+- P4 Traceability wurde zusätzlich als kleiner Regressionstest `tests/p4-audit-traceability.test.ts` codiert und grün verifiziert
 - Leitlinien bleiben bindend:
   - deterministischer, pruefbarer Produktkern
   - keine unnoetige Plattformbildung
