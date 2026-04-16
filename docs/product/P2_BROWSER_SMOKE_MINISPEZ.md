@@ -68,7 +68,12 @@ Als kleinster echter Nutzpfad wurde auf der Produktionsseite ein vorhandener Exp
 - Ziel: `http://127.0.0.1:3200/api/exports/v1/exports/production-plans/plan-spec-demo-production-coffee/html`
 - sichtbar dort: `Produktionsplan plan-spec-demo-production-coffee` und `Status: partial`
 
-Damit ist eine minimale UI-nahe Service-Interaktion bestaetigt, ohne eine neue Browser-/E2E-Infrastruktur oder breitere Pfadabdeckung aufzubauen.
+Zusätzlich wurde der zugehörige Einkaufslisten-Export als weiterer kleiner read-only Servicepfad geprüft:
+- `Einkaufsliste herunterladen` fuer `purchase-spec-demo-production-coffee`
+- Ziel: `http://127.0.0.1:3200/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv`
+- sichtbarer CSV-Anfang: `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
+
+Damit ist eine minimale UI-nahe Service-Interaktion bestätigt, ohne eine neue Browser-/E2E-Infrastruktur oder breitere Pfadabdeckung aufzubauen.
 
 ## 4. Empfohlene kleinste MVP-Kernpfade fuer erste Smoke-Checks
 
