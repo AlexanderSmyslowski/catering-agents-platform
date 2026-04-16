@@ -70,6 +70,7 @@ Zusätzlich ist der Nachvollziehbarkeitsweg nun als kleiner Regressionstest abge
 - `tests/p4-audit-traceability.test.ts`
 - Produktions-`seed-demo` erzeugt einen sichtbaren `production.seed_demo`-Audit-Eintrag
 - ein Produktions-Rezeptreview erzeugt einen sichtbaren `recipe.reviewed`-Eintrag im gleichen Audit-Kontext
+- ein Intake-Finalize erzeugt einen sichtbaren `intake.spec_governance_finalized`-Eintrag im gleichen Nachvollziehbarkeitsrahmen
 - beide Nachweise laufen ueber die vorhandene lokale App-/Service-Konfiguration ohne neue Infrastruktur
 - zusaetzlich ist ein kleiner Angebots-Rezeptreview-Nachweis als eigener Regressionstest codiert
 
