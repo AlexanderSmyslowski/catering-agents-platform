@@ -136,7 +136,7 @@ Ein interner Produktkandidat ist nur dann stabil nutzbar, wenn der Betrieb nicht
 Die bereits vorhandene Audit- und Review-Idee so zu strukturieren, dass sie fuer den MVP als klare operative Nachvollziehbarkeit dient.
 
 **Kurzbeschreibung:**
-Das Pflichtenheft benoetigt eine nachvollziehbare Zuordnung mutierender Aktionen, sichtbare Review-Pfade und eine klare Trennung von finalisiert und freigegeben. Dieses Paket ordnet die dazugehoerigen Erwartungen und minimalen Nachweise.
+Das Pflichtenheft benoetigt eine nachvollziehbare Zuordnung mutierender Aktionen, sichtbare Review-Pfade und eine klare Trennung von finalisiert und freigegeben. Dieses Paket ordnet die dazugehoerigen Erwartungen und minimalen Nachweise. Im aktuellen Repo sind diese Nachweise inzwischen nicht nur fuer Produktionsseed und Produktionsreview, sondern auch fuer den Intake-Finalize-Pfad sichtbar verankert.
 
 **Begruendung:**
 Der Produktkern ist nur dann intern belastbar, wenn Aenderungen und Entscheidungen im Alltag nachvollziehbar bleiben.

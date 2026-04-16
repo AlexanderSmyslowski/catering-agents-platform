@@ -74,7 +74,7 @@ Zusätzlich ist der Nachvollziehbarkeitsweg nun als kleiner Regressionstest abge
 - beide Nachweise laufen ueber die vorhandene lokale App-/Service-Konfiguration ohne neue Infrastruktur
 - zusaetzlich ist ein kleiner Angebots-Rezeptreview-Nachweis als eigener Regressionstest codiert
 
-Damit ist der Audit-/Review-Korridor nicht nur manuell, sondern auch als kleiner reproduzierbarer Testlauf bestaetigt.
+Damit ist der Audit-/Review-Korridor nicht nur manuell, sondern auch als kleiner reproduzierbarer Testlauf bestaetigt. P4 ist in dieser ersten Stufe real begonnen, sichtbar verankert und bewusst schmal gehalten.
 
 ## 4. Bereits vorhandene Bausteine
 
