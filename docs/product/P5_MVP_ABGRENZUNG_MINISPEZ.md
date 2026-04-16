@@ -166,7 +166,14 @@ Bewusst nicht Teil des MVP:
 - ungebundene Deploy-Roadmap
 - Betriebsmodell als separater Produktkern
 
-## 5. Grenze zwischen internem Nutzwert und spaeterer Produktisierung
+### 4.9 Praktische Priorisierung
+
+Fuer die praktische Pflege und weitere Verifikation gilt im aktuellen Repo-Stand folgende Reihenfolge:
+1. Shared Core / Access-Control / Governance
+2. Betrieb / lokale Reproduzierbarkeit
+3. Intake, Angebot, Produktion, Exporte und Backoffice-UI
+
+Diese Reihenfolge ist keine neue Roadmap, sondern nur die Priorisierung der bereits realen Kernbereiche nach Stabilitaet und Nutzwert.
 
 Der aktuelle MVP ist auf internen Nutzwert optimiert:
 - deterministisch
@@ -194,13 +201,7 @@ Offen bleiben aktuell nur eng begrenzte Fragen:
 
 ## 7. Empfohlener naechster kleiner Folgeschritt nach P5
 
-Der naechste kleine Schritt nach dieser Abgrenzung ist Arbeitspaket P2 aus `docs/product/MVP_ARBEITSPAKETE.md`:
-- schmale Browser-/Smoke-Absicherung der Kernpfade
-- ohne neue Produktflaeche
-- ohne neue API
-- ohne neue Persistenz
-
-Damit wird die bereits definierte Abgrenzung praktisch abgesichert, ohne den MVP-Kern zu vergroessern.
+Der naechste kleine Schritt nach dieser Abgrenzung ist keine neue Produktflaeche, sondern die Pflege der bereits realen Mindestkorridore in ihrer Prioritaet. Wenn eine naechste fachliche Vertiefung benoetigt wird, liegt sie zuerst bei Shared Core / Access-Control / Governance und beim Betrieb, nicht bei neuen UI- oder API-Flaechen.
 
 ## 8. Einordnung
 
