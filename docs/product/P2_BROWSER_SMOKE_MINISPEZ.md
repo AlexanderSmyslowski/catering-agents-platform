@@ -61,6 +61,15 @@ Mit dem vorhandenen Browser-Tool wurde ausserdem einmalig die gerenderte UI betr
 
 Damit ist die kleinste inhaltliche Smoke-Erweiterung ohne neue Testarchitektur bereits zusätzlich bestätigt.
 
+### 3.4 Zusätzlich operativ verifiziert
+
+Als kleinster echter Nutzpfad wurde auf der Produktionsseite ein vorhandener Export-Link aus der UI gefolgt:
+- `Produktionsblatt exportieren` fuer `plan-spec-demo-production-coffee`
+- Ziel: `http://127.0.0.1:3200/api/exports/v1/exports/production-plans/plan-spec-demo-production-coffee/html`
+- sichtbar dort: `Produktionsplan plan-spec-demo-production-coffee` und `Status: partial`
+
+Damit ist eine minimale UI-nahe Service-Interaktion bestaetigt, ohne eine neue Browser-/E2E-Infrastruktur oder breitere Pfadabdeckung aufzubauen.
+
 ## 4. Empfohlene kleinste MVP-Kernpfade fuer erste Smoke-Checks
 
 Fuer die erste Smoke-Stufe sind die kleinsten sinnvollen Kernpfade:
