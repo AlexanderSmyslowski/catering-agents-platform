@@ -136,6 +136,8 @@ function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-"));
 }
 
+const auditActorName = "Betriebs-/Audit-Operator";
+
 describe("catering agents platform", () => {
   it("normalizes manual text into the canonical AcceptedEventSpec", async () => {
     const dataRoot = createDataRoot();
@@ -2091,7 +2093,10 @@ describe("catering agents platform", () => {
       }),
       productionApp.inject({
         method: "POST",
-        url: "/v1/production/seed-demo"
+        url: "/v1/production/seed-demo",
+        headers: {
+          "x-actor-name": auditActorName
+        }
       })
     ]);
 
@@ -2110,7 +2115,10 @@ describe("catering agents platform", () => {
       }),
       productionApp.inject({
         method: "POST",
-        url: "/v1/production/seed-demo"
+        url: "/v1/production/seed-demo",
+        headers: {
+          "x-actor-name": auditActorName
+        }
       })
     ]);
 
@@ -2657,7 +2665,10 @@ describe("catering agents platform", () => {
 
     const auditResponse = await productionApp.inject({
       method: "GET",
-      url: "/v1/production/audit/events?limit=10"
+      url: "/v1/production/audit/events?limit=10",
+      headers: {
+        "x-actor-name": auditActorName
+      }
     });
     expect(auditResponse.statusCode).toBe(200);
 
