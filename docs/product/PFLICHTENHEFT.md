@@ -331,6 +331,18 @@ Nicht Bestandteil des MVP sind aktuell insbesondere:
 
 ## 16. Risiken / Annahmen / offene Fragen
 
+### 16.0 Kurzüberblick bisherige Implementierungsherausforderungen
+
+Die bisher wichtigsten Implementierungsherausforderungen lagen in der kontrollierten Reifung des Produkts, nicht in einer einzelnen schweren Kernfunktion.
+
+Konkret haben sich bisher vor allem diese Punkte gezeigt:
+- Repo- und Arbeitskontext mussten stabilisiert werden, damit Änderungen im richtigen Repository und ohne alte Nebenstränge erfolgen.
+- Führungsdokumente und realer Repo-Stand mussten wiederholt synchronisiert werden, damit Planung, Architektur und Umsetzung zusammenlaufen.
+- Neue Access-Control- und Governance-Schritte brachen ältere Testannahmen; bestehende Tests und Aufrufe mussten an geschützte Pfade angepasst werden.
+- Einzelne Zieltests reichten nicht als Qualitätsgate; zusätzlich musste `npm run build` als verpflichtender Prüfschritt vor Commit und Push etabliert werden.
+- P2, P3 und P4 mussten bewusst klein gehalten werden, um keine große E2E-, Infrastruktur- oder Compliance-Baustelle zu eröffnen.
+- Spätere Produktideen wie Onboarding mussten architektonisch vorgemerkt, aber aus dem aktiven MVP-Block herausgehalten werden.
+
 ### 16.1 Risiken
 
 - Dokumentierte Prozesse können größer wirken als aktuell technisch abgesichert.
