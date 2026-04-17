@@ -1339,6 +1339,10 @@ export function App() {
               body={`${dashboard.acceptedSpecs.length} operative Datensätze stehen dienstübergreifend bereit.`}
             />
             <StatusCard
+              title="Übergabe an Produktion"
+              body={`${offerHandoffCounts.complete} vollständig · ${offerHandoffCounts.partial} teilweise vollständig`}
+            />
+            <StatusCard
               title="Angebotsentwürfe"
               body={`${dashboard.offerDrafts.length} kaufmännische Entwürfe können direkt übernommen werden.`}
             />
