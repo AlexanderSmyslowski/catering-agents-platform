@@ -89,6 +89,10 @@ process.stdin.on("end", () => {
     process.exit(1);
   }
 
+  if (typeof item.summary !== "string" || !item.summary.includes("Produktions-Demoplaene angelegt")) {
+    process.exit(1);
+  }
+
   process.stdout.write(JSON.stringify(item));
 });
 ')"
