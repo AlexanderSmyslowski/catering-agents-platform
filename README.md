@@ -105,6 +105,7 @@ Fuer frische Deployments stehen ausserdem Admin-Endpunkte bereit:
 - `POST /v1/intake/seed-demo`
 - `POST /v1/offers/seed-demo`
 - `POST /v1/production/seed-demo`
+- `GET /v1/intake/requests/:requestId` fuer eine persistierte Intake-Anfrage inklusive verknuepfter `AcceptedEventSpec`-IDs
 - `GET /v1/production/audit/events?limit=30` fuer den gemeinsamen Audit-Feed
 
 Operator-Namen koennen ueber den Header `x-actor-name` mitgegeben werden.
