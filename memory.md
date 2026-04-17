@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.60
-date: 2026-04-16
+version: 5.61
+date: 2026-04-17
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -29,6 +29,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P4 zielt auf Audit-/Review-/Nachvollziehbarkeit: vorhandene Nachweise, Operator-Zuordnung und geschuetzte Kernpfade betriebsnah schaerfen, der Traceability-Strang ist inzwischen testseitig belegt und soll stehen bleiben
 - P4 Traceability wurde zusätzlich als kleiner Regressionstest `tests/p4-audit-traceability.test.ts` codiert und grün verifiziert; die Traceability umfasst Produktionsseed, Produktionsreview, Angebotsreview und Intake-Finalize
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
+- Intake wurde um einen kleinen, realen Herkunftsbaustein erweitert: `GET /v1/intake/requests/:requestId` liefert persistierte Intake-Anfragen; der Detailpfad fuehrt jetzt zusaetzlich die verknuepften `AcceptedEventSpec`-IDs mit
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
 - Leitlinien bleiben bindend:
 
@@ -330,6 +331,12 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+### 5.61 - 2026-04-17
+- Intake-Herkunftsbaustein im laufenden Request-Detailpfad nachgezogen.
+- `GET /v1/intake/requests/:requestId` liefert nun neben der persistierten Anfrage auch die verknuepften `AcceptedEventSpec`-IDs.
+- Kleiner Zieltest `tests/intake-request-detail.test.ts` auf Herkunftsverknuepfung erweitert.
+- `README.md` und `docs/product/PFLICHTENHEFT.md` fuer diesen Intake-Schritt nachgezogen.
+
 ### 5.50 - 2026-04-16
 - P2 Stufe 1 nun auch inhaltlich nachgezogen: die drei UI-Kernrouten und die vier Health-Endpunkte wurden erfolgreich mit HTTP 200 verifiziert.
 - Gerenderte UI-Marker fuer Startseite, Angebotsagent und Produktionsagent im Browser-Tool bestaetigt.
