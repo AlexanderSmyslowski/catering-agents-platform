@@ -316,6 +316,7 @@ function renderPlanList(
         const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
         const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
         const sheetCount = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets.length : 0;
+        const selectionCount = Array.isArray(plan.recipeSelections) ? plan.recipeSelections.length : 0;
         return (
           <li key={String(plan.planId)}>
             <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Produktionsplan"}</strong>
@@ -323,6 +324,7 @@ function renderPlanList(
               Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}
               {" · "}Arbeitsblätter: {sheetCount}
               {" · "}Rezeptblätter: {batchCount}
+              {" · "}Rezeptauswahl: {selectionCount}
               {" · "}Offene Punkte: {unresolvedCount}
             </p>
             <div className="action-row">
@@ -2359,6 +2361,7 @@ export function App() {
                     : ""}
                   {" · "}Arbeitsblätter: {Array.isArray(selectedPlan.kitchenSheets) ? selectedPlan.kitchenSheets.length : 0}
                   {" · "}Rezeptblätter: {Array.isArray(selectedPlan.productionBatches) ? selectedPlan.productionBatches.length : 0}
+                  {" · "}Rezeptauswahl: {Array.isArray(selectedPlan.recipeSelections) ? selectedPlan.recipeSelections.length : 0}
                 </p>
                 {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0 ? (
                   <>
