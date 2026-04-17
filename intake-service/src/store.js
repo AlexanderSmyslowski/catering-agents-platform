@@ -26,6 +26,9 @@ export class IntakeStore {
     async saveSpec(spec) {
         await this.specs.set(spec);
     }
+    async getRequest(requestId) {
+        return this.requests.get(requestId);
+    }
     async getSpec(specId) {
         return this.specs.get(specId);
     }
