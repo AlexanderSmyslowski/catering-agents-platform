@@ -2,6 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { buildIntakeApp } from "../intake-service/src/app.js";
+import { IntakeStore } from "../intake-service/src/store.js";
 import { buildOfferApp } from "../offer-service/src/app.js";
 import { buildProductionApp } from "../production-service/src/app.js";
 import { AuditLogStore } from "../shared-core/src/audit-log.js";
