@@ -35,6 +35,10 @@ export class IntakeStore {
     await this.requests.set(request);
   }
 
+  async getRequest(requestId: string): Promise<EventRequest | undefined> {
+    return this.requests.get(requestId);
+  }
+
   async saveSpec(spec: AcceptedEventSpec): Promise<void> {
     await this.specs.set(spec);
   }
