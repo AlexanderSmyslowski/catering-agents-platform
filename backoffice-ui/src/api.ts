@@ -8,6 +8,20 @@ export interface DashboardState {
   auditEvents: Array<Record<string, unknown>>;
 }
 
+export interface IntakeRequestDetail extends Record<string, unknown> {
+  requestId: string;
+  source?: {
+    channel?: string;
+    receivedAt?: string;
+  };
+  rawInputs?: Array<{
+    kind: string;
+    mimeType?: string;
+    content?: string;
+    documentId?: string;
+  }>;
+}
+
 export type RecipeUploadTarget = "offer" | "production";
 export type RecipeReviewDecision = "approve" | "verify" | "reject";
 export type IntakeDocumentChannel = "pdf_upload" | "email" | "text";
@@ -87,6 +101,10 @@ export async function loadDashboardState(): Promise<DashboardState> {
     recipes: recipes.items,
     auditEvents: auditEvents.items
   };
+}
+
+export async function loadIntakeRequestDetail(requestId: string): Promise<IntakeRequestDetail> {
+  return fetchJson<IntakeRequestDetail>(`/api/intake/v1/intake/requests/${requestId}`);
 }
 
 export async function loadServiceHealth(): Promise<ServiceHealthState> {
