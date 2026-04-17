@@ -659,6 +659,23 @@ export function App() {
     };
   }, [currentIntakeRequestId]);
 
+  const focusedProductionSpecRecord = focusedProductionSpec as Record<string, unknown> | undefined;
+  const focusedProductionSpecEvent =
+    focusedProductionSpecRecord?.event && typeof focusedProductionSpecRecord.event === "object"
+      ? (focusedProductionSpecRecord.event as Record<string, unknown>)
+      : undefined;
+  const focusedProductionSpecServicePlan =
+    focusedProductionSpecRecord?.servicePlan && typeof focusedProductionSpecRecord.servicePlan === "object"
+      ? (focusedProductionSpecRecord.servicePlan as Record<string, unknown>)
+      : undefined;
+  const focusedProductionSpecAttendees =
+    focusedProductionSpecRecord?.attendees && typeof focusedProductionSpecRecord.attendees === "object"
+      ? (focusedProductionSpecRecord.attendees as Record<string, unknown>)
+      : undefined;
+  const focusedProductionSpecMenuPlan = Array.isArray(focusedProductionSpecRecord?.menuPlan)
+    ? focusedProductionSpecRecord.menuPlan
+    : undefined;
+
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
 
   const currentSpecPlans = useMemo(() => {
@@ -2044,6 +2061,41 @@ export function App() {
                         ))}
                       </ul>
                     </>
+                  ) : null}
+                  {focusedProductionSpec ? (
+                    <div className="component-answer-card">
+                      <p className="eyebrow">Spezifikationsdetails</p>
+                      <p className="helper-text">
+                        {`Eventtyp: ${String(
+                          focusedProductionSpecEvent?.type ?? focusedProductionSpecServicePlan?.eventType ?? "-"
+                        )} · Datum: ${String(focusedProductionSpecEvent?.date ?? "-")}`}
+                      </p>
+                      <p className="helper-text">
+                        {`Teilnehmerzahl: ${String(focusedProductionSpecAttendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
+                          String(focusedProductionSpecServicePlan?.serviceForm ?? "")
+                        )} · Readiness: ${translateReadiness(
+                          String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+                        )}`}
+                      </p>
+                      <p className="helper-text">Menüpunkte / Komponenten:</p>
+                      <ul className="item-list compact">
+                        {focusedProductionSpecMenuPlan
+                          ? focusedProductionSpecMenuPlan.map((entry) => {
+                              const component = entry as Record<string, unknown>;
+                              return (
+                                <li key={String(component.componentId ?? component.label)}>
+                                  <strong>{String(component.label ?? component.componentId ?? "-")}</strong>
+                                  <p className="helper-text">
+                                    {`${translateMenuCategory(String(component.menuCategory ?? ""))} · ${translateProductionMode(
+                                      String((component.productionDecision as Record<string, unknown> | undefined)?.mode ?? "")
+                                    )}`}
+                                  </p>
+                                </li>
+                              );
+                            })
+                          : null}
+                      </ul>
+                    </div>
                   ) : null}
                   {intakeRequestDetailError ? (
                     <p className="helper-text" role="status">
