@@ -499,6 +499,21 @@ export function App() {
     );
   }, [dashboard.recipes]);
 
+  const offerHandoffCounts = useMemo(() => {
+    return dashboard.acceptedSpecs.reduce(
+      (counts: { complete: number; partial: number }, spec) => {
+        const readiness = String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "");
+        if (readiness === "complete") {
+          counts.complete += 1;
+        } else if (readiness === "partial") {
+          counts.partial += 1;
+        }
+        return counts;
+      },
+      { complete: 0, partial: 0 }
+    );
+  }, [dashboard.acceptedSpecs]);
+
   const filteredPurchaseLists = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
     if (!query) {
@@ -1349,6 +1364,10 @@ export function App() {
             <StatusCard
               title="Angebotsdienst"
               body={`${translateHealthStatus(serviceHealth.offers.status)} · ${formatCounts(serviceHealth.offers.counts)}`}
+            />
+            <StatusCard
+              title="Übergabereife"
+              body={`${offerHandoffCounts.complete} von ${dashboard.acceptedSpecs.length} Spezifikationen sind vollständig`}
             />
             <StatusCard
               title="Exportdienst"
