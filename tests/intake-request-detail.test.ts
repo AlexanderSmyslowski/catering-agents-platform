@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe("intake request detail endpoint", () => {
-  it("returns a persisted intake request by requestId", async () => {
+  it("returns a persisted intake request together with linked spec ids", async () => {
     const dataRoot = createDataRoot();
     createdRoots.push(dataRoot);
     const app = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
@@ -35,6 +35,7 @@ describe("intake request detail endpoint", () => {
     });
 
     expect(createResponse.statusCode).toBe(201);
+    expect(createResponse.json().acceptedEventSpec.specId).toBe("spec-request-detail-1");
 
     const detailResponse = await app.inject({
       method: "GET",
@@ -44,6 +45,7 @@ describe("intake request detail endpoint", () => {
     expect(detailResponse.statusCode).toBe(200);
     expect(detailResponse.json().requestId).toBe("request-detail-1");
     expect(detailResponse.json().source.channel).toBe("text");
+    expect(detailResponse.json().linkedSpecIds).toEqual(["spec-request-detail-1"]);
 
     await app.close();
   });
