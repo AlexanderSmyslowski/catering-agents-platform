@@ -19,6 +19,7 @@ import {
   createOfferFromText,
   createProductionPlan,
   loadDashboardState,
+  loadIntakeRequestDetail,
   loadServiceHealth,
   offerExportUrl,
   persistOperatorName,
@@ -32,6 +33,7 @@ import {
   uploadRecipeFile,
   type DashboardState,
   type IntakeDocumentChannel,
+  type IntakeRequestDetail,
   type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
@@ -224,6 +226,25 @@ function extractAcceptedSpecId(payload: Record<string, unknown>): string | undef
   return typeof specId === "string" ? specId : undefined;
 }
 
+function getIntakeRequestIdForSpec(spec: Record<string, unknown> | undefined): string | undefined {
+  const sourceLineage = Array.isArray(spec?.sourceLineage) ? spec?.sourceLineage : [];
+  const intakeSource = sourceLineage.find((lineage) => {
+    const sourceType = String((lineage as Record<string, unknown>)?.sourceType ?? "");
+    return sourceType === "manual_input" || sourceType === "pdf" || sourceType === "email";
+  }) as Record<string, unknown> | undefined;
+  const reference = intakeSource?.reference;
+  return typeof reference === "string" && reference.trim() ? reference.trim() : undefined;
+}
+
+function summarizeRawInput(input: Record<string, unknown>): string {
+  const content = String(input.content ?? input.text ?? input.rawText ?? "").trim();
+  const fallback = content || String(input.excerpt ?? input.value ?? input.documentId ?? "").trim();
+  if (!fallback) {
+    return "(kein Vorschautext)";
+  }
+  return fallback.length > 160 ? `${fallback.slice(0, 157)}...` : fallback;
+}
+
 function extractProductionPlanId(payload: Record<string, unknown>): string | undefined {
   const plan = payload.productionPlan as Record<string, unknown> | undefined;
   const planId = plan?.planId;
@@ -388,6 +409,8 @@ export function App() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [intakeRequestDetail, setIntakeRequestDetail] = useState<IntakeRequestDetail | null>(null);
+  const [intakeRequestDetailError, setIntakeRequestDetailError] = useState<string>();
   const [operatorName, setOperatorName] = useState(() => readOperatorName());
   const [intakeText, setIntakeText] = useState(
     "Konferenz am 2026-06-18 für 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
@@ -595,6 +618,46 @@ export function App() {
       dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1]
     );
   }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared]);
+
+  const currentIntakeRequestId = useMemo(() => {
+    if (route !== "production" || !focusedProductionSpec) {
+      return undefined;
+    }
+
+    return getIntakeRequestIdForSpec(focusedProductionSpec as Record<string, unknown>);
+  }, [focusedProductionSpec, route]);
+
+  useEffect(() => {
+    if (!currentIntakeRequestId) {
+      setIntakeRequestDetail(null);
+      setIntakeRequestDetailError(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    setIntakeRequestDetail(null);
+    setIntakeRequestDetailError(undefined);
+
+    void loadIntakeRequestDetail(currentIntakeRequestId)
+      .then((detail) => {
+        if (!cancelled) {
+          setIntakeRequestDetail(detail);
+        }
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          setIntakeRequestDetailError(
+            `Die ursprüngliche Intake-Anfrage konnte nicht geladen werden: ${String(
+              (fetchError as Error).message ?? fetchError
+            )}`
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentIntakeRequestId]);
 
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
 
@@ -1981,6 +2044,39 @@ export function App() {
                         ))}
                       </ul>
                     </>
+                  ) : null}
+                  {intakeRequestDetailError ? (
+                    <p className="helper-text" role="status">
+                      {intakeRequestDetailError}
+                    </p>
+                  ) : null}
+                  {intakeRequestDetail ? (
+                    <div className="component-answer-card">
+                      <p className="eyebrow">Ursprüngliche Intake-Anfrage</p>
+                      <p className="helper-text">
+                        {`requestId: ${String(intakeRequestDetail.requestId ?? "-")} · channel: ${String(
+                          (intakeRequestDetail.source as Record<string, unknown> | undefined)?.channel ?? "-"
+                        )} · receivedAt: ${String(
+                          (intakeRequestDetail.source as Record<string, unknown> | undefined)?.receivedAt ?? "-"
+                        )}`}
+                      </p>
+                      <ul className="item-list compact">
+                        {Array.isArray(intakeRequestDetail.rawInputs)
+                          ? intakeRequestDetail.rawInputs.map((rawInput, index) => {
+                              const rawInputRecord = rawInput as Record<string, unknown>;
+                              return (
+                                <li key={`${String(rawInputRecord.documentId ?? rawInputRecord.kind ?? index)}-${index}`}>
+                                  <strong>{String(rawInputRecord.kind ?? "-")}</strong>
+                                  <p className="helper-text">
+                                    {`${String(rawInputRecord.mimeType ? ` · ${rawInputRecord.mimeType}` : "")}`}
+                                  </p>
+                                  <p>{summarizeRawInput(rawInputRecord)}</p>
+                                </li>
+                              );
+                            })
+                          : null}
+                      </ul>
+                    </div>
                   ) : null}
                   {editingSpecId === String(focusedProductionSpec.specId) ? (
                     <>

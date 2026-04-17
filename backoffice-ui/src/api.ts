@@ -12,6 +12,20 @@ export type RecipeUploadTarget = "offer" | "production";
 export type RecipeReviewDecision = "approve" | "verify" | "reject";
 export type IntakeDocumentChannel = "pdf_upload" | "email" | "text";
 
+export interface IntakeRequestDetail {
+  requestId: string;
+  source: {
+    channel: string;
+    receivedAt: string;
+  };
+  rawInputs: Array<{
+    kind: string;
+    mimeType?: string;
+    content?: string;
+    documentId?: string;
+  }>;
+}
+
 export interface ServiceHealth {
   service: string;
   status: string;
@@ -60,6 +74,10 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+export async function loadIntakeRequestDetail(requestId: string): Promise<IntakeRequestDetail> {
+  return fetchJson<IntakeRequestDetail>(`/api/intake/v1/intake/requests/${requestId}`);
 }
 
 export async function loadDashboardState(): Promise<DashboardState> {
