@@ -33,9 +33,11 @@ describe("minimal MVP roles convention", () => {
     expect(resolveMinimalMvpRoleFromActorName("Mitarbeiter")).toBeUndefined();
   });
 
-  it("normalizes surrounding whitespace and casing for default actor names", () => {
+  it("normalizes surrounding whitespace and casing for all default actor names", () => {
+    expect(resolveMinimalMvpRoleFromActorName("  intake-mitarbeiter  ")).toBe("intake_operator");
+    expect(resolveMinimalMvpRoleFromActorName("  angebots-mitarbeiter  ")).toBe("offer_operator");
+    expect(resolveMinimalMvpRoleFromActorName("  produktions-mitarbeiter  ")).toBe("production_operator");
     expect(resolveMinimalMvpRoleFromActorName("  betriebs-/audit-operator  ")).toBe("operations_audit_operator");
-    expect(resolveMinimalMvpRoleFromActorName("  INTAKE-mitarbeiter  ")).toBe("intake_operator");
   });
 
   it("marks the sensitive MVP paths as protected", () => {
