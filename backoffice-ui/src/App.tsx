@@ -1367,7 +1367,7 @@ export function App() {
             />
             <StatusCard
               title="Rezeptbibliothek"
-              body={`${dashboard.recipes.length} Rezepte sind in der gemeinsamen Bibliothek hinterlegt.`}
+              body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
             />
             <StatusCard
               title="Produktionsdienst"
