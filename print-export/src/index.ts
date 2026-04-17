@@ -13,10 +13,22 @@ function escapeCsv(value: string | number): string {
 }
 
 export function renderOfferHtml(draft: OfferDraft): string {
+  const openQuestionsSection =
+    draft.openQuestions.length > 0
+      ? [
+          `<section><h2>Offene Punkte</h2><ul>${draft.openQuestions
+            .map((item) => `<li>${item}</li>`)
+            .join("")}</ul></section>`
+        ]
+      : ["<p>Offene Punkte: keine</p>"];
+
   return [
     "<html><body>",
     `<h1>Angebot ${draft.draftId}</h1>`,
     `<p>${draft.eventSummary}</p>`,
+    `<p>Varianten: ${draft.variantSet.length}</p>`,
+    `<p>Offene Punkte: ${draft.openQuestions.length}</p>`,
+    ...openQuestionsSection,
     "<ul>",
     ...draft.serviceModules.map((module) => `<li>${module.label}</li>`),
     "</ul>",

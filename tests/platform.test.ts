@@ -2434,6 +2434,14 @@ describe("catering agents platform", () => {
       }
     });
     const draft = offerResponse.json();
+    const partialOfferResponse = await offerApp.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      payload: {
+        text: "Konferenz am 2026-06-03"
+      }
+    });
+    const partialDraft = partialOfferResponse.json();
     await offerApp.close();
 
     const productionApp = buildProductionApp({ dataRoot });
@@ -2465,6 +2473,17 @@ describe("catering agents platform", () => {
     expect(offerExportResponse.headers["content-type"]).toContain("text/html");
     expect(offerExportResponse.body).toContain(String(draft.draftId));
     expect(offerExportResponse.body).toContain("Vielen Dank");
+
+    const partialOfferExportResponse = await exportApp.inject({
+      method: "GET",
+      url: `/v1/exports/offers/${partialDraft.draftId}/html`
+    });
+
+    expect(partialOfferExportResponse.statusCode).toBe(200);
+    expect(partialOfferExportResponse.headers["content-type"]).toContain("text/html");
+    expect(partialOfferExportResponse.body).toContain(String(partialDraft.draftId));
+    expect(partialOfferExportResponse.body).toContain("Varianten: 3");
+    expect(partialOfferExportResponse.body).toContain("Offene Punkte:");
 
     expect(planExportResponse.statusCode).toBe(200);
     expect(planExportResponse.headers["content-type"]).toContain("text/html");
