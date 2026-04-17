@@ -181,6 +181,7 @@ Nach dem aktuellen Konsolidierungsstand ist die wichtigste Schutzfunktion nicht 
 Diese Elemente sind als Arbeitsgrundlage bereits vorhanden und muessen nicht als neue MVP-Pakete erfunden werden:
 - zentrale Services fuer Intake, Angebot, Produktion und Exporte
 - Backoffice-UI
+- im Backoffice mehrere kleine, bewusst schmale Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht
 - dokumentierter lokaler Start
 - dokumentierter Betriebsrahmen
 - Governance bis 6c
