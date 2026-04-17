@@ -29,10 +29,16 @@ export function renderOfferHtml(draft: OfferDraft): string {
 }
 
 export function renderProductionPlanHtml(plan: ProductionPlan): string {
+  const unresolvedSection =
+    plan.unresolvedItems.length > 0
+      ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${item}</li>`).join("")}</ul></section>`]
+      : [];
   return [
     "<html><body>",
     `<h1>Produktionsplan ${plan.planId}</h1>`,
     `<p>Status: ${plan.readiness.status}</p>`,
+    `<p>Recipe selections: ${plan.recipeSelections.length}</p>`,
+    ...unresolvedSection,
     ...plan.productionBatches.map(
       (batch) =>
         `<section><h2>${batch.componentId}</h2><p>Station: ${batch.station}</p><ol>${batch.steps

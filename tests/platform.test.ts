@@ -2470,6 +2470,8 @@ describe("catering agents platform", () => {
     expect(planExportResponse.headers["content-type"]).toContain("text/html");
     expect(planExportResponse.body).toContain(String(productionPayload.productionPlan.planId));
     expect(planExportResponse.body).toContain("Produktionsplan");
+    expect(planExportResponse.body).toContain("Recipe selections:");
+    expect(planExportResponse.body).toContain("Status: complete");
 
     expect(purchaseExportResponse.statusCode).toBe(200);
     expect(purchaseExportResponse.headers["content-type"]).toContain("text/csv");
