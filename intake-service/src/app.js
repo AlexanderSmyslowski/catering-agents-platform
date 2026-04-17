@@ -196,6 +196,13 @@ async function normalizeUploadedDocuments(payload) {
         acceptedEventSpec: spec
     };
 }
+function linkedSpecIdsForRequest(specs, requestId) {
+    return specs
+        .filter((spec) => Array.isArray(spec.sourceLineage) &&
+        spec.sourceLineage.some((entry) => String(entry.reference ?? "") === requestId))
+        .map((spec) => String(spec.specId))
+        .filter(Boolean);
+}
 export function buildIntakeApp(input = {}) {
     const options = isIntakeStore(input) ? { store: input } : input;
     const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
@@ -390,6 +397,17 @@ export function buildIntakeApp(input = {}) {
             items: await store.listRequests()
         });
     });
+    app.get("/v1/intake/requests/:requestId", async (request, reply) => {
+        const intakeRequest = await store.getRequest(request.params.requestId);
+        if (!intakeRequest) {
+            return reply.code(404).send({ message: "Intake-Anfrage nicht gefunden." });
+        }
+        const linkedSpecIds = linkedSpecIdsForRequest(await store.listSpecs(), request.params.requestId);
+        return reply.send({
+            ...intakeRequest,
+            linkedSpecIds
+        });
+    });
     app.get("/v1/intake/specs", async (_request, reply) => {
         return reply.send({
             items: await store.listSpecs()
@@ -439,6 +457,18 @@ export function buildIntakeApp(input = {}) {
                 message: "Es muss eine specId oder changeSetId uebergeben werden."
             });
         }
+        await auditLog.log({
+            action: "intake.spec_governance_finalized",
+            entityType: "AcceptedEventSpec",
+            entityId: specId ?? changeSetId ?? "unknown",
+            actor: actorForRequest(request),
+            summary: "Spec-Governance im Intake-Finalize-Pfad bestaetigt.",
+            details: {
+                specId,
+                changeSetId,
+                confirmCriticalFinalize: request.body.confirmCriticalFinalize === true
+            }
+        });
         return reply.send({
             ok: true,
             specId,
