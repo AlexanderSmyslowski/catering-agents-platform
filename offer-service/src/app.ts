@@ -45,6 +45,10 @@ function isOfferOperator(request: { headers: Record<string, string | string[] | 
   return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "offer_operator";
 }
 
+function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
+}
+
 function multipartFieldValue(
   fields: Record<string, unknown>,
   fieldName: string
@@ -153,6 +157,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post<{ Body: EventRequest }>("/v1/offers/drafts", async (request, reply) => {
+    if (!isOfferOperator(request)) {
+      return reply.code(403).send({
+        message: "Angebots-Operator erforderlich."
+      });
+    }
+
     const eventRequest = validateEventRequest(request.body);
     const draft = validateOfferDraft(createOfferDraft(eventRequest));
     await store.saveDraft(draft);
@@ -172,6 +182,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post<{ Body: { text: string; requestId?: string } }>("/v1/offers/from-text", async (request, reply) => {
+    if (!isOfferOperator(request)) {
+      return reply.code(403).send({
+        message: "Angebots-Operator erforderlich."
+      });
+    }
+
     const eventRequest = createEventRequestFromText({
       requestId: request.body.requestId ?? `request-${Date.now()}`,
       channel: "text",
@@ -195,6 +211,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post("/v1/offers/seed-demo", async (request, reply) => {
+    if (!isOperationsAuditOperator(request)) {
+      return reply.code(403).send({
+        message: "Betriebs-/Audit-Operator erforderlich."
+      });
+    }
+
     const seeded = [];
     for (const eventRequest of getDemoOfferRequests()) {
       const draft = validateOfferDraft(createOfferDraft(eventRequest));
@@ -245,6 +267,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post<{ Body: RecipeTextImportBody }>("/v1/offers/recipes/import-text", async (request, reply) => {
+    if (!isOfferOperator(request)) {
+      return reply.code(403).send({
+        message: "Angebots-Operator erforderlich."
+      });
+    }
+
     const recipe = parseUploadedRecipeText(request.body);
     await recipeLibrary.save(recipe);
     await auditLog.log({
@@ -263,6 +291,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post("/v1/offers/recipes/upload", async (request, reply) => {
+    if (!isOfferOperator(request)) {
+      return reply.code(403).send({
+        message: "Angebots-Operator erforderlich."
+      });
+    }
+
     const payload = await recipeImportFromMultipart(request);
     const recipe = parseUploadedRecipeText(payload);
     await recipeLibrary.save(recipe);

@@ -159,6 +159,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.post<{ Body: { eventSpec: AcceptedEventSpec } }>("/v1/production/plans", async (request, reply) => {
+    if (!isProductionOperator(request)) {
+      return reply.code(403).send({
+        message: "Produktions-Operator erforderlich."
+      });
+    }
+
     const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
     const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
     await store.savePlan(artifacts.productionPlan);
@@ -282,6 +288,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.post<{ Body: RecipeTextImportBody }>("/v1/production/recipes/import-text", async (request, reply) => {
+    if (!isProductionOperator(request)) {
+      return reply.code(403).send({
+        message: "Produktions-Operator erforderlich."
+      });
+    }
+
     const recipe = parseUploadedRecipeText(request.body);
     await repository.save(recipe);
     await auditLog.log({
@@ -300,6 +312,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.post("/v1/production/recipes/upload", async (request, reply) => {
+    if (!isProductionOperator(request)) {
+      return reply.code(403).send({
+        message: "Produktions-Operator erforderlich."
+      });
+    }
+
     const payload = await recipeImportFromMultipart(request);
     const recipe = parseUploadedRecipeText(payload);
     await repository.save(recipe);
