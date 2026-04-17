@@ -128,12 +128,11 @@ Bewusst nicht Teil von P4 in dieser Stufe:
 
 ## 9. Empfohlener kleinster naechster P4-Schritt
 
-Der kleinste sinnvolle naechste Schritt ist eine kleine, repo-gebundene Vertiefung des vorhandenen Nachvollziehbarkeitswegs im UI-Kontext:
-- Audit-Feed weiter als zentrale operative Nachweisflaeche bestaetigen
-- Review-/Finalize-Pfade im bestehenden UI- und Service-Rahmen lesbar halten
-- nur kleine, bereits vorhandene Nachweise pruefen, keine neue Architektur einziehen
+Der kleinste sinnvolle naechste Schritt ist hier bewusst kein weiterer Ausbau der Traceability-Strange selbst.
+Die vorhandenen Nachweise sind inzwischen klein, reproduzierbar und testseitig belegt; P4 kann damit als tragfaehige Basis stehen bleiben.
 
-Damit wird P4 in der ersten Stufe praktisch bestaetigt, ohne eine grosse Audit-/Compliance-Baustelle zu eroefnen.
+Falls spaeter noch ein weiterer P4-Nachweis belegt werden muss, sollte er nur dann ergänzt werden, wenn ein konkreter Repo-Anker oder ein echter Regressionstext fehlt.
+Bis dahin liegt der naechste sinnvolle kleine Block ausserhalb von P4.
 
 ## 10. Einordnung
 
