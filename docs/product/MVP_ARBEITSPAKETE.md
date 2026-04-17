@@ -111,7 +111,7 @@ Der Repo-Stand ist fachlich gruen, aber die UI- und Bedienkette ist noch nicht i
 Den dokumentierten lokalen und Hetzner-orientierten Betriebsrahmen so praezisieren, dass er fuer den MVP als belastbare Arbeitsgrundlage dient.
 
 **Kurzbeschreibung:**
-Die Betriebswege sind bereits dokumentiert. Dieses Paket schaerft die operative Reproduzierbarkeit: Start, Status, Stop, Proxy-Rahmen, Datenhaltung und minimale Betriebsannahmen. Der aktuelle P3-Stand ist inzwischen real belegt mit einem reproduzierbaren lokalen Check, der neben fünf `screen`-Sessions und den vier Health-Endpunkten auch einen konkreten read-only Exportpfad prueft.
+Die Betriebswege sind bereits dokumentiert. Dieses Paket schaerft die operative Reproduzierbarkeit: Start, Status, Stop, Proxy-Rahmen, Datenhaltung und minimale Betriebsannahmen. Der aktuelle P3-Stand ist inzwischen real belegt mit einem reproduzierbaren lokalen Check, der neben fünf `screen`-Sessions und den vier Health-Endpunkten auch einen konkreten read-only Exportpfad prueft. Der Audit-Beleg fuer den Demo-Startweg ist dabei inzwischen in gehärteter Form mit JSON-Auswertung und Feldvalidierung abgesichert; weitere Mikro-Härtungen desselben Checks sind hier nicht mehr der naechste sinnvolle Hebel.
 
 **Begruendung:**
 Ein interner Produktkandidat ist nur dann stabil nutzbar, wenn der Betrieb nicht nur beschrieben, sondern in einer klaren Minimalform reproduzierbar ist.
@@ -210,8 +210,7 @@ Diese Elemente sind als Arbeitsgrundlage bereits vorhanden und muessen nicht als
 - Betriebs- und Deployment-Annahmen sind dokumentiert, aber fuer eine echte Freigabe noch weiter zu schliessen.
 - Datenschutz- und Aufbewahrungsfragen sind aktuell nur teilweise konkretisiert.
 
-## 8. empfohlene naechste Konkretisierung
+## 8. empfohlene naechste Prioritaet nach der P3-Konsolidierung
 
-Die naechste sinnvolle Konkretisierung ist nicht ein neuer Fachblock, sondern die Auswahl von Arbeitspaket 1 als fachlichem Anker, gefolgt von Arbeitspaket 2 fuer die sichtbare Bedienabsicherung.
-
-Damit bleibt die weitere Arbeit klein, real und direkt an den aktuellen Repo-Stand gebunden.
+Da P3 an dieser Stelle bewusst ausreichend gehärtet ist, sollte der naechste kleine Block ausserhalb von P3 liegen.
+Die naechste sinnvolle Prioritaet ist Shared Core / Access-Control / Governance, weil dort bereits reale Schutzpfade und Konsistenzfragen verankert sind und ein kleiner Klarheitsschritt direkten Nutzwert bringt, ohne neue Produktflaechen zu oeffnen.

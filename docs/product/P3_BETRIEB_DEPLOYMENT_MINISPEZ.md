@@ -39,7 +39,7 @@ Im Repo sind bereits folgende Betriebswege und Annahmen sichtbar:
 - lokaler Status ueber `npm run local:status`
 - reproduzierbarer lokaler Check ueber `npm run local:check`
 - lokaler Stop ueber `npm run local:stop`
-- der lokale Check prueft neben fünf `screen`-Sessions und den vier Health-Endpunkten jetzt auch einen konkreten read-only Exportpfad sowie einen read-only Audit-Beleg fuer den Demo-Startweg
+- der lokale Check prueft neben fünf `screen`-Sessions und den vier Health-Endpunkten jetzt auch einen konkreten read-only Exportpfad sowie einen gehärteten read-only Audit-Beleg fuer den Demo-Startweg
 - `platform-infra/docker-compose.yml` als Compose-Basis fuer den servernahen Betrieb
 - `platform-infra/scripts/deploy-hetzner.sh` als reproduzierbarer Deploy-Run
 - `platform-infra/scripts/smoke-check.sh` fuer einfache API-Healthchecks
@@ -121,7 +121,9 @@ Der kleinste sinnvolle naechste Schritt ist eine knappe, repo-gebundene Betriebs
 - Health ueber `npm run local:check`
 - plus ein bewusst kleiner Health-/Erreichbarkeitsnachweis fuer einen konkreten read-only Exportpfad
 
-Damit wird P3 in der ersten Stufe praktisch bestaetigt, ohne eine grosse Infra-Baustelle zu eroefnen.
+Damit ist P3 in der ersten Stufe praktisch bestaetigt und bewusst ausreichend gehärtet, ohne eine grosse Infra-Baustelle zu eroefnen.
+
+Ein weiterer Mikro-Ausbau des gleichen Checks wird an dieser Stelle nicht empfohlen; der naechste sinnvolle Schritt liegt ausserhalb von P3.
 
 ## 9. Einordnung
 
