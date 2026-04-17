@@ -49,7 +49,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
     "<html><body>",
     `<h1>Produktionsplan ${plan.planId}</h1>`,
     `<p>Status: ${plan.readiness.status}</p>`,
-    `<p>Recipe selections: ${plan.recipeSelections.length}</p>`,
+    `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...unresolvedSection,
     ...plan.productionBatches.map(
       (batch) =>
