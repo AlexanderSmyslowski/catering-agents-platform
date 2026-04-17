@@ -33,6 +33,11 @@ describe("minimal MVP roles convention", () => {
     expect(resolveMinimalMvpRoleFromActorName("Mitarbeiter")).toBeUndefined();
   });
 
+  it("normalizes surrounding whitespace and casing for default actor names", () => {
+    expect(resolveMinimalMvpRoleFromActorName("  betriebs-/audit-operator  ")).toBe("operations_audit_operator");
+    expect(resolveMinimalMvpRoleFromActorName("  INTAKE-mitarbeiter  ")).toBe("intake_operator");
+  });
+
   it("marks the sensitive MVP paths as protected", () => {
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/intake/seed-demo");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/offers/recipes/:recipeId/review");

@@ -146,6 +146,7 @@ Folgende Punkte sind im Repo bereits real verankert:
 - geschuetzte Kernpfade fuer Audit, Seed, Finalize und Recipe-Review
 - gruen verifizierter kleiner Access-Control-Korridor
 - klare Trennung zwischen Fachrollen und Betriebs-/Audit-Rolle
+- Default-Akteursnamen werden im Code normalisiert (trim + lowercase) auf die Minimalrollen gemappt; das macht die Betriebs-/Audit-Zuordnung im Repo explizit und reproduzierbar
 
 ## 7. Noch nur dokumentiert / noch offen
 

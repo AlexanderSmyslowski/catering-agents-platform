@@ -163,6 +163,9 @@ Darf:
 - Demo-Seed-Endpunkte und Betriebsaktionen nutzen
 - Governance- und Nachvollziehbarkeitskontexte prüfen
 
+Hinweis:
+- Die Zuordnung der Default-Akteursnamen ist im Code normalisiert (trim + lowercase) und damit kanonisch, nicht fall- oder whitespace-sensitiv.
+
 Soll nicht:
 - produktive Fachaktionen in den Fachrollen still ersetzen
 
