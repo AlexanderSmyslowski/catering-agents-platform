@@ -76,6 +76,7 @@ process.stdin.on("end", () => {
   const payload = JSON.parse(input);
   const item = (payload.items ?? []).find((entry) =>
     entry.action === "production.seed_demo" &&
+    entry.entityType === "SeedBatch" &&
     entry.actor &&
     entry.actor.name === "Betriebs-/Audit-Operator"
   );
