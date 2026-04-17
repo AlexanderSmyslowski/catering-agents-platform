@@ -111,7 +111,7 @@ Der Repo-Stand ist fachlich gruen, aber die UI- und Bedienkette ist noch nicht i
 Den dokumentierten lokalen und Hetzner-orientierten Betriebsrahmen so praezisieren, dass er fuer den MVP als belastbare Arbeitsgrundlage dient.
 
 **Kurzbeschreibung:**
-Die Betriebswege sind bereits dokumentiert. Dieses Paket schaerft die operative Reproduzierbarkeit: Start, Status, Stop, Proxy-Rahmen, Datenhaltung und minimale Betriebsannahmen. Der aktuelle P3-Stand ist inzwischen real belegt mit einem reproduzierbaren lokalen Check, der neben fünf `screen`-Sessions und den vier Health-Endpunkten auch einen konkreten read-only Exportpfad prueft. Der Audit-Beleg fuer den Demo-Startweg ist dabei inzwischen in gehärteter Form mit JSON-Auswertung und Feldvalidierung abgesichert; weitere Mikro-Härtungen desselben Checks sind hier nicht mehr der naechste sinnvolle Hebel.
+Die Betriebswege sind bereits dokumentiert. Dieses Paket schaerft die operative Reproduzierbarkeit: Start, Status, Stop, Proxy-Rahmen, Datenhaltung und minimale Betriebsannahmen. Der aktuelle P3-Stand ist inzwischen real belegt mit einem reproduzierbaren lokalen Check, der neben fünf `screen`-Sessions und den vier Health-Endpunkten auch die drei UI-Routen, einen konkreten read-only Exportpfad und einen gehärteten read-only Audit-Beleg fuer den Demo-Startweg prueft. Der Audit-Beleg fuer den Demo-Startweg ist dabei inzwischen in gehärteter Form mit JSON-Auswertung und Feldvalidierung abgesichert; weitere Mikro-Härtungen desselben Checks sind hier nicht mehr der naechste sinnvolle Hebel.
 
 **Begruendung:**
 Ein interner Produktkandidat ist nur dann stabil nutzbar, wenn der Betrieb nicht nur beschrieben, sondern in einer klaren Minimalform reproduzierbar ist.

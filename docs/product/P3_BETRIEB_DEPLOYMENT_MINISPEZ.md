@@ -39,7 +39,7 @@ Im Repo sind bereits folgende Betriebswege und Annahmen sichtbar:
 - lokaler Status ueber `npm run local:status`
 - reproduzierbarer lokaler Check ueber `npm run local:check`
 - lokaler Stop ueber `npm run local:stop`
-- der lokale Check prueft neben fünf `screen`-Sessions und den vier Health-Endpunkten jetzt auch einen konkreten read-only Exportpfad sowie einen gehärteten read-only Audit-Beleg fuer den Demo-Startweg
+- der lokale Check prueft neben fünf `screen`-Sessions und den vier Health-Endpunkten jetzt auch die drei zentralen UI-Routen sowie einen konkreten read-only Exportpfad und einen gehärteten read-only Audit-Beleg fuer den Demo-Startweg
 - `platform-infra/docker-compose.yml` als Compose-Basis fuer den servernahen Betrieb
 - `platform-infra/scripts/deploy-hetzner.sh` als reproduzierbarer Deploy-Run
 - `platform-infra/scripts/smoke-check.sh` fuer einfache API-Healthchecks
