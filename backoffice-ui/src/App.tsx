@@ -200,6 +200,68 @@ function formatLatestIntakeRequest(requests: Array<Record<string, unknown>>): st
   return `letzte Erfassung: ${requestId} via ${channel}`;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readStringOrNumber(record: Record<string, unknown> | undefined, keys: string[]): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return undefined;
+}
+
+function getPurchaseListPreviewItems(
+  purchaseList: Record<string, unknown>
+): Array<{ articleName: string; quantity: string; unit: string }> {
+  const rawItems = Array.isArray(purchaseList.items)
+    ? purchaseList.items
+    : Array.isArray(purchaseList.positions)
+      ? purchaseList.positions
+      : Array.isArray(purchaseList.entries)
+        ? purchaseList.entries
+        : [];
+
+  return rawItems.slice(0, 5).flatMap((item) => {
+    const itemRecord = asRecord(item);
+    if (!itemRecord) {
+      return [];
+    }
+
+    const quantityRecord = asRecord(itemRecord.quantity);
+    const articleName =
+      readStringOrNumber(itemRecord, ["displayName", "articleName", "name", "label", "ingredientName"]) ??
+      "Artikel";
+    const quantity =
+      readStringOrNumber(itemRecord, ["purchaseQty", "normalizedQty", "qty", "amount"]) ??
+      readStringOrNumber(quantityRecord, ["amount"]) ??
+      "-";
+    const unit =
+      readStringOrNumber(itemRecord, ["purchaseUnit", "normalizedUnit", "unit"]) ??
+      readStringOrNumber(quantityRecord, ["unit"]) ??
+      "-";
+
+    return [{ articleName, quantity, unit }];
+  });
+}
+
 function getRouteTitle(route: AppRoute): string {
   if (route === "offer") {
     return "Angebotsagent";
@@ -2724,20 +2786,35 @@ export function App() {
             <ul className="item-list compact">
               {currentSpecPurchaseLists.map((purchaseList) => {
                 const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                const purchaseListPreviewItems = getPurchaseListPreviewItems(purchaseList);
                 return (
-                <li key={String(purchaseList.purchaseListId)}>
-                  <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                  <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                  <a
-                    className="ghost-link"
-                    href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Einkaufsliste herunterladen
-                  </a>
-                </li>
-              );
+                  <li key={String(purchaseList.purchaseListId)}>
+                    <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                    <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
+                    <a
+                      className="ghost-link"
+                      href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Einkaufsliste herunterladen
+                    </a>
+                    {purchaseListPreviewItems.length > 0 ? (
+                      <>
+                        <p className="helper-text">Kurzübersicht der ersten Positionen:</p>
+                        <ul className="item-list compact">
+                          {purchaseListPreviewItems.map((item, itemIndex) => (
+                            <li key={`${String(purchaseList.purchaseListId)}-${itemIndex}`}>
+                              <strong>{item.articleName}</strong>
+                              <p>Menge: {item.quantity}</p>
+                              <p>Einheit: {item.unit}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                  </li>
+                );
               })}
               {currentSpecPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li> : null}
             </ul>
