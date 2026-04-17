@@ -2,7 +2,7 @@
 
 Status: Entwurf v0.1 auf Basis des aktuellen Repo-Iststands
 
-Stand: 2026-04-11
+Stand: 2026-04-17
 
 ## 1. Zweck des Dokuments
 
@@ -58,6 +58,8 @@ Im aktuellen Repo-Stand sind laut README und zugehörigen Implementierungsbereic
 - Audit-Log / Audit-Feed übergreifend über Intake, Offer und Production
 - Rezept-Upload und Rezept-Review mit Freigabe, Verifizierung oder Ablehnung
 - Produktionsansichten mit Suchspur je Gericht
+- persistierte Intake-Anfragen können gezielt über `GET /v1/intake/requests/:requestId` gelesen werden
+- der Request-Detailpfad liefert zusätzlich die verknüpften `AcceptedEventSpec`-IDs zur Herkunftsnachverfolgung
 
 ### 3.2 Dokumentiert, aber nicht als neue Produktbehauptung weiter ausgebaut
 
@@ -97,6 +99,7 @@ Zielbild ist:
 - Eingang von Text, Dokumenten und anderen unterstützten Quellen
 - Normalisierung zu `AcceptedEventSpec`
 - Nachbearbeitung unvollständiger Spezifikationen im Backoffice
+- Herkunft eines normalisierten Vorgangs bleibt über die persistierte Intake-Anfrage und verknüpfte Spec-IDs nachvollziehbar
 
 ### 5.2 Angebotsprozess
 
@@ -139,6 +142,7 @@ Zielbild ist:
 - Normalisierung von Eingaben
 - Verarbeitung verschiedener Dokumenttypen
 - Ableitung strukturierter Veranstaltungsdaten
+- Detailzugriff auf persistierte Intake-Anfragen mit Herkunftsbezug zu verknüpften Spezifikationen
 
 ### 6.3 Offer-Service
 
@@ -177,6 +181,7 @@ Diese Anforderungen sind aus dem aktuellen Repo-Stand und den führenden Dokumen
 7. Das System muss zwischen finalisiert und freigegeben fachlich unterscheiden.
 8. Das System muss den Konsolidierungsstand ohne neue Fachlogik respektieren.
 9. Das System muss ohne neue Persistenzwelt oder Prisma weiter betreibbar bleiben.
+10. Das System muss die Herkunft normalisierter Spezifikationen über den Intake-Kontext nachvollziehbar halten.
 
 ## 8. Soll-Anforderungen
 
@@ -246,6 +251,7 @@ Die Memory- und Harness-Grundlage ist in `docs/architecture/MEMORY_ARCHITECTURE.
 - Angebotsentwurf / Angebotsvariante im Offer-Kontext
 - Rezeptdatensatz / Rezeptkandidat
 - Audit-Event / Audit-Eintrag
+- persistierte Intake-Anfrage (`EventRequest`) als nachvollziehbarer Eingangsanker
 
 ### 12.2 Einordnung
 
@@ -253,6 +259,7 @@ Die Memory- und Harness-Grundlage ist in `docs/architecture/MEMORY_ARCHITECTURE.
 - `SpecRecord` und `OpenIssueRecord` sind im Memory-Strang als kanonische Objektanker geführt.
 - `ProductionPlanRecord` ist der planungsbezogene interne Anker.
 - Audit-Events dienen der Nachvollziehbarkeit mutierender Aktionen.
+- persistierte Intake-Anfragen bilden den dokumentierten Eingangsanker, aus dem normalisierte Spezifikationen hervorgehen.
 
 ### 12.3 Offen
 
@@ -310,6 +317,7 @@ Dokumentiert ist ein Hetzner-MVP mit:
 - gemeinsame Audit-Spur über die Services hinweg
 - nachvollziehbare Operator-Zuordnung
 - sichtbare Änderungen in der Web-App
+- nachvollziehbare Zuordnung zwischen persistierter Intake-Anfrage und daraus abgeleiteter Spezifikation
 
 ## 15. MVP-Abgrenzung
 
