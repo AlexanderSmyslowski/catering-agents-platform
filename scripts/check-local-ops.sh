@@ -74,7 +74,11 @@ process.stdin.on("data", (chunk) => {
 });
 process.stdin.on("end", () => {
   const payload = JSON.parse(input);
-  const item = (payload.items ?? []).find((entry) =>
+  if (!Array.isArray(payload.items)) {
+    process.exit(1);
+  }
+
+  const item = payload.items.find((entry) =>
     entry.action === "production.seed_demo" &&
     entry.entityType === "SeedBatch" &&
     entry.actor &&
