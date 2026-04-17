@@ -171,6 +171,33 @@ function formatCounts(counts: Record<string, number>): string {
   return entries.map(([label, value]) => `${labels[label] ?? label}: ${value}`).join(" · ");
 }
 
+function formatLatestIntakeRequest(requests: Array<Record<string, unknown>>): string {
+  if (requests.length === 0) {
+    return "letzte Erfassung: keine";
+  }
+
+  const latestRequest = requests.reduce((latest, request) => {
+    const latestTimestamp = Date.parse(
+      String((latest.source as Record<string, unknown> | undefined)?.receivedAt ?? "")
+    );
+    const requestTimestamp = Date.parse(
+      String((request.source as Record<string, unknown> | undefined)?.receivedAt ?? "")
+    );
+    if (Number.isNaN(latestTimestamp)) {
+      return request;
+    }
+    if (Number.isNaN(requestTimestamp)) {
+      return latest;
+    }
+    return requestTimestamp >= latestTimestamp ? request : latest;
+  });
+
+  const requestId = String(latestRequest.requestId ?? latestRequest.id ?? "unbekannt");
+  const channel = String((latestRequest.source as Record<string, unknown> | undefined)?.channel ?? "-");
+
+  return `letzte Erfassung: ${requestId} via ${channel}`;
+}
+
 function getRouteTitle(route: AppRoute): string {
   if (route === "offer") {
     return "Angebotsagent";
@@ -515,6 +542,11 @@ export function App() {
       { complete: 0, partial: 0 }
     );
   }, [dashboard.acceptedSpecs]);
+
+  const latestIntakeRequestSummary = useMemo(
+    () => formatLatestIntakeRequest(dashboard.intakeRequests),
+    [dashboard.intakeRequests]
+  );
 
   const filteredPurchaseLists = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
@@ -1439,7 +1471,7 @@ export function App() {
             <div className="metrics-grid compact-metrics">
               <StatusCard
                 title="Erfassung"
-                body={`${translateHealthStatus(serviceHealth.intake.status)} · ${formatCounts(serviceHealth.intake.counts)}`}
+                body={`${translateHealthStatus(serviceHealth.intake.status)} · ${formatCounts(serviceHealth.intake.counts)} · ${latestIntakeRequestSummary}`}
               />
               <StatusCard
                 title="Angebot"
