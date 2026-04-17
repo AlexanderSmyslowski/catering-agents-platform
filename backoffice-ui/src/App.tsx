@@ -1418,6 +1418,13 @@ export function App() {
             <header>
               <p className="eyebrow">Änderungsprotokoll</p>
               <h3>Letzte Bearbeitungsschritte über alle Dienste</h3>
+              <p className="helper-text">
+                {filteredAuditEvents.length > 0
+                  ? `${filteredAuditEvents.length} Änderungen geladen · neueste: ${String(
+                      filteredAuditEvents[0]?.summary ?? filteredAuditEvents[0]?.action ?? filteredAuditEvents[0]?.auditId
+                    )}`
+                  : "Noch keine Änderungen geladen."}
+              </p>
             </header>
             <ul className="item-list compact">
               {filteredAuditEvents.map((entry) => (
