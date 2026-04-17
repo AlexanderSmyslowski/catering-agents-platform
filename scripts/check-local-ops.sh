@@ -66,7 +66,28 @@ echo ""
 echo "Bootstrapp-/Auditpruefung:"
 audit_url="http://127.0.0.1:3103/v1/production/audit/events?limit=5"
 audit_body="$(curl -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${audit_url}")"
-if [[ "${audit_body}" != *"production.seed_demo"* ]] || [[ "${audit_body}" != *"Betriebs-/Audit-Operator"* ]]; then
+audit_entry="$(printf '%s' "${audit_body}" | node -e '
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  input += chunk;
+});
+process.stdin.on("end", () => {
+  const payload = JSON.parse(input);
+  const item = (payload.items ?? []).find((entry) =>
+    entry.action === "production.seed_demo" &&
+    entry.actor &&
+    entry.actor.name === "Betriebs-/Audit-Operator"
+  );
+
+  if (!item) {
+    process.exit(1);
+  }
+
+  process.stdout.write(JSON.stringify(item));
+});
+')"
+if [[ -z "${audit_entry}" ]]; then
   echo "  Audit-Check: erwarteter Seed-Demo-Eintrag fehlt (${audit_url})" >&2
   exit 1
 fi
