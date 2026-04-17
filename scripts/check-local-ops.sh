@@ -93,6 +93,10 @@ process.stdin.on("end", () => {
     process.exit(1);
   }
 
+  if (typeof item.entityId !== "string" || !item.entityId.startsWith("production-demo-")) {
+    process.exit(1);
+  }
+
   process.stdout.write(JSON.stringify(item));
 });
 ')"
