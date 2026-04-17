@@ -482,6 +482,23 @@ export function App() {
     );
   }, [dashboard.recipes, deferredSearch]);
 
+  const recipeReviewCounts = useMemo(() => {
+    return dashboard.recipes.reduce(
+      (counts: { approved: number; reviewRequired: number; rejected: number }, recipe) => {
+        const approvalState = String((recipe.source as Record<string, unknown> | undefined)?.approvalState ?? "");
+        if (approvalState === "approved_internal") {
+          counts.approved += 1;
+        } else if (approvalState === "review_required") {
+          counts.reviewRequired += 1;
+        } else if (approvalState === "rejected") {
+          counts.rejected += 1;
+        }
+        return counts;
+      },
+      { approved: 0, reviewRequired: 0, rejected: 0 }
+    );
+  }, [dashboard.recipes]);
+
   const filteredPurchaseLists = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
     if (!query) {
@@ -1316,7 +1333,7 @@ export function App() {
             />
             <StatusCard
               title="Rezeptbibliothek"
-              body={`${dashboard.recipes.length} Rezepte stehen bereit, einschließlich externer Internet-Ausweichquellen.`}
+              body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
             />
           </>
         ) : route === "offer" ? (
