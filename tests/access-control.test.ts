@@ -42,8 +42,12 @@ describe("minimal MVP roles convention", () => {
 
   it("marks the sensitive MVP paths as protected", () => {
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/intake/seed-demo");
+    expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/intake/normalize");
+    expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/offers/drafts");
+    expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/production/plans");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/offers/recipes/:recipeId/review");
     expect(isMinimalMvpProtectedPath("/v1/production/seed-demo")).toBe(true);
+    expect(isMinimalMvpProtectedPath("/v1/intake/specs/spec-1")).toBe(true);
     expect(isMinimalMvpProtectedPath("/v1/production/recipes/recipe-1/review")).toBe(true);
     expect(isMinimalMvpProtectedPath("/v1/production/audit/events")).toBe(true);
     expect(isMinimalMvpProtectedPath("/v1/public/ping")).toBe(false);
