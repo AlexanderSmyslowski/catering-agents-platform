@@ -561,6 +561,15 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
   });
 
+  app.get<{ Params: { requestId: string } }>("/v1/intake/requests/:requestId", async (request, reply) => {
+    const intakeRequest = await store.getRequest(request.params.requestId);
+    if (!intakeRequest) {
+      return reply.code(404).send({ message: "Intake-Anfrage nicht gefunden." });
+    }
+
+    return reply.send(intakeRequest);
+  });
+
   app.get("/v1/intake/specs", async (_request, reply) => {
     return reply.send({
       items: await store.listSpecs()
@@ -645,4 +654,3 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
   return app;
 }
-
