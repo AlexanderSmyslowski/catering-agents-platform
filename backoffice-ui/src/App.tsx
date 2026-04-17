@@ -1592,6 +1592,11 @@ export function App() {
                 <li key={String(draft.draftId)}>
                   <strong>{String(draft.draftId)}</strong>
                   <p>{String(draft.eventSummary ?? "-")}</p>
+                  <p className="helper-text">
+                    {`Varianten: ${Array.isArray(draft.variantSet) ? draft.variantSet.length : 0} · Offene Punkte: ${
+                      Array.isArray(draft.openQuestions) ? draft.openQuestions.length : 0
+                    }`}
+                  </p>
                   <div className="action-row">
                     <button
                       className="secondary-button"
@@ -1641,6 +1646,23 @@ export function App() {
                   <h3>{String(selectedDraft.draftId)}</h3>
                 </header>
                 <p>{String(selectedDraft.eventSummary ?? "-")}</p>
+                <p className="helper-text">
+                  {`Varianten: ${Array.isArray(selectedDraft.variantSet) ? selectedDraft.variantSet.length : 0} · Offene Punkte: ${
+                    Array.isArray(selectedDraft.openQuestions) ? selectedDraft.openQuestions.length : 0
+                  }`}
+                </p>
+                {Array.isArray(selectedDraft.openQuestions) && selectedDraft.openQuestions.length > 0 ? (
+                  <>
+                    <p>Offene Punkte:</p>
+                    <ul className="item-list compact">
+                      {selectedDraft.openQuestions.map((question) => (
+                        <li key={question}>{question}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p>Offene Punkte: keine</p>
+                )}
                 <pre className="detail-pre">{String(selectedDraft.customerFacingText ?? "")}</pre>
                 <pre className="detail-pre">{String(selectedDraft.internalWorkingText ?? "")}</pre>
               </>
