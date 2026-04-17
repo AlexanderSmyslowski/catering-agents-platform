@@ -332,6 +332,16 @@ async function normalizeUploadedDocuments(
   };
 }
 
+function linkedSpecIdsForRequest(specs: AcceptedEventSpec[], requestId: string): string[] {
+  return specs
+    .filter((spec) =>
+      Array.isArray(spec.sourceLineage) &&
+      spec.sourceLineage.some((entry) => String(entry.reference ?? "") === requestId)
+    )
+    .map((spec) => String(spec.specId))
+    .filter(Boolean);
+}
+
 export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   const options = isIntakeStore(input) ? { store: input } : input;
   const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
@@ -567,7 +577,12 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       return reply.code(404).send({ message: "Intake-Anfrage nicht gefunden." });
     }
 
-    return reply.send(intakeRequest);
+    const linkedSpecIds = linkedSpecIdsForRequest(await store.listSpecs(), request.params.requestId);
+
+    return reply.send({
+      ...intakeRequest,
+      linkedSpecIds
+    });
   });
 
   app.get("/v1/intake/specs", async (_request, reply) => {
