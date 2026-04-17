@@ -117,7 +117,7 @@ Die kleinste sinnvolle MVP-Rollenmenge ist:
 ### 6.1 Warum diese Aufteilung
 
 - Sie spiegelt die bereits vorhandene Dreiteilung der Services und UI-Bereiche wider.
-- Sie folgt den im Code vorhandenen Standard-Akteursnamen.
+- Sie folgt den im Code vorhandenen Standard-Akteursnamen, die im shared-core trim-/lowercase-normalisiert auf die Minimalrollen gemappt werden.
 - Sie trennt produktive Facharbeit von Betriebs- und Audit-Aktionen.
 - Sie bleibt klein genug fuer den aktuellen Konsolidierungsstand.
 

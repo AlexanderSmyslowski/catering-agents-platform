@@ -41,6 +41,7 @@ const PROTECTED_PATH_PREFIXES = [
   "/v1/production/audit/events"
 ] as const;
 
+// Canonicalize operator labels so the shared default actor names remain stable across caller formatting.
 function normalizeActorName(value: string): string {
   return value.trim().toLowerCase();
 }
