@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.68
+version: 5.70
 date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -36,6 +36,8 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P12 Demo-/Seed-Daten und zulässige Nutzung im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie begrenzen Seed-/Demo-Nutzung als Betriebs- und Verifikationshilfe, ohne eine neue Testdaten- oder Reset-Plattform einzuführen
 - P13 Export-Verbindlichkeit und operative Nutzung im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie ordnen operative Exportartefakte als interne Arbeitsbelege ein, ohne eine neue Signatur- oder Freigabewelt einzuführen
 - P14 Audit-/Review-Spuren und operative Nutzung im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie begrenzen die Spuren auf interne Betriebs- und Kontrollnachweise, ohne eine neue Compliance- oder Revisionswelt einzuführen
+- P15 minimaler interner Abnahmeprozess im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die kleinste interne Abnahme auf bestehende Test-, Build-, Rollen-, Export- und Audit-/Review-Kontexte, ohne eine neue QA- oder Release-Welt einzuführen
+- P16 minimaler interner Aenderungs- und Entscheidungslog im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Dokumentation von Entscheidungen auf PR-, Commit-, Doku- und memory-Kontexte, ohne ein neues Ticket-, ADR- oder Governance-System einzuführen
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
 - Leitlinien bleiben bindend:
@@ -338,6 +340,17 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+<<<<<<< HEAD
+=======
+### 5.70 - 2026-04-16
+- P16 Minimaler interner Aenderungs- und Entscheidungslog im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: Entscheidungen werden nur knapp ueber PR-, Commit-, Doku- und memory-Kontexte eingeordnet, ohne ein neues Ticket-, ADR- oder Governance-System einzuführen.
+
+### 5.69 - 2026-04-16
+- P15 Minimaler interner Abnahmeprozess im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: die kleinste interne Abnahme wird nur ueber bestehende Test-, Build-, Rollen-, Export- und Audit-/Review-Kontexte begrenzt, ohne eine neue QA- oder Release-Welt einzufuehren.
+
+>>>>>>> faf4b89 (docs(p16): add minimal change decision log minispec)
 ### 5.68 - 2026-04-16
 - P14 Audit-/Review-Spuren und operative Nutzung im MVP sind im Repo als neue Mini-Spezifikation dokumentiert und wurden in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: Audit-/Review-Spuren werden nur als interne Betriebs- und Kontrollnachweise eingeordnet, ohne eine neue Compliance-, Revisions- oder Monitoring-Welt einzuführen.
