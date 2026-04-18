@@ -36,9 +36,10 @@ Im Repo existieren bereits folgende nutzbare Bausteine:
 - Statuspruefung ueber `npm run local:status`
 - Stop ueber `npm run local:stop`
 - bestehender Deployment-Smoke-Check unter `platform-infra/scripts/smoke-check.sh`
+- reproduzierbar gepruefte read-only Exportpfade fuer Produktionsplan, Angebots-HTML und Einkaufslisten-CSV
 - gemeinsamer UI- und Service-Rahmen mit bereits vorhandenen Health- und Audit-Pfaden
 
-Diese erste Smoke-Stufe wurde bereits real ausgefuehrt: die drei UI-Routen und die vier Health-Endpunkte lieferten jeweils HTTP 200, ohne dass dafuer eine grosse Browser-/E2E-Infrastruktur aufgebaut werden musste.
+Diese erste Smoke-Stufe wurde bereits real ausgefuehrt: die drei UI-Routen, die vier Health-Endpunkte und die drei read-only Exportpfade lieferten jeweils die erwarteten Ergebnisse, ohne dass dafuer eine grosse Browser-/E2E-Infrastruktur aufgebaut werden musste.
 
 ### 3.2 Nicht vorhanden bzw. nicht als eigene Browser-E2E-Infrastruktur ausgebaut
 
@@ -56,12 +57,19 @@ Dafuer existieren bereits:
 
 Mit dem vorhandenen Browser-Tool wurde ausserdem einmalig die gerenderte UI betrachtet. Dabei zeigten die drei Kernrouten die erwartbaren Kernmarker im DOM:
 - Startseite: `Catering-Agenten`, `Angebotsagent`, `Produktionsagent`, `Gemeinsamer Regelkern`
-- `/angebot`: `Angebotsagent`, `Angebotsentwürfe`, `Operative Übergabe`
-- `/produktion`: `Produktionsagent`, `Produktionspläne`, `Einkaufslisten`, `Gemeinsamer Regelkern`
+- `/angebot`: `Angebotsagent`, `Angebots-URL: Kundenanfrage, Varianten und operative Übergabe.`
+- `/produktion`: `Produktionsagent`, `Produktions-URL: unabhängige Küchenvorbereitung, Rezepte und Einkaufslisten.`
 
 Damit ist die kleinste inhaltliche Smoke-Erweiterung ohne neue Testarchitektur bereits zusätzlich bestätigt.
 
-### 3.4 Zusätzlich operativ verifiziert
+### 3.4 Zusätzlicher repo-verankerter UI-Route-Smoke-Test
+
+Ergänzend existiert ein minimaler, repo-verankerter UI-Route-Smoke-Test unter `tests/backoffice-route-smoke.test.ts`.
+Er prueft die drei Kernrouten `/`, `/angebot` und `/produktion` im jsdom/Vitest-Kontext.
+
+Die Assertions fuer `/angebot` und `/produktion` wurden bewusst auf route-eindeutige Marker geschaerft, damit ein Fallback auf `/` nicht faelschlich gruen bleibt.
+
+### 3.5 Zusätzlich operativ verifiziert
 
 Als kleinster echter Nutzpfad wurde auf der Produktionsseite ein vorhandener Export-Link aus der UI gefolgt:
 - `Produktionsblatt exportieren` fuer `plan-spec-demo-production-coffee`
@@ -141,7 +149,7 @@ Ein breiter Browser-Run ist aktuell blockiert bzw. nicht vorgesehen, weil:
 Der kleinste sinnvolle erste Smoke-Schritt ist:
 1. lokalen Stack mit Demo-Daten starten
 2. die drei zentralen UI-Routen per HTTP auf Status 200 pruefen
-3. optional anschliessend die vier lokalen Health-Endpunkte pruefen
+3. optional anschliessend die vier lokalen Health-Endpunkte und die drei read-only Exportpfade pruefen
 
 Damit wird P2 als minimaler, repo-gebundener Smoke-Korridor validiert, ohne einen groesseren Testaufbau zu starten.
 
