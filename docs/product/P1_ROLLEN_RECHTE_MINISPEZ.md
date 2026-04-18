@@ -53,17 +53,31 @@ Die vorhandene Umsetzung deutet auf folgende Schutz- und Zuständigkeitslinien h
 Seit den Commits `dab9e71` und `66297ac` ist P1 in einer ersten MVP-Stufe real verankert und nicht mehr nur konzeptionell:
 - im `shared-core` existiert eine minimale zentrale Rollen-/Rechte-Konvention
 - konkret geschützt sind:
-  - `GET /v1/production/audit/events`
+  - `POST /v1/intake/normalize`
+  - `POST /v1/intake/documents`
+  - `POST /v1/intake/documents/upload`
+  - `POST /v1/intake/specs/manual`
+  - `PATCH /v1/intake/specs/:specId`
+  - `POST /v1/offers/drafts`
+  - `POST /v1/offers/from-text`
+  - `POST /v1/offers/recipes/import-text`
+  - `POST /v1/offers/recipes/upload`
+  - `POST /v1/production/plans`
+  - `POST /v1/production/recipes/import-text`
+  - `POST /v1/production/recipes/upload`
   - `POST /v1/production/seed-demo`
+  - `POST /v1/intake/seed-demo`
+  - `POST /v1/offers/seed-demo`
   - `POST /v1/intake/spec-governance/finalize`
   - `PATCH /v1/offers/recipes/:recipeId/review`
   - `PATCH /v1/production/recipes/:recipeId/review`
-- die angeschlossenen Caller verwenden für diese Betriebswege den Betriebs-/Audit-Operator
-- die kleine Access-Control-Verifikation ist grün:
+- die angeschlossenen Caller verwenden fuer diese Betriebswege den Betriebs-/Audit-Operator
+- die kleine Access-Control-Verifikation ist gruen:
   - `tests/intake-finalize-access.test.ts`
   - `tests/production-audit-access.test.ts`
   - `tests/recipe-review-access.test.ts`
-  - insgesamt 6 Tests grün
+  - `tests/p1-role-guards.test.ts`
+  - insgesamt 8 Tests gruen
 
 ## 4. bereits vorhandene implizite Rollen / Verantwortlichkeiten
 

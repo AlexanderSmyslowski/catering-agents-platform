@@ -59,7 +59,11 @@ Erlaubte Kernaktionen:
 - Intake als fachlichen Eingangspfad nutzen
 
 Aktuell real geschuetzte Kernpfade:
-- keine im aktuell verifizierten Minimal-Guard-Korridor als explizite Intake-Operator-Guards belegt
+- `POST /v1/intake/normalize`
+- `POST /v1/intake/documents`
+- `POST /v1/intake/documents/upload`
+- `POST /v1/intake/specs/manual`
+- `PATCH /v1/intake/specs/:specId`
 
 Implizit / dokumentiert:
 - `Intake-Mitarbeiter` ist der Service-Standardname fuer Intake-Aktionen
@@ -73,11 +77,16 @@ Erlaubte Kernaktionen:
 - Angebots-Review ausfuehren
 
 Aktuell real geschuetzte Kernpfade:
+- `POST /v1/offers/drafts` -> Angebots-Operator
+- `POST /v1/offers/from-text` -> Angebots-Operator
+- `POST /v1/offers/recipes/import-text` -> Angebots-Operator
+- `POST /v1/offers/recipes/upload` -> Angebots-Operator
 - `PATCH /v1/offers/recipes/:recipeId/review` -> Angebots-Operator
+- `POST /v1/offers/seed-demo` -> Betriebs-/Audit-Operator
 
 Implizit / dokumentiert:
 - `Angebots-Mitarbeiter` ist der Service-Standardname fuer Angebotsaktionen
-- Angebots-Seeding ist als Betriebs-/Demo-Weg dokumentiert, aber nicht Teil des real verifizierten Minimal-Guard-Korridors
+- Angebots-Seeding ist als Betriebs-/Demo-Weg dokumentiert und jetzt mit dem Betriebs-/Audit-Operator real abgesichert
 
 ### 4.3 Produktions-Operator
 
@@ -87,6 +96,9 @@ Erlaubte Kernaktionen:
 - Produktions-Review ausfuehren
 
 Aktuell real geschuetzte Kernpfade:
+- `POST /v1/production/plans` -> Produktions-Operator
+- `POST /v1/production/recipes/import-text` -> Produktions-Operator
+- `POST /v1/production/recipes/upload` -> Produktions-Operator
 - `PATCH /v1/production/recipes/:recipeId/review` -> Produktions-Operator
 
 Implizit / dokumentiert:
@@ -116,6 +128,19 @@ Implizit / dokumentiert:
 
 | Pfad | Erwartete Rolle | Status |
 |---|---|---|
+| `POST /v1/intake/normalize` | Intake-Operator | real verankert |
+| `POST /v1/intake/documents` | Intake-Operator | real verankert |
+| `POST /v1/intake/documents/upload` | Intake-Operator | real verankert |
+| `POST /v1/intake/specs/manual` | Intake-Operator | real verankert |
+| `PATCH /v1/intake/specs/:specId` | Intake-Operator | real verankert |
+| `POST /v1/offers/drafts` | Angebots-Operator | real verankert |
+| `POST /v1/offers/from-text` | Angebots-Operator | real verankert |
+| `POST /v1/offers/recipes/import-text` | Angebots-Operator | real verankert |
+| `POST /v1/offers/recipes/upload` | Angebots-Operator | real verankert |
+| `POST /v1/offers/seed-demo` | Betriebs-/Audit-Operator | real verankert |
+| `POST /v1/production/plans` | Produktions-Operator | real verankert |
+| `POST /v1/production/recipes/import-text` | Produktions-Operator | real verankert |
+| `POST /v1/production/recipes/upload` | Produktions-Operator | real verankert |
 | `GET /v1/production/audit/events` | Betriebs-/Audit-Operator | real verankert |
 | `POST /v1/production/seed-demo` | Betriebs-/Audit-Operator | real verankert |
 | `POST /v1/intake/spec-governance/finalize` | Betriebs-/Audit-Operator | real verankert |
@@ -126,8 +151,7 @@ Implizit / dokumentiert:
 
 | Pfad | Vorlaeufige Einordnung | Status |
 |---|---|---|
-| `POST /v1/intake/seed-demo` | operativer Demo-/Betriebsweg; eine harte Rollenbindung ist im aktuellen Minimal-Korridor nicht belegt | dokumentiert / offen |
-| `POST /v1/offers/seed-demo` | operativer Demo-/Betriebsweg; eine harte Rollenbindung ist im aktuellen Minimal-Korridor nicht belegt | dokumentiert / offen |
+| keine verbleibenden dokumentierten Kernpfade im aktuellen Mini-Korridor | die zuvor offenen Seed-Pfade sind jetzt in den realen Guard-Korridor aufgenommen | konsolidiert |
 
 ### 5.3 Warum diese Trennung wichtig ist
 
@@ -143,7 +167,7 @@ Diese Mini-Spezifikation trennt deshalb bewusst zwischen:
 Folgende Punkte sind im Repo bereits real verankert:
 - zentrale Rollen-/Rechte-Konvention in `shared-core/src/access-control.ts`
 - Rollennamen und Default-Akteursnamen
-- geschuetzte Kernpfade fuer Audit, Seed, Finalize und Recipe-Review
+- geschuetzte Kernpfade fuer Intake-, Angebots-, Produktions-, Audit-, Seed-, Finalize- und Recipe-Review-Pfade
 - gruen verifizierter kleiner Access-Control-Korridor
 - klare Trennung zwischen Fachrollen und Betriebs-/Audit-Rolle
 - Default-Akteursnamen werden im Code normalisiert (trim + lowercase) auf die Minimalrollen gemappt; das macht die Betriebs-/Audit-Zuordnung im Repo explizit und reproduzierbar
@@ -151,7 +175,6 @@ Folgende Punkte sind im Repo bereits real verankert:
 ## 7. Noch nur dokumentiert / noch offen
 
 Offen bleibt aktuell insbesondere:
-- ob `POST /v1/intake/seed-demo` und `POST /v1/offers/seed-demo` spaeter ebenfalls hart an eine Rolle gebunden werden sollen
 - ob es fuer den MVP neben den vier Minimalrollen noch eine echte Admin-Rolle braucht
 - ob Rollen nur fachlich benannt oder technisch weiter differenziert werden sollen
 - ob weitere Endpunkte jenseits des aktuellen Minimal-Korridors ebenfalls als geschuetzt gelten muessen

@@ -2085,11 +2085,17 @@ describe("catering agents platform", () => {
     const seedResponses = await Promise.all([
       intakeApp.inject({
         method: "POST",
-        url: "/v1/intake/seed-demo"
+        url: "/v1/intake/seed-demo",
+        headers: {
+          "x-actor-name": auditActorName
+        }
       }),
       offerApp.inject({
         method: "POST",
-        url: "/v1/offers/seed-demo"
+        url: "/v1/offers/seed-demo",
+        headers: {
+          "x-actor-name": auditActorName
+        }
       }),
       productionApp.inject({
         method: "POST",
@@ -2107,11 +2113,17 @@ describe("catering agents platform", () => {
     const repeatedSeedResponses = await Promise.all([
       intakeApp.inject({
         method: "POST",
-        url: "/v1/intake/seed-demo"
+        url: "/v1/intake/seed-demo",
+        headers: {
+          "x-actor-name": auditActorName
+        }
       }),
       offerApp.inject({
         method: "POST",
-        url: "/v1/offers/seed-demo"
+        url: "/v1/offers/seed-demo",
+        headers: {
+          "x-actor-name": auditActorName
+        }
       }),
       productionApp.inject({
         method: "POST",
@@ -2652,7 +2664,7 @@ describe("catering agents platform", () => {
       method: "POST",
       url: "/v1/offers/from-text",
       headers: {
-        "x-actor-name": "Angebot Team"
+        "x-actor-name": "Angebots-Mitarbeiter"
       },
       payload: {
         text: "Sommerempfang am 2026-07-01 fuer 45 Teilnehmer mit Fingerfood und Getraenken."
@@ -2664,7 +2676,7 @@ describe("catering agents platform", () => {
       method: "POST",
       url: "/v1/intake/normalize",
       headers: {
-        "x-actor-name": "Kuechenplanung"
+        "x-actor-name": "Intake-Mitarbeiter"
       },
       payload: {
         text: "Konferenz am 2026-08-04 fuer 60 Teilnehmer mit Lunchbuffet und Tomatensuppe."
@@ -2676,7 +2688,7 @@ describe("catering agents platform", () => {
       method: "POST",
       url: "/v1/production/plans",
       headers: {
-        "x-actor-name": "Operations"
+        "x-actor-name": "Produktions-Mitarbeiter"
       },
       payload: {
         eventSpec: withProductionDecision(intakeResponse.json().acceptedEventSpec)
@@ -2703,21 +2715,21 @@ describe("catering agents platform", () => {
       auditEvents.some(
         (entry) =>
           entry.action === "offer.draft_created_from_text" &&
-          entry.actor.name === "Angebot Team"
+          entry.actor.name === "Angebots-Mitarbeiter"
       )
     ).toBe(true);
     expect(
       auditEvents.some(
         (entry) =>
           entry.action === "intake.normalized" &&
-          entry.actor.name === "Kuechenplanung"
+          entry.actor.name === "Intake-Mitarbeiter"
       )
     ).toBe(true);
     expect(
       auditEvents.some(
         (entry) =>
           entry.action === "production.plan_created" &&
-          entry.actor.name === "Operations"
+          entry.actor.name === "Produktions-Mitarbeiter"
       )
     ).toBe(true);
     expect(auditEvents.some((entry) => entry.entityType === "ProductionPlan")).toBe(true);

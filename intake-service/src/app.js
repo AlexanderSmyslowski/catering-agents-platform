@@ -115,6 +115,9 @@ function actorForRequest(request) {
         source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
     };
 }
+function isIntakeOperator(request) {
+    return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "intake_operator";
+}
 function isOperationsAuditOperator(request) {
     return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
 }
@@ -234,6 +237,11 @@ export function buildIntakeApp(input = {}) {
         });
     });
     app.post("/v1/intake/normalize", async (request, reply) => {
+        if (!isIntakeOperator(request)) {
+            return reply.code(403).send({
+                message: "Intake-Operator erforderlich."
+            });
+        }
         const body = request.body;
         const eventRequest = "rawInputs" in body
             ? validateEventRequest(body)
@@ -271,6 +279,11 @@ export function buildIntakeApp(input = {}) {
         });
     });
     app.post("/v1/intake/documents", async (request, reply) => {
+        if (!isIntakeOperator(request)) {
+            return reply.code(403).send({
+                message: "Intake-Operator erforderlich."
+            });
+        }
         const body = request.body;
         const documents = body.documents.map((document) => ({
             filename: document.filename,
@@ -300,6 +313,11 @@ export function buildIntakeApp(input = {}) {
         return reply.code(201).send(normalized);
     });
     app.post("/v1/intake/documents/upload", async (request, reply) => {
+        if (!isIntakeOperator(request)) {
+            return reply.code(403).send({
+                message: "Intake-Operator erforderlich."
+            });
+        }
         const upload = await extractMultipartDocuments(request);
         const normalized = await normalizeUploadedDocuments(upload);
         await store.saveRequest(normalized.eventRequest);
@@ -320,6 +338,11 @@ export function buildIntakeApp(input = {}) {
         return reply.code(201).send(normalized);
     });
     app.post("/v1/intake/specs/manual", async (request, reply) => {
+        if (!isIntakeOperator(request)) {
+            return reply.code(403).send({
+                message: "Intake-Operator erforderlich."
+            });
+        }
         const eventRequest = validateEventRequest(createEventRequestFromManualForm({
             requestId: `manual-${Date.now()}`,
             ...request.body
@@ -410,6 +433,11 @@ export function buildIntakeApp(input = {}) {
         return reply.send(spec);
     });
     app.patch("/v1/intake/specs/:specId", async (request, reply) => {
+        if (!isIntakeOperator(request)) {
+            return reply.code(403).send({
+                message: "Intake-Operator erforderlich."
+            });
+        }
         const spec = await store.getSpec(request.params.specId);
         if (!spec) {
             return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
