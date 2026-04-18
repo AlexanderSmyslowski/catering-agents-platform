@@ -15,6 +15,8 @@ required_sessions=(
 
 required_urls=(
   "UI|http://127.0.0.1:3200/"
+  "Angebot-UI|http://127.0.0.1:3200/angebot"
+  "Produktion-UI|http://127.0.0.1:3200/produktion"
   "Intake|http://127.0.0.1:3101/health"
   "Angebot|http://127.0.0.1:3102/health"
   "Produktion|http://127.0.0.1:3103/health"
