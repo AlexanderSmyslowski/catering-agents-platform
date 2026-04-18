@@ -42,31 +42,51 @@ export interface ServiceHealthState {
 
 const OPERATOR_NAME_STORAGE_KEY = "catering.operatorName";
 const AUDIT_OPERATOR_NAME = "Betriebs-/Audit-Operator";
+const GENERIC_OPERATOR_NAME = "Mitarbeiter";
+const DEFAULT_MUTATION_ACTOR_NAMES = {
+  intake: "Intake-Mitarbeiter",
+  offer: "Angebots-Mitarbeiter",
+  production: "Produktions-Mitarbeiter",
+  audit: AUDIT_OPERATOR_NAME
+} as const;
 
-function getDefaultOperatorName(): string {
+function getStoredOperatorName(): string | undefined {
   if (typeof window === "undefined") {
-    return "Mitarbeiter";
+    return undefined;
   }
 
   const stored = window.localStorage.getItem(OPERATOR_NAME_STORAGE_KEY)?.trim();
-  return stored || "Mitarbeiter";
+  return stored || undefined;
 }
 
-function buildHeaders(initHeaders?: HeadersInit, includeJsonContentType = true): Headers {
+function getRequestActorName(defaultActorName?: string): string {
+  const storedOperatorName = getStoredOperatorName();
+  if (storedOperatorName && storedOperatorName !== GENERIC_OPERATOR_NAME) {
+    return storedOperatorName;
+  }
+
+  return defaultActorName ?? storedOperatorName ?? GENERIC_OPERATOR_NAME;
+}
+
+function buildHeaders(
+  initHeaders?: HeadersInit,
+  includeJsonContentType = true,
+  defaultActorName?: string
+): Headers {
   const headers = new Headers(initHeaders);
   if (includeJsonContentType && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
   if (!headers.has("x-actor-name")) {
-    headers.set("x-actor-name", getDefaultOperatorName());
+    headers.set("x-actor-name", getRequestActorName(defaultActorName));
   }
   return headers;
 }
 
-async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(input: string, init?: RequestInit, defaultActorName?: string): Promise<T> {
   const response = await fetch(input, {
     ...init,
-    headers: buildHeaders(init?.headers)
+    headers: buildHeaders(init?.headers, true, defaultActorName)
   });
 
   if (!response.ok) {
@@ -127,7 +147,7 @@ export async function createAcceptedSpecFromText(text: string) {
   return fetchJson<Record<string, unknown>>("/api/intake/v1/intake/normalize", {
     method: "POST",
     body: JSON.stringify({ text })
-  });
+  }, DEFAULT_MUTATION_ACTOR_NAMES.intake);
 }
 
 export async function createAcceptedSpecFromDocument(
@@ -141,7 +161,7 @@ export async function createAcceptedSpecFromDocument(
   const response = await fetch("/api/intake/v1/intake/documents/upload", {
     method: "POST",
     body: formData,
-    headers: buildHeaders(undefined, false)
+    headers: buildHeaders(undefined, false, DEFAULT_MUTATION_ACTOR_NAMES.intake)
   });
 
   if (!response.ok) {
@@ -174,7 +194,8 @@ export async function updateAcceptedSpec(
     {
       method: "PATCH",
       body: JSON.stringify(input)
-    }
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.intake
   );
 }
 
@@ -191,28 +212,28 @@ export async function createAcceptedSpecFromManualForm(input: {
   return fetchJson<Record<string, unknown>>("/api/intake/v1/intake/specs/manual", {
     method: "POST",
     body: JSON.stringify(input)
-  });
+  }, DEFAULT_MUTATION_ACTOR_NAMES.intake);
 }
 
 export async function createOfferFromText(text: string) {
   return fetchJson<Record<string, unknown>>("/api/offers/v1/offers/from-text", {
     method: "POST",
     body: JSON.stringify({ text })
-  });
+  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 
 export async function promoteOfferDraft(draftId: string, variantId?: string) {
   return fetchJson<Record<string, unknown>>(`/api/offers/v1/offers/drafts/${draftId}/promote`, {
     method: "POST",
     body: JSON.stringify(variantId ? { variantId } : {})
-  });
+  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 
 export async function createProductionPlan(eventSpec: Record<string, unknown>) {
   return fetchJson<Record<string, unknown>>("/api/production/v1/production/plans", {
     method: "POST",
     body: JSON.stringify({ eventSpec })
-  });
+  }, DEFAULT_MUTATION_ACTOR_NAMES.production);
 }
 
 export async function uploadRecipeFile(
@@ -234,7 +255,11 @@ export async function uploadRecipeFile(
   const response = await fetch(endpoint, {
     method: "POST",
     body: formData,
-    headers: buildHeaders(undefined, false)
+    headers: buildHeaders(
+      undefined,
+      false,
+      target === "offer" ? DEFAULT_MUTATION_ACTOR_NAMES.offer : DEFAULT_MUTATION_ACTOR_NAMES.production
+    )
   });
 
   if (!response.ok) {
@@ -245,11 +270,11 @@ export async function uploadRecipeFile(
 }
 
 export function readOperatorName(): string {
-  return getDefaultOperatorName();
+  return getStoredOperatorName() ?? GENERIC_OPERATOR_NAME;
 }
 
 export function persistOperatorName(name: string): string {
-  const trimmed = name.trim() || "Mitarbeiter";
+  const trimmed = name.trim() || GENERIC_OPERATOR_NAME;
   if (typeof window !== "undefined") {
     window.localStorage.setItem(OPERATOR_NAME_STORAGE_KEY, trimmed);
   }
@@ -269,32 +294,23 @@ export async function reviewRecipe(
   return fetchJson<{ recipe: Record<string, unknown> }>(endpoint, {
     method: "PATCH",
     body: JSON.stringify({ decision })
-  });
+  }, target === "offer" ? DEFAULT_MUTATION_ACTOR_NAMES.offer : DEFAULT_MUTATION_ACTOR_NAMES.production);
 }
 
 export async function seedDemoData() {
   const [intake, offers, production] = await Promise.all([
     fetchJson<Record<string, unknown>>("/api/intake/v1/intake/seed-demo", {
       method: "POST",
-      body: "{}",
-      headers: {
-        "x-actor-name": AUDIT_OPERATOR_NAME
-      }
-    }),
+      body: "{}"
+    }, DEFAULT_MUTATION_ACTOR_NAMES.audit),
     fetchJson<Record<string, unknown>>("/api/offers/v1/offers/seed-demo", {
       method: "POST",
-      body: "{}",
-      headers: {
-        "x-actor-name": AUDIT_OPERATOR_NAME
-      }
-    }),
+      body: "{}"
+    }, DEFAULT_MUTATION_ACTOR_NAMES.audit),
     fetchJson<Record<string, unknown>>("/api/production/v1/production/seed-demo", {
       method: "POST",
-      body: "{}",
-      headers: {
-        "x-actor-name": AUDIT_OPERATOR_NAME
-      }
-    })
+      body: "{}"
+    }, DEFAULT_MUTATION_ACTOR_NAMES.audit)
   ]);
 
   return {
