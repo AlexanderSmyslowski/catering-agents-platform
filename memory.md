@@ -42,7 +42,6 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P18 minimaler interner Eskalations- und Klaerungspfad im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die sichtbare Klaerung und Eskalation auf PR-, Doku- und memory-Kontexte ohne ein Incident-, Ticket- oder Governance-System einzuführen
 - P19 minimaler interner Beta-Durchfuehrungsrahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt einen ersten kontrollierten internen Beta-Durchlauf auf bestehende Test-, Build-, Smoke-, Abnahme-, Lage- und Klaerungsrahmen ohne ein Release-, Rollout- oder Support-System einzuführen
 - P20 minimaler interner Beta-Auswertungs- und Go/No-Go-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Auswertung eines ersten Beta-Durchlaufs sowie die Einordnung in tragfaehig, nachzuschaerfen oder vorerst zu stoppen ohne ein formales QA-, Release- oder Steering-System einzuführen
-- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen
 - P22 minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den Umgang mit kleinen Restpunkten vor einem sauberen Beta-Abschluss ohne ein formales Defect-, QA- oder Release-Management zu konstruieren
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
@@ -349,10 +348,6 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.76 - 2026-04-16
 - P22 Minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: kleine Restpunkte werden nur ueber technische, fachliche, betriebliche und dokumentarische Einordnung vor Beta-Abschluss behandelt, ohne ein formales Defect-, QA- oder Release-Management zu konstruieren.
-
-### 5.75 - 2026-04-16
-- P21 Minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
-- Der Rahmen bleibt bewusst konservativ: ein Beta-Stand wird nur ueber technische, fachliche, betriebliche und dokumentarische Mindestsignale in einen intern nutzbaren Produktstatus eingeordnet, ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen.
 
 ### 5.74 - 2026-04-16
 - P20 Minimaler interner Beta-Auswertungs- und Go/No-Go-Rahmen im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.

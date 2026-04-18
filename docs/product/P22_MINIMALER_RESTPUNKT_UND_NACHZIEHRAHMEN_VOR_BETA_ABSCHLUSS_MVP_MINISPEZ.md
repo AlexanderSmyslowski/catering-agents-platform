@@ -9,7 +9,7 @@ Diese Mini-Spezifikation begrenzt den minimalen internen Restpunkt- und Nachzieh
 
 Sie erfindet kein formales Defect-Management, kein Ticket-Triage-System, kein Priorisierungsboard und kein formales QA-System. Ziel ist ausschliesslich, den Umgang mit kleinen Restpunkten vor einem sauberen Beta-Abschluss fachlich einzuordnen, ohne daraus eine neue Produkt- oder Prozessfamilie zu machen.
 
-## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete, P15, P17, P19, P20, P21 und Memory
+## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete, P15, P17, P19, P20 und Memory
 
 Grundlagen dieses Dokuments sind:
 - `docs/product/PFLICHTENHEFT.md`
@@ -18,7 +18,6 @@ Grundlagen dieses Dokuments sind:
 - `docs/product/P17_MINIMALER_INTERNER_BETRIEBSSTATUS_UND_LAGEUEBERBLICK_MVP_MINISPEZ.md`
 - `docs/product/P19_MINIMALER_INTERNER_BETA_DURCHFUEHRUNGSRAHMEN_MVP_MINISPEZ.md`
 - `docs/product/P20_MINIMALER_INTERNER_BETA_AUSWERTUNGS_UND_GO_NO_GO_RAHMEN_MVP_MINISPEZ.md`
-- `docs/product/P21_MINIMALER_UEBERGANG_VON_BETA_ZU_INTERN_NUTZBAREM_PRODUKTSTATUS_MVP_MINISPEZ.md`
 - `memory.md`
 - der aktuelle Repo-Iststand in den Test-/Build-/Smoke-Pfaden, der bestehenden Freigabe- und Abnahmebasis, dem internen Betriebsstatus-/Lageueberblick, dem internen Beta-Durchfuehrungsrahmen, der Beta-Auswertung und dem Go/No-Go-Rahmen, dem Uebergang zu intern nutzbarem Produktstatus sowie den manuellen Fallbacks, operativen Exporten und der Review-/Audit-Sicht
 
@@ -29,7 +28,6 @@ Wesentliche Ableitung:
 - P17 begrenzt den internen Lageueberblick auf wenige technische, fachliche und betriebliche Signale.
 - P19 begrenzt den internen Beta-Durchlauf auf einen kontrollierten, kleinen internen Rahmen.
 - P20 begrenzt die knappe Auswertung dieses Beta-Durchlaufs und die Einordnung in tragfaehig, nachzuschaerfen oder vorerst zu stoppen.
-- P21 begrenzt den Uebergang von Beta zu intern nutzbarem Produktstatus.
 - P22 ordnet nun die Behandlung kleiner Restpunkte vor Beta-Abschluss ein, ohne daraus ein formales Backlog-, QA- oder Release-Management zu machen.
 - `memory.md` bleibt der Kurzanker fuer die konsolidierten Repo-Fakten und die laufende Projektfortschreibung.
 
@@ -45,7 +43,6 @@ Im Repo sind bereits folgende Bausteine sichtbar:
 - schmaler interner Lageueberblick ueber P17
 - interner Beta-Durchfuehrungsrahmen ueber P19
 - Beta-Auswertung und Go/No-Go-Rahmen ueber P20
-- Uebergang zu intern nutzbarem Produktstatus ueber P21
 - sichtbare Klaerung und Eskalation ueber P18
 - read-only Exportpfade fuer Angebot, Produktionsblatt und Einkaufsliste
 - Review-/Audit-Sicht fuer interne Betriebs- und Kontrollnachweise
@@ -56,7 +53,7 @@ Im Repo sind bereits folgende Bausteine sichtbar:
 
 Fuer den Umgang mit Restpunkten vor Beta-Abschluss ist im MVP verbindlich anzunehmen:
 - die technische Basis ist ueber Test, Build und Smoke bereits belastbar genug, um kleine Restpunkte nicht blind zu lassen
-- die Go-/No-Go- und Abnahmekriterien aus P15, P19, P20 und P21 bilden den Bewertungsrahmen
+- die Go-/No-Go- und Abnahmekriterien aus P15, P19 und P20 bilden den Bewertungsrahmen
 - der Lageueberblick aus P17 zeigt, ob Restpunkte technische, fachliche oder betriebliche Grundsignale beruehren
 - der Klaerungs- und Eskalationspfad aus P18 steht bereit, wenn ein Restpunkt nicht knapp eingeordnet werden kann
 - manuelle Fallbacks und operative Exporte bleiben als Rueckfall- und Plausibilisierungsebene verfuegbar
