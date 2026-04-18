@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.65
+version: 5.66
 date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -33,6 +33,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P9 formaler AuthN-/AuthZ-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; sie fasst die bestehende Rollen-/Guard-Grundlage, die Actor-Zuordnung und den Proxy-Rahmen zu einem konservativen internen AuthN-/AuthZ-Rahmen zusammen
 - P10 manuelle Betriebsinterventionen und Fallbacks im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie ordnen nur die manuellen Betriebswege, Fallbacks und Grenzen im bestehenden MVP-Rahmen ein, ohne eine neue Incident- oder Recovery-Plattform einzuführen
 - P11 Datenkorrekturen und fachliche Nachpflege im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie begrenzen Direktedit, Neuerzeugung und read-only-Nachpflege im bestehenden Rollen-/Guard-Rahmen, ohne eine neue Diff- oder Governance-Welt einzuführen
+- P12 Demo-/Seed-Daten und zulässige Nutzung im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie begrenzen Seed-/Demo-Nutzung als Betriebs- und Verifikationshilfe, ohne eine neue Testdaten- oder Reset-Plattform einzuführen
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
 - Leitlinien bleiben bindend:
@@ -335,6 +336,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+### 5.66 - 2026-04-16
+- P12 Demo-/Seed-Daten und zulässige Nutzung im MVP sind im Repo als neue Mini-Spezifikation dokumentiert und wurden in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: Seed-/Demo-Nutzung wird nur als Betriebs- und Verifikationshilfe eingeordnet, ohne eine neue Testdaten-, Reset- oder Datenmanagement-Welt einzuführen.
+
 ### 5.65 - 2026-04-16
 - P11 Datenkorrekturen und fachliche Nachpflege im MVP sind im Repo als neue Mini-Spezifikation dokumentiert und wurden in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: Direktedit, Neuerzeugung und read-only-Nachpflege werden nur fachlich eingeordnet, ohne eine neue Diff-, Governance- oder Bearbeitungswelt einzuführen.
