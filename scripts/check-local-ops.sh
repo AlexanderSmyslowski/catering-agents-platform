@@ -64,6 +64,22 @@ if [[ "${export_body}" != *"${export_anchor}"* ]]; then
 fi
 printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${export_url}" "${export_anchor}"
 
+offer_export_url="http://127.0.0.1:3200/api/exports/v1/exports/offers/draft-demo-offer-conference-buffet/html"
+offer_export_body="$(curl -fsS "${offer_export_url}")"
+if [[ "${offer_export_body}" != *"Angebot draft-demo-offer-conference-buffet"* ]]; then
+  echo "  Export-Check: unerwarteter Inhalt (${offer_export_url})" >&2
+  exit 1
+fi
+printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${offer_export_url}" "Angebot draft-demo-offer-conference-buffet"
+
+purchase_list_export_url="http://127.0.0.1:3200/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv"
+purchase_list_export_body="$(curl -fsS "${purchase_list_export_url}")"
+if [[ "${purchase_list_export_body}" != *'"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"'* ]]; then
+  echo "  Export-Check: unerwarteter Inhalt (${purchase_list_export_url})" >&2
+  exit 1
+fi
+printf '  Export-Check: erreichbar (%s, enthält CSV-Header)\n' "${purchase_list_export_url}"
+
 echo ""
 echo "Bootstrapp-/Auditpruefung:"
 audit_url="http://127.0.0.1:3103/v1/production/audit/events?limit=5"
