@@ -340,17 +340,14 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
-<<<<<<< HEAD
-=======
 ### 5.70 - 2026-04-16
 - P16 Minimaler interner Aenderungs- und Entscheidungslog im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: Entscheidungen werden nur knapp ueber PR-, Commit-, Doku- und memory-Kontexte eingeordnet, ohne ein neues Ticket-, ADR- oder Governance-System einzuführen.
 
 ### 5.69 - 2026-04-16
 - P15 Minimaler interner Abnahmeprozess im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
-- Der Rahmen bleibt bewusst konservativ: die kleinste interne Abnahme wird nur ueber bestehende Test-, Build-, Rollen-, Export- und Audit-/Review-Kontexte begrenzt, ohne eine neue QA- oder Release-Welt einzufuehren.
+- Der Rahmen bleibt bewusst konservativ: die kleinste interne Abnahme wird nur ueber bestehende Test-, Build-, Rollen-, Export- und Audit-/Review-Kontexte begrenzt, ohne eine neue QA- oder Release-Welt einzuführen.
 
->>>>>>> faf4b89 (docs(p16): add minimal change decision log minispec)
 ### 5.68 - 2026-04-16
 - P14 Audit-/Review-Spuren und operative Nutzung im MVP sind im Repo als neue Mini-Spezifikation dokumentiert und wurden in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: Audit-/Review-Spuren werden nur als interne Betriebs- und Kontrollnachweise eingeordnet, ohne eine neue Compliance-, Revisions- oder Monitoring-Welt einzuführen.
