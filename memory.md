@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.63
+version: 5.64
 date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -31,6 +31,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P2 Browser-/Smoke-Absicherung ist jetzt real belegt: der lokale Smoke-Korridor prueft die drei UI-Routen, die vier Health-Endpunkte und die drei read-only Exportpfade; ergaenzend existiert ein minimaler repo-verankerter UI-Route-Smoke-Test fuer `/`, `/angebot` und `/produktion`, dessen Angebots- und Produktions-Assertions auf route-eindeutige Marker geschaerft sind
 - P8 UI-Rollenverantwortung und Operator-Zuordnung ist als schmale Mini-Spezifikation fuer den Backoffice-UI-Kern ergänzt worden; sie ordnet Home, Angebotsansicht, Produktionsansicht sowie read-only Detail-/Export-/Audit-Kontexte den bestehenden Minimalrollen und Operatornamen zu
 - P9 formaler AuthN-/AuthZ-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; sie fasst die bestehende Rollen-/Guard-Grundlage, die Actor-Zuordnung und den Proxy-Rahmen zu einem konservativen internen AuthN-/AuthZ-Rahmen zusammen
+- P10 manuelle Betriebsinterventionen und Fallbacks im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie ordnen nur die manuellen Betriebswege, Fallbacks und Grenzen im bestehenden MVP-Rahmen ein, ohne eine neue Incident- oder Recovery-Plattform einzuführen
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
 - Leitlinien bleiben bindend:
@@ -333,6 +334,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+### 5.64 - 2026-04-16
+- P10 manuelle Betriebsinterventionen und Fallbacks im MVP sind im Repo als neue Mini-Spezifikation dokumentiert und wurden in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: manuelle Betriebswege, Fallbacks und Grenzen werden nur eingeordnet, ohne eine neue Incident-, Recovery- oder Admin-Welt einzuführen.
+
 ### 5.63 - 2026-04-16
 - P9 formaler AuthN-/AuthZ-Rahmen im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: Rollen-/Guard-Grundlage, Actor-Zuordnung und Proxy-Rahmen werden nur fachlich eingeordnet, ohne Login-, Session- oder IdP-Welt einzufuehren.
