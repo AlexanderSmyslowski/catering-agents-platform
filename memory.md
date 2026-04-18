@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.72
+version: 5.73
 date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -40,6 +40,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P16 minimaler interner Aenderungs- und Entscheidungslog im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Dokumentation von Entscheidungen auf PR-, Commit-, Doku- und memory-Kontexte, ohne ein neues Ticket-, ADR- oder Governance-System einzuführen
 - P17 minimaler interner Betriebsstatus- und Lageueberblick im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die wenigen internen Statussignale auf Test-, Build-, Smoke-, Export-, Audit-/Review- und Fallback-Sicht ohne eine neue Monitoring- oder Ops-Welt einzuführen
 - P18 minimaler interner Eskalations- und Klaerungspfad im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die sichtbare Klaerung und Eskalation auf PR-, Doku- und memory-Kontexte ohne ein Incident-, Ticket- oder Governance-System einzuführen
+- P19 minimaler interner Beta-Durchfuehrungsrahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt einen ersten kontrollierten internen Beta-Durchlauf auf bestehende Test-, Build-, Smoke-, Abnahme-, Lage- und Klaerungsrahmen ohne ein Release-, Rollout- oder Support-System einzuführen
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
 - Leitlinien bleiben bindend:
@@ -342,6 +343,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+### 5.73 - 2026-04-16
+- P19 Minimaler interner Beta-Durchfuehrungsrahmen im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: ein erster kontrollierter interner Beta-Durchlauf wird nur ueber Test-, Build-, Smoke-, Abnahme-, Lage- und Klaerungsrahmen eingeordnet, ohne ein Release-, Rollout- oder Support-System einzuführen.
+
 ### 5.72 - 2026-04-16
 - P18 Minimaler interner Eskalations- und Klaerungspfad im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: sichtbare Klaerung und Eskalation werden nur ueber PR-, Doku- und memory-Kontexte eingeordnet, ohne ein Incident-, Ticket- oder Governance-System einzuführen.
