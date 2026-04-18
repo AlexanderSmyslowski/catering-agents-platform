@@ -134,10 +134,10 @@ describe("backoffice route smoke", () => {
 
     const offer = await renderRoute("/angebot");
     expect(offer).toContain("Angebotsagent");
-    expect(offer).toContain("Angebotsentwürfe");
+    expect(offer).toContain("Angebots-URL: Kundenanfrage, Varianten und operative Übergabe.");
 
     const production = await renderRoute("/produktion");
     expect(production).toContain("Produktionsagent");
-    expect(production).toContain("Einkaufslisten");
+    expect(production).toContain("Produktions-URL: unabhängige Küchenvorbereitung, Rezepte und Einkaufslisten.");
   });
 });
