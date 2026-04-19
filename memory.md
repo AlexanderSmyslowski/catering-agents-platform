@@ -44,8 +44,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P20 minimaler interner Beta-Auswertungs- und Go/No-Go-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Auswertung eines ersten Beta-Durchlaufs sowie die Einordnung in tragfaehig, nachzuschaerfen oder vorerst zu stoppen ohne ein formales QA-, Release- oder Steering-System einzuführen
 |- P22 minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den Umgang mit kleinen Restpunkten vor einem sauberen Beta-Abschluss ohne ein formales Defect-, QA- oder Release-Management zu konstruieren
 |- P23 minimaler interner Beta-Abschluss- und Dokumentationsstand im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die kleine Abschlusssicht auf konsistente Dokumente, PR und memory ohne ein formales Abschluss-, QA- oder Governance-System einzuführen
-|- P24 minimaler Uebergabestand von Beta zu laufender interner Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den kleinsten intern fortsetzbaren Uebergang von dokumentarisch abgeschlossenem Beta-Stand zu laufender interner Nutzung ohne ein formales Betriebs-, Support- oder Release-Modell einzuführen
-|- P25 minimaler interner Nutzungsrahmen nach Beta-Uebergabe im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufenden internen Nutzungsstand nach der Beta-Uebergabe ohne ein formales Betriebs-, Support- oder Governance-Modell einzuführen
+- P25 minimaler interner Nutzungsrahmen nach Beta-Uebergabe im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufenden internen Nutzungsstand nach der Beta-Uebergabe ohne ein formales Betriebs-, Support- oder Governance-Modell einzuführen
 |- P26 minimaler interner Stabilisierungsrahmen in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufend ruhigen internen Nutzungsstand ohne ein formales Betriebs-, Monitoring- oder Support-Modell einzuführen
 |- P27 minimaler interner Reaktionsrahmen bei Instabilitaet in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die erste Reaktion auf Instabilitaetssignale ohne ein formales Incident-, Support- oder Betriebsreaktionsmodell einzuführen
 |- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen
@@ -355,22 +354,6 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - P23 Minimaler interner Beta-Abschluss- und Dokumentationsstand im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: der Beta-Abschnitt wird nur ueber konsistente Dokumente, PR und memory als dokumentarisch sauber abgeschlossen eingeordnet, ohne ein formales Abschluss-, QA- oder Governance-System einzuführen.
 
-### 5.78 - 2026-04-19
-- P24 Minimaler Uebergabestand von Beta zu laufender interner Nutzung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
-- Der Rahmen bleibt bewusst konservativ: ein dokumentarisch abgeschlossener Beta-Stand wird nur als Uebergang zu laufender interner Nutzung eingeordnet, ohne ein formales Betriebs-, Support- oder Release-Modell einzuführen.
-
-### 5.79 - 2026-04-19
-- P25 Minimaler interner Nutzungsrahmen nach Beta-Uebergabe im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
-- Der Rahmen bleibt bewusst konservativ: die laufende interne Nutzung nach Beta-Uebergabe wird nur als knapper Nutzungsrahmen eingeordnet, ohne ein formales Betriebs-, Support- oder Governance-Modell einzuführen.
-
-### 5.80 - 2026-04-19
-- P26 Minimaler interner Stabilisierungsrahmen in laufender Nutzung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
-- Der Rahmen bleibt bewusst konservativ: die laufende interne Nutzung wird nur ueber ruhige technische, fachliche und betriebliche Signale stabilisiert eingeordnet, ohne ein formales Betriebs-, Monitoring- oder Support-Modell einzuführen.
-
-### 5.81 - 2026-04-19
-- P27 Minimaler interner Reaktionsrahmen bei Instabilitaet in laufender Nutzung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
-- Der Rahmen bleibt bewusst konservativ: erste Instabilitaetssignale werden nur knapp eingeordnet und begrenzen vorsichtige Weiternutzung, Klaerung oder Aussetzen, ohne ein formales Incident-, Support- oder Betriebsreaktionsmodell einzuführen.
-
 ### 5.76 - 2026-04-16
 - P22 Minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: kleine Restpunkte werden nur ueber technische, fachliche, betriebliche und dokumentarische Einordnung vor Beta-Abschluss behandelt, ohne ein formales Defect-, QA- oder Release-Management zu konstruieren.
@@ -469,3 +452,19 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Governance-/Konsolidierungsstand bis einschliesslich Stufe 6c aktualisiert.
 - Stufe 6c als umgesetzter read-only UX-/Transparenzschritt dokumentiert.
 - Arbeitsregeln, Leitplanken und Handoff-Referenzen auf den konsolidierten Stand gebracht.
+
+### 5.78 - 2026-04-19
+- P24 Minimaler Uebergabestand von Beta zu laufender interner Nutzung im MVP bleibt als inhaltlicher Referenzpunkt der Dokumentationslinie fuer den Uebergang von Beta zu laufender interner Nutzung erhalten.
+- Der Rahmen bleibt bewusst konservativ: ein dokumentarisch abgeschlossener Beta-Stand wird nur als Uebergang zu laufender interner Nutzung eingeordnet, ohne ein formales Betriebs-, Support- oder Release-Modell einzuführen.
+
+### 5.79 - 2026-04-19
+- P25 Minimaler interner Nutzungsrahmen nach Beta-Uebergabe im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: die laufende interne Nutzung nach Beta-Uebergabe wird nur als knapper Nutzungsrahmen eingeordnet, ohne ein formales Betriebs-, Support- oder Governance-Modell einzuführen.
+
+### 5.80 - 2026-04-19
+- P26 Minimaler interner Stabilisierungsrahmen in laufender Nutzung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: die laufende interne Nutzung wird nur ueber ruhige technische, fachliche und betriebliche Signale stabilisiert eingeordnet, ohne ein formales Betriebs-, Monitoring- oder Support-Modell einzuführen.
+
+### 5.81 - 2026-04-19
+- P27 Minimaler interner Reaktionsrahmen bei Instabilitaet in laufender Nutzung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: erste Instabilitaetssignale werden nur knapp eingeordnet und begrenzen vorsichtige Weiternutzung, Klaerung oder Aussetzen, ohne ein formales Incident-, Support- oder Betriebsreaktionsmodell einzuführen.
