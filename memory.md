@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.76
+version: 5.77
 date: 2026-04-16
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -43,6 +43,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P19 minimaler interner Beta-Durchfuehrungsrahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt einen ersten kontrollierten internen Beta-Durchlauf auf bestehende Test-, Build-, Smoke-, Abnahme-, Lage- und Klaerungsrahmen ohne ein Release-, Rollout- oder Support-System einzuführen
 - P20 minimaler interner Beta-Auswertungs- und Go/No-Go-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Auswertung eines ersten Beta-Durchlaufs sowie die Einordnung in tragfaehig, nachzuschaerfen oder vorerst zu stoppen ohne ein formales QA-, Release- oder Steering-System einzuführen
 |- P22 minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den Umgang mit kleinen Restpunkten vor einem sauberen Beta-Abschluss ohne ein formales Defect-, QA- oder Release-Management zu konstruieren
+|- P23 minimaler interner Beta-Abschluss- und Dokumentationsstand im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die kleine Abschlusssicht auf konsistente Dokumente, PR und memory ohne ein formales Abschluss-, QA- oder Governance-System einzuführen
 |- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
@@ -346,6 +347,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - nur Resolver-/Skill-Rahmen beschreiben, nicht ausbauen
 
 ## Versionshistorie
+### 5.77 - 2026-04-16
+- P23 Minimaler interner Beta-Abschluss- und Dokumentationsstand im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: der Beta-Abschnitt wird nur ueber konsistente Dokumente, PR und memory als dokumentarisch sauber abgeschlossen eingeordnet, ohne ein formales Abschluss-, QA- oder Governance-System einzuführen.
+
 ### 5.76 - 2026-04-16
 - P22 Minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: kleine Restpunkte werden nur ueber technische, fachliche, betriebliche und dokumentarische Einordnung vor Beta-Abschluss behandelt, ohne ein formales Defect-, QA- oder Release-Management zu konstruieren.
