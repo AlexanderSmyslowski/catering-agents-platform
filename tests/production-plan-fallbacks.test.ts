@@ -181,7 +181,8 @@ describe("production planning fallbacks", () => {
         label: "BROT & BAGUETTE",
         menuCategory: "classic",
         productionDecision: {
-          mode: "scratch"
+          mode: "hybrid",
+          purchasedElements: ["Baguette"]
         }
       }
     ];
@@ -196,5 +197,10 @@ describe("production planning fallbacks", () => {
     expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("gluten_free");
     expect(artifacts.productionPlan.fallbackReason).toContain("gluten_free");
     expect(artifacts.productionPlan.productionBatches).toHaveLength(0);
+    expect(artifacts.productionPlan.recipeSelections).toHaveLength(1);
+    expect(artifacts.productionPlan.recipeSelections[0].selectionReason).toContain("gluten_free");
+    expect(artifacts.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
+    expect(artifacts.purchaseList.items).toHaveLength(0);
+    expect(artifacts.purchaseList.totals.itemCount).toBe(0);
   });
 });
