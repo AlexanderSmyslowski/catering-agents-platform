@@ -437,14 +437,19 @@ export async function buildProductionArtifacts(
   const readiness = mergeReadiness(eventSpec.readiness, unresolvedItems, blockingIssues);
   const uniqueWarnings = [...new Set(warnings)];
   const uniqueBlockingIssues = [...new Set(blockingIssues)];
+  const hasBlockingIssues = uniqueBlockingIssues.length > 0;
+  const operationalProductionBatches = hasBlockingIssues ? [] : productionBatches;
+  const operationalTimeline = hasBlockingIssues ? [] : timeline;
+  const operationalKitchenSheets = hasBlockingIssues ? [] : kitchenSheets;
+  const operationalProcurementItems = hasBlockingIssues ? [] : procurementItems;
   const productionPlan = validateProductionPlan({
     schemaVersion: SCHEMA_VERSION,
     planId: `plan-${eventSpec.specId}`,
     eventSpecId: eventSpec.specId,
     readiness,
-    productionBatches,
-    timeline,
-    kitchenSheets,
+    productionBatches: operationalProductionBatches,
+    timeline: operationalTimeline,
+    kitchenSheets: operationalKitchenSheets,
     recipeSelections,
     unresolvedItems: [...new Set(unresolvedItems)],
     ...(uniqueWarnings.length > 0 || uniqueBlockingIssues.length > 0
@@ -458,7 +463,7 @@ export async function buildProductionArtifacts(
   });
 
   const purchaseList = validatePurchaseList(
-    aggregatePurchaseList(eventSpec.specId, productionBatches, procurementItems)
+    aggregatePurchaseList(eventSpec.specId, operationalProductionBatches, operationalProcurementItems)
   );
 
   return {
