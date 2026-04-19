@@ -140,6 +140,16 @@ export const productionPlanSchema = {
         unresolvedItems: {
             type: "array",
             items: { type: "string" }
+        },
+        isFallback: { type: "boolean" },
+        fallbackReason: { type: "string" },
+        warnings: {
+            type: "array",
+            items: { type: "string" }
+        },
+        blockingIssues: {
+            type: "array",
+            items: { type: "string" }
         }
     }
 };

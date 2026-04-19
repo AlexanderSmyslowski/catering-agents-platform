@@ -337,6 +337,10 @@ export interface ProductionPlan {
   kitchenSheets: KitchenSheet[];
   recipeSelections: RecipeSelection[];
   unresolvedItems: string[];
+  isFallback?: boolean;
+  fallbackReason?: string;
+  warnings?: string[];
+  blockingIssues?: string[];
 }
 
 export interface PurchaseItem {
