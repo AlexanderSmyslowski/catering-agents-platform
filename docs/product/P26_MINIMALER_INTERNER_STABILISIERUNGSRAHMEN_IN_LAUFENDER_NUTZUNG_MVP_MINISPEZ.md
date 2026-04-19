@@ -9,14 +9,13 @@ Diese Mini-Spezifikation begrenzt den minimalen internen Stabilisierungsrahmen i
 
 Sie erfindet kein Monitoring-Board, keinen Incident-/Support-Prozess, kein formales Stabilitaets-Freigabesystem und keine neue Produkt- oder Prozessfamilie. Ziel ist ausschliesslich, den kleinsten Rahmen festzuhalten, unter dem die laufende interne Nutzung im MVP als hinreichend ruhig und belastbar betrachtet werden kann.
 
-## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete, P22, P23, P24, P25 und Memory
+## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete, P22, P23, P25 und Memory
 
 Grundlagen dieses Dokuments sind:
 - `docs/product/PFLICHTENHEFT.md`
 - `docs/product/MVP_ARBEITSPAKETE.md`
 - `docs/product/P22_MINIMALER_RESTPUNKT_UND_NACHZIEHRAHMEN_VOR_BETA_ABSCHLUSS_MVP_MINISPEZ.md`
 - `docs/product/P23_MINIMALER_INTERNER_BETA_ABSCHLUSS_UND_DOKUMENTATIONSSTAND_MVP_MINISPEZ.md`
-- `docs/product/P24_MINIMALER_UEBERGABESTAND_VON_BETA_ZU_LAUFENDER_INTERNER_NUTZUNG_MVP_MINISPEZ.md`
 - `docs/product/P25_MINIMALER_INTERNER_NUTZUNGSRAHMEN_NACH_BETA_UEBERGABE_MVP_MINISPEZ.md`
 - `memory.md`
 - der aktuelle Repo-Iststand in den Test-/Build-/Smoke-Pfaden, dem Restpunkt- und Nachziehrahmen, dem Beta-Abschluss- und Dokumentationsstand, dem Uebergabestand von Beta zu laufender interner Nutzung, dem Nutzungsrahmen nach Beta-Uebergabe sowie den vorhandenen Export-/Audit-/Fallback-Bezuegen
@@ -26,7 +25,7 @@ Wesentliche Ableitung:
 - Die MVP-Arbeitspakete ordnen die naechsten kleinen Schritte konservativ.
 - P22 ordnet den Umgang mit kleinen Restpunkten vor Beta-Abschluss ein.
 - P23 ordnet die kleine Abschlusssicht und den dokumentarisch sauberen Beta-Abschluss ein.
-- P24 ordnet den Uebergabestand von dokumentarisch abgeschlossenem Beta-Stand zu laufender interner Nutzung ein.
+- P25 bildet den naechsten Bezugspunkt fuer die laufende interne Nutzung.
 - P25 ordnet den dauerhaften Nutzungsrahmen nach Beta-Uebergabe ein.
 - P26 begrenzt nun den kleinsten Stabilisierungsrahmen fuer diese laufende interne Nutzung.
 - `memory.md` bleibt der Kurzanker fuer die konsolidierten Repo-Fakten und die laufende Projektfortschreibung.
@@ -41,7 +40,6 @@ Im Repo sind bereits folgende Bausteine sichtbar:
 - schmale UI-/Smoke-Grundlage fuer die Kernrouten
 - Restpunkt- und Nachziehrahmen vor Beta-Abschluss ueber P22
 - Beta-Abschluss- und Dokumentationsstand ueber P23
-- Uebergabestand zu laufender interner Nutzung ueber P24
 - Nutzungsrahmen nach Beta-Uebergabe ueber P25
 - read-only Exportpfade fuer Angebot, Produktionsblatt und Einkaufsliste
 - Review-/Audit-Sicht fuer interne Betriebs- und Kontrollnachweise
@@ -54,7 +52,7 @@ Fuer die knappe Stabilitaetsbetrachtung in laufender interner Nutzung ist im MVP
 - die technische Basis ist ueber Test, Build und Smoke bereits belastbar genug, um die laufende Nutzung nicht als instabilen Sonderfall zu betrachten
 - die Einordnung aus P22 bis P25 steht nicht im Widerspruch zu einem ruhigen laufenden Nutzungsstand
 - die Restpunkt-Einordnung aus P22 ist so weit geklaert, dass nur noch bewusst tolerierte Punkte offen bleiben
-- die Beta-Abschlusssicht aus P23, der Uebergabestand aus P24 und der Nutzungsrahmen aus P25 bleiben konsistent mit der laufenden Nutzung
+- die Beta-Abschlusssicht aus P23 und der Nutzungsrahmen aus P25 bleiben konsistent mit der laufenden Nutzung
 - der Stand kann intern weiter genutzt werden, ohne dass dafuer ein formales Betriebs-, Monitoring- oder Support-Modell erforderlich wird
 - PR, Doku und memory bleiben die kleinste tragende Dokumentationsspur fuer die laufende Stabilitaetsbewertung
 
@@ -97,7 +95,7 @@ Im bestehenden MVP-Rahmen gilt:
 ### 4.1 Wann ein laufend intern genutzter Stand als hinreichend stabil betrachtet werden kann
 
 Ein Stand soll im MVP als hinreichend stabil gelten, wenn:
-1. die Beta-Uebergabe nach P24 dokumentarisch sauber erfolgt ist
+1. die in P25 definierte laufende interne Nutzung als tragfaehiger Folgeraum nach der Uebergabe dokumentarisch sauber beschrieben ist
 2. die laufende Nutzung nach P25 im Grundsatz bereits als dauerhafter interner Zustand eingeordnet ist
 3. die Restpunkte aus P22 entweder nachgezogen oder bewusst als tolerierbar festgehalten sind
 4. die Einordnung aus P23 bis P25 nicht im Widerspruch zu einem ruhigen laufenden Zustand steht

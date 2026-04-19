@@ -355,6 +355,22 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - P23 Minimaler interner Beta-Abschluss- und Dokumentationsstand im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: der Beta-Abschnitt wird nur ueber konsistente Dokumente, PR und memory als dokumentarisch sauber abgeschlossen eingeordnet, ohne ein formales Abschluss-, QA- oder Governance-System einzuführen.
 
+### 5.78 - 2026-04-19
+- P24 Minimaler Uebergabestand von Beta zu laufender interner Nutzung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: ein dokumentarisch abgeschlossener Beta-Stand wird nur als Uebergang zu laufender interner Nutzung eingeordnet, ohne ein formales Betriebs-, Support- oder Release-Modell einzuführen.
+
+### 5.79 - 2026-04-19
+- P25 Minimaler interner Nutzungsrahmen nach Beta-Uebergabe im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: die laufende interne Nutzung nach Beta-Uebergabe wird nur als knapper Nutzungsrahmen eingeordnet, ohne ein formales Betriebs-, Support- oder Governance-Modell einzuführen.
+
+### 5.80 - 2026-04-19
+- P26 Minimaler interner Stabilisierungsrahmen in laufender Nutzung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: die laufende interne Nutzung wird nur ueber ruhige technische, fachliche und betriebliche Signale stabilisiert eingeordnet, ohne ein formales Betriebs-, Monitoring- oder Support-Modell einzuführen.
+
+### 5.81 - 2026-04-19
+- P27 Minimaler interner Reaktionsrahmen bei Instabilitaet in laufender Nutzung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: erste Instabilitaetssignale werden nur knapp eingeordnet und begrenzen vorsichtige Weiternutzung, Klaerung oder Aussetzen, ohne ein formales Incident-, Support- oder Betriebsreaktionsmodell einzuführen.
+
 ### 5.76 - 2026-04-16
 - P22 Minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: kleine Restpunkte werden nur ueber technische, fachliche, betriebliche und dokumentarische Einordnung vor Beta-Abschluss behandelt, ohne ein formales Defect-, QA- oder Release-Management zu konstruieren.
