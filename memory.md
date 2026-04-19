@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.82
+version: 5.83
 date: 2026-04-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -48,6 +48,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 |- P26 minimaler interner Stabilisierungsrahmen in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufend ruhigen internen Nutzungsstand ohne ein formales Betriebs-, Monitoring- oder Support-Modell einzuführen
 |- P27 minimaler interner Reaktionsrahmen bei Instabilitaet in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die erste Reaktion auf Instabilitaetssignale ohne ein formales Incident-, Support- oder Betriebsreaktionsmodell einzuführen
 |- P29 minimaler interner Entscheidungsrahmen zur Ausbaupriorisierung nach Bereinigung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Priorisierung weiterer kleiner Ausbauschritte nach der dokumentarischen Bereinigung ohne ein formales Produktmanagement-, Portfolio- oder Governance-Modell einzuführen
+|- P30 minimaler interner Abgrenzungsrahmen zwischen Stabilisierung und echtem Funktionsausbau im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Unterscheidung zwischen Stabilisierung/Nachziehen und echtem Ausbau ohne ein formales Produktfreigabe-, Scope- oder Governance-Modell einzuführen
 |- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
@@ -473,3 +474,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.82 - 2026-04-19
 - P29 Minimaler interner Entscheidungsrahmen zur Ausbaupriorisierung nach Bereinigung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: weitere kleine Ausbauschritte werden nur knapp gegen Stabilisierung, Nachziehbedarf und Dokumentationskonsistenz abgegrenzt, ohne ein formales Produktmanagement-, Portfolio- oder Governance-Modell einzuführen.
+
+### 5.83 - 2026-04-19
+- P30 Minimaler interner Abgrenzungsrahmen zwischen Stabilisierung und echtem Funktionsausbau im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: Stabilisierung, Nachziehen und echter Ausbau werden nur knapp getrennt, ohne ein formales Produktfreigabe-, Scope- oder Governance-Modell einzuführen.
