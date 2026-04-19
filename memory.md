@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.84
+version: 5.85
 date: 2026-04-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -51,6 +51,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 |- die zuvor dokumentierte Abgrenzungslogik zwischen Stabilisierung und echtem Funktionsausbau ist als relevanter Referenzpunkt in der Dokumentationslinie verankert
 |- P31 minimaler interner Entscheidungsrahmen zur Zurueckstellung von Funktionsausbau zugunsten von Stabilisierung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Zurueckstellung von Ausbau zugunsten von Stabilisierung ohne ein formales Produktmanagement-, Portfolio- oder Governance-Modell einzuführen.
 |- P33 minimaler interner Entscheidungsrahmen fuer Konsistenzfix-Vorrang vor weiterem Ausbau im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Vorrangentscheidung fuer dokumentarische Konsistenzfixes ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
+|- P34 minimaler interner Entscheidungsrahmen fuer ausreichend hergestellte dokumentarische Konsistenz zum wieder kleinen Ausbau im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Rueckkehr zu kleinem Ausbau ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
 |- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen.
 
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
@@ -481,6 +482,6 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - P31 Minimaler interner Entscheidungsrahmen zur Zurueckstellung von Funktionsausbau zugunsten von Stabilisierung im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: geplanter Ausbau wird bei offenen Stabilitaets-, Nachzieh- oder Konsistenzpunkten zugunsten von Stabilisierung zurueckgestellt, ohne ein formales Produktmanagement-, Portfolio- oder Governance-Modell einzuführen.
 
-### 5.84 - 2026-04-19
-- P33 Minimaler interner Entscheidungsrahmen fuer Konsistenzfix-Vorrang vor weiterem Ausbau im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
-- Der Rahmen bleibt bewusst konservativ: dokumentarische Konsistenzfixes erhalten Vorrang, wenn Referenzen, Repo-Bezüge oder memory-Fortschreibung sonst die naechste Entscheidung unklar machen wuerden, ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
+### 5.85 - 2026-04-19
+- P34 Minimaler interner Entscheidungsrahmen fuer ausreichend hergestellte dokumentarische Konsistenz zum wieder kleinen Ausbau im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
+- Der Rahmen bleibt bewusst konservativ: kleiner Ausbau wird erst wieder vertretbar, wenn Referenzen, Repo-Bezüge und memory-Fortschreibung wieder konsistent genug sind, ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
