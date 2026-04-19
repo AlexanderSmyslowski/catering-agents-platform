@@ -9,14 +9,14 @@ Diese Mini-Spezifikation begrenzt den minimalen internen Entscheidungsrahmen daf
 
 Sie erfindet kein Priorisierungsboard, kein formales Produktmanagement-System, kein Scoring-/Freigabemodell und keine neue Produkt- oder Prozessfamilie. Ziel ist ausschliesslich, den kleinsten Rahmen festzuhalten, unter dem ein geplanter Ausbau intern bewusst hinter Stabilisierung, Nachziehen oder Konsistenzpflege zuruecktritt.
 
-## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete, P27, P29, P30 und Memory
+## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete, P27, P29 und die zuvor dokumentierte Abgrenzungslogik
 
 Grundlagen dieses Dokuments sind:
 - `docs/product/PFLICHTENHEFT.md`
 - `docs/product/MVP_ARBEITSPAKETE.md`
 - `docs/product/P27_MINIMALER_INTERNER_REAKTIONSRAHMEN_BEI_INSTABILITAET_IN_LAUFENDER_NUTZUNG_MVP_MINISPEZ.md`
 - `docs/product/P29_MINIMALER_INTERNE_ENTSCHEIDUNGSRAHMEN_AUSBAUPRIORISIERUNG_NACH_BEREINIGUNG_MVP_MINISPEZ.md`
-- `docs/product/P30_MINIMALER_INTERNE_ABGRENZUNGSRAHMEN_STABILISIERUNG_VS_FUNKTIONSAUSBAU_MVP_MINISPEZ.md`
+- die zuvor dokumentierte Abgrenzungslogik zwischen Stabilisierung und echtem Funktionsausbau
 - `memory.md`
 - der aktuelle Repo-Iststand in den Test-/Build-/Smoke-Pfaden, dem Reaktionsrahmen bei Instabilitaet, der Ausbaupriorisierung nach Bereinigung, der Abgrenzung zwischen Stabilisierung und echtem Funktionsausbau sowie den vorhandenen Export-/Audit-/Fallback-Bezuegen
 
@@ -25,7 +25,7 @@ Wesentliche Ableitung:
 - Die MVP-Arbeitspakete ordnen die naechsten kleinen Schritte konservativ.
 - P27 ordnet den Umgang mit ersten Instabilitaetssignalen ein.
 - P29 ordnet die knappe Priorisierung weiterer kleiner Ausbauschritte nach Bereinigung ein.
-- P30 trennt Stabilisierung und echten Funktionsausbau fachlich sauber.
+- die zuvor dokumentierte Abgrenzungslogik zwischen Stabilisierung und echtem Funktionsausbau trennt Stabilisierung und echten Funktionsausbau fachlich sauber.
 - P31 begrenzt nun den kleinsten Entscheidungsrahmen dafuer, dass geplanter Ausbau zugunsten von Stabilisierung bewusst zurueckgestellt wird.
 - `memory.md` bleibt der Kurzanker fuer die konsolidierten Repo-Fakten und die laufende Projektfortschreibung.
 
@@ -39,7 +39,7 @@ Im Repo sind bereits folgende Bausteine sichtbar:
 - schmale UI-/Smoke-Grundlage fuer die Kernrouten
 - Reaktionsrahmen bei Instabilitaet ueber P27
 - Ausbaupriorisierung nach Bereinigung ueber P29
-- Abgrenzungsrahmen Stabilisierung vs. Funktionsausbau ueber P30
+- Abgrenzungsrahmen Stabilisierung vs. die zuvor dokumentierte Abgrenzungslogik
 - read-only Exportpfade fuer Angebot, Produktionsblatt und Einkaufsliste
 - Review-/Audit-Sicht fuer interne Betriebs- und Kontrollnachweise
 - manuelle Fallbacks und Datenkorrekturen als gesondert begrenzte Rahmen
@@ -49,7 +49,7 @@ Im Repo sind bereits folgende Bausteine sichtbar:
 
 Fuer die knappe Zurueckstellung von Funktionsausbau zugunsten von Stabilisierung ist im MVP verbindlich anzunehmen:
 - die technische Basis ist ueber Test, Build und Smoke belastbar genug, um Ausbau nicht blind vorzuziehen
-- die Einordnung aus P27 bis P30 steht nicht im Widerspruch zu einer weiteren kleinen Zurueckstellungsentscheidung
+- die Einordnung aus P27 bis zur zuvor dokumentierten Abgrenzungslogik steht nicht im Widerspruch zu einer weiteren kleinen Zurueckstellungsentscheidung
 - die Dokumentationslage ist so weit konsistent, dass Ausbaufragen hinter Stabilisierung, Nachziehen und Konsistenzpflege zuruecktreten koennen
 - der Stand kann intern weiterentwickelt werden, ohne dass dafuer ein formales Produktmanagement-, Portfolio- oder Governance-Modell erforderlich wird
 - PR, Doku und memory bleiben die kleinste tragende Dokumentationsspur fuer diese Zurueckstellungsentscheidung
