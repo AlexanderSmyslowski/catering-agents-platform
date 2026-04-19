@@ -156,7 +156,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isBlockingPlanningIssue(message: string): boolean {
-  return /Harte Intake-Restriktion|Herstellungsentscheidung fehlt|Gerichtsklassifikation fehlt|Zugekaufte Bestandteile.*fehlen|technischer Fehler|Timeout|fehlgeschlagen/i.test(
+  return /Harte Intake-Restriktion|Herstellungsentscheidung fehlt|Gerichtsklassifikation fehlt|Zugekaufte Bestandteile.*fehlen|Rezeptzuweisung .* ist ungültig\.|technischer Fehler|Timeout|fehlgeschlagen/i.test(
     message
   );
 }

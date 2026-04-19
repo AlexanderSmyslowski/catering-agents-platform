@@ -203,4 +203,34 @@ describe("production planning fallbacks", () => {
     expect(artifacts.purchaseList.items).toHaveLength(0);
     expect(artifacts.purchaseList.totals.itemCount).toBe(0);
   });
+
+  it("marks an invalid manual recipe assignment as a hard blocking issue", async () => {
+    const spec = baseSpec("Konferenz am 2026-06-01 fuer 40 Teilnehmer. Buffet mit Mystery Bowl.");
+    spec.menuPlan = [
+      {
+        ...spec.menuPlan[0],
+        label: "Mystery Bowl",
+        menuCategory: "classic",
+        recipeOverrideId: "missing-manual-recipe",
+        productionDecision: {
+          mode: "scratch"
+        }
+      }
+    ];
+
+    const repository = new InMemoryRecipeRepository([], { rootDir: createDataRoot() });
+    const discovery = new RecipeDiscoveryService(repository, new FakeWebProvider([baseCandidate()]));
+
+    const artifacts = await buildProductionArtifacts(spec, discovery);
+
+    expect(artifacts.productionPlan.isFallback).toBe(true);
+    expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
+    expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Rezeptzuweisung missing-manual-recipe für Mystery Bowl ist ungültig.");
+    expect(artifacts.productionPlan.warnings ?? []).not.toContain(
+      "Rezeptzuweisung missing-manual-recipe für Mystery Bowl ist ungültig."
+    );
+    expect(artifacts.productionPlan.productionBatches).toHaveLength(0);
+    expect(artifacts.purchaseList.items).toHaveLength(0);
+    expect(artifacts.purchaseList.totals.itemCount).toBe(0);
+  });
 });
