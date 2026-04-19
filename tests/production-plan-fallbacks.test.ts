@@ -192,6 +192,7 @@ describe("production planning fallbacks", () => {
     const artifacts = await buildProductionArtifacts(spec, discovery);
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
+    expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
     expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("gluten_free");
     expect(artifacts.productionPlan.fallbackReason).toContain("gluten_free");
     expect(artifacts.productionPlan.productionBatches).toHaveLength(0);

@@ -29,14 +29,26 @@ export function evaluateReadiness(spec) {
         missingFields
     };
 }
-export function mergeReadiness(current, extraIssues) {
+export function mergeReadiness(current, extraIssues, blockingIssues = []) {
+    const reasons = [...new Set([...current.reasons, ...extraIssues, ...blockingIssues])];
+    if (current.status === "insufficient") {
+        return {
+            status: "insufficient",
+            reasons
+        };
+    }
+    if (blockingIssues.length > 0) {
+        return {
+            status: "insufficient",
+            reasons
+        };
+    }
     if (extraIssues.length === 0) {
         return current;
     }
-    const status = current.status === "insufficient" ? "insufficient" : "partial";
     return {
-        status,
-        reasons: [...current.reasons, ...extraIssues]
+        status: "partial",
+        reasons
     };
 }
 export function withEvaluatedReadiness(spec) {

@@ -46,18 +46,32 @@ export function evaluateReadiness(spec: {
 
 export function mergeReadiness(
   current: Readiness,
-  extraIssues: string[]
+  extraIssues: string[],
+  blockingIssues: string[] = []
 ): Readiness {
+  const reasons = [...new Set([...current.reasons, ...extraIssues, ...blockingIssues])];
+
+  if (current.status === "insufficient") {
+    return {
+      status: "insufficient",
+      reasons
+    };
+  }
+
+  if (blockingIssues.length > 0) {
+    return {
+      status: "insufficient",
+      reasons
+    };
+  }
+
   if (extraIssues.length === 0) {
     return current;
   }
 
-  const status: ReadinessStatus =
-    current.status === "insufficient" ? "insufficient" : "partial";
-
   return {
-    status,
-    reasons: [...current.reasons, ...extraIssues]
+    status: "partial",
+    reasons
   };
 }
 
