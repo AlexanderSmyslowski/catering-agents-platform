@@ -9,13 +9,12 @@ Diese Mini-Spezifikation begrenzt den minimalen internen Reaktionsrahmen bei ers
 
 Sie erfindet kein Incident-Board, kein Support-/Eskalationssystem als Vollmodell, kein formales Betriebsunterbrechungs- oder Recovery-Modell und keine neue Produkt- oder Prozessfamilie. Ziel ist ausschliesslich, den kleinsten Rahmen festzuhalten, unter dem erste Instabilitaetssignale in der laufenden internen Nutzung knapp eingeordnet werden koennen.
 
-## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete, P23, P24, P25, P26 und Memory
+## 2. Bezug auf Pflichtenheft, MVP-Arbeitspakete, P23, P25, P26 und Memory
 
 Grundlagen dieses Dokuments sind:
 - `docs/product/PFLICHTENHEFT.md`
 - `docs/product/MVP_ARBEITSPAKETE.md`
 - `docs/product/P23_MINIMALER_INTERNER_BETA_ABSCHLUSS_UND_DOKUMENTATIONSSTAND_MVP_MINISPEZ.md`
-- `docs/product/P24_MINIMALER_UEBERGABESTAND_VON_BETA_ZU_LAUFENDER_INTERNER_NUTZUNG_MVP_MINISPEZ.md`
 - `docs/product/P25_MINIMALER_INTERNER_NUTZUNGSRAHMEN_NACH_BETA_UEBERGABE_MVP_MINISPEZ.md`
 - `docs/product/P26_MINIMALER_INTERNER_STABILISIERUNGSRAHMEN_IN_LAUFENDER_NUTZUNG_MVP_MINISPEZ.md`
 - `memory.md`
@@ -25,7 +24,6 @@ Wesentliche Ableitung:
 - Das Pflichtenheft beschreibt eine interne, nachvollziehbare Betriebsplattform mit operativen Artefakten.
 - Die MVP-Arbeitspakete ordnen die naechsten kleinen Schritte konservativ.
 - P23 ordnet die kleine Abschlusssicht und den dokumentarisch sauberen Beta-Abschluss ein.
-- P24 ordnet den Uebergabestand von dokumentarisch abgeschlossenem Beta-Stand zu laufender interner Nutzung ein.
 - P25 ordnet den dauerhaften Nutzungsrahmen nach Beta-Uebergabe ein.
 - P26 ordnet den kleinsten Stabilisierungsrahmen fuer die laufende interne Nutzung ein.
 - P27 begrenzt nun den kleinsten Reaktionsrahmen fuer erste Instabilitaetssignale in dieser laufenden Nutzung.
@@ -40,7 +38,6 @@ Im Repo sind bereits folgende Bausteine sichtbar:
 - reproduzierbarer `npm run build`-Pfad
 - schmale UI-/Smoke-Grundlage fuer die Kernrouten
 - Beta-Abschluss- und Dokumentationsstand ueber P23
-- Uebergabestand zu laufender interner Nutzung ueber P24
 - Nutzungsrahmen nach Beta-Uebergabe ueber P25
 - Stabilisierungsrahmen in laufender Nutzung ueber P26
 - read-only Exportpfade fuer Angebot, Produktionsblatt und Einkaufsliste
@@ -52,7 +49,7 @@ Im Repo sind bereits folgende Bausteine sichtbar:
 
 Fuer die knappe Reaktion auf erste Instabilitaetssignale in laufender interner Nutzung ist im MVP verbindlich anzunehmen:
 - die technische Basis ist ueber Test, Build und Smoke bereits belastbar genug, um Auffaelligkeiten nicht blind zu behandeln
-- die Einordnung aus P23 bis P26 steht nicht im Widerspruch zu einer knappen Reaktion auf erste Instabilitaetssignale
+- die Einordnung aus P23, P25 und P26 steht nicht im Widerspruch zu einer knappen Reaktion auf erste Instabilitaetssignale
 - die Restpunkt-Einordnung aus P22 bleibt implizit so weit geklaert, dass nur noch bewusst tolerierte Punkte offen bleiben
 - der Stand kann intern weiter genutzt werden, ohne dass dafuer ein formales Incident-, Support- oder Betriebsmodell erforderlich wird
 - PR, Doku und memory bleiben die kleinste tragende Dokumentationsspur fuer diese Reaktionsbewertung
@@ -114,7 +111,7 @@ Im bestehenden MVP-Rahmen gilt:
 ### 4.1 Wie erste Instabilitaetssignale in laufender Nutzung knapp eingeordnet werden sollen
 
 Ein Signal soll im MVP knapp eingeordnet werden koennen, wenn:
-1. der laufende Nutzungsstand nach P24 und P25 bereits als intern tragfaehig gilt
+1. der laufende Nutzungsstand nach P25 und P26 bereits als intern tragfaehig gilt
 2. der Stabilisierungsrahmen nach P26 nicht bereits einen klaren Dauerblocker beschreibt
 3. das Signal fachlich, technisch oder betrieblich minimal zuordenbar ist
 4. die Einordnung in vorsichtige Weiternutzung, Klaerung oder Aussetzen mit den vorhandenen Repo-Bausteinen nachvollziehbar bleibt
