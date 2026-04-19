@@ -156,7 +156,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isBlockingPlanningIssue(message: string): boolean {
-  return /Harte Intake-Restriktion|Herstellungsentscheidung fehlt|Gerichtsklassifikation fehlt|Zugekaufte Bestandteile.*fehlen|ungültig|technischer Fehler|Timeout|fehlgeschlagen/i.test(
+  return /Harte Intake-Restriktion|Herstellungsentscheidung fehlt|Gerichtsklassifikation fehlt|Zugekaufte Bestandteile.*fehlen|technischer Fehler|Timeout|fehlgeschlagen/i.test(
     message
   );
 }
@@ -354,7 +354,6 @@ export async function buildProductionArtifacts(
         ? await discoveryService.resolveRecipeOverride(component.recipeOverrideId, component)
         : await discoveryService.resolveRecipe(component, eventSpec);
       const resolution = normalizeRecipeResolution(rawResolution, component.label);
-      recipeSelections.push(resolution.selection);
       for (const issue of resolution.unresolvedItems) {
         noteIssue(issue, isBlockingPlanningIssue(issue));
       }
@@ -363,6 +362,14 @@ export async function buildProductionArtifacts(
         resolution.recipe,
         eventSpec.productionConstraints
       );
+      const selectedRecipe = constraintConflict
+        ? {
+            ...resolution.selection,
+            selectionReason: constraintConflict,
+            autoUsedInternetRecipe: false
+          }
+        : resolution.selection;
+      recipeSelections.push(selectedRecipe);
       if (constraintConflict) {
         noteIssue(constraintConflict, true);
         kitchenSheets.push(unresolvedKitchenSheet(component, servings, constraintConflict));
@@ -374,9 +381,8 @@ export async function buildProductionArtifacts(
       }
 
       if (!resolution.recipe || servings <= 0) {
-        const reason =
-          resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden.";
-        noteIssue(reason, true);
+        const reason = resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden.";
+        noteIssue(reason, servings <= 0);
         kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
         timeline.push({
           label: `${component.label} Rezeptklärung`,
@@ -411,12 +417,9 @@ export async function buildProductionArtifacts(
         at: batch.prepWindow
       });
     } catch (error) {
-      const reason =
-        error instanceof Error && error.message.startsWith("Ungültige Planungsantwort")
-          ? error.message
-          : `Technischer Fehler in der Produktionsplanung für ${component.label}: ${
-              error instanceof Error ? error.message : "Unbekannter Fehler"
-            }`;
+      const reason = error instanceof Error && error.message.startsWith("Ungültige Planungsantwort")
+        ? error.message
+        : `Technischer Fehler in der Produktionsplanung für ${component.label}: ${error instanceof Error ? error.message : "Unbekannter Fehler"}`;
       recipeSelections.push({
         componentId: component.componentId,
         selectionReason: reason,
@@ -431,7 +434,7 @@ export async function buildProductionArtifacts(
     }
   }
 
-  const readiness = mergeReadiness(eventSpec.readiness, unresolvedItems);
+  const readiness = mergeReadiness(eventSpec.readiness, unresolvedItems, blockingIssues);
   const uniqueWarnings = [...new Set(warnings)];
   const uniqueBlockingIssues = [...new Set(blockingIssues)];
   const productionPlan = validateProductionPlan({

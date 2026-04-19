@@ -405,6 +405,11 @@ export function normalizeEventRequestToSpec(
     dietaryTags: item.dietaryTags ?? []
   }));
 
+  const mergeUniqueStrings = (primary: string[] | undefined, secondary: string[]): string[] | undefined => {
+    const merged = [...new Set([...(primary ?? []), ...secondary])];
+    return merged.length > 0 ? merged : undefined;
+  };
+
   const spec: AcceptedEventSpec = {
     schemaVersion: SCHEMA_VERSION,
     specId: `spec-${request.requestId}`,
@@ -449,7 +454,7 @@ export function normalizeEventRequestToSpec(
     infrastructurePlan: uniqueByCode(
       inferInfrastructure(eventType, request.desiredInfrastructure)
     ),
-    productionConstraints: request.constraints ?? (signals.constraints.length > 0 ? signals.constraints : undefined),
+    productionConstraints: mergeUniqueStrings(request.constraints, signals.constraints),
     assumptions,
     uncertainties,
     evidence: request.rawInputs.map((raw, index) => ({
