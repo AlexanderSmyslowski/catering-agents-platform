@@ -1,3 +1,4 @@
+import { analyzeIntakeText } from "../intake-signals.js";
 import { eventTypeDefaults, eventTypeKeywords, infrastructureCatalog, serviceFormKeywords } from "../taxonomies/defaults.js";
 import { SCHEMA_VERSION } from "../types.js";
 import { evaluateReadiness } from "./readiness.js";
@@ -80,16 +81,7 @@ function parseAttendees(text) {
     return bestCandidate && bestCandidate.score >= 5 ? bestCandidate.count : undefined;
 }
 function parseDate(text) {
-    const isoMatch = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
-    if (isoMatch) {
-        return isoMatch[1];
-    }
-    const germanMatch = text.match(/\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b/);
-    if (!germanMatch) {
-        return undefined;
-    }
-    const [, day, month, year] = germanMatch;
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    return analyzeIntakeText(text).eventDate;
 }
 function sanitizeMenuLine(line) {
     return line
@@ -239,14 +231,24 @@ function uniqueByCode(items) {
     }
     return [...map.values()];
 }
+function uniqueUncertainties(base, additions) {
+    const result = [...base];
+    for (const item of additions) {
+        if (!result.some((entry) => entry.field === item.field && entry.message === item.message && entry.severity === item.severity)) {
+            result.push(item);
+        }
+    }
+    return result;
+}
 export function normalizeEventRequestToSpec(request, opts) {
     const rawText = request.rawInputs.map((item) => item.content).join("\n");
+    const signals = analyzeIntakeText(rawText);
     const explicitEventType = request.event?.type;
     const eventType = explicitEventType ?? detectEventType(rawText);
     const defaults = eventTypeDefaults[eventType] ?? eventTypeDefaults.meeting;
     const serviceForm = request.event?.serviceForm ?? detectServiceForm(rawText, eventType);
-    const attendees = request.attendees?.expected ?? parseAttendees(rawText);
-    const eventDate = request.event?.date ?? parseDate(rawText);
+    const attendees = request.attendees?.expected ?? signals.attendeeCount ?? parseAttendees(rawText);
+    const eventDate = request.event?.date ?? signals.eventDate ?? parseDate(rawText);
     const menuItems = request.source.channel === "manual_form" && (request.desiredCatering?.length ?? 0) > 0
         ? request.desiredCatering.map((item) => ({
             label: item.label,
@@ -255,7 +257,7 @@ export function normalizeEventRequestToSpec(request, opts) {
         }))
         : extractMenuItems(rawText, request.desiredCatering?.map((item) => item.label) ?? defaults.defaultMenuKeywords);
     const assumptions = [];
-    const uncertainties = request.uncertainties ? [...request.uncertainties] : [];
+    const uncertainties = uniqueUncertainties(request.uncertainties ?? [], signals.uncertainties);
     if (!request.event?.type) {
         assumptions.push({
             code: "event_type_defaulted",
@@ -278,12 +280,25 @@ export function normalizeEventRequestToSpec(request, opts) {
             suggestedQuestion: "Wie viele Teilnehmer werden verbindlich erwartet?"
         });
     }
+    if (!request.attendees?.expected && (signals.uncertainties.some((item) => item.field === "attendees.expected") || /(?:ca\.?|circa|etwa|ungef(?:ä|ae)hr|knapp|wahrscheinlich|eventuell|möglicherweise|moeglicherweise|vielleicht|vermutlich|unklar|offen|noch unklar)/i.test(rawText))) {
+        assumptions.push({
+            code: "attendees_expected_approximate",
+            message: "Participant count was only inferred approximately from the intake text.",
+            applied: true
+        });
+    }
     if (!eventDate) {
         uncertainties.push({
             field: "event.date",
-            message: "No event date or service window was found.",
+            message: "No exact event date could be extracted.",
             severity: "high",
             suggestedQuestion: "An welchem Datum findet das Event statt?"
+        });
+        uncertainties.push({
+            field: "event.date_or_schedule",
+            message: "No event date or schedule was found.",
+            severity: "high",
+            suggestedQuestion: "An welchem Datum oder in welchem Zeitfenster findet das Event statt?"
         });
     }
     const menuPlan = menuItems.map((item, index) => ({
@@ -338,7 +353,7 @@ export function normalizeEventRequestToSpec(request, opts) {
         },
         menuPlan,
         infrastructurePlan: uniqueByCode(inferInfrastructure(eventType, request.desiredInfrastructure)),
-        productionConstraints: request.constraints,
+        productionConstraints: request.constraints ?? (signals.constraints.length > 0 ? signals.constraints : undefined),
         assumptions,
         uncertainties,
         evidence: request.rawInputs.map((raw, index) => ({

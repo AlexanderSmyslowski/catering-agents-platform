@@ -1,5 +1,7 @@
+import { analyzeIntakeText } from "./intake-signals.js";
 import { SCHEMA_VERSION } from "./types.js";
 export function createEventRequestFromText(input) {
+    const signals = analyzeIntakeText(input.rawText);
     return {
         schemaVersion: SCHEMA_VERSION,
         requestId: input.requestId,
@@ -17,7 +19,10 @@ export function createEventRequestFromText(input) {
                         : "text",
                 content: input.rawText
             }
-        ]
+        ],
+        extractedFacts: signals.extractedFacts,
+        constraints: signals.constraints.length > 0 ? signals.constraints : undefined,
+        uncertainties: signals.uncertainties.length > 0 ? signals.uncertainties : undefined
     };
 }
 export function createEventRequestFromManualForm(input) {
