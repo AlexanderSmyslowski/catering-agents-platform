@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.80
+version: 5.81
 date: 2026-04-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -47,6 +47,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 |- P24 minimaler Uebergabestand von Beta zu laufender interner Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den kleinsten intern fortsetzbaren Uebergang von dokumentarisch abgeschlossenem Beta-Stand zu laufender interner Nutzung ohne ein formales Betriebs-, Support- oder Release-Modell einzuführen
 |- P25 minimaler interner Nutzungsrahmen nach Beta-Uebergabe im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufenden internen Nutzungsstand nach der Beta-Uebergabe ohne ein formales Betriebs-, Support- oder Governance-Modell einzuführen
 |- P26 minimaler interner Stabilisierungsrahmen in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufend ruhigen internen Nutzungsstand ohne ein formales Betriebs-, Monitoring- oder Support-Modell einzuführen
+|- P27 minimaler interner Reaktionsrahmen bei Instabilitaet in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die erste Reaktion auf Instabilitaetssignale ohne ein formales Incident-, Support- oder Betriebsreaktionsmodell einzuführen
 |- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen
 - Im Backoffice sind mehrere kleine Status-/Orientierungskarten in Start-, Angebots- und Produktionsansicht real umgesetzt; der UI-Orientierungsstrang ist bewusst klein und soll nicht weiter in Mikro-Karten ausfransen
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
