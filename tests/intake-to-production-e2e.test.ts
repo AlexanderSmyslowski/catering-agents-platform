@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   SCHEMA_VERSION,
-  createEventRequestFromText,
+  createEventRequestFromManualForm,
   normalizeEventRequestToSpec,
   type Recipe
 } from "@catering/shared-core";
@@ -77,57 +77,31 @@ function createRecipe(recipe: {
   };
 }
 
-function withPlanningOverrides(
-  spec: ReturnType<typeof normalizeEventRequestToSpec>,
-  overrides: Record<string, { recipeOverrideId: string; menuCategory: "classic" | "vegetarian" | "vegan" }>
-): ReturnType<typeof normalizeEventRequestToSpec> {
-  return {
-    ...spec,
-    menuPlan: spec.menuPlan.map((component) => {
-      const override = overrides[component.label];
-      return {
-        ...component,
-        menuCategory: override?.menuCategory ?? component.menuCategory ?? "classic",
-        dietaryTags: override?.menuCategory ? [override.menuCategory] : component.dietaryTags ?? [],
-        recipeOverrideId: override?.recipeOverrideId ?? component.recipeOverrideId,
-        productionDecision: {
-          mode: "scratch"
-        }
-      };
-    })
-  };
+function createDiscoveryService(repository: InMemoryRecipeRepository): RecipeDiscoveryService {
+  return new RecipeDiscoveryService(repository, new EmptyWebProvider());
 }
 
-function createDiscoveryService(rootDir: string): RecipeDiscoveryService {
-  return new RecipeDiscoveryService(
-    new InMemoryRecipeRepository([], { rootDir }),
-    new EmptyWebProvider()
-  );
-}
-
-describe("intake to production e2e", () => {
-  it("keeps a realistic, slightly uncertain but planable catering request consistent end to end", async () => {
-    const rawText = [
-      "Konferenz am 2026-06-14. ca. 80 Teilnehmer.",
-      "Bitte vegetarisch.",
-      "BUFFET",
-      "Tomatensuppe",
-      "DETAILS |"
-    ].join("\n");
-
-    const request = createEventRequestFromText({
-      requestId: "e2e-positive-1",
-      channel: "text",
-      rawText
+describe("manual form intake to production e2e", () => {
+  it("keeps a realistic manual form request consistent end to end", async () => {
+    const request = createEventRequestFromManualForm({
+      requestId: "manual-e2e-positive-1",
+      eventDate: "2026-07-12",
+      attendeeCount: 48,
+      serviceForm: "buffet",
+      menuItems: ["Vegetarische Tomatensuppe"],
+      notes: "Bitte vegetarisch"
     });
     const spec = normalizeEventRequestToSpec(request);
 
-    expect(request.constraints ?? []).toEqual(expect.arrayContaining(["vegetarian"]));
-    expect(request.uncertainties ?? []).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ field: "attendees.expected" })
-      ])
-    );
+    expect(request.source.channel).toBe("manual_form");
+    expect(request.rawInputs[0].kind).toBe("form");
+    expect(request.rawInputs[0].content).toContain("Notizen: Bitte vegetarisch");
+    expect(request.constraints ?? []).toEqual(expect.arrayContaining(["Bitte vegetarisch"]));
+    expect(spec.event.date).toBe("2026-07-12");
+    expect(spec.attendees.expected).toBe(48);
+    expect(spec.event.serviceForm).toBe("buffet");
+    expect(spec.menuPlan).toHaveLength(1);
+    expect(spec.menuPlan[0].label).toBe("Vegetarische Tomatensuppe");
     expect(spec.productionConstraints ?? []).toEqual(expect.arrayContaining(["vegetarian"]));
     expect(spec.readiness.status).toBe("complete");
 
@@ -136,20 +110,23 @@ describe("intake to production e2e", () => {
       const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
       await repository.save(
         createRecipe({
-          recipeId: "tomatensuppe-basic",
+          recipeId: "tomatensuppe-manual",
           name: "Tomatensuppe",
           ingredientName: "Tomaten",
           dietTags: ["vegetarian"]
         })
       );
 
-      const plannedSpec = withPlanningOverrides(spec, {
-        Tomatensuppe: {
-          recipeOverrideId: "tomatensuppe-basic",
-          menuCategory: "vegetarian"
-        }
-      });
-      const discovery = new RecipeDiscoveryService(repository, new EmptyWebProvider());
+      const plannedSpec = {
+        ...spec,
+        menuPlan: spec.menuPlan.map((item) => ({
+          ...item,
+          productionDecision: {
+            mode: "scratch" as const
+          }
+        }))
+      };
+      const discovery = createDiscoveryService(repository);
       const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
 
       expect(artifacts.productionPlan.readiness.status).toBe("complete");
@@ -168,23 +145,25 @@ describe("intake to production e2e", () => {
     }
   });
 
-  it("turns a hard dietary conflict into a blocking fallback without operational artifacts", async () => {
-    const rawText = [
-      "Konferenz am 2026-06-15 fuer 80 Teilnehmer.",
-      "Bitte glutenfrei.",
-      "BUFFET",
-      "BROT & BAGUETTE",
-      "DETAILS |"
-    ].join("\n");
-
-    const request = createEventRequestFromText({
-      requestId: "e2e-negative-1",
-      channel: "text",
-      rawText
+  it("turns a manual form conflict into a blocking fallback without operational artifacts", async () => {
+    const request = createEventRequestFromManualForm({
+      requestId: "manual-e2e-negative-1",
+      eventDate: "2026-07-13",
+      attendeeCount: 36,
+      serviceForm: "buffet",
+      menuItems: ["Klassisch Brot & Baguette"],
+      notes: "Bitte glutenfrei"
     });
     const spec = normalizeEventRequestToSpec(request);
 
-    expect(request.constraints ?? []).toEqual(expect.arrayContaining(["gluten_free"]));
+    expect(request.source.channel).toBe("manual_form");
+    expect(request.rawInputs[0].content).toContain("Notizen: Bitte glutenfrei");
+    expect(request.constraints ?? []).toEqual(expect.arrayContaining(["Bitte glutenfrei"]));
+    expect(spec.event.date).toBe("2026-07-13");
+    expect(spec.attendees.expected).toBe(36);
+    expect(spec.event.serviceForm).toBe("buffet");
+    expect(spec.menuPlan).toHaveLength(1);
+    expect(spec.menuPlan[0].label).toBe("Klassisch Brot & Baguette");
     expect(spec.productionConstraints ?? []).toEqual(expect.arrayContaining(["gluten_free"]));
     expect(spec.readiness.status).toBe("complete");
 
@@ -193,20 +172,23 @@ describe("intake to production e2e", () => {
       const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
       await repository.save(
         createRecipe({
-          recipeId: "bread-baguette-basic",
+          recipeId: "bread-baguette-manual",
           name: "Bread & Baguette",
           ingredientName: "Weizenmehl",
           dietTags: []
         })
       );
 
-      const plannedSpec = withPlanningOverrides(spec, {
-        "BROT & BAGUETTE": {
-          recipeOverrideId: "bread-baguette-basic",
-          menuCategory: "classic"
-        }
-      });
-      const discovery = new RecipeDiscoveryService(repository, new EmptyWebProvider());
+      const plannedSpec = {
+        ...spec,
+        menuPlan: spec.menuPlan.map((item) => ({
+          ...item,
+          productionDecision: {
+            mode: "scratch" as const
+          }
+        }))
+      };
+      const discovery = createDiscoveryService(repository);
       const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
 
       expect(artifacts.productionPlan.isFallback).toBe(true);
@@ -225,3 +207,4 @@ describe("intake to production e2e", () => {
     }
   });
 });
+
