@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   SCHEMA_VERSION,
   createEventRequestFromManualForm,
+  createEventRequestFromText,
   normalizeEventRequestToSpec,
   type Recipe
 } from "@catering/shared-core";
@@ -19,6 +20,17 @@ class EmptyWebProvider {
     return [];
   }
 }
+
+type ParitySummary = {
+  intakeReadiness: string;
+  planReadiness: string;
+  isFallback: boolean;
+  hasBlockingIssues: boolean;
+  productionBatches: number;
+  kitchenSheets: number;
+  purchaseItems: number;
+  menuLabels: string[];
+};
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-e2e-"));
@@ -79,6 +91,46 @@ function createRecipe(recipe: {
 
 function createDiscoveryService(repository: InMemoryRecipeRepository): RecipeDiscoveryService {
   return new RecipeDiscoveryService(repository, new EmptyWebProvider());
+}
+
+async function runParityFlow(
+  request:
+    | ReturnType<typeof createEventRequestFromText>
+    | ReturnType<typeof createEventRequestFromManualForm>,
+  recipe: Parameters<typeof createRecipe>[0]
+): Promise<ParitySummary> {
+  const spec = normalizeEventRequestToSpec(request);
+  const dataRoot = createDataRoot();
+
+  try {
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    await repository.save(createRecipe(recipe));
+
+    const discovery = createDiscoveryService(repository);
+    const plannedSpec = {
+      ...spec,
+      menuPlan: spec.menuPlan.map((item) => ({
+        ...item,
+        productionDecision: {
+          mode: "scratch" as const
+        }
+      }))
+    };
+    const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
+
+    return {
+      intakeReadiness: spec.readiness.status,
+      planReadiness: artifacts.productionPlan.readiness.status,
+      isFallback: artifacts.productionPlan.isFallback === true,
+      hasBlockingIssues: (artifacts.productionPlan.blockingIssues?.length ?? 0) > 0,
+      productionBatches: artifacts.productionPlan.productionBatches.length,
+      kitchenSheets: artifacts.productionPlan.kitchenSheets.length,
+      purchaseItems: artifacts.purchaseList.items.length,
+      menuLabels: spec.menuPlan.map((item) => item.label)
+    };
+  } finally {
+    rmSync(dataRoot, { recursive: true, force: true });
+  }
 }
 
 describe("manual form intake to production e2e", () => {
@@ -205,6 +257,95 @@ describe("manual form intake to production e2e", () => {
     } finally {
       rmSync(dataRoot, { recursive: true, force: true });
     }
+  });
+
+  describe("intake path parity e2e", () => {
+    it.each([
+      {
+        name: "planbarer Inhalt bleibt über Text und Manual Form operativ gleichgerichtet",
+        textRequest: {
+          requestId: "parity-positive-text-1",
+          rawText:
+            "Konferenz am 2026-07-12 fuer 48 Teilnehmer. Bitte vegetarisch. Buffet mit Vegetarische Tomatensuppe."
+        },
+        manualRequest: {
+          requestId: "parity-positive-form-1",
+          eventType: "Konferenz",
+          eventDate: "2026-07-12",
+          attendeeCount: 48,
+          serviceForm: "buffet",
+          menuItems: ["Vegetarische Tomatensuppe"],
+          notes: "Bitte vegetarisch"
+        },
+        recipe: {
+          recipeId: "parity-vegetarische-tomatensuppe",
+          name: "Vegetarische Tomatensuppe",
+          ingredientName: "Tomaten",
+          dietTags: ["vegetarian"]
+        },
+        expected: {
+          intakeReadiness: "complete",
+          planReadiness: "complete",
+          isFallback: false,
+          hasBlockingIssues: false,
+          productionBatches: 1,
+          kitchenSheets: 1,
+          menuLabels: ["Vegetarische Tomatensuppe"]
+        }
+      },
+      {
+        name: "problematischer Inhalt endet über Text und Manual Form konsistent blockiert",
+        textRequest: {
+          requestId: "parity-negative-text-1",
+          rawText:
+            "Konferenz am 2026-07-13 fuer 36 Teilnehmer. Bitte glutenfrei. Buffet mit Brot-Baguette."
+        },
+        manualRequest: {
+          requestId: "parity-negative-form-1",
+          eventType: "Konferenz",
+          eventDate: "2026-07-13",
+          attendeeCount: 36,
+          serviceForm: "buffet",
+          menuItems: ["Brot-Baguette"],
+          notes: "Bitte glutenfrei"
+        },
+        recipe: {
+          recipeId: "parity-brot-baguette",
+          name: "Brot-Baguette",
+          ingredientName: "Weizenmehl"
+        },
+        expected: {
+          intakeReadiness: "complete",
+          planReadiness: "insufficient",
+          isFallback: true,
+          hasBlockingIssues: true,
+          productionBatches: 0,
+          kitchenSheets: 0,
+          menuLabels: ["Brot-Baguette"]
+        }
+      }
+    ])("$name", async ({ textRequest, manualRequest, recipe, expected }) => {
+      const textSummary = await runParityFlow(
+        createEventRequestFromText({
+          requestId: textRequest.requestId,
+          channel: "text",
+          rawText: textRequest.rawText
+        }),
+        recipe
+      );
+      const manualSummary = await runParityFlow(createEventRequestFromManualForm(manualRequest), recipe);
+
+      expect(textSummary).toEqual(manualSummary);
+      expect(textSummary).toMatchObject(expected);
+
+      if (expected.isFallback) {
+        expect(textSummary.purchaseItems).toBe(0);
+      } else {
+        expect(textSummary.purchaseItems).toBeGreaterThan(0);
+      }
+
+      expect(textSummary.menuLabels).toEqual(expected.menuLabels);
+    });
   });
 });
 
