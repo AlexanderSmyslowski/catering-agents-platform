@@ -21,7 +21,7 @@ class EmptyWebProvider {
   }
 }
 
-type ParitySummary = {
+type Summary = {
   intakeReadiness: string;
   planReadiness: string;
   isFallback: boolean;
@@ -30,10 +30,25 @@ type ParitySummary = {
   kitchenSheets: number;
   purchaseItems: number;
   menuLabels: string[];
+  assumptionCodes: string[];
+  uncertaintyFields: string[];
 };
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-e2e-"));
+}
+
+function operationalSummary(summary: Summary) {
+  return {
+    intakeReadiness: summary.intakeReadiness,
+    planReadiness: summary.planReadiness,
+    isFallback: summary.isFallback,
+    hasBlockingIssues: summary.hasBlockingIssues,
+    productionBatches: summary.productionBatches,
+    kitchenSheets: summary.kitchenSheets,
+    purchaseItems: summary.purchaseItems,
+    menuLabels: summary.menuLabels
+  };
 }
 
 function createRecipe(recipe: {
@@ -98,7 +113,7 @@ async function runParityFlow(
     | ReturnType<typeof createEventRequestFromText>
     | ReturnType<typeof createEventRequestFromManualForm>,
   recipe: Parameters<typeof createRecipe>[0]
-): Promise<ParitySummary> {
+): Promise<Summary> {
   const spec = normalizeEventRequestToSpec(request);
   const dataRoot = createDataRoot();
 
@@ -126,7 +141,9 @@ async function runParityFlow(
       productionBatches: artifacts.productionPlan.productionBatches.length,
       kitchenSheets: artifacts.productionPlan.kitchenSheets.length,
       purchaseItems: artifacts.purchaseList.items.length,
-      menuLabels: spec.menuPlan.map((item) => item.label)
+      menuLabels: spec.menuPlan.map((item) => item.label),
+      assumptionCodes: spec.assumptions?.map((assumption) => assumption.code) ?? [],
+      uncertaintyFields: spec.uncertainties?.map((uncertainty) => uncertainty.field) ?? []
     };
   } finally {
     rmSync(dataRoot, { recursive: true, force: true });
@@ -335,7 +352,7 @@ describe("manual form intake to production e2e", () => {
       );
       const manualSummary = await runParityFlow(createEventRequestFromManualForm(manualRequest), recipe);
 
-      expect(textSummary).toEqual(manualSummary);
+      expect(operationalSummary(textSummary)).toEqual(operationalSummary(manualSummary));
       expect(textSummary).toMatchObject(expected);
 
       if (expected.isFallback) {
@@ -345,6 +362,54 @@ describe("manual form intake to production e2e", () => {
       }
 
       expect(textSummary.menuLabels).toEqual(expected.menuLabels);
+    });
+  });
+
+  describe("assumptions and uncertainties smoke e2e", () => {
+    it("keeps a realistic approximate intake operatively usable across text and manual form", async () => {
+      const textSummary = await runParityFlow(
+        createEventRequestFromText({
+          requestId: "smoke-uncertainty-text-1",
+          channel: "text",
+          rawText:
+            "Konferenz am 2026-08-20 gegen 10 Uhr, ca. 50 Personen, Buffet mit Vegetarische Tomatensuppe."
+        }),
+        {
+          recipeId: "smoke-vegetarische-tomatensuppe",
+          name: "Vegetarische Tomatensuppe",
+          ingredientName: "Tomaten",
+          dietTags: ["vegetarian"]
+        }
+      );
+
+      const manualSummary = await runParityFlow(
+        createEventRequestFromManualForm({
+          requestId: "smoke-uncertainty-form-1",
+          eventDate: "2026-08-20",
+          menuItems: ["Vegetarische Tomatensuppe"],
+          notes: "ca. 50 Personen, gegen 10 Uhr"
+        }),
+        {
+          recipeId: "smoke-vegetarische-tomatensuppe",
+          name: "Vegetarische Tomatensuppe",
+          ingredientName: "Tomaten",
+          dietTags: ["vegetarian"]
+        }
+      );
+
+      expect(operationalSummary(textSummary)).toEqual(operationalSummary(manualSummary));
+      expect(textSummary.intakeReadiness).toBe("complete");
+      expect(textSummary.planReadiness).toBe("complete");
+      expect(textSummary.isFallback).toBe(false);
+      expect(textSummary.hasBlockingIssues).toBe(false);
+      expect(textSummary.productionBatches).toBe(1);
+      expect(textSummary.kitchenSheets).toBe(1);
+      expect(textSummary.purchaseItems).toBeGreaterThan(0);
+      expect(textSummary.menuLabels).toEqual(["Vegetarische Tomatensuppe"]);
+      expect(textSummary.assumptionCodes).toContain("attendees_expected_approximate");
+      expect(textSummary.uncertaintyFields).toContain("event.schedule");
+      expect(textSummary.uncertaintyFields).toContain("attendees.expected");
+      expect(textSummary.uncertaintyFields).not.toContain("event.date_or_schedule");
     });
   });
 });
