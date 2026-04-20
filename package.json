@@ -24,6 +24,7 @@
     "dev:offer": "tsx offer-service/src/server.ts",
     "dev:production": "tsx production-service/src/server.ts",
     "dev:exports": "tsx print-export/src/server.ts",
+    "start:cli": "tsx src/cli.ts",
     "deploy:hetzner": "bash ./platform-infra/scripts/deploy-hetzner.sh",
     "smoke:deploy": "bash ./platform-infra/scripts/smoke-check.sh"
   },

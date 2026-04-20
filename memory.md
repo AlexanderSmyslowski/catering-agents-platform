@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.85
-date: 2026-04-19
+version: 5.86
+date: 2026-04-20
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -23,6 +23,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
   - `backoffice-ui`
 
 ## Projektkontext der aktuellen Arbeit
+- Der neue MVP-Interface-Hook `npm run start:cli` startet `src/cli.ts` und gibt Text- oder Manual-Form-Input als menschenlesbaren Bericht oder JSON aus, ohne die Kernlogik zu verändern
 - P1 Rollen-/Rechte-Arbeit ist in einer ersten MVP-Stufe real verankert und gezielt verifiziert: zentrale Konvention im `shared-core` plus Guards fuer die mutierenden Intake-, Offer- und Production-Kernpfade, den Demo-Seed-/Audit-Korridor und die Recipe-Review-/Finalize-Pfade; kleiner Access-Control-Korridor ist gruen
 - P3-Betriebscheck ist bewusst konsolidiert und soll nicht weiter in Mikro-Härtungen ausfransen; naechster sinnvoller Block liegt ausserhalb von P3, bevorzugt im Shared-Core-/Access-Control-/Governance-Anker
 - P3 Stufe 1 und 2 sind begonnen und mit reproduzierbarem lokalem Betriebscheck gehärtet; der Check bestaetigt Exportpfad und einen read-only Audit-Beleg fuer den Demo-Startweg in gehärteter Form
@@ -485,3 +486,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.85 - 2026-04-19
 - P34 Minimaler interner Entscheidungsrahmen fuer ausreichend hergestellte dokumentarische Konsistenz zum wieder kleinen Ausbau im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: kleiner Ausbau wird erst wieder vertretbar, wenn Referenzen, Repo-Bezüge und memory-Fortschreibung wieder konsistent genug sind, ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
+
+### 5.86 - 2026-04-20
+- Neuer minimaler Interface-Hook fuer den MVP: `npm run start:cli` startet `src/cli.ts` und fuehrt Text- oder Manual-Form-Input durch den bestehenden E2E-Flow bis zu den resultierenden Artefakten.
+- Die Ausgabe bleibt bewusst leichtgewichtig: menschenlesbarer Terminalbericht oder JSON, ohne neue Persistenz oder neue Kernlogik.
