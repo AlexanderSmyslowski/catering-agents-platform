@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import {
   createEventRequestFromManualForm,
   createEventRequestFromText,
@@ -48,8 +49,205 @@ type CliRunResult = {
   purchaseList: Awaited<ReturnType<typeof buildProductionArtifacts>>["purchaseList"];
 };
 
+type CliOutcome =
+  | {
+      status: "completed";
+      result: CliRunResult;
+    }
+  | {
+      status: "aborted";
+      reason: string;
+    }
+  | {
+      status: "failed";
+      reason: string;
+    };
+
+type CliAuditEntry = {
+  timestamp: string;
+  runId: string;
+  durationMs: number;
+  mode: CliMode;
+  input: {
+    rawArgv: string[];
+    parameters: ParsedArgs;
+  };
+  normalization?: {
+    readiness: {
+      status: string;
+      reasons: string[];
+    };
+    assumptions: Array<{
+      code: string;
+      message: string;
+    }>;
+    uncertainties: Array<{
+      field: string;
+      message: string;
+    }>;
+    event: {
+      date?: string;
+      serviceForm?: string;
+      type?: string;
+    };
+    attendees?: number;
+    menuPlan: Array<{
+      label: string;
+      menuCategory?: string;
+      productionDecision?: string;
+      recipeOverrideId?: string;
+    }>;
+  };
+  finalResult: {
+    status: CliOutcome["status"];
+    reason?: string;
+    productionPlan?: {
+      readiness: {
+        status: string;
+        reasons: string[];
+      };
+      isFallback: boolean;
+      fallbackReason?: string;
+      blockingIssues: string[];
+      warnings: string[];
+      productionBatchCount: number;
+      kitchenSheetCount: number;
+    };
+    purchaseList?: {
+      itemCount: number;
+      groupCount: number;
+      sampleItems: Array<{
+        displayName: string;
+        quantity: string;
+        group: string;
+      }>;
+    };
+  };
+};
+
 function createTempRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-cli-"));
+}
+
+function getAuditRootDir(): string {
+  return path.resolve(process.cwd(), process.env.CLI_AUDIT_LOG_DIR?.trim() || "logs");
+}
+
+function formatUtcStamp(date: Date): { date: string; time: string; millis: string } {
+  const pad = (value: number, size: number) => value.toString().padStart(size, "0");
+
+  return {
+    date: `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`,
+    time: `${pad(date.getUTCHours(), 2)}${pad(date.getUTCMinutes(), 2)}${pad(date.getUTCSeconds(), 2)}`,
+    millis: pad(date.getUTCMilliseconds(), 3)
+  };
+}
+
+function createRunId(date: Date): string {
+  const stamp = formatUtcStamp(date);
+  return `run-${stamp.date}-${stamp.time}-${stamp.millis}-${randomUUID().slice(0, 8)}`;
+}
+
+function toAssumptionsSummary(spec: ReturnType<typeof normalizeEventRequestToSpec>) {
+  return spec.assumptions?.map((item) => ({ code: item.code, message: item.message })) ?? [];
+}
+
+function toUncertaintiesSummary(spec: ReturnType<typeof normalizeEventRequestToSpec>) {
+  return spec.uncertainties?.map((item) => ({ field: item.field, message: item.message })) ?? [];
+}
+
+function toNormalizationSummary(spec: ReturnType<typeof normalizeEventRequestToSpec>) {
+  return {
+    readiness: {
+      status: spec.readiness.status,
+      reasons: spec.readiness.reasons ?? []
+    },
+    assumptions: toAssumptionsSummary(spec),
+    uncertainties: toUncertaintiesSummary(spec),
+    event: {
+      date: spec.event.date,
+      serviceForm: spec.event.serviceForm,
+      type: spec.event.type
+    },
+    attendees: spec.attendees.expected,
+    menuPlan: spec.menuPlan.map((item) => ({
+      label: item.label,
+      menuCategory: item.menuCategory,
+      productionDecision: item.productionDecision?.mode,
+      recipeOverrideId: item.recipeOverrideId
+    }))
+  };
+}
+
+function toProductionPlanSummary(productionPlan: CliRunResult["productionPlan"]) {
+  return {
+    readiness: {
+      status: productionPlan.readiness.status,
+      reasons: productionPlan.readiness.reasons ?? []
+    },
+    isFallback: productionPlan.isFallback === true,
+    fallbackReason: productionPlan.fallbackReason,
+    blockingIssues: productionPlan.blockingIssues ?? [],
+    warnings: productionPlan.warnings ?? [],
+    productionBatchCount: productionPlan.productionBatches.length,
+    kitchenSheetCount: productionPlan.kitchenSheets.length
+  };
+}
+
+function toPurchaseListSummary(purchaseList: CliRunResult["purchaseList"]) {
+  return {
+    itemCount: purchaseList.items.length,
+    groupCount: purchaseList.totals.groups.length,
+    sampleItems: purchaseList.items.slice(0, 5).map((item) => ({
+      displayName: item.displayName,
+      quantity: `${item.purchaseQty} ${item.purchaseUnit}`,
+      group: item.group
+    }))
+  };
+}
+
+function buildAuditEntry(
+  parsed: ParsedArgs,
+  rawArgv: string[],
+  outcome: CliOutcome,
+  startedAt: Date,
+  finishedAt: Date
+): CliAuditEntry {
+  const entry: CliAuditEntry = {
+    timestamp: finishedAt.toISOString(),
+    runId: createRunId(finishedAt),
+    durationMs: finishedAt.getTime() - startedAt.getTime(),
+    mode: parsed.mode,
+    input: {
+      rawArgv: [...rawArgv],
+      parameters: {
+        ...parsed,
+        menuItems: parsed.menuItems ? [...parsed.menuItems] : undefined
+      }
+    },
+    finalResult: {
+      status: outcome.status
+    }
+  };
+
+  if (outcome.status === "completed") {
+    entry.normalization = toNormalizationSummary(outcome.result.spec);
+    entry.finalResult.productionPlan = toProductionPlanSummary(outcome.result.productionPlan);
+    entry.finalResult.purchaseList = toPurchaseListSummary(outcome.result.purchaseList);
+  } else {
+    entry.finalResult.reason = outcome.reason;
+  }
+
+  return entry;
+}
+
+function writeAuditEntry(entry: CliAuditEntry): string {
+  const auditRootDir = getAuditRootDir();
+  mkdirSync(auditRootDir, { recursive: true });
+  const fileName = `${entry.runId}.json`;
+  const filePath = path.join(auditRootDir, fileName);
+  writeFileSync(filePath, `${JSON.stringify(entry, null, 2)}\n`, "utf8");
+  return filePath;
 }
 
 function parseNumber(value?: string): number | undefined {
@@ -242,6 +440,29 @@ async function runFlow(parsed: ParsedArgs): Promise<CliRunResult> {
   }
 }
 
+async function executeCliRun(parsed: ParsedArgs): Promise<CliOutcome> {
+  if (parsed.mode === "text" && !parsed.text?.trim()) {
+    return {
+      status: "aborted",
+      reason: "Bitte entweder --text angeben oder im interaktiven Modus eine Freitext-Anfrage eingeben."
+    };
+  }
+
+  try {
+    const result = await runFlow(parsed);
+    return {
+      status: "completed",
+      result
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      status: "failed",
+      reason: message
+    };
+  }
+}
+
 function formatList(values: string[], emptyLabel = "- keine"): string {
   return values.length > 0 ? values.map((value) => `- ${value}`).join("\n") : emptyLabel;
 }
@@ -298,38 +519,40 @@ function formatHumanReadable(result: CliRunResult): string {
 
 async function main(): Promise<void> {
   const parsed = await promptForArgs(parseArgs(process.argv));
-
-  if (parsed.mode === "text" && !parsed.text?.trim()) {
-    console.error("Bitte entweder --text angeben oder im interaktiven Modus eine Freitext-Anfrage eingeben.");
-    process.exitCode = 1;
-    return;
-  }
+  const startedAt = new Date();
+  const outcome = await executeCliRun(parsed);
+  const finishedAt = new Date();
 
   try {
-    const result = await runFlow(parsed);
+    const auditEntry = buildAuditEntry(parsed, process.argv.slice(2), outcome, startedAt, finishedAt);
+    writeAuditEntry(auditEntry);
+  } catch {
+    // Audit logging is best-effort and must stay silent.
+  }
 
+  if (outcome.status === "completed") {
     if (parsed.json) {
       console.log(
         JSON.stringify(
           {
-            mode: result.mode,
-            request: result.request,
-            spec: result.spec,
-            productionPlan: result.productionPlan,
-            purchaseList: result.purchaseList
+            mode: outcome.result.mode,
+            request: outcome.result.request,
+            spec: outcome.result.spec,
+            productionPlan: outcome.result.productionPlan,
+            purchaseList: outcome.result.purchaseList
           },
           null,
           2
         )
       );
     } else {
-      console.log(formatHumanReadable(result));
+      console.log(formatHumanReadable(outcome.result));
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`MVP-CLI konnte die Anfrage nicht ausführen: ${message}`);
-    process.exitCode = 1;
+    return;
   }
+
+  console.error(`MVP-CLI konnte die Anfrage nicht ausführen: ${outcome.reason}`);
+  process.exitCode = 1;
 }
 
 void main();

@@ -24,6 +24,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 
 ## Projektkontext der aktuellen Arbeit
 - Der neue MVP-Interface-Hook `npm run start:cli` startet `src/cli.ts` und gibt Text- oder Manual-Form-Input als menschenlesbaren Bericht oder JSON aus, ohne die Kernlogik zu verändern
+- Der CLI-Audit-Korridor schreibt lokale JSON-Logs standardmaessig nach `logs/`; der Ordner ist in `.gitignore` ausgeschlossen, damit keine lokalen Nutzungsdaten ins Repo gelangen
 - P1 Rollen-/Rechte-Arbeit ist in einer ersten MVP-Stufe real verankert und gezielt verifiziert: zentrale Konvention im `shared-core` plus Guards fuer die mutierenden Intake-, Offer- und Production-Kernpfade, den Demo-Seed-/Audit-Korridor und die Recipe-Review-/Finalize-Pfade; kleiner Access-Control-Korridor ist gruen
 - P3-Betriebscheck ist bewusst konsolidiert und soll nicht weiter in Mikro-Härtungen ausfransen; naechster sinnvoller Block liegt ausserhalb von P3, bevorzugt im Shared-Core-/Access-Control-/Governance-Anker
 - P3 Stufe 1 und 2 sind begonnen und mit reproduzierbarem lokalem Betriebscheck gehärtet; der Check bestaetigt Exportpfad und einen read-only Audit-Beleg fuer den Demo-Startweg in gehärteter Form
