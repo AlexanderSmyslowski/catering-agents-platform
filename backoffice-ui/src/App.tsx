@@ -2104,11 +2104,12 @@ export function App() {
                 <div className="question-window">
                   <p className="question-window__spec">{getSpecLabel(focusedProductionSpec)}</p>
                   <p className="helper-text">
-                    Status:{" "}
+                    Spezifikation:{" "}
                     {translateReadiness(
                       String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
                     )}
                   </p>
+                  <p className="helper-text">Operative Bewertung im Ergebnisbereich unten.</p>
                   <ul className="question-list">
                     {productionQuestions.map((question) => (
                       <li key={question}>{question}</li>

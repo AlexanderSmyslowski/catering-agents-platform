@@ -49,6 +49,7 @@
     "@types/react": "^19.1.11",
     "@types/react-dom": "^19.1.7",
     "pg-mem": "^3.0.14",
+    "playwright-core": "^1.55.0",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
