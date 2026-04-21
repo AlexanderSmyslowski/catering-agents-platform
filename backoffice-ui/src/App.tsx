@@ -2130,7 +2130,7 @@ export function App() {
                       <p className="helper-text">
                         {`Eventtyp: ${String(
                           focusedProductionSpecEvent?.type ?? focusedProductionSpecServicePlan?.eventType ?? "-"
-                        )} · Datum: ${String(focusedProductionSpecEvent?.date ?? "-")}`}
+                        )} · Terminfenster: ${String(focusedProductionSpecEvent?.date ?? "noch zu bestätigen")}`}
                       </p>
                       <p className="helper-text">
                         {`Teilnehmerzahl: ${String(focusedProductionSpecAttendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
