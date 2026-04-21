@@ -126,6 +126,37 @@ function translateReadiness(value?: string): string {
   return value ? labels[value] ?? value : "-";
 }
 
+function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
+  const event = asRecord(spec?.event);
+  const date = readStringOrNumber(event, ["date"]);
+  const schedule = Array.isArray(event?.schedule)
+    ? event.schedule
+        .map((item) => {
+          const slot = asRecord(item);
+          const label = readStringOrNumber(slot, ["label"]);
+          const start = readStringOrNumber(slot, ["start"]);
+          const end = readStringOrNumber(slot, ["end"]);
+          if (!start && !end) {
+            return "";
+          }
+          const timing = start && end ? `${start}–${end}` : start ?? end;
+          return [label, timing].filter(Boolean).join(" ").trim();
+        })
+        .filter(Boolean)
+    : [];
+
+  if (date && schedule.length > 0) {
+    return `Datum: ${date} · Terminfenster: ${schedule.join(", ")}`;
+  }
+  if (date) {
+    return `Datum: ${date}`;
+  }
+  if (schedule.length > 0) {
+    return `Terminfenster: ${schedule.join(", ")}`;
+  }
+  return "Terminfenster: noch zu bestätigen";
+}
+
 function translateHealthStatus(value?: string): string {
   const labels: Record<string, string> = {
     ok: "bereit",
@@ -2130,7 +2161,7 @@ export function App() {
                       <p className="helper-text">
                         {`Eventtyp: ${String(
                           focusedProductionSpecEvent?.type ?? focusedProductionSpecServicePlan?.eventType ?? "-"
-                        )} · Terminfenster: ${String(focusedProductionSpecEvent?.date ?? "noch zu bestätigen")}`}
+                        )} · ${formatProductionTimingWindow(focusedProductionSpecRecord)}`}
                       </p>
                       <p className="helper-text">
                         {`Teilnehmerzahl: ${String(focusedProductionSpecAttendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(

@@ -4,7 +4,16 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
 
-function createDashboardResponse(blocked = false) {
+function createDashboardResponse(
+  blocked = false,
+  schedule: Array<{ label: string; start?: string; end?: string }> = [
+    {
+      label: "Mittagsservice",
+      start: "12:30",
+      end: "14:00"
+    }
+  ]
+) {
   const requestId = blocked ? "presentation-intake-blocked" : "presentation-intake-success";
   const specId = blocked ? "presentation-spec-blocked" : "presentation-spec-success";
   const planId = blocked ? "presentation-plan-blocked" : "presentation-plan-success";
@@ -19,7 +28,8 @@ function createDashboardResponse(blocked = false) {
       }
     ],
     event: {
-      type: "lunch"
+      type: "lunch",
+      schedule,
     },
     attendees: {
       expected: 45
@@ -184,7 +194,16 @@ function createDashboardResponse(blocked = false) {
   };
 }
 
-function installBackofficeMocks(blocked = false) {
+function installBackofficeMocks(
+  blocked = false,
+  schedule: Array<{ label: string; start?: string; end?: string }> = [
+    {
+      label: "Mittagsservice",
+      start: "12:30",
+      end: "14:00"
+    }
+  ]
+) {
   const storage = new Map<string, string>();
   const localStorageMock = {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -205,7 +224,7 @@ function installBackofficeMocks(blocked = false) {
   });
   vi.stubGlobal("localStorage", localStorageMock);
 
-  const { dashboard, requestDetail } = createDashboardResponse(blocked);
+  const { dashboard, requestDetail } = createDashboardResponse(blocked, schedule);
 
   vi.stubGlobal(
     "fetch",
@@ -331,13 +350,27 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Tomaten");
     expect(content).toContain("Veranstaltungstyp als Lunch abgeleitet.");
     expect(content).toContain("Serviceform als Buffet abgeleitet.");
-    expect(content).toContain("Welches Veranstaltungsdatum oder Servicefenster gilt verbindlich für die Produktion?");
-    expect(content).toContain("Terminfenster: noch zu bestätigen");
+    expect(content).toContain("Terminfenster: Mittagsservice 12:30–14:00");
+    expect(content).not.toContain("noch zu bestätigen");
     expect(content).toContain("requestId: presentation-intake-success");
     expect(content).toContain("channel: manual_form");
     expect(content).toContain("Einkaufsliste herunterladen");
     expect(content).not.toContain("Status: unzureichend");
     expect(content).not.toContain("Noch keine Produktionspläne für den aktuellen Vorgang vorhanden.");
+  });
+
+  it("does not treat a label-only schedule as a confirmed timing window", async () => {
+    installBackofficeMocks(false, [
+      {
+        label: "Mittagsservice"
+      }
+    ]);
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Terminfenster: noch zu bestätigen");
+    expect(content).not.toContain("Terminfenster: Mittagsservice");
+    expect(content).not.toContain("Datum:");
   });
 
   it("keeps a blocked production result visibly blocked instead of looking operationally complete", async () => {
