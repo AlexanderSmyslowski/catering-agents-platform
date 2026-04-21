@@ -136,6 +136,9 @@ function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
           const label = readStringOrNumber(slot, ["label"]);
           const start = readStringOrNumber(slot, ["start"]);
           const end = readStringOrNumber(slot, ["end"]);
+          if (!start && !end) {
+            return "";
+          }
           const timing = start && end ? `${start}–${end}` : start ?? end;
           return [label, timing].filter(Boolean).join(" ").trim();
         })
