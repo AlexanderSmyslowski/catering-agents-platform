@@ -30,6 +30,9 @@ type Summary = {
   kitchenSheets: number;
   purchaseItems: number;
   menuLabels: string[];
+  productionConstraints: string[];
+  eventType: string;
+  serviceForm: string;
   assumptionCodes: string[];
   uncertaintyFields: string[];
 };
@@ -47,7 +50,8 @@ function operationalSummary(summary: Summary) {
     productionBatches: summary.productionBatches,
     kitchenSheets: summary.kitchenSheets,
     purchaseItems: summary.purchaseItems,
-    menuLabels: summary.menuLabels
+    menuLabels: summary.menuLabels,
+    serviceForm: summary.serviceForm
   };
 }
 
@@ -142,6 +146,9 @@ async function runParityFlow(
       kitchenSheets: artifacts.productionPlan.kitchenSheets.length,
       purchaseItems: artifacts.purchaseList.items.length,
       menuLabels: spec.menuPlan.map((item) => item.label),
+      productionConstraints: spec.productionConstraints ?? [],
+      eventType: spec.event.type ?? "",
+      serviceForm: spec.event.serviceForm ?? "",
       assumptionCodes: spec.assumptions?.map((assumption) => assumption.code) ?? [],
       uncertaintyFields: spec.uncertainties?.map((uncertainty) => uncertainty.field) ?? []
     };
@@ -365,35 +372,38 @@ describe("manual form intake to production e2e", () => {
     });
   });
 
-  describe("assumptions and uncertainties smoke e2e", () => {
-    it("keeps a realistic approximate intake operatively usable across text and manual form", async () => {
+  describe("acceptance smoke e2e", () => {
+    it("keeps a typical internal lunch meeting operatively usable across text and manual form", async () => {
       const textSummary = await runParityFlow(
         createEventRequestFromText({
-          requestId: "smoke-uncertainty-text-1",
+          requestId: "acceptance-smoke-text-1",
           channel: "text",
           rawText:
-            "Konferenz am 2026-08-20 gegen 10 Uhr, ca. 50 Personen, Buffet mit Vegetarische Tomatensuppe."
+            "Internes Mittagessen am 2026-07-18, ca. 45 Personen, gegen 12:30 Uhr, bitte vegetarisch und glutenfrei, mit Vegetarische Tomatensuppe."
         }),
         {
-          recipeId: "smoke-vegetarische-tomatensuppe",
+          recipeId: "acceptance-smoke-tomatensuppe",
           name: "Vegetarische Tomatensuppe",
           ingredientName: "Tomaten",
-          dietTags: ["vegetarian"]
+          dietTags: ["vegetarian", "gluten_free"]
         }
       );
 
       const manualSummary = await runParityFlow(
         createEventRequestFromManualForm({
-          requestId: "smoke-uncertainty-form-1",
-          eventDate: "2026-08-20",
+          requestId: "acceptance-smoke-form-1",
+          eventType: "lunch",
+          eventDate: "2026-07-18",
+          attendeeCount: 45,
+          serviceForm: "buffet",
           menuItems: ["Vegetarische Tomatensuppe"],
-          notes: "ca. 50 Personen, gegen 10 Uhr"
+          notes: "gegen 12:30 Uhr, bitte vegetarisch und glutenfrei"
         }),
         {
-          recipeId: "smoke-vegetarische-tomatensuppe",
+          recipeId: "acceptance-smoke-tomatensuppe",
           name: "Vegetarische Tomatensuppe",
           ingredientName: "Tomaten",
-          dietTags: ["vegetarian"]
+          dietTags: ["vegetarian", "gluten_free"]
         }
       );
 
@@ -406,9 +416,17 @@ describe("manual form intake to production e2e", () => {
       expect(textSummary.kitchenSheets).toBe(1);
       expect(textSummary.purchaseItems).toBeGreaterThan(0);
       expect(textSummary.menuLabels).toEqual(["Vegetarische Tomatensuppe"]);
-      expect(textSummary.assumptionCodes).toContain("attendees_expected_approximate");
-      expect(textSummary.uncertaintyFields).toContain("event.schedule");
-      expect(textSummary.uncertaintyFields).toContain("attendees.expected");
+      expect(textSummary.productionConstraints).toEqual(
+        expect.arrayContaining(["vegetarian", "gluten_free"])
+      );
+      expect(textSummary.serviceForm).toBe("buffet");
+      expect(textSummary.eventType).toBe("lunch");
+      expect(textSummary.assumptionCodes).toEqual(
+        expect.arrayContaining(["attendees_expected_approximate"])
+      );
+      expect(textSummary.uncertaintyFields).toEqual(
+        expect.arrayContaining(["event.schedule", "attendees.expected"])
+      );
       expect(textSummary.uncertaintyFields).not.toContain("event.date_or_schedule");
     });
   });
