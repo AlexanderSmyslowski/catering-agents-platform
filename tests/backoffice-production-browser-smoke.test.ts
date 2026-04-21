@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { expect, test } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 
@@ -13,7 +14,16 @@ const BROWSER_CANDIDATES = [
   "/usr/bin/chromium-browser"
 ].filter((candidate): candidate is string => Boolean(candidate));
 const CHROME_PATH = BROWSER_CANDIDATES.find((candidate) => existsSync(candidate));
-const browserSmoke = CHROME_PATH ? test : test.skip;
+
+function isBaseUrlReachable(url: string): boolean {
+  const result = spawnSync("curl", ["-fsS", "--max-time", "1", url], {
+    stdio: "ignore"
+  });
+  return result.status === 0;
+}
+
+const STACK_READY = isBaseUrlReachable(BASE_URL);
+const browserSmoke = CHROME_PATH && STACK_READY ? test : test.skip;
 
 async function launchChrome(): Promise<Browser> {
   if (!CHROME_PATH) {
