@@ -96,3 +96,39 @@ test("creates a positive production plan in a real browser and opens its export"
     await browser.close();
   }
 });
+
+test("shows the operative production status on a blocked production flow", async () => {
+  const browser = await launchChrome();
+
+  try {
+    const page = await browser.newPage();
+    await page.goto(`${BASE_URL}/produktion`, { waitUntil: "domcontentloaded" });
+    await waitForText(page, "Produktionsdienst");
+
+    await page.getByPlaceholder("Veranstaltungstyp, z. B. Konferenz").fill("conference");
+    await page.getByPlaceholder("Datum, z. B. 2026-10-10").fill("2026-07-13");
+    await page.getByPlaceholder("Teilnehmerzahl").fill("36");
+    await page.getByPlaceholder("Serviceform, z. B. Buffet").fill("buffet");
+    await page.getByPlaceholder("Menüpunkte, durch Komma getrennt").fill("Brot, Baguette");
+    await page.getByPlaceholder("Interne Notizen oder Einschränkungen").fill("Bitte glutenfrei");
+    await page.getByRole("button", { name: "Spezifikation anlegen" }).click();
+
+    await waitForText(page, "Konferenz · 36 Teilnehmer · 2026-07-13");
+    await page.getByRole("button", { name: "Speichern und Berechnung starten" }).click();
+
+    await waitForText(page, "Produktionsplan wurde für Konferenz · 36 Teilnehmer · 2026-07-13 erzeugt.");
+    const questionWindow = (await page.locator('.question-window').textContent()) ?? '';
+    const body = await textOf(page);
+
+    expect(questionWindow).toContain("Spezifikation: vollständig");
+    expect(questionWindow).toContain("Operative Bewertung im Ergebnisbereich unten.");
+    expect(questionWindow).not.toContain("Produktionsplan: vollständig");
+    expect(body).toContain("Offene Punkte: 2");
+    expect(body).toContain("Klassifikation für Brot fehlt.");
+    expect(body).toContain("Klassifikation für Baguette fehlt.");
+
+    await page.close();
+  } finally {
+    await browser.close();
+  }
+});
