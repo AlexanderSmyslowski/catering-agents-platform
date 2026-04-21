@@ -19,7 +19,14 @@ function createDashboardResponse(blocked = false) {
       }
     ],
     event: {
-      type: "lunch"
+      type: "lunch",
+      schedule: [
+        {
+          label: "Mittagsservice",
+          start: "12:30",
+          end: "14:00"
+        }
+      ]
     },
     attendees: {
       expected: 45
@@ -331,8 +338,8 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Tomaten");
     expect(content).toContain("Veranstaltungstyp als Lunch abgeleitet.");
     expect(content).toContain("Serviceform als Buffet abgeleitet.");
-    expect(content).toContain("Welches Veranstaltungsdatum oder Servicefenster gilt verbindlich für die Produktion?");
-    expect(content).toContain("Terminfenster: noch zu bestätigen");
+    expect(content).toContain("Terminfenster: Mittagsservice 12:30–14:00");
+    expect(content).not.toContain("noch zu bestätigen");
     expect(content).toContain("requestId: presentation-intake-success");
     expect(content).toContain("channel: manual_form");
     expect(content).toContain("Einkaufsliste herunterladen");
