@@ -1,11 +1,25 @@
+import { existsSync } from "node:fs";
 import { expect, test } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 
 const BASE_URL = process.env.CATERING_BROWSER_SMOKE_BASE_URL ?? "http://127.0.0.1:3200";
-const CHROME_PATH =
-  process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const BROWSER_CANDIDATES = [
+  process.env.CHROME_PATH,
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser"
+].filter((candidate): candidate is string => Boolean(candidate));
+const CHROME_PATH = BROWSER_CANDIDATES.find((candidate) => existsSync(candidate));
+const browserSmoke = CHROME_PATH ? test : test.skip;
 
 async function launchChrome(): Promise<Browser> {
+  if (!CHROME_PATH) {
+    throw new Error("No browser executable found for production browser smoke.");
+  }
+
   return chromium.launch({
     executablePath: CHROME_PATH,
     headless: true,
@@ -25,7 +39,7 @@ async function waitForText(page: Page, needle: string, timeout = 30000): Promise
   );
 }
 
-test("creates a positive production plan in a real browser and opens its export", async () => {
+browserSmoke("creates a positive production plan in a real browser and opens its export", async () => {
   const browser = await launchChrome();
 
   try {
