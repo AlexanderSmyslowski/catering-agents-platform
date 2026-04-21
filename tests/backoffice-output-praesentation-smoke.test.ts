@@ -19,8 +19,7 @@ function createDashboardResponse(blocked = false) {
       }
     ],
     event: {
-      type: "lunch",
-      date: "2026-07-18"
+      type: "lunch"
     },
     attendees: {
       expected: 45
@@ -65,8 +64,8 @@ function createDashboardResponse(blocked = false) {
         ]
       : [
           {
-            field: "event.schedule",
-            message: "Zeitangabe in \"gegen 12:30 Uhr\" ist nicht als vollständiger Termin belastbar."
+            field: "event.date_or_schedule",
+            message: "Im Dokument wurde kein belastbares Veranstaltungsdatum oder Servicefenster erkannt."
           }
         ]
   };
@@ -332,8 +331,8 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Tomaten");
     expect(content).toContain("Veranstaltungstyp als Lunch abgeleitet.");
     expect(content).toContain("Serviceform als Buffet abgeleitet.");
-    expect(content).toContain("Zeitangabe in \"gegen 12:30 Uhr\" ist nicht als vollständiger Termin belastbar.");
-    expect(content).toContain("Ursprüngliche Intake-Anfrage");
+    expect(content).toContain("Welches Veranstaltungsdatum oder Servicefenster gilt verbindlich für die Produktion?");
+    expect(content).toContain("Terminfenster: noch zu bestätigen");
     expect(content).toContain("requestId: presentation-intake-success");
     expect(content).toContain("channel: manual_form");
     expect(content).toContain("Einkaufsliste herunterladen");
