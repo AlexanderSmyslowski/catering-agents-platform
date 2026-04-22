@@ -26,4 +26,23 @@ describe("document text extraction", () => {
     expect(elapsed).toBeLessThan(7000);
     expect(text).toContain("Lunch Buffet");
   });
+
+  it("drops PDF extraction output that is dominated by control characters and falls back to printable text", async () => {
+    vi.mocked(pdf).mockResolvedValue({
+      text: "\u0000\u0001\u0002\u0003binary\u0004\u0005fragment\u0006\u0007\u0008"
+    } as Awaited<ReturnType<typeof pdf>>);
+
+    const text = await extractTextFromDocument({
+      filename: "kaputtes-angebot.pdf",
+      mimeType: "application/pdf",
+      content: Buffer.from(
+        "\u0000\u0001Conference Getraenke Kaffee Tee Saft Wasser Kekse Obst Welcome Coffee Lunch Buffet Tea Time Lunch Bags 10x Haehnchen Reis Falafel Tabouleh Gemuese Hummus Dessert Kuchen\u0000\u0001",
+        "utf8"
+      )
+    });
+
+    expect(text).toContain("Conference Getraenke Kaffee Tee Saft Wasser Kekse Obst");
+    expect(text).not.toContain("binary");
+    expect(text).not.toContain("fragment");
+  });
 });

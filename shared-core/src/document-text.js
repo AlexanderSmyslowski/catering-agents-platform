@@ -21,16 +21,37 @@ function decodePrintableSegments(buffer) {
         .join("\n")
         .trim();
 }
+function looksCorruptedText(value) {
+    return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value);
+}
+function wordCount(value) {
+    return (value.match(/[A-Za-zÀ-ÿ0-9]{2,}/g) ?? []).length;
+}
+function preferReadableText(primary, fallback) {
+    const cleanedPrimary = primary.trim();
+    const cleanedFallback = fallback.trim();
+    if (!cleanedPrimary) {
+        return cleanedFallback;
+    }
+    if (looksCorruptedText(cleanedPrimary)) {
+        const strippedPrimary = cleanedPrimary.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
+        if (wordCount(strippedPrimary) >= 4) {
+            return strippedPrimary;
+        }
+        return cleanedFallback || strippedPrimary;
+    }
+    return cleanedPrimary;
+}
 function fallbackDocumentText(buffer) {
     const utf8 = decodeText(buffer);
-    if (utf8.length >= 24) {
-        return utf8;
-    }
     const printable = decodePrintableSegments(buffer);
+    if (utf8.length >= 24 && !looksCorruptedText(utf8)) {
+        return preferReadableText(utf8, printable);
+    }
     if (printable.length >= 24) {
         return printable;
     }
-    return utf8 || printable;
+    return preferReadableText(utf8, printable);
 }
 async function parsePdfWithTimeout(buffer) {
     return await Promise.race([
@@ -85,7 +106,7 @@ export async function extractTextFromDocument(document) {
     if (document.mimeType.includes("pdf")) {
         try {
             const text = await parsePdfWithTimeout(document.content);
-            if (text) {
+            if (text && !looksCorruptedText(text)) {
                 return text;
             }
         }
