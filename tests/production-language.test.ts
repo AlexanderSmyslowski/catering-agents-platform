@@ -6,33 +6,40 @@ import {
 } from "../backoffice-ui/src/production-language.js";
 
 describe("production language helpers", () => {
-  it("translates production questions into clear German without raw field keys", () => {
+  it("shows missing production decision and category per affected position", () => {
     const questions = buildProductionQuestions({
       readiness: { status: "insufficient" },
       event: {
-        type: "lunch"
+        type: "coffee_break"
       },
-      attendees: {},
-      servicePlan: {},
+      attendees: {
+        expected: 35
+      },
+      servicePlan: {
+        serviceForm: "coffee_break"
+      },
       menuPlan: [
         {
-          componentId: "quiche-1",
-          label: "Quiche"
+          componentId: "coffee-break-station",
+          label: "Coffee Break Station",
+          menuCategory: "classic"
+        },
+        {
+          componentId: "savoury-snack",
+          label: "Savoury Snack",
+          productionDecision: {
+            mode: "hybrid"
+          }
         }
-      ],
-      missingFields: ["attendees.expected", "servicePlan.serviceForm", "menuPlan"]
+      ]
     });
 
-    expect(questions).toContain("Mit welcher verbindlichen Teilnehmerzahl soll kalkuliert und produziert werden?");
-    expect(questions).toContain("Welche Serviceform gilt: Buffet, Menü, Flying oder Ausgabe?");
     expect(questions).toContain(
-      "Bitte je Gericht festlegen, ob es eigenproduziert, hybrid gefertigt, als Convenience-Komponente zugekauft oder als Fertigprodukt beschafft wird."
+      "Coffee Break Station: Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen."
     );
-    expect(questions).toContain(
-      "Bitte je Gericht kennzeichnen, ob es klassisch, vegetarisch oder vegan ist, wenn das aus dem Angebot nicht eindeutig hervorgeht."
-    );
-    expect(questions.join(" ")).not.toContain("attendees.expected");
-    expect(questions.join(" ")).not.toContain("servicePlan.serviceForm");
+    expect(questions).toContain("Savoury Snack: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.");
+    expect(questions.join(" ")).not.toContain("Bitte je Gericht festlegen");
+    expect(questions.join(" ")).not.toContain("Bitte je Gericht kennzeichnen");
   });
 
   it("translates inferred assumptions into German", () => {

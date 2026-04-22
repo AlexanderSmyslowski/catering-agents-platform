@@ -200,48 +200,54 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
     addFieldQuestion("menuPlan");
   }
 
-  const unresolvedSourcing = menuPlan.some((item) => {
-    const component = asRecord(item);
-    const productionDecision = asRecord(component?.productionDecision);
-    return !productionDecision?.mode;
-  });
+  const unresolvedSourcingQuestions = menuPlan
+    .map((item) => {
+      const component = asRecord(item);
+      const productionDecision = asRecord(component?.productionDecision);
+      if (productionDecision?.mode) {
+        return undefined;
+      }
 
-  if (unresolvedSourcing) {
-    questions.push(
-      "Bitte je Gericht festlegen, ob es eigenproduziert, hybrid gefertigt, als Convenience-Komponente zugekauft oder als Fertigprodukt beschafft wird."
-    );
-  }
+      const label = String(component?.label ?? component?.componentId ?? "Position");
+      return `${label}: Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.`;
+    })
+    .filter((item): item is string => Boolean(item));
+  questions.push(...unresolvedSourcingQuestions);
 
-  const unresolvedConvenienceParts = menuPlan.some((item) => {
-    const component = asRecord(item);
-    const productionDecision = asRecord(component?.productionDecision);
-    const mode = typeof productionDecision?.mode === "string" ? productionDecision.mode : "";
-    const purchasedElements = Array.isArray(productionDecision?.purchasedElements)
-      ? productionDecision.purchasedElements
-      : [];
+  const unresolvedConvenienceQuestions = menuPlan
+    .map((item) => {
+      const component = asRecord(item);
+      const productionDecision = asRecord(component?.productionDecision);
+      const mode = typeof productionDecision?.mode === "string" ? productionDecision.mode : "";
+      const purchasedElements = Array.isArray(productionDecision?.purchasedElements)
+        ? productionDecision.purchasedElements
+        : [];
 
-    return (
-      (mode === "hybrid" || mode === "convenience_purchase") &&
-      purchasedElements.length === 0
-    );
-  });
+      if (mode !== "hybrid" && mode !== "convenience_purchase") {
+        return undefined;
+      }
+      if (purchasedElements.length > 0) {
+        return undefined;
+      }
 
-  if (unresolvedConvenienceParts) {
-    questions.push(
-      "Bitte bei Hybrid- oder Convenience-Gerichten angeben, welche Bestandteile zugekauft werden, zum Beispiel Teig, fertiger Boden oder Saucenbasis."
-    );
-  }
+      const label = String(component?.label ?? component?.componentId ?? "Position");
+      return `${label}: Zukaufanteil fehlt. Bitte benennen, welche Bestandteile bei Hybrid oder Convenience zugekauft werden.`;
+    })
+    .filter((item): item is string => Boolean(item));
+  questions.push(...unresolvedConvenienceQuestions);
 
-  const unresolvedCategories = menuPlan.some((item) => {
-    const component = asRecord(item);
-    return !component?.menuCategory;
-  });
+  const unresolvedCategoriesQuestions = menuPlan
+    .map((item) => {
+      const component = asRecord(item);
+      if (component?.menuCategory) {
+        return undefined;
+      }
 
-  if (unresolvedCategories) {
-    questions.push(
-      "Bitte je Gericht kennzeichnen, ob es klassisch, vegetarisch oder vegan ist, wenn das aus dem Angebot nicht eindeutig hervorgeht."
-    );
-  }
+      const label = String(component?.label ?? component?.componentId ?? "Position");
+      return `${label}: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.`;
+    })
+    .filter((item): item is string => Boolean(item));
+  questions.push(...unresolvedCategoriesQuestions);
 
   for (const field of missingFields) {
     if (!coveredFields.has(field)) {
