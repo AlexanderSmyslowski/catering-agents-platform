@@ -598,6 +598,37 @@ button:disabled {
   font-size: 1.02rem;
 }
 
+.secondary-workspace {
+  margin-top: 0.9rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(15, 23, 34, 0.08);
+  border-radius: 1.15rem;
+  background: rgba(247, 250, 255, 0.72);
+}
+
+.secondary-workspace > summary {
+  display: grid;
+  gap: 0.25rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.secondary-workspace > summary::-webkit-details-marker {
+  display: none;
+}
+
+.secondary-workspace__content {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.secondary-panel {
+  opacity: 0.94;
+  background: rgba(248, 251, 255, 0.68);
+  border-style: dashed;
+}
+
 .answer-grid {
   display: grid;
   gap: 0.8rem;

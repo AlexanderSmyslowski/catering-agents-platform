@@ -2657,90 +2657,111 @@ export function App() {
                     offenen Komponenten ein belastbares Rezept oder eine eindeutige Beschaffungsentscheidung vorliegt.
                   </p>
                 ) : null}
-                <ul className="item-list compact">
-                  {Array.isArray(selectedPlan.recipeSelections)
-                    ? selectedPlan.recipeSelections.map((selection) => {
-                        const selectionRecord = selection as Record<string, unknown>;
-                        const componentId = String(selectionRecord.componentId ?? "");
-                        const component = selectedPlanComponentsById.get(componentId);
-                        const componentLabel = String(component?.label ?? componentId);
-                        const qualityScore = formatPercent(selectionRecord.qualityScore);
-                        const fitScore = formatPercent(selectionRecord.fitScore);
-                        const searchTrace = Array.isArray(selectionRecord.searchTrace)
-                          ? selectionRecord.searchTrace.map((entry) => String(entry))
-                          : [];
-                        return (
-                          <li key={componentId}>
-                            <strong>{componentLabel}</strong>
-                            <p>{String(selectionRecord.selectionReason ?? "-")}</p>
-                            {component ? (
-                              <p className="helper-text">
-                                Kategorie: {translateMenuCategory(String(component.menuCategory ?? ""))}
-                                {" · "}Herstellungsart:{" "}
-                                {translateProductionMode(
-                                  String(
-                                    (
-                                      component.productionDecision as Record<string, unknown> | undefined
-                                    )?.mode ?? ""
-                                  )
-                                )}
-                              </p>
-                            ) : null}
-                            {qualityScore || fitScore ? (
-                              <p className="helper-text">
-                                {qualityScore ? `Qualität ${qualityScore}` : "Qualität offen"}
-                                {fitScore ? ` · Passung ${fitScore}` : ""}
-                              </p>
-                            ) : null}
-                            {searchTrace.length > 0 ? (
-                              <div className="search-trace">
-                                <p className="helper-text">Suchspur:</p>
+
+                <details className="secondary-workspace">
+                  <summary>
+                    <span className="eyebrow">Sekundäre Details</span>
+                    <span className="subsection-title">Ältere Läufe, Rezeptauswahl und Arbeitsblätter</span>
+                    <span className="helper-text">Nur bei Bedarf aufklappen.</span>
+                  </summary>
+                  <div className="secondary-workspace__content">
+                    {!productionWorkspaceCleared && archivedPlans.length > 0 ? (
+                      <>
+                        <header>
+                          <p className="eyebrow">Ältere Produktionsläufe</p>
+                          <h4 className="subsection-title">Frühere Ergebnisse aus anderen Vorgängen</h4>
+                        </header>
+                        {renderPlanList(archivedPlans, specById, submitting, setSelectedPlanId)}
+                      </>
+                    ) : null}
+
+                    <ul className="item-list compact">
+                      {Array.isArray(selectedPlan.recipeSelections)
+                        ? selectedPlan.recipeSelections.map((selection) => {
+                            const selectionRecord = selection as Record<string, unknown>;
+                            const componentId = String(selectionRecord.componentId ?? "");
+                            const component = selectedPlanComponentsById.get(componentId);
+                            const componentLabel = String(component?.label ?? componentId);
+                            const qualityScore = formatPercent(selectionRecord.qualityScore);
+                            const fitScore = formatPercent(selectionRecord.fitScore);
+                            const searchTrace = Array.isArray(selectionRecord.searchTrace)
+                              ? selectionRecord.searchTrace.map((entry) => String(entry))
+                              : [];
+                            return (
+                              <li key={componentId}>
+                                <strong>{componentLabel}</strong>
+                                <p>{String(selectionRecord.selectionReason ?? "-")}</p>
+                                {component ? (
+                                  <p className="helper-text">
+                                    Kategorie: {translateMenuCategory(String(component.menuCategory ?? ""))}
+                                    {" · "}Herstellungsart:{" "}
+                                    {translateProductionMode(
+                                      String(
+                                        (
+                                          component.productionDecision as Record<string, unknown> | undefined
+                                        )?.mode ?? ""
+                                      )
+                                    )}
+                                  </p>
+                                ) : null}
+                                {qualityScore || fitScore ? (
+                                  <p className="helper-text">
+                                    {qualityScore ? `Qualität ${qualityScore}` : "Qualität offen"}
+                                    {fitScore ? ` · Passung ${fitScore}` : ""}
+                                  </p>
+                                ) : null}
+                                {searchTrace.length > 0 ? (
+                                  <div className="search-trace">
+                                    <p className="helper-text">Suchspur:</p>
+                                    <ul className="item-list compact trace-list">
+                                      {searchTrace.map((entry) => (
+                                        <li key={`${componentId}-${entry}`}>{entry}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                              </li>
+                            );
+                          })
+                        : null}
+                    </ul>
+
+                    {Array.isArray(selectedPlan.kitchenSheets) && selectedPlan.kitchenSheets.length > 0 ? (
+                      <>
+                        <div className="divider" />
+                        <header>
+                          <p className="eyebrow">Arbeitsblätter</p>
+                          <h4 className="subsection-title">Küche, Beschaffung und Klärungen</h4>
+                        </header>
+                        <ul className="item-list compact">
+                          {selectedPlan.kitchenSheets.map((sheet, sheetIndex) => {
+                            const sheetRecord = sheet as Record<string, unknown>;
+                            const instructions = Array.isArray(sheetRecord.instructions)
+                              ? sheetRecord.instructions.map((entry) => String(entry))
+                              : [];
+                            return (
+                              <li key={`${String(sheetRecord.title ?? "Arbeitsblatt")}-${sheetIndex}`}>
+                                <strong>{String(sheetRecord.title ?? "Arbeitsblatt")}</strong>
                                 <ul className="item-list compact trace-list">
-                                  {searchTrace.map((entry) => (
-                                    <li key={`${componentId}-${entry}`}>{entry}</li>
+                                  {instructions.map((instruction) => (
+                                    <li key={`${String(sheetRecord.title ?? "Arbeitsblatt")}-${instruction}`}>
+                                      {instruction}
+                                    </li>
                                   ))}
                                 </ul>
-                              </div>
-                            ) : null}
-                          </li>
-                        );
-                      })
-                    : null}
-                </ul>
-                {Array.isArray(selectedPlan.kitchenSheets) && selectedPlan.kitchenSheets.length > 0 ? (
-                  <>
-                    <div className="divider" />
-                    <header>
-                      <p className="eyebrow">Arbeitsblätter</p>
-                      <h4 className="subsection-title">Küche, Beschaffung und Klärungen</h4>
-                    </header>
-                    <ul className="item-list compact">
-                      {selectedPlan.kitchenSheets.map((sheet, sheetIndex) => {
-                        const sheetRecord = sheet as Record<string, unknown>;
-                        const instructions = Array.isArray(sheetRecord.instructions)
-                          ? sheetRecord.instructions.map((entry) => String(entry))
-                          : [];
-                        return (
-                          <li key={`${String(sheetRecord.title ?? "Arbeitsblatt")}-${sheetIndex}`}>
-                            <strong>{String(sheetRecord.title ?? "Arbeitsblatt")}</strong>
-                            <ul className="item-list compact trace-list">
-                              {instructions.map((instruction) => (
-                                <li key={`${String(sheetRecord.title ?? "Arbeitsblatt")}-${instruction}`}>
-                                  {instruction}
-                                </li>
-                              ))}
-                            </ul>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </>
-                ) : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </>
+                    ) : null}
+                  </div>
+                </details>
               </>
             ) : null}
           </article>
 
-          <article className="panel form-panel">
+          <article className="panel form-panel secondary-panel">
             <header>
               <p className="eyebrow">Rezeptbibliothek</p>
               <h3>Zusätzliche Rezepte in die Küchenbibliothek übernehmen</h3>
@@ -2767,7 +2788,7 @@ export function App() {
             {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
           </article>
 
-          <article className="panel">
+          <article className="panel secondary-panel">
             <header>
               <p className="eyebrow">Rezeptbestand</p>
               <h3>Freigaben, Herkunft und Internet-Ausweichquellen</h3>
@@ -2809,7 +2830,7 @@ export function App() {
             </ul>
           </article>
 
-          <article className="panel">
+          <article className="panel secondary-panel">
             <header>
               <p className="eyebrow">Einkaufslisten</p>
               <h3>CSV-fähige Beschaffungslisten</h3>
