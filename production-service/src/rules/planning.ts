@@ -1,5 +1,6 @@
 import {
   aggregatePurchaseList,
+  checkPurchaseCoverage,
   mergeReadiness,
   procurementGroupFor,
   SCHEMA_VERSION,
@@ -110,9 +111,17 @@ function purchasedElementsSummary(component: AcceptedEventSpec["menuPlan"][numbe
   return purchasedElements.length > 0 ? purchasedElements.join(", ") : "noch offen";
 }
 
+function productionQtyFor(servings: number) {
+  return {
+    amount: servings,
+    unit: "Portionen"
+  };
+}
+
 function procurementKitchenSheet(
   component: AcceptedEventSpec["menuPlan"][number],
-  servings: number
+  servings: number,
+  spec: AcceptedEventSpec
 ): ProductionPlan["kitchenSheets"][number] {
   const mode = component.productionDecision?.mode;
   const modeLabel =
@@ -121,14 +130,24 @@ function procurementKitchenSheet(
       : mode === "external_finished"
         ? "Fertigprodukt / externer Bezug"
         : "Beschaffung";
+  const procurementNotes = [
+    `Beschaffung laut Herstellungsart: ${modeLabel}.`,
+    `Zugekaufte Bestandteile: ${purchasedElementsSummary(component)}.`,
+    "Lieferquelle und Gebinde vor Bestellung kurz prüfen."
+  ];
 
   return {
     title: `${component.label} - ${modeLabel}`,
+    componentId: component.componentId,
+    productionQty: productionQtyFor(servings),
+    station: stationFor(component.label),
+    prepWindow: prepWindowFor(spec),
+    ingredients: [],
+    steps: [],
+    procurementNotes,
     instructions: [
       `Menge einplanen: ${servings} Portionen.`,
-      `Beschaffung laut Herstellungsart: ${modeLabel}.`,
-      `Zugekaufte Bestandteile: ${purchasedElementsSummary(component)}.`,
-      "Lieferquelle und Gebinde vor Bestellung kurz prüfen.",
+      ...procurementNotes,
       "Komponente vor Service optisch und mengenmäßig gegen das Angebot prüfen."
     ]
   };
@@ -137,10 +156,18 @@ function procurementKitchenSheet(
 function unresolvedKitchenSheet(
   component: AcceptedEventSpec["menuPlan"][number],
   servings: number,
-  reason: string
+  reason: string,
+  spec: AcceptedEventSpec
 ): ProductionPlan["kitchenSheets"][number] {
   return {
     title: `${component.label} - Rezeptklärung nötig`,
+    componentId: component.componentId,
+    productionQty: productionQtyFor(servings),
+    station: stationFor(component.label),
+    prepWindow: prepWindowFor(spec),
+    ingredients: [],
+    steps: [],
+    blockingNotes: [reason],
     instructions: [
       `Aktuell geplant für ${servings} Portionen.`,
       reason,
@@ -163,6 +190,44 @@ function isBlockingPlanningIssue(message: string): boolean {
 
 function summarizeFallbackReason(blockingIssues: string[], warnings: string[]): string {
   return blockingIssues[0] ?? warnings[0] ?? "Die Produktionsplanung musste in einen deterministischen Fallback wechseln.";
+}
+
+function purchaseCoverageBlockingIssues(productionPlan: ProductionPlan, purchaseList: PurchaseList): string[] {
+  const coverageCheck = checkPurchaseCoverage(productionPlan, purchaseList);
+  if (coverageCheck.status === "passed") {
+    return [];
+  }
+
+  return [
+    `Einkaufsabdeckung fehlt für produktionsrelevante Zutaten: ${coverageCheck.missingIngredients
+      .map((ingredient) => `${ingredient.name} (${ingredient.componentId}/${ingredient.recipeId}/${ingredient.batchId})`)
+      .join(", ")}.`
+  ];
+}
+
+function withPurchaseCoverageBlockingIssues(
+  eventSpec: AcceptedEventSpec,
+  productionPlan: ProductionPlan,
+  issues: string[]
+): ProductionPlan {
+  const blockingIssues = [...new Set([...(productionPlan.blockingIssues ?? []), ...issues])];
+  const unresolvedItems = [...new Set([...productionPlan.unresolvedItems, ...issues])];
+  const warnings = productionPlan.warnings ?? [];
+  const blockingNotes = issues;
+
+  return validateProductionPlan({
+    ...productionPlan,
+    readiness: mergeReadiness(eventSpec.readiness, unresolvedItems, blockingIssues),
+    unresolvedItems,
+    kitchenSheets: productionPlan.kitchenSheets.map((sheet) => ({
+      ...sheet,
+      blockingNotes: [...new Set([...(sheet.blockingNotes ?? []), ...blockingNotes])]
+    })),
+    isFallback: true,
+    fallbackReason: summarizeFallbackReason(blockingIssues, warnings),
+    warnings,
+    blockingIssues
+  });
 }
 
 function normalizeRecipeResolution(
@@ -285,7 +350,7 @@ export async function buildProductionArtifacts(
           autoUsedInternetRecipe: false
         });
         noteIssue(`Klassifikation für ${component.label} fehlt.`, true);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
+        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
         timeline.push({
           label: `${component.label} fachlich klären`,
           at: prepWindowFor(eventSpec)
@@ -302,7 +367,7 @@ export async function buildProductionArtifacts(
           autoUsedInternetRecipe: false
         });
         noteIssue(`Herstellungsentscheidung für ${component.label} fehlt.`, true);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
+        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
         timeline.push({
           label: `${component.label} Herstellungsart klären`,
           at: prepWindowFor(eventSpec)
@@ -319,7 +384,7 @@ export async function buildProductionArtifacts(
           autoUsedInternetRecipe: false
         });
         noteIssue(`Zugekaufte Bestandteile für ${component.label} fehlen.`, true);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
+        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
         timeline.push({
           label: `${component.label} Beschaffungsanteil klären`,
           at: prepWindowFor(eventSpec)
@@ -337,7 +402,7 @@ export async function buildProductionArtifacts(
               : "Komponente ist als Fertigprodukt markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen.",
           autoUsedInternetRecipe: false
         });
-        kitchenSheets.push(procurementKitchenSheet(component, servings));
+        kitchenSheets.push(procurementKitchenSheet(component, servings, eventSpec));
         timeline.push({
           label:
             productionMode === "convenience_purchase"
@@ -372,7 +437,7 @@ export async function buildProductionArtifacts(
       recipeSelections.push(selectedRecipe);
       if (constraintConflict) {
         noteIssue(constraintConflict, true);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, constraintConflict));
+        kitchenSheets.push(unresolvedKitchenSheet(component, servings, constraintConflict, eventSpec));
         timeline.push({
           label: `${component.label} Rezeptklärung`,
           at: prepWindowFor(eventSpec)
@@ -383,7 +448,7 @@ export async function buildProductionArtifacts(
       if (!resolution.recipe || servings <= 0) {
         const reason = resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden.";
         noteIssue(reason, servings <= 0);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
+        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
         timeline.push({
           label: `${component.label} Rezeptklärung`,
           at: prepWindowFor(eventSpec)
@@ -391,7 +456,12 @@ export async function buildProductionArtifacts(
         continue;
       }
 
-      const resolvedRecipe = resolution.recipe as { name: string };
+      const resolvedRecipe = resolution.recipe as {
+        recipeId: string;
+        name: string;
+        allergens?: string[];
+        dietTags?: string[];
+      };
       const draftBatch = toProductionBatch(resolution.recipe as any, component.componentId, servings);
       const batchId = `batch-${eventSpec.specId}-${component.componentId}`;
       const batch = {
@@ -401,15 +471,27 @@ export async function buildProductionArtifacts(
         prepWindow: prepWindowFor(eventSpec),
         gnPlan: gnPlanFor(servings)
       };
+      const procurementNotes = productionMode === "hybrid"
+        ? [`Zukaufteil separat disponieren: ${purchasedElementsSummary(component)}.`]
+        : [];
 
       productionBatches.push(batch);
       kitchenSheets.push({
         title: `${component.label} - ${resolvedRecipe.name}`,
+        componentId: component.componentId,
+        recipeId: resolvedRecipe.recipeId,
+        productionQty: batch.scaledYield,
+        station: batch.station,
+        prepWindow: batch.prepWindow,
+        ingredients: batch.ingredients,
+        steps: batch.steps,
+        allergens: resolvedRecipe.allergens ?? [],
+        dietTags: resolvedRecipe.dietTags ?? [],
+        gnPlan: batch.gnPlan,
+        ...(procurementNotes.length > 0 ? { procurementNotes } : {}),
         instructions: [
           ...batch.steps.map((step) => `${step.index}. ${step.instruction}`),
-          ...(productionMode === "hybrid"
-            ? [`Zukaufteil separat disponieren: ${purchasedElementsSummary(component)}.`]
-            : [])
+          ...procurementNotes
         ]
       });
       timeline.push({
@@ -426,7 +508,7 @@ export async function buildProductionArtifacts(
         autoUsedInternetRecipe: false
       });
       noteIssue(reason, true);
-      kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason));
+      kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
       timeline.push({
         label: `${component.label} Rezeptklärung`,
         at: prepWindowFor(eventSpec)
@@ -440,7 +522,9 @@ export async function buildProductionArtifacts(
   const hasBlockingIssues = uniqueBlockingIssues.length > 0;
   const operationalProductionBatches = hasBlockingIssues ? [] : productionBatches;
   const operationalTimeline = hasBlockingIssues ? [] : timeline;
-  const operationalKitchenSheets = hasBlockingIssues ? [] : kitchenSheets;
+  const operationalKitchenSheets = hasBlockingIssues
+    ? kitchenSheets.filter((sheet) => (sheet.blockingNotes?.length ?? 0) > 0)
+    : kitchenSheets;
   const operationalProcurementItems = hasBlockingIssues ? [] : procurementItems;
   const productionPlan = validateProductionPlan({
     schemaVersion: SCHEMA_VERSION,
@@ -465,9 +549,12 @@ export async function buildProductionArtifacts(
   const purchaseList = validatePurchaseList(
     aggregatePurchaseList(eventSpec.specId, operationalProductionBatches, operationalProcurementItems)
   );
+  const purchaseCoverageIssues = purchaseCoverageBlockingIssues(productionPlan, purchaseList);
 
   return {
-    productionPlan,
+    productionPlan: purchaseCoverageIssues.length > 0
+      ? withPurchaseCoverageBlockingIssues(eventSpec, productionPlan, purchaseCoverageIssues)
+      : productionPlan,
     purchaseList
   };
 }

@@ -83,3 +83,61 @@ export function aggregatePurchaseList(eventSpecId, batches, additionalItems = []
         }
     };
 }
+function normalizeCoverageKey(value) {
+    return value.trim().toLowerCase();
+}
+function purchaseItemCoversIngredient(item, ingredient) {
+    return (item.ingredientId === ingredient.ingredientId ||
+        normalizeCoverageKey(item.displayName) === normalizeCoverageKey(ingredient.name));
+}
+function productionIngredientRef(batch, ingredient) {
+    return {
+        batchId: batch.batchId,
+        componentId: batch.componentId,
+        recipeId: batch.recipeId,
+        ingredientId: ingredient.ingredientId,
+        name: ingredient.name
+    };
+}
+function documentedProcurementExceptions(purchaseList) {
+    return purchaseList.items.flatMap((item) => item.sourceRecipes.flatMap((sourceRecipe) => {
+        const match = sourceRecipe.match(/^procurement:(.+)$/);
+        if (!match) {
+            return [];
+        }
+        return [
+            {
+                componentId: match[1],
+                ingredientId: item.ingredientId,
+                displayName: item.displayName,
+                purchaseListId: purchaseList.purchaseListId
+            }
+        ];
+    }));
+}
+export function checkPurchaseCoverage(productionPlan, purchaseList) {
+    const coveredIngredients = [];
+    const missingIngredients = [];
+    for (const batch of productionPlan.productionBatches) {
+        for (const ingredient of batch.ingredients) {
+            const ingredientRef = productionIngredientRef(batch, ingredient);
+            const coveringItem = purchaseList.items.find((item) => purchaseItemCoversIngredient(item, ingredientRef));
+            if (!coveringItem) {
+                missingIngredients.push(ingredientRef);
+                continue;
+            }
+            coveredIngredients.push({
+                ...ingredientRef,
+                purchaseListId: purchaseList.purchaseListId,
+                purchaseItemIngredientId: coveringItem.ingredientId,
+                displayName: coveringItem.displayName
+            });
+        }
+    }
+    return {
+        status: missingIngredients.length === 0 ? "passed" : "blocked",
+        coveredIngredients,
+        missingIngredients,
+        documentedProcurementExceptions: documentedProcurementExceptions(purchaseList)
+    };
+}

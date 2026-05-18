@@ -1,6 +1,36 @@
 import { ingredientGroupHints } from "../taxonomies/defaults.js";
-import type { ProductionBatch, PurchaseItem, PurchaseList } from "../types.js";
+import type { ProductionBatch, ProductionPlan, PurchaseItem, PurchaseList } from "../types.js";
 import { SCHEMA_VERSION } from "../types.js";
+
+export type PurchaseCoverageStatus = "passed" | "blocked";
+
+export interface PurchaseCoverageIngredientRef {
+  batchId: string;
+  componentId: string;
+  recipeId: string;
+  ingredientId: string;
+  name: string;
+}
+
+export interface CoveredPurchaseIngredient extends PurchaseCoverageIngredientRef {
+  purchaseListId: string;
+  purchaseItemIngredientId: string;
+  displayName: string;
+}
+
+export interface DocumentedProcurementException {
+  componentId: string;
+  ingredientId: string;
+  displayName: string;
+  purchaseListId: string;
+}
+
+export interface PurchaseCoverageCheck {
+  status: PurchaseCoverageStatus;
+  coveredIngredients: CoveredPurchaseIngredient[];
+  missingIngredients: PurchaseCoverageIngredientRef[];
+  documentedProcurementExceptions: DocumentedProcurementException[];
+}
 
 function purchaseUnitFor(unit: string): string {
   if (unit === "g") {
@@ -107,5 +137,85 @@ export function aggregatePurchaseList(
       itemCount: items.length,
       groups: [...new Set(items.map((item) => item.group))]
     }
+  };
+}
+
+function normalizeCoverageKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function purchaseItemCoversIngredient(item: PurchaseItem, ingredient: PurchaseCoverageIngredientRef): boolean {
+  return (
+    item.ingredientId === ingredient.ingredientId ||
+    normalizeCoverageKey(item.displayName) === normalizeCoverageKey(ingredient.name)
+  );
+}
+
+function productionIngredientRef(
+  batch: ProductionBatch,
+  ingredient: ProductionBatch["ingredients"][number]
+): PurchaseCoverageIngredientRef {
+  return {
+    batchId: batch.batchId,
+    componentId: batch.componentId,
+    recipeId: batch.recipeId,
+    ingredientId: ingredient.ingredientId,
+    name: ingredient.name
+  };
+}
+
+function documentedProcurementExceptions(purchaseList: PurchaseList): DocumentedProcurementException[] {
+  return purchaseList.items.flatMap((item) =>
+    item.sourceRecipes.flatMap((sourceRecipe) => {
+      const match = sourceRecipe.match(/^procurement:(.+)$/);
+      if (!match) {
+        return [];
+      }
+
+      return [
+        {
+          componentId: match[1],
+          ingredientId: item.ingredientId,
+          displayName: item.displayName,
+          purchaseListId: purchaseList.purchaseListId
+        }
+      ];
+    })
+  );
+}
+
+export function checkPurchaseCoverage(
+  productionPlan: ProductionPlan,
+  purchaseList: PurchaseList
+): PurchaseCoverageCheck {
+  const coveredIngredients: CoveredPurchaseIngredient[] = [];
+  const missingIngredients: PurchaseCoverageIngredientRef[] = [];
+
+  for (const batch of productionPlan.productionBatches) {
+    for (const ingredient of batch.ingredients) {
+      const ingredientRef = productionIngredientRef(batch, ingredient);
+      const coveringItem = purchaseList.items.find((item) =>
+        purchaseItemCoversIngredient(item, ingredientRef)
+      );
+
+      if (!coveringItem) {
+        missingIngredients.push(ingredientRef);
+        continue;
+      }
+
+      coveredIngredients.push({
+        ...ingredientRef,
+        purchaseListId: purchaseList.purchaseListId,
+        purchaseItemIngredientId: coveringItem.ingredientId,
+        displayName: coveringItem.displayName
+      });
+    }
+  }
+
+  return {
+    status: missingIngredients.length === 0 ? "passed" : "blocked",
+    coveredIngredients,
+    missingIngredients,
+    documentedProcurementExceptions: documentedProcurementExceptions(purchaseList)
   };
 }

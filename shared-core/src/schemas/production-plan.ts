@@ -94,12 +94,68 @@ export const productionPlanSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["title", "instructions"],
+        required: [
+          "title",
+          "instructions",
+          "componentId",
+          "productionQty",
+          "station",
+          "prepWindow",
+          "ingredients",
+          "steps"
+        ],
         properties: {
           title: { type: "string" },
           instructions: {
             type: "array",
             items: { type: "string" }
+          },
+          componentId: { type: "string" },
+          productionQty: {
+            $ref: "https://schemas.catering.local/common.json#/$defs/quantity"
+          },
+          station: { type: "string" },
+          prepWindow: { type: "string" },
+          ingredients: {
+            type: "array",
+            items: {
+              $ref: "https://schemas.catering.local/common.json#/$defs/ingredientLine"
+            }
+          },
+          steps: {
+            type: "array",
+            items: {
+              $ref: "https://schemas.catering.local/common.json#/$defs/recipeStep"
+            }
+          },
+          recipeId: { type: "string" },
+          allergens: {
+            type: "array",
+            items: { type: "string" }
+          },
+          dietTags: {
+            type: "array",
+            items: { type: "string" }
+          },
+          procurementNotes: {
+            type: "array",
+            items: { type: "string" }
+          },
+          blockingNotes: {
+            type: "array",
+            items: { type: "string" }
+          },
+          gnPlan: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["container", "count"],
+              properties: {
+                container: { type: "string" },
+                count: { type: "integer", minimum: 1 }
+              }
+            }
           }
         }
       }

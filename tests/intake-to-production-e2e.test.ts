@@ -274,7 +274,10 @@ describe("manual form intake to production e2e", () => {
       expect(artifacts.productionPlan.recipeSelections).toHaveLength(1);
       expect(artifacts.productionPlan.recipeSelections[0].selectionReason).toContain("gluten_free");
       expect(artifacts.productionPlan.productionBatches).toHaveLength(0);
-      expect(artifacts.productionPlan.kitchenSheets).toHaveLength(0);
+      expect(artifacts.productionPlan.kitchenSheets).toHaveLength(1);
+      expect(artifacts.productionPlan.kitchenSheets[0].blockingNotes?.join(" ")).toContain("gluten_free");
+      expect(artifacts.productionPlan.kitchenSheets[0].ingredients).toEqual([]);
+      expect(artifacts.productionPlan.kitchenSheets[0].steps).toEqual([]);
       expect(artifacts.productionPlan.timeline).toHaveLength(0);
       expect(artifacts.purchaseList.items).toHaveLength(0);
       expect(artifacts.purchaseList.totals.itemCount).toBe(0);
@@ -344,7 +347,7 @@ describe("manual form intake to production e2e", () => {
           isFallback: true,
           hasBlockingIssues: true,
           productionBatches: 0,
-          kitchenSheets: 0,
+          kitchenSheets: 1,
           menuLabels: ["Brot-Baguette"]
         }
       }

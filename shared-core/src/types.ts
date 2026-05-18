@@ -320,6 +320,21 @@ export interface ProductionBatch {
 export interface KitchenSheet {
   title: string;
   instructions: string[];
+  componentId: string;
+  productionQty: Quantity;
+  station: string;
+  prepWindow: string;
+  ingredients: IngredientLine[];
+  steps: RecipeStep[];
+  recipeId?: string;
+  allergens?: string[];
+  dietTags?: string[];
+  procurementNotes?: string[];
+  blockingNotes?: string[];
+  gnPlan?: {
+    container: string;
+    count: number;
+  }[];
 }
 
 export interface TimelineEntry {
