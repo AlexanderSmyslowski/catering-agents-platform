@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
 
-function installProductionAcceptanceMocks() {
+function installProductionAcceptanceMocks(options: { stalePlanOnly?: boolean } = {}) {
   const storage = new Map<string, string>();
   const localStorageMock = {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -27,6 +27,8 @@ function installProductionAcceptanceMocks() {
 
   const requestId = "request-production-fallback-1";
   const specId = "spec-production-fallback-1";
+  const previousSpecId = "spec-production-previous-1";
+  const planSpecId = options.stalePlanOnly ? previousSpecId : specId;
 
   vi.stubGlobal(
     "fetch",
@@ -61,6 +63,21 @@ function installProductionAcceptanceMocks() {
         return new Response(
           JSON.stringify({
             items: [
+              ...(options.stalePlanOnly
+                ? [
+                    {
+                      schemaVersion: 1,
+                      specId: previousSpecId,
+                      requestId: "request-production-previous-1",
+                      sourceLineage: [],
+                      readiness: { status: "complete", reasons: [] },
+                      event: { type: "meeting", date: "2026-07-12" },
+                      servicePlan: { eventType: "meeting", serviceForm: "buffet" },
+                      attendees: { expected: 12 },
+                      menuPlan: []
+                    }
+                  ]
+                : []),
               {
                 schemaVersion: 1,
                 specId,
@@ -116,7 +133,7 @@ function installProductionAcceptanceMocks() {
             items: [
               {
                 planId: "plan-production-fallback-1",
-                eventSpecId: specId,
+                eventSpecId: planSpecId,
                 readiness: {
                   status: "insufficient",
                   reasons: ["Glutenfrei-Konflikt bleibt ungelöst."]
@@ -242,5 +259,17 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("channel: manual_form");
     expect(content).toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
     expect(content).not.toContain("Offene Punkte: keine");
+  });
+
+  it("does not surface a previous plan as current results for a newly focused production spec", async () => {
+    installProductionAcceptanceMocks({ stalePlanOnly: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Aktueller Vorgang");
+    expect(content).toContain("Noch keine Produktionspläne vorhanden.");
+    expect(content).toContain("Einkauf: offen");
+    expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
+    expect(content).not.toContain("Produktionsblatt exportieren");
   });
 });

@@ -1061,10 +1061,7 @@ export function App() {
     if (!currentProductionSpecId) {
       return orderedPlans;
     }
-    const matchingPlans = orderedPlans.filter(
-      (plan) => String(plan.eventSpecId ?? "") === currentProductionSpecId
-    );
-    return matchingPlans.length > 0 ? matchingPlans : orderedPlans;
+    return orderedPlans.filter((plan) => String(plan.eventSpecId ?? "") === currentProductionSpecId);
   }, [currentProductionSpecId, orderedPlans, productionWorkspaceCleared]);
 
   const archivedPlans = useMemo(() => {
@@ -1082,10 +1079,9 @@ export function App() {
     if (!currentProductionSpecId) {
       return orderedPurchaseLists;
     }
-    const matchingLists = orderedPurchaseLists.filter(
+    return orderedPurchaseLists.filter(
       (purchaseList) => String(purchaseList.eventSpecId ?? "") === currentProductionSpecId
     );
-    return matchingLists.length > 0 ? matchingLists : orderedPurchaseLists;
   }, [currentProductionSpecId, orderedPurchaseLists, productionWorkspaceCleared]);
 
   const archivedPurchaseLists = useMemo(() => {
@@ -1104,8 +1100,8 @@ export function App() {
         : currentSpecPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
           orderedPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
           currentSpecPlans[0] ??
-          orderedPlans[0],
-    [currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId]
+          (currentProductionSpecId ? undefined : orderedPlans[0]),
+    [currentProductionSpecId, currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId]
   );
 
   const selectedPlanSpec = useMemo(() => {
