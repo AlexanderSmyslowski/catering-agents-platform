@@ -488,6 +488,259 @@ function ReadOnlyWorkbenchProjection({
   );
 }
 
+type ProductionInputPanelProps = {
+  submitting: boolean;
+  dragActive: boolean;
+  intakeFile: File | null;
+  intakeChannel: IntakeDocumentChannel;
+  documentPhase: "idle" | "analysing" | "done";
+  activeDocumentName?: string;
+  documentProgress: number;
+  documentEtaSeconds?: number;
+  intakeText: string;
+  manualEventType: string;
+  manualEventDate: string;
+  manualAttendeeCount: string;
+  manualServiceForm: string;
+  manualMenuItems: string;
+  manualCustomerName: string;
+  manualVenueName: string;
+  manualNotes: string;
+  productionUploadInputRef: { current: HTMLInputElement | null };
+  setDragActive: (active: boolean) => void;
+  setIntakeChannel: (channel: IntakeDocumentChannel) => void;
+  setIntakeText: (value: string) => void;
+  setManualEventType: (value: string) => void;
+  setManualEventDate: (value: string) => void;
+  setManualAttendeeCount: (value: string) => void;
+  setManualServiceForm: (value: string) => void;
+  setManualMenuItems: (value: string) => void;
+  setManualCustomerName: (value: string) => void;
+  setManualVenueName: (value: string) => void;
+  setManualNotes: (value: string) => void;
+  openProductionFilePicker: () => void;
+  clearProductionWorkspace: () => void;
+  handleProductionDrop: (event: DragEvent<HTMLLabelElement>) => void;
+  handleProductionFileSelection: (event: ChangeEvent<HTMLInputElement>) => void;
+  handleIntakeDocumentSubmit: () => Promise<void>;
+  handleIntakeSubmit: () => Promise<void>;
+  handleManualSpecSubmit: () => Promise<void>;
+};
+
+function ProductionInputPanel({
+  submitting,
+  dragActive,
+  intakeFile,
+  intakeChannel,
+  documentPhase,
+  activeDocumentName,
+  documentProgress,
+  documentEtaSeconds,
+  intakeText,
+  manualEventType,
+  manualEventDate,
+  manualAttendeeCount,
+  manualServiceForm,
+  manualMenuItems,
+  manualCustomerName,
+  manualVenueName,
+  manualNotes,
+  productionUploadInputRef,
+  setDragActive,
+  setIntakeChannel,
+  setIntakeText,
+  setManualEventType,
+  setManualEventDate,
+  setManualAttendeeCount,
+  setManualServiceForm,
+  setManualMenuItems,
+  setManualCustomerName,
+  setManualVenueName,
+  setManualNotes,
+  openProductionFilePicker,
+  clearProductionWorkspace,
+  handleProductionDrop,
+  handleProductionFileSelection,
+  handleIntakeDocumentSubmit,
+  handleIntakeSubmit,
+  handleManualSpecSubmit
+}: ProductionInputPanelProps) {
+  return (
+    <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
+      <div className="upload-shortcut-bar">
+        <div>
+          <p className="eyebrow">Arbeitsauftrag / Eingabe</p>
+          <strong>Quelle für den Produktionsauftrag hinzufügen</strong>
+          <p className="helper-text">
+            Vorhandene Eingabewege bleiben gebündelt: Datei, Freitext oder strukturierte Angaben werden zur operativen Spezifikation.
+          </p>
+        </div>
+        <div className="action-row">
+          <button type="button" disabled={submitting} onClick={openProductionFilePicker}>
+            Datei hochladen
+          </button>
+          <button
+            type="button"
+            className="secondary-button destructive-button"
+            disabled={submitting}
+            onClick={clearProductionWorkspace}
+          >
+            Löschen
+          </button>
+        </div>
+      </div>
+      <header>
+        <p className="eyebrow">Eingabequelle</p>
+        <h3>Auftrag als Datei übernehmen</h3>
+      </header>
+      <label
+        className={dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={handleProductionDrop}
+      >
+        <input
+          ref={productionUploadInputRef}
+          className="visually-hidden"
+          type="file"
+          accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
+          onChange={handleProductionFileSelection}
+        />
+        <span className="eyebrow">Drag & Drop</span>
+        <strong>Angebot, E-Mail oder Textdatei hier ablegen</strong>
+        <p className="helper-text">
+          PDF, E-Mail und Textdateien werden sofort analysiert und in operative Veranstaltungsdaten überführt.
+        </p>
+        <span className="drag-drop-zone__cta">Datei auswählen</span>
+      </label>
+      <div className="activity-slot">
+        {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
+        {documentPhase === "analysing" && activeDocumentName ? (
+          <div className="progress-panel">
+            <div
+              className="progress-ring"
+              style={
+                {
+                  "--progress-angle": `${Math.max(0, Math.min(documentProgress, 100)) * 3.6}deg`
+                } as CSSProperties
+              }
+            >
+              <span>{documentProgress}%</span>
+            </div>
+            <div className="progress-panel__content">
+              <p className="processing-note">Analyse läuft für {activeDocumentName} ...</p>
+              <div className="progress-bar">
+                <div
+                  className="progress-bar__fill"
+                  style={{ width: `${Math.max(0, Math.min(documentProgress, 100))}%` }}
+                />
+              </div>
+              <p className="helper-text">
+                Geschätzte Restzeit: {formatEta(documentEtaSeconds ?? 1)}
+              </p>
+            </div>
+          </div>
+        ) : null}
+        {documentPhase === "done" && activeDocumentName ? (
+          <div className="progress-panel">
+            <div
+              className="progress-ring progress-ring--done"
+              style={{ "--progress-angle": "360deg" } as CSSProperties}
+            >
+              <span>100%</span>
+            </div>
+            <div className="progress-panel__content">
+              <p className="processing-note processing-note--success">
+                Analyse abgeschlossen für {activeDocumentName}.
+              </p>
+              <div className="progress-bar">
+                <div className="progress-bar__fill" style={{ width: "100%" }} />
+              </div>
+              <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className="action-row">
+        <select
+          className="operator-input"
+          value={intakeChannel}
+          onChange={(event) => setIntakeChannel(event.target.value as IntakeDocumentChannel)}
+        >
+          <option value="pdf_upload">PDF / Angebot</option>
+          <option value="email">E-Mail</option>
+          <option value="text">Textdatei</option>
+        </select>
+        <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
+          Erneut mit ausgewähltem Typ verarbeiten
+        </button>
+      </div>
+      <div className="divider" />
+      <header>
+        <p className="eyebrow">Texteingabe</p>
+        <h3>Arbeitsauftrag direkt einfügen</h3>
+      </header>
+      <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
+      <div className="action-row">
+        <button disabled={submitting} onClick={() => void handleIntakeSubmit()}>
+          Erfassungstext normalisieren
+        </button>
+      </div>
+      <div className="divider" />
+      <header>
+        <p className="eyebrow">Strukturierte Eingabe</p>
+        <h3>Arbeitsauftrag manuell anlegen</h3>
+      </header>
+      <input
+        value={manualEventType}
+        onChange={(event) => setManualEventType(event.target.value)}
+        placeholder="Veranstaltungstyp, z. B. Konferenz"
+      />
+      <input
+        value={manualEventDate}
+        onChange={(event) => setManualEventDate(event.target.value)}
+        placeholder="Datum, z. B. 2026-10-10"
+      />
+      <input
+        value={manualAttendeeCount}
+        onChange={(event) => setManualAttendeeCount(event.target.value)}
+        placeholder="Teilnehmerzahl"
+      />
+      <input
+        value={manualServiceForm}
+        onChange={(event) => setManualServiceForm(event.target.value)}
+        placeholder="Serviceform, z. B. Buffet"
+      />
+      <input
+        value={manualMenuItems}
+        onChange={(event) => setManualMenuItems(event.target.value)}
+        placeholder="Menüpunkte, durch Komma getrennt"
+      />
+      <input
+        value={manualCustomerName}
+        onChange={(event) => setManualCustomerName(event.target.value)}
+        placeholder="Kundenname"
+      />
+      <input
+        value={manualVenueName}
+        onChange={(event) => setManualVenueName(event.target.value)}
+        placeholder="Ort oder Veranstaltungsort"
+      />
+      <textarea
+        value={manualNotes}
+        onChange={(event) => setManualNotes(event.target.value)}
+        placeholder="Interne Notizen oder Einschränkungen"
+      />
+      <button disabled={submitting} onClick={() => void handleManualSpecSubmit()}>
+        Spezifikation anlegen
+      </button>
+    </article>
+  );
+}
+
 function renderPlanList(
   plans: Array<Record<string, unknown>>,
   specById: Map<string, Record<string, unknown>>,
@@ -2030,178 +2283,44 @@ export function App() {
       {route === "production" ? (
         <section className="production-layout">
           <div className="production-column">
-          <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
-            <div className="upload-shortcut-bar">
-              <div>
-                <p className="eyebrow">Arbeitsauftrag / Eingabe</p>
-                <strong>Quelle für den Produktionsauftrag hinzufügen</strong>
-                <p className="helper-text">
-                  Vorhandene Eingabewege bleiben gebündelt: Datei, Freitext oder strukturierte Angaben werden zur operativen Spezifikation.
-                </p>
-              </div>
-              <div className="action-row">
-                <button type="button" disabled={submitting} onClick={openProductionFilePicker}>
-                  Datei hochladen
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button destructive-button"
-                  disabled={submitting}
-                  onClick={clearProductionWorkspace}
-                >
-                  Löschen
-                </button>
-              </div>
-            </div>
-            <header>
-              <p className="eyebrow">Eingabequelle</p>
-              <h3>Auftrag als Datei übernehmen</h3>
-            </header>
-            <label
-              className={dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragActive(true);
-              }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={handleProductionDrop}
-            >
-              <input
-                ref={productionUploadInputRef}
-                className="visually-hidden"
-                type="file"
-                accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
-                onChange={handleProductionFileSelection}
-              />
-              <span className="eyebrow">Drag & Drop</span>
-              <strong>Angebot, E-Mail oder Textdatei hier ablegen</strong>
-              <p className="helper-text">
-                PDF, E-Mail und Textdateien werden sofort analysiert und in operative Veranstaltungsdaten überführt.
-              </p>
-              <span className="drag-drop-zone__cta">Datei auswählen</span>
-            </label>
-            <div className="activity-slot">
-              {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
-              {documentPhase === "analysing" && activeDocumentName ? (
-                <div className="progress-panel">
-                  <div
-                    className="progress-ring"
-                    style={
-                      {
-                        "--progress-angle": `${Math.max(0, Math.min(documentProgress, 100)) * 3.6}deg`
-                      } as CSSProperties
-                    }
-                  >
-                    <span>{documentProgress}%</span>
-                  </div>
-                  <div className="progress-panel__content">
-                    <p className="processing-note">Analyse läuft für {activeDocumentName} ...</p>
-                    <div className="progress-bar">
-                      <div
-                        className="progress-bar__fill"
-                        style={{ width: `${Math.max(0, Math.min(documentProgress, 100))}%` }}
-                      />
-                    </div>
-                    <p className="helper-text">
-                      Geschätzte Restzeit: {formatEta(documentEtaSeconds ?? 1)}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-              {documentPhase === "done" && activeDocumentName ? (
-                <div className="progress-panel">
-                  <div
-                    className="progress-ring progress-ring--done"
-                    style={{ "--progress-angle": "360deg" } as CSSProperties}
-                  >
-                    <span>100%</span>
-                  </div>
-                  <div className="progress-panel__content">
-                    <p className="processing-note processing-note--success">
-                      Analyse abgeschlossen für {activeDocumentName}.
-                    </p>
-                    <div className="progress-bar">
-                      <div className="progress-bar__fill" style={{ width: "100%" }} />
-                    </div>
-                    <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <div className="action-row">
-              <select
-                className="operator-input"
-                value={intakeChannel}
-                onChange={(event) => setIntakeChannel(event.target.value as IntakeDocumentChannel)}
-              >
-                <option value="pdf_upload">PDF / Angebot</option>
-                <option value="email">E-Mail</option>
-                <option value="text">Textdatei</option>
-              </select>
-              <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
-                Erneut mit ausgewähltem Typ verarbeiten
-              </button>
-            </div>
-            <div className="divider" />
-            <header>
-              <p className="eyebrow">Texteingabe</p>
-              <h3>Arbeitsauftrag direkt einfügen</h3>
-            </header>
-            <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
-            <div className="action-row">
-              <button disabled={submitting} onClick={() => void handleIntakeSubmit()}>
-                Erfassungstext normalisieren
-              </button>
-            </div>
-            <div className="divider" />
-            <header>
-              <p className="eyebrow">Strukturierte Eingabe</p>
-              <h3>Arbeitsauftrag manuell anlegen</h3>
-            </header>
-            <input
-              value={manualEventType}
-              onChange={(event) => setManualEventType(event.target.value)}
-              placeholder="Veranstaltungstyp, z. B. Konferenz"
-            />
-            <input
-              value={manualEventDate}
-              onChange={(event) => setManualEventDate(event.target.value)}
-              placeholder="Datum, z. B. 2026-10-10"
-            />
-            <input
-              value={manualAttendeeCount}
-              onChange={(event) => setManualAttendeeCount(event.target.value)}
-              placeholder="Teilnehmerzahl"
-            />
-            <input
-              value={manualServiceForm}
-              onChange={(event) => setManualServiceForm(event.target.value)}
-              placeholder="Serviceform, z. B. Buffet"
-            />
-            <input
-              value={manualMenuItems}
-              onChange={(event) => setManualMenuItems(event.target.value)}
-              placeholder="Menüpunkte, durch Komma getrennt"
-            />
-            <input
-              value={manualCustomerName}
-              onChange={(event) => setManualCustomerName(event.target.value)}
-              placeholder="Kundenname"
-            />
-            <input
-              value={manualVenueName}
-              onChange={(event) => setManualVenueName(event.target.value)}
-              placeholder="Ort oder Veranstaltungsort"
-            />
-            <textarea
-              value={manualNotes}
-              onChange={(event) => setManualNotes(event.target.value)}
-              placeholder="Interne Notizen oder Einschränkungen"
-            />
-            <button disabled={submitting} onClick={() => void handleManualSpecSubmit()}>
-              Spezifikation anlegen
-            </button>
-          </article>
+          <ProductionInputPanel
+            submitting={submitting}
+            dragActive={dragActive}
+            intakeFile={intakeFile}
+            intakeChannel={intakeChannel}
+            documentPhase={documentPhase}
+            activeDocumentName={activeDocumentName}
+            documentProgress={documentProgress}
+            documentEtaSeconds={documentEtaSeconds}
+            intakeText={intakeText}
+            manualEventType={manualEventType}
+            manualEventDate={manualEventDate}
+            manualAttendeeCount={manualAttendeeCount}
+            manualServiceForm={manualServiceForm}
+            manualMenuItems={manualMenuItems}
+            manualCustomerName={manualCustomerName}
+            manualVenueName={manualVenueName}
+            manualNotes={manualNotes}
+            productionUploadInputRef={productionUploadInputRef}
+            setDragActive={setDragActive}
+            setIntakeChannel={setIntakeChannel}
+            setIntakeText={setIntakeText}
+            setManualEventType={setManualEventType}
+            setManualEventDate={setManualEventDate}
+            setManualAttendeeCount={setManualAttendeeCount}
+            setManualServiceForm={setManualServiceForm}
+            setManualMenuItems={setManualMenuItems}
+            setManualCustomerName={setManualCustomerName}
+            setManualVenueName={setManualVenueName}
+            setManualNotes={setManualNotes}
+            openProductionFilePicker={openProductionFilePicker}
+            clearProductionWorkspace={clearProductionWorkspace}
+            handleProductionDrop={handleProductionDrop}
+            handleProductionFileSelection={handleProductionFileSelection}
+            handleIntakeDocumentSubmit={handleIntakeDocumentSubmit}
+            handleIntakeSubmit={handleIntakeSubmit}
+            handleManualSpecSubmit={handleManualSpecSubmit}
+          />
           </div>
           <div className="production-column">
           <article className="panel form-panel question-panel production-step-card">
