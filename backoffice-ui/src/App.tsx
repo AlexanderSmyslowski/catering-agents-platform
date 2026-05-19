@@ -2837,74 +2837,81 @@ export function App() {
             ) : null}
           </article>
 
-          <article className="panel form-panel secondary-panel">
-            <header>
-              <p className="eyebrow">Rezeptbibliothek</p>
-              <h3>Zusätzliche Rezepte in die Küchenbibliothek übernehmen</h3>
-            </header>
-            <input
-              value={recipeName}
-              onChange={(event) => setRecipeName(event.target.value)}
-              placeholder="Optionaler Rezeptname"
-            />
-            <input
-              className="file-input"
-              type="file"
-              accept=".pdf,.txt,.md,text/plain,application/pdf"
-              onChange={(event) => setRecipeFile(event.target.files?.[0] ?? null)}
-            />
-            <div className="action-row">
-              <button disabled={submitting} onClick={() => void handleRecipeUpload("offer")}>
-                Über Angebotsagent speichern
-              </button>
-              <button disabled={submitting} onClick={() => void handleRecipeUpload("production")}>
-                Über Produktionsagent speichern
-              </button>
+          <details className="panel secondary-panel secondary-rail-details">
+            <summary>
+              <span className="eyebrow">Rezeptbibliothek</span>
+              <span className="subsection-title">Rezepte verwalten</span>
+              <span className="helper-text">
+                {dashboard.recipes.length} Rezepte · {recipeReviewCounts.approved} freigegeben · {recipeReviewCounts.reviewRequired} Prüfung nötig
+              </span>
+            </summary>
+            <div className="secondary-rail-details__content form-panel">
+              <header>
+                <p className="eyebrow">Rezeptupload</p>
+                <h3>Zusätzliche Rezepte in die Küchenbibliothek übernehmen</h3>
+              </header>
+              <input
+                value={recipeName}
+                onChange={(event) => setRecipeName(event.target.value)}
+                placeholder="Optionaler Rezeptname"
+              />
+              <input
+                className="file-input"
+                type="file"
+                accept=".pdf,.txt,.md,text/plain,application/pdf"
+                onChange={(event) => setRecipeFile(event.target.files?.[0] ?? null)}
+              />
+              <div className="action-row">
+                <button disabled={submitting} onClick={() => void handleRecipeUpload("offer")}>
+                  Über Angebotsagent speichern
+                </button>
+                <button disabled={submitting} onClick={() => void handleRecipeUpload("production")}>
+                  Über Produktionsagent speichern
+                </button>
+              </div>
+              {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
+              <div className="divider" />
+              <header>
+                <p className="eyebrow">Rezeptbestand</p>
+                <h3>Freigaben, Herkunft und Internet-Ausweichquellen</h3>
+              </header>
+              <ul className="item-list compact">
+                {filteredRecipes.slice(0, 12).map((recipe) => (
+                  <li key={String(recipe.recipeId)}>
+                    <strong>{String(recipe.name)}</strong>
+                    <p>
+                      {translateRecipeTier(String((recipe.source as Record<string, unknown>)?.tier ?? "-"))} ·{" "}
+                      {translateApprovalState(String((recipe.source as Record<string, unknown>)?.approvalState ?? "-"))}
+                    </p>
+                    <div className="action-row">
+                      <button
+                        className="secondary-button"
+                        disabled={submitting}
+                        onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "approve")}
+                      >
+                        Freigeben
+                      </button>
+                      <button
+                        className="secondary-button"
+                        disabled={submitting}
+                        onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "verify")}
+                      >
+                        Verifizieren
+                      </button>
+                      <button
+                        className="secondary-button destructive-button"
+                        disabled={submitting}
+                        onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "reject")}
+                      >
+                        Ablehnen
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                {filteredRecipes.length === 0 ? <li>Noch keine Rezepte vorhanden.</li> : null}
+              </ul>
             </div>
-            {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
-          </article>
-
-          <article className="panel secondary-panel">
-            <header>
-              <p className="eyebrow">Rezeptbestand</p>
-              <h3>Freigaben, Herkunft und Internet-Ausweichquellen</h3>
-            </header>
-            <ul className="item-list compact">
-              {filteredRecipes.slice(0, 12).map((recipe) => (
-                <li key={String(recipe.recipeId)}>
-                  <strong>{String(recipe.name)}</strong>
-                  <p>
-                    {translateRecipeTier(String((recipe.source as Record<string, unknown>)?.tier ?? "-"))} ·{" "}
-                    {translateApprovalState(String((recipe.source as Record<string, unknown>)?.approvalState ?? "-"))}
-                  </p>
-                  <div className="action-row">
-                    <button
-                      className="secondary-button"
-                      disabled={submitting}
-                      onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "approve")}
-                    >
-                      Freigeben
-                    </button>
-                    <button
-                      className="secondary-button"
-                      disabled={submitting}
-                      onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "verify")}
-                    >
-                      Verifizieren
-                    </button>
-                    <button
-                      className="secondary-button destructive-button"
-                      disabled={submitting}
-                      onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "reject")}
-                    >
-                      Ablehnen
-                    </button>
-                  </div>
-                </li>
-              ))}
-              {filteredRecipes.length === 0 ? <li>Noch keine Rezepte vorhanden.</li> : null}
-            </ul>
-          </article>
+          </details>
 
           <article className="panel secondary-panel">
             <header>
@@ -2947,29 +2954,34 @@ export function App() {
               {currentSpecPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li> : null}
             </ul>
             {archivedPurchaseLists.length > 0 ? (
-              <>
-                <div className="divider" />
-                <p className="eyebrow">Ältere Einkaufslisten</p>
-                <ul className="item-list compact">
-                  {archivedPurchaseLists.map((purchaseList) => {
-                    const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                    return (
-                      <li key={String(purchaseList.purchaseListId)}>
-                        <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                        <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                        <a
-                          className="ghost-link"
-                          href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Einkaufsliste herunterladen
-                        </a>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
+              <details className="secondary-workspace">
+                <summary>
+                  <span className="eyebrow">Ältere Einkaufslisten</span>
+                  <span className="subsection-title">{archivedPurchaseLists.length} frühere Listen</span>
+                  <span className="helper-text">Nur bei Bedarf aufklappen.</span>
+                </summary>
+                <div className="secondary-workspace__content">
+                  <ul className="item-list compact">
+                    {archivedPurchaseLists.map((purchaseList) => {
+                      const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                      return (
+                        <li key={String(purchaseList.purchaseListId)}>
+                          <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                          <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
+                          <a
+                            className="ghost-link"
+                            href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Einkaufsliste herunterladen
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </details>
             ) : null}
           </article>
           </div>

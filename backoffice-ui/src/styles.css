@@ -682,6 +682,21 @@ button:disabled {
   border-style: dashed;
 }
 
+.secondary-rail-details > summary {
+  display: grid;
+  gap: 0.25rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.secondary-rail-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.secondary-rail-details__content {
+  margin-top: 1rem;
+}
+
 .answer-grid {
   display: grid;
   gap: 0.8rem;
