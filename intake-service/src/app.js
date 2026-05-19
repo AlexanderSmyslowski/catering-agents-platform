@@ -474,6 +474,18 @@ export function buildIntakeApp(input = {}) {
                 message: "Es muss eine specId oder changeSetId uebergeben werden."
             });
         }
+        await auditLog.log({
+            action: "intake.spec_governance_finalized",
+            entityType: "AcceptedEventSpec",
+            entityId: specId ?? changeSetId ?? "unknown",
+            actor: actorForRequest(request),
+            summary: "Spec-Governance im Intake-Finalize-Pfad bestaetigt.",
+            details: {
+                specId,
+                changeSetId,
+                confirmCriticalFinalize: request.body.confirmCriticalFinalize === true
+            }
+        });
         return reply.send({
             ok: true,
             specId,

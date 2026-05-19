@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildIntakeApp } from "../intake-service/src/app.js";
-import { IntakeStore } from "../intake-service/src/store.js";
 import { buildOfferApp } from "../offer-service/src/app.js";
 import { buildProductionApp } from "../production-service/src/app.js";
 import { AuditLogStore } from "../shared-core/src/audit-log.js";
@@ -113,6 +112,47 @@ describe("P4 audit and review traceability", () => {
         "Produktions-Mitarbeiter"
       );
       expect(String(reviewEntry?.summary ?? "")).toContain("ueber den Produktions-Workflow geprueft");
+    } finally {
+      await app.close();
+      rmSync(dataRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("shows intake finalize actions in the audit trail", async () => {
+    const dataRoot = createDataRoot();
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const app = buildIntakeApp({ auditLog, rootDir: dataRoot });
+
+    try {
+      const finalizeResponse = await app.inject({
+        method: "POST",
+        url: "/v1/intake/spec-governance/finalize",
+        headers: {
+          "x-actor-name": auditOperatorName
+        },
+        payload: {
+          specId: "p4-finalize-spec-1",
+          changeSetId: "p4-finalize-change-1",
+          confirmCriticalFinalize: true
+        }
+      });
+
+      expect(finalizeResponse.statusCode).toBe(200);
+
+      const items = await auditLog.listRecent(20);
+      const finalizeEntry = items.find(
+        (entry) => entry.action === "intake.spec_governance_finalized" && entry.entityId === "p4-finalize-spec-1"
+      );
+
+      expect(finalizeEntry).toBeDefined();
+      expect(finalizeEntry?.entityType).toBe("AcceptedEventSpec");
+      expect(finalizeEntry?.actor.name).toBe(auditOperatorName);
+      expect(String(finalizeEntry?.summary ?? "")).toContain("Spec-Governance im Intake-Finalize-Pfad bestaetigt");
+      expect(finalizeEntry?.details).toMatchObject({
+        specId: "p4-finalize-spec-1",
+        changeSetId: "p4-finalize-change-1",
+        confirmCriticalFinalize: true
+      });
     } finally {
       await app.close();
       rmSync(dataRoot, { recursive: true, force: true });
