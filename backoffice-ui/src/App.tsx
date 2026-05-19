@@ -2674,19 +2674,9 @@ export function App() {
             <p className="helper-text">
               {productionWorkspaceCleared
                 ? "Die Ergebnisfelder wurden geleert. Ein neuer Upload oder eine neue Erfassung füllt diesen Bereich wieder."
-                : "Hier erscheinen nur die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere Läufe stehen weiter unten."}
+                : "Hier erscheinen die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere Läufe bleiben in den Details abrufbar."}
             </p>
             {!productionWorkspaceCleared ? renderPlanList(currentSpecPlans, specById, submitting, setSelectedPlanId) : null}
-            {!productionWorkspaceCleared && archivedPlans.length > 0 ? (
-              <>
-                <div className="divider" />
-                <header>
-                  <p className="eyebrow">Ältere Produktionsläufe</p>
-                  <h4 className="subsection-title">Frühere Ergebnisse aus anderen Vorgängen</h4>
-                </header>
-                {renderPlanList(archivedPlans, specById, submitting, setSelectedPlanId)}
-              </>
-            ) : null}
             {selectedPlan ? (
               <>
                 <div className="divider" />
