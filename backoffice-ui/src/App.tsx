@@ -488,6 +488,28 @@ function ReadOnlyWorkbenchProjection({
   );
 }
 
+type ProductionManualInputValues = {
+  eventType: string;
+  eventDate: string;
+  attendeeCount: string;
+  serviceForm: string;
+  menuItems: string;
+  customerName: string;
+  venueName: string;
+  notes: string;
+};
+
+type ProductionManualInputActions = {
+  setEventType: (value: string) => void;
+  setEventDate: (value: string) => void;
+  setAttendeeCount: (value: string) => void;
+  setServiceForm: (value: string) => void;
+  setMenuItems: (value: string) => void;
+  setCustomerName: (value: string) => void;
+  setVenueName: (value: string) => void;
+  setNotes: (value: string) => void;
+};
+
 type ProductionInputPanelProps = {
   submitting: boolean;
   dragActive: boolean;
@@ -498,26 +520,12 @@ type ProductionInputPanelProps = {
   documentProgress: number;
   documentEtaSeconds?: number;
   intakeText: string;
-  manualEventType: string;
-  manualEventDate: string;
-  manualAttendeeCount: string;
-  manualServiceForm: string;
-  manualMenuItems: string;
-  manualCustomerName: string;
-  manualVenueName: string;
-  manualNotes: string;
+  manualInput: ProductionManualInputValues;
+  manualInputActions: ProductionManualInputActions;
   productionUploadInputRef: { current: HTMLInputElement | null };
   setDragActive: (active: boolean) => void;
   setIntakeChannel: (channel: IntakeDocumentChannel) => void;
   setIntakeText: (value: string) => void;
-  setManualEventType: (value: string) => void;
-  setManualEventDate: (value: string) => void;
-  setManualAttendeeCount: (value: string) => void;
-  setManualServiceForm: (value: string) => void;
-  setManualMenuItems: (value: string) => void;
-  setManualCustomerName: (value: string) => void;
-  setManualVenueName: (value: string) => void;
-  setManualNotes: (value: string) => void;
   openProductionFilePicker: () => void;
   clearProductionWorkspace: () => void;
   handleProductionDrop: (event: DragEvent<HTMLLabelElement>) => void;
@@ -537,26 +545,12 @@ function ProductionInputPanel({
   documentProgress,
   documentEtaSeconds,
   intakeText,
-  manualEventType,
-  manualEventDate,
-  manualAttendeeCount,
-  manualServiceForm,
-  manualMenuItems,
-  manualCustomerName,
-  manualVenueName,
-  manualNotes,
+  manualInput,
+  manualInputActions,
   productionUploadInputRef,
   setDragActive,
   setIntakeChannel,
   setIntakeText,
-  setManualEventType,
-  setManualEventDate,
-  setManualAttendeeCount,
-  setManualServiceForm,
-  setManualMenuItems,
-  setManualCustomerName,
-  setManualVenueName,
-  setManualNotes,
   openProductionFilePicker,
   clearProductionWorkspace,
   handleProductionDrop,
@@ -695,43 +689,43 @@ function ProductionInputPanel({
         <h3>Arbeitsauftrag manuell anlegen</h3>
       </header>
       <input
-        value={manualEventType}
-        onChange={(event) => setManualEventType(event.target.value)}
+        value={manualInput.eventType}
+        onChange={(event) => manualInputActions.setEventType(event.target.value)}
         placeholder="Veranstaltungstyp, z. B. Konferenz"
       />
       <input
-        value={manualEventDate}
-        onChange={(event) => setManualEventDate(event.target.value)}
+        value={manualInput.eventDate}
+        onChange={(event) => manualInputActions.setEventDate(event.target.value)}
         placeholder="Datum, z. B. 2026-10-10"
       />
       <input
-        value={manualAttendeeCount}
-        onChange={(event) => setManualAttendeeCount(event.target.value)}
+        value={manualInput.attendeeCount}
+        onChange={(event) => manualInputActions.setAttendeeCount(event.target.value)}
         placeholder="Teilnehmerzahl"
       />
       <input
-        value={manualServiceForm}
-        onChange={(event) => setManualServiceForm(event.target.value)}
+        value={manualInput.serviceForm}
+        onChange={(event) => manualInputActions.setServiceForm(event.target.value)}
         placeholder="Serviceform, z. B. Buffet"
       />
       <input
-        value={manualMenuItems}
-        onChange={(event) => setManualMenuItems(event.target.value)}
+        value={manualInput.menuItems}
+        onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
         placeholder="Menüpunkte, durch Komma getrennt"
       />
       <input
-        value={manualCustomerName}
-        onChange={(event) => setManualCustomerName(event.target.value)}
+        value={manualInput.customerName}
+        onChange={(event) => manualInputActions.setCustomerName(event.target.value)}
         placeholder="Kundenname"
       />
       <input
-        value={manualVenueName}
-        onChange={(event) => setManualVenueName(event.target.value)}
+        value={manualInput.venueName}
+        onChange={(event) => manualInputActions.setVenueName(event.target.value)}
         placeholder="Ort oder Veranstaltungsort"
       />
       <textarea
-        value={manualNotes}
-        onChange={(event) => setManualNotes(event.target.value)}
+        value={manualInput.notes}
+        onChange={(event) => manualInputActions.setNotes(event.target.value)}
         placeholder="Interne Notizen oder Einschränkungen"
       />
       <button disabled={submitting} onClick={() => void handleManualSpecSubmit()}>
@@ -2293,26 +2287,30 @@ export function App() {
             documentProgress={documentProgress}
             documentEtaSeconds={documentEtaSeconds}
             intakeText={intakeText}
-            manualEventType={manualEventType}
-            manualEventDate={manualEventDate}
-            manualAttendeeCount={manualAttendeeCount}
-            manualServiceForm={manualServiceForm}
-            manualMenuItems={manualMenuItems}
-            manualCustomerName={manualCustomerName}
-            manualVenueName={manualVenueName}
-            manualNotes={manualNotes}
+            manualInput={{
+              eventType: manualEventType,
+              eventDate: manualEventDate,
+              attendeeCount: manualAttendeeCount,
+              serviceForm: manualServiceForm,
+              menuItems: manualMenuItems,
+              customerName: manualCustomerName,
+              venueName: manualVenueName,
+              notes: manualNotes
+            }}
+            manualInputActions={{
+              setEventType: setManualEventType,
+              setEventDate: setManualEventDate,
+              setAttendeeCount: setManualAttendeeCount,
+              setServiceForm: setManualServiceForm,
+              setMenuItems: setManualMenuItems,
+              setCustomerName: setManualCustomerName,
+              setVenueName: setManualVenueName,
+              setNotes: setManualNotes
+            }}
             productionUploadInputRef={productionUploadInputRef}
             setDragActive={setDragActive}
             setIntakeChannel={setIntakeChannel}
             setIntakeText={setIntakeText}
-            setManualEventType={setManualEventType}
-            setManualEventDate={setManualEventDate}
-            setManualAttendeeCount={setManualAttendeeCount}
-            setManualServiceForm={setManualServiceForm}
-            setManualMenuItems={setManualMenuItems}
-            setManualCustomerName={setManualCustomerName}
-            setManualVenueName={setManualVenueName}
-            setManualNotes={setManualNotes}
             openProductionFilePicker={openProductionFilePicker}
             clearProductionWorkspace={clearProductionWorkspace}
             handleProductionDrop={handleProductionDrop}
