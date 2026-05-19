@@ -151,6 +151,43 @@ describe("backoffice route smoke", () => {
     expect(production).toContain("Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.");
   });
 
+  it("keeps the offer route anchored on existing drafts and operative handoff status", async () => {
+    installBackofficeEnvironmentMocks({
+      acceptedSpecs: [
+        { specId: "offer-spec-complete", readiness: { status: "complete" }, event: { type: "lunch" } },
+        { specId: "offer-spec-partial", readiness: { status: "partial" }, event: { type: "meeting" } }
+      ],
+      offerDrafts: [
+        {
+          draftId: "offer-draft-buffet",
+          eventSummary: "Sommerfest mit Buffet",
+          variantSet: [
+            {
+              variantId: "basis",
+              label: "Basis"
+            }
+          ],
+          openQuestions: ["Getränkepaket noch klären"]
+        }
+      ]
+    });
+
+    const offer = await renderRoute("/angebot");
+
+    expect(offer).toContain("Angebotsentwürfe");
+    expect(offer).toContain("1 Entwürfe mit Varianten und Export stehen bereit.");
+    expect(offer).toContain("Übergabereife");
+    expect(offer).toContain("1 von 2 Spezifikationen sind vollständig");
+    expect(offer).toContain("offer-draft-buffet");
+    expect(offer).toContain("Sommerfest mit Buffet");
+    expect(offer).toContain("Varianten: 1 · Offene Punkte: 1");
+    expect(offer).toContain("Übernehmen: Basis");
+    expect(offer).toContain("Angebot exportieren");
+    expect(offer).toContain("Spezifikationen für die Weitergabe an die Produktion");
+    expect(offer).toContain("Status: vollständig");
+    expect(offer).toContain("Status: teilweise vollständig");
+  });
+
   it("keeps the start overview anchored on existing operational counts", async () => {
     installBackofficeEnvironmentMocks({
       intakeRequests: [
