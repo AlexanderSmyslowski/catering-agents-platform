@@ -508,6 +508,7 @@ type ProductionManualInputActions = {
   setCustomerName: (value: string) => void;
   setVenueName: (value: string) => void;
   setNotes: (value: string) => void;
+  submitManualSpec: () => Promise<void>;
 };
 
 type ProductionSourceInputValues = {
@@ -540,7 +541,6 @@ type ProductionInputPanelProps = {
   sourceInputActions: ProductionSourceInputActions;
   manualInput: ProductionManualInputValues;
   manualInputActions: ProductionManualInputActions;
-  handleManualSpecSubmit: () => Promise<void>;
 };
 
 function ProductionInputPanel({
@@ -548,8 +548,7 @@ function ProductionInputPanel({
   sourceInput,
   sourceInputActions,
   manualInput,
-  manualInputActions,
-  handleManualSpecSubmit
+  manualInputActions
 }: ProductionInputPanelProps) {
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
@@ -720,7 +719,7 @@ function ProductionInputPanel({
         onChange={(event) => manualInputActions.setNotes(event.target.value)}
         placeholder="Interne Notizen oder Einschränkungen"
       />
-      <button disabled={submitting} onClick={() => void handleManualSpecSubmit()}>
+      <button disabled={submitting} onClick={() => void manualInputActions.submitManualSpec()}>
         Spezifikation anlegen
       </button>
     </article>
@@ -2311,9 +2310,9 @@ export function App() {
               setMenuItems: setManualMenuItems,
               setCustomerName: setManualCustomerName,
               setVenueName: setManualVenueName,
-              setNotes: setManualNotes
+              setNotes: setManualNotes,
+              submitManualSpec: handleManualSpecSubmit
             }}
-            handleManualSpecSubmit={handleManualSpecSubmit}
           />
           </div>
           <div className="production-column">
