@@ -510,8 +510,7 @@ type ProductionManualInputActions = {
   setNotes: (value: string) => void;
 };
 
-type ProductionInputPanelProps = {
-  submitting: boolean;
+type ProductionSourceInputValues = {
   dragActive: boolean;
   intakeFile: File | null;
   intakeChannel: IntakeDocumentChannel;
@@ -520,43 +519,36 @@ type ProductionInputPanelProps = {
   documentProgress: number;
   documentEtaSeconds?: number;
   intakeText: string;
-  manualInput: ProductionManualInputValues;
-  manualInputActions: ProductionManualInputActions;
-  productionUploadInputRef: { current: HTMLInputElement | null };
+};
+
+type ProductionSourceInputActions = {
+  uploadInputRef: { current: HTMLInputElement | null };
   setDragActive: (active: boolean) => void;
   setIntakeChannel: (channel: IntakeDocumentChannel) => void;
   setIntakeText: (value: string) => void;
-  openProductionFilePicker: () => void;
-  clearProductionWorkspace: () => void;
-  handleProductionDrop: (event: DragEvent<HTMLLabelElement>) => void;
-  handleProductionFileSelection: (event: ChangeEvent<HTMLInputElement>) => void;
-  handleIntakeDocumentSubmit: () => Promise<void>;
-  handleIntakeSubmit: () => Promise<void>;
+  openFilePicker: () => void;
+  clearWorkspace: () => void;
+  handleDrop: (event: DragEvent<HTMLLabelElement>) => void;
+  handleFileSelection: (event: ChangeEvent<HTMLInputElement>) => void;
+  submitDocument: () => Promise<void>;
+  submitText: () => Promise<void>;
+};
+
+type ProductionInputPanelProps = {
+  submitting: boolean;
+  sourceInput: ProductionSourceInputValues;
+  sourceInputActions: ProductionSourceInputActions;
+  manualInput: ProductionManualInputValues;
+  manualInputActions: ProductionManualInputActions;
   handleManualSpecSubmit: () => Promise<void>;
 };
 
 function ProductionInputPanel({
   submitting,
-  dragActive,
-  intakeFile,
-  intakeChannel,
-  documentPhase,
-  activeDocumentName,
-  documentProgress,
-  documentEtaSeconds,
-  intakeText,
+  sourceInput,
+  sourceInputActions,
   manualInput,
   manualInputActions,
-  productionUploadInputRef,
-  setDragActive,
-  setIntakeChannel,
-  setIntakeText,
-  openProductionFilePicker,
-  clearProductionWorkspace,
-  handleProductionDrop,
-  handleProductionFileSelection,
-  handleIntakeDocumentSubmit,
-  handleIntakeSubmit,
   handleManualSpecSubmit
 }: ProductionInputPanelProps) {
   return (
@@ -570,14 +562,14 @@ function ProductionInputPanel({
           </p>
         </div>
         <div className="action-row">
-          <button type="button" disabled={submitting} onClick={openProductionFilePicker}>
+          <button type="button" disabled={submitting} onClick={sourceInputActions.openFilePicker}>
             Datei hochladen
           </button>
           <button
             type="button"
             className="secondary-button destructive-button"
             disabled={submitting}
-            onClick={clearProductionWorkspace}
+            onClick={sourceInputActions.clearWorkspace}
           >
             Löschen
           </button>
@@ -588,20 +580,20 @@ function ProductionInputPanel({
         <h3>Auftrag als Datei übernehmen</h3>
       </header>
       <label
-        className={dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
+        className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
         onDragOver={(event) => {
           event.preventDefault();
-          setDragActive(true);
+          sourceInputActions.setDragActive(true);
         }}
-        onDragLeave={() => setDragActive(false)}
-        onDrop={handleProductionDrop}
+        onDragLeave={() => sourceInputActions.setDragActive(false)}
+        onDrop={sourceInputActions.handleDrop}
       >
         <input
-          ref={productionUploadInputRef}
+          ref={sourceInputActions.uploadInputRef}
           className="visually-hidden"
           type="file"
           accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
-          onChange={handleProductionFileSelection}
+          onChange={sourceInputActions.handleFileSelection}
         />
         <span className="eyebrow">Drag & Drop</span>
         <strong>Angebot, E-Mail oder Textdatei hier ablegen</strong>
@@ -611,34 +603,34 @@ function ProductionInputPanel({
         <span className="drag-drop-zone__cta">Datei auswählen</span>
       </label>
       <div className="activity-slot">
-        {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
-        {documentPhase === "analysing" && activeDocumentName ? (
+        {sourceInput.intakeFile ? <p className="helper-text">Ausgewählt: {sourceInput.intakeFile.name}</p> : null}
+        {sourceInput.documentPhase === "analysing" && sourceInput.activeDocumentName ? (
           <div className="progress-panel">
             <div
               className="progress-ring"
               style={
                 {
-                  "--progress-angle": `${Math.max(0, Math.min(documentProgress, 100)) * 3.6}deg`
+                  "--progress-angle": `${Math.max(0, Math.min(sourceInput.documentProgress, 100)) * 3.6}deg`
                 } as CSSProperties
               }
             >
-              <span>{documentProgress}%</span>
+              <span>{sourceInput.documentProgress}%</span>
             </div>
             <div className="progress-panel__content">
-              <p className="processing-note">Analyse läuft für {activeDocumentName} ...</p>
+              <p className="processing-note">Analyse läuft für {sourceInput.activeDocumentName} ...</p>
               <div className="progress-bar">
                 <div
                   className="progress-bar__fill"
-                  style={{ width: `${Math.max(0, Math.min(documentProgress, 100))}%` }}
+                  style={{ width: `${Math.max(0, Math.min(sourceInput.documentProgress, 100))}%` }}
                 />
               </div>
               <p className="helper-text">
-                Geschätzte Restzeit: {formatEta(documentEtaSeconds ?? 1)}
+                Geschätzte Restzeit: {formatEta(sourceInput.documentEtaSeconds ?? 1)}
               </p>
             </div>
           </div>
         ) : null}
-        {documentPhase === "done" && activeDocumentName ? (
+        {sourceInput.documentPhase === "done" && sourceInput.activeDocumentName ? (
           <div className="progress-panel">
             <div
               className="progress-ring progress-ring--done"
@@ -648,7 +640,7 @@ function ProductionInputPanel({
             </div>
             <div className="progress-panel__content">
               <p className="processing-note processing-note--success">
-                Analyse abgeschlossen für {activeDocumentName}.
+                Analyse abgeschlossen für {sourceInput.activeDocumentName}.
               </p>
               <div className="progress-bar">
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
@@ -661,14 +653,14 @@ function ProductionInputPanel({
       <div className="action-row">
         <select
           className="operator-input"
-          value={intakeChannel}
-          onChange={(event) => setIntakeChannel(event.target.value as IntakeDocumentChannel)}
+          value={sourceInput.intakeChannel}
+          onChange={(event) => sourceInputActions.setIntakeChannel(event.target.value as IntakeDocumentChannel)}
         >
           <option value="pdf_upload">PDF / Angebot</option>
           <option value="email">E-Mail</option>
           <option value="text">Textdatei</option>
         </select>
-        <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
+        <button disabled={submitting} onClick={() => void sourceInputActions.submitDocument()}>
           Erneut mit ausgewähltem Typ verarbeiten
         </button>
       </div>
@@ -677,9 +669,9 @@ function ProductionInputPanel({
         <p className="eyebrow">Texteingabe</p>
         <h3>Arbeitsauftrag direkt einfügen</h3>
       </header>
-      <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
+      <textarea value={sourceInput.intakeText} onChange={(event) => sourceInputActions.setIntakeText(event.target.value)} />
       <div className="action-row">
-        <button disabled={submitting} onClick={() => void handleIntakeSubmit()}>
+        <button disabled={submitting} onClick={() => void sourceInputActions.submitText()}>
           Erfassungstext normalisieren
         </button>
       </div>
@@ -2279,14 +2271,28 @@ export function App() {
           <div className="production-column">
           <ProductionInputPanel
             submitting={submitting}
-            dragActive={dragActive}
-            intakeFile={intakeFile}
-            intakeChannel={intakeChannel}
-            documentPhase={documentPhase}
-            activeDocumentName={activeDocumentName}
-            documentProgress={documentProgress}
-            documentEtaSeconds={documentEtaSeconds}
-            intakeText={intakeText}
+            sourceInput={{
+              dragActive,
+              intakeFile,
+              intakeChannel,
+              documentPhase,
+              activeDocumentName,
+              documentProgress,
+              documentEtaSeconds,
+              intakeText
+            }}
+            sourceInputActions={{
+              uploadInputRef: productionUploadInputRef,
+              setDragActive,
+              setIntakeChannel,
+              setIntakeText,
+              openFilePicker: openProductionFilePicker,
+              clearWorkspace: clearProductionWorkspace,
+              handleDrop: handleProductionDrop,
+              handleFileSelection: handleProductionFileSelection,
+              submitDocument: handleIntakeDocumentSubmit,
+              submitText: handleIntakeSubmit
+            }}
             manualInput={{
               eventType: manualEventType,
               eventDate: manualEventDate,
@@ -2307,16 +2313,6 @@ export function App() {
               setVenueName: setManualVenueName,
               setNotes: setManualNotes
             }}
-            productionUploadInputRef={productionUploadInputRef}
-            setDragActive={setDragActive}
-            setIntakeChannel={setIntakeChannel}
-            setIntakeText={setIntakeText}
-            openProductionFilePicker={openProductionFilePicker}
-            clearProductionWorkspace={clearProductionWorkspace}
-            handleProductionDrop={handleProductionDrop}
-            handleProductionFileSelection={handleProductionFileSelection}
-            handleIntakeDocumentSubmit={handleIntakeDocumentSubmit}
-            handleIntakeSubmit={handleIntakeSubmit}
             handleManualSpecSubmit={handleManualSpecSubmit}
           />
           </div>
