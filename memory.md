@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.91
+version: 5.92
 date: 2026-05-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -42,17 +42,17 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P18 minimaler interner Eskalations- und Klaerungspfad im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die sichtbare Klaerung und Eskalation auf PR-, Doku- und memory-Kontexte ohne ein Incident-, Ticket- oder Governance-System einzuführen
 - P19 minimaler interner Beta-Durchfuehrungsrahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt einen ersten kontrollierten internen Beta-Durchlauf auf bestehende Test-, Build-, Smoke-, Abnahme-, Lage- und Klaerungsrahmen ohne ein Release-, Rollout- oder Support-System einzuführen
 - P20 minimaler interner Beta-Auswertungs- und Go/No-Go-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Auswertung eines ersten Beta-Durchlaufs sowie die Einordnung in tragfaehig, nachzuschaerfen oder vorerst zu stoppen ohne ein formales QA-, Release- oder Steering-System einzuführen
-|- P22 minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den Umgang mit kleinen Restpunkten vor einem sauberen Beta-Abschluss ohne ein formales Defect-, QA- oder Release-Management zu konstruieren
-|- P23 minimaler interner Beta-Abschluss- und Dokumentationsstand im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die kleine Abschlusssicht auf konsistente Dokumente, PR und memory ohne ein formales Abschluss-, QA- oder Governance-System einzuführen
-|- P25 minimaler interner Nutzungsrahmen nach Beta-Uebergabe im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufenden internen Nutzungsstand nach der Beta-Uebergabe ohne ein formales Betriebs-, Support- oder Governance-Modell einzuführen
-|- P26 minimaler interner Stabilisierungsrahmen in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufend ruhigen internen Nutzungsstand ohne ein formales Betriebs-, Monitoring- oder Support-Modell einzuführen
-|- P27 minimaler interner Reaktionsrahmen bei Instabilitaet in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die erste Reaktion auf Instabilitaetssignale ohne ein formales Incident-, Support- oder Betriebsreaktionsmodell einzuführen
-|- P29 minimaler interner Entscheidungsrahmen zur Ausbaupriorisierung nach Bereinigung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Priorisierung weiterer kleiner Ausbauschritte nach der dokumentarischen Bereinigung ohne ein formales Produktmanagement-, Portfolio- oder Governance-Modell einzuführen
-|- die zuvor dokumentierte Abgrenzungslogik zwischen Stabilisierung und echtem Funktionsausbau ist als relevanter Referenzpunkt in der Dokumentationslinie verankert
-|- P31 minimaler interner Entscheidungsrahmen zur Zurueckstellung von Funktionsausbau zugunsten von Stabilisierung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Zurueckstellung von Ausbau zugunsten von Stabilisierung ohne ein formales Produktmanagement-, Portfolio- oder Governance-Modell einzuführen.
-|- P33 minimaler interner Entscheidungsrahmen fuer Konsistenzfix-Vorrang vor weiterem Ausbau im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Vorrangentscheidung fuer dokumentarische Konsistenzfixes ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
-|- P34 minimaler interner Entscheidungsrahmen fuer ausreichend hergestellte dokumentarische Konsistenz zum wieder kleinen Ausbau im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Rueckkehr zu kleinem Ausbau ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
-|- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen.
+- P22 minimaler Restpunkt- und Nachziehrahmen vor Beta-Abschluss im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den Umgang mit kleinen Restpunkten vor einem sauberen Beta-Abschluss ohne ein formales Defect-, QA- oder Release-Management zu konstruieren
+- P23 minimaler interner Beta-Abschluss- und Dokumentationsstand im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die kleine Abschlusssicht auf konsistente Dokumente, PR und memory ohne ein formales Abschluss-, QA- oder Governance-System einzuführen
+- P25 minimaler interner Nutzungsrahmen nach Beta-Uebergabe im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufenden internen Nutzungsstand nach der Beta-Uebergabe ohne ein formales Betriebs-, Support- oder Governance-Modell einzuführen
+- P26 minimaler interner Stabilisierungsrahmen in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt den laufend ruhigen internen Nutzungsstand ohne ein formales Betriebs-, Monitoring- oder Support-Modell einzuführen
+- P27 minimaler interner Reaktionsrahmen bei Instabilitaet in laufender Nutzung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die erste Reaktion auf Instabilitaetssignale ohne ein formales Incident-, Support- oder Betriebsreaktionsmodell einzuführen
+- P29 minimaler interner Entscheidungsrahmen zur Ausbaupriorisierung nach Bereinigung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Priorisierung weiterer kleiner Ausbauschritte nach der dokumentarischen Bereinigung ohne ein formales Produktmanagement-, Portfolio- oder Governance-Modell einzuführen
+- die zuvor dokumentierte Abgrenzungslogik zwischen Stabilisierung und echtem Funktionsausbau ist als relevanter Referenzpunkt in der Dokumentationslinie verankert
+- P31 minimaler interner Entscheidungsrahmen zur Zurueckstellung von Funktionsausbau zugunsten von Stabilisierung im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Zurueckstellung von Ausbau zugunsten von Stabilisierung ohne ein formales Produktmanagement-, Portfolio- oder Governance-Modell einzuführen.
+- P33 minimaler interner Entscheidungsrahmen fuer Konsistenzfix-Vorrang vor weiterem Ausbau im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Vorrangentscheidung fuer dokumentarische Konsistenzfixes ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
+- P34 minimaler interner Entscheidungsrahmen fuer ausreichend hergestellte dokumentarische Konsistenz zum wieder kleinen Ausbau im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die knappe Rueckkehr zu kleinem Ausbau ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
+- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen.
 
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
 - Telegram als zusaetzlicher Bedien- und Rueckkanal ist als spaeterer fachlicher Ausbauanker im Pflichtenheft dokumentiert: Angebots-/Veranstaltungsinformationen per Telegram an die App, klaerende Rueckfragen per Telegram und Versand von Rezepten, Produktionshinweisen sowie Einkaufslisten per Telegram an die Produktion; aktuell nur Zielbild, keine Umsetzung und keine Scope-Ausweitung im Konsolidierungsblock.
@@ -513,3 +513,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.91 - 2026-05-19
 - Das read-only Workbench-Zonenmapping `docs/product/UI_WORKBENCH_ZONE_MAPPING_READONLY.md` dokumentiert die spaetere Apple-like Conversational Workbench als reine Zuordnung vorhandener Produktobjekte und Flows zu Quellen-/Eingabe-, Spec-, Klaer-, Ergebnis-, Export-/Drive- und Audit-/Herkunftszonen.
 - Der Schritt bleibt rein dokumentarisch: keine UI-/API-/Google-/OAuth-Implementierung; strukturierte Ergebnisobjekte duerfen nicht in generischem Chattext verschwinden, und Drive bleibt auf read-only Importquellen bzw. explizit freigegebene app-eigene Outputs begrenzt.
+
+### 5.92 - 2026-05-19
+- Die Root-Memory wurde formal bereinigt: fehlerhafte Listenmarker im Projektkontext wurden ohne inhaltliche Scope-Aenderung korrigiert.
+- Der Schritt bleibt reine Dokumentationskonsistenz: keine Produktlogik, keine UI-/API-/Persistenz-/Google-/Deployment-Aenderung.
