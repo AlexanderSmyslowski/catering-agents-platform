@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.90
+version: 5.91
 date: 2026-05-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -58,6 +58,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Telegram als zusaetzlicher Bedien- und Rueckkanal ist als spaeterer fachlicher Ausbauanker im Pflichtenheft dokumentiert: Angebots-/Veranstaltungsinformationen per Telegram an die App, klaerende Rueckfragen per Telegram und Versand von Rezepten, Produktionshinweisen sowie Einkaufslisten per Telegram an die Produktion; aktuell nur Zielbild, keine Umsetzung und keine Scope-Ausweitung im Konsolidierungsblock.
 - Die neue Produkt-/UI-Richtung ist als Discovery- und Zielbildnotiz `docs/product/UI_CHATBOT_GOOGLE_DRIVE_ZIELBILD_DISCOVERY.md` dokumentiert: Apple-like, ruhige Conversational Workbench als Zielbild, Google Drive nur als spaeter bewusst entschiedener Integrationspfad mit OAuth-/Scope-/Rechteklaerung; bestehende Drive-Dateien bleiben grundsaetzlich read-only Importquellen, Schreibzugriff ist nur fuer app-eigene Outputs oder explizit freigegebene Zielartefakte/Zielordner vorgesehen; keine Implementierung, keine neue API, keine Secrets.
 - Die vorhandenen UI-Flows `/`, `/angebot` und `/produktion` sind als Ist-Flow-Karte in `docs/product/UI_IST_FLOW_KARTE_CONVERSATIONAL_WORKBENCH.md` dokumentiert; die Karte ordnet Eingaben, Systemantworten, Klaerbedarf, Produktobjekte, Export-/Audit-Bezuege sowie spaetere Workbench- und Drive-Beruehrungen ein, ohne Implementierung oder neue API.
+- Das read-only Workbench-Zonenmapping `docs/product/UI_WORKBENCH_ZONE_MAPPING_READONLY.md` ordnet eine spaetere cleane Conversational Workbench den vorhandenen Zonen Quellen/Eingabe, verstandene Daten/Spec, Rueckfragen/Klaerung, Ergebnisobjekte, Export/Drive-Output und Audit/Herkunft/Freigabe zu; Ergebnisobjekte bleiben pruefbar und Drive folgt weiterhin der read-only-Import- bzw. explizit freigegebenen Output-Linie.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -508,3 +509,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.90 - 2026-05-19
 - Die Ist-Flow-Karte `docs/product/UI_IST_FLOW_KARTE_CONVERSATIONAL_WORKBENCH.md` dokumentiert die vorhandenen UI-Flows `/`, `/angebot` und `/produktion` als naechsten kleinen Schritt in Richtung Apple-like Conversational Workbench.
 - Der Schritt bleibt rein dokumentarisch: keine UI-/Google-/API-Implementierung, Drive-Beruehrung nur als spaetere read-only Import- bzw. explizit freigegebene Output-Linie eingeordnet.
+
+### 5.91 - 2026-05-19
+- Das read-only Workbench-Zonenmapping `docs/product/UI_WORKBENCH_ZONE_MAPPING_READONLY.md` dokumentiert die spaetere Apple-like Conversational Workbench als reine Zuordnung vorhandener Produktobjekte und Flows zu Quellen-/Eingabe-, Spec-, Klaer-, Ergebnis-, Export-/Drive- und Audit-/Herkunftszonen.
+- Der Schritt bleibt rein dokumentarisch: keine UI-/API-/Google-/OAuth-Implementierung; strukturierte Ergebnisobjekte duerfen nicht in generischem Chattext verschwinden, und Drive bleibt auf read-only Importquellen bzw. explizit freigegebene app-eigene Outputs begrenzt.
