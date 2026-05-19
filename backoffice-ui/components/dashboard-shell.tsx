@@ -3,10 +3,11 @@ import type { PropsWithChildren } from "react";
 export function DashboardShell({
   title,
   subtitle,
+  className,
   children
-}: PropsWithChildren<{ title: string; subtitle?: string }>) {
+}: PropsWithChildren<{ title: string; subtitle?: string; className?: string }>) {
   return (
-    <main className="app-shell">
+    <main className={className ? `app-shell ${className}` : "app-shell"}>
       <div className="app-shell__veil" />
       <div className="app-shell__inner">
         <header className="app-shell__header">

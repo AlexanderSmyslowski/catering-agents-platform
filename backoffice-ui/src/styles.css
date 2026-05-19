@@ -327,6 +327,65 @@ select {
   box-shadow: 0 10px 30px rgba(31, 57, 89, 0.08);
 }
 
+.app-shell--production-route .app-shell__inner {
+  padding-top: 1.35rem;
+}
+
+.app-shell--production-route .app-shell__header {
+  margin-bottom: 0.85rem;
+}
+
+.app-shell--production-route .app-shell__header h1 {
+  font-size: clamp(1.9rem, 3vw, 2.6rem);
+  letter-spacing: -0.035em;
+}
+
+.app-shell--production-route .app-shell__subtitle {
+  margin-top: 0.35rem;
+  max-width: 54ch;
+  font-size: 0.98rem;
+}
+
+.app-shell--production-route .masthead-card {
+  padding: 0.85rem 1rem;
+}
+
+.app-shell--production-route .agent-shortcuts {
+  display: none;
+}
+
+.app-shell--production-route .hero-detail-card {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.7rem;
+  margin-top: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1.25rem;
+}
+
+.app-shell--production-route .hero-title {
+  max-width: 58ch;
+  font-size: clamp(1.05rem, 1.5vw, 1.35rem);
+  letter-spacing: -0.02em;
+}
+
+.app-shell--production-route .hero-detail-card .lede {
+  margin-top: 0.35rem;
+  max-width: 64ch;
+  font-size: 0.94rem;
+}
+
+.app-shell--production-route .hero-pills,
+.app-shell--production-route .hero-pill {
+  gap: 0.45rem;
+}
+
+.app-shell--production-route .hero-pill {
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  box-shadow: none;
+  font-size: 0.88rem;
+}
+
 .toolbar {
   justify-content: flex-start;
 }

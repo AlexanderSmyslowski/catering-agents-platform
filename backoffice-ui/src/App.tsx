@@ -308,7 +308,7 @@ function getRouteSubtitle(route: AppRoute): string {
     return "Kundenanfrage verstehen, Leistungen strukturieren und daraus belastbare Angebotsentwürfe erzeugen.";
   }
   if (route === "production") {
-    return "Operative Daten, Rezepte, Produktionspläne und Einkaufslisten in einem klaren Küchenarbeitsplatz bündeln.";
+    return "Ruhige Arbeitsfläche für Rezepte, Produktionspläne und Einkaufslisten.";
   }
   return "Zwei spezialisierte Arbeitsflächen mit gemeinsamem Regelkern und klar getrennten Zuständigkeiten.";
 }
@@ -1530,7 +1530,11 @@ export function App() {
   ];
 
   return (
-    <DashboardShell title={getRouteTitle(route)} subtitle={getRouteSubtitle(route)}>
+    <DashboardShell
+      title={getRouteTitle(route)}
+      subtitle={getRouteSubtitle(route)}
+      className={route === "production" ? "app-shell--production-route" : undefined}
+    >
       <section className="masthead-card">
         <div className="masthead-row">
           <nav className="primary-nav" aria-label="Hauptnavigation">
@@ -1596,12 +1600,12 @@ export function App() {
               <h2 className="hero-title">
                 {route === "offer"
                   ? "Eigene URL für Angebotserstellung mit direkter Übergabe in operative Veranstaltungsdaten."
-                  : "Eigene URL für Produktionsvorbereitung mit Rezeptbibliothek, Küchenplanung und Einkaufsliste."}
+                  : "Produktionsvorbereitung: Rezepte, Küchenplanung und Einkauf."}
               </h2>
               <p className="lede">
                 {route === "offer"
                   ? "Diese Ansicht bündelt Kundenanfrage, modulare Angebotsentwürfe und die Übernahme ausgewählter Varianten in die operative Spezifikation."
-                  : "Diese Ansicht bündelt unabhängige Erfassung, Produktionspläne, Internet-Ausweichrezepte, Rezeptfreigaben und CSV-fähige Einkaufslisten."}
+                  : "Arbeitsroute für Spezifikationen, Pläne, Rezeptfreigaben und Exporte."}
               </p>
             </div>
             <div className="hero-pills">
