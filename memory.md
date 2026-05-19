@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.92
+version: 5.93
 date: 2026-05-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -29,6 +29,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P4 zielt auf Audit-/Review-/Nachvollziehbarkeit: vorhandene Nachweise, Operator-Zuordnung und geschuetzte Kernpfade betriebsnah schaerfen, der Traceability-Strang ist inzwischen testseitig belegt und soll stehen bleiben
 - P4 Traceability wurde zusätzlich als kleiner Regressionstest `tests/p4-audit-traceability.test.ts` codiert und grün verifiziert; die Traceability umfasst Produktionsseed, Produktionsreview, Angebotsreview und Intake-Finalize
 - P2 Browser-/Smoke-Absicherung ist jetzt real belegt: der lokale Smoke-Korridor prueft die drei UI-Routen, die vier Health-Endpunkte und die drei read-only Exportpfade; ergaenzend existiert ein minimaler repo-verankerter UI-Route-Smoke-Test fuer `/`, `/angebot` und `/produktion`, dessen Angebots- und Produktions-Assertions auf route-eindeutige Marker geschaerft sind
+- Die Backoffice-API-Testspur sichert nun auch die zentralen read-only Export-Link-Helper fuer Angebot, Produktionsplan und Einkaufsliste gegen Pfaddrift ab.
 - P8 UI-Rollenverantwortung und Operator-Zuordnung ist als schmale Mini-Spezifikation fuer den Backoffice-UI-Kern ergänzt worden; sie ordnet Home, Angebotsansicht, Produktionsansicht sowie read-only Detail-/Export-/Audit-Kontexte den bestehenden Minimalrollen und Operatornamen zu
 - P9 formaler AuthN-/AuthZ-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; sie fasst die bestehende Rollen-/Guard-Grundlage, die Actor-Zuordnung und den Proxy-Rahmen zu einem konservativen internen AuthN-/AuthZ-Rahmen zusammen
 - P10 manuelle Betriebsinterventionen und Fallbacks im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie ordnen nur die manuellen Betriebswege, Fallbacks und Grenzen im bestehenden MVP-Rahmen ein, ohne eine neue Incident- oder Recovery-Plattform einzuführen
@@ -517,3 +518,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.92 - 2026-05-19
 - Die Root-Memory wurde formal bereinigt: fehlerhafte Listenmarker im Projektkontext wurden ohne inhaltliche Scope-Aenderung korrigiert.
 - Der Schritt bleibt reine Dokumentationskonsistenz: keine Produktlogik, keine UI-/API-/Persistenz-/Google-/Deployment-Aenderung.
+
+### 5.93 - 2026-05-19
+- Die Backoffice-API-Testspur wurde um eine kleine read-only Export-Link-Absicherung erweitert: Angebot, Produktionsplan und Einkaufsliste bleiben auf den bestehenden Exportservice-Pfaden verankert.
+- Der Schritt ist reine Test-/Smoke-Konsolidierung und fuehrt keine neue Produktlogik, API, Persistenz oder Deployment-Aenderung ein.

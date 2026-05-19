@@ -3,6 +3,9 @@ import {
   createAcceptedSpecFromText,
   createOfferFromText,
   createProductionPlan,
+  offerExportUrl,
+  productionExportUrl,
+  purchaseListExportUrl,
   reviewRecipe,
   seedDemoData
 } from "../backoffice-ui/src/api.js";
@@ -93,5 +96,13 @@ describe("backoffice API actor defaults", () => {
       "Betriebs-/Audit-Operator"
     ]);
     expect(calls.map((call) => call.contentType)).toEqual(["application/json", "application/json", "application/json"]);
+  });
+
+  it("keeps export links on the read-only export service paths", () => {
+    expect(offerExportUrl("draft-ops-1")).toBe("/api/exports/v1/exports/offers/draft-ops-1/html");
+    expect(productionExportUrl("plan-ops-1")).toBe("/api/exports/v1/exports/production-plans/plan-ops-1/html");
+    expect(purchaseListExportUrl("purchase-ops-1")).toBe(
+      "/api/exports/v1/exports/purchase-lists/purchase-ops-1/csv"
+    );
   });
 });
