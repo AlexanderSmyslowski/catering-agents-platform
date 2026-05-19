@@ -444,6 +444,50 @@ function formatPercent(value?: unknown): string | undefined {
   return `${Math.round(numeric * 100)} %`;
 }
 
+type WorkbenchSpecFact = {
+  label: string;
+  value: string;
+};
+
+type ReadOnlyWorkbenchProjectionProps = {
+  specLabel: string;
+  facts: WorkbenchSpecFact[];
+  questionCount: number;
+  readinessLabel: string;
+};
+
+function ReadOnlyWorkbenchProjection({
+  specLabel,
+  facts,
+  questionCount,
+  readinessLabel
+}: ReadOnlyWorkbenchProjectionProps) {
+  return (
+    <div className="workbench-projection" aria-label="Read-only Workbench-Projektion">
+      <div>
+        <p className="eyebrow">Workbench-Projektion</p>
+        <p className="question-window__spec">{specLabel}</p>
+        <p className="helper-text">
+          Strukturierte Veranstaltungsdaten bleiben führend; dieser Bereich ist nur eine ruhige read-only Sicht.
+        </p>
+      </div>
+      <dl className="spec-fact-grid">
+        {facts.map((fact) => (
+          <div key={fact.label} className="spec-fact">
+            <dt>{fact.label}</dt>
+            <dd>{fact.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="clarification-strip">
+        <span>Klärbereich</span>
+        <strong>{questionCount === 1 ? "1 offene Rückfrage" : `${questionCount} offene Rückfragen`}</strong>
+      </div>
+      <p className="helper-text">Status: {readinessLabel}</p>
+    </div>
+  );
+}
+
 function renderPlanList(
   plans: Array<Record<string, unknown>>,
   specById: Map<string, Record<string, unknown>>,
@@ -2164,37 +2208,14 @@ export function App() {
             {focusedProductionSpec ? (
               <>
                 <div className="question-window">
-                  <div className="workbench-projection" aria-label="Read-only Workbench-Projektion">
-                    <div>
-                      <p className="eyebrow">Workbench-Projektion</p>
-                      <p className="question-window__spec">{getSpecLabel(focusedProductionSpec)}</p>
-                      <p className="helper-text">
-                        Strukturierte Veranstaltungsdaten bleiben führend; dieser Bereich ist nur eine ruhige read-only Sicht.
-                      </p>
-                    </div>
-                    <dl className="spec-fact-grid">
-                      {workbenchSpecFacts.map((fact) => (
-                        <div key={fact.label} className="spec-fact">
-                          <dt>{fact.label}</dt>
-                          <dd>{fact.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <div className="clarification-strip">
-                      <span>Klärbereich</span>
-                      <strong>
-                        {productionQuestions.length === 1
-                          ? "1 offene Rückfrage"
-                          : `${productionQuestions.length} offene Rückfragen`}
-                      </strong>
-                    </div>
-                    <p className="helper-text">
-                      Status:{" "}
-                      {translateReadiness(
-                        String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                      )}
-                    </p>
-                  </div>
+                  <ReadOnlyWorkbenchProjection
+                    specLabel={getSpecLabel(focusedProductionSpec)}
+                    facts={workbenchSpecFacts}
+                    questionCount={productionQuestions.length}
+                    readinessLabel={translateReadiness(
+                      String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+                    )}
+                  />
                   <ul className="question-list">
                     {productionQuestions.map((question) => (
                       <li key={question}>{question}</li>
