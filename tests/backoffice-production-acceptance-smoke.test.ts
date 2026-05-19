@@ -228,7 +228,12 @@ describe("backoffice production acceptance smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Produktionsagent");
-    expect(content).toContain("Status: unzureichend");
+    expect(content).toContain("Workbench-Projektion");
+    expect(content).toContain("Strukturierte Veranstaltungsdaten bleiben führend");
+    expect(content).toContain("Klärbereich");
+    expect(content).toContain("1 offene Rückfrage");
+    expect(content).toContain("Status");
+    expect(content).toContain("unzureichend");
     expect(content).toContain("Offene Punkte:");
     expect(content).toContain("Glutenfrei-Konflikt bleibt ungelöst.");
     expect(content).toContain("Klassifikation für Brot-Baguette fehlt.");

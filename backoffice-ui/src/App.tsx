@@ -853,6 +853,37 @@ export function App() {
     [focusedProductionSpec]
   );
 
+  const workbenchSpecFacts = useMemo(() => {
+    if (!focusedProductionSpecRecord) {
+      return [];
+    }
+
+    return [
+      {
+        label: "Status",
+        value: translateReadiness(
+          String((focusedProductionSpecRecord.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+        )
+      },
+      {
+        label: "Zeit",
+        value: formatProductionTimingWindow(focusedProductionSpecRecord)
+      },
+      {
+        label: "Gäste",
+        value: `${String(focusedProductionSpecAttendees?.expected ?? "-")} Personen`
+      },
+      {
+        label: "Service",
+        value: translateServiceForm(String(focusedProductionSpecServicePlan?.serviceForm ?? ""))
+      },
+      {
+        label: "Menü",
+        value: `${focusedProductionSpecMenuPlan?.length ?? 0} Komponenten`
+      }
+    ];
+  }, [focusedProductionSpecAttendees, focusedProductionSpecMenuPlan, focusedProductionSpecRecord, focusedProductionSpecServicePlan]);
+
   useEffect(() => {
     if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {
       return;
@@ -2133,13 +2164,37 @@ export function App() {
             {focusedProductionSpec ? (
               <>
                 <div className="question-window">
-                  <p className="question-window__spec">{getSpecLabel(focusedProductionSpec)}</p>
-                  <p className="helper-text">
-                    Status:{" "}
-                    {translateReadiness(
-                      String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                    )}
-                  </p>
+                  <div className="workbench-projection" aria-label="Read-only Workbench-Projektion">
+                    <div>
+                      <p className="eyebrow">Workbench-Projektion</p>
+                      <p className="question-window__spec">{getSpecLabel(focusedProductionSpec)}</p>
+                      <p className="helper-text">
+                        Strukturierte Veranstaltungsdaten bleiben führend; dieser Bereich ist nur eine ruhige read-only Sicht.
+                      </p>
+                    </div>
+                    <dl className="spec-fact-grid">
+                      {workbenchSpecFacts.map((fact) => (
+                        <div key={fact.label} className="spec-fact">
+                          <dt>{fact.label}</dt>
+                          <dd>{fact.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <div className="clarification-strip">
+                      <span>Klärbereich</span>
+                      <strong>
+                        {productionQuestions.length === 1
+                          ? "1 offene Rückfrage"
+                          : `${productionQuestions.length} offene Rückfragen`}
+                      </strong>
+                    </div>
+                    <p className="helper-text">
+                      Status:{" "}
+                      {translateReadiness(
+                        String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+                      )}
+                    </p>
+                  </div>
                   <ul className="question-list">
                     {productionQuestions.map((question) => (
                       <li key={question}>{question}</li>
