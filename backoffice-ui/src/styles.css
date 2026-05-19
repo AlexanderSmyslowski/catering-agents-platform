@@ -237,6 +237,11 @@ select {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.metrics-grid--compact-route .status-card {
+  min-height: 7rem;
+  padding: 1rem;
+}
+
 .wide-grid {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }

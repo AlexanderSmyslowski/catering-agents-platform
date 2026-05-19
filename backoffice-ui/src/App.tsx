@@ -1613,7 +1613,7 @@ export function App() {
         )}
       </section>
 
-      <section className="metrics-grid">
+      <section className={route === "production" ? "metrics-grid metrics-grid--compact-route" : "metrics-grid"}>
         {route === "home" ? (
           <>
             <StatusCard
