@@ -126,6 +126,16 @@ Zielbild ist:
 - Finalize-Funktion als separate Aktion
 - klare Unterscheidung zwischen finalisiert und freigegeben
 
+### 5.7 Bedienkanaele und Telegram-Integration
+
+- Die App soll langfristig nicht nur ueber die eigentliche Bedienoberflaeche in App/Web nutzbar sein, sondern auch ueber Telegram als operativen Kommunikationskanal.
+- Telegram soll dabei als zusaetzlicher Bedien- und Rueckkanal verstanden werden, nicht als Ersatz fuer die fuehrende interne App/Web-Oberflaeche.
+- Vorgesehene Nutzungspunkte sind insbesondere:
+  - Uebergabe von Angebots- und Veranstaltungsinformationen per Telegram an die App
+  - klaerende Rueckfragen der App an den zustaendigen Nutzer per Telegram
+  - Versand von Rezepten, Produktionshinweisen und Einkaufslisten aus der App per Telegram an die Produktion
+- Dieser Punkt ist als fachliches Zielbild und spaeterer Ausbauanker dokumentiert; er bedeutet noch keine Umsetzung eines Telegram-Bots, keine neue Persistenzwelt und keine Scope-Ausweitung im aktuellen Konsolidierungsblock.
+
 ## 6. zentrale Produktbausteine
 
 ### 6.1 Backoffice-UI

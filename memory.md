@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.85
-date: 2026-04-19
+version: 5.86
+date: 2026-05-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -55,6 +55,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 |- P21 minimaler Uebergang von Beta zu intern nutzbarem Produktstatus im MVP ist als schmale Mini-Spezifikation ergänzt worden; er begrenzt die Einordnung eines Beta-Standes in einen intern tragfaehigen Nutzungsstand ohne ein formales Release-, Betriebs- oder Steuerungsmodell einzuführen.
 
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
+- Telegram als zusaetzlicher Bedien- und Rueckkanal ist als spaeterer fachlicher Ausbauanker im Pflichtenheft dokumentiert: Angebots-/Veranstaltungsinformationen per Telegram an die App, klaerende Rueckfragen per Telegram und Versand von Rezepten, Produktionshinweisen sowie Einkaufslisten per Telegram an die Produktion; aktuell nur Zielbild, keine Umsetzung und keine Scope-Ausweitung im Konsolidierungsblock.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -485,3 +486,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.85 - 2026-04-19
 - P34 Minimaler interner Entscheidungsrahmen fuer ausreichend hergestellte dokumentarische Konsistenz zum wieder kleinen Ausbau im MVP ist im Repo als neue Mini-Spezifikation dokumentiert und wurde in memory.md als relevanter neuer Stand ergänzt.
 - Der Rahmen bleibt bewusst konservativ: kleiner Ausbau wird erst wieder vertretbar, wenn Referenzen, Repo-Bezüge und memory-Fortschreibung wieder konsistent genug sind, ohne ein formales Governance-, QA- oder Freigabemodell einzuführen.
+
+### 5.86 - 2026-05-19
+- Telegram als zusaetzlicher Bedien- und Rueckkanal wurde im Pflichtenheft als spaeterer fachlicher Ausbauanker dokumentiert.
+- Der Rahmen bleibt bewusst konservativ: Telegram ist als Zielbild fuer Angebotsuebergabe, klaerende Rueckfragen und Versand von Rezepten, Produktionshinweisen sowie Einkaufslisten an die Produktion festgehalten, aber noch keine Implementierung, kein neuer Bot und keine Scope-Ausweitung im aktuellen Konsolidierungsblock.
