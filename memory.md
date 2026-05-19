@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.87
+version: 5.89
 date: 2026-05-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -56,6 +56,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 
 - Onboarding ist als spaeterer Architektur-/Produktstrang vorgemerkt; aktuell noch nicht Teil des aktiven MVP-Umsetzungsblocks
 - Telegram als zusaetzlicher Bedien- und Rueckkanal ist als spaeterer fachlicher Ausbauanker im Pflichtenheft dokumentiert: Angebots-/Veranstaltungsinformationen per Telegram an die App, klaerende Rueckfragen per Telegram und Versand von Rezepten, Produktionshinweisen sowie Einkaufslisten per Telegram an die Produktion; aktuell nur Zielbild, keine Umsetzung und keine Scope-Ausweitung im Konsolidierungsblock.
+- Die neue Produkt-/UI-Richtung ist als Discovery- und Zielbildnotiz `docs/product/UI_CHATBOT_GOOGLE_DRIVE_ZIELBILD_DISCOVERY.md` dokumentiert: Apple-like, ruhige Conversational Workbench als Zielbild, Google Drive nur als spaeter bewusst entschiedener Integrationspfad mit OAuth-/Scope-/Rechteklaerung; bestehende Drive-Dateien bleiben grundsaetzlich read-only Importquellen, Schreibzugriff ist nur fuer app-eigene Outputs oder explizit freigegebene Zielartefakte/Zielordner vorgesehen; keine Implementierung, keine neue API, keine Secrets.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -494,3 +495,11 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.87 - 2026-05-19
 - README-Links auf `platform-infra/README.md` und `docs/deployment-and-versioning.md` wurden von lokalen absoluten iCloud-Pfaden auf repo-relative Pfade umgestellt.
 - Der Schritt ist reine dokumentarische Projektklarheit und fuehrt keine neue Produktlogik, API, Persistenz oder Local-Ops-Erweiterung ein.
+
+### 5.88 - 2026-05-19
+- Die neue Produkt-/UI-Richtung wurde als Discovery- und Zielbildnotiz `docs/product/UI_CHATBOT_GOOGLE_DRIVE_ZIELBILD_DISCOVERY.md` dokumentiert.
+- Der Rahmen bleibt bewusst konservativ: Apple-like Conversational Workbench und Google Drive sind als Zielbild und Entscheidungsbedarf festgehalten, aber ohne UI-Redesign, ohne neue API, ohne OAuth-/Google-Implementierung und ohne neue Secrets.
+
+### 5.89 - 2026-05-19
+- Alexanders Drive-Berechtigungslinie wurde in der Zielbildnotiz ergänzt: bestehende Drive-Dateien sind read-only Importquellen; Schreiben ist nur fuer app-eigene Outputs oder explizit freigegebene Zielartefakte/Zielordner vorgesehen.
+- Offen bleibt die spaetere OAuth-/Scope-Strategie, insbesondere Picker/read-only fuer bestehende Dateien plus separater create/write-Scope fuer app-eigene Outputs oder ein anderes bewusst begruendetes Modell.
