@@ -1687,13 +1687,13 @@ export function App() {
       </section>
 
       {route !== "home" ? (
-        <section className="toolbar">
+        <section className={route === "production" ? "toolbar toolbar--production" : "toolbar"}>
           <input
             className="search"
             placeholder={
               route === "offer"
                 ? "Angebotsentwürfe und operative Spezifikationen filtern"
-                : "Spezifikationen, Produktionspläne oder Rezepte filtern"
+                : "Produktion ruhig filtern"
             }
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -1701,7 +1701,7 @@ export function App() {
           <p className="helper-text toolbar-note">
             {route === "offer"
               ? "Angebots-URL: Kundenanfrage, Varianten und operative Übergabe."
-              : "Produktions-URL: unabhängige Küchenvorbereitung, Rezepte und Einkaufslisten."}
+              : "Bestehende Spezifikationen, Pläne und Rezepte durchsuchen."}
           </p>
         </section>
       ) : null}

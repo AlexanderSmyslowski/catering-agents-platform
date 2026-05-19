@@ -138,6 +138,6 @@ describe("backoffice route smoke", () => {
 
     const production = await renderRoute("/produktion");
     expect(production).toContain("Produktionsagent");
-    expect(production).toContain("Produktions-URL: unabhängige Küchenvorbereitung, Rezepte und Einkaufslisten.");
+    expect(production).toContain("Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.");
   });
 });
