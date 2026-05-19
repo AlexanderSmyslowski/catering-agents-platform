@@ -2030,13 +2030,13 @@ export function App() {
       {route === "production" ? (
         <section className="production-layout">
           <div className="production-column">
-          <article className="panel form-panel">
+          <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
             <div className="upload-shortcut-bar">
               <div>
-                <p className="eyebrow">Schnellimport</p>
-                <strong>Datei hochladen oder einfach irgendwo auf dieser Seite ablegen</strong>
+                <p className="eyebrow">Arbeitsauftrag / Eingabe</p>
+                <strong>Quelle für den Produktionsauftrag hinzufügen</strong>
                 <p className="helper-text">
-                  Der Upload bleibt dauerhaft sichtbar. Drag & Drop reagiert jetzt auf die gesamte Produktionsansicht.
+                  Vorhandene Eingabewege bleiben gebündelt: Datei, Freitext oder strukturierte Angaben werden zur operativen Spezifikation.
                 </p>
               </div>
               <div className="action-row">
@@ -2054,8 +2054,8 @@ export function App() {
               </div>
             </div>
             <header>
-              <p className="eyebrow">Schritt 1</p>
-              <h3>Angebot hineinziehen oder hochladen</h3>
+              <p className="eyebrow">Eingabequelle</p>
+              <h3>Auftrag als Datei übernehmen</h3>
             </header>
             <label
               className={dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
@@ -2144,8 +2144,8 @@ export function App() {
             </div>
             <div className="divider" />
             <header>
-              <p className="eyebrow">Alternative</p>
-              <h3>Freitext direkt einfügen</h3>
+              <p className="eyebrow">Texteingabe</p>
+              <h3>Arbeitsauftrag direkt einfügen</h3>
             </header>
             <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
             <div className="action-row">
@@ -2155,8 +2155,8 @@ export function App() {
             </div>
             <div className="divider" />
             <header>
-              <p className="eyebrow">Fallback</p>
-              <h3>Veranstaltungsdaten direkt eingeben</h3>
+              <p className="eyebrow">Strukturierte Eingabe</p>
+              <h3>Arbeitsauftrag manuell anlegen</h3>
             </header>
             <input
               value={manualEventType}
