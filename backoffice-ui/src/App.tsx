@@ -2332,6 +2332,23 @@ export function App() {
                       String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
                     )}
                   />
+                  <div className="result-status-strip" aria-label="Ergebnisstatus aktueller Vorgang">
+                    <span>
+                      <strong>Ergebnisstatus</strong>
+                    </span>
+                    <span>
+                      Plan:{" "}
+                      {selectedPlan
+                        ? translateReadiness(
+                            String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+                          )
+                        : "noch nicht berechnet"}
+                    </span>
+                    <span>Produktionsblatt: {selectedPlan ? "vorhanden" : "offen"}</span>
+                    <span>
+                      Einkauf: {currentSpecPurchaseLists.length > 0 ? `${currentSpecPurchaseLists.length} Liste(n)` : "offen"}
+                    </span>
+                  </div>
                   <ul className="question-list">
                     {productionQuestions.map((question) => (
                       <li key={question}>{question}</li>

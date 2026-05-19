@@ -344,6 +344,10 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Arbeitsblätter: 1");
     expect(content).toContain("Rezeptblätter: 1");
     expect(content).toContain("Rezeptauswahl: 1");
+    expect(content).toContain("Ergebnisstatus");
+    expect(content).toContain("Plan: vollständig");
+    expect(content).toContain("Produktionsblatt: vorhanden");
+    expect(content).toContain("Einkauf: 1 Liste(n)");
     expect(content).toContain("Offene Punkte: keine");
     expect(content).toContain("Vegetarische Tomatensuppe");
     expect(content).toContain("Küchenblatt Vegetarische Tomatensuppe");
