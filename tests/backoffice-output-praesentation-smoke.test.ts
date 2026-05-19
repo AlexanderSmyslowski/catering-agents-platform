@@ -359,6 +359,8 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("requestId: presentation-intake-success");
     expect(content).toContain("channel: manual_form");
     expect(content).toContain("Einkaufsliste herunterladen");
+    expect(content).toContain("Aktueller Vorgang zuerst");
+    expect(content).toContain("Archivierte Listen bleiben unten eingeklappt");
     expect(content).not.toContain("Status: unzureichend");
     expect(content).not.toContain("Noch keine Produktionspläne für den aktuellen Vorgang vorhanden.");
   });

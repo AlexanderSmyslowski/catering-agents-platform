@@ -3035,8 +3035,9 @@ export function App() {
           <article className="panel secondary-panel">
             <header>
               <p className="eyebrow">Einkaufslisten</p>
-              <h3>CSV-fähige Beschaffungslisten</h3>
+              <h3>Aktueller Vorgang zuerst</h3>
             </header>
+            <p className="helper-text">Archivierte Listen bleiben unten eingeklappt und werden nur bei Bedarf geöffnet.</p>
             <ul className="item-list compact">
               {currentSpecPurchaseLists.map((purchaseList) => {
                 const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
