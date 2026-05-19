@@ -340,6 +340,12 @@ describe("backoffice production presentation smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Produktionsagent");
+    expect(content).toContain("Arbeitsauftrag / Eingabe");
+    expect(content).toContain("Quelle für den Produktionsauftrag hinzufügen");
+    expect(content).toContain("Workbench-Projektion");
+    expect(content).toContain("Klärbereich");
+    expect(content).toContain("Berechnete Ergebnisse");
+    expect(content).toContain("Aktueller Vorgang zuerst");
     expect(content).toContain("Status: vollständig");
     expect(content).toContain("Arbeitsblätter: 1");
     expect(content).toContain("Rezeptblätter: 1");
