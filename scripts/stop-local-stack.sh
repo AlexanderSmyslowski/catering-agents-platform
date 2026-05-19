@@ -2,12 +2,31 @@
 
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 stop_screen_session() {
   local session_name="$1"
   if (screen -ls 2>/dev/null || true) | grep -q "\\.${session_name}[[:space:]]"; then
     echo "Stoppe ${session_name}..."
     screen -S "${session_name}" -X quit || true
   fi
+}
+
+stop_repo_processes() {
+  local label="$1"
+  local pattern="$2"
+  local pids
+
+  pids="$(pgrep -f "${pattern}" 2>/dev/null || true)"
+  if [[ -z "${pids}" ]]; then
+    return 0
+  fi
+
+  echo "Stoppe verbliebene ${label}-Prozesse..."
+  while IFS= read -r pid; do
+    [[ -n "${pid}" ]] || continue
+    kill "${pid}" 2>/dev/null || true
+  done <<<"${pids}"
 }
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -29,5 +48,13 @@ stop_screen_session "catering-exports"
 stop_screen_session "catering-production"
 stop_screen_session "catering-offer"
 stop_screen_session "catering-intake"
+
+sleep 1
+
+stop_repo_processes "UI" "${ROOT_DIR}/node_modules/.*(vite|@vitejs).*--port 3200"
+stop_repo_processes "Intake" "${ROOT_DIR}/node_modules/.*intake-service/src/server.ts"
+stop_repo_processes "Angebot" "${ROOT_DIR}/node_modules/.*offer-service/src/server.ts"
+stop_repo_processes "Produktion" "${ROOT_DIR}/node_modules/.*production-service/src/server.ts"
+stop_repo_processes "Export" "${ROOT_DIR}/node_modules/.*print-export/src/server.ts"
 
 echo "Lokaler Stack gestoppt."
