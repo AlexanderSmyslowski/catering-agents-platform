@@ -123,7 +123,7 @@ Bei Produktionslaeufen ist nun auch eine Suchspur je Gericht sichtbar: interne K
 
 ## Docker / Hetzner-MVP
 
-Fuer einen zentralen Serverbetrieb liegt unter [platform-infra/README.md](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/platform-infra/README.md) eine Compose-Basis mit:
+Fuer einen zentralen Serverbetrieb liegt unter [platform-infra/README.md](platform-infra/README.md) eine Compose-Basis mit:
 
 - PostgreSQL
 - Intake-, Offer-, Production- und Export-Service
@@ -172,4 +172,4 @@ npm run checkpoint -- <kurzname> --push
 - Zugriff fuer Angebots-Ersteller und Kuechenplanung erfolgt ueber die interne Web-App, nicht direkt per Shell auf dem Server.
 - Intake-, Angebots-, Produktions- und Rezeptdaten werden im MVP entweder dateibasiert oder ueber PostgreSQL persistiert und ueberstehen Server-Neustarts.
 - Nutzeraktionen aus Intake, Angebot, Produktion und Rezept-Review landen in einem gemeinsamen Audit-Log und sind in der Web-App sichtbar.
-- GitHub- und Checkpoint-Strategie siehe [docs/deployment-and-versioning.md](/Users/alexandersmyslowski/Library/Mobile%20Documents/com~apple~CloudDocs/Dateien/THE%20ONE%20von%20Alexander/Codex/docs/deployment-and-versioning.md).
+- GitHub- und Checkpoint-Strategie siehe [docs/deployment-and-versioning.md](docs/deployment-and-versioning.md).

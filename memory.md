@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.86
+version: 5.87
 date: 2026-05-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -490,3 +490,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.86 - 2026-05-19
 - Telegram als zusaetzlicher Bedien- und Rueckkanal wurde im Pflichtenheft als spaeterer fachlicher Ausbauanker dokumentiert.
 - Der Rahmen bleibt bewusst konservativ: Telegram ist als Zielbild fuer Angebotsuebergabe, klaerende Rueckfragen und Versand von Rezepten, Produktionshinweisen sowie Einkaufslisten an die Produktion festgehalten, aber noch keine Implementierung, kein neuer Bot und keine Scope-Ausweitung im aktuellen Konsolidierungsblock.
+
+### 5.87 - 2026-05-19
+- README-Links auf `platform-infra/README.md` und `docs/deployment-and-versioning.md` wurden von lokalen absoluten iCloud-Pfaden auf repo-relative Pfade umgestellt.
+- Der Schritt ist reine dokumentarische Projektklarheit und fuehrt keine neue Produktlogik, API, Persistenz oder Local-Ops-Erweiterung ein.
