@@ -82,6 +82,7 @@ Bestehender lokaler Stack:
 ```bash
 npm run local:start
 npm run local:status
+npm run local:check
 npm run local:stop
 ```
 
@@ -95,6 +96,8 @@ Der minimale lokale Smoke-Korridor umfasst:
 - Health: `http://127.0.0.1:3103/health`
 - Health: `http://127.0.0.1:3104/health`
 - read-only Exportpfade fuer Angebot, Produktionsblatt und Einkaufsliste, soweit Demo-Daten vorhanden sind
+
+Der bestehende Repo-Befehl `npm run local:check` fuehrt genau diesen schmalen lokalen Betriebscheck gegen einen laufenden lokalen Stack aus und prueft zusaetzlich den Demo-Start-/Audit-Beleg.
 
 Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Framework.
 

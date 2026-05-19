@@ -38,8 +38,11 @@ Status und Stop:
 
 ```bash
 npm run local:status
+npm run local:check
 npm run local:stop
 ```
+
+`npm run local:check` prueft den bereits laufenden lokalen Stack gegen den schmalen MVP-Betriebsweg: UI-Routen, Health-Endpunkte, read-only Exportpfade und den Demo-Start-/Audit-Beleg.
 
 Standardmaessig speichern die Services ihre Laufzeitdaten unter `./data`.
 Auf Servern sollte dafuer ein persistentes Verzeichnis gesetzt werden:
