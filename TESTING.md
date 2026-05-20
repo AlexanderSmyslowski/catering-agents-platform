@@ -1,6 +1,6 @@
 # Teststrategie und Frontend-Smoke – MVP Phase 4
 
-Status: minimale Phase-4-Teststrategie auf Basis des Repo-Stands nach `9d10518`  
+Status: minimale Phase-4-Teststrategie auf Basis des Repo-Stands nach `8a2cda9`
 Scope: bestehender MVP-Kern, keine neuen Produktfeatures
 
 ## 1. Ziel
@@ -28,6 +28,8 @@ npm run build
 Relevante bestehende Tests:
 
 - `tests/intake-to-production-e2e.test.ts`
+- `tests/intake-normalization-robustness.test.ts`
+- `tests/shared-core-conflicts.test.ts`
 - `tests/production-sheet-v1-kitchen-sheet.test.ts`
 - `tests/production-purchase-coverage-integration.test.ts`
 - `tests/purchase-coverage-check.test.ts`
@@ -61,6 +63,8 @@ Relevante bestehende Tests:
 - `tests/backoffice-internal-usage-smoke.test.ts`
 - `tests/backoffice-output-praesentation-smoke.test.ts`
 - `tests/backoffice-intake-request-detail.test.ts`
+- `tests/intake-request-detail.test.ts`
+- `tests/react-act-environment.test.ts`
 
 Der Frontend-Smoke bleibt bewusst schmal:
 
@@ -132,8 +136,8 @@ Bei zukuenftigen Testluecken gilt:
 
 Der Repo-Iststand enthaelt bereits eine belastbare minimale Basis fuer Phase 4:
 
-- fachliche Vitest-Abdeckung fuer Intake, AcceptedEventSpec, Produktion, Rezept-/Kitchen-Sheet-Logik und Purchase-Coverage
-- schmale jsdom-basierte Frontend-Smoke-Absicherung fuer die Kernrouten und den internen Produktionsnutzpfad
+- fachliche Vitest-Abdeckung fuer Intake, AcceptedEventSpec, Produktion, Rezept-/Kitchen-Sheet-Logik, Purchase-Coverage, Normalisierungsrobustheit und Shared-Core-Konfliktregeln
+- schmale jsdom-basierte Frontend-Smoke-Absicherung fuer die Kernrouten, den internen Produktionsnutzpfad, Detail-Read-Pfade und die React-Testumgebung
 - dokumentierten lokalen Stack- und Smoke-Korridor
 
 Die kleinste sinnvolle Phase-4-Umsteuerung ist daher keine neue Funktion und keine neue Testinfrastruktur, sondern diese zentrale, repo-nahe Teststrategie als verbindlicher Einstiegspunkt.
