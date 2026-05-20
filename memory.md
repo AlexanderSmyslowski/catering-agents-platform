@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.94
-date: 2026-05-19
+version: 5.95
+date: 2026-05-20
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -28,6 +28,9 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P3 Stufe 1 und 2 sind begonnen und mit reproduzierbarem lokalem Betriebscheck gehärtet; der Check bestaetigt Exportpfad und einen read-only Audit-Beleg fuer den Demo-Startweg in gehärteter Form
 - P4 zielt auf Audit-/Review-/Nachvollziehbarkeit: vorhandene Nachweise, Operator-Zuordnung und geschuetzte Kernpfade betriebsnah schaerfen, der Traceability-Strang ist inzwischen testseitig belegt und soll stehen bleiben
 - P4 Traceability wurde zusätzlich als kleiner Regressionstest `tests/p4-audit-traceability.test.ts` codiert und grün verifiziert; die Traceability umfasst Produktionsseed, Produktionsreview, Angebotsreview und Intake-Finalize, inklusive synchronisiertem `.ts`/`.js`-Runtimepfad fuer den Intake-Finalize-Audit-Eintrag
+- P5 MVP-Abgrenzung pro Kernbereich ist als schmale Mini-Spezifikation dokumentiert; sie trennt vorhandenen internen MVP-Kern, bewusste Nicht-Ziele und spaetere Produktisierung ohne neue Featureliste.
+- P6 Aufbewahrung, Loeschung und Archivierung ist als schmale Mini-Spezifikation dokumentiert; sie begrenzt den vorsichtigen Umgang mit operativen Daten und Artefakten ohne neue Retention- oder Archivplattform.
+- P7 Betriebsfreigabe / MVP-Freigabekriterien ist als schmale Mini-Spezifikation dokumentiert; sie fasst den kleinen repo-gebundenen Go/No-Go-Rahmen fuer interne MVP-/Beta-Nutzung zusammen, ohne neue Release- oder Monitoring-Plattform.
 - P2 Browser-/Smoke-Absicherung ist jetzt real belegt: der lokale Smoke-Korridor prueft die drei UI-Routen, die vier Health-Endpunkte und die drei read-only Exportpfade; ergaenzend existiert ein minimaler repo-verankerter UI-Route-Smoke-Test fuer `/`, `/angebot` und `/produktion`, dessen Angebots- und Produktions-Assertions auf route-eindeutige Marker geschaerft sind
 - Die Backoffice-API-Testspur sichert nun auch die zentralen read-only Export-Link-Helper fuer Angebot, Produktionsplan und Einkaufsliste gegen Pfaddrift ab.
 - P8 UI-Rollenverantwortung und Operator-Zuordnung ist als schmale Mini-Spezifikation fuer den Backoffice-UI-Kern ergänzt worden; sie ordnet Home, Angebotsansicht, Produktionsansicht sowie read-only Detail-/Export-/Audit-Kontexte den bestehenden Minimalrollen und Operatornamen zu
@@ -526,3 +529,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.94 - 2026-05-19
 - Die P4-Audit-Traceability ist fuer den Intake-Finalize-Pfad runtime-seitig geschlossen: der bestehende TypeScript-Audit-Write wurde im gecheckten `.js`-Sibling nachgezogen und mit einem fokussierten Regressionstest belegt.
 - Der Schritt bleibt eine kleine Konsistenz-/Traceability-Korrektur im bestehenden Finalize-/Audit-Pfad; keine neue API, Persistenzwelt oder Governance-Logik.
+
+### 5.95 - 2026-05-20
+- Die Root-Memory verdichtet nun auch die bereits vorhandenen Mini-Spezifikationen P5, P6 und P7 im oberen Projektkontext.
+- Der Schritt bleibt reine Dokumentationskonsistenz: keine Produktlogik, keine UI-/API-/Persistenz-/Deployment-Aenderung.
