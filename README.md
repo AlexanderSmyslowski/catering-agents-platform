@@ -14,6 +14,7 @@ MVP-Monorepo fuer zwei spezialisierte Catering-Agenten:
 ```bash
 npm install
 npm test
+npm run build
 ```
 
 ## Entwicklungsserver
