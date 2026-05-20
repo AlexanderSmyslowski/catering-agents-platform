@@ -1,6 +1,6 @@
 # Teststrategie und Frontend-Smoke – MVP Phase 4
 
-Status: minimale Phase-4-Teststrategie auf Basis des Repo-Stands nach `8a2cda9`
+Status: minimale Phase-4-Teststrategie auf Basis des aktuellen Repo-Stands
 Scope: bestehender MVP-Kern, keine neuen Produktfeatures
 
 ## 1. Ziel
