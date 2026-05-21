@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.116
+version: 5.117
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -81,6 +81,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA8 Read-path Auth Hardening Slice 1 ist umgesetzt: sensible read-only Intake-Requests/-Specs, Offer-Drafts/-Recipes, Production-Plans/-Purchase-Lists/-Recipes sowie Print-Export-Pfade fuer Angebot, Produktionsplan und Einkaufsliste verlangen bei gesetztem Trusted-Secret den passenden Trusted-Actor-/Rollen-Kontext; Health bleibt offen, externe Nutzung bleibt ohne Reverse Proxy/OIDC/SSO oder gleichwertigen Identity-Aware Proxy gesperrt.
 - PA9 Proxy-/Deployment-Readiness ist als ADR `docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md` dokumentiert und mit `tests/pa9-proxy-deployment-readiness-adr.test.ts` abgesichert: Edge muss clientseitige Trusted-/Actor-Header entfernen, Proxy/IAP setzt `x-catering-actor-name` plus `x-catering-trusted-secret` kontrolliert, `CATERING_TRUSTED_ACTOR_SECRET` ist produktionsnah Pflicht, Secret bleibt serverseitig, Services duerfen nicht direkt oeffentlich erreichbar sein; keine OIDC-/Login-/Session-Implementierung.
 - PA10 DocumentIngestion-v1 Boundary ist als kleiner `shared-core`-Baustein umgesetzt: `DocumentIngestionResult` kapselt vorhandene Upload-`sourceMetadata`, Kontext, Status, Warnungen, Ingestion-Zeitpunkt und optional extrahierten Text, ohne neue Parser-Engine, API, Persistenz, Angebotssemantik, LLM-, OCR-, Rezept- oder Allergenlogik.
+- PA11 Intake DocumentIngestion Bridge ist umgesetzt: bestehende Intake-Dokumentnormalisierung fuer JSON/Base64 und Multipart nutzt intern `ingestDocument(...)`; Antworten und Audit-Details transportieren nur sichere Ingestion-Status-/Warnungsmarker und vorhandene `sourceMetadata`, waehrend Conversation-/Export-Provenance-Anker weiterhin keine Rohtexte spiegeln.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -635,3 +636,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.116 - 2026-05-21
 - PA10 DocumentIngestion-v1 Boundary ist umgesetzt: `shared-core` stellt `ingestDocument(...)` und ein kleines `DocumentIngestionResult`-Modell bereit, das bestehende Textgewinnung typisiert umhuellt und `sourceMetadata`, Kontext, Status, Warnungen, Ingestion-Zeitpunkt sowie optional extrahierten Text ausdrueckt.
 - Abgesichert ist der erlaubte Textpfad, ein PDF-Fallback-/Problemfall mit Warnung und die Grenze, dass Conversation-/Export-Provenance-Anker weiterhin keine sensiblen Rohinhalte spiegeln. Keine neue API, Migration, Persistenzwelt, Parser-Engine, OCR, LLM-/Tool-Use-, Angebotsanalyse-, Rezept- oder Allergenlogik.
+
+### 5.117 - 2026-05-21
+- PA11 Intake DocumentIngestion Bridge ist umgesetzt: die bestehende Intake-Dokumentnormalisierung fuer JSON/Base64 und Multipart verwendet intern `ingestDocument(...)` und fuehrt eine rueckwaertskompatible `documentIngestion`-Antwort mit `ingestionStatus`, `warnings` und vorhandener `sourceMetadata` ein.
+- PDF-/Fallbackfaelle werden als Warnung/Status sichtbar statt als extrahierter Erfolg behauptet; Conversation-/Export-Provenance-Anker bleiben auf sichere Metadaten/Hash-Kurzanker begrenzt. Keine neue Persistenz, Migration, Parser-Engine, OCR, LLM-/Tool-Use-, Rezept-, Allergen- oder neue Produktlogik.

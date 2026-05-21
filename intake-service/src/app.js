@@ -1,8 +1,18 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
-import { AuditLogStore, createEventRequestFromManualForm, createUploadSourceMetadata, getDemoIntakeRequests, normalizeEventRequestToSpec, resolveMinimalMvpRoleFromTrustedActor, trustedActorFromHeaders, multipartLimitsForUpload, readLimitedUploadBuffer, uploadErrorResponse, validateUploadedDocument, validateUploadedDocumentMetadata, withEvaluatedReadiness, validateAcceptedEventSpec, validateEventRequest } from "@catering/shared-core";
-import { buildEventRequestFromText, extractTextFromDocument } from "./extraction.js";
+import { AuditLogStore, createEventRequestFromManualForm, createUploadSourceMetadata, getDemoIntakeRequests, ingestDocument, normalizeEventRequestToSpec, resolveMinimalMvpRoleFromTrustedActor, trustedActorFromHeaders, multipartLimitsForUpload, readLimitedUploadBuffer, uploadErrorResponse, validateUploadedDocument, validateUploadedDocumentMetadata, withEvaluatedReadiness, validateAcceptedEventSpec, validateEventRequest } from "@catering/shared-core";
+import { buildEventRequestFromText } from "./extraction.js";
 import { IntakeStore } from "./store.js";
+function safeDocumentIngestionSummary(results) {
+    return {
+        documents: results.map((result) => ({
+            documentId: result.documentId,
+            ingestionStatus: result.status,
+            warnings: result.warnings,
+            sourceMetadata: result.sourceMetadata
+        }))
+    };
+}
 function rawInputKindForMimeType(mimeType) {
     if (mimeType.includes("pdf")) {
         return "pdf";
@@ -186,11 +196,13 @@ async function extractMultipartDocuments(request) {
     };
 }
 async function normalizeUploadedDocuments(payload) {
-    const extracted = await Promise.all(payload.documents.map(async (document, index) => ({
+    const ingested = await Promise.all(payload.documents.map(async (document, index) => ({
         documentId: `${payload.requestId ?? "document"}-${index + 1}`,
         mimeType: document.mimeType,
-        sourceMetadata: document.sourceMetadata,
-        text: await extractTextFromDocument(document)
+        ...(await ingestDocument({
+            document,
+            context: "intake"
+        }))
     })));
     const eventRequest = {
         schemaVersion: "1.0.0",
@@ -199,9 +211,9 @@ async function normalizeUploadedDocuments(payload) {
             channel: payload.channel ?? "pdf_upload",
             receivedAt: new Date().toISOString()
         },
-        rawInputs: extracted.map((item) => ({
+        rawInputs: ingested.map((item) => ({
             kind: rawInputKindForMimeType(item.mimeType),
-            content: item.text,
+            content: item.extractedText ?? "",
             mimeType: item.mimeType,
             documentId: item.documentId,
             sourceMetadata: item.sourceMetadata
@@ -219,7 +231,8 @@ async function normalizeUploadedDocuments(payload) {
     }));
     return {
         eventRequest: validatedRequest,
-        acceptedEventSpec: spec
+        acceptedEventSpec: spec,
+        documentIngestion: safeDocumentIngestionSummary(ingested)
     };
 }
 export function buildIntakeApp(input = {}) {
@@ -343,7 +356,9 @@ export function buildIntakeApp(input = {}) {
                     requestId: normalized.eventRequest.requestId,
                     documentCount: documents.length,
                     readiness: normalized.acceptedEventSpec.readiness.status,
-                    uploadMode: "json_base64"
+                    uploadMode: "json_base64",
+                    ingestionStatuses: normalized.documentIngestion.documents.map((document) => document.ingestionStatus).join(","),
+                    warnings: normalized.documentIngestion.documents.flatMap((document) => document.warnings).join(",")
                 }
             });
             return reply.code(201).send(normalized);
@@ -374,7 +389,9 @@ export function buildIntakeApp(input = {}) {
                     requestId: normalized.eventRequest.requestId,
                     documentCount: upload.documents.length,
                     readiness: normalized.acceptedEventSpec.readiness.status,
-                    uploadMode: "multipart"
+                    uploadMode: "multipart",
+                    ingestionStatuses: normalized.documentIngestion.documents.map((document) => document.ingestionStatus).join(","),
+                    warnings: normalized.documentIngestion.documents.flatMap((document) => document.warnings).join(",")
                 }
             });
             return reply.code(201).send(normalized);

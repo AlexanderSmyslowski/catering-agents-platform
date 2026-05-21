@@ -127,6 +127,17 @@ describe("upload security limits", () => {
       uploadContext: "intake"
     });
     expect(body.eventRequest.rawInputs[0].sourceMetadata.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(body.documentIngestion.documents[0]).toMatchObject({
+      ingestionStatus: "extracted",
+      warnings: [],
+      sourceMetadata: {
+        filename: "angebot.txt",
+        mimeType: "text/plain",
+        sizeBytes: 51,
+        uploadContext: "intake"
+      }
+    });
+    expect(JSON.stringify(body.documentIngestion)).not.toContain("Lunch am 2026-05-14");
     await app.close();
   });
 

@@ -6,6 +6,7 @@ import {
   createEventRequestFromManualForm,
   createUploadSourceMetadata,
   getDemoIntakeRequests,
+  ingestDocument,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
@@ -18,10 +19,11 @@ import {
   validateAcceptedEventSpec,
   validateEventRequest,
   type AcceptedEventSpec,
+  type DocumentIngestionResult,
   type DocumentInput,
   type EventRequest
 } from "@catering/shared-core";
-import { buildEventRequestFromText, extractTextFromDocument } from "./extraction.js";
+import { buildEventRequestFromText } from "./extraction.js";
 import { IntakeStore } from "./store.js";
 
 interface DocumentBody {
@@ -71,6 +73,19 @@ interface MultipartDocumentUpload {
   requestId?: string;
   channel?: EventRequest["source"]["channel"];
   documents: DocumentInput[];
+}
+
+function safeDocumentIngestionSummary(
+  results: Array<DocumentIngestionResult & { documentId: string }>
+) {
+  return {
+    documents: results.map((result) => ({
+      documentId: result.documentId,
+      ingestionStatus: result.status,
+      warnings: result.warnings,
+      sourceMetadata: result.sourceMetadata
+    }))
+  };
 }
 
 function rawInputKindForMimeType(
@@ -328,12 +343,14 @@ async function extractMultipartDocuments(
 async function normalizeUploadedDocuments(
   payload: { documents: DocumentInput[]; requestId?: string; channel?: EventRequest["source"]["channel"] }
 ) {
-  const extracted = await Promise.all(
+  const ingested = await Promise.all(
     payload.documents.map(async (document, index) => ({
       documentId: `${payload.requestId ?? "document"}-${index + 1}`,
       mimeType: document.mimeType,
-      sourceMetadata: document.sourceMetadata,
-      text: await extractTextFromDocument(document)
+      ...(await ingestDocument({
+        document,
+        context: "intake"
+      }))
     }))
   );
 
@@ -344,9 +361,9 @@ async function normalizeUploadedDocuments(
       channel: payload.channel ?? "pdf_upload",
       receivedAt: new Date().toISOString()
     },
-    rawInputs: extracted.map((item) => ({
+    rawInputs: ingested.map((item) => ({
       kind: rawInputKindForMimeType(item.mimeType),
-      content: item.text,
+      content: item.extractedText ?? "",
       mimeType: item.mimeType,
       documentId: item.documentId,
       sourceMetadata: item.sourceMetadata
@@ -369,7 +386,8 @@ async function normalizeUploadedDocuments(
 
   return {
     eventRequest: validatedRequest,
-    acceptedEventSpec: spec
+    acceptedEventSpec: spec,
+    documentIngestion: safeDocumentIngestionSummary(ingested)
   };
 }
 
@@ -512,7 +530,9 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
           requestId: normalized.eventRequest.requestId,
           documentCount: documents.length,
           readiness: normalized.acceptedEventSpec.readiness.status,
-          uploadMode: "json_base64"
+          uploadMode: "json_base64",
+          ingestionStatuses: normalized.documentIngestion.documents.map((document) => document.ingestionStatus).join(","),
+          warnings: normalized.documentIngestion.documents.flatMap((document) => document.warnings).join(",")
         }
       });
 
@@ -546,7 +566,9 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
           requestId: normalized.eventRequest.requestId,
           documentCount: upload.documents.length,
           readiness: normalized.acceptedEventSpec.readiness.status,
-          uploadMode: "multipart"
+          uploadMode: "multipart",
+          ingestionStatuses: normalized.documentIngestion.documents.map((document) => document.ingestionStatus).join(","),
+          warnings: normalized.documentIngestion.documents.flatMap((document) => document.warnings).join(",")
         }
       });
 

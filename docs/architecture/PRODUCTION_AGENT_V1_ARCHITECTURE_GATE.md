@@ -196,6 +196,14 @@ PA10 DocumentIngestion-v1 Boundary:
 - Conversation- und Exportanker bleiben weiterhin sichere Provenance-Anker aus Metadaten/Hash-Kurzform; Rohinhalte oder extrahierte Texte werden dort nicht gespiegelt.
 - Der Slice fuehrt keine neue Parser-Engine, OCR, LLM-/Tool-Use-Schicht, Angebotssemantik, Rezept-/Allergenlogik, API, Migration oder Persistenzwelt ein.
 
+PA11 Intake DocumentIngestion Bridge:
+
+- Die bestehenden Intake-Dokumentpfade fuer JSON/Base64 und Multipart verwenden intern `ingestDocument(...)` fuer die kontrollierte Textgewinnung.
+- Die API bleibt rueckwaertskompatibel und ergaenzt nur sichere Marker in `documentIngestion`: `ingestionStatus`, `warnings` und vorhandene `sourceMetadata`.
+- Audit-Details duerfen Ingestion-Status und Warnungen enthalten, aber keine Rohtexte oder extrahierten Inhalte.
+- PDF-/Fallback-/Problemfaelle werden als Warnung/Status sichtbar und nicht als extrahierter Erfolg behauptet.
+- Der Slice fuehrt keine neue Parser-Engine, OCR, LLM-/Tool-Use-Schicht, Angebotssemantik, Rezept-/Allergenlogik, neue Persistenz, Migration oder neue Produktlogik ein.
+
 ### 5.3 LLM Orchestrator
 
 Zweck:
