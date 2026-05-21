@@ -118,6 +118,14 @@ function actorForRequest(request, trustedActorSecret) {
 function isIntakeOperator(request, trustedActorSecret) {
     return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "intake_operator";
 }
+function requireIntakeOperator(request, reply, trustedActorSecret) {
+    if (!isIntakeOperator(request, trustedActorSecret)) {
+        return reply.code(403).send({
+            message: "Intake-Operator erforderlich."
+        });
+    }
+    return undefined;
+}
 function isOperationsAuditOperator(request, trustedActorSecret) {
     return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "operations_audit_operator";
 }
@@ -452,24 +460,40 @@ export function buildIntakeApp(input = {}) {
             }
         });
     });
-    app.get("/v1/intake/requests", async (_request, reply) => {
+    app.get("/v1/intake/requests", async (request, reply) => {
+        const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
+        if (forbidden) {
+            return forbidden;
+        }
         return reply.send({
             items: await store.listRequests()
         });
     });
     app.get("/v1/intake/requests/:requestId", async (request, reply) => {
+        const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
+        if (forbidden) {
+            return forbidden;
+        }
         const intakeRequest = await store.getRequest(request.params.requestId);
         if (!intakeRequest) {
             return reply.code(404).send({ message: "EventRequest nicht gefunden." });
         }
         return reply.send(intakeRequest);
     });
-    app.get("/v1/intake/specs", async (_request, reply) => {
+    app.get("/v1/intake/specs", async (request, reply) => {
+        const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
+        if (forbidden) {
+            return forbidden;
+        }
         return reply.send({
             items: await store.listSpecs()
         });
     });
     app.get("/v1/intake/specs/:specId", async (request, reply) => {
+        const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
+        if (forbidden) {
+            return forbidden;
+        }
         const spec = await store.getSpec(request.params.specId);
         if (!spec) {
             return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });

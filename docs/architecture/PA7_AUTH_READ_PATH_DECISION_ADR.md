@@ -1,8 +1,8 @@
 # PA7 AuthN/AuthZ + Read-Path Auth – Entscheidungs-ADR
 
-Status: Entscheidungsvorlage v0.1 auf Basis des aktuellen Repo-Iststands
+Status: Entscheidung angenommen; PA8 Runtime-Slice 1 umgesetzt
 Datum: 2026-05-21
-Scope: Doku-only; keine Runtime-Implementierung, keine neue Persistenz, keine Migration, keine OIDC-/Login-Implementierung
+Scope: PA7 ADR plus PA8 Read-path Auth Hardening Slice 1; keine neue Persistenz, keine Migration, keine OIDC-/Login-Implementierung
 
 ## 1. Zweck
 
@@ -244,3 +244,26 @@ Empfohlene Entscheidung:
 - Externe oder echte produktionsnahe Nutzung bleibt bis zur bestätigten Proxy/OIDC/SSO-Entscheidung gesperrt.
 
 Damit erhält Alexander sofort einen kleinen, testbaren Sicherheitsgewinn, ohne jetzt eine neue Login-, Session- oder Persistenzwelt zu bauen.
+
+## 11. PA8-Umsetzungsstand nach Slice 1
+
+Option D ist fuer den ersten technischen Slice umgesetzt.
+
+Real gehaertet sind sensible read-only Pfade fuer echte Betriebsdaten:
+
+- Intake: `GET /v1/intake/requests`, `GET /v1/intake/requests/:requestId`, `GET /v1/intake/specs`, `GET /v1/intake/specs/:specId` -> Intake-Operator
+- Angebot: `GET /v1/offers/drafts`, `GET /v1/offers/drafts/:draftId`, `GET /v1/offers/recipes`, `GET /v1/offers/recipes/:recipeId` -> Angebots-Operator
+- Produktion: `GET /v1/production/plans`, `GET /v1/production/plans/:planId`, `GET /v1/production/purchase-lists`, `GET /v1/production/purchase-lists/:purchaseListId`, `GET /v1/production/recipes`, `GET /v1/production/recipes/:recipeId` -> Produktions-Operator
+- Audit: `GET /v1/production/audit/events` bleibt Betriebs-/Audit-Operator-geschuetzt
+- Print-Export: `GET /v1/exports/offers/:draftId/html` -> Angebots-Operator; `GET /v1/exports/production-plans/:planId/html` und `GET /v1/exports/purchase-lists/:purchaseListId/csv` -> Produktions-Operator
+
+Bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET` reicht ein frei gesetztes `x-actor-name` fuer diese Read-Pfade nicht aus. Erforderlich bleibt der Trusted-Proxy-Kontext aus `x-catering-actor-name` und passendem `x-catering-trusted-secret`.
+
+Bewusst offen bleiben `GET /health` je Service und Exportservice, solange dort nur nicht-sensitive Status-/Zaehlinformationen ausgeliefert werden.
+
+Grenzen bleiben unveraendert:
+
+- keine applikationsinterne Login-/Session-Welt
+- keine OIDC-/SSO-Implementierung in diesem Slice
+- keine neue Persistenz oder Migration
+- keine externe oder produktionsnahe Freigabe ohne Reverse Proxy/OIDC/SSO bzw. gleichwertigen Identity-Aware Proxy

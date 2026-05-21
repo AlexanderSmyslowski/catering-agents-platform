@@ -107,12 +107,36 @@ async function fetchJson<T>(input: string, init?: RequestInit, defaultActorName?
 export async function loadDashboardState(): Promise<DashboardState> {
   const [intakeRequests, acceptedSpecs, offerDrafts, productionPlans, purchaseLists, recipes, auditEvents] =
     await Promise.all([
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/requests"),
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/intake/v1/intake/specs"),
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/offers/v1/offers/drafts"),
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/plans"),
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/purchase-lists"),
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/recipes"),
+      fetchJson<{ items: Array<Record<string, unknown>> }>(
+        "/api/intake/v1/intake/requests",
+        undefined,
+        DEFAULT_MUTATION_ACTOR_NAMES.intake
+      ),
+      fetchJson<{ items: Array<Record<string, unknown>> }>(
+        "/api/intake/v1/intake/specs",
+        undefined,
+        DEFAULT_MUTATION_ACTOR_NAMES.intake
+      ),
+      fetchJson<{ items: Array<Record<string, unknown>> }>(
+        "/api/offers/v1/offers/drafts",
+        undefined,
+        DEFAULT_MUTATION_ACTOR_NAMES.offer
+      ),
+      fetchJson<{ items: Array<Record<string, unknown>> }>(
+        "/api/production/v1/production/plans",
+        undefined,
+        DEFAULT_MUTATION_ACTOR_NAMES.production
+      ),
+      fetchJson<{ items: Array<Record<string, unknown>> }>(
+        "/api/production/v1/production/purchase-lists",
+        undefined,
+        DEFAULT_MUTATION_ACTOR_NAMES.production
+      ),
+      fetchJson<{ items: Array<Record<string, unknown>> }>(
+        "/api/production/v1/production/recipes",
+        undefined,
+        DEFAULT_MUTATION_ACTOR_NAMES.production
+      ),
       fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/audit/events?limit=30", {
         headers: {
           "x-actor-name": AUDIT_OPERATOR_NAME
@@ -132,7 +156,11 @@ export async function loadDashboardState(): Promise<DashboardState> {
 }
 
 export async function loadIntakeRequestDetail(requestId: string): Promise<IntakeRequestDetail> {
-  return fetchJson<IntakeRequestDetail>(`/api/intake/v1/intake/requests/${requestId}`);
+  return fetchJson<IntakeRequestDetail>(
+    `/api/intake/v1/intake/requests/${requestId}`,
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.intake
+  );
 }
 
 export async function loadServiceHealth(): Promise<ServiceHealthState> {

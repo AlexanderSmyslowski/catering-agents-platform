@@ -7,6 +7,10 @@ import type {
   ProductionPlan,
   PurchaseList
 } from "@catering/shared-core";
+import {
+  resolveMinimalMvpRoleFromTrustedActor,
+  trustedActorFromHeaders
+} from "@catering/shared-core";
 
 function escapeCsv(value: string | number): string {
   return `"${String(value).replace(/"/g, '""')}"`;
@@ -142,9 +146,63 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
   return [header, ...rows].join("\n");
 }
 
-export interface PrintExportAppOptions extends CollectionStorageOptions {}
+export interface PrintExportAppOptions extends CollectionStorageOptions {
+  trustedActorSecret?: string;
+}
+
+function actorForRequest(
+  request: { headers: Record<string, string | string[] | undefined> },
+  fallbackActorName: string,
+  trustedActorSecret?: string
+) {
+  return trustedActorFromHeaders(request.headers, {
+    fallbackActorName,
+    trustedActorSecret
+  });
+}
+
+function isOfferOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(
+    actorForRequest(request, "Angebots-Mitarbeiter", trustedActorSecret)
+  ) === "offer_operator";
+}
+
+function isProductionOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(
+    actorForRequest(request, "Produktions-Mitarbeiter", trustedActorSecret)
+  ) === "production_operator";
+}
+
+function requireOfferOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+  trustedActorSecret?: string
+): unknown | undefined {
+  if (!isOfferOperator(request, trustedActorSecret)) {
+    return reply.code(403).send({
+      message: "Angebots-Operator erforderlich."
+    });
+  }
+
+  return undefined;
+}
+
+function requireProductionOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+  trustedActorSecret?: string
+): unknown | undefined {
+  if (!isProductionOperator(request, trustedActorSecret)) {
+    return reply.code(403).send({
+      message: "Produktions-Operator erforderlich."
+    });
+  }
+
+  return undefined;
+}
 
 export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
+  const trustedActorSecret = options.trustedActorSecret ?? process.env.CATERING_TRUSTED_ACTOR_SECRET;
   const app = Fastify({
     logger: false
   });
@@ -181,6 +239,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   app.get<{ Params: { draftId: string } }>(
     "/v1/exports/offers/:draftId/html",
     async (request, reply) => {
+      const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
+      if (forbidden) {
+        return forbidden;
+      }
+
       const draft = await offerStore.getDraft(request.params.draftId);
       if (!draft) {
         return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
@@ -199,6 +262,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   app.get<{ Params: { planId: string } }>(
     "/v1/exports/production-plans/:planId/html",
     async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+      if (forbidden) {
+        return forbidden;
+      }
+
       const plan = await productionStore.getPlan(request.params.planId);
       if (!plan) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
@@ -217,6 +285,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   app.get<{ Params: { purchaseListId: string } }>(
     "/v1/exports/purchase-lists/:purchaseListId/csv",
     async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+      if (forbidden) {
+        return forbidden;
+      }
+
       const list = await productionStore.getPurchaseList(request.params.purchaseListId);
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList nicht gefunden." });

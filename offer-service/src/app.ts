@@ -53,6 +53,20 @@ function isOfferOperator(request: { headers: Record<string, string | string[] | 
   return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "offer_operator";
 }
 
+function requireOfferOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+  trustedActorSecret?: string
+): unknown | undefined {
+  if (!isOfferOperator(request, trustedActorSecret)) {
+    return reply.code(403).send({
+      message: "Angebots-Operator erforderlich."
+    });
+  }
+
+  return undefined;
+}
+
 function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
   return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "operations_audit_operator";
 }
@@ -265,19 +279,34 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     });
   });
 
-  app.get("/v1/offers/drafts", async (_request, reply) => {
+  app.get("/v1/offers/drafts", async (request, reply) => {
+    const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     return reply.send({
       items: await store.listDrafts()
     });
   });
 
-  app.get("/v1/offers/recipes", async (_request, reply) => {
+  app.get("/v1/offers/recipes", async (request, reply) => {
+    const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     return reply.send({
       items: await recipeLibrary.list()
     });
   });
 
   app.get<{ Params: { recipeId: string } }>("/v1/offers/recipes/:recipeId", async (request, reply) => {
+    const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     const recipe = await recipeLibrary.get(request.params.recipeId);
     if (!recipe) {
       return reply.code(404).send({ message: "Rezept nicht gefunden." });
@@ -368,6 +397,11 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   );
 
   app.get<{ Params: { draftId: string } }>("/v1/offers/drafts/:draftId", async (request, reply) => {
+    const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     const draft = await store.getDraft(request.params.draftId);
     if (!draft) {
       return reply.code(404).send({ message: "OfferDraft nicht gefunden." });

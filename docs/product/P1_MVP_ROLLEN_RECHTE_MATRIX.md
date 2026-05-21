@@ -1,6 +1,6 @@
 # P1 MVP-Rollen- und Rechte-Matrix – Mini-Spezifikation
 
-Status: Mini-Spezifikation v0.1 auf Basis des aktuellen Repo-Iststands
+Status: Mini-Spezifikation v0.2 auf Basis des aktuellen Repo-Iststands nach PA8
 Stand: 2026-04-16
 Einordnung: Bindender MVP-Anker fuer Rollen, Rechte und geschuetzte Kernpfade im bereits real verankerten P1-Korridor
 
@@ -64,6 +64,10 @@ Aktuell real geschuetzte Kernpfade:
 - `POST /v1/intake/documents/upload`
 - `POST /v1/intake/specs/manual`
 - `PATCH /v1/intake/specs/:specId`
+- `GET /v1/intake/requests`
+- `GET /v1/intake/requests/:requestId`
+- `GET /v1/intake/specs`
+- `GET /v1/intake/specs/:specId`
 
 Implizit / dokumentiert:
 - `Intake-Mitarbeiter` ist der Service-Standardname fuer Intake-Aktionen
@@ -82,6 +86,11 @@ Aktuell real geschuetzte Kernpfade:
 - `POST /v1/offers/recipes/import-text` -> Angebots-Operator
 - `POST /v1/offers/recipes/upload` -> Angebots-Operator
 - `PATCH /v1/offers/recipes/:recipeId/review` -> Angebots-Operator
+- `GET /v1/offers/drafts` -> Angebots-Operator
+- `GET /v1/offers/drafts/:draftId` -> Angebots-Operator
+- `GET /v1/offers/recipes` -> Angebots-Operator
+- `GET /v1/offers/recipes/:recipeId` -> Angebots-Operator
+- `GET /v1/exports/offers/:draftId/html` -> Angebots-Operator
 - `POST /v1/offers/seed-demo` -> Betriebs-/Audit-Operator
 
 Implizit / dokumentiert:
@@ -100,6 +109,14 @@ Aktuell real geschuetzte Kernpfade:
 - `POST /v1/production/recipes/import-text` -> Produktions-Operator
 - `POST /v1/production/recipes/upload` -> Produktions-Operator
 - `PATCH /v1/production/recipes/:recipeId/review` -> Produktions-Operator
+- `GET /v1/production/plans` -> Produktions-Operator
+- `GET /v1/production/plans/:planId` -> Produktions-Operator
+- `GET /v1/production/purchase-lists` -> Produktions-Operator
+- `GET /v1/production/purchase-lists/:purchaseListId` -> Produktions-Operator
+- `GET /v1/production/recipes` -> Produktions-Operator
+- `GET /v1/production/recipes/:recipeId` -> Produktions-Operator
+- `GET /v1/exports/production-plans/:planId/html` -> Produktions-Operator
+- `GET /v1/exports/purchase-lists/:purchaseListId/csv` -> Produktions-Operator
 
 Implizit / dokumentiert:
 - `Produktions-Mitarbeiter` ist der Service-Standardname fuer Produktionsaktionen

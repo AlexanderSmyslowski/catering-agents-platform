@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 const adrPath = "docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md";
 
 describe("PA7 auth/read-path decision ADR", () => {
-  it("keeps the decision scope as documentation-only and compares the expected options", () => {
+  it("keeps the decision scope explicit and compares the expected options", () => {
     const doc = readFileSync(adrPath, "utf8");
 
-    expect(doc).toContain("Doku-only; keine Runtime-Implementierung");
+    expect(doc).toContain("PA7 ADR plus PA8 Read-path Auth Hardening Slice 1");
     expect(doc).toContain("Option A: Reverse Proxy/OIDC/SSO setzt vertrauenswürdige Header");
     expect(doc).toContain("Option B: Applikationsinterne Session/Auth");
     expect(doc).toContain("Option C: Weiter nur interner trusted-proxy Korridor, aber read-paths härten");

@@ -124,6 +124,20 @@ function isProductionOperator(request: { headers: Record<string, string | string
   return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "production_operator";
 }
 
+function requireProductionOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+  trustedActorSecret?: string
+): unknown | undefined {
+  if (!isProductionOperator(request, trustedActorSecret)) {
+    return reply.code(403).send({
+      message: "Produktions-Operator erforderlich."
+    });
+  }
+
+  return undefined;
+}
+
 export function buildProductionApp(options: ProductionAppOptions = {}) {
   const trustedActorSecret = options.trustedActorSecret ?? process.env.CATERING_TRUSTED_ACTOR_SECRET;
   const repository =
@@ -243,13 +257,23 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     });
   });
 
-  app.get("/v1/production/plans", async (_request, reply) => {
+  app.get("/v1/production/plans", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     return reply.send({
       items: await store.listPlans()
     });
   });
 
   app.get<{ Params: { planId: string } }>("/v1/production/plans/:planId", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     const plan = await store.getPlan(request.params.planId);
     if (!plan) {
       return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
@@ -261,6 +285,11 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.get<{ Params: { purchaseListId: string } }>(
     "/v1/production/purchase-lists/:purchaseListId",
     async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+      if (forbidden) {
+        return forbidden;
+      }
+
       const list = await store.getPurchaseList(request.params.purchaseListId);
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
@@ -270,7 +299,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     }
   );
 
-  app.get("/v1/production/purchase-lists", async (_request, reply) => {
+  app.get("/v1/production/purchase-lists", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     return reply.send({
       items: await store.listPurchaseLists()
     });
@@ -292,13 +326,23 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     });
   });
 
-  app.get("/v1/production/recipes", async (_request, reply) => {
+  app.get("/v1/production/recipes", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     return reply.send({
       items: await repository.list()
     });
   });
 
   app.get<{ Params: { recipeId: string } }>("/v1/production/recipes/:recipeId", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+    if (forbidden) {
+      return forbidden;
+    }
+
     const recipe = await repository.get(request.params.recipeId);
     if (!recipe) {
       return reply.code(404).send({ message: "Rezept nicht gefunden." });

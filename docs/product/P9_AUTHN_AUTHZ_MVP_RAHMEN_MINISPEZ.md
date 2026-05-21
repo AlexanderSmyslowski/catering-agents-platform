@@ -1,6 +1,6 @@
 # P9 Formaler AuthN-/AuthZ-Rahmen im MVP – Mini-Spezifikation
 
-Status: Mini-Spezifikation v0.1 auf Basis des aktuellen Repo-Iststands
+Status: Mini-Spezifikation v0.2 auf Basis des aktuellen Repo-Iststands nach PA8
 Stand: 2026-04-16
 
 ## 1. Zweck und Abgrenzung
@@ -88,7 +88,7 @@ Fuer den internen MVP-Betrieb verbindlich angenommen wird:
 - produktionsnahe Actor-/Rollenzuordnung erfolgt ueber Trusted-Proxy-Header plus `CATERING_TRUSTED_ACTOR_SECRET`
 - interne Operatoren sind die relevante Nutzungsform, nicht externe Endnutzerkonten
 - geschuetzte Kernpfade bleiben geschuetzt und muessen nicht durch eine neue Login-Welt ersetzt werden
-- read-only Detail- und Export-Kontexte bleiben bewusst interne, nicht oeffentliche Datenpfade; der Audit-Read-Pfad ist bereits rollen-/trusted-guarded
+- read-only Detail-, Listen-, Export- und Audit-Kontexte fuer echte Betriebsdaten sind nach PA8 als interne, rollen-/trusted-guarded Datenpfade gehaertet
 
 ### 4.3 Read-only vs. mutierend
 
@@ -97,7 +97,7 @@ Verbindlich fuer den MVP:
 - mutierend muss fuer Intake-, Angebots-, Produktions- und Betriebsaktionen mit vorhandener Rolle und Actor-Zuordnung abgesichert sein
 - bei gesetztem Trusted-Secret scheitern mutierende Pfade ohne gueltigen Trusted-Proxy-Kontext kontrolliert
 - der read-only Audit-Feed ist mit Betriebs-/Audit-Rolle und Trusted-Kontext abgesichert
-- Export-HTML-/CSV-Pfade und Detail-Listen bleiben in diesem Block bewusst als interne read-only Datenpfade klassifiziert; sie duerfen betrieblich nicht direkt oeffentlich exponiert werden
+- Export-HTML-/CSV-Pfade und Detail-/Listenpfade sind nach PA8 als interne read-only Datenpfade mit bestehender Trusted-Actor-/Rollenlogik geschuetzt; sie duerfen betrieblich weiterhin nicht direkt oeffentlich exponiert werden
 - ein read-only Kontext darf keine verdeckte Schreibwirkung ausloesen
 - ein mutierender Kontext darf nicht als bloesse Anzeige behandelt werden
 
@@ -110,6 +110,19 @@ Bewusst nicht umgesetzt und fuer den MVP nicht erforderlich:
 - IdP-Integration
 - OAuth-/OIDC-/SSO-Implementierung
 - neue Identity- oder Secret-Plattform ueber das eine vorhandene Shared-Secret-Gate fuer den Trusted-Proxy-Kontext hinaus
+
+### 4.5 PA8 Read-path Auth Hardening
+
+Nach PA8 gilt im realen Guard-Korridor zusaetzlich:
+
+- Intake-Requests und AcceptedEventSpecs duerfen read-only nur mit Intake-Operator-Kontext gelesen werden.
+- Angebotsentwuerfe und Angebots-Rezeptdaten duerfen read-only nur mit Angebots-Operator-Kontext gelesen werden.
+- Produktionsplaene, Einkaufslisten und Produktions-Rezeptdaten duerfen read-only nur mit Produktions-Operator-Kontext gelesen werden.
+- Der bestehende Audit-Feed bleibt Betriebs-/Audit-Operator-geschuetzt.
+- Print-Exports folgen dem jeweiligen Fachkontext: Angebots-HTML -> Angebots-Operator; Produktionsplan-HTML und Einkaufsliste-CSV -> Produktions-Operator.
+- Health-Endpunkte bleiben offen, solange sie keine sensiblen Daten liefern.
+
+Bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET` zaehlt fuer diese Pfade nur der Trusted-Proxy-Kontext. `x-actor-name` bleibt ausschliesslich lokale Dev-/Test-Kompatibilitaet.
 
 ## 5. Offene Punkte
 

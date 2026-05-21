@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.113
+version: 5.114
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -78,6 +78,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA5 konsolidiert den Nachvollziehbarkeitskorridor als read-only MVP-Korridor: Upload-Provenance -> Conversation-Quellenanker -> Produktionsoutput/Exportdarstellung. Er ist intern nachvollziehbar, aber kein rechtssicherer Audit und keine Vollständigkeitsgarantie für spätere LLM-/Rezept-/Allergen-Outputs.
 - PA6 fasst die interne Beta-/Abnahme-Readiness als Doku-only-Sicht in `docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md` zusammen: interner MVP-Korridor ist ueber bestehende Status-, Test-, Export-, Audit- und Gate-Signale lesbar; externe Nutzung und echte Produktionsagent-v1-Features bleiben ohne OIDC/SSO, read-path Auth, Sandbox/AV, Retention/PII, Human Approval und Architekturentscheidungen nicht freigegeben.
 - PA7 AuthN/AuthZ + read-path Auth ist als Entscheidungs-ADR in `docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md` dokumentiert: empfohlen ist Option D als Stufenmodell, zuerst read-only Detail-/Export-/Audit-Pfade auf bestehender Trusted-Actor-/Rollenbasis haerten, externe oder produktionsnahe Nutzung aber weiter an Reverse Proxy/OIDC/SSO bzw. gleichwertigen Identity-Aware Proxy koppeln; keine Login-, Session-, Persistenz- oder OIDC-Implementierung in diesem ADR-Slice.
+- PA8 Read-path Auth Hardening Slice 1 ist umgesetzt: sensible read-only Intake-Requests/-Specs, Offer-Drafts/-Recipes, Production-Plans/-Purchase-Lists/-Recipes sowie Print-Export-Pfade fuer Angebot, Produktionsplan und Einkaufsliste verlangen bei gesetztem Trusted-Secret den passenden Trusted-Actor-/Rollen-Kontext; Health bleibt offen, externe Nutzung bleibt ohne Reverse Proxy/OIDC/SSO oder gleichwertigen Identity-Aware Proxy gesperrt.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -620,3 +621,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.113 - 2026-05-21
 - PA7 AuthN/AuthZ + read-path Auth ist als Doku-only-Entscheidungs-ADR in `docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md` umgesetzt und mit `tests/pa7-auth-read-path-decision-adr.test.ts` gegen Optionen, Empfehlung und Scope-Grenzen abgesichert.
 - Empfohlen ist Option D als Stufenmodell: naechster Runtime-Slice nur read-only Detail-/Export-/Audit-Pfade auf bestehender Trusted-Actor-/Rollenbasis haerten; externe oder produktionsnahe Nutzung bleibt bis zur Reverse-Proxy/OIDC/SSO- bzw. Identity-Aware-Proxy-Entscheidung gesperrt, ohne Login-, Session-, Persistenz- oder OIDC-Implementierung in diesem ADR-Slice.
+
+### 5.114 - 2026-05-21
+- PA8 Read-path Auth Hardening Slice 1 ist umgesetzt und mit `tests/pa8-read-path-auth.test.ts` abgesichert: bei gesetztem Trusted-Secret reichen freie `x-actor-name`-Header fuer sensible read-only Detail-/Listen-/Exportpfade nicht mehr aus; passende Trusted-Actor-Header erlauben die rollenbezogenen Read-Zugriffe.
+- Geschuetzt sind Intake-Requests/-Specs, Offer-Drafts/-Recipes, Production-Plans/-Purchase-Lists/-Recipes, der bestehende Production-Audit-Feed sowie Print-Exports fuer Angebot, Produktionsplan und Einkaufsliste; Health-Endpunkte bleiben unauthentifiziert, und externe Nutzung bleibt weiterhin ohne Reverse Proxy/OIDC/SSO bzw. Identity-Aware Proxy gesperrt.
