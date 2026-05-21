@@ -1,3 +1,10 @@
+export const allowedProductionClarificationAnswerTypes = ["shortText"];
+export const futureProductionClarificationAnswerTypeConcepts = [
+  "selectionOrConfirmation",
+  "yesNo",
+  "sourceReference"
+];
+
 const fieldLabels = {
   "attendees.expected": "erwartete Personenzahl",
   "event.date": "Veranstaltungsdatum",

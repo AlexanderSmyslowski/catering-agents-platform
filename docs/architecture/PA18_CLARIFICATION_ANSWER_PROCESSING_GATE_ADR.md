@@ -21,6 +21,15 @@ Dieses ADR legt fest, welche Grenzen spaeter gelten muessen, bevor echte Nutzera
 
 Ziel ist ein enger Sicherheits- und Architekturrahmen fuer einen spaeteren Antwort-Slice, damit Antworten nicht still fachliche Wahrheit, Rezeptentscheidungen, Mengenentscheidungen, Allergenentscheidungen oder Freigaben erzeugen.
 
+## 2a. Entscheidungen nach PA18
+
+Alexander hat nach PA18 entschieden: weiterarbeiten ja, aber nur als Typanker.
+
+- Antwortspeicherung bleibt blockiert, bis ein bewusster Datenmodell-/Migrationsschnitt entschieden ist.
+- Der erste echte Runtime-Antworttyp bleibt auf kurze Freitext-Klaerung `shortText` begrenzt.
+- Auswahl/Bestaetigung, Ja/Nein und Datei-/Quellenhinweise bleiben spaetere, nicht aktivierte Konzeptgrenzen.
+- PA19 erzeugt keine Antwortannahme, keine Antwortspeicherung, keine Antwortverarbeitung, keine API und keine Runtime-Annahme.
+
 ## 3. Nicht-Ziele dieses PA18-Slices
 
 Nicht Teil dieses Slices und nicht umzusetzen:
@@ -43,19 +52,22 @@ Nicht Teil dieses Slices und nicht umzusetzen:
 Ein spaeterer Antwort-Slice darf nur eng typisierte Klaerantworten vorbereiten. Erlaubte Antworttypen als Konzept:
 
 1. Kurze Freitext-Klaerung
+   - erster aktiv erlaubter Runtime-Antworttyp: `shortText`
    - fuer knappe Angaben wie Datum, Personenzahlhinweis, Zeitfenster oder fehlende organisatorische Information
    - kein Ersatz fuer fachliche Rezept-, Mengen- oder Allergenentscheidung
 
 2. Auswahl oder Bestaetigung
+   - nur spaetere, nicht aktivierte Konzeptgrenze
    - fuer explizite Bestaetigung oder Korrektur eines vorhandenen sicheren Fragekontexts
    - muss an die urspruengliche Frage gebunden bleiben
 
 3. Ja/Nein oder binaer
+   - nur spaetere, nicht aktivierte Konzeptgrenze
    - fuer einfache, klar abgegrenzte Klaerpunkte
    - darf keine mehrstufige fachliche Ableitung ausloesen
 
 4. Datei-/Quellenhinweis
-   - nur als spaeterer separater Gate-Pfad
+   - nur spaetere, nicht aktivierte Konzeptgrenze und separater Gate-Pfad
    - braucht vorher eigene Upload-/Source-/Retention-/Security-Grenze
 
 Explizit nicht erlaubt im ersten Antwort-Slice:
@@ -104,7 +116,8 @@ Falls ein weiterer enger Vorbereitungsslice gewuenscht ist, dann nur als Typ-/Te
 
 - `AllowedAnswerType` oder `ProductionClarificationAnswerDraft` im `shared-core` als Konzeptmodell
 - Bindung an `questionId` und Question-Key
-- Laengen-/Sanitizing-/XSS-/Prompt-Injection-Grenzen als reine Testspezifikation oder statische Helpergrenze
+- nur `shortText` als erster aktiv erlaubter Runtime-Antworttyp
+- Auswahl/Bestaetigung, Ja/Nein und Datei-/Quellenhinweise nur als spaetere, nicht aktivierte Konzeptgrenzen
 - keine API, keine UI-Annahme, keine Persistenz, keine Verarbeitung, keine fachliche Ableitung
 
 ## 8. Akzeptanzkriterien fuer spaetere echte Antwortverarbeitung
@@ -121,11 +134,11 @@ Ein spaeterer Runtime-Slice ist erst akzeptabel, wenn mindestens gilt:
 8. Actor, Fragebezug, Zeitbezug und Reviewstatus sind nachvollziehbar, falls Antwortdaten gespeichert werden.
 9. `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check` sind gruen.
 
-## 9. Maximal drei offene Entscheidungen fuer Alexander
+## 9. Drei Entscheidungen nach PA18
 
-1. Soll der naechste Schritt nach PA18 bewusst stoppen, oder darf ein reiner `AllowedAnswerType`-/`ProductionClarificationAnswerDraft`-Typanker ohne Runtime-Annahme vorbereitet werden?
-2. Wenn spaeter Antworten gespeichert werden: bestehende dateibasierte Domain-Ablage weiter nutzen oder vorher einen bewussten Datenmodell-/Migrationsschnitt entscheiden?
-3. Welche Antworttypen sollen im ersten echten Runtime-Slice erlaubt sein: nur kurze Freitext-Klaerung, auch Auswahl/Bestaetigung, oder zusaetzlich Ja/Nein?
+1. Weiterarbeiten: ja, aber nur als reiner `AllowedAnswerType`-/`ProductionClarificationAnswerDraft`-Typanker ohne Runtime-Annahme.
+2. Wenn spaeter Antworten gespeichert werden: vorher bewussten Datenmodell-/Migrationsschnitt entscheiden; nicht einfach dateibasiert starten.
+3. Erster echter Runtime-Antworttyp: nur kurze Freitext-Klaerung `shortText`; Auswahl/Bestaetigung und Ja/Nein bleiben nicht aktiv.
 
 ## 10. Weiter geltende Stopgrenzen
 

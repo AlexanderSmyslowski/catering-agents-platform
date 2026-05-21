@@ -10,6 +10,27 @@ export type ProductionClarificationSeverity = "info" | "warning" | "blocking";
 
 export type ProductionClarificationSuggestedAnswerType = "short_text" | "confirm_or_correct";
 
+export const allowedProductionClarificationAnswerTypes = ["shortText"] as const;
+
+export type AllowedProductionClarificationAnswerType = typeof allowedProductionClarificationAnswerTypes[number];
+
+export const futureProductionClarificationAnswerTypeConcepts = [
+  "selectionOrConfirmation",
+  "yesNo",
+  "sourceReference"
+] as const;
+
+export type FutureProductionClarificationAnswerTypeConcept = typeof futureProductionClarificationAnswerTypeConcepts[number];
+
+export interface ProductionClarificationAnswerDraft {
+  questionId: string;
+  questionKey: {
+    reason: ProductionClarificationReason;
+    reasonCode: string;
+  };
+  answerType: AllowedProductionClarificationAnswerType;
+}
+
 export interface ProductionClarificationQuestion {
   questionId: string;
   reason: ProductionClarificationReason;
