@@ -8,6 +8,7 @@ type ProductionConversationalWorkbenchProps = {
   questionCount: number;
   productionObjectCount: number;
   productionObjectStatusLabel: string;
+  purchaseListCount: number;
   children: ReactNode;
 };
 
@@ -29,9 +30,10 @@ export function ProductionConversationalWorkbench({
   questionCount,
   productionObjectCount,
   productionObjectStatusLabel,
+  purchaseListCount,
   children
 }: ProductionConversationalWorkbenchProps) {
-  const [inputPanel, questionsPanel, productionObjectsPanel, lowerPanels] = Children.toArray(children);
+  const [inputPanel, questionsPanel, productionObjectsPanel, purchasePanel, lowerPanels] = Children.toArray(children);
 
   return (
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
@@ -76,6 +78,17 @@ export function ProductionConversationalWorkbench({
             <strong>{productionObjectStatusLabel}</strong>
           </summary>
           <div className="progressive-panel__body">{productionObjectsPanel}</div>
+        </details>
+      </div>
+
+      <div className="production-purchase-zone">
+        <span className="visually-hidden">production-purchase-zone</span>
+        <details className="progressive-panel production-purchase-panel" open={purchaseListCount > 0}>
+          <summary>
+            <span>Einkaufsliste</span>
+            <strong>{purchaseStatusLabel}</strong>
+          </summary>
+          <div className="progressive-panel__body">{purchasePanel}</div>
         </details>
       </div>
 

@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
 
-function installProductionAcceptanceMocks(options: { stalePlanOnly?: boolean } = {}) {
+function installProductionAcceptanceMocks(options: { stalePlanOnly?: boolean; withCurrentPurchaseList?: boolean } = {}) {
   const storage = new Map<string, string>();
   const localStorageMock = {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -152,10 +152,35 @@ function installProductionAcceptanceMocks(options: { stalePlanOnly?: boolean } =
       }
 
       if (url.endsWith("/api/production/v1/production/purchase-lists")) {
-        return new Response(JSON.stringify({ items: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
+        return new Response(
+          JSON.stringify({
+            items: options.withCurrentPurchaseList
+              ? [
+                  {
+                    purchaseListId: "purchase-production-current-1",
+                    eventSpecId: specId,
+                    totals: { itemCount: 2 },
+                    items: [
+                      {
+                        articleName: "Glutenfreies Baguette",
+                        purchaseQty: 4,
+                        purchaseUnit: "Stück"
+                      },
+                      {
+                        articleName: "Olivenöl",
+                        purchaseQty: 1,
+                        purchaseUnit: "l"
+                      }
+                    ]
+                  }
+                ]
+              : []
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
       }
 
       if (url.endsWith("/api/production/v1/production/recipes")) {
@@ -276,5 +301,19 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Einkauf: offen");
     expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
     expect(content).not.toContain("Produktionsblatt exportieren");
+  });
+
+  it("keeps purchase lists reachable through a quiet progressive workbench zone", async () => {
+    installProductionAcceptanceMocks({ withCurrentPurchaseList: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("production-purchase-zone");
+    expect(content).toContain("Einkaufsliste");
+    expect(content).toContain("1 Liste · 2 Positionen");
+    expect(content).toContain("Einkaufsliste herunterladen");
+    expect(content).toContain("Glutenfreies Baguette");
+    expect(content).toContain("Olivenöl");
+    expect(content).not.toContain("Aktueller Vorgang zuerst");
   });
 });

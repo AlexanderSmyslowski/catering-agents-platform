@@ -1413,16 +1413,22 @@ button:disabled {
 
 .production-progressive-zone,
 .production-objects-zone,
+.production-purchase-zone,
 .production-lower-zones {
   display: grid;
   gap: 0.9rem;
 }
 
-.production-objects-panel .production-step-card {
+.production-objects-panel .production-step-card,
+.production-purchase-panel .secondary-panel {
   background: transparent;
   border: 0;
   box-shadow: none;
   padding: 0 0 0.25rem;
+}
+
+.production-purchase-panel .item-list {
+  margin-bottom: 0;
 }
 
 .production-objects-panel .activity-slot {

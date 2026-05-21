@@ -392,8 +392,9 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Quelle für den Produktionsauftrag hinzufügen");
     expect(content).toContain("Workbench-Projektion");
     expect(content).toContain("Klärbereich");
-    expect(content).toContain("Berechnete Ergebnisse");
-    expect(content).toContain("Aktueller Vorgang zuerst");
+    expect(content).toContain("production-objects-zone");
+    expect(content).toContain("Produktionsobjekte");
+    expect(content).toContain("Plan und Ergebnis leise prüfen");
     expect(content).toContain("Status: vollständig");
     expect(content).toContain("Arbeitsblätter: 1");
     expect(content).toContain("Rezeptblätter: 1");
@@ -413,8 +414,9 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("requestId: presentation-intake-success");
     expect(content).toContain("channel: manual_form");
     expect(content).toContain("Einkaufsliste herunterladen");
-    expect(content).toContain("Aktueller Vorgang zuerst");
-    expect(content).toContain("Archivierte Listen bleiben unten eingeklappt");
+    expect(content).toContain("production-purchase-zone");
+    expect(content).toContain("Einkaufsliste");
+    expect(content).toContain("1 Liste · 3 Positionen");
     expect(content).not.toContain("Status: unzureichend");
     expect(content).not.toContain("Noch keine Produktionspläne für den aktuellen Vorgang vorhanden.");
   });

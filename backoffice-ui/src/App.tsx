@@ -1167,6 +1167,27 @@ export function App() {
     ];
   }, [focusedProductionSpecAttendees, focusedProductionSpecMenuPlan, focusedProductionSpecRecord, focusedProductionSpecServicePlan]);
 
+  const currentPurchaseListItemCount = useMemo(
+    () =>
+      currentSpecPurchaseLists.reduce((sum, purchaseList) => {
+        const totals = purchaseList.totals as Record<string, unknown> | undefined;
+        const itemCount = Number(totals?.itemCount);
+        if (Number.isFinite(itemCount)) {
+          return sum + itemCount;
+        }
+        if (Array.isArray(purchaseList.items)) {
+          return sum + purchaseList.items.length;
+        }
+        return sum;
+      }, 0),
+    [currentSpecPurchaseLists]
+  );
+
+  const purchaseZoneStatusLabel =
+    currentSpecPurchaseLists.length > 0
+      ? `${currentSpecPurchaseLists.length} Liste${currentSpecPurchaseLists.length === 1 ? "" : "n"} · ${currentPurchaseListItemCount} Positionen`
+      : "noch keine Liste";
+
   useEffect(() => {
     if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {
       return;
@@ -2074,7 +2095,7 @@ export function App() {
               ? translateReadiness(String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-"))
               : "offen"
           }
-          purchaseStatusLabel={currentSpecPurchaseLists.length > 0 ? `${currentSpecPurchaseLists.length} Liste(n)` : "offen"}
+          purchaseStatusLabel={purchaseZoneStatusLabel}
           questionCount={productionQuestions.length}
           productionObjectCount={currentSpecPlans.length}
           productionObjectStatusLabel={
@@ -2086,6 +2107,7 @@ export function App() {
                 ? `${currentSpecPlans.length} Plan(e)`
                 : "noch kein Plan"
           }
+          purchaseListCount={currentSpecPurchaseLists.length}
         >
           <div className="production-column">
           <ProductionInputPanel
@@ -2781,6 +2803,82 @@ export function App() {
           </article>
           </div>
           <div className="production-column">
+          <article className="panel secondary-panel">
+            <header>
+              <p className="eyebrow">Einkaufsliste</p>
+              <h3>{purchaseZoneStatusLabel}</h3>
+            </header>
+            <p className="helper-text">
+              Erreichbar und exportierbar, aber nur mit kompakter Vorschau im Workbench-Fluss.
+            </p>
+            <ul className="item-list compact">
+              {currentSpecPurchaseLists.map((purchaseList) => {
+                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                const purchaseListPreviewItems = getPurchaseListPreviewItems(purchaseList);
+                return (
+                  <li key={String(purchaseList.purchaseListId)}>
+                    <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                    <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
+                    <a
+                      className="ghost-link"
+                      href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Einkaufsliste herunterladen
+                    </a>
+                    {purchaseListPreviewItems.length > 0 ? (
+                      <>
+                        <p className="helper-text">Kurzübersicht der ersten Positionen:</p>
+                        <ul className="item-list compact">
+                          {purchaseListPreviewItems.map((item, itemIndex) => (
+                            <li key={`${String(purchaseList.purchaseListId)}-${itemIndex}`}>
+                              <strong>{item.articleName}</strong>
+                              <p>Menge: {item.quantity}</p>
+                              <p>Einheit: {item.unit}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                  </li>
+                );
+              })}
+              {currentSpecPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li> : null}
+            </ul>
+            {archivedPurchaseLists.length > 0 ? (
+              <details className="secondary-workspace">
+                <summary>
+                  <span className="eyebrow">Ältere Einkaufslisten</span>
+                  <span className="subsection-title">{archivedPurchaseLists.length} frühere Listen</span>
+                  <span className="helper-text">Nur bei Bedarf aufklappen.</span>
+                </summary>
+                <div className="secondary-workspace__content">
+                  <ul className="item-list compact">
+                    {archivedPurchaseLists.map((purchaseList) => {
+                      const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                      return (
+                        <li key={String(purchaseList.purchaseListId)}>
+                          <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                          <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
+                          <a
+                            className="ghost-link"
+                            href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Einkaufsliste herunterladen
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </details>
+            ) : null}
+          </article>
+          </div>
+          <div className="production-column">
 
           <details className="panel secondary-panel secondary-rail-details">
             <summary>
@@ -2858,78 +2956,6 @@ export function App() {
             </div>
           </details>
 
-          <article className="panel secondary-panel">
-            <header>
-              <p className="eyebrow">Einkaufslisten</p>
-              <h3>Aktueller Vorgang zuerst</h3>
-            </header>
-            <p className="helper-text">Archivierte Listen bleiben unten eingeklappt und werden nur bei Bedarf geöffnet.</p>
-            <ul className="item-list compact">
-              {currentSpecPurchaseLists.map((purchaseList) => {
-                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                const purchaseListPreviewItems = getPurchaseListPreviewItems(purchaseList);
-                return (
-                  <li key={String(purchaseList.purchaseListId)}>
-                    <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                    <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                    <a
-                      className="ghost-link"
-                      href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Einkaufsliste herunterladen
-                    </a>
-                    {purchaseListPreviewItems.length > 0 ? (
-                      <>
-                        <p className="helper-text">Kurzübersicht der ersten Positionen:</p>
-                        <ul className="item-list compact">
-                          {purchaseListPreviewItems.map((item, itemIndex) => (
-                            <li key={`${String(purchaseList.purchaseListId)}-${itemIndex}`}>
-                              <strong>{item.articleName}</strong>
-                              <p>Menge: {item.quantity}</p>
-                              <p>Einheit: {item.unit}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    ) : null}
-                  </li>
-                );
-              })}
-              {currentSpecPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li> : null}
-            </ul>
-            {archivedPurchaseLists.length > 0 ? (
-              <details className="secondary-workspace">
-                <summary>
-                  <span className="eyebrow">Ältere Einkaufslisten</span>
-                  <span className="subsection-title">{archivedPurchaseLists.length} frühere Listen</span>
-                  <span className="helper-text">Nur bei Bedarf aufklappen.</span>
-                </summary>
-                <div className="secondary-workspace__content">
-                  <ul className="item-list compact">
-                    {archivedPurchaseLists.map((purchaseList) => {
-                      const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                      return (
-                        <li key={String(purchaseList.purchaseListId)}>
-                          <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                          <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                          <a
-                            className="ghost-link"
-                            href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Einkaufsliste herunterladen
-                          </a>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              </details>
-            ) : null}
-          </article>
           </div>
         </ProductionConversationalWorkbench>
       ) : null}
