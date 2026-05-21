@@ -6,7 +6,8 @@ import {
   MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES,
   MINIMAL_MVP_ROLE_LABELS,
   MINIMAL_MVP_ROLES,
-  resolveMinimalMvpRoleFromActorName
+  resolveMinimalMvpRoleFromActorName,
+  trustedActorFromHeaders
 } from "../shared-core/src/access-control.js";
 
 describe("minimal MVP roles convention", () => {
@@ -57,5 +58,43 @@ describe("minimal MVP roles convention", () => {
     expect(isMinimalMvpRole("intake_operator")).toBe(true);
     expect(isMinimalMvpRole("admin")).toBe(false);
     expect(MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES.offer_operator).toBe("Angebots-Mitarbeiter");
+  });
+
+  it("ignores freely set x-actor-name when a trusted actor secret is required", () => {
+    expect(
+      trustedActorFromHeaders(
+        {
+          "x-actor-name": "Produktions-Mitarbeiter"
+        },
+        {
+          fallbackActorName: "Produktions-Mitarbeiter",
+          trustedActorSecret: "shared-secret"
+        }
+      )
+    ).toEqual({
+      name: "Produktions-Mitarbeiter",
+      source: "untrusted",
+      trusted: false
+    });
+  });
+
+  it("accepts actor identity from the trusted proxy header when the shared secret matches", () => {
+    expect(
+      trustedActorFromHeaders(
+        {
+          "x-catering-actor-name": "Produktions-Mitarbeiter",
+          "x-catering-trusted-secret": "shared-secret",
+          "x-actor-name": "Angebots-Mitarbeiter"
+        },
+        {
+          fallbackActorName: "Produktions-Mitarbeiter",
+          trustedActorSecret: "shared-secret"
+        }
+      )
+    ).toEqual({
+      name: "Produktions-Mitarbeiter",
+      source: "trusted-proxy:x-catering-actor-name",
+      trusted: true
+    });
   });
 });

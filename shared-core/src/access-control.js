@@ -58,6 +58,12 @@ const PROTECTED_PATH_TEMPLATES = [
     "/v1/production/recipes/:recipeId/review",
     "/v1/production/audit/events"
 ];
+function firstHeaderValue(value) {
+    if (Array.isArray(value)) {
+        return value[0];
+    }
+    return value;
+}
 function normalizeActorName(value) {
     return value.trim().toLowerCase();
 }
@@ -80,6 +86,44 @@ export function resolveMinimalMvpRoleFromActorName(actorName) {
         }
     }
     return undefined;
+}
+export function trustedActorFromHeaders(headers, options) {
+    const expectedSecret = options.trustedActorSecret?.trim();
+    const trustedSecret = firstHeaderValue(headers["x-catering-trusted-secret"])?.trim();
+    const trustedActorName = firstHeaderValue(headers["x-catering-actor-name"])?.trim();
+    if (expectedSecret && trustedSecret === expectedSecret && trustedActorName) {
+        return {
+            name: trustedActorName,
+            source: "trusted-proxy:x-catering-actor-name",
+            trusted: true
+        };
+    }
+    const devActorName = firstHeaderValue(headers["x-actor-name"])?.trim();
+    if (!expectedSecret && options.allowDevActorHeader !== false && devActorName) {
+        return {
+            name: devActorName,
+            source: "dev-header:x-actor-name",
+            trusted: false
+        };
+    }
+    if (expectedSecret) {
+        return {
+            name: options.fallbackActorName,
+            source: "untrusted",
+            trusted: false
+        };
+    }
+    return {
+        name: options.fallbackActorName,
+        source: "service-default",
+        trusted: false
+    };
+}
+export function resolveMinimalMvpRoleFromTrustedActor(actor) {
+    if (!actor.trusted && actor.source === "untrusted") {
+        return undefined;
+    }
+    return resolveMinimalMvpRoleFromActorName(actor.name);
 }
 export function isMinimalMvpProtectedPath(path) {
     return PROTECTED_PATH_TEMPLATES.some((template) => pathMatchesProtectedTemplate(path, template));

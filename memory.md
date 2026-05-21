@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.104
+version: 5.105
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -69,6 +69,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Als Step-4-Slice benennt `/produktion` nach den strukturierten Antworten nun einen klaren naechsten Agent-Schritt fuer Produktionsobjekte und Downloads: Produktionsplan, Rezepte/Objektuebersicht, Einkaufsliste und Downloads werden als vorhandene bzw. entstehende pruefbare Ergebniszone eingeordnet, ohne neue Generierungslogik, API oder Persistenz.
 - Security-Hardening Block 1 ist abgeschlossen: `npm audit --omit=dev` ist nach minimalem `npm audit fix` gruen, HTML-Exports escapen datengetriebene Angebots- und Produktionsplan-Texte, und ein fokussierter XSS-Regressionstest schuetzt Script-/Tag-/Event-Attribut-/Quote-Faelle; kein Featurebau, keine neue Persistenzwelt.
 - Security-Hardening Block 2 haertet Upload-/PDF-Pfade minimal: zentrale Upload-Limits und MIME-/Extension-Allowlist fuer Intake-, Offer- und Production-Dokumentuploads, streambasierte Groessenpruefung vor Parser-Aufruf sowie Regressionstests fuer zu grosse, unerlaubte und weiterhin erlaubte Dateien; keine neue Parser-Engine, keine OCR, keine neue Persistenzwelt.
+- Security-Hardening Block 3 fuehrt einen minimalen Trusted-Identity-Rahmen ein: Bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET` zaehlen Rollen nur noch aus `x-catering-actor-name` plus passendem `x-catering-trusted-secret`; frei setzbares `x-actor-name` bleibt nur lokaler Dev-/Test-Kompatibilitaetsheader und gilt nicht mehr als produktionsnahes Sicherheitsmodell.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -575,3 +576,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.104 - 2026-05-21
 - Security-Hardening Block 2 ist umgesetzt: Intake-, Angebots- und Produktions-Dokumentuploads nutzen zentrale Datei-/Part-/Field-Grenzen, MIME-/Extension-Allowlist und streambasierte Groessenpruefung vor Textgewinnung/PDF-Parsing.
 - Der Block ist mit fokussierten Upload-Security-Regressionen fuer zu grosse Intake-Dateien, unerlaubte Intake-/Offer-Dateien und weiterhin erlaubte Intake-/Production-Textuploads abgesichert; keine neue Parser-Engine, OCR, Persistenzwelt oder Fake-LLM-/Rezept-/Allergenlogik.
+
+### 5.105 - 2026-05-21
+- Security-Hardening Block 3 ist umgesetzt: Services koennen per `CATERING_TRUSTED_ACTOR_SECRET` oder Testoption `trustedActorSecret` erzwingen, dass Rollen nur aus `x-catering-actor-name` mit passendem `x-catering-trusted-secret` stammen.
+- Frei setzbares `x-actor-name` bleibt nur fuer expliziten lokalen Dev-/Testbetrieb kompatibel; Spoofing- und Trusted-Kontext-Regressionen schuetzen mutierende Produktions-/Seed-Pfade und den read-only Audit-Feed, waehrend Export-/Detail-Read-Pfade bewusst als interne, nicht oeffentlich zu exponierende Datenpfade dokumentiert bleiben.

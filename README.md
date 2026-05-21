@@ -111,8 +111,10 @@ Fuer frische Deployments stehen ausserdem Admin-Endpunkte bereit:
 - `POST /v1/production/seed-demo`
 - `GET /v1/production/audit/events?limit=30` fuer den gemeinsamen Audit-Feed
 
-Operator-Namen koennen ueber den Header `x-actor-name` mitgegeben werden.
-Die Backoffice-UI speichert diesen Namen lokal und sendet ihn bei mutierenden Aktionen automatisch mit.
+Operator-Namen koennen im lokalen Dev-/Testbetrieb weiterhin ueber den Header `x-actor-name` mitgegeben werden.
+Sobald `CATERING_TRUSTED_ACTOR_SECRET` gesetzt ist, zaehlt `x-actor-name` nicht mehr als Sicherheitskontext: Services akzeptieren Rollen dann nur aus dem Trusted-Proxy-Kontext `x-catering-actor-name` plus passendem `x-catering-trusted-secret`.
+Die Backoffice-UI speichert den lokalen Operatornamen weiterhin lokal und sendet ihn bei mutierenden Dev-/Test-Aktionen automatisch mit; produktionsnah muss der Reverse Proxy die Trusted-Header setzen.
+Echte Login-, OIDC-/SSO- und Session-Mechanik bleibt bewusst offen und ist nicht Teil dieses Hardening-Blocks.
 
 Die Web-App nutzt diese Pfade jetzt direkt fuer Service-Status und Demo-Befuellung.
 Zusatzlich kann sie nun PDF-, TXT-, MD- und E-Mail-Dateien ueber den Intake-Pfad hochladen und daraus direkt `AcceptedEventSpec`-Datensaetze erzeugen.
