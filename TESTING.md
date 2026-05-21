@@ -52,8 +52,9 @@ Relevante bestehende Tests:
 - `tests/intake-finalize-access.test.ts`
 - `tests/recipe-review-access.test.ts`
 - `tests/production-audit-access.test.ts`
+- `tests/trusted-identity-access.test.ts`
 
-Diese Tests bleiben Rueckversicherung fuer bestehende geschuetzte Pfade. Phase 4 erweitert hier nichts fachlich.
+Diese Tests bleiben Rueckversicherung fuer bestehende geschuetzte Pfade. Der Trusted-Identity-Test belegt zusaetzlich, dass ein frei gesetzter `x-actor-name` bei konfiguriertem `CATERING_TRUSTED_ACTOR_SECRET` keinen mutierenden oder Audit-read-only Zugriff mehr erteilt, waehrend der explizite Trusted-Proxy-Kontext funktioniert. Phase 4 erweitert hier nichts fachlich.
 
 ### 3.3 Frontend-/Backoffice-Smoke
 

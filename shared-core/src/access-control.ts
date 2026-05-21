@@ -7,6 +7,26 @@ export const MINIMAL_MVP_ROLES = [
 
 export type MinimalMvpRole = (typeof MINIMAL_MVP_ROLES)[number];
 
+export interface TrustedActor {
+  name: string;
+  source: "trusted-proxy:x-catering-actor-name" | "dev-header:x-actor-name" | "service-default" | "untrusted";
+  trusted: boolean;
+}
+
+export interface TrustedActorOptions {
+  fallbackActorName: string;
+  trustedActorSecret?: string;
+  allowDevActorHeader?: boolean;
+}
+
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+}
+
 export const MINIMAL_MVP_ROLE_LABELS: Record<MinimalMvpRole, string> = {
   intake_operator: "Intake-Operator",
   offer_operator: "Angebots-Operator",
@@ -97,6 +117,54 @@ export function resolveMinimalMvpRoleFromActorName(actorName: string): MinimalMv
   }
 
   return undefined;
+}
+
+export function trustedActorFromHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  options: TrustedActorOptions
+): TrustedActor {
+  const expectedSecret = options.trustedActorSecret?.trim();
+  const trustedSecret = firstHeaderValue(headers["x-catering-trusted-secret"])?.trim();
+  const trustedActorName = firstHeaderValue(headers["x-catering-actor-name"])?.trim();
+
+  if (expectedSecret && trustedSecret === expectedSecret && trustedActorName) {
+    return {
+      name: trustedActorName,
+      source: "trusted-proxy:x-catering-actor-name",
+      trusted: true
+    };
+  }
+
+  const devActorName = firstHeaderValue(headers["x-actor-name"])?.trim();
+  if (!expectedSecret && options.allowDevActorHeader !== false && devActorName) {
+    return {
+      name: devActorName,
+      source: "dev-header:x-actor-name",
+      trusted: false
+    };
+  }
+
+  if (expectedSecret) {
+    return {
+      name: options.fallbackActorName,
+      source: "untrusted",
+      trusted: false
+    };
+  }
+
+  return {
+    name: options.fallbackActorName,
+    source: "service-default",
+    trusted: false
+  };
+}
+
+export function resolveMinimalMvpRoleFromTrustedActor(actor: TrustedActor): MinimalMvpRole | undefined {
+  if (!actor.trusted && actor.source === "untrusted") {
+    return undefined;
+  }
+
+  return resolveMinimalMvpRoleFromActorName(actor.name);
 }
 
 export function isMinimalMvpProtectedPath(path: string): boolean {

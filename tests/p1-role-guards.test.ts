@@ -16,12 +16,13 @@ describe("P1 minimal role guards", () => {
     const app = buildIntakeApp(new IntakeStore());
     const blockedActor = "Angebots-Mitarbeiter";
 
-    for (const { method, url } of [
-      { method: "POST", url: "/v1/intake/normalize" },
-      { method: "POST", url: "/v1/intake/documents" },
-      { method: "POST", url: "/v1/intake/documents/upload" },
-      { method: "POST", url: "/v1/intake/specs/manual" },
-      { method: "PATCH", url: "/v1/intake/specs/spec-123" }
+    for (const { method, url, message } of [
+      { method: "POST", url: "/v1/intake/normalize", message: "Intake-Operator erforderlich." },
+      { method: "POST", url: "/v1/intake/documents", message: "Intake-Operator erforderlich." },
+      { method: "POST", url: "/v1/intake/documents/upload", message: "Intake-Operator erforderlich." },
+      { method: "POST", url: "/v1/intake/specs/manual", message: "Intake-Operator erforderlich." },
+      { method: "PATCH", url: "/v1/intake/specs/spec-123", message: "Intake-Operator erforderlich." },
+      { method: "POST", url: "/v1/intake/seed-demo", message: "Betriebs-/Audit-Operator erforderlich." }
     ] as const) {
       const response = await app.inject({
         method,
@@ -34,7 +35,7 @@ describe("P1 minimal role guards", () => {
 
       expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({
-        message: "Intake-Operator erforderlich."
+        message
       });
     }
 

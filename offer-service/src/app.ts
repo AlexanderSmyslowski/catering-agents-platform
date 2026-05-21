@@ -1,7 +1,6 @@
 import Fastify, { type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import {
-  actorNameFromHeaders,
   AuditLogStore,
   createEventRequestFromText,
   createOfferDraft,
@@ -10,7 +9,8 @@ import {
   parseUploadedRecipeText,
   RecipeLibrary,
   promoteOfferVariant,
-  resolveMinimalMvpRoleFromActorName,
+  resolveMinimalMvpRoleFromTrustedActor,
+  trustedActorFromHeaders,
   multipartLimitsForUpload,
   readLimitedUploadBuffer,
   uploadErrorResponse,
@@ -40,18 +40,19 @@ export interface OfferAppOptions extends CollectionStorageOptions {
   store?: OfferStore;
   recipeLibrary?: RecipeLibrary;
   auditLog?: AuditLogStore;
+  trustedActorSecret?: string;
 }
 
 function isOfferStore(value: OfferStore | OfferAppOptions | undefined): value is OfferStore {
   return value instanceof OfferStore;
 }
 
-function isOfferOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
-  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "offer_operator";
+function isOfferOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "offer_operator";
 }
 
-function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }): boolean {
-  return resolveMinimalMvpRoleFromActorName(actorForRequest(request).name) === "operations_audit_operator";
+function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "operations_audit_operator";
 }
 
 function multipartFieldValue(
@@ -109,15 +110,16 @@ async function recipeImportFromMultipart(
   };
 }
 
-function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }) {
-  return {
-    name: actorNameFromHeaders(request.headers, "Angebots-Mitarbeiter"),
-    source: request.headers["x-actor-name"] ? "header:x-actor-name" : "service-default"
-  };
+function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string) {
+  return trustedActorFromHeaders(request.headers, {
+    fallbackActorName: "Angebots-Mitarbeiter",
+    trustedActorSecret
+  });
 }
 
 export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   const options = isOfferStore(input) ? { store: input } : input;
+  const trustedActorSecret = options.trustedActorSecret ?? process.env.CATERING_TRUSTED_ACTOR_SECRET;
   const storageOptions = isOfferStore(input) ? input.storageOptions : options;
   const store =
     options.store ??
@@ -166,7 +168,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post<{ Body: EventRequest }>("/v1/offers/drafts", async (request, reply) => {
-    if (!isOfferOperator(request)) {
+    if (!isOfferOperator(request, trustedActorSecret)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
       });
@@ -179,7 +181,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       action: "offer.draft_created",
       entityType: "OfferDraft",
       entityId: draft.draftId,
-      actor: actorForRequest(request),
+      actor: actorForRequest(request, trustedActorSecret),
       summary: "Angebotsentwurf aus strukturierter Event-Anfrage erstellt.",
       details: {
         requestId: eventRequest.requestId,
@@ -191,7 +193,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post<{ Body: { text: string; requestId?: string } }>("/v1/offers/from-text", async (request, reply) => {
-    if (!isOfferOperator(request)) {
+    if (!isOfferOperator(request, trustedActorSecret)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
       });
@@ -208,7 +210,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       action: "offer.draft_created_from_text",
       entityType: "OfferDraft",
       entityId: draft.draftId,
-      actor: actorForRequest(request),
+      actor: actorForRequest(request, trustedActorSecret),
       summary: "Angebotsentwurf aus Freitext erstellt.",
       details: {
         requestId: eventRequest.requestId,
@@ -220,7 +222,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post("/v1/offers/seed-demo", async (request, reply) => {
-    if (!isOperationsAuditOperator(request)) {
+    if (!isOperationsAuditOperator(request, trustedActorSecret)) {
       return reply.code(403).send({
         message: "Betriebs-/Audit-Operator erforderlich."
       });
@@ -239,7 +241,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       action: "offer.seed_demo",
       entityType: "SeedBatch",
       entityId: `offer-demo-${Date.now()}`,
-      actor: actorForRequest(request),
+      actor: actorForRequest(request, trustedActorSecret),
       summary: `${seeded.length} Angebotsentwuerfe als Demo angelegt.`,
       details: {
         seededCount: seeded.length
@@ -276,7 +278,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post<{ Body: RecipeTextImportBody }>("/v1/offers/recipes/import-text", async (request, reply) => {
-    if (!isOfferOperator(request)) {
+    if (!isOfferOperator(request, trustedActorSecret)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
       });
@@ -288,7 +290,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       action: "recipe.imported_text",
       entityType: "Recipe",
       entityId: recipe.recipeId,
-      actor: actorForRequest(request),
+      actor: actorForRequest(request, trustedActorSecret),
       summary: `Rezepttext in gemeinsame Bibliothek importiert: ${recipe.name}.`,
       details: {
         recipeName: recipe.name,
@@ -300,7 +302,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post("/v1/offers/recipes/upload", async (request, reply) => {
-    if (!isOfferOperator(request)) {
+    if (!isOfferOperator(request, trustedActorSecret)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
       });
@@ -314,7 +316,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         action: "recipe.uploaded_file",
         entityType: "Recipe",
         entityId: recipe.recipeId,
-        actor: actorForRequest(request),
+        actor: actorForRequest(request, trustedActorSecret),
         summary: `Rezeptdatei in gemeinsame Bibliothek hochgeladen: ${recipe.name}.`,
         details: {
           recipeName: recipe.name,
@@ -333,7 +335,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   app.patch<{ Params: { recipeId: string }; Body: RecipeReviewBody }>(
     "/v1/offers/recipes/:recipeId/review",
     async (request, reply) => {
-      if (!isOfferOperator(request)) {
+      if (!isOfferOperator(request, trustedActorSecret)) {
         return reply.code(403).send({
           message: "Angebots-Operator erforderlich."
         });
@@ -344,7 +346,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         action: "recipe.reviewed",
         entityType: "Recipe",
         entityId: recipe.recipeId,
-        actor: actorForRequest(request),
+        actor: actorForRequest(request, trustedActorSecret),
         summary: `Rezept ${recipe.name} ueber den Angebots-Workflow geprueft.`,
         details: {
           decision: request.body.decision,
@@ -380,7 +382,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         action: "offer.promoted_variant",
         entityType: "AcceptedEventSpec",
         entityId: promoted.specId,
-        actor: actorForRequest(request),
+        actor: actorForRequest(request, trustedActorSecret),
         summary: `Angebotsvariante in operative Event-Spezifikation uebernommen.`,
         details: {
           draftId: draft.draftId,

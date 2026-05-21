@@ -43,13 +43,14 @@ Bereits vorhanden im Repo:
 - testseitig belegte Guard-Verifikation
 - eindeutige Trennung zwischen mutierenden und read-only Pfaden im MVP-Kern
 
-### 3.2 Operator-Zuordnung ueber `x-actor-name`
+### 3.2 Operator-Zuordnung und Trusted-Proxy-Kontext
 
-Bereits vorhanden im Repo:
-- mutierende Aktionen werden ueber `x-actor-name` einem Operator-Kontext zugeordnet
-- die Backoffice-API setzt einen Default-Actor, wenn kein Header gesetzt ist
-- die Services pruefen den Actor gegen die minimalen MVP-Rollen
-- der Audit-/Betriebs-Operator ist als eigene Zuordnungsbasis vorhanden
+Aktuell real vorhanden im Repo:
+- Im lokalen Dev-/Testbetrieb kann `x-actor-name` weiterhin als explizit nicht-produktiver Operatorhinweis genutzt werden.
+- Sobald `CATERING_TRUSTED_ACTOR_SECRET` gesetzt ist, wird ein frei gesetzter `x-actor-name` fuer Rollenentscheidungen ignoriert.
+- Rollenentscheidend ist dann nur ein Trusted-Proxy-Kontext aus `x-catering-actor-name` und passendem `x-catering-trusted-secret`.
+- Die Services lesen denselben Rahmen ueber den gemeinsamen `shared-core`-Resolver und koennen ihn testseitig per `trustedActorSecret` konfigurieren.
+- Der Audit-/Betriebs-Operator ist weiterhin als eigene Zuordnungsbasis vorhanden, aber bei konfiguriertem Secret ebenfalls nur trusted wirksam.
 
 ### 3.3 Reverse-Proxy-/HTTPS-Rahmen
 
@@ -75,23 +76,28 @@ Heute bereits eher organisatorisch bzw. implizit geregelt:
 Fuer den MVP ist der AuthN-/AuthZ-Rahmen ausreichend vorhanden, wenn:
 1. die minimalen Rollen im `shared-core` als gemeinsame Referenz dienen
 2. mutierende Kernpfade ueber Actor-Zuordnung und Guards abgesichert sind
-3. read-only Pfade nicht als Schreibwege behandelt werden
-4. der interne Betrieb ueber den vorhandenen Proxy- und UI-Rahmen stattfindet
-5. keine neue Login-Schicht benoetigt wird, um den bestehenden MVP-Kern sicher zu nutzen
+3. produktionsnahe Rollenentscheidungen nur aus einem Trusted-Proxy-Kontext stammen, nicht aus frei setzbarem `x-actor-name`
+4. read-only Pfade nicht als Schreibwege behandelt werden
+5. der interne Betrieb ueber den vorhandenen Proxy- und UI-Rahmen stattfindet
+6. keine neue Login-Schicht benoetigt wird, um den bestehenden MVP-Kern intern kontrolliert zu nutzen
 
 ### 4.2 Was fuer internen Betrieb verbindlich angenommen wird
 
 Fuer den internen MVP-Betrieb verbindlich angenommen wird:
-- Actor-Zuordnung ueber `x-actor-name` oder die vorhandenen Defaults bleibt die operative Identitaetsbasis fuer mutierende Requests
+- `x-actor-name` bleibt nur lokaler Dev-/Test-Kompatibilitaetsheader und ist als nicht-produktiv markiert
+- produktionsnahe Actor-/Rollenzuordnung erfolgt ueber Trusted-Proxy-Header plus `CATERING_TRUSTED_ACTOR_SECRET`
 - interne Operatoren sind die relevante Nutzungsform, nicht externe Endnutzerkonten
 - geschuetzte Kernpfade bleiben geschuetzt und muessen nicht durch eine neue Login-Welt ersetzt werden
-- read-only Detail-, Export- und Audit-Kontexte muessen nicht in eine neue Session-/Token-Architektur verschoben werden, solange sie nicht mutieren
+- read-only Detail- und Export-Kontexte bleiben bewusst interne, nicht oeffentliche Datenpfade; der Audit-Read-Pfad ist bereits rollen-/trusted-guarded
 
 ### 4.3 Read-only vs. mutierend
 
 Verbindlich fuer den MVP:
 - read-only muss fuer Detail-, Export- und Audit-Kontexte gelten, soweit kein expliziter Schreibvorgang vorgesehen ist
 - mutierend muss fuer Intake-, Angebots-, Produktions- und Betriebsaktionen mit vorhandener Rolle und Actor-Zuordnung abgesichert sein
+- bei gesetztem Trusted-Secret scheitern mutierende Pfade ohne gueltigen Trusted-Proxy-Kontext kontrolliert
+- der read-only Audit-Feed ist mit Betriebs-/Audit-Rolle und Trusted-Kontext abgesichert
+- Export-HTML-/CSV-Pfade und Detail-Listen bleiben in diesem Block bewusst als interne read-only Datenpfade klassifiziert; sie duerfen betrieblich nicht direkt oeffentlich exponiert werden
 - ein read-only Kontext darf keine verdeckte Schreibwirkung ausloesen
 - ein mutierender Kontext darf nicht als bloesse Anzeige behandelt werden
 
@@ -103,7 +109,7 @@ Bewusst nicht umgesetzt und fuer den MVP nicht erforderlich:
 - Token- oder Refresh-Token-Mechanik
 - IdP-Integration
 - OAuth-/OIDC-/SSO-Implementierung
-- neue Identity- oder Secret-Plattform
+- neue Identity- oder Secret-Plattform ueber das eine vorhandene Shared-Secret-Gate fuer den Trusted-Proxy-Kontext hinaus
 
 ## 5. Offene Punkte
 
