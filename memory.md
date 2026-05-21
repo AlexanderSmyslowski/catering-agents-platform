@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.115
+version: 5.116
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -80,6 +80,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA7 AuthN/AuthZ + read-path Auth ist als Entscheidungs-ADR in `docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md` dokumentiert: empfohlen ist Option D als Stufenmodell, zuerst read-only Detail-/Export-/Audit-Pfade auf bestehender Trusted-Actor-/Rollenbasis haerten, externe oder produktionsnahe Nutzung aber weiter an Reverse Proxy/OIDC/SSO bzw. gleichwertigen Identity-Aware Proxy koppeln; keine Login-, Session-, Persistenz- oder OIDC-Implementierung in diesem ADR-Slice.
 - PA8 Read-path Auth Hardening Slice 1 ist umgesetzt: sensible read-only Intake-Requests/-Specs, Offer-Drafts/-Recipes, Production-Plans/-Purchase-Lists/-Recipes sowie Print-Export-Pfade fuer Angebot, Produktionsplan und Einkaufsliste verlangen bei gesetztem Trusted-Secret den passenden Trusted-Actor-/Rollen-Kontext; Health bleibt offen, externe Nutzung bleibt ohne Reverse Proxy/OIDC/SSO oder gleichwertigen Identity-Aware Proxy gesperrt.
 - PA9 Proxy-/Deployment-Readiness ist als ADR `docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md` dokumentiert und mit `tests/pa9-proxy-deployment-readiness-adr.test.ts` abgesichert: Edge muss clientseitige Trusted-/Actor-Header entfernen, Proxy/IAP setzt `x-catering-actor-name` plus `x-catering-trusted-secret` kontrolliert, `CATERING_TRUSTED_ACTOR_SECRET` ist produktionsnah Pflicht, Secret bleibt serverseitig, Services duerfen nicht direkt oeffentlich erreichbar sein; keine OIDC-/Login-/Session-Implementierung.
+- PA10 DocumentIngestion-v1 Boundary ist als kleiner `shared-core`-Baustein umgesetzt: `DocumentIngestionResult` kapselt vorhandene Upload-`sourceMetadata`, Kontext, Status, Warnungen, Ingestion-Zeitpunkt und optional extrahierten Text, ohne neue Parser-Engine, API, Persistenz, Angebotssemantik, LLM-, OCR-, Rezept- oder Allergenlogik.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -630,3 +631,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.115 - 2026-05-21
 - PA9 Proxy-/Deployment-Readiness ist als Doku-/Konfigurationsanker `docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md` umgesetzt und mit `tests/pa9-proxy-deployment-readiness-adr.test.ts` gegen Muss-Anforderungen, Health-Grenzen, Preflight und Nicht-Ziele abgesichert.
 - Verbindlich dokumentiert ist: clientseitige Trusted-/Actor-Header muessen am Edge entfernt werden, Proxy/IAP setzt Trusted-Header kontrolliert, `CATERING_TRUSTED_ACTOR_SECRET` ist produktionsnah Pflicht, das Secret bleibt ausschliesslich serverseitig, Services duerfen nicht direkt oeffentlich erreichbar sein; kein OIDC-/Login-/Session-/Persistenz-Ausbau.
+
+### 5.116 - 2026-05-21
+- PA10 DocumentIngestion-v1 Boundary ist umgesetzt: `shared-core` stellt `ingestDocument(...)` und ein kleines `DocumentIngestionResult`-Modell bereit, das bestehende Textgewinnung typisiert umhuellt und `sourceMetadata`, Kontext, Status, Warnungen, Ingestion-Zeitpunkt sowie optional extrahierten Text ausdrueckt.
+- Abgesichert ist der erlaubte Textpfad, ein PDF-Fallback-/Problemfall mit Warnung und die Grenze, dass Conversation-/Export-Provenance-Anker weiterhin keine sensiblen Rohinhalte spiegeln. Keine neue API, Migration, Persistenzwelt, Parser-Engine, OCR, LLM-/Tool-Use-, Angebotsanalyse-, Rezept- oder Allergenlogik.

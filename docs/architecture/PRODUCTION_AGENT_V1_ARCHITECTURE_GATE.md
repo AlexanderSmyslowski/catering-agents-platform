@@ -188,6 +188,14 @@ Gate vor Implementierung:
 - entscheiden, ob Parser in separatem Worker/Sandbox laufen muessen
 - PII-/Retention-Regeln fuer Rohdateien und extrahierte Texte festlegen
 
+PA10 DocumentIngestion-v1 Boundary:
+
+- `shared-core` definiert eine kleine, testbare `DocumentIngestionResult`-Grenze fuer vorhandene Dokumentbausteine.
+- Das Modell kapselt vorhandene `sourceMetadata`, `context`, `status`, `warnings`, `ingestedAt` und optional extrahierten Text mit Laengenangabe.
+- Fallback- oder Problemfaelle werden als Warnung/Status modelliert und nicht als fachlich sicherer Erfolg behauptet.
+- Conversation- und Exportanker bleiben weiterhin sichere Provenance-Anker aus Metadaten/Hash-Kurzform; Rohinhalte oder extrahierte Texte werden dort nicht gespiegelt.
+- Der Slice fuehrt keine neue Parser-Engine, OCR, LLM-/Tool-Use-Schicht, Angebotssemantik, Rezept-/Allergenlogik, API, Migration oder Persistenzwelt ein.
+
 ### 5.3 LLM Orchestrator
 
 Zweck:
