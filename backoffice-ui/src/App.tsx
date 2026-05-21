@@ -488,6 +488,91 @@ function ReadOnlyWorkbenchProjection({
   );
 }
 
+type OfferWorkbenchProjectionProps = {
+  latestSourceLabel: string;
+  activeDraft?: Record<string, unknown>;
+  activeSpec?: Record<string, unknown>;
+  completeSpecCount: number;
+  partialSpecCount: number;
+  draftCount: number;
+};
+
+function countDraftOpenQuestions(draft?: Record<string, unknown>): number {
+  return Array.isArray(draft?.openQuestions) ? draft.openQuestions.length : 0;
+}
+
+function countDraftVariants(draft?: Record<string, unknown>): number {
+  return Array.isArray(draft?.variantSet) ? draft.variantSet.length : 0;
+}
+
+function OfferWorkbenchProjection({
+  latestSourceLabel,
+  activeDraft,
+  activeSpec,
+  completeSpecCount,
+  partialSpecCount,
+  draftCount
+}: OfferWorkbenchProjectionProps) {
+  const activeDraftId = activeDraft ? String(activeDraft.draftId ?? "-") : "kein Entwurf";
+  const activeSpecId = activeSpec ? String(activeSpec.specId ?? "-") : "keine Spezifikation";
+  const openQuestionCount = countDraftOpenQuestions(activeDraft);
+  const variantCount = countDraftVariants(activeDraft);
+
+  const zones: WorkbenchSpecFact[] = [
+    {
+      label: "Quellen/Eingabe",
+      value: latestSourceLabel
+    },
+    {
+      label: "Verstandene Daten",
+      value: activeSpec
+        ? `${activeSpecId} · ${translateReadiness(
+            String((activeSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+          )}`
+        : activeSpecId
+    },
+    {
+      label: "Rückfragen",
+      value: `Offene Angebotsfragen: ${openQuestionCount}`
+    },
+    {
+      label: "Ergebnisobjekte",
+      value: `${draftCount} Entwurf/Entwürfe · aktiv: ${activeDraftId} · Varianten: ${variantCount}`
+    },
+    {
+      label: "Export/Audit",
+      value: activeDraft ? "Angebotsexport und Operator-Spur vorhanden" : "noch kein Angebotsexport"
+    }
+  ];
+
+  return (
+    <article className="panel offer-workbench-panel" aria-label="Angebots-Workbench-Projektion">
+      <header>
+        <p className="eyebrow">Angebots-Workbench-Projektion</p>
+        <h3>Read-only Arbeitsbild vor Produktionsübergabe</h3>
+        <p className="helper-text">
+          Kundenanfrage, verstandene Daten, Rückfragen, Ergebnisobjekte und Export-/Audit-Bezug bleiben getrennt sichtbar.
+        </p>
+      </header>
+      <dl className="spec-fact-grid offer-workbench-grid">
+        {zones.map((zone) => (
+          <div key={zone.label} className="spec-fact">
+            <dt>{zone.label}</dt>
+            <dd>{zone.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="result-status-strip" aria-label="Angebotsübergabe-Status">
+        <span>
+          <strong>Operative Übergabe: {completeSpecCount} vollständig</strong>
+        </span>
+        <span>{partialSpecCount} teilweise vollständig</span>
+        <span>Aktive Spezifikation: {activeSpecId}</span>
+      </div>
+    </article>
+  );
+}
+
 type ProductionManualInputValues = {
   eventType: string;
   eventDate: string;
@@ -978,6 +1063,10 @@ export function App() {
     () => dashboard.offerDrafts.find((draft) => String(draft.draftId) === selectedDraftId),
     [dashboard.offerDrafts, selectedDraftId]
   );
+
+  const activeOfferDraft = selectedDraft ?? filteredOfferDrafts[0];
+  const activeOfferSpec =
+    filteredSpecs[filteredSpecs.length - 1] ?? dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1];
 
   const focusedProductionSpec = useMemo(() => {
     if (productionWorkspaceCleared) {
@@ -2003,7 +2092,16 @@ export function App() {
       ) : null}
 
       {route === "offer" ? (
-        <section className="wide-grid">
+        <div className="offer-workbench-route">
+          <OfferWorkbenchProjection
+            latestSourceLabel={latestIntakeRequestSummary}
+            activeDraft={activeOfferDraft}
+            activeSpec={activeOfferSpec}
+            completeSpecCount={offerHandoffCounts.complete}
+            partialSpecCount={offerHandoffCounts.partial}
+            draftCount={dashboard.offerDrafts.length}
+          />
+          <section className="wide-grid">
           <article className="panel form-panel production-step-card">
             <header>
               <p className="eyebrow">Kundenanfrage</p>
@@ -2258,7 +2356,8 @@ export function App() {
               </>
             ) : null}
           </article>
-        </section>
+          </section>
+        </div>
       ) : null}
 
       {route === "production" ? (

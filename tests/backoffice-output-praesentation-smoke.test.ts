@@ -175,7 +175,25 @@ function createDashboardResponse(
         }
       ],
       acceptedSpecs: [acceptedSpec],
-      offerDrafts: [],
+      offerDrafts: [
+        {
+          draftId: "presentation-draft-success",
+          eventSummary: "Lunch-Angebot für 45 Personen",
+          openQuestions: ["Soll ein Dessert angeboten werden?"],
+          variantSet: [
+            {
+              variantId: "variant-classic",
+              label: "Klassisch"
+            },
+            {
+              variantId: "variant-vegetarian",
+              label: "Vegetarisch erweitert"
+            }
+          ],
+          customerFacingText: "Gerne bieten wir ein Lunchbuffet für 45 Personen an.",
+          internalWorkingText: "Interne Prüfung: vegetarische Tomatensuppe als Kernkomponente."
+        }
+      ],
       productionPlans: [productionPlan],
       purchaseLists: [purchaseList],
       recipes: [
@@ -304,12 +322,12 @@ function installBackofficeMocks(
   );
 }
 
-async function renderProductionRoute(): Promise<string> {
+async function renderRoute(pathname: "/angebot" | "/produktion"): Promise<string> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
-  window.history.pushState({}, "", "/produktion");
+  window.history.pushState({}, "", pathname);
 
   await act(async () => {
     root.render(createElement(App));
@@ -328,12 +346,39 @@ async function renderProductionRoute(): Promise<string> {
   return content;
 }
 
+async function renderProductionRoute(): Promise<string> {
+  return renderRoute("/produktion");
+}
+
+async function renderOfferRoute(): Promise<string> {
+  return renderRoute("/angebot");
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
 
 describe("backoffice production presentation smoke", () => {
+  it("shows the offer route as a read-only workbench projection before production handoff", async () => {
+    installBackofficeMocks(false);
+
+    const content = await renderOfferRoute();
+
+    expect(content).toContain("Angebotsagent");
+    expect(content).toContain("Angebots-Workbench-Projektion");
+    expect(content).toContain("Quellen/Eingabe");
+    expect(content).toContain("Verstandene Daten");
+    expect(content).toContain("Rückfragen");
+    expect(content).toContain("Ergebnisobjekte");
+    expect(content).toContain("Export/Audit");
+    expect(content).toContain("Offene Angebotsfragen: 1");
+    expect(content).toContain("Operative Übergabe: 1 vollständig");
+    expect(content).toContain("presentation-draft-success");
+    expect(content).toContain("presentation-spec-success");
+    expect(content).toContain("Angebot exportieren");
+  });
+
   it("shows a plausible successful production result with visible assumptions and operational context", async () => {
     installBackofficeMocks(false);
 

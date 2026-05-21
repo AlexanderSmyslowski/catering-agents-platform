@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.95
-date: 2026-05-20
+version: 5.96
+date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -63,6 +63,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Die neue Produkt-/UI-Richtung ist als Discovery- und Zielbildnotiz `docs/product/UI_CHATBOT_GOOGLE_DRIVE_ZIELBILD_DISCOVERY.md` dokumentiert: Apple-like, ruhige Conversational Workbench als Zielbild, Google Drive nur als spaeter bewusst entschiedener Integrationspfad mit OAuth-/Scope-/Rechteklaerung; bestehende Drive-Dateien bleiben grundsaetzlich read-only Importquellen, Schreibzugriff ist nur fuer app-eigene Outputs oder explizit freigegebene Zielartefakte/Zielordner vorgesehen; keine Implementierung, keine neue API, keine Secrets.
 - Die vorhandenen UI-Flows `/`, `/angebot` und `/produktion` sind als Ist-Flow-Karte in `docs/product/UI_IST_FLOW_KARTE_CONVERSATIONAL_WORKBENCH.md` dokumentiert; die Karte ordnet Eingaben, Systemantworten, Klaerbedarf, Produktobjekte, Export-/Audit-Bezuege sowie spaetere Workbench- und Drive-Beruehrungen ein, ohne Implementierung oder neue API.
 - Das read-only Workbench-Zonenmapping `docs/product/UI_WORKBENCH_ZONE_MAPPING_READONLY.md` ordnet eine spaetere cleane Conversational Workbench den vorhandenen Zonen Quellen/Eingabe, verstandene Daten/Spec, Rueckfragen/Klaerung, Ergebnisobjekte, Export/Drive-Output und Audit/Herkunft/Freigabe zu; Ergebnisobjekte bleiben pruefbar und Drive folgt weiterhin der read-only-Import- bzw. explizit freigegebenen Output-Linie.
+- Der erste groessere UI-Ausbauschritt nach der Doku-Konsolidierung ist umgesetzt: `/angebot` zeigt eine read-only Angebots-Workbench-Projektion auf Basis bestehender Dashboard-Daten mit Quellen-/Eingabe-, Verstandene-Daten-, Rueckfragen-, Ergebnisobjekt- und Export/Audit-Zonen; keine neue API, keine Persistenz, kein OAuth/Google/Chat.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -533,3 +534,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.95 - 2026-05-20
 - Die Root-Memory verdichtet nun auch die bereits vorhandenen Mini-Spezifikationen P5, P6 und P7 im oberen Projektkontext.
 - Der Schritt bleibt reine Dokumentationskonsistenz: keine Produktlogik, keine UI-/API-/Persistenz-/Deployment-Aenderung.
+
+### 5.96 - 2026-05-21
+- Die Angebotsansicht `/angebot` hat eine read-only Angebots-Workbench-Projektion erhalten, die vorhandene Dashboard-Daten in Quellen-/Eingabe-, Verstandene-Daten-, Rueckfragen-, Ergebnisobjekt- und Export/Audit-Zonen zusammenzieht.
+- Der Schritt ist der erste groessere, aber scope-sichere UI-Ausbau nach der Doku-Konsolidierung: keine neue API, keine neue Persistenz, keine OAuth-/Google-/Upload-/Chat-Erweiterung; abgesichert durch Backoffice-Praesentations-Smoke, `npm test` und `npm run build`.
