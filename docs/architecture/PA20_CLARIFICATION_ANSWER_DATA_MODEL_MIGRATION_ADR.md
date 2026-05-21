@@ -4,6 +4,16 @@ Status: Entscheidungsvorlage, keine Runtime-Implementierung
 Datum: 2026-05-21
 Scope: Datenmodell- und Migrationsschnitt fuer spaetere kurze Freitext-Klaerungsantworten auf `ProductionClarificationQuestion`
 
+## 0. PA21-Fortfuehrungsentscheidung nach PA20
+
+Alexander hat nach PA20 entschieden: Option B wird als Zielrichtung bestaetigt.
+
+- Zielrichtung: kleines explizites `ProductionClarificationAnswer`-Modell innerhalb der bestehenden Domain-/Persistenzgrenzen.
+- Minimaler Reviewstatus: `draft / submitted / reviewed`.
+- Erster spaeterer Runtime-Slice: nur speichern/anzeigen, keine automatische Ueberfuehrung in Spec-Korrekturpfade.
+- PA21 konkretisiert diese Zielrichtung nur als shared-core Modellanker mit Typ-/Testgrenzen.
+- keine Antwortannahme in PA21, keine Antwortspeicherung in PA21, keine Antwortverarbeitung in PA21, keine neue API in PA21, keine Migration in PA21 und keine neue Persistenzwelt.
+
 ## 1. Ist-Zustand nach PA19
 
 PA19 hat bewusst nur einen shared-core Typ-/Testanker geschaffen:

@@ -31,6 +31,45 @@ export interface ProductionClarificationAnswerDraft {
   answerType: AllowedProductionClarificationAnswerType;
 }
 
+export const productionClarificationAnswerStatuses = ["draft", "submitted", "reviewed"] as const;
+
+export type ProductionClarificationAnswerStatus = typeof productionClarificationAnswerStatuses[number];
+
+export const productionClarificationAnswerTextMaxLength = 500;
+
+export const productionClarificationAnswerModelBoundaries = [
+  "noRuntimeAcceptance",
+  "noRuntimePersistence",
+  "noApiEndpoint",
+  "noMigration",
+  "noRawDocumentTextMirroring",
+  "noHtmlOrScriptMirroring",
+  "noAutomaticDomainInterpretation",
+  "noAutomaticSpecCorrectionTransfer"
+] as const;
+
+export type ProductionClarificationAnswerModelBoundary = typeof productionClarificationAnswerModelBoundaries[number];
+
+export interface ProductionClarificationAnswer {
+  answerId: string;
+  questionId: string;
+  questionKey: {
+    reason: ProductionClarificationReason;
+    reasonCode: string;
+  };
+  answerType: "shortText";
+  status: ProductionClarificationAnswerStatus;
+  answerText: {
+    kind: "shortText";
+    value: string;
+  };
+  actor?: {
+    actorName: string;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ProductionClarificationQuestion {
   questionId: string;
   reason: ProductionClarificationReason;

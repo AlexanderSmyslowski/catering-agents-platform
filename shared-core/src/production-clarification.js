@@ -4,6 +4,18 @@ export const futureProductionClarificationAnswerTypeConcepts = [
   "yesNo",
   "sourceReference"
 ];
+export const productionClarificationAnswerStatuses = ["draft", "submitted", "reviewed"];
+export const productionClarificationAnswerTextMaxLength = 500;
+export const productionClarificationAnswerModelBoundaries = [
+  "noRuntimeAcceptance",
+  "noRuntimePersistence",
+  "noApiEndpoint",
+  "noMigration",
+  "noRawDocumentTextMirroring",
+  "noHtmlOrScriptMirroring",
+  "noAutomaticDomainInterpretation",
+  "noAutomaticSpecCorrectionTransfer"
+];
 
 const fieldLabels = {
   "attendees.expected": "erwartete Personenzahl",
