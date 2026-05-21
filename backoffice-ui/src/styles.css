@@ -1149,12 +1149,7 @@ button:disabled {
 }
 
 .app-shell--offer-route .hero-detail-card {
-  grid-template-columns: minmax(0, 1fr);
-  margin: 1.2rem auto 0;
-  max-width: 760px;
-  padding: 0;
-  text-align: center;
-  background: transparent;
+  display: none;
 }
 
 .app-shell--offer-route .hero-title {
