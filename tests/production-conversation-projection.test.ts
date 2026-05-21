@@ -82,11 +82,64 @@ describe("production conversation projection", () => {
     });
   });
 
-  it("keeps an empty production context as a non-LLM system hint without creating fake answers", () => {
+  it("adds a safe read-only provenance anchor when upload source metadata is present", () => {
+    const projection = buildProductionConversationProjection({
+      spec: acceptedSpec,
+      questions: [],
+      assumptions: [],
+      sourceInputs: [
+        {
+          kind: "pdf",
+          content: "Interner Langtext darf nicht im Quellenanker erscheinen.",
+          documentId: "document-pa3-1",
+          sourceMetadata: {
+            filename: "angebot-pa3.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 24816,
+            sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            ingestedAt: "2026-05-21T08:30:00.000Z",
+            uploadContext: "intake"
+          }
+        }
+      ],
+      productionPlans: [],
+      purchaseLists: []
+    });
+
+    expect(projection.messages.map((message) => message.type)).toEqual([
+      "system_agent_hint",
+      "source_provenance_anchor"
+    ]);
+    expect(projection.messages[1]).toMatchObject({
+      role: "system",
+      title: "Quellenanker",
+      text: "angebot-pa3.pdf · application/pdf · 24.2 KB · sha256:0123456789ab · intake · 2026-05-21T08:30:00.000Z"
+    });
+    expect(projection.messages[1].sourceAnchors).toEqual([
+      {
+        documentId: "document-pa3-1",
+        filename: "angebot-pa3.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 24816,
+        sha256Short: "0123456789ab",
+        ingestedAt: "2026-05-21T08:30:00.000Z",
+        uploadContext: "intake"
+      }
+    ]);
+    expect(projection.messages[1].text).not.toContain("Interner Langtext");
+  });
+
+  it("keeps an empty production context as a non-LLM system hint without creating fake answers or provenance", () => {
     const projection = buildProductionConversationProjection({
       spec: undefined,
       questions: ["Bitte ziehe zuerst ein Angebot hinein oder lade eine Datei hoch."],
       assumptions: [],
+      sourceInputs: [
+        {
+          kind: "text",
+          content: "Text ohne sourceMetadata"
+        }
+      ],
       productionPlans: [],
       purchaseLists: []
     });
@@ -98,5 +151,6 @@ describe("production conversation projection", () => {
     ]);
     expect(projection.messages.some((message) => message.type === "user_structured_answer")).toBe(false);
     expect(projection.messages.some((message) => message.type === "production_output_anchor")).toBe(false);
+    expect(projection.messages.some((message) => message.type === "source_provenance_anchor")).toBe(false);
   });
 });

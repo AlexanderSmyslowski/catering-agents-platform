@@ -221,7 +221,16 @@ function installProductionAcceptanceMocks(options: { stalePlanOnly?: boolean; wi
               {
                 kind: "form",
                 content:
-                  "Konferenz am 2026-07-13 fuer 36 Teilnehmer. Bitte glutenfrei. Buffet mit Brot-Baguette."
+                  "Konferenz am 2026-07-13 fuer 36 Teilnehmer. Bitte glutenfrei. Buffet mit Brot-Baguette.",
+                documentId: "document-production-fallback-1",
+                sourceMetadata: {
+                  filename: "produktion-angebot.pdf",
+                  mimeType: "application/pdf",
+                  sizeBytes: 24816,
+                  sha256: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+                  ingestedAt: "2026-05-21T08:30:00.000Z",
+                  uploadContext: "intake"
+                }
               }
             ]
           }),
@@ -285,6 +294,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("ConversationSession-Projektion");
     expect(content).toContain("Session-Grundlage");
     expect(content).toContain("Strukturierte Veranstaltungsdaten bleiben führend");
+    expect(content).toContain("Quellenanker");
+    expect(content).toContain("produktion-angebot.pdf · application/pdf · 24.2 KB · sha256:fedcba987654 · intake");
     expect(content).toContain("Produktionsoutput / Downloadanker");
     expect(content).toContain("Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.");
     expect(content).toContain("Klärbereich");

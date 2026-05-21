@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.108
+version: 5.109
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -73,6 +73,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Das Architektur-Gate `docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md` sperrt weiteren Produktionsagent-v1-Featurebau, bis Zielbild, Modulgrenzen, Datenfluss, Security-/Qualitaets-Gates und Migrationspfad fuer echte LLM-/PDF-/Rezept-/Allergen-/Persistenzarchitektur bewusst entschieden sind.
 - PA1 Slice 1 fuehrt eine minimale read-only `ProductionConversationProjection` im `shared-core` ein und verankert sie sichtbar in `/produktion`: vorhandene Spezifikations-, Rueckfrage-, Antwort- und Outputdaten werden als geordneter Session-/Chat-Verlauf abgebildet, ohne neue API, Persistenz, freie Chat-Eingabe, LLM-, PDF-, Rezept- oder Allergenlogik.
 - PA2 zieht minimale Source-/Provenance-Metadaten fuer bestehende Uploadpfade nach: Intake-RawInputs und Rezeptquellen aus Offer-/Production-Uploads koennen Dateiname, normalisierten MIME-Typ, Groesse, SHA-256, Ingestion-Zeitpunkt und Upload-Kontext tragen; keine neue Persistenzwelt, Migration, Parser-Engine, UI oder LLM-/Rezept-/Allergen-Fachlogik.
+- PA3 bildet vorhandene `sourceMetadata` in der `ProductionConversationProjection` als read-only `source_provenance_anchor` ab und zeigt den Quellenanker im bestehenden `/produktion`-Chatfluss, ohne neue API, Persistenz, Workflow-, Parser-, LLM-, Rezept- oder Allergenlogik.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -595,3 +596,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.108 - 2026-05-21
 - PA2 Source-/Provenance-Slice ist umgesetzt: `shared-core` erzeugt deterministische Upload-Metadaten mit Dateiname, normalisiertem MIME-Typ, Groesse, SHA-256, Ingestion-Zeitpunkt und Upload-Kontext.
 - Bestehende Intake-Multipart-Uploads speichern diese Metadaten im vorhandenen `EventRequest.rawInputs[].sourceMetadata`; Offer- und Production-Rezeptuploads geben sie in `Recipe.source.sourceMetadata` weiter. Der Schritt bleibt ohne neue Persistenzwelt, Migration, neue UI, Parser-Engine, LLM-, Rezeptgenerierungs- oder Allergenlogik.
+
+### 5.109 - 2026-05-21
+- PA3 Provenance-Anker ist umgesetzt: `ProductionConversationProjection` erzeugt aus vorhandenen `sourceInputs[].sourceMetadata` einen read-only `source_provenance_anchor` mit Dateiname, MIME-Typ, Groesse, SHA-256-Kurzform, Upload-Kontext und Ingestion-Zeitpunkt.
+- `/produktion` gibt die bereits geladene urspruengliche Intake-Anfrage an die Projection weiter und zeigt den Quellenanker im bestehenden strukturierten Chatfluss; dokumentiert in `docs/architecture/PA3_PROVENANCE_CONVERSATION_ANCHOR.md`. Keine neue API, Persistenzwelt, UI-Workflow-, Parser-, LLM-, Rezept- oder Allergenlogik.

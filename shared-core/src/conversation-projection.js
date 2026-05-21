@@ -12,6 +12,54 @@ function uniqueStrings(values) {
   return Array.from(new Set(values.filter((value) => value.trim())));
 }
 
+function formatSize(sizeBytes) {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  return `${(sizeBytes / 1024).toFixed(1)} KB`;
+}
+
+function collectSourceAnchors(sourceInputs = []) {
+  return sourceInputs.flatMap((sourceInput) => {
+    const metadata = sourceInput.sourceMetadata;
+    if (
+      !metadata?.filename?.trim() ||
+      !metadata.mimeType?.trim() ||
+      typeof metadata.sizeBytes !== "number" ||
+      !Number.isFinite(metadata.sizeBytes) ||
+      !metadata.sha256?.trim() ||
+      !metadata.ingestedAt?.trim() ||
+      !metadata.uploadContext?.trim()
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        documentId: sourceInput.documentId,
+        filename: metadata.filename.trim(),
+        mimeType: metadata.mimeType.trim(),
+        sizeBytes: metadata.sizeBytes,
+        sha256Short: metadata.sha256.trim().slice(0, 12),
+        ingestedAt: metadata.ingestedAt.trim(),
+        uploadContext: metadata.uploadContext.trim()
+      }
+    ];
+  });
+}
+
+function formatSourceAnchor(anchor) {
+  return [
+    anchor.filename,
+    anchor.mimeType,
+    formatSize(anchor.sizeBytes),
+    `sha256:${anchor.sha256Short}`,
+    anchor.uploadContext,
+    anchor.ingestedAt
+  ].join(" · ");
+}
+
 export function buildProductionConversationProjection(input) {
   const sourceSpecId = input.spec ? readId(input.spec, ["specId", "id"]) : undefined;
   const sessionId = sourceSpecId ? `production-session-${sourceSpecId}` : "production-session-draft";
@@ -24,6 +72,18 @@ export function buildProductionConversationProjection(input) {
       text: "Strukturierte Veranstaltungsdaten bleiben führend. Kein freier LLM-Chat."
     }
   ];
+
+  const sourceAnchors = collectSourceAnchors(input.sourceInputs);
+  if (sourceAnchors.length > 0) {
+    messages.push({
+      messageId: `${sessionId}-source-provenance`,
+      type: "source_provenance_anchor",
+      role: "system",
+      title: "Quellenanker",
+      text: sourceAnchors.map(formatSourceAnchor).join("\n"),
+      sourceAnchors
+    });
+  }
 
   input.questions.forEach((question, index) => {
     messages.push({

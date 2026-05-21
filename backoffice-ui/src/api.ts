@@ -19,6 +19,14 @@ export interface IntakeRequestDetail extends Record<string, unknown> {
     mimeType?: string;
     content?: string;
     documentId?: string;
+    sourceMetadata?: {
+      filename?: string;
+      mimeType?: string;
+      sizeBytes?: number;
+      sha256?: string;
+      ingestedAt?: string;
+      uploadContext?: string;
+    };
   }>;
 }
 

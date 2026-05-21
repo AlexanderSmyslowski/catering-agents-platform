@@ -1168,10 +1168,11 @@ export function App() {
         questions: productionQuestions,
         assumptions: productionAssumptions,
         answerSummary: formatStructuredProductionAnswerSummary(focusedProductionSpec),
+        sourceInputs: intakeRequestDetail?.rawInputs,
         productionPlans: currentSpecPlans,
         purchaseLists: currentSpecPurchaseLists
       }),
-    [currentSpecPlans, currentSpecPurchaseLists, focusedProductionSpec, productionAssumptions, productionQuestions]
+    [currentSpecPlans, currentSpecPurchaseLists, focusedProductionSpec, intakeRequestDetail?.rawInputs, productionAssumptions, productionQuestions]
   );
 
   const workbenchSpecFacts = useMemo(() => {
