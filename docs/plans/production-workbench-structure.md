@@ -20,7 +20,7 @@ Verbindliche Grenze fuer kleine Schritte:
 - Keine neue API, Persistenz, Multi-Tenancy, Plattform- oder White-Label-Schiene fuer diesen UI-Schritt.
 - Bestehende progressive Produktionsobjekte, Einkaufslisten, Rezeptbibliothek und Exportlinks bleiben Quelle der Wahrheit und werden nur chatzentrierter eingeordnet.
 
-Erste daraus abgeleitete Umsetzung: sichtbare Chat-/Upload-Affordance in `/produktion`, klare Rueckfrage-/Status-/Download-Zonen und Tests auf diese Anker. Danach wurde die Rueckfragezone in zwei kleinen UI-Slices enger an den Chatfluss gerueckt: Agent-Fragen erscheinen als strukturierte Assistant-Bubbles, und die bestehenden Antwortfelder erscheinen nun als Nutzerantwort-Bubble direkt im selben Chatfluss.
+Erste daraus abgeleitete Umsetzung: sichtbare Chat-/Upload-Affordance in `/produktion`, klare Rueckfrage-/Status-/Download-Zonen und Tests auf diese Anker. Danach wurde die Rueckfragezone in zwei kleinen UI-Slices enger an den Chatfluss gerueckt: Agent-Fragen erscheinen als strukturierte Assistant-Bubbles, und die bestehenden Antwortfelder erscheinen nun als Nutzerantwort-Bubble direkt im selben Chatfluss. Anschliessend wurde zwischen Rueckfragen und Ergebniszonen ein kleiner Agent-Schritt-Anker ergänzt, der Produktionsplan, Rezepte/Objektuebersicht, Einkaufsliste und Downloads als naechsten pruefbaren Bereich benennt, ohne neue Generierungslogik zu behaupten.
 
 ## Ziel
 

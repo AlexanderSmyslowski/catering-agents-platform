@@ -72,6 +72,14 @@ export function ProductionConversationalWorkbench({
 
       <div className="production-objects-zone">
         <span className="visually-hidden">production-objects-zone</span>
+        <article className="production-output-anchor" aria-label="Nächster Agent-Schritt zu Produktionsobjekten">
+          <p className="eyebrow">Nächster Agent-Schritt</p>
+          <h3>Produktionsobjekte und Downloads prüfen</h3>
+          <p className="helper-text">
+            Nach den strukturierten Antworten liegen oder entstehen hier Produktionsplan, Rezepte/Objektübersicht,
+            Einkaufsliste und Downloads. Der Bereich nutzt nur vorhandene Pläne, Einkaufslisten und Exportlinks.
+          </p>
+        </article>
         <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
           <summary>
             <span>Produktionsobjekte</span>

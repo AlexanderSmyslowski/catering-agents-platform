@@ -1412,11 +1412,31 @@ button:disabled {
 }
 
 .production-progressive-zone,
-.production-objects-zone,
 .production-purchase-zone,
 .production-lower-zones {
   display: grid;
   gap: 0.9rem;
+}
+
+.production-objects-zone {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.production-output-anchor {
+  padding: 0.9rem 1rem;
+  border-radius: 1.2rem;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(15, 23, 34, 0.06);
+}
+
+.production-output-anchor h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+}
+
+.production-output-anchor .helper-text {
+  margin: 0.35rem 0 0;
 }
 
 .production-objects-panel .production-step-card,

@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.101
+version: 5.102
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -66,6 +66,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Die `/angebot`-Ansicht ist von der ueberladenen Dashboard-/Card-Projektion auf eine ultra-clean, Apple-like Conversational Workbench reduziert: zentrale Anfrage-/Angebots-Eingabeflaeche, ruhige Zusammenfassung und einklappbare Detailzonen fuer Entwurf, weitere Eingaben sowie operative Uebergabe/Audit; keine neue API, keine Persistenz, kein OAuth/Google/Chat.
 - Fuer `/produktion` liegt der enge Strukturplan `docs/plans/production-workbench-structure.md` vor: empfohlen ist Option B, eine eigene `ProductionConversationalWorkbench` nach Angebotsmuster mit dominanter Leitfrage `Was braucht die Produktion als Naechstes?`, ruhiger Kontextzeile und progressiven Zonen fuer Rueckfragen, Produktionsplan, Einkauf, Rezept-/Mengenlogik sowie Audit/Uebergabe; keine neue Fachlogik, API, Persistenz, OAuth/Google oder Chat.
 - Die bestehende Rueckfragezone in `/produktion` ist als kleiner Step-3-Slice chataehnlicher: vorhandene `productionQuestions` erscheinen als Assistant-/Agent-Fragen im strukturierten Chatfluss, die bestehenden Antwortfelder erscheinen als Nutzerantwort-Bubble direkt im Chatfluss, und die UI markiert ausdruecklich, dass es kein freier LLM-Chat ist.
+- Als Step-4-Slice benennt `/produktion` nach den strukturierten Antworten nun einen klaren naechsten Agent-Schritt fuer Produktionsobjekte und Downloads: Produktionsplan, Rezepte/Objektuebersicht, Einkaufsliste und Downloads werden als vorhandene bzw. entstehende pruefbare Ergebniszone eingeordnet, ohne neue Generierungslogik, API oder Persistenz.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -560,3 +561,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.101 - 2026-05-21
 - Die Antwortbearbeitung in `/produktion` ist enger an die Agent-Frage gerueckt: bestehende Antwortfelder erscheinen nun als Nutzerantwort im strukturierten Chatfluss direkt nach den Agent-Fragen, statt als abgesetzter Formularblock.
 - Der Schritt bleibt reine UI-/Smoke-Absicherung ohne neue Backend-, LLM-, Persistenz-, PDF-, Internet-, Rezeptgenerierungs- oder Allergenlogik; Produktionsobjekte, Einkaufsliste, Downloadanker und Uploadanker bleiben auf den bestehenden Pfaden.
+
+### 5.102 - 2026-05-21
+- `/produktion` zeigt nach den strukturierten Antworten einen kleinen naechsten Agent-Schritt fuer Produktionsobjekte und Downloads: Produktionsplan, Rezepte/Objektuebersicht, Einkaufsliste und Downloads werden als pruefbare vorhandene bzw. entstehende Ergebniszone benannt.
+- Der Schritt bleibt UI-/Smoke-Absicherung ohne neue Backend-, LLM-, Persistenz-, PDF-, Internet-, Rezeptgenerierungs- oder Allergenlogik; bestehende Produktionsplaene, Einkaufslisten und Exportlinks bleiben fuehrend.
