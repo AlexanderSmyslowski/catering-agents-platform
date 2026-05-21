@@ -31,14 +31,14 @@ describe("PA16 production clarification model slice 1", () => {
         reasonCode: "attendees.expected",
         severity: "blocking",
         blocking: true,
-        prompt: "Bitte klären: attendees.expected.",
+        prompt: "Bitte klären: erwartete Personenzahl.",
         sourceAnchors: [],
         suggestedAnswerType: "short_text"
       },
       {
-        questionId: "spec-pa16-missing-readiness-reasons-1",
+        questionId: "spec-pa16-missing-readiness-reasons-teilnehmerzahl-noch-nicht-verbindlich",
         reason: "readiness.reasons",
-        reasonCode: "readiness_reason",
+        reasonCode: "Teilnehmerzahl noch nicht verbindlich.",
         severity: "warning",
         blocking: false,
         prompt: "Bitte prüfen: Teilnehmerzahl noch nicht verbindlich.",
@@ -89,12 +89,12 @@ describe("PA16 production clarification model slice 1", () => {
         suggestedAnswerType: "confirm_or_correct"
       },
       {
-        questionId: "spec-pa16-ingestion-documentIngestion-warnings-document-pa16-1-1",
+        questionId: "spec-pa16-ingestion-documentIngestion-warnings-document-pa16-1-document-text-extraction-fallback",
         reason: "documentIngestion.warnings",
         reasonCode: "document_text_extraction_fallback",
         severity: "warning",
         blocking: false,
-        prompt: "Bitte Ingestion-Warnung prüfen: document_text_extraction_fallback.",
+        prompt: "Bitte Ingestion-Warnung prüfen: Textextraktion unsicher.",
         sourceAnchors: [
           {
             documentId: "document-pa16-1",
@@ -112,6 +112,77 @@ describe("PA16 production clarification model slice 1", () => {
       }
     ]);
     expect(JSON.stringify(questions)).not.toContain("%PDF Rohtext");
+  });
+
+  it("deduplicates identical causes and orders blocking questions before warnings deterministically", () => {
+    const questions = buildProductionClarificationQuestions({
+      spec: {
+        specId: "spec-pa17-quality",
+        readiness: {
+          status: "partial",
+          reasons: ["Teilnehmerzahl noch nicht verbindlich.", "Teilnehmerzahl noch nicht verbindlich."]
+        },
+        missingFields: ["event.date", "attendees.expected", "event.date"]
+      },
+      sourceInputs: [
+        {
+          kind: "pdf",
+          content: "Rohtext darf nicht gespiegelt werden.",
+          documentId: "document-pa17-1",
+          documentIngestion: {
+            status: "fallback",
+            warnings: ["document_text_extraction_fallback", "document_text_extraction_fallback"]
+          },
+          sourceMetadata: safeSourceMetadata
+        }
+      ]
+    });
+
+    expect(questions.map((question) => question.questionId)).toEqual([
+      "spec-pa17-quality-missingFields-attendees-expected",
+      "spec-pa17-quality-missingFields-event-date",
+      "spec-pa17-quality-documentIngestion-status-document-pa17-1",
+      "spec-pa17-quality-documentIngestion-warnings-document-pa17-1-document-text-extraction-fallback",
+      "spec-pa17-quality-readiness-reasons-teilnehmerzahl-noch-nicht-verbindlich"
+    ]);
+    expect(questions.map((question) => question.severity)).toEqual(["blocking", "blocking", "blocking", "warning", "warning"]);
+    expect(new Set(questions.map((question) => question.questionId)).size).toBe(questions.length);
+    expect(JSON.stringify(questions)).not.toContain("Rohtext darf nicht gespiegelt werden");
+  });
+
+  it("uses neutral human-readable labels for known keys and safe technical fallback for unknown keys", () => {
+    const questions = buildProductionClarificationQuestions({
+      spec: {
+        specId: "spec-pa17-labels",
+        readiness: { status: "partial", reasons: ["custom.unknown_reason"] },
+        missingFields: ["event.date", "custom.unknown_field", "extractedText"]
+      },
+      sourceInputs: [
+        {
+          kind: "pdf",
+          content: "Dieser extrahierte Text darf nicht im Prompt stehen.",
+          documentId: "document-pa17-labels",
+          documentIngestion: {
+            status: "fallback",
+            warnings: ["document_text_extraction_fallback", "unknown_warning_key"]
+          },
+          sourceMetadata: safeSourceMetadata
+        }
+      ]
+    });
+
+    expect(questions.find((question) => question.reasonCode === "event.date")?.prompt).toBe("Bitte klären: Veranstaltungsdatum.");
+    expect(questions.find((question) => question.reasonCode === "document_text_extraction_fallback")?.prompt).toBe(
+      "Bitte Ingestion-Warnung prüfen: Textextraktion unsicher."
+    );
+    expect(questions.find((question) => question.reasonCode === "custom.unknown_field")?.prompt).toBe(
+      "Bitte klären: custom.unknown_field."
+    );
+    expect(questions.find((question) => question.reasonCode === "unknown_warning_key")?.prompt).toBe(
+      "Bitte Ingestion-Warnung prüfen: unknown_warning_key."
+    );
+    expect(JSON.stringify(questions)).not.toContain("Dieser extrahierte Text");
+    expect(JSON.stringify(questions)).not.toContain("extractedText");
   });
 
   it("keeps extracted ok sources quiet and transports clarification questions read-only in the existing projection", () => {
@@ -146,7 +217,7 @@ describe("PA16 production clarification model slice 1", () => {
     expect(questionMessage).toMatchObject({
       role: "agent",
       title: "Agent fragt",
-      text: "Bitte klären: event.date.",
+      text: "Bitte klären: Veranstaltungsdatum.",
       questionIndex: 1,
       clarificationQuestion: {
         questionId: "spec-pa16-projection-missingFields-event-date",

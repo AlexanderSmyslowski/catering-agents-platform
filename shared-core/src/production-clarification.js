@@ -1,5 +1,32 @@
+const fieldLabels = {
+  "attendees.expected": "erwartete Personenzahl",
+  "event.date": "Veranstaltungsdatum",
+  extractedText: "Extrahierter Dokumenttext"
+};
+
+const fieldReasonCodes = {
+  extractedText: "document_text"
+};
+
+const reasonLabels = {
+  document_text_extraction_fallback: "Textextraktion unsicher"
+};
+
+const severityOrder = {
+  blocking: 0,
+  warning: 1,
+  info: 2
+};
+
+const reasonOrder = {
+  missingFields: 0,
+  "documentIngestion.status": 1,
+  "documentIngestion.warnings": 2,
+  "readiness.reasons": 3
+};
+
 function slug(value) {
-  return value.trim().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
+  return value.trim().toLowerCase().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
 }
 
 function specIdFor(spec) {
@@ -47,6 +74,52 @@ function safeAnchor(sourceInput) {
   };
 }
 
+function labelForField(field) {
+  return fieldLabels[field] ?? field;
+}
+
+function reasonCodeForField(field) {
+  return fieldReasonCodes[field] ?? field;
+}
+
+function labelForReason(reason) {
+  return reasonLabels[reason] ?? reason;
+}
+
+function withSentenceEnd(label) {
+  return /[.!?]$/.test(label) ? label : `${label}.`;
+}
+
+function questionDedupeKey(question) {
+  const anchorKey = question.sourceAnchors
+    .map((anchor) => [anchor.documentId, anchor.filename, anchor.sha256Short, anchor.ingestionStatus].filter(Boolean).join("|"))
+    .join(";");
+  return [question.reason, question.reasonCode, anchorKey].join("::");
+}
+
+function stableQuestions(questions) {
+  const deduplicated = new Map();
+  questions.forEach((question) => {
+    const key = questionDedupeKey(question);
+    const existing = deduplicated.get(key);
+    if (!existing || question.sourceAnchors.length > existing.sourceAnchors.length) {
+      deduplicated.set(key, question);
+    }
+  });
+
+  return Array.from(deduplicated.values())
+    .sort((left, right) => {
+      const severityDifference = severityOrder[left.severity] - severityOrder[right.severity];
+      if (severityDifference !== 0) return severityDifference;
+
+      const reasonDifference = reasonOrder[left.reason] - reasonOrder[right.reason];
+      if (reasonDifference !== 0) return reasonDifference;
+
+      return left.sortKey.localeCompare(right.sortKey, "de");
+    })
+    .map(({ sortKey: _sortKey, ...question }) => question);
+}
+
 export function buildProductionClarificationQuestions(input) {
   const questions = [];
   const specId = specIdFor(input.spec);
@@ -56,15 +129,17 @@ export function buildProductionClarificationQuestions(input) {
 
   missingFields.forEach((field) => {
     const cleanField = field.trim();
+    const reasonCode = reasonCodeForField(cleanField);
     questions.push({
-      questionId: `${specId}-missingFields-${slug(cleanField)}`,
+      questionId: `${specId}-missingFields-${slug(reasonCode)}`,
       reason: "missingFields",
-      reasonCode: cleanField,
+      reasonCode,
       severity: "blocking",
       blocking: true,
-      prompt: `Bitte klären: ${cleanField}.`,
+      prompt: `Bitte klären: ${labelForField(cleanField)}.`,
       sourceAnchors: [],
-      suggestedAnswerType: "short_text"
+      suggestedAnswerType: "short_text",
+      sortKey: cleanField
     });
   });
 
@@ -73,17 +148,18 @@ export function buildProductionClarificationQuestions(input) {
     ? readiness.reasons.filter((reason) => typeof reason === "string" && reason.trim().length > 0)
     : [];
 
-  readinessReasons.forEach((reason, index) => {
+  readinessReasons.forEach((reason) => {
     const cleanReason = reason.trim();
     questions.push({
-      questionId: `${specId}-readiness-reasons-${index + 1}`,
+      questionId: `${specId}-readiness-reasons-${slug(cleanReason)}`,
       reason: "readiness.reasons",
-      reasonCode: "readiness_reason",
+      reasonCode: cleanReason,
       severity: "warning",
       blocking: false,
-      prompt: `Bitte prüfen: ${cleanReason}`,
+      prompt: `Bitte prüfen: ${withSentenceEnd(labelForReason(cleanReason))}`,
       sourceAnchors: [],
-      suggestedAnswerType: "short_text"
+      suggestedAnswerType: "short_text",
+      sortKey: cleanReason
     });
   });
 
@@ -103,23 +179,25 @@ export function buildProductionClarificationQuestions(input) {
         blocking: true,
         prompt: `Bitte Quelle prüfen: ${anchor?.filename ?? anchorRef} wurde nur unsicher/fallback verarbeitet.`,
         sourceAnchors,
-        suggestedAnswerType: "confirm_or_correct"
+        suggestedAnswerType: "confirm_or_correct",
+        sortKey: `${anchorRef}-${status}`
       });
     }
 
-    warnings.forEach((warning, warningIndex) => {
+    warnings.forEach((warning) => {
       questions.push({
-        questionId: `${specId}-documentIngestion-warnings-${slug(anchorRef)}-${warningIndex + 1}`,
+        questionId: `${specId}-documentIngestion-warnings-${slug(anchorRef)}-${slug(warning)}`,
         reason: "documentIngestion.warnings",
         reasonCode: warning,
         severity: "warning",
         blocking: false,
-        prompt: `Bitte Ingestion-Warnung prüfen: ${warning}.`,
+        prompt: `Bitte Ingestion-Warnung prüfen: ${labelForReason(warning)}.`,
         sourceAnchors,
-        suggestedAnswerType: "confirm_or_correct"
+        suggestedAnswerType: "confirm_or_correct",
+        sortKey: `${anchorRef}-${warning}`
       });
     });
   });
 
-  return questions;
+  return stableQuestions(questions);
 }

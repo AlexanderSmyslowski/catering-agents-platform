@@ -71,7 +71,7 @@ describe("production conversation projection", () => {
     expect(projection.messages[1]).toMatchObject({
       role: "agent",
       questionIndex: 1,
-      text: "Bitte klären: attendees.expected."
+      text: "Bitte klären: erwartete Personenzahl."
     });
     expect(projection.messages[3]).toMatchObject({
       role: "agent",
