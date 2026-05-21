@@ -119,6 +119,7 @@ Fuer frische Deployments stehen ausserdem Admin-Endpunkte bereit:
 Operator-Namen koennen im lokalen Dev-/Testbetrieb weiterhin ueber den Header `x-actor-name` mitgegeben werden.
 Sobald `CATERING_TRUSTED_ACTOR_SECRET` gesetzt ist, zaehlt `x-actor-name` nicht mehr als Sicherheitskontext: Services akzeptieren Rollen dann nur aus dem Trusted-Proxy-Kontext `x-catering-actor-name` plus passendem `x-catering-trusted-secret`.
 Die Backoffice-UI speichert den lokalen Operatornamen weiterhin lokal und sendet ihn bei mutierenden Dev-/Test-Aktionen automatisch mit; produktionsnah muss der Reverse Proxy die Trusted-Header setzen.
+Die verbindlichen Proxy-/Deployment-Annahmen fuer Header-Stripping, Trusted-Header-Injektion, Secret-Setzung und Health-Grenzen sind in [docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md](docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md) dokumentiert.
 Echte Login-, OIDC-/SSO- und Session-Mechanik bleibt bewusst offen und ist nicht Teil dieses Hardening-Blocks.
 
 Die Web-App nutzt diese Pfade jetzt direkt fuer Service-Status und Demo-Befuellung.
