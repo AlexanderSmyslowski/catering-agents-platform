@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.97
+version: 5.98
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -64,6 +64,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Die vorhandenen UI-Flows `/`, `/angebot` und `/produktion` sind als Ist-Flow-Karte in `docs/product/UI_IST_FLOW_KARTE_CONVERSATIONAL_WORKBENCH.md` dokumentiert; die Karte ordnet Eingaben, Systemantworten, Klaerbedarf, Produktobjekte, Export-/Audit-Bezuege sowie spaetere Workbench- und Drive-Beruehrungen ein, ohne Implementierung oder neue API.
 - Das read-only Workbench-Zonenmapping `docs/product/UI_WORKBENCH_ZONE_MAPPING_READONLY.md` ordnet eine spaetere cleane Conversational Workbench den vorhandenen Zonen Quellen/Eingabe, verstandene Daten/Spec, Rueckfragen/Klaerung, Ergebnisobjekte, Export/Drive-Output und Audit/Herkunft/Freigabe zu; Ergebnisobjekte bleiben pruefbar und Drive folgt weiterhin der read-only-Import- bzw. explizit freigegebenen Output-Linie.
 - Die `/angebot`-Ansicht ist von der ueberladenen Dashboard-/Card-Projektion auf eine ultra-clean, Apple-like Conversational Workbench reduziert: zentrale Anfrage-/Angebots-Eingabeflaeche, ruhige Zusammenfassung und einklappbare Detailzonen fuer Entwurf, weitere Eingaben sowie operative Uebergabe/Audit; keine neue API, keine Persistenz, kein OAuth/Google/Chat.
+- Fuer `/produktion` liegt der enge Strukturplan `docs/plans/production-workbench-structure.md` vor: empfohlen ist Option B, eine eigene `ProductionConversationalWorkbench` nach Angebotsmuster mit dominanter Leitfrage `Was braucht die Produktion als Naechstes?`, ruhiger Kontextzeile und progressiven Zonen fuer Rueckfragen, Produktionsplan, Einkauf, Rezept-/Mengenlogik sowie Audit/Uebergabe; keine neue Fachlogik, API, Persistenz, OAuth/Google oder Chat.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -542,3 +543,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.97 - 2026-05-21
 - `/angebot` wurde visuell und strukturell auf eine ruhige Conversational Workbench reduziert: keine sichtbare Card-Wand, keine prominenten Health-/Demo-/Zaehlerbloecke, eine dominante Anfrage-/Angebotsflaeche und progressive Detailzonen fuer Entwurf, weitere Eingaben sowie operative Uebergabe/Audit.
 - Der Schritt ordnet nur bestehende Daten und UI-Aktionen neu; keine neue Fachlogik, keine API-, Persistenz-, OAuth-/Google- oder Deployment-Aenderung; abgesichert durch aktualisierte Backoffice-Smokes, `npm test`, `npm run build`, `npm run local:check` und einen lokalen Browser-Screenshot.
+
+### 5.98 - 2026-05-21
+- Fuer `/produktion` wurde der enge Strukturplan `docs/plans/production-workbench-structure.md` erstellt: empfohlen ist eine eigene `ProductionConversationalWorkbench` nach Angebotsmuster statt weiterer Mikro-Polishes oder generischem Grossrefactoring.
+- Der Plan bleibt umsetzungsorientiert, aber ohne Code-Umsetzung: dominante Leitfrage, ruhige Kontextzeile und progressive Produktionsobjektzonen; keine neue Fachlogik, API, Persistenz, OAuth-/Google-/Chat-Erweiterung oder Deployment-Aenderung.
