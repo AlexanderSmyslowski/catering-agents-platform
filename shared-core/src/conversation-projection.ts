@@ -196,6 +196,15 @@ function formatOutputAnchorIngestionWarning(anchor: ProductionConversationSource
     .join(" · ");
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&(?!(?:amp|lt|gt|quot|#39);)/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function answerMatchesQuestion(answer: ProductionClarificationAnswer, question: ProductionClarificationQuestion): boolean {
   return answer.status === "submitted" &&
     answer.answerType === "shortText" &&
@@ -204,6 +213,16 @@ function answerMatchesQuestion(answer: ProductionClarificationAnswer, question: 
     answer.questionKey.reasonCode === question.reasonCode &&
     answer.answerText.kind === "shortText" &&
     Boolean(answer.answerText.value.trim());
+}
+
+function safeClarificationAnswer(answer: ProductionClarificationAnswer): ProductionClarificationAnswer {
+  return {
+    ...answer,
+    answerText: {
+      ...answer.answerText,
+      value: escapeHtml(answer.answerText.value.trim())
+    }
+  };
 }
 
 export function buildProductionConversationProjection(
@@ -271,15 +290,16 @@ export function buildProductionConversationProjection(
       (input.clarificationAnswers ?? [])
         .filter((answer) => answerMatchesQuestion(answer, question.clarificationQuestion as ProductionClarificationQuestion))
         .forEach((answer) => {
+          const safeAnswer = safeClarificationAnswer(answer);
           messages.push({
-            messageId: `${sessionId}-clarification-answer-${answer.answerId}`,
+            messageId: `${sessionId}-clarification-answer-${safeAnswer.answerId}`,
             type: "user_structured_answer",
             role: "user",
             title: "Antwort auf Rückfrage",
-            text: answer.answerText.value,
+            text: safeAnswer.answerText.value,
             questionIndex: index + 1,
             clarificationQuestion: question.clarificationQuestion,
-            clarificationAnswer: answer
+            clarificationAnswer: safeAnswer
           });
         });
     }

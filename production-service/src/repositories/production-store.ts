@@ -1,11 +1,48 @@
 import {
   createPersistentCollection,
+  productionClarificationAnswerTextMaxLength,
   type CollectionStorageOptions,
   type PersistentCollection,
   type ProductionClarificationAnswer,
   type ProductionPlan,
   type PurchaseList
 } from "@catering/shared-core";
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&(?!(?:amp|lt|gt|quot|#39);)/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeClarificationAnswerForStorage(answer: ProductionClarificationAnswer): ProductionClarificationAnswer {
+  return {
+    ...answer,
+    answerText: {
+      ...answer.answerText,
+      value: escapeHtml(answer.answerText.value.trim())
+    }
+  };
+}
+
+function isSubmittedShortTextAnswer(answer: ProductionClarificationAnswer): boolean {
+  return typeof answer.answerId === "string" &&
+    Boolean(answer.answerId.trim()) &&
+    typeof answer.questionId === "string" &&
+    Boolean(answer.questionId.trim()) &&
+    typeof answer.questionKey?.reason === "string" &&
+    Boolean(answer.questionKey.reason.trim()) &&
+    typeof answer.questionKey?.reasonCode === "string" &&
+    Boolean(answer.questionKey.reasonCode.trim()) &&
+    answer.status === "submitted" &&
+    answer.answerType === "shortText" &&
+    answer.answerText?.kind === "shortText" &&
+    typeof answer.answerText.value === "string" &&
+    Boolean(answer.answerText.value.trim()) &&
+    answer.answerText.value.trim().length <= productionClarificationAnswerTextMaxLength;
+}
 
 export class ProductionStore {
   private readonly plans: PersistentCollection<ProductionPlan>;
@@ -61,7 +98,11 @@ export class ProductionStore {
   }
 
   async saveClarificationAnswer(answer: ProductionClarificationAnswer): Promise<void> {
-    await this.clarificationAnswers.set(answer);
+    if (!isSubmittedShortTextAnswer(answer)) {
+      throw new Error("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
+    }
+
+    await this.clarificationAnswers.set(safeClarificationAnswerForStorage(answer));
   }
 
   async getClarificationAnswer(answerId: string): Promise<ProductionClarificationAnswer | undefined> {

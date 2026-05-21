@@ -181,4 +181,105 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     expect(JSON.stringify(specWithClarification)).not.toContain("42");
     expect(projection.messages.some((message) => message.type === "production_output_anchor")).toBe(false);
   });
+
+  it("sanitizes forged persisted answers before projection display", () => {
+    const question = firstQuestion();
+    const forgedRawAnswer = {
+      answerId: "answer-forged-raw-html",
+      questionId: question.questionId,
+      questionKey: { reason: question.reason, reasonCode: question.reasonCode },
+      answerType: "shortText",
+      status: "submitted",
+      answerText: { kind: "shortText", value: "<img src=x onerror=alert('x')>" }
+    } as never;
+
+    const projection = buildProductionConversationProjection({
+      spec: specWithClarification,
+      questions: [],
+      clarificationAnswers: [forgedRawAnswer],
+      productionPlans: [],
+      purchaseLists: []
+    });
+
+    const answerMessage = projection.messages.find(
+      (message) => message.type === "user_structured_answer" && message.messageId.includes("answer-forged-raw-html")
+    );
+    const serializedProjection = JSON.stringify(projection.messages);
+
+    expect(answerMessage?.text).toBe("&lt;img src=x onerror=alert(&#39;x&#39;)&gt;");
+    expect(answerMessage?.clarificationAnswer?.answerText.value).toBe("&lt;img src=x onerror=alert(&#39;x&#39;)&gt;");
+    expect(serializedProjection).not.toContain("<img");
+    expect(serializedProjection).not.toContain("onerror=alert('x')");
+  });
+
+  it("does not display answers for other missing questions draft reviewed or wrong typed answers", () => {
+    const question = firstQuestion();
+    const baseAnswer = createSubmittedProductionClarificationAnswer({
+      questions: [question],
+      questionId: question.questionId,
+      questionKey: { reason: question.reason, reasonCode: question.reasonCode },
+      answerType: "shortText",
+      answerText: "42 Personen",
+      now: "2026-05-21T12:02:00.000Z"
+    });
+
+    const projection = buildProductionConversationProjection({
+      spec: specWithClarification,
+      questions: [],
+      clarificationAnswers: [
+        { ...baseAnswer, answerId: "answer-wrong-key", questionKey: { ...baseAnswer.questionKey, reasonCode: "wrong-key" } },
+        { ...baseAnswer, answerId: "answer-draft", status: "draft" },
+        { ...baseAnswer, answerId: "answer-reviewed", status: "reviewed" },
+        { ...baseAnswer, answerId: "answer-wrong-type", answerType: "yesNo" },
+        { ...baseAnswer, answerId: "answer-wrong-kind", answerText: { kind: "longText", value: "42 Personen" } }
+      ] as never,
+      productionPlans: [],
+      purchaseLists: []
+    });
+
+    const answerMessages = projection.messages.filter((message) => message.type === "user_structured_answer");
+    expect(answerMessages).toHaveLength(0);
+  });
+
+  it("rejects invalid clarification answer records at the production store boundary", async () => {
+    const question = firstQuestion();
+    const validAnswer = createSubmittedProductionClarificationAnswer({
+      questions: [question],
+      questionId: question.questionId,
+      questionKey: { reason: question.reason, reasonCode: question.reasonCode },
+      answerType: "shortText",
+      answerText: "42 Personen",
+      now: "2026-05-21T12:03:00.000Z"
+    });
+    const dataRoot = createTempRoot();
+    tempRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+
+    await expect(store.saveClarificationAnswer({ ...validAnswer, status: "draft" } as never)).rejects.toThrow(
+      "Nur submitted shortText-Klärungsantworten dürfen gespeichert werden."
+    );
+    await expect(store.saveClarificationAnswer({ ...validAnswer, answerType: "yesNo" } as never)).rejects.toThrow(
+      "Nur submitted shortText-Klärungsantworten dürfen gespeichert werden."
+    );
+    await expect(
+      store.saveClarificationAnswer({ ...validAnswer, answerText: { kind: "longText", value: "42 Personen" } } as never)
+    ).rejects.toThrow("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
+    await expect(store.saveClarificationAnswer({ ...validAnswer, answerText: undefined } as never)).rejects.toThrow(
+      "Nur submitted shortText-Klärungsantworten dürfen gespeichert werden."
+    );
+    await expect(
+      store.saveClarificationAnswer({ ...validAnswer, answerText: { kind: "shortText", value: "x".repeat(501) } } as never)
+    ).rejects.toThrow("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
+
+    expect(await store.listClarificationAnswers()).toEqual([]);
+
+    await store.saveClarificationAnswer({
+      ...validAnswer,
+      answerId: "answer-store-raw-html",
+      answerText: { kind: "shortText", value: "<script>alert('store')</script>" }
+    });
+    expect((await store.getClarificationAnswer("answer-store-raw-html"))?.answerText.value).toBe(
+      "&lt;script&gt;alert(&#39;store&#39;)&lt;/script&gt;"
+    );
+  });
 });
