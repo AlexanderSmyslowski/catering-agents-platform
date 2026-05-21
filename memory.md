@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.120
+version: 5.121
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -85,6 +85,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA12 Read-only Ingestion-Warnungen sind sichtbar: bestehende Intake-Detail- und `/produktion`-Conversation-Kontexte zeigen sichere `documentIngestion`-Marker fuer fallback/failed Quellen als knappe Warnhinweise, extracted/ok bleibt ruhig. Keine neue API-Welt, Persistenz, Migration, Parser-Engine, OCR, LLM-/Tool-Use-, Rezept-, Allergen- oder neue Produktlogik.
 - PA13 Ingestion-Warnungen in Exportankern ist umgesetzt: sichere fallback/failed `documentIngestion`-Marker werden ueber vorhandene `sourceAnchors` in Produktionsoutput-/Downloadanker und Produktionsplan-HTML-Exports weitergereicht; extracted/ok bleibt ruhig, Rohtexte/extractedText werden nicht gespiegelt.
 - PA14 DocumentIngestion-Korridor ist als read-only Abnahmeanker in `tests/pa14-document-ingestion-corridor-readiness.test.ts` und `TESTING.md` abgesichert: Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher; Rohtexte werden nicht gespiegelt und es wurde keine neue API, UI, Persistenz, Parser-, OCR-, LLM-, Rezept- oder Allergenlogik eingefuehrt.
+- PA15 ProductionAgent-v1 Next Capability ADR ist als Entscheidungsvorlage in `docs/architecture/PA15_PRODUCTION_AGENT_NEXT_CAPABILITY_ADR.md` dokumentiert und mit `tests/pa15-productionagent-next-capability-adr.test.ts` abgesichert: Empfohlen wird Option A Rueckfragenmodell / Clarification Model als naechste echte, eng begrenzte Agentenfaehigkeit; keine Runtime-Implementierung, API, Persistenz, LLM-/Tool-Use-, Rezept- oder Allergenlogik.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -655,3 +656,8 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.120 - 2026-05-21
 - PA14 Read-only Abnahmeanker fuer den PA10-PA13 DocumentIngestion-Korridor ist umgesetzt: `tests/pa14-document-ingestion-corridor-readiness.test.ts` prueft Quelle, Ingestion-Status, Warnhinweis, Produktionsoutput-/Exportanker und die Sicherheitsgrenze ohne Rohtextspiegelung.
 - `TESTING.md` benennt den Korridor als internen Abnahmeanker: Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher. Keine neue UI, API, Persistenz, Migration, Parser-Engine, OCR, LLM-/Tool-Use-, Rezept-, Allergen-, Dashboard- oder Monitoring-Logik.
+
+
+### 5.121 - 2026-05-21
+- PA15 ProductionAgent-v1 Next Capability ADR ist als Doku-/Entscheidungsslice umgesetzt: `docs/architecture/PA15_PRODUCTION_AGENT_NEXT_CAPABILITY_ADR.md` vergleicht Rueckfragenmodell, RecipeCandidate-Grenze, read-only Output-Einordnung und Tool-/LLM-Gate und empfiehlt das Rueckfragenmodell als naechste echte, verantwortbare Agentenfaehigkeit.
+- Der Slice bleibt ohne Runtime-Implementierung, neue API, Persistenz, Migration, LLM-/Tool-Use, OCR-/Parser-, Rezept-/Mengen-/Allergen- oder Downloadlogik; der naechste enge Slice waere PA16 Clarification Model Slice 1 als Modell-/Projection-Grenze aus vorhandenen Ingestion-Warnungen, Spec-Luecken und Quellenankern.

@@ -47,10 +47,13 @@ Relevante bestehende Tests:
 - `tests/pa11-intake-document-ingestion-bridge.test.ts`
 - `tests/pa13-ingestion-warnings-export-anchors.test.ts`
 - `tests/pa14-document-ingestion-corridor-readiness.test.ts`
+- `tests/pa15-productionagent-next-capability-adr.test.ts`
 
-Diese Tests pruefen den Kernpfad von Intake/AcceptedEventSpec ueber Produktionsplanung, Rezept-/Kitchen-Sheet-Erzeugung, Einkaufsliste, Fallbacks, produktionsnahe Sprache, die read-only Conversation-Projection, den PA5-Nachvollziehbarkeitskorridor Upload-Provenance -> Conversation-Quellenanker -> Produktionsoutput/Exportdarstellung, die PA6-Doku-Grenze fuer interne Beta-/Abnahme-Readiness, die PA7-Entscheidungs-ADR fuer AuthN/AuthZ + read-path Auth, den PA8-Guard-Korridor fuer sensible read-only Detail-/Listen-/Exportpfade, den PA9-Proxy-/Deployment-Readiness-Anker fuer Header-Stripping/Trusted-Header-Injektion/Health-Grenzen, den schmalen Upload-/PDF-Haertungskorridor fuer Groessenlimits und MIME-/Extension-Allowlist sowie den PA10-PA14 DocumentIngestion-Korridor.
+Diese Tests pruefen den Kernpfad von Intake/AcceptedEventSpec ueber Produktionsplanung, Rezept-/Kitchen-Sheet-Erzeugung, Einkaufsliste, Fallbacks, produktionsnahe Sprache, die read-only Conversation-Projection, den PA5-Nachvollziehbarkeitskorridor Upload-Provenance -> Conversation-Quellenanker -> Produktionsoutput/Exportdarstellung, die PA6-Doku-Grenze fuer interne Beta-/Abnahme-Readiness, die PA7-Entscheidungs-ADR fuer AuthN/AuthZ + read-path Auth, den PA8-Guard-Korridor fuer sensible read-only Detail-/Listen-/Exportpfade, den PA9-Proxy-/Deployment-Readiness-Anker fuer Header-Stripping/Trusted-Header-Injektion/Health-Grenzen, den schmalen Upload-/PDF-Haertungskorridor fuer Groessenlimits und MIME-/Extension-Allowlist, den PA10-PA14 DocumentIngestion-Korridor sowie die PA15-Entscheidungsvorlage fuer die naechste ProductionAgent-v1-Faehigkeit.
 
 PA14 DocumentIngestion-Korridor ist als interner read-only Abnahmeanker codiert: Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher. Der Anker bestaetigt dabei nur vorhandene sichere Metadaten-/Warnmarker und die Grenze: keine Rohtextspiegelung in Conversation-/Output-/Exportankern; er ist kein neues Dashboard, kein Monitoring, keine neue API und keine Parser-, OCR-, LLM-, Rezept- oder Allergen-Implementierung.
+
+PA15 ProductionAgent-v1 Next Capability ADR ist als Doku-/Entscheidungsanker codiert: Optionen A Rueckfragenmodell, B RecipeCandidate-Grenze, C read-only Download-/Output-Einordnung und D Tool-/LLM-Gate werden verglichen; empfohlen wird Option A als naechste echte, aber eng begrenzte Agentenfaehigkeit. Der Marker-Test schuetzt die Grenze: keine Runtime-Implementierung, keine neue API, keine Persistenz, kein LLM-/Tool-Use, keine Rezept-/Allergenlogik und keine Rohtextspiegelung.
 
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
