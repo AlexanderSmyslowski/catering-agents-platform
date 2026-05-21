@@ -51,7 +51,19 @@ describe("backoffice intake request detail", () => {
                 {
                   kind: "text",
                   content:
-                    "Konferenz am 2026-04-18 fuer 45 Teilnehmer mit Lunchbuffet, Wasserstation und Dessert."
+                    "Konferenz am 2026-04-18 fuer 45 Teilnehmer mit Lunchbuffet, Wasserstation und Dessert.",
+                  documentIngestion: {
+                    status: "fallback",
+                    warnings: ["document_text_extraction_fallback"]
+                  },
+                  sourceMetadata: {
+                    filename: "angebot-detail.pdf",
+                    mimeType: "application/pdf",
+                    sizeBytes: 2048,
+                    sha256: "ddddddddddddeeeeeeeeeeeeffffffffffffffffaaaabbbbbbbbbbbbcccccccccccc",
+                    ingestedAt: "2026-04-10T09:31:00.000Z",
+                    uploadContext: "intake"
+                  }
                 }
               ]
             }),
@@ -154,6 +166,11 @@ describe("backoffice intake request detail", () => {
     expect(document.body.textContent).toContain("channel: text");
     expect(document.body.textContent).toContain("2026-04-10T09:30:00.000Z");
     expect(document.body.textContent).toContain("Konferenz am 2026-04-18 fuer 45 Teilnehmer");
+    expect(document.body.textContent).toContain("Ingestion-Warnung");
+    expect(document.body.textContent).toContain(
+      "Quelle unsicher/fallback: angebot-detail.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
+    );
+    expect(document.body.textContent).toContain("Ingestion: fallback · document_text_extraction_fallback");
 
     await act(async () => {
       root.unmount();

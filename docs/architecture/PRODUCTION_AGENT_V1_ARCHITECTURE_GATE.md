@@ -204,6 +204,14 @@ PA11 Intake DocumentIngestion Bridge:
 - PDF-/Fallback-/Problemfaelle werden als Warnung/Status sichtbar und nicht als extrahierter Erfolg behauptet.
 - Der Slice fuehrt keine neue Parser-Engine, OCR, LLM-/Tool-Use-Schicht, Angebotssemantik, Rezept-/Allergenlogik, neue Persistenz, Migration oder neue Produktlogik ein.
 
+PA12 Read-only Ingestion-Warnungen:
+
+- Bestehende Intake-Dokumentpfade speichern sichere `rawInputs[].documentIngestion`-Marker mit Status und Warnungen, damit bestehende Detail-/ProductionConversation-Kontexte ohne neue API-Welt darauf zugreifen koennen.
+- Die `ProductionConversationProjection` erzeugt bei fallback/failed oder vorhandenen Warnungen nur einen Systemhinweis zur unsicheren/fallback Quelle; sie interpretiert die Quelle nicht fachlich.
+- `/produktion` und die Intake-Detailkarte zeigen knappe read-only Warnhinweise; extracted/ok bleibt ohne Warnspur.
+- Neue Warn-/Conversation-Anker enthalten nur Dateiname/Dokumentanker, Status und Warncodes, keine Rohtexte oder extrahierten Inhalte.
+- Der Slice fuehrt keine neue Parser-Engine, OCR, LLM-/Tool-Use-Schicht, Angebotssemantik, Rezept-/Allergenlogik, API-Welt, Persistenz, Migration oder neue Produktlogik ein.
+
 ### 5.3 LLM Orchestrator
 
 Zweck:

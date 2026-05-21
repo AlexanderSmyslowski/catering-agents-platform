@@ -397,6 +397,20 @@ function formatSourceMetadataSummary(input: Record<string, unknown>): string | u
     .join(" · ");
 }
 
+function formatDocumentIngestionSummary(input: Record<string, unknown>): string | undefined {
+  const marker = asRecord(input.documentIngestion);
+  const status = readStringOrNumber(marker, ["status"]);
+  const warnings = Array.isArray(marker?.warnings)
+    ? marker.warnings.map((warning) => String(warning).trim()).filter(Boolean)
+    : [];
+
+  if (!status || (status === "extracted" && warnings.length === 0)) {
+    return undefined;
+  }
+
+  return [status, warnings.length > 0 ? warnings.join(",") : undefined].filter(Boolean).join(" · ");
+}
+
 function extractProductionPlanId(payload: Record<string, unknown>): string | undefined {
   const plan = payload.productionPlan as Record<string, unknown> | undefined;
   const planId = plan?.planId;
@@ -2578,6 +2592,7 @@ export function App() {
                           ? intakeRequestDetail.rawInputs.map((rawInput, index) => {
                               const rawInputRecord = rawInput as Record<string, unknown>;
                               const sourceMetadataSummary = formatSourceMetadataSummary(rawInputRecord);
+                              const documentIngestionSummary = formatDocumentIngestionSummary(rawInputRecord);
                               return (
                                 <li key={`${String(rawInputRecord.documentId ?? rawInputRecord.kind ?? index)}-${index}`}>
                                   <strong>{String(rawInputRecord.kind ?? "-")}</strong>
@@ -2585,6 +2600,9 @@ export function App() {
                                     {`${String(rawInputRecord.mimeType ? ` · ${rawInputRecord.mimeType}` : "")}`}
                                   </p>
                                   <p>{summarizeRawInput(rawInputRecord)}</p>
+                                  {documentIngestionSummary ? (
+                                    <p className="helper-text">Ingestion: {documentIngestionSummary}</p>
+                                  ) : null}
                                   {sourceMetadataSummary ? (
                                     <p className="helper-text">Quellenmetadaten: {sourceMetadataSummary}</p>
                                   ) : null}

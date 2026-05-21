@@ -31,7 +31,26 @@ export const eventRequestSchema = {
                     content: { type: "string" },
                     mimeType: { type: "string" },
                     documentId: { type: "string" },
-                    sourceMetadata: { $ref: "https://schemas.catering.local/common.json#/$defs/uploadSourceMetadata" }
+                    sourceMetadata: { $ref: "https://schemas.catering.local/common.json#/$defs/uploadSourceMetadata" },
+                    documentIngestion: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["status", "warnings"],
+                        properties: {
+                            status: { enum: ["accepted", "extracted", "fallback", "failed"] },
+                            warnings: {
+                                type: "array",
+                                items: {
+                                    enum: [
+                                        "document_text_extraction_fallback",
+                                        "document_text_extraction_empty",
+                                        "document_upload_validation_failed",
+                                        "document_ingestion_failed"
+                                    ]
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },

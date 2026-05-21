@@ -216,7 +216,11 @@ async function normalizeUploadedDocuments(payload) {
             content: item.extractedText ?? "",
             mimeType: item.mimeType,
             documentId: item.documentId,
-            sourceMetadata: item.sourceMetadata
+            sourceMetadata: item.sourceMetadata,
+            documentIngestion: {
+                status: item.status,
+                warnings: item.warnings
+            }
         }))
     };
     const validatedRequest = validateEventRequest(eventRequest);

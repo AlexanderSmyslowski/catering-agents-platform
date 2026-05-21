@@ -81,8 +81,13 @@ describe("PA11 intake DocumentIngestion bridge", () => {
         uploadContext: "intake"
       }
     });
+    expect(body.eventRequest.rawInputs[0].documentIngestion).toEqual({
+      status: "fallback",
+      warnings: ["document_text_extraction_fallback"]
+    });
     expect(body.acceptedEventSpec.readiness.status).not.toBe("complete");
     expect(JSON.stringify(body.documentIngestion)).not.toContain("%PDF");
+    expect(JSON.stringify(body.eventRequest.rawInputs[0].documentIngestion)).not.toContain("%PDF");
 
     await app.close();
   });

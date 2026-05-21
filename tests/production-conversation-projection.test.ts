@@ -171,6 +171,76 @@ describe("production conversation projection", () => {
     expect(outputAnchor?.text).not.toContain("Rohinhalt");
   });
 
+  it("adds a safe ingestion warning hint for fallback sources without leaking raw source text", () => {
+    const projection = buildProductionConversationProjection({
+      spec: acceptedSpec,
+      questions: [],
+      assumptions: [],
+      sourceInputs: [
+        {
+          kind: "pdf",
+          content: "%PDF Rohinhalt darf nicht im Warnhinweis erscheinen.",
+          documentId: "document-pa12-1",
+          documentIngestion: {
+            status: "fallback",
+            warnings: ["document_text_extraction_fallback"]
+          },
+          sourceMetadata: {
+            filename: "angebot-pa12.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 1024,
+            sha256: "bbbbbbbbbbbbccccccccccccddddddddddddeeeeeeeeeeeeffffffffffffffffaaaa",
+            ingestedAt: "2026-05-21T10:00:00.000Z",
+            uploadContext: "intake"
+          }
+        }
+      ],
+      productionPlans: [],
+      purchaseLists: []
+    });
+
+    const warningHint = projection.messages.find((message) => message.type === "ingestion_warning_anchor");
+
+    expect(warningHint).toMatchObject({
+      role: "system",
+      title: "Ingestion-Warnung",
+      text: "Quelle unsicher/fallback: angebot-pa12.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
+    });
+    expect(warningHint?.text).not.toContain("%PDF Rohinhalt");
+  });
+
+  it("keeps extracted sources quiet in the ingestion warning lane", () => {
+    const projection = buildProductionConversationProjection({
+      spec: acceptedSpec,
+      questions: [],
+      assumptions: [],
+      sourceInputs: [
+        {
+          kind: "text",
+          content: "Extrahierter Rohtext darf keinen Warnhinweis erzeugen.",
+          documentId: "document-pa12-ok-1",
+          documentIngestion: {
+            status: "extracted",
+            warnings: []
+          },
+          sourceMetadata: {
+            filename: "angebot-pa12.txt",
+            mimeType: "text/plain",
+            sizeBytes: 96,
+            sha256: "ccccccccccccddddddddddddeeeeeeeeeeeeffffffffffffffffaaaabbbbbbbbbbbb",
+            ingestedAt: "2026-05-21T10:05:00.000Z",
+            uploadContext: "intake"
+          }
+        }
+      ],
+      productionPlans: [],
+      purchaseLists: []
+    });
+
+    expect(projection.messages.some((message) => message.type === "ingestion_warning_anchor")).toBe(false);
+    expect(JSON.stringify(projection.messages)).not.toContain("Extrahierter Rohtext");
+  });
+
   it("keeps an empty production context as a non-LLM system hint without creating fake answers or provenance", () => {
     const projection = buildProductionConversationProjection({
       spec: undefined,

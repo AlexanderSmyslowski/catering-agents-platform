@@ -1,6 +1,7 @@
 export type ProductionConversationMessageType =
   | "system_agent_hint"
   | "source_provenance_anchor"
+  | "ingestion_warning_anchor"
   | "structured_agent_question"
   | "user_structured_answer"
   | "production_output_anchor";
@@ -33,6 +34,10 @@ interface ProductionConversationSourceInput {
   kind?: string;
   content?: string;
   documentId?: string;
+  documentIngestion?: {
+    status?: string;
+    warnings?: string[];
+  };
   sourceMetadata?: {
     filename?: string;
     mimeType?: string;
@@ -121,6 +126,28 @@ function formatSourceAnchor(anchor: ProductionConversationSourceAnchor): string 
   ].join(" · ");
 }
 
+function formatIngestionWarning(sourceInput: ProductionConversationSourceInput): string | undefined {
+  const marker = sourceInput.documentIngestion;
+  const status = typeof marker?.status === "string" ? marker.status.trim() : "";
+  const warnings = Array.isArray(marker?.warnings) ? marker.warnings.filter((warning) => warning.trim()) : [];
+  if (!status || (status !== "fallback" && status !== "failed" && warnings.length === 0)) {
+    return undefined;
+  }
+
+  const filename = sourceInput.sourceMetadata?.filename?.trim() || sourceInput.documentId?.trim() || "unbekannte Quelle";
+  return [
+    `Quelle unsicher/fallback: ${filename}`,
+    `Status: ${status}`,
+    warnings.length > 0 ? `Warnungen: ${warnings.join(",")}` : undefined
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function collectIngestionWarnings(sourceInputs: ProductionConversationSourceInput[] = []): string[] {
+  return sourceInputs.flatMap((sourceInput) => formatIngestionWarning(sourceInput) ?? []);
+}
+
 export function buildProductionConversationProjection(
   input: ProductionConversationProjectionInput
 ): ProductionConversationProjection {
@@ -137,6 +164,17 @@ export function buildProductionConversationProjection(
   ];
 
   const sourceAnchors = collectSourceAnchors(input.sourceInputs);
+  const ingestionWarnings = collectIngestionWarnings(input.sourceInputs);
+  if (ingestionWarnings.length > 0) {
+    messages.push({
+      messageId: `${sessionId}-ingestion-warnings`,
+      type: "ingestion_warning_anchor",
+      role: "system",
+      title: "Ingestion-Warnung",
+      text: ingestionWarnings.join("\n")
+    });
+  }
+
   if (sourceAnchors.length > 0) {
     messages.push({
       messageId: `${sessionId}-source-provenance`,

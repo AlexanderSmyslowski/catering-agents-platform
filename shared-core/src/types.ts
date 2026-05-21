@@ -1,3 +1,5 @@
+import type { DocumentIngestionStatus, DocumentIngestionWarning } from "./document-ingestion.js";
+
 export const SCHEMA_VERSION = "1.0.0";
 
 export type ReadinessStatus = "complete" | "partial" | "insufficient";
@@ -74,12 +76,18 @@ export interface UploadSourceMetadata {
   uploadContext: "intake" | "offer" | "production";
 }
 
+export interface SafeDocumentIngestionMarker {
+  status: DocumentIngestionStatus;
+  warnings: DocumentIngestionWarning[];
+}
+
 export interface RawInput {
   kind: "text" | "email" | "pdf" | "json" | "form";
   content: string;
   mimeType?: string;
   documentId?: string;
   sourceMetadata?: UploadSourceMetadata;
+  documentIngestion?: SafeDocumentIngestionMarker;
 }
 
 export interface SourceDescriptor {

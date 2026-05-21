@@ -27,6 +27,10 @@ export interface IntakeRequestDetail extends Record<string, unknown> {
       ingestedAt?: string;
       uploadContext?: string;
     };
+    documentIngestion?: {
+      status?: string;
+      warnings?: string[];
+    };
   }>;
 }
 

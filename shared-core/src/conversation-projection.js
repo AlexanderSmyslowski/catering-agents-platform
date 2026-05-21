@@ -60,6 +60,28 @@ function formatSourceAnchor(anchor) {
   ].join(" · ");
 }
 
+function formatIngestionWarning(sourceInput) {
+  const marker = sourceInput.documentIngestion;
+  const status = typeof marker?.status === "string" ? marker.status.trim() : "";
+  const warnings = Array.isArray(marker?.warnings) ? marker.warnings.filter((warning) => warning.trim()) : [];
+  if (!status || (status !== "fallback" && status !== "failed" && warnings.length === 0)) {
+    return undefined;
+  }
+
+  const filename = sourceInput.sourceMetadata?.filename?.trim() || sourceInput.documentId?.trim() || "unbekannte Quelle";
+  return [
+    `Quelle unsicher/fallback: ${filename}`,
+    `Status: ${status}`,
+    warnings.length > 0 ? `Warnungen: ${warnings.join(",")}` : undefined
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function collectIngestionWarnings(sourceInputs = []) {
+  return sourceInputs.flatMap((sourceInput) => formatIngestionWarning(sourceInput) ?? []);
+}
+
 export function buildProductionConversationProjection(input) {
   const sourceSpecId = input.spec ? readId(input.spec, ["specId", "id"]) : undefined;
   const sessionId = sourceSpecId ? `production-session-${sourceSpecId}` : "production-session-draft";
@@ -74,6 +96,17 @@ export function buildProductionConversationProjection(input) {
   ];
 
   const sourceAnchors = collectSourceAnchors(input.sourceInputs);
+  const ingestionWarnings = collectIngestionWarnings(input.sourceInputs);
+  if (ingestionWarnings.length > 0) {
+    messages.push({
+      messageId: `${sessionId}-ingestion-warnings`,
+      type: "ingestion_warning_anchor",
+      role: "system",
+      title: "Ingestion-Warnung",
+      text: ingestionWarnings.join("\n")
+    });
+  }
+
   if (sourceAnchors.length > 0) {
     messages.push({
       messageId: `${sessionId}-source-provenance`,
