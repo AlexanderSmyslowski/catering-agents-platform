@@ -212,6 +212,13 @@ PA12 Read-only Ingestion-Warnungen:
 - Neue Warn-/Conversation-Anker enthalten nur Dateiname/Dokumentanker, Status und Warncodes, keine Rohtexte oder extrahierten Inhalte.
 - Der Slice fuehrt keine neue Parser-Engine, OCR, LLM-/Tool-Use-Schicht, Angebotssemantik, Rezept-/Allergenlogik, API-Welt, Persistenz, Migration oder neue Produktlogik ein.
 
+PA13 Ingestion-Warnungen in Exportankern:
+
+- Bestehende `sourceAnchors` tragen bei fallback/failed oder vorhandenen Warnungen zusaetzlich nur sichere `ingestionStatus`-/`ingestionWarnings`-Marker.
+- Produktionsoutput-/Downloadanker und Produktionsplan-HTML-Export zeigen diese Warnmarker read-only weiter; extracted/ok bleibt ruhig.
+- Exportanker enthalten nur Dateiname, Status und Warncodes, keine Rohtexte, extrahierten Inhalte oder fachliche Angebotsinterpretation.
+- Der Slice fuehrt keine neue API, Persistenz, Migration, Parser-Engine, OCR, LLM-/Tool-Use-Schicht, Angebotssemantik, Rezept-/Allergenlogik oder neue Produktlogik ein.
+
 ### 5.3 LLM Orchestrator
 
 Zweck:

@@ -28,6 +28,8 @@ export interface ProductionConversationSourceAnchor {
   sha256Short: string;
   ingestedAt: string;
   uploadContext: string;
+  ingestionStatus?: string;
+  ingestionWarnings?: string[];
 }
 
 interface ProductionConversationSourceInput {
@@ -101,6 +103,9 @@ function collectSourceAnchors(sourceInputs: ProductionConversationSourceInput[] 
       return [];
     }
 
+    const ingestionStatus = safeIngestionStatus(sourceInput);
+    const ingestionWarnings = safeIngestionWarnings(sourceInput);
+
     return [
       {
         documentId: sourceInput.documentId,
@@ -109,10 +114,28 @@ function collectSourceAnchors(sourceInputs: ProductionConversationSourceInput[] 
         sizeBytes: metadata.sizeBytes,
         sha256Short: metadata.sha256.trim().slice(0, 12),
         ingestedAt: metadata.ingestedAt.trim(),
-        uploadContext: metadata.uploadContext.trim()
+        uploadContext: metadata.uploadContext.trim(),
+        ...(ingestionStatus ? { ingestionStatus } : {}),
+        ...(ingestionWarnings.length > 0 ? { ingestionWarnings } : {})
       }
     ];
   });
+}
+
+function safeIngestionWarnings(sourceInput: ProductionConversationSourceInput): string[] {
+  return Array.isArray(sourceInput.documentIngestion?.warnings)
+    ? sourceInput.documentIngestion.warnings.map((warning) => warning.trim()).filter(Boolean)
+    : [];
+}
+
+function safeIngestionStatus(sourceInput: ProductionConversationSourceInput): string | undefined {
+  const status = typeof sourceInput.documentIngestion?.status === "string" ? sourceInput.documentIngestion.status.trim() : "";
+  const warnings = safeIngestionWarnings(sourceInput);
+  if (status === "fallback" || status === "failed" || warnings.length > 0) {
+    return status || undefined;
+  }
+
+  return undefined;
 }
 
 function formatSourceAnchor(anchor: ProductionConversationSourceAnchor): string {
@@ -146,6 +169,22 @@ function formatIngestionWarning(sourceInput: ProductionConversationSourceInput):
 
 function collectIngestionWarnings(sourceInputs: ProductionConversationSourceInput[] = []): string[] {
   return sourceInputs.flatMap((sourceInput) => formatIngestionWarning(sourceInput) ?? []);
+}
+
+function formatOutputAnchorIngestionWarning(anchor: ProductionConversationSourceAnchor): string | undefined {
+  if (!anchor.ingestionStatus && (!anchor.ingestionWarnings || anchor.ingestionWarnings.length === 0)) {
+    return undefined;
+  }
+
+  return [
+    `Ingestion-Warnung: ${anchor.filename}`,
+    anchor.ingestionStatus ? `Status: ${anchor.ingestionStatus}` : undefined,
+    anchor.ingestionWarnings && anchor.ingestionWarnings.length > 0
+      ? `Warnungen: ${anchor.ingestionWarnings.join(",")}`
+      : undefined
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function buildProductionConversationProjection(
@@ -215,11 +254,13 @@ export function buildProductionConversationProjection(
   );
 
   if (planIds.length > 0 || purchaseListIds.length > 0) {
+    const outputIngestionWarnings = sourceAnchors.flatMap((anchor) => formatOutputAnchorIngestionWarning(anchor) ?? []);
     const outputAnchorText = [
       "Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.",
       sourceAnchors.length > 0
         ? `Quellenanker: ${sourceAnchors.map((anchor) => `sha256:${anchor.sha256Short}`).join(", ")}`
-        : undefined
+        : undefined,
+      ...outputIngestionWarnings
     ]
       .filter(Boolean)
       .join("\n");

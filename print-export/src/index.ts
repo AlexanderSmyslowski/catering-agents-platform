@@ -58,12 +58,44 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
         .join(" · ")
     ];
   });
+  const warningRows = sourceAnchors.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return [];
+    }
 
-  if (rows.length === 0) {
-    return [];
-  }
+    const anchor = item as Record<string, unknown>;
+    const filename = String(anchor.filename ?? "").trim();
+    const ingestionStatus = String(anchor.ingestionStatus ?? "").trim();
+    const ingestionWarnings = Array.isArray(anchor.ingestionWarnings)
+      ? anchor.ingestionWarnings.map((warning) => String(warning).trim()).filter(Boolean)
+      : [];
+    if (!filename || (!ingestionStatus && ingestionWarnings.length === 0)) {
+      return [];
+    }
 
-  return [`<section><h2>Quellenanker</h2><ul>${rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul></section>`];
+    return [
+      [
+        filename,
+        ingestionStatus ? `Status: ${ingestionStatus}` : undefined,
+        ingestionWarnings.length > 0 ? `Warnungen: ${ingestionWarnings.join(",")}` : undefined
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    ];
+  });
+
+  return [
+    ...(rows.length > 0
+      ? [`<section><h2>Quellenanker</h2><ul>${rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul></section>`]
+      : []),
+    ...(warningRows.length > 0
+      ? [
+          `<section><h2>Ingestion-Warnungen</h2><ul>${warningRows
+            .map((row) => `<li>${escapeHtml(row)}</li>`)
+            .join("")}</ul></section>`
+        ]
+      : [])
+  ];
 }
 
 export function renderOfferHtml(draft: OfferDraft): string {
