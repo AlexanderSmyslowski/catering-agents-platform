@@ -12,29 +12,38 @@ function escapeCsv(value: string | number): string {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+function escapeHtml(value: string | number): string {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function renderOfferHtml(draft: OfferDraft): string {
   const openQuestionsSection =
     draft.openQuestions.length > 0
       ? [
           `<section><h2>Offene Punkte</h2><ul>${draft.openQuestions
-            .map((item) => `<li>${item}</li>`)
+            .map((item) => `<li>${escapeHtml(item)}</li>`)
             .join("")}</ul></section>`
         ]
       : ["<p>Offene Punkte: keine</p>"];
 
   return [
     "<html><body>",
-    `<h1>Angebot ${draft.draftId}</h1>`,
-    `<p>${draft.eventSummary}</p>`,
+    `<h1>Angebot ${escapeHtml(draft.draftId)}</h1>`,
+    `<p>${escapeHtml(draft.eventSummary)}</p>`,
     `<p>Varianten: ${draft.variantSet.length}</p>`,
     `<p>Offene Punkte: ${draft.openQuestions.length}</p>`,
     ...openQuestionsSection,
     "<ul>",
-    ...draft.serviceModules.map((module) => `<li>${module.label}</li>`),
+    ...draft.serviceModules.map((module) => `<li>${escapeHtml(module.label)}</li>`),
     "</ul>",
-    `<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toFixed(2)} ${draft.pricingSummary.subtotal.currency}</p>`,
+    `<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toFixed(2)} ${escapeHtml(draft.pricingSummary.subtotal.currency)}</p>`,
     "<pre>",
-    draft.customerFacingText,
+    escapeHtml(draft.customerFacingText),
     "</pre>",
     "</body></html>"
   ].join("");
@@ -43,18 +52,18 @@ export function renderOfferHtml(draft: OfferDraft): string {
 export function renderProductionPlanHtml(plan: ProductionPlan): string {
   const unresolvedSection =
     plan.unresolvedItems.length > 0
-      ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${item}</li>`).join("")}</ul></section>`]
+      ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`]
       : [];
   return [
     "<html><body>",
-    `<h1>Produktionsplan ${plan.planId}</h1>`,
-    `<p>Status: ${plan.readiness.status}</p>`,
+    `<h1>Produktionsplan ${escapeHtml(plan.planId)}</h1>`,
+    `<p>Status: ${escapeHtml(plan.readiness.status)}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...unresolvedSection,
     ...plan.productionBatches.map(
       (batch) =>
-        `<section><h2>${batch.componentId}</h2><p>Station: ${batch.station}</p><ol>${batch.steps
-          .map((step) => `<li>${step.instruction}</li>`)
+        `<section><h2>${escapeHtml(batch.componentId)}</h2><p>Station: ${escapeHtml(batch.station)}</p><ol>${batch.steps
+          .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)
           .join("")}</ol></section>`
     ),
     "</body></html>"

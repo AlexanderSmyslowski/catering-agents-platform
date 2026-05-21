@@ -1,0 +1,92 @@
+import { describe, expect, it } from "vitest";
+import type { OfferDraft, ProductionPlan } from "@catering/shared-core";
+import { renderOfferHtml, renderProductionPlanHtml } from "@catering/print-export";
+
+const maliciousText = `<script>alert("xss")</script><img src=x onerror="alert('xss')"><b data-x="1">bold</b> "quoted" & 'single'`;
+
+function minimalOfferDraft(): OfferDraft {
+  return {
+    schemaVersion: "1.0.0",
+    draftId: `draft-${maliciousText}`,
+    eventSummary: `Summary ${maliciousText}`,
+    serviceModules: [
+      {
+        moduleId: "module-1",
+        label: `Module ${maliciousText}`,
+        category: "test",
+        pricing: { amount: 10, currency: "EUR" }
+      }
+    ],
+    pricingSummary: {
+      subtotal: { amount: 10, currency: "EUR" }
+    },
+    assumptions: [],
+    openQuestions: [`Question ${maliciousText}`],
+    variantSet: [],
+    customerFacingText: `Customer ${maliciousText}`,
+    internalWorkingText: "Internal",
+    proposedEventSpec: {} as OfferDraft["proposedEventSpec"]
+  };
+}
+
+function minimalProductionPlan(): ProductionPlan {
+  return {
+    schemaVersion: "1.0.0",
+    planId: `plan-${maliciousText}`,
+    eventSpecId: "event-1",
+    readiness: {
+      status: "partial",
+      reasons: []
+    },
+    productionBatches: [
+      {
+        batchId: "batch-1",
+        componentId: `Component ${maliciousText}`,
+        recipeId: "recipe-1",
+        scaledYield: { amount: 10, unit: "portion" },
+        batchCount: 1,
+        lossFactor: 1,
+        gnPlan: [],
+        station: `Station ${maliciousText}`,
+        prepWindow: "08:00-10:00",
+        ingredients: [],
+        steps: [
+          {
+            index: 1,
+            instruction: `Step ${maliciousText}`
+          }
+        ]
+      }
+    ],
+    timeline: [],
+    kitchenSheets: [],
+    recipeSelections: [],
+    unresolvedItems: [`Unresolved ${maliciousText}`]
+  };
+}
+
+describe("print export HTML escaping", () => {
+  it("escapes data-driven offer HTML text so tags, event attributes, and quotes are inert", () => {
+    const html = renderOfferHtml(minimalOfferDraft());
+
+    expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
+    expect(html).toContain("&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;");
+    expect(html).toContain("&lt;b data-x=&quot;1&quot;&gt;bold&lt;/b&gt; &quot;quoted&quot; &amp; &#39;single&#39;");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<img src=x onerror=");
+    expect(html).not.toContain("<b data-x=");
+    expect(html).not.toContain('"quoted" & \'single\'');
+  });
+
+  it("escapes data-driven production HTML text so tags, event attributes, and quotes are inert", () => {
+    const html = renderProductionPlanHtml(minimalProductionPlan());
+
+    expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
+    expect(html).toContain("&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;");
+    expect(html).toContain("&lt;b data-x=&quot;1&quot;&gt;bold&lt;/b&gt; &quot;quoted&quot; &amp; &#39;single&#39;");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<img src=x onerror=");
+    expect(html).not.toContain("<b data-x=");
+    expect(html).not.toContain('"quoted" & \'single\'');
+  });
+});
