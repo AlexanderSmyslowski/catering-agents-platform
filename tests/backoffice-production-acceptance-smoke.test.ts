@@ -283,6 +283,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Strukturierte Veranstaltungsdaten bleiben führend");
     expect(content).toContain("Klärbereich");
     expect(content).toContain("1 offene Rückfrage");
+    expect(content).toContain("Strukturierte Rückfragen im Chatfluss");
+    expect(content).toContain("Agent fragt");
+    expect(content).toContain("Strukturierte Antwortfelder");
+    expect(content).toContain("kein freier LLM-Chat");
     expect(content).toContain("Status");
     expect(content).toContain("unzureichend");
     expect(content).toContain("Offene Punkte:");

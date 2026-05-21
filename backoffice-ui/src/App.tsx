@@ -2160,8 +2160,11 @@ export function App() {
           <div className="production-column">
           <article className="panel form-panel question-panel production-step-card">
             <header>
-              <p className="eyebrow">Schritt 2</p>
+              <p className="eyebrow">Strukturierte Rückfragen im Chatfluss</p>
               <h3>Rückfragen des Agenten</h3>
+              <p className="helper-text">
+                Assistant-Fragen aus den vorhandenen Produktionsdaten; strukturierte Antwortfelder statt freier LLM-Chat.
+              </p>
             </header>
             {focusedProductionSpec ? (
               <>
@@ -2191,11 +2194,19 @@ export function App() {
                       Einkauf: {currentSpecPurchaseLists.length > 0 ? `${currentSpecPurchaseLists.length} Liste(n)` : "offen"}
                     </span>
                   </div>
-                  <ul className="question-list">
+                  <div className="structured-chat-thread" aria-label="Strukturierte Rückfragen als Chatfluss">
                     {productionQuestions.map((question) => (
-                      <li key={question}>{question}</li>
+                      <article className="structured-chat-message" key={question}>
+                        <div className="structured-chat-avatar" aria-hidden="true">
+                          A
+                        </div>
+                        <div className="structured-chat-bubble">
+                          <p className="eyebrow">Agent fragt</p>
+                          <p>{question}</p>
+                        </div>
+                      </article>
                     ))}
-                  </ul>
+                  </div>
                   {productionAssumptions.length > 0 ? (
                     <>
                       <p className="eyebrow">Annahmen des Agenten</p>
@@ -2277,9 +2288,12 @@ export function App() {
                   {editingSpecId === String(focusedProductionSpec.specId) ? (
                     <>
                       <div className="divider" />
-                      <header>
-                        <p className="eyebrow">Direkte Antworten</p>
+                      <header className="structured-answer-anchor">
+                        <p className="eyebrow">Strukturierte Antwortfelder</p>
                         <h4 className="subsection-title">Rückfragen unmittelbar ergänzen</h4>
+                        <p className="helper-text">
+                          Diese Felder beantworten die Rückfragen strukturiert im bestehenden Spezifikationspfad; kein freier LLM-Chat.
+                        </p>
                       </header>
                       <div className="answer-grid">
                         <label className="field-block">
