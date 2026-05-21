@@ -10,6 +10,7 @@ import {
   useRef,
   useState
 } from "react";
+import { buildProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
 import { DashboardShell } from "../components/dashboard-shell.js";
 import { StatusCard } from "../components/status-card.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
@@ -156,6 +157,30 @@ function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
     return `Terminfenster: ${schedule.join(", ")}`;
   }
   return "Terminfenster: noch zu bestätigen";
+}
+
+function formatStructuredProductionAnswerSummary(spec?: Record<string, unknown>): string | undefined {
+  if (!spec) {
+    return undefined;
+  }
+
+  const event = asRecord(spec.event);
+  const attendees = asRecord(spec.attendees);
+  const servicePlan = asRecord(spec.servicePlan);
+  const parts = [
+    readStringOrNumber(event, ["type"])
+      ? `Veranstaltung: ${String(readStringOrNumber(event, ["type"]))}`
+      : undefined,
+    readStringOrNumber(event, ["date"]) ? `Datum: ${String(readStringOrNumber(event, ["date"]))}` : undefined,
+    readStringOrNumber(attendees, ["expected"])
+      ? `Teilnehmerzahl: ${String(readStringOrNumber(attendees, ["expected"]))} Personen`
+      : undefined,
+    readStringOrNumber(servicePlan, ["serviceForm"])
+      ? `Serviceform: ${translateServiceForm(String(readStringOrNumber(servicePlan, ["serviceForm"])))}`
+      : undefined
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 function translateHealthStatus(value?: string): string {
@@ -1134,6 +1159,19 @@ export function App() {
   const productionAssumptions = useMemo(
     () => buildProductionAssumptions(focusedProductionSpec),
     [focusedProductionSpec]
+  );
+
+  const productionConversationProjection = useMemo(
+    () =>
+      buildProductionConversationProjection({
+        spec: focusedProductionSpec,
+        questions: productionQuestions,
+        assumptions: productionAssumptions,
+        answerSummary: formatStructuredProductionAnswerSummary(focusedProductionSpec),
+        productionPlans: currentSpecPlans,
+        purchaseLists: currentSpecPurchaseLists
+      }),
+    [currentSpecPlans, currentSpecPurchaseLists, focusedProductionSpec, productionAssumptions, productionQuestions]
   );
 
   const workbenchSpecFacts = useMemo(() => {
@@ -2177,6 +2215,13 @@ export function App() {
                       String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
                     )}
                   />
+                  <div className="component-answer-card" aria-label="ConversationSession-Projektion">
+                    <p className="eyebrow">ConversationSession-Projektion</p>
+                    <strong>{productionConversationProjection.sessionId}</strong>
+                    <p className="helper-text">
+                      Read-only Session-Verlauf aus vorhandenen Spezifikations-, Rückfrage- und Output-Daten.
+                    </p>
+                  </div>
                   <div className="result-status-strip" aria-label="Ergebnisstatus aktueller Vorgang">
                     <span>
                       <strong>Ergebnisstatus</strong>
@@ -2195,17 +2240,36 @@ export function App() {
                     </span>
                   </div>
                   <div className="structured-chat-thread" aria-label="Strukturierte Rückfragen als Chatfluss">
-                    {productionQuestions.map((question) => (
-                      <article className="structured-chat-message" key={question}>
-                        <div className="structured-chat-avatar" aria-hidden="true">
-                          A
-                        </div>
-                        <div className="structured-chat-bubble">
-                          <p className="eyebrow">Agent fragt</p>
-                          <p>{question}</p>
-                        </div>
-                      </article>
-                    ))}
+                    {productionConversationProjection.messages.map((message) => {
+                      if (message.type === "user_structured_answer" || message.type === "production_output_anchor") {
+                        return null;
+                      }
+
+                      return (
+                        <article className="structured-chat-message" key={message.messageId}>
+                          <div className="structured-chat-avatar" aria-hidden="true">
+                            {message.role === "system" ? "S" : "A"}
+                          </div>
+                          <div className="structured-chat-bubble">
+                            <p className="eyebrow">{message.title}</p>
+                            <p>{message.text}</p>
+                          </div>
+                        </article>
+                      );
+                    })}
+                    {productionConversationProjection.messages
+                      .filter((message) => message.type === "production_output_anchor")
+                      .map((message) => (
+                        <article className="structured-chat-message" key={message.messageId}>
+                          <div className="structured-chat-avatar" aria-hidden="true">
+                            A
+                          </div>
+                          <div className="structured-chat-bubble">
+                            <p className="eyebrow">{message.title}</p>
+                            <p>{message.text}</p>
+                          </div>
+                        </article>
+                      ))}
                     {editingSpecId === String(focusedProductionSpec.specId) ? (
                       <article className="structured-chat-message structured-chat-message--user">
                         <div className="structured-chat-avatar structured-chat-avatar--user" aria-hidden="true">

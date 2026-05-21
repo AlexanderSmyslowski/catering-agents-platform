@@ -1,5 +1,6 @@
 export * from "./access-control.js";
 export * from "./audit-log.js";
+export * from "./conversation-projection.js";
 export * from "./document-text.js";
 export * from "./fixtures/sample-data.js";
 export * from "./fixtures/demo-scenarios.js";

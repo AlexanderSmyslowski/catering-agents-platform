@@ -282,7 +282,11 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsobjekte");
     expect(content).not.toContain("Schritt 3");
     expect(content).toContain("Workbench-Projektion");
+    expect(content).toContain("ConversationSession-Projektion");
+    expect(content).toContain("Session-Grundlage");
     expect(content).toContain("Strukturierte Veranstaltungsdaten bleiben führend");
+    expect(content).toContain("Produktionsoutput / Downloadanker");
+    expect(content).toContain("Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.");
     expect(content).toContain("Klärbereich");
     expect(content).toContain("1 offene Rückfrage");
     expect(content).toContain("Strukturierte Rückfragen im Chatfluss");

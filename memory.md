@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.106
+version: 5.107
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -71,6 +71,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Security-Hardening Block 2 haertet Upload-/PDF-Pfade minimal: zentrale Upload-Limits und MIME-/Extension-Allowlist fuer Intake-, Offer- und Production-Dokumentuploads, streambasierte Groessenpruefung vor Parser-Aufruf sowie Regressionstests fuer zu grosse, unerlaubte und weiterhin erlaubte Dateien; keine neue Parser-Engine, keine OCR, keine neue Persistenzwelt.
 - Security-Hardening Block 3 fuehrt einen minimalen Trusted-Identity-Rahmen ein: Bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET` zaehlen Rollen nur noch aus `x-catering-actor-name` plus passendem `x-catering-trusted-secret`; frei setzbares `x-actor-name` bleibt nur lokaler Dev-/Test-Kompatibilitaetsheader und gilt nicht mehr als produktionsnahes Sicherheitsmodell.
 - Das Architektur-Gate `docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md` sperrt weiteren Produktionsagent-v1-Featurebau, bis Zielbild, Modulgrenzen, Datenfluss, Security-/Qualitaets-Gates und Migrationspfad fuer echte LLM-/PDF-/Rezept-/Allergen-/Persistenzarchitektur bewusst entschieden sind.
+- PA1 Slice 1 fuehrt eine minimale read-only `ProductionConversationProjection` im `shared-core` ein und verankert sie sichtbar in `/produktion`: vorhandene Spezifikations-, Rueckfrage-, Antwort- und Outputdaten werden als geordneter Session-/Chat-Verlauf abgebildet, ohne neue API, Persistenz, freie Chat-Eingabe, LLM-, PDF-, Rezept- oder Allergenlogik.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -585,3 +586,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.106 - 2026-05-21
 - Das Produktionsagent-v1-Zielbild ist als Architektur-Gate in `docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md` dokumentiert: ConversationSession, DocumentIngestion, LLM Orchestrator, RecipeGeneration, Allergen Engine DE/EN, Quantity/Purchase Aggregation, Export/Download, Audit/Provenance, Persistence/Migrations und Security/Permissions sind als Modulgrenzen und Gates beschrieben.
 - Der Schritt bleibt reine Architektur-/ADR-Arbeit: kein Featurebau, keine LLM-/PDF-/Rezept-/Allergen-Implementierung, keine neue API, keine neue Persistenzwelt und kein Prisma; naechste Slices muessen erst als kleine ADR-/Sicherheits-/Provenance-Schritte entschieden werden.
+
+### 5.107 - 2026-05-21
+- PA1 Slice 1 ist als minimale `ProductionConversationProjection` umgesetzt: `shared-core` erzeugt aus vorhandener Spezifikation, Rueckfragen, strukturierter Antwortzusammenfassung, Produktionsplaenen und Einkaufslisten einen geordneten read-only Session-Verlauf mit Systemhinweis, Agent-Frage, Nutzerantwort und Output-/Downloadanker.
+- `/produktion` verankert diese Projection sichtbar als `ConversationSession-Projektion`; der Schritt bleibt ohne neue API, ohne neue Datenbankmigration, ohne Conversation-Persistenz, ohne freie Chat-Eingabe und ohne LLM-/PDF-/Rezept-/Allergen-Fake-Magie; dokumentiert in `docs/architecture/PA1_CONVERSATION_PROJECTION_SLICE1.md`.
