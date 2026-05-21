@@ -13,6 +13,7 @@ import {
 import { DashboardShell } from "../components/dashboard-shell.js";
 import { StatusCard } from "../components/status-card.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
+import { ProductionConversationalWorkbench } from "./production-workbench.js";
 import {
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
@@ -2057,7 +2058,25 @@ export function App() {
         />
       ) : null}
       {route === "production" ? (
-        <section className="production-layout">
+        <ProductionConversationalWorkbench
+          activeSpecLabel={
+            focusedProductionSpec
+              ? getSpecLabel(focusedProductionSpec)
+              : productionWorkspaceCleared
+                ? "Kein aktiver Vorgang"
+                : "Noch kein aktiver Vorgang"
+          }
+          readinessLabel={translateReadiness(
+            String((focusedProductionSpec?.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+          )}
+          planStatusLabel={
+            selectedPlan
+              ? translateReadiness(String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-"))
+              : "offen"
+          }
+          purchaseStatusLabel={currentSpecPurchaseLists.length > 0 ? `${currentSpecPurchaseLists.length} Liste(n)` : "offen"}
+          questionCount={productionQuestions.length}
+        >
           <div className="production-column">
           <ProductionInputPanel
             submitting={submitting}
@@ -2900,7 +2919,7 @@ export function App() {
             ) : null}
           </article>
           </div>
-        </section>
+        </ProductionConversationalWorkbench>
       ) : null}
 
       <footer className="footer-note">
