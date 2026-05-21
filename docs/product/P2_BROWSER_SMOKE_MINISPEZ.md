@@ -39,7 +39,7 @@ Im Repo existieren bereits folgende nutzbare Bausteine:
 - reproduzierbar gepruefte read-only Exportpfade fuer Produktionsplan, Angebots-HTML und Einkaufslisten-CSV
 - gemeinsamer UI- und Service-Rahmen mit bereits vorhandenen Health- und Audit-Pfaden
 
-Diese erste Smoke-Stufe wurde bereits real ausgefuehrt: die drei UI-Routen, die vier Health-Endpunkte und die drei read-only Exportpfade lieferten jeweils die erwarteten Ergebnisse, ohne dass dafuer eine grosse Browser-/E2E-Infrastruktur aufgebaut werden musste.
+Diese erste Smoke-Stufe wurde bereits real ausgefuehrt: die drei UI-Routen, die vier Health-Endpunkte, die drei read-only Exportpfade und der Bootstrap-/Audit-Beleg lieferten jeweils die erwarteten Ergebnisse, ohne dass dafuer eine grosse Browser-/E2E-Infrastruktur aufgebaut werden musste.
 
 ### 3.2 Nicht vorhanden bzw. nicht als eigene Browser-E2E-Infrastruktur ausgebaut
 
@@ -86,7 +86,7 @@ Als weiterer kleiner read-only Nutzpfad wurde auch der Angebots-Export verifizie
 - Ziel: `http://127.0.0.1:3200/api/exports/v1/exports/offers/draft-demo-offer-conference-buffet/html`
 - sichtbarer HTML-Anfang: `Angebot draft-demo-offer-conference-buffet` und die Leistungsbausteine des Angebots
 
-Damit ist der erste P2-Smoke-Korridor jetzt real belegt: drei UI-Routen, vier Health-Endpunkte und drei read-only Nutzpfade sind nachgewiesen, ohne eine neue Browser-/E2E-Infrastruktur oder breitere Pfadabdeckung aufzubauen.
+Damit ist der erste P2-Smoke-Korridor jetzt real belegt: drei UI-Routen, vier Health-Endpunkte, drei read-only Nutzpfade und ein Bootstrap-/Audit-Beleg sind nachgewiesen, ohne eine neue Browser-/E2E-Infrastruktur oder breitere Pfadabdeckung aufzubauen.
 
 ## 4. Empfohlene kleinste MVP-Kernpfade fuer erste Smoke-Checks
 
@@ -149,7 +149,7 @@ Ein breiter Browser-Run ist aktuell blockiert bzw. nicht vorgesehen, weil:
 Der kleinste sinnvolle erste Smoke-Schritt ist:
 1. lokalen Stack mit Demo-Daten starten
 2. die drei zentralen UI-Routen per HTTP auf Status 200 pruefen
-3. optional anschliessend die vier lokalen Health-Endpunkte und die drei read-only Exportpfade pruefen
+3. anschliessend die vier lokalen Health-Endpunkte, die drei read-only Exportpfade und den Bootstrap-/Audit-Beleg pruefen
 
 Damit wird P2 als minimaler, repo-gebundener Smoke-Korridor validiert, ohne einen groesseren Testaufbau zu starten.
 
