@@ -461,7 +461,8 @@ export function parseUploadedRecipeText(input) {
             qualityScore: coverageScore >= 0.8 ? 0.9 : 0.78,
             fitScore: 1,
             extractionCompleteness: coverageScore,
-            licenseNote: "Menschlich hochgeladene interne Rezeptquelle."
+            licenseNote: "Menschlich hochgeladene interne Rezeptquelle.",
+            ...(input.sourceMetadata ? { sourceMetadata: input.sourceMetadata } : {})
         },
         baseYield: {
             servings,

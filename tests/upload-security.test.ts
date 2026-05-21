@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildIntakeApp } from "@catering/intake-service";
 import { buildOfferApp } from "@catering/offer-service";
 import { buildProductionApp } from "@catering/production-service";
-import { DOCUMENT_UPLOAD_LIMITS } from "@catering/shared-core";
+import {
+  createUploadSourceMetadata,
+  DOCUMENT_UPLOAD_LIMITS
+} from "@catering/shared-core";
 
 const dataRoots: string[] = [];
 
@@ -44,6 +47,25 @@ afterEach(() => {
 });
 
 describe("upload security limits", () => {
+  it("creates deterministic upload source metadata", () => {
+    const metadata = createUploadSourceMetadata({
+      filename: "Angebot.txt",
+      mimeType: "text/plain; charset=utf-8",
+      content: Buffer.from("Lunch fuer 20 Personen", "utf8"),
+      uploadContext: "intake",
+      ingestedAt: "2026-05-21T10:00:00.000Z"
+    });
+
+    expect(metadata).toEqual({
+      filename: "Angebot.txt",
+      mimeType: "text/plain",
+      sizeBytes: 22,
+      sha256: "44df5c6bb17828b242fa96cd873be7e535be26cc742aecadd77237b1f86db31d",
+      ingestedAt: "2026-05-21T10:00:00.000Z",
+      uploadContext: "intake"
+    });
+  });
+
   it("rejects oversized intake multipart files with a controlled status", async () => {
     const app = buildIntakeApp({ rootDir: createDataRoot() });
     const address = await app.listen({ port: 0, host: "127.0.0.1" });
@@ -98,6 +120,13 @@ describe("upload security limits", () => {
     expect(response.status).toBe(201);
     const body = await response.json();
     expect(body.acceptedEventSpec.attendees.expected).toBe(120);
+    expect(body.eventRequest.rawInputs[0].sourceMetadata).toMatchObject({
+      filename: "angebot.txt",
+      mimeType: "text/plain",
+      sizeBytes: 51,
+      uploadContext: "intake"
+    });
+    expect(body.eventRequest.rawInputs[0].sourceMetadata.sha256).toMatch(/^[a-f0-9]{64}$/);
     await app.close();
   });
 
@@ -131,6 +160,12 @@ describe("upload security limits", () => {
     expect(response.status).toBe(201);
     const body = await response.json();
     expect(body.recipe.name).toBe("Tomatensalsa");
+    expect(body.recipe.source.sourceMetadata).toMatchObject({
+      filename: "tomatensalsa.txt",
+      mimeType: "text/plain",
+      uploadContext: "production"
+    });
+    expect(body.recipe.source.sourceMetadata.sha256).toMatch(/^[a-f0-9]{64}$/);
     await app.close();
   });
 });

@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
-import type { DocumentInput } from "./types.js";
+import type { DocumentInput, UploadSourceMetadata } from "./types.js";
 
 export const DOCUMENT_UPLOAD_LIMITS = {
   intake: {
@@ -17,6 +18,7 @@ export const DOCUMENT_UPLOAD_LIMITS = {
 } as const;
 
 type UploadKind = keyof typeof DOCUMENT_UPLOAD_LIMITS;
+export type UploadContext = "intake" | "offer" | "production";
 
 const ALLOWED_DOCUMENT_TYPES = [
   { extension: ".pdf", mimeTypes: ["application/pdf"] },
@@ -52,6 +54,23 @@ function normalizedExtension(filename: string): string {
 
 function normalizedMimeType(mimeType: string): string {
   return mimeType.toLowerCase().split(";")[0]?.trim() ?? "";
+}
+
+export function createUploadSourceMetadata(input: {
+  filename: string;
+  mimeType: string;
+  content: Buffer;
+  uploadContext: UploadContext;
+  ingestedAt?: string;
+}): UploadSourceMetadata {
+  return {
+    filename: input.filename,
+    mimeType: normalizedMimeType(input.mimeType),
+    sizeBytes: input.content.length,
+    sha256: createHash("sha256").update(input.content).digest("hex"),
+    ingestedAt: input.ingestedAt ?? new Date().toISOString(),
+    uploadContext: input.uploadContext
+  };
 }
 
 export function validateUploadedDocumentMetadata(input: Pick<DocumentInput, "filename" | "mimeType">): void {

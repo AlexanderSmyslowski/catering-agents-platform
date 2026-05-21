@@ -10,7 +10,8 @@ import { ingredientGroupHints, unitNormalization } from "./taxonomies/defaults.j
 import {
   SCHEMA_VERSION,
   type Recipe,
-  type RecipeReviewDecision
+  type RecipeReviewDecision,
+  type UploadSourceMetadata
 } from "./types.js";
 import { validateRecipe } from "./validation.js";
 
@@ -503,6 +504,7 @@ export function parseUploadedRecipeText(input: {
   filename?: string;
   recipeName?: string;
   sourceRef?: string;
+  sourceMetadata?: UploadSourceMetadata;
 }): Recipe {
   const text = input.text.trim();
   if (!text) {
@@ -561,7 +563,8 @@ export function parseUploadedRecipeText(input: {
       qualityScore: coverageScore >= 0.8 ? 0.9 : 0.78,
       fitScore: 1,
       extractionCompleteness: coverageScore,
-      licenseNote: "Menschlich hochgeladene interne Rezeptquelle."
+      licenseNote: "Menschlich hochgeladene interne Rezeptquelle.",
+      ...(input.sourceMetadata ? { sourceMetadata: input.sourceMetadata } : {})
     },
     baseYield: {
       servings,

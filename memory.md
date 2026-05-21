@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.107
+version: 5.108
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -72,6 +72,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Security-Hardening Block 3 fuehrt einen minimalen Trusted-Identity-Rahmen ein: Bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET` zaehlen Rollen nur noch aus `x-catering-actor-name` plus passendem `x-catering-trusted-secret`; frei setzbares `x-actor-name` bleibt nur lokaler Dev-/Test-Kompatibilitaetsheader und gilt nicht mehr als produktionsnahes Sicherheitsmodell.
 - Das Architektur-Gate `docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md` sperrt weiteren Produktionsagent-v1-Featurebau, bis Zielbild, Modulgrenzen, Datenfluss, Security-/Qualitaets-Gates und Migrationspfad fuer echte LLM-/PDF-/Rezept-/Allergen-/Persistenzarchitektur bewusst entschieden sind.
 - PA1 Slice 1 fuehrt eine minimale read-only `ProductionConversationProjection` im `shared-core` ein und verankert sie sichtbar in `/produktion`: vorhandene Spezifikations-, Rueckfrage-, Antwort- und Outputdaten werden als geordneter Session-/Chat-Verlauf abgebildet, ohne neue API, Persistenz, freie Chat-Eingabe, LLM-, PDF-, Rezept- oder Allergenlogik.
+- PA2 zieht minimale Source-/Provenance-Metadaten fuer bestehende Uploadpfade nach: Intake-RawInputs und Rezeptquellen aus Offer-/Production-Uploads koennen Dateiname, normalisierten MIME-Typ, Groesse, SHA-256, Ingestion-Zeitpunkt und Upload-Kontext tragen; keine neue Persistenzwelt, Migration, Parser-Engine, UI oder LLM-/Rezept-/Allergen-Fachlogik.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -590,3 +591,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.107 - 2026-05-21
 - PA1 Slice 1 ist als minimale `ProductionConversationProjection` umgesetzt: `shared-core` erzeugt aus vorhandener Spezifikation, Rueckfragen, strukturierter Antwortzusammenfassung, Produktionsplaenen und Einkaufslisten einen geordneten read-only Session-Verlauf mit Systemhinweis, Agent-Frage, Nutzerantwort und Output-/Downloadanker.
 - `/produktion` verankert diese Projection sichtbar als `ConversationSession-Projektion`; der Schritt bleibt ohne neue API, ohne neue Datenbankmigration, ohne Conversation-Persistenz, ohne freie Chat-Eingabe und ohne LLM-/PDF-/Rezept-/Allergen-Fake-Magie; dokumentiert in `docs/architecture/PA1_CONVERSATION_PROJECTION_SLICE1.md`.
+
+### 5.108 - 2026-05-21
+- PA2 Source-/Provenance-Slice ist umgesetzt: `shared-core` erzeugt deterministische Upload-Metadaten mit Dateiname, normalisiertem MIME-Typ, Groesse, SHA-256, Ingestion-Zeitpunkt und Upload-Kontext.
+- Bestehende Intake-Multipart-Uploads speichern diese Metadaten im vorhandenen `EventRequest.rawInputs[].sourceMetadata`; Offer- und Production-Rezeptuploads geben sie in `Recipe.source.sourceMetadata` weiter. Der Schritt bleibt ohne neue Persistenzwelt, Migration, neue UI, Parser-Engine, LLM-, Rezeptgenerierungs- oder Allergenlogik.

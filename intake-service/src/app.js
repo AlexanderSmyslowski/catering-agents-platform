@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
-import { AuditLogStore, createEventRequestFromManualForm, getDemoIntakeRequests, normalizeEventRequestToSpec, resolveMinimalMvpRoleFromTrustedActor, trustedActorFromHeaders, multipartLimitsForUpload, readLimitedUploadBuffer, uploadErrorResponse, validateUploadedDocument, validateUploadedDocumentMetadata, withEvaluatedReadiness, validateAcceptedEventSpec, validateEventRequest } from "@catering/shared-core";
+import { AuditLogStore, createEventRequestFromManualForm, createUploadSourceMetadata, getDemoIntakeRequests, normalizeEventRequestToSpec, resolveMinimalMvpRoleFromTrustedActor, trustedActorFromHeaders, multipartLimitsForUpload, readLimitedUploadBuffer, uploadErrorResponse, validateUploadedDocument, validateUploadedDocumentMetadata, withEvaluatedReadiness, validateAcceptedEventSpec, validateEventRequest } from "@catering/shared-core";
 import { buildEventRequestFromText, extractTextFromDocument } from "./extraction.js";
 import { IntakeStore } from "./store.js";
 function rawInputKindForMimeType(mimeType) {
@@ -143,12 +143,19 @@ async function extractMultipartDocuments(request) {
             }
             const mimeType = part.mimetype ?? "application/octet-stream";
             validateUploadedDocumentMetadata({ filename: part.filename, mimeType });
+            const content = part.file
+                ? await readLimitedUploadBuffer(part.file, "intake")
+                : await part.toBuffer();
             const document = {
                 filename: part.filename,
                 mimeType,
-                content: part.file
-                    ? await readLimitedUploadBuffer(part.file, "intake")
-                    : await part.toBuffer()
+                content,
+                sourceMetadata: createUploadSourceMetadata({
+                    filename: part.filename,
+                    mimeType,
+                    content,
+                    uploadContext: "intake"
+                })
             };
             validateUploadedDocument(document, "intake");
             documents.push(document);
@@ -174,6 +181,7 @@ async function normalizeUploadedDocuments(payload) {
     const extracted = await Promise.all(payload.documents.map(async (document, index) => ({
         documentId: `${payload.requestId ?? "document"}-${index + 1}`,
         mimeType: document.mimeType,
+        sourceMetadata: document.sourceMetadata,
         text: await extractTextFromDocument(document)
     })));
     const eventRequest = {
@@ -187,7 +195,8 @@ async function normalizeUploadedDocuments(payload) {
             kind: rawInputKindForMimeType(item.mimeType),
             content: item.text,
             mimeType: item.mimeType,
-            documentId: item.documentId
+            documentId: item.documentId,
+            sourceMetadata: item.sourceMetadata
         }))
     };
     const validatedRequest = validateEventRequest(eventRequest);
@@ -294,10 +303,17 @@ export function buildIntakeApp(input = {}) {
         const body = request.body;
         try {
             const documents = body.documents.map((document) => {
+                const content = Buffer.from(document.contentBase64, "base64");
                 const decodedDocument = {
                     filename: document.filename,
                     mimeType: document.mimeType,
-                    content: Buffer.from(document.contentBase64, "base64")
+                    content,
+                    sourceMetadata: createUploadSourceMetadata({
+                        filename: document.filename,
+                        mimeType: document.mimeType,
+                        content,
+                        uploadContext: "intake"
+                    })
                 };
                 validateUploadedDocument(decodedDocument, "intake");
                 return decodedDocument;

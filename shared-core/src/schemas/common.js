@@ -218,6 +218,19 @@ export const commonSchema = {
                 }
             }
         },
+        uploadSourceMetadata: {
+            type: "object",
+            additionalProperties: false,
+            required: ["filename", "mimeType", "sizeBytes", "sha256", "ingestedAt", "uploadContext"],
+            properties: {
+                filename: { type: "string" },
+                mimeType: { type: "string" },
+                sizeBytes: { type: "integer", minimum: 0 },
+                sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+                ingestedAt: { type: "string" },
+                uploadContext: { enum: ["intake", "offer", "production"] }
+            }
+        },
         sourceLineage: {
             type: "object",
             additionalProperties: false,
@@ -292,7 +305,8 @@ export const commonSchema = {
                 qualityScore: { type: "number", minimum: 0, maximum: 1 },
                 fitScore: { type: "number", minimum: 0, maximum: 1 },
                 extractionCompleteness: { type: "number", minimum: 0, maximum: 1 },
-                licenseNote: { type: "string" }
+                licenseNote: { type: "string" },
+                sourceMetadata: { $ref: "#/$defs/uploadSourceMetadata" }
             }
         }
     }

@@ -2,6 +2,7 @@ import Fastify, { type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import {
   AuditLogStore,
+  createUploadSourceMetadata,
   extractTextFromDocument,
   getDemoProductionSpecs,
   parseUploadedRecipeText,
@@ -27,6 +28,7 @@ interface RecipeTextImportBody {
   filename?: string;
   recipeName?: string;
   sourceRef?: string;
+  sourceMetadata?: ReturnType<typeof createUploadSourceMetadata>;
 }
 
 interface RecipeReviewBody {
@@ -77,10 +79,11 @@ async function recipeImportFromMultipart(
   }
 
   validateUploadedDocumentMetadata({ filename: file.filename, mimeType: file.mimetype });
+  const content = await readLimitedUploadBuffer(file.file, "recipe");
   const document = {
     filename: file.filename,
     mimeType: file.mimetype,
-    content: await readLimitedUploadBuffer(file.file, "recipe")
+    content
   };
   validateUploadedDocument(document, "recipe");
   const text = await extractTextFromDocument(document);
@@ -89,7 +92,13 @@ async function recipeImportFromMultipart(
     text,
     filename: file.filename,
     recipeName: multipartFieldValue(file.fields, "recipeName"),
-    sourceRef: multipartFieldValue(file.fields, "sourceRef")
+    sourceRef: multipartFieldValue(file.fields, "sourceRef"),
+    sourceMetadata: createUploadSourceMetadata({
+      filename: file.filename,
+      mimeType: file.mimetype,
+      content,
+      uploadContext: "production"
+    })
   };
 }
 

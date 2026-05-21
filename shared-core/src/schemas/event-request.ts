@@ -30,7 +30,8 @@ export const eventRequestSchema = {
           kind: { enum: ["text", "email", "pdf", "json", "form"] },
           content: { type: "string" },
           mimeType: { type: "string" },
-          documentId: { type: "string" }
+          documentId: { type: "string" },
+          sourceMetadata: { $ref: "https://schemas.catering.local/common.json#/$defs/uploadSourceMetadata" }
         }
       }
     },

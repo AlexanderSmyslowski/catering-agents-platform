@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 export const DOCUMENT_UPLOAD_LIMITS = {
     intake: {
@@ -42,6 +43,16 @@ function normalizedExtension(filename) {
 }
 function normalizedMimeType(mimeType) {
     return mimeType.toLowerCase().split(";")[0]?.trim() ?? "";
+}
+export function createUploadSourceMetadata(input) {
+    return {
+        filename: input.filename,
+        mimeType: normalizedMimeType(input.mimeType),
+        sizeBytes: input.content.length,
+        sha256: createHash("sha256").update(input.content).digest("hex"),
+        ingestedAt: input.ingestedAt ?? new Date().toISOString(),
+        uploadContext: input.uploadContext
+    };
 }
 export function validateUploadedDocumentMetadata(input) {
     const extension = normalizedExtension(input.filename);

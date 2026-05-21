@@ -65,11 +65,21 @@ export interface Readiness {
   reasons: string[];
 }
 
+export interface UploadSourceMetadata {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  ingestedAt: string;
+  uploadContext: "intake" | "offer" | "production";
+}
+
 export interface RawInput {
   kind: "text" | "email" | "pdf" | "json" | "form";
   content: string;
   mimeType?: string;
   documentId?: string;
+  sourceMetadata?: UploadSourceMetadata;
 }
 
 export interface SourceDescriptor {
@@ -267,6 +277,7 @@ export interface RecipeSource {
   fitScore: number;
   extractionCompleteness: number;
   licenseNote?: string;
+  sourceMetadata?: UploadSourceMetadata;
 }
 
 export interface Recipe {
@@ -387,6 +398,7 @@ export interface DocumentInput {
   filename: string;
   mimeType: string;
   content: Buffer;
+  sourceMetadata?: UploadSourceMetadata;
 }
 
 export interface RecipeSearchQuery {

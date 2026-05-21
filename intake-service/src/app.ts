@@ -4,6 +4,7 @@ import {
   AuditLogStore,
   type CollectionStorageOptions,
   createEventRequestFromManualForm,
+  createUploadSourceMetadata,
   getDemoIntakeRequests,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
@@ -272,12 +273,19 @@ async function extractMultipartDocuments(
 
       const mimeType = part.mimetype ?? "application/octet-stream";
       validateUploadedDocumentMetadata({ filename: part.filename, mimeType });
+      const content = part.file
+        ? await readLimitedUploadBuffer(part.file, "intake")
+        : await part.toBuffer();
       const document = {
         filename: part.filename,
         mimeType,
-        content: part.file
-          ? await readLimitedUploadBuffer(part.file, "intake")
-          : await part.toBuffer()
+        content,
+        sourceMetadata: createUploadSourceMetadata({
+          filename: part.filename,
+          mimeType,
+          content,
+          uploadContext: "intake"
+        })
       };
       validateUploadedDocument(document, "intake");
       documents.push(document);
@@ -310,6 +318,7 @@ async function normalizeUploadedDocuments(
     payload.documents.map(async (document, index) => ({
       documentId: `${payload.requestId ?? "document"}-${index + 1}`,
       mimeType: document.mimeType,
+      sourceMetadata: document.sourceMetadata,
       text: await extractTextFromDocument(document)
     }))
   );
@@ -325,7 +334,8 @@ async function normalizeUploadedDocuments(
       kind: rawInputKindForMimeType(item.mimeType),
       content: item.text,
       mimeType: item.mimeType,
-      documentId: item.documentId
+      documentId: item.documentId,
+      sourceMetadata: item.sourceMetadata
     }))
   };
 
@@ -455,10 +465,17 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     const body = request.body;
     try {
       const documents: DocumentInput[] = body.documents.map((document) => {
+        const content = Buffer.from(document.contentBase64, "base64");
         const decodedDocument = {
           filename: document.filename,
           mimeType: document.mimeType,
-          content: Buffer.from(document.contentBase64, "base64")
+          content,
+          sourceMetadata: createUploadSourceMetadata({
+            filename: document.filename,
+            mimeType: document.mimeType,
+            content,
+            uploadContext: "intake"
+          })
         };
         validateUploadedDocument(decodedDocument, "intake");
         return decodedDocument;
