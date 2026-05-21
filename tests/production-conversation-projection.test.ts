@@ -129,6 +129,48 @@ describe("production conversation projection", () => {
     expect(projection.messages[1].text).not.toContain("Interner Langtext");
   });
 
+  it("keeps provenance anchors attached to the production output anchor without leaking raw source text", () => {
+    const projection = buildProductionConversationProjection({
+      spec: acceptedSpec,
+      questions: [],
+      assumptions: [],
+      sourceInputs: [
+        {
+          kind: "pdf",
+          content: "Rohinhalt darf nicht im Output-Anker erscheinen.",
+          documentId: "document-pa4-1",
+          sourceMetadata: {
+            filename: "angebot-pa4.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 1024,
+            sha256: "aaaaaaaaaaaabbbbbbbbbbbbccccccccccccddddddddddddeeeeeeeeeeeeffffffff",
+            ingestedAt: "2026-05-21T09:00:00.000Z",
+            uploadContext: "intake"
+          }
+        }
+      ],
+      productionPlans: [productionPlan],
+      purchaseLists: [purchaseList]
+    });
+
+    const outputAnchor = projection.messages.find((message) => message.type === "production_output_anchor");
+
+    expect(outputAnchor).toMatchObject({
+      planIds: ["plan-pa1-1"],
+      purchaseListIds: ["purchase-pa1-1"],
+      sourceAnchors: [
+        {
+          documentId: "document-pa4-1",
+          filename: "angebot-pa4.pdf",
+          sha256Short: "aaaaaaaaaaaa",
+          uploadContext: "intake"
+        }
+      ]
+    });
+    expect(outputAnchor?.text).toContain("sha256:aaaaaaaaaaaa");
+    expect(outputAnchor?.text).not.toContain("Rohinhalt");
+  });
+
   it("keeps an empty production context as a non-LLM system hint without creating fake answers or provenance", () => {
     const projection = buildProductionConversationProjection({
       spec: undefined,

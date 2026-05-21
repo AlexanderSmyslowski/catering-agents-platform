@@ -89,4 +89,27 @@ describe("print export HTML escaping", () => {
     expect(html).not.toContain("<b data-x=");
     expect(html).not.toContain('"quoted" & \'single\'');
   });
+
+  it("renders safe read-only provenance anchors on production plan exports when present", () => {
+    const plan = {
+      ...minimalProductionPlan(),
+      sourceAnchors: [
+        {
+          filename: "angebot-pa4.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 2048,
+          sha256Short: "123456789abc",
+          ingestedAt: "2026-05-21T09:15:00.000Z",
+          uploadContext: "intake"
+        }
+      ],
+      rawSourceText: "Dieser Rohtext darf nicht im Export erscheinen."
+    } as unknown as ProductionPlan;
+
+    const html = renderProductionPlanHtml(plan);
+
+    expect(html).toContain("Quellenanker");
+    expect(html).toContain("angebot-pa4.pdf · application/pdf · 2.0 KB · sha256:123456789abc · intake · 2026-05-21T09:15:00.000Z");
+    expect(html).not.toContain("Dieser Rohtext");
+  });
 });

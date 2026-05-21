@@ -114,14 +114,24 @@ export function buildProductionConversationProjection(input) {
   );
 
   if (planIds.length > 0 || purchaseListIds.length > 0) {
+    const outputAnchorText = [
+      "Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.",
+      sourceAnchors.length > 0
+        ? `Quellenanker: ${sourceAnchors.map((anchor) => `sha256:${anchor.sha256Short}`).join(", ")}`
+        : undefined
+    ]
+      .filter(Boolean)
+      .join("\n");
+
     messages.push({
       messageId: `${sessionId}-production-outputs`,
       type: "production_output_anchor",
       role: "agent",
       title: "Produktionsoutput / Downloadanker",
-      text: "Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.",
+      text: outputAnchorText,
       planIds,
-      purchaseListIds
+      purchaseListIds,
+      ...(sourceAnchors.length > 0 ? { sourceAnchors } : {})
     });
   }
 

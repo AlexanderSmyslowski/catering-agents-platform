@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.109
+version: 5.110
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -74,6 +74,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA1 Slice 1 fuehrt eine minimale read-only `ProductionConversationProjection` im `shared-core` ein und verankert sie sichtbar in `/produktion`: vorhandene Spezifikations-, Rueckfrage-, Antwort- und Outputdaten werden als geordneter Session-/Chat-Verlauf abgebildet, ohne neue API, Persistenz, freie Chat-Eingabe, LLM-, PDF-, Rezept- oder Allergenlogik.
 - PA2 zieht minimale Source-/Provenance-Metadaten fuer bestehende Uploadpfade nach: Intake-RawInputs und Rezeptquellen aus Offer-/Production-Uploads koennen Dateiname, normalisierten MIME-Typ, Groesse, SHA-256, Ingestion-Zeitpunkt und Upload-Kontext tragen; keine neue Persistenzwelt, Migration, Parser-Engine, UI oder LLM-/Rezept-/Allergen-Fachlogik.
 - PA3 bildet vorhandene `sourceMetadata` in der `ProductionConversationProjection` als read-only `source_provenance_anchor` ab und zeigt den Quellenanker im bestehenden `/produktion`-Chatfluss, ohne neue API, Persistenz, Workflow-, Parser-, LLM-, Rezept- oder Allergenlogik.
+- PA4 verbindet diese Quellenanker minimal mit bestehenden Traceability-Sichten: der Produktionsoutput-/Downloadanker traegt dieselben sicheren Hash-Kurzanker testbar mit, die `/produktion`-Detailansicht zeigt Upload-Provenance read-only bei der urspruenglichen Intake-Anfrage, und Produktionsplan-HTML-Exports koennen vorhandene sichere Quellenanker anzeigen; keine rechtssichere Audit-Behauptung, keine neue API, keine neue Persistenzwelt.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -600,3 +601,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.109 - 2026-05-21
 - PA3 Provenance-Anker ist umgesetzt: `ProductionConversationProjection` erzeugt aus vorhandenen `sourceInputs[].sourceMetadata` einen read-only `source_provenance_anchor` mit Dateiname, MIME-Typ, Groesse, SHA-256-Kurzform, Upload-Kontext und Ingestion-Zeitpunkt.
 - `/produktion` gibt die bereits geladene urspruengliche Intake-Anfrage an die Projection weiter und zeigt den Quellenanker im bestehenden strukturierten Chatfluss; dokumentiert in `docs/architecture/PA3_PROVENANCE_CONVERSATION_ANCHOR.md`. Keine neue API, Persistenzwelt, UI-Workflow-, Parser-, LLM-, Rezept- oder Allergenlogik.
+
+### 5.110 - 2026-05-21
+- PA4 Audit-/Traceability-Abgleich ist als read-only Minimal-Slice umgesetzt: `ProductionConversationProjection` haengt vorhandene sichere Quellenanker auch an den Produktionsoutput-/Downloadanker, die `/produktion`-Detailansicht zeigt Upload-Provenance bei der urspruenglichen Intake-Anfrage, und `print-export` kann vorhandene Quellenanker in Produktionsplan-HTML-Exports darstellen.
+- Der Slice behauptet keine rechtssichere Audit-Verbindlichkeit und fuehrt keine neue API, Migration, Persistenzwelt, LLM-/Tool-Use-/PDF-Parser-/OCR-/Rezept-/Allergenlogik ein; Fallback ohne `sourceMetadata` bleibt stabil.

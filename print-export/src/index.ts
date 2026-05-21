@@ -21,6 +21,47 @@ function escapeHtml(value: string | number): string {
     .replace(/'/g, "&#39;");
 }
 
+function formatBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  return `${(sizeBytes / 1024).toFixed(1)} KB`;
+}
+
+function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
+  const sourceAnchors = Array.isArray(record.sourceAnchors) ? record.sourceAnchors : [];
+  const rows = sourceAnchors.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return [];
+    }
+
+    const anchor = item as Record<string, unknown>;
+    const filename = String(anchor.filename ?? "").trim();
+    const mimeType = String(anchor.mimeType ?? "").trim();
+    const sizeBytes = anchor.sizeBytes;
+    const sha256Short = String(anchor.sha256Short ?? "").trim();
+    const uploadContext = String(anchor.uploadContext ?? "").trim();
+    const ingestedAt = String(anchor.ingestedAt ?? "").trim();
+
+    if (!filename || !mimeType || typeof sizeBytes !== "number" || !Number.isFinite(sizeBytes) || !sha256Short || !uploadContext) {
+      return [];
+    }
+
+    return [
+      [filename, mimeType, formatBytes(sizeBytes), `sha256:${sha256Short.slice(0, 12)}`, uploadContext, ingestedAt]
+        .filter(Boolean)
+        .join(" · ")
+    ];
+  });
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  return [`<section><h2>Quellenanker</h2><ul>${rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul></section>`];
+}
+
 export function renderOfferHtml(draft: OfferDraft): string {
   const openQuestionsSection =
     draft.openQuestions.length > 0
@@ -59,6 +100,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
     `<h1>Produktionsplan ${escapeHtml(plan.planId)}</h1>`,
     `<p>Status: ${escapeHtml(plan.readiness.status)}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
+    ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
     ...unresolvedSection,
     ...plan.productionBatches.map(
       (batch) =>

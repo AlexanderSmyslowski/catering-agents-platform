@@ -364,6 +364,39 @@ function summarizeRawInput(input: Record<string, unknown>): string {
   return fallback.length > 160 ? `${fallback.slice(0, 157)}...` : fallback;
 }
 
+function formatBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  return `${(sizeBytes / 1024).toFixed(1)} KB`;
+}
+
+function formatSourceMetadataSummary(input: Record<string, unknown>): string | undefined {
+  const sourceMetadata = asRecord(input.sourceMetadata);
+  const filename = readStringOrNumber(sourceMetadata, ["filename"]);
+  const mimeType = readStringOrNumber(sourceMetadata, ["mimeType"]);
+  const sizeBytes = sourceMetadata?.sizeBytes;
+  const sha256 = readStringOrNumber(sourceMetadata, ["sha256"]);
+  const uploadContext = readStringOrNumber(sourceMetadata, ["uploadContext"]);
+  const ingestedAt = readStringOrNumber(sourceMetadata, ["ingestedAt"]);
+
+  if (!filename || !mimeType || typeof sizeBytes !== "number" || !Number.isFinite(sizeBytes) || !sha256 || !uploadContext) {
+    return undefined;
+  }
+
+  return [
+    filename,
+    mimeType,
+    formatBytes(sizeBytes),
+    `sha256:${sha256.slice(0, 12)}`,
+    uploadContext,
+    ingestedAt
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function extractProductionPlanId(payload: Record<string, unknown>): string | undefined {
   const plan = payload.productionPlan as Record<string, unknown> | undefined;
   const planId = plan?.planId;
@@ -2544,6 +2577,7 @@ export function App() {
                         {Array.isArray(intakeRequestDetail.rawInputs)
                           ? intakeRequestDetail.rawInputs.map((rawInput, index) => {
                               const rawInputRecord = rawInput as Record<string, unknown>;
+                              const sourceMetadataSummary = formatSourceMetadataSummary(rawInputRecord);
                               return (
                                 <li key={`${String(rawInputRecord.documentId ?? rawInputRecord.kind ?? index)}-${index}`}>
                                   <strong>{String(rawInputRecord.kind ?? "-")}</strong>
@@ -2551,6 +2585,9 @@ export function App() {
                                     {`${String(rawInputRecord.mimeType ? ` · ${rawInputRecord.mimeType}` : "")}`}
                                   </p>
                                   <p>{summarizeRawInput(rawInputRecord)}</p>
+                                  {sourceMetadataSummary ? (
+                                    <p className="helper-text">Quellenmetadaten: {sourceMetadataSummary}</p>
+                                  ) : null}
                                 </li>
                               );
                             })
