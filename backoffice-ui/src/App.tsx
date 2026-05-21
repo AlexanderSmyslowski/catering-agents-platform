@@ -1771,6 +1771,7 @@ export function App() {
     <DashboardShell
       title={getRouteTitle(route)}
       subtitle={getRouteSubtitle(route)}
+      hideKicker={route === "offer"}
       className={
         route === "production"
           ? "app-shell--production-route"
@@ -1795,33 +1796,37 @@ export function App() {
               Produktionsagent
             </a>
           </nav>
-          <div className="masthead-actions">
-            <input
-              className="operator-input"
-              placeholder="Bearbeitername"
-              value={operatorName}
-              onChange={(event) => handleOperatorNameChange(event.target.value)}
-            />
-            <button disabled={loading || submitting} onClick={() => void handleSeedDemoData()}>
-              Demo-Daten laden
-            </button>
-            <button className="secondary-button" disabled={loading || submitting} onClick={() => void refreshDashboard()}>
-              Aktualisieren
-            </button>
+          {route !== "offer" ? (
+            <div className="masthead-actions">
+              <input
+                className="operator-input"
+                placeholder="Bearbeitername"
+                value={operatorName}
+                onChange={(event) => handleOperatorNameChange(event.target.value)}
+              />
+              <button disabled={loading || submitting} onClick={() => void handleSeedDemoData()}>
+                Demo-Daten laden
+              </button>
+              <button className="secondary-button" disabled={loading || submitting} onClick={() => void refreshDashboard()}>
+                Aktualisieren
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {route !== "offer" ? (
+          <div className="agent-shortcuts" aria-label="Direkteinstieg Agenten">
+            {agentShortcutButtons.map((button) => (
+              <a
+                key={button.href}
+                className={button.active ? "agent-shortcut agent-shortcut--active" : "agent-shortcut"}
+                href={button.href}
+              >
+                <strong>{button.title}</strong>
+                <span>{button.description}</span>
+              </a>
+            ))}
           </div>
-        </div>
-        <div className="agent-shortcuts" aria-label="Direkteinstieg Agenten">
-          {agentShortcutButtons.map((button) => (
-            <a
-              key={button.href}
-              className={button.active ? "agent-shortcut agent-shortcut--active" : "agent-shortcut"}
-              href={button.href}
-            >
-              <strong>{button.title}</strong>
-              <span>{button.description}</span>
-            </a>
-          ))}
-        </div>
+        ) : null}
 
         {route === "home" ? (
           <div className="route-grid">
@@ -1837,28 +1842,22 @@ export function App() {
               </article>
             ))}
           </div>
-        ) : (
+        ) : route === "production" ? (
           <div className="hero-detail-card">
             <div>
-              <p className="eyebrow">{route === "offer" ? "Angebotsagent" : "Küche und Produktion"}</p>
+              <p className="eyebrow">Küche und Produktion</p>
               <h2 className="hero-title">
-                {route === "offer"
-                  ? "Ruhige Workbench für Kundenanfragen und Angebotsentwürfe."
-                  : "Produktionsvorbereitung: Rezepte, Küchenplanung und Einkauf."}
+                Produktionsvorbereitung: Rezepte, Küchenplanung und Einkauf.
               </h2>
-              <p className="lede">
-                {route === "offer"
-                  ? "Eine zentrale Eingabe, ein fokussierter nächster Schritt. Details bleiben prüfbar, aber treten zurück."
-                  : "Arbeitsroute für Spezifikationen, Pläne, Rezeptfreigaben und Exporte."}
-              </p>
+              <p className="lede">Arbeitsroute für Spezifikationen, Pläne, Rezeptfreigaben und Exporte.</p>
             </div>
             <div className="hero-pills">
-              <span className="hero-pill">{route === "offer" ? `${baseUrl}/angebot` : `${baseUrl}/produktion`}</span>
+              <span className="hero-pill">{`${baseUrl}/produktion`}</span>
               <span className="hero-pill">Gemeinsamer Regelkern</span>
               <span className="hero-pill">Persistente Betriebsdaten</span>
             </div>
           </div>
-        )}
+        ) : null}
       </section>
 
       {route !== "offer" ? (

@@ -106,7 +106,7 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
   );
 }
 
-async function renderRoute(pathname: string): Promise<string> {
+async function renderRoute(pathname: string): Promise<{ text: string; html: string }> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -119,14 +119,17 @@ async function renderRoute(pathname: string): Promise<string> {
     await Promise.resolve();
   });
 
-  const content = document.body.textContent ?? "";
+  const result = {
+    text: document.body.textContent ?? "",
+    html: document.body.innerHTML
+  };
 
   await act(async () => {
     root.unmount();
   });
   container.remove();
 
-  return content;
+  return result;
 }
 
 afterEach(() => {
@@ -138,16 +141,20 @@ describe("backoffice route smoke", () => {
   it("renders the three core routes with stable markers", async () => {
     installBackofficeEnvironmentMocks();
 
-    const home = await renderRoute("/");
+    const home = (await renderRoute("/")).text;
     expect(home).toContain("Catering-Agenten");
     expect(home).toMatch(/gemeinsam.*regelkern/i);
 
     const offer = await renderRoute("/angebot");
-    expect(offer).toContain("Angebotsagent");
-    expect(offer).toContain("Ruhige Workbench für Kundenanfragen und Angebotsentwürfe.");
-    expect(offer).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(offer.text).toContain("Angebotsagent");
+    expect(offer.text).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(offer.text).not.toContain("Catering-Betriebssystem");
+    expect(offer.html).not.toContain("Bearbeitername");
+    expect(offer.text).not.toContain("Demo-Daten laden");
+    expect(offer.text).not.toContain("Aktualisieren");
+    expect(offer.text).not.toContain("Ruhige Workbench für Kundenanfragen und Angebotsentwürfe.");
 
-    const production = await renderRoute("/produktion");
+    const production = (await renderRoute("/produktion")).text;
     expect(production).toContain("Produktionsagent");
     expect(production).toContain("Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.");
   });
@@ -173,7 +180,7 @@ describe("backoffice route smoke", () => {
       ]
     });
 
-    const offer = await renderRoute("/angebot");
+    const offer = (await renderRoute("/angebot")).text;
 
     expect(offer).toContain("Zusammenfassung");
     expect(offer).toContain("Sommerfest mit Buffet · 1 Varianten · 1 offene Punkte");
@@ -222,7 +229,7 @@ describe("backoffice route smoke", () => {
       ]
     });
 
-    const home = await renderRoute("/");
+    const home = (await renderRoute("/")).text;
 
     expect(home).toContain("Operative Spezifikationen");
     expect(home).toContain("2 operative Datensätze stehen dienstübergreifend bereit.");

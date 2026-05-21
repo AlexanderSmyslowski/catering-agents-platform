@@ -1097,13 +1097,6 @@ button:disabled {
   text-align: center;
 }
 
-.app-shell--offer-route .app-shell__kicker,
-.app-shell--offer-route .masthead-actions,
-.app-shell--offer-route .agent-shortcuts,
-.app-shell--offer-route .hero-pills {
-  display: none;
-}
-
 .app-shell--offer-route .app-shell__header h1 {
   font-size: clamp(2.1rem, 4vw, 3.2rem);
   font-weight: 620;
@@ -1146,10 +1139,6 @@ button:disabled {
 .app-shell--offer-route .active-nav-link {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 8px 22px rgba(31, 57, 89, 0.08);
-}
-
-.app-shell--offer-route .hero-detail-card {
-  display: none;
 }
 
 .app-shell--offer-route .hero-title {
