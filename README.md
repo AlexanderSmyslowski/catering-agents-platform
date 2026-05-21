@@ -78,6 +78,10 @@ Die Oberflaeche hat jetzt drei Einstiege:
 - `http://localhost:3200/angebot` fuer den Angebotsagenten
 - `http://localhost:3200/produktion` fuer den Produktionsagenten
 
+Fuehrendes Architektur-Gate vor weiterem Produktionsagent-v1-Featurebau:
+
+- [docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md](docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md)
+
 Die Web-App bietet Exportlinks fuer:
 
 - Angebots-HTML

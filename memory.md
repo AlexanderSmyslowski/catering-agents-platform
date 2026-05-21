@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.105
+version: 5.106
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -70,6 +70,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Security-Hardening Block 1 ist abgeschlossen: `npm audit --omit=dev` ist nach minimalem `npm audit fix` gruen, HTML-Exports escapen datengetriebene Angebots- und Produktionsplan-Texte, und ein fokussierter XSS-Regressionstest schuetzt Script-/Tag-/Event-Attribut-/Quote-Faelle; kein Featurebau, keine neue Persistenzwelt.
 - Security-Hardening Block 2 haertet Upload-/PDF-Pfade minimal: zentrale Upload-Limits und MIME-/Extension-Allowlist fuer Intake-, Offer- und Production-Dokumentuploads, streambasierte Groessenpruefung vor Parser-Aufruf sowie Regressionstests fuer zu grosse, unerlaubte und weiterhin erlaubte Dateien; keine neue Parser-Engine, keine OCR, keine neue Persistenzwelt.
 - Security-Hardening Block 3 fuehrt einen minimalen Trusted-Identity-Rahmen ein: Bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET` zaehlen Rollen nur noch aus `x-catering-actor-name` plus passendem `x-catering-trusted-secret`; frei setzbares `x-actor-name` bleibt nur lokaler Dev-/Test-Kompatibilitaetsheader und gilt nicht mehr als produktionsnahes Sicherheitsmodell.
+- Das Architektur-Gate `docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md` sperrt weiteren Produktionsagent-v1-Featurebau, bis Zielbild, Modulgrenzen, Datenfluss, Security-/Qualitaets-Gates und Migrationspfad fuer echte LLM-/PDF-/Rezept-/Allergen-/Persistenzarchitektur bewusst entschieden sind.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -580,3 +581,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.105 - 2026-05-21
 - Security-Hardening Block 3 ist umgesetzt: Services koennen per `CATERING_TRUSTED_ACTOR_SECRET` oder Testoption `trustedActorSecret` erzwingen, dass Rollen nur aus `x-catering-actor-name` mit passendem `x-catering-trusted-secret` stammen.
 - Frei setzbares `x-actor-name` bleibt nur fuer expliziten lokalen Dev-/Testbetrieb kompatibel; Spoofing- und Trusted-Kontext-Regressionen schuetzen mutierende Produktions-/Seed-Pfade und den read-only Audit-Feed, waehrend Export-/Detail-Read-Pfade bewusst als interne, nicht oeffentlich zu exponierende Datenpfade dokumentiert bleiben.
+
+### 5.106 - 2026-05-21
+- Das Produktionsagent-v1-Zielbild ist als Architektur-Gate in `docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md` dokumentiert: ConversationSession, DocumentIngestion, LLM Orchestrator, RecipeGeneration, Allergen Engine DE/EN, Quantity/Purchase Aggregation, Export/Download, Audit/Provenance, Persistence/Migrations und Security/Permissions sind als Modulgrenzen und Gates beschrieben.
+- Der Schritt bleibt reine Architektur-/ADR-Arbeit: kein Featurebau, keine LLM-/PDF-/Rezept-/Allergen-Implementierung, keine neue API, keine neue Persistenzwelt und kein Prisma; naechste Slices muessen erst als kleine ADR-/Sicherheits-/Provenance-Schritte entschieden werden.
