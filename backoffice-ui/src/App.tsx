@@ -555,15 +555,15 @@ function ProductionInputPanel({
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
       <div className="upload-shortcut-bar">
         <div>
-          <p className="eyebrow">Arbeitsauftrag / Eingabe</p>
-          <strong>Quelle für den Produktionsauftrag hinzufügen</strong>
+          <p className="eyebrow">Chat-Eingang</p>
+          <strong>+ Angebot hinzufügen</strong>
           <p className="helper-text">
-            Vorhandene Eingabewege bleiben gebündelt: Datei, Freitext oder strukturierte Angaben werden zur operativen Spezifikation.
+            Ronak-Angebot per Datei, Drag & Drop oder Text in den Produktionsagenten geben. Bestehende Spezifikationspfade bleiben führend.
           </p>
         </div>
         <div className="action-row">
           <button type="button" disabled={submitting} onClick={sourceInputActions.openFilePicker}>
-            Datei hochladen
+            + Angebot hinzufügen
           </button>
           <button
             type="button"
@@ -577,7 +577,7 @@ function ProductionInputPanel({
       </div>
       <header>
         <p className="eyebrow">Eingabequelle</p>
-        <h3>Auftrag als Datei übernehmen</h3>
+        <h3>Angebot als Datei übernehmen</h3>
       </header>
       <label
         className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
@@ -596,11 +596,11 @@ function ProductionInputPanel({
           onChange={sourceInputActions.handleFileSelection}
         />
         <span className="eyebrow">Drag & Drop</span>
-        <strong>Angebot, E-Mail oder Textdatei hier ablegen</strong>
+        <strong>Angebot hier ablegen oder über + auswählen</strong>
         <p className="helper-text">
-          PDF, E-Mail und Textdateien werden sofort analysiert und in operative Veranstaltungsdaten überführt.
+          Sichtbarer Import-Anker für PDF, E-Mail und Textdateien; Verarbeitung erfolgt über die bestehenden Intake- und Spezifikationspfade.
         </p>
-        <span className="drag-drop-zone__cta">Datei auswählen</span>
+        <span className="drag-drop-zone__cta">+ Angebot auswählen</span>
       </label>
       <div className="activity-slot">
         {sourceInput.intakeFile ? <p className="helper-text">Ausgewählt: {sourceInput.intakeFile.name}</p> : null}
@@ -667,7 +667,7 @@ function ProductionInputPanel({
       <div className="divider" />
       <header>
         <p className="eyebrow">Texteingabe</p>
-        <h3>Arbeitsauftrag direkt einfügen</h3>
+        <h3>Angebot oder Produktionskontext direkt einfügen</h3>
       </header>
       <textarea value={sourceInput.intakeText} onChange={(event) => sourceInputActions.setIntakeText(event.target.value)} />
       <div className="action-row">
@@ -2656,7 +2656,7 @@ export function App() {
               <>
                 <div className="divider" />
                 <header>
-                  <p className="eyebrow">Plandetails</p>
+                  <p className="eyebrow">Downloadbereich</p>
                   <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
                 </header>
                 <p className="helper-text">
@@ -2805,7 +2805,7 @@ export function App() {
           <div className="production-column">
           <article className="panel secondary-panel">
             <header>
-              <p className="eyebrow">Einkaufsliste</p>
+              <p className="eyebrow">Downloadbereich</p>
               <h3>{purchaseZoneStatusLabel}</h3>
             </header>
             <p className="helper-text">

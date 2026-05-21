@@ -4,6 +4,24 @@ Status: Plan, keine Umsetzung
 Datum: 2026-05-21
 Scope: Backoffice-UI-Route `/produktion`, Layout-/Strukturumbau mit bestehenden Daten, bestehenden Aktionen und bestehenden API-Pfaden.
 
+## Produkt-Nordstern 2026-05-21
+
+Alexander hat das langfristige Zielbild fuer den Produktionsagenten geschaerft:
+
+- Im Ideal ist `/produktion` eine weisse, chatzentrierte Arbeitsflaeche.
+- Der Nutzer gibt ein von Ronak erstelltes Angebot per Drag & Drop oder `+`-Auswahl in den Chatbereich.
+- Der Agent stellt Rueckfragen, bis die Produktionsarbeit belastbar moeglich ist.
+- Ergebnisobjekte bleiben pruefbar: Rezepte je Speise, Mengen je Personenanzahl, Rezept-Lebensmittelmengen, kumulierte Einkaufsliste, druckbare Dateien/Downloads und spaeter Allergenlisten Deutsch/Englisch.
+- Quellen koennen spaeter Angebot, Antworten, Internet-Recherche, hinterlegte Rezepte und fruehere gute Catering-Rezepte sein.
+
+Verbindliche Grenze fuer kleine Schritte:
+
+- Keine simulierte Magie: keine echte PDF-Extraktion, Internet-Recherche, Rezeptgenerierung, LLM-Konversation oder Allergenautomatik behaupten, solange diese Pfade nicht real implementiert sind.
+- Keine neue API, Persistenz, Multi-Tenancy, Plattform- oder White-Label-Schiene fuer diesen UI-Schritt.
+- Bestehende progressive Produktionsobjekte, Einkaufslisten, Rezeptbibliothek und Exportlinks bleiben Quelle der Wahrheit und werden nur chatzentrierter eingeordnet.
+
+Erste daraus abgeleitete Umsetzung: sichtbare Chat-/Upload-Affordance in `/produktion`, klare Rueckfrage-/Status-/Download-Zonen und Tests auf diese Anker.
+
 ## Ziel
 
 `/produktion` soll nicht weiter als Dashboard-/Admin-Cockpit wachsen, sondern als ruhige, Apple-like Conversational Workbench funktionieren.

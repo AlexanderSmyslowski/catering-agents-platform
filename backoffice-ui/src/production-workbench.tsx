@@ -39,10 +39,10 @@ export function ProductionConversationalWorkbench({
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
       <article className="production-composer" aria-label="Zentrale Produktionsarbeit">
         <header className="production-composer__header">
-          <p className="eyebrow">Produktionsarbeit</p>
+          <p className="eyebrow">Produktionsagent-Chat</p>
           <h3>Was braucht die Produktion als Nächstes?</h3>
           <p className="helper-text">
-            Primärfläche für den aktuellen Vorgang. Bestehende Eingaben und Aktionen bleiben erhalten, werden aber ruhig geführt.
+            Angebot als Datei oder Text in den Chatbereich geben; der Agent zeigt Rückfragen, Status und druckbare Ergebnisse als prüfbare Zonen.
           </p>
         </header>
         {inputPanel}
