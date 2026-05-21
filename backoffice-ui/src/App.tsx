@@ -1771,7 +1771,7 @@ export function App() {
     <DashboardShell
       title={getRouteTitle(route)}
       subtitle={getRouteSubtitle(route)}
-      hideKicker={route === "offer"}
+      hideKicker={route !== "home"}
       className={
         route === "production"
           ? "app-shell--production-route"
@@ -1796,7 +1796,7 @@ export function App() {
               Produktionsagent
             </a>
           </nav>
-          {route !== "offer" ? (
+          {route === "home" ? (
             <div className="masthead-actions">
               <input
                 className="operator-input"
@@ -1813,7 +1813,7 @@ export function App() {
             </div>
           ) : null}
         </div>
-        {route !== "offer" ? (
+        {route === "home" ? (
           <div className="agent-shortcuts" aria-label="Direkteinstieg Agenten">
             {agentShortcutButtons.map((button) => (
               <a
@@ -1860,66 +1860,73 @@ export function App() {
         ) : null}
       </section>
 
-      {route !== "offer" ? (
-      <section className={route === "production" ? "metrics-grid metrics-grid--compact-route" : "metrics-grid"}>
-        {route === "home" ? (
-          <>
-            <StatusCard
-              title="Operative Spezifikationen"
-              body={`${dashboard.acceptedSpecs.length} operative Datensätze stehen dienstübergreifend bereit.`}
-            />
-            <StatusCard
-              title="Übergabe an Produktion"
-              body={`${offerHandoffCounts.complete} vollständig · ${offerHandoffCounts.partial} teilweise vollständig`}
-            />
-            <StatusCard
-              title="Angebotsentwürfe"
-              body={`${dashboard.offerDrafts.length} kaufmännische Entwürfe können direkt übernommen werden.`}
-            />
-            <StatusCard
-              title="Produktionspläne"
-              body={`${dashboard.productionPlans.length} Küchenpläne mit Rezept- und Einkaufsbezug sind verfügbar.`}
-            />
-            <StatusCard
-              title="Rezeptbibliothek"
-              body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
-            />
-          </>
-        ) : (
-          <>
-            <StatusCard
-              title="Produktionspläne"
-              body={`${dashboard.productionPlans.length} Küchenpläne mit Zeit- und Rezeptbezug sind vorhanden.`}
-            />
-            <StatusCard
-              title="Einkaufslisten"
-              body={`${dashboard.purchaseLists.length} Listen sind für Großmarkt und Beschaffung verfügbar.`}
-            />
-            <StatusCard
-              title="Rezeptbibliothek"
-              body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
-            />
-            <StatusCard
-              title="Produktionsdienst"
-              body={`${translateHealthStatus(serviceHealth.production.status)} · ${formatCounts(serviceHealth.production.counts)}`}
-            />
-          </>
-        )}
-      </section>
+      {route === "home" ? (
+        <section className="metrics-grid">
+          <StatusCard
+            title="Operative Spezifikationen"
+            body={`${dashboard.acceptedSpecs.length} operative Datensätze stehen dienstübergreifend bereit.`}
+          />
+          <StatusCard
+            title="Übergabe an Produktion"
+            body={`${offerHandoffCounts.complete} vollständig · ${offerHandoffCounts.partial} teilweise vollständig`}
+          />
+          <StatusCard
+            title="Angebotsentwürfe"
+            body={`${dashboard.offerDrafts.length} kaufmännische Entwürfe können direkt übernommen werden.`}
+          />
+          <StatusCard
+            title="Produktionspläne"
+            body={`${dashboard.productionPlans.length} Küchenpläne mit Rezept- und Einkaufsbezug sind verfügbar.`}
+          />
+          <StatusCard
+            title="Rezeptbibliothek"
+            body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
+          />
+        </section>
       ) : null}
 
       {route === "production" ? (
-        <section className="toolbar toolbar--production">
-          <input
-            className="search"
-            placeholder="Produktion ruhig filtern"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <p className="helper-text toolbar-note">
-            Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.
-          </p>
-        </section>
+        <details className="panel secondary-workspace production-filter-details">
+          <summary>
+            <span className="eyebrow">Suche und Bestand</span>
+            <span className="subsection-title">Produktionsobjekte leise filtern</span>
+            <span className="helper-text">
+              {dashboard.productionPlans.length} Pläne · {dashboard.purchaseLists.length} Einkaufslisten ·{" "}
+              {dashboard.recipes.length} Rezepte · Produktionsdienst {translateHealthStatus(serviceHealth.production.status)}
+            </span>
+          </summary>
+          <div className="secondary-workspace__content">
+            <section className="toolbar toolbar--production">
+              <input
+                className="search"
+                placeholder="Produktion ruhig filtern"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <p className="helper-text toolbar-note">
+                Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.
+              </p>
+            </section>
+            <section className="metrics-grid metrics-grid--compact-route">
+              <StatusCard
+                title="Produktionspläne"
+                body={`${dashboard.productionPlans.length} Küchenpläne mit Zeit- und Rezeptbezug sind vorhanden.`}
+              />
+              <StatusCard
+                title="Einkaufslisten"
+                body={`${dashboard.purchaseLists.length} Listen sind für Großmarkt und Beschaffung verfügbar.`}
+              />
+              <StatusCard
+                title="Rezeptbibliothek"
+                body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
+              />
+              <StatusCard
+                title="Produktionsdienst"
+                body={`${translateHealthStatus(serviceHealth.production.status)} · ${formatCounts(serviceHealth.production.counts)}`}
+              />
+            </section>
+          </div>
+        </details>
       ) : null}
 
       {error || notice ? (
