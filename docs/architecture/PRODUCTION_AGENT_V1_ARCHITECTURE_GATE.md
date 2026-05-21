@@ -20,6 +20,14 @@ Der bestehende MVP-Korridor bleibt fuehrend fuer den aktuellen Betrieb:
 
 Der zukuenftige Produktionsagent v1 darf diese Objekte erklaeren, anstossen und verdichten, aber nicht durch unpruefbaren Chattext ersetzen.
 
+### PA5 Nachvollziehbarkeitskorridor
+
+Der aktuell abgesicherte MVP-Korridor ist ein read-only Nachvollziehbarkeitskorridor:
+
+`Upload-Provenance -> Conversation-Quellenanker -> Produktionsoutput/Exportdarstellung`
+
+Er ist intern nachvollziehbar und dient der operativen Rueckverfolgung vorhandener Upload-Metadaten ueber bestehende Projektionen und Exportanker. Er ist ausdruecklich nicht rechtssicherer Audit und gibt keine Vollständigkeitsgarantie für spätere LLM-/Rezept-/Allergen-Outputs. Rohinhalte, neue Parser-/OCR-Logik, LLM-/Tool-Use-Schritte, neue API-Endpunkte und neue Persistenz bleiben ausserhalb dieses Korridors.
+
 ## 2. Grundlagen und Iststand
 
 Gelesene fuehrende Grundlagen:

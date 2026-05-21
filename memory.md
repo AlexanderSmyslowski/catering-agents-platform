@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.110
+version: 5.111
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -75,6 +75,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA2 zieht minimale Source-/Provenance-Metadaten fuer bestehende Uploadpfade nach: Intake-RawInputs und Rezeptquellen aus Offer-/Production-Uploads koennen Dateiname, normalisierten MIME-Typ, Groesse, SHA-256, Ingestion-Zeitpunkt und Upload-Kontext tragen; keine neue Persistenzwelt, Migration, Parser-Engine, UI oder LLM-/Rezept-/Allergen-Fachlogik.
 - PA3 bildet vorhandene `sourceMetadata` in der `ProductionConversationProjection` als read-only `source_provenance_anchor` ab und zeigt den Quellenanker im bestehenden `/produktion`-Chatfluss, ohne neue API, Persistenz, Workflow-, Parser-, LLM-, Rezept- oder Allergenlogik.
 - PA4 verbindet diese Quellenanker minimal mit bestehenden Traceability-Sichten: der Produktionsoutput-/Downloadanker traegt dieselben sicheren Hash-Kurzanker testbar mit, die `/produktion`-Detailansicht zeigt Upload-Provenance read-only bei der urspruenglichen Intake-Anfrage, und Produktionsplan-HTML-Exports koennen vorhandene sichere Quellenanker anzeigen; keine rechtssichere Audit-Behauptung, keine neue API, keine neue Persistenzwelt.
+- PA5 konsolidiert den Nachvollziehbarkeitskorridor als read-only MVP-Korridor: Upload-Provenance -> Conversation-Quellenanker -> Produktionsoutput/Exportdarstellung. Er ist intern nachvollziehbar, aber kein rechtssicherer Audit und keine Vollständigkeitsgarantie für spätere LLM-/Rezept-/Allergen-Outputs.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -605,3 +606,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.110 - 2026-05-21
 - PA4 Audit-/Traceability-Abgleich ist als read-only Minimal-Slice umgesetzt: `ProductionConversationProjection` haengt vorhandene sichere Quellenanker auch an den Produktionsoutput-/Downloadanker, die `/produktion`-Detailansicht zeigt Upload-Provenance bei der urspruenglichen Intake-Anfrage, und `print-export` kann vorhandene Quellenanker in Produktionsplan-HTML-Exports darstellen.
 - Der Slice behauptet keine rechtssichere Audit-Verbindlichkeit und fuehrt keine neue API, Migration, Persistenzwelt, LLM-/Tool-Use-/PDF-Parser-/OCR-/Rezept-/Allergenlogik ein; Fallback ohne `sourceMetadata` bleibt stabil.
+
+### 5.111 - 2026-05-21
+- PA5 Read-only Konsolidierungs-/Abnahmeslice ist umgesetzt: `tests/pa5-traceability-corridor.test.ts` sichert die Kette Upload-Metadaten -> Conversation-Quellenanker -> Produktionsoutput-/Exportanker und das Architektur-Gate benennt den Korridor ausdruecklich als intern nachvollziehbar.
+- Der Korridor ist kein rechtssicherer Audit und keine Vollständigkeitsgarantie für spaetere LLM-/Rezept-/Allergen-Outputs; keine neue Runtime-Funktion, API, Persistenz, LLM-/Tool-Use-/PDF-Parser-/OCR-/Rezept-/Allergenlogik wurde eingefuehrt.
