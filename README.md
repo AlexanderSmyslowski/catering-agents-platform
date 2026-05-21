@@ -81,6 +81,7 @@ Die Oberflaeche hat jetzt drei Einstiege:
 Fuehrendes Architektur-Gate vor weiterem Produktionsagent-v1-Featurebau:
 
 - [docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md](docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md)
+- [docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md](docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md) fasst die interne Beta-/Abnahme-Readiness aus bestehenden Status-, Test-, Export-, Audit- und Gate-Signalen zusammen; externe Nutzung und echte Produktionsagent-v1-Faehigkeiten bleiben gesperrt, bis die benannten Gates bewusst entschieden sind.
 
 Die Web-App bietet Exportlinks fuer:
 
