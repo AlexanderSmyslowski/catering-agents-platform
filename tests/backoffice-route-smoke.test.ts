@@ -144,7 +144,8 @@ describe("backoffice route smoke", () => {
 
     const offer = await renderRoute("/angebot");
     expect(offer).toContain("Angebotsagent");
-    expect(offer).toContain("Angebots-URL: Kundenanfrage, Varianten und operative Übergabe.");
+    expect(offer).toContain("Ruhige Workbench für Kundenanfragen und Angebotsentwürfe.");
+    expect(offer).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
 
     const production = await renderRoute("/produktion");
     expect(production).toContain("Produktionsagent");
@@ -174,18 +175,18 @@ describe("backoffice route smoke", () => {
 
     const offer = await renderRoute("/angebot");
 
-    expect(offer).toContain("Angebotsentwürfe");
-    expect(offer).toContain("1 Entwürfe mit Varianten und Export stehen bereit.");
-    expect(offer).toContain("Übergabereife");
-    expect(offer).toContain("1 von 2 Spezifikationen sind vollständig");
+    expect(offer).toContain("Zusammenfassung");
+    expect(offer).toContain("Sommerfest mit Buffet · 1 Varianten · 1 offene Punkte");
+    expect(offer).toContain("Übergabe: 1 vollständig · 1 teilweise");
     expect(offer).toContain("offer-draft-buffet");
-    expect(offer).toContain("Sommerfest mit Buffet");
-    expect(offer).toContain("Varianten: 1 · Offene Punkte: 1");
-    expect(offer).toContain("Übernehmen: Basis");
+    expect(offer).toContain("Ausgewählter Entwurf");
+    expect(offer).toContain("Variante übernehmen: Basis");
     expect(offer).toContain("Angebot exportieren");
-    expect(offer).toContain("Spezifikationen für die Weitergabe an die Produktion");
+    expect(offer).toContain("Operative Übergabe und Audit");
     expect(offer).toContain("Status: vollständig");
     expect(offer).toContain("Status: teilweise vollständig");
+    expect(offer).not.toContain("1 Entwürfe mit Varianten und Export stehen bereit.");
+    expect(offer).not.toContain("Angebotsdienst");
   });
 
   it("keeps the start overview anchored on existing operational counts", async () => {

@@ -12,6 +12,7 @@ import {
 } from "react";
 import { DashboardShell } from "../components/dashboard-shell.js";
 import { StatusCard } from "../components/status-card.js";
+import { OfferConversationalWorkbench } from "./offer-workbench.js";
 import {
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
@@ -21,7 +22,6 @@ import {
   loadDashboardState,
   loadIntakeRequestDetail,
   loadServiceHealth,
-  offerExportUrl,
   persistOperatorName,
   promoteOfferDraft,
   productionExportUrl,
@@ -485,91 +485,6 @@ function ReadOnlyWorkbenchProjection({
       </div>
       <p className="helper-text">Status: {readinessLabel}</p>
     </div>
-  );
-}
-
-type OfferWorkbenchProjectionProps = {
-  latestSourceLabel: string;
-  activeDraft?: Record<string, unknown>;
-  activeSpec?: Record<string, unknown>;
-  completeSpecCount: number;
-  partialSpecCount: number;
-  draftCount: number;
-};
-
-function countDraftOpenQuestions(draft?: Record<string, unknown>): number {
-  return Array.isArray(draft?.openQuestions) ? draft.openQuestions.length : 0;
-}
-
-function countDraftVariants(draft?: Record<string, unknown>): number {
-  return Array.isArray(draft?.variantSet) ? draft.variantSet.length : 0;
-}
-
-function OfferWorkbenchProjection({
-  latestSourceLabel,
-  activeDraft,
-  activeSpec,
-  completeSpecCount,
-  partialSpecCount,
-  draftCount
-}: OfferWorkbenchProjectionProps) {
-  const activeDraftId = activeDraft ? String(activeDraft.draftId ?? "-") : "kein Entwurf";
-  const activeSpecId = activeSpec ? String(activeSpec.specId ?? "-") : "keine Spezifikation";
-  const openQuestionCount = countDraftOpenQuestions(activeDraft);
-  const variantCount = countDraftVariants(activeDraft);
-
-  const zones: WorkbenchSpecFact[] = [
-    {
-      label: "Quellen/Eingabe",
-      value: latestSourceLabel
-    },
-    {
-      label: "Verstandene Daten",
-      value: activeSpec
-        ? `${activeSpecId} · ${translateReadiness(
-            String((activeSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-          )}`
-        : activeSpecId
-    },
-    {
-      label: "Rückfragen",
-      value: `Offene Angebotsfragen: ${openQuestionCount}`
-    },
-    {
-      label: "Ergebnisobjekte",
-      value: `${draftCount} Entwurf/Entwürfe · aktiv: ${activeDraftId} · Varianten: ${variantCount}`
-    },
-    {
-      label: "Export/Audit",
-      value: activeDraft ? "Angebotsexport und Operator-Spur vorhanden" : "noch kein Angebotsexport"
-    }
-  ];
-
-  return (
-    <article className="panel offer-workbench-panel" aria-label="Angebots-Workbench-Projektion">
-      <header>
-        <p className="eyebrow">Angebots-Workbench-Projektion</p>
-        <h3>Read-only Arbeitsbild vor Produktionsübergabe</h3>
-        <p className="helper-text">
-          Kundenanfrage, verstandene Daten, Rückfragen, Ergebnisobjekte und Export-/Audit-Bezug bleiben getrennt sichtbar.
-        </p>
-      </header>
-      <dl className="spec-fact-grid offer-workbench-grid">
-        {zones.map((zone) => (
-          <div key={zone.label} className="spec-fact">
-            <dt>{zone.label}</dt>
-            <dd>{zone.value}</dd>
-          </div>
-        ))}
-      </dl>
-      <div className="result-status-strip" aria-label="Angebotsübergabe-Status">
-        <span>
-          <strong>Operative Übergabe: {completeSpecCount} vollständig</strong>
-        </span>
-        <span>{partialSpecCount} teilweise vollständig</span>
-        <span>Aktive Spezifikation: {activeSpecId}</span>
-      </div>
-    </article>
   );
 }
 
@@ -1856,7 +1771,13 @@ export function App() {
     <DashboardShell
       title={getRouteTitle(route)}
       subtitle={getRouteSubtitle(route)}
-      className={route === "production" ? "app-shell--production-route" : undefined}
+      className={
+        route === "production"
+          ? "app-shell--production-route"
+          : route === "offer"
+            ? "app-shell--offer-route"
+            : undefined
+      }
     >
       <section className="masthead-card">
         <div className="masthead-row">
@@ -1919,15 +1840,15 @@ export function App() {
         ) : (
           <div className="hero-detail-card">
             <div>
-              <p className="eyebrow">{route === "offer" ? "Vertrieb und Kalkulation" : "Küche und Produktion"}</p>
+              <p className="eyebrow">{route === "offer" ? "Angebotsagent" : "Küche und Produktion"}</p>
               <h2 className="hero-title">
                 {route === "offer"
-                  ? "Eigene URL für Angebotserstellung mit direkter Übergabe in operative Veranstaltungsdaten."
+                  ? "Ruhige Workbench für Kundenanfragen und Angebotsentwürfe."
                   : "Produktionsvorbereitung: Rezepte, Küchenplanung und Einkauf."}
               </h2>
               <p className="lede">
                 {route === "offer"
-                  ? "Diese Ansicht bündelt Kundenanfrage, modulare Angebotsentwürfe und die Übernahme ausgewählter Varianten in die operative Spezifikation."
+                  ? "Eine zentrale Eingabe, ein fokussierter nächster Schritt. Details bleiben prüfbar, aber treten zurück."
                   : "Arbeitsroute für Spezifikationen, Pläne, Rezeptfreigaben und Exporte."}
               </p>
             </div>
@@ -1940,6 +1861,7 @@ export function App() {
         )}
       </section>
 
+      {route !== "offer" ? (
       <section className={route === "production" ? "metrics-grid metrics-grid--compact-route" : "metrics-grid"}>
         {route === "home" ? (
           <>
@@ -1964,29 +1886,6 @@ export function App() {
               body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
             />
           </>
-        ) : route === "offer" ? (
-          <>
-            <StatusCard
-              title="Angebotsentwürfe"
-              body={`${dashboard.offerDrafts.length} Entwürfe mit Varianten und Export stehen bereit.`}
-            />
-            <StatusCard
-              title="Operative Spezifikationen"
-              body={`${dashboard.acceptedSpecs.length} Datensätze können direkt an die Produktion übergeben werden.`}
-            />
-            <StatusCard
-              title="Angebotsdienst"
-              body={`${translateHealthStatus(serviceHealth.offers.status)} · ${formatCounts(serviceHealth.offers.counts)}`}
-            />
-            <StatusCard
-              title="Übergabereife"
-              body={`${offerHandoffCounts.complete} von ${dashboard.acceptedSpecs.length} Spezifikationen sind vollständig`}
-            />
-            <StatusCard
-              title="Exportdienst"
-              body={`${translateHealthStatus(serviceHealth.exports.status)} · ${formatCounts(serviceHealth.exports.counts)}`}
-            />
-          </>
         ) : (
           <>
             <StatusCard
@@ -2008,23 +1907,18 @@ export function App() {
           </>
         )}
       </section>
+      ) : null}
 
-      {route !== "home" ? (
-        <section className={route === "production" ? "toolbar toolbar--production" : "toolbar"}>
+      {route === "production" ? (
+        <section className="toolbar toolbar--production">
           <input
             className="search"
-            placeholder={
-              route === "offer"
-                ? "Angebotsentwürfe und operative Spezifikationen filtern"
-                : "Produktion ruhig filtern"
-            }
+            placeholder="Produktion ruhig filtern"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <p className="helper-text toolbar-note">
-            {route === "offer"
-              ? "Angebots-URL: Kundenanfrage, Varianten und operative Übergabe."
-              : "Bestehende Spezifikationen, Pläne und Rezepte durchsuchen."}
+            Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.
           </p>
         </section>
       ) : null}
@@ -2092,274 +1986,70 @@ export function App() {
       ) : null}
 
       {route === "offer" ? (
-        <div className="offer-workbench-route">
-          <OfferWorkbenchProjection
-            latestSourceLabel={latestIntakeRequestSummary}
-            activeDraft={activeOfferDraft}
-            activeSpec={activeOfferSpec}
-            completeSpecCount={offerHandoffCounts.complete}
-            partialSpecCount={offerHandoffCounts.partial}
-            draftCount={dashboard.offerDrafts.length}
-          />
-          <section className="wide-grid">
-          <article className="panel form-panel production-step-card">
-            <header>
-              <p className="eyebrow">Kundenanfrage</p>
-              <h3>Freitext in eine operative Spezifikation überführen</h3>
-            </header>
-            <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
-            <div className="action-row">
-              <button disabled={submitting} onClick={() => void handleIntakeSubmit()}>
-                Erfassungstext normalisieren
-              </button>
-            </div>
-            <div className="divider" />
-            <header>
-              <p className="eyebrow">Dokumentenerfassung</p>
-              <h3>PDF-, E-Mail- oder Textdateien übernehmen</h3>
-            </header>
-            <select
-              className="operator-input"
-              value={intakeChannel}
-              onChange={(event) => setIntakeChannel(event.target.value as IntakeDocumentChannel)}
-            >
-              <option value="pdf_upload">PDF / Angebot</option>
-              <option value="email">E-Mail</option>
-              <option value="text">Textdatei</option>
-            </select>
-            <input
-              className="file-input"
-              type="file"
-              accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
-              onChange={(event) => setIntakeFile(event.target.files?.[0] ?? null)}
-            />
-            <div className="action-row">
-              <button disabled={submitting} onClick={() => void handleIntakeDocumentSubmit()}>
-                Dokument normalisieren
-              </button>
-            </div>
-            {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
-          </article>
-
-          <article className="panel form-panel">
-            <header>
-              <p className="eyebrow">Angebotswerkbank</p>
-              <h3>Angebotsentwurf aus Freitext erstellen</h3>
-            </header>
-            <textarea value={offerText} onChange={(event) => setOfferText(event.target.value)} />
-            <button disabled={submitting} onClick={() => void handleOfferSubmit()}>
-              Angebotsentwurf erzeugen
-            </button>
-            <div className="divider" />
-            <header>
-              <p className="eyebrow">Direkterfassung</p>
-              <h3>Veranstaltungsdaten strukturiert erfassen</h3>
-            </header>
-            <input
-              value={manualEventType}
-              onChange={(event) => setManualEventType(event.target.value)}
-              placeholder="Veranstaltungstyp, z. B. Konferenz"
-            />
-            <input
-              value={manualEventDate}
-              onChange={(event) => setManualEventDate(event.target.value)}
-              placeholder="Datum, z. B. 2026-10-10"
-            />
-            <input
-              value={manualAttendeeCount}
-              onChange={(event) => setManualAttendeeCount(event.target.value)}
-              placeholder="Teilnehmerzahl"
-            />
-            <input
-              value={manualServiceForm}
-              onChange={(event) => setManualServiceForm(event.target.value)}
-              placeholder="Serviceform, z. B. Buffet"
-            />
-            <input
-              value={manualMenuItems}
-              onChange={(event) => setManualMenuItems(event.target.value)}
-              placeholder="Menüpunkte, durch Komma getrennt"
-            />
-            <input
-              value={manualCustomerName}
-              onChange={(event) => setManualCustomerName(event.target.value)}
-              placeholder="Kundenname"
-            />
-            <input
-              value={manualVenueName}
-              onChange={(event) => setManualVenueName(event.target.value)}
-              placeholder="Ort oder Veranstaltungsort"
-            />
-            <textarea
-              value={manualNotes}
-              onChange={(event) => setManualNotes(event.target.value)}
-              placeholder="Interne Notizen oder Einschränkungen"
-            />
-            <button disabled={submitting} onClick={() => void handleManualSpecSubmit()}>
-              Spezifikation anlegen
-            </button>
-          </article>
-
-          <article className="panel">
-            <header>
-              <p className="eyebrow">Angebotsentwürfe</p>
-              <h3>Aktuelle kaufmännische Ergebnisse</h3>
-            </header>
-            <ul className="item-list compact">
-              {filteredOfferDrafts.map((draft) => (
-                <li key={String(draft.draftId)}>
-                  <strong>{String(draft.draftId)}</strong>
-                  <p>{String(draft.eventSummary ?? "-")}</p>
-                  <p className="helper-text">
-                    {`Varianten: ${Array.isArray(draft.variantSet) ? draft.variantSet.length : 0} · Offene Punkte: ${
-                      Array.isArray(draft.openQuestions) ? draft.openQuestions.length : 0
-                    }`}
-                  </p>
-                  <div className="action-row">
-                    <button
-                      className="secondary-button"
-                      disabled={submitting}
-                      onClick={() => setSelectedDraftId(String(draft.draftId))}
-                    >
-                      Einzelheiten
-                    </button>
-                    {Array.isArray(draft.variantSet)
-                      ? draft.variantSet.map((variant) => {
-                          const variantRecord = variant as Record<string, unknown>;
-                          return (
-                            <button
-                              key={String(variantRecord.variantId)}
-                              className="secondary-button"
-                              disabled={submitting}
-                              onClick={() =>
-                                void handlePromoteDraft(
-                                  String(draft.draftId),
-                                  String(variantRecord.variantId)
-                                )
-                              }
-                            >
-                              {`Übernehmen: ${String(variantRecord.label ?? variantRecord.variantId)}`}
-                            </button>
-                          );
-                        })
-                      : null}
-                  </div>
-                  <a
-                    className="ghost-link"
-                    href={offerExportUrl(String(draft.draftId))}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Angebot exportieren
-                  </a>
-                </li>
-              ))}
-              {filteredOfferDrafts.length === 0 ? <li>Noch keine Angebotsentwürfe vorhanden.</li> : null}
-            </ul>
-            {selectedDraft ? (
-              <>
-                <div className="divider" />
-                <header>
-                  <p className="eyebrow">Entwurfsdetails</p>
-                  <h3>{String(selectedDraft.draftId)}</h3>
-                </header>
-                <p>{String(selectedDraft.eventSummary ?? "-")}</p>
-                <p className="helper-text">
-                  {`Varianten: ${Array.isArray(selectedDraft.variantSet) ? selectedDraft.variantSet.length : 0} · Offene Punkte: ${
-                    Array.isArray(selectedDraft.openQuestions) ? selectedDraft.openQuestions.length : 0
-                  }`}
-                </p>
-                {Array.isArray(selectedDraft.openQuestions) && selectedDraft.openQuestions.length > 0 ? (
-                  <>
-                    <p>Offene Punkte:</p>
-                    <ul className="item-list compact">
-                      {selectedDraft.openQuestions.map((question) => (
-                        <li key={question}>{question}</li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <p>Offene Punkte: keine</p>
-                )}
-                <pre className="detail-pre">{String(selectedDraft.customerFacingText ?? "")}</pre>
-                <pre className="detail-pre">{String(selectedDraft.internalWorkingText ?? "")}</pre>
-              </>
-            ) : null}
-          </article>
-
-          <article className="panel">
-            <header>
-              <p className="eyebrow">Operative Übergabe</p>
-              <h3>Spezifikationen für die Weitergabe an die Produktion</h3>
-            </header>
-            <ul className="item-list">
-              {filteredSpecs.map((spec) => (
-                <li key={String(spec.specId)} className="list-row">
-                  <div>
-                    <strong>{getSpecLabel(spec)}</strong>
-                    <p>Status: {translateReadiness(String((spec.readiness as Record<string, unknown>)?.status ?? "-"))}</p>
-                  </div>
-                  <div className="action-row">
-                    <button className="secondary-button" disabled={submitting} onClick={() => beginSpecEdit(spec)}>
-                      Bearbeiten
-                    </button>
-                    <a className="button-link button-link--subtle" href="/produktion">
-                      Zur Produktionsansicht
-                    </a>
-                  </div>
-                </li>
-              ))}
-              {filteredSpecs.length === 0 ? <li>Noch keine Spezifikationen vorhanden.</li> : null}
-            </ul>
-            {editingSpecId ? (
-              <>
-                <div className="divider" />
-                <div className="form-panel">
-                  <header>
-                    <p className="eyebrow">Spezifikation bearbeiten</p>
-                    <h3>{editingSpecId}</h3>
-                  </header>
-                  <input
-                    value={editingEventType}
-                    onChange={(event) => setEditingEventType(event.target.value)}
-                    placeholder="Veranstaltungstyp, z. B. Konferenz"
-                  />
-                  <input
-                    value={editingEventDate}
-                    onChange={(event) => setEditingEventDate(event.target.value)}
-                    placeholder="Datum, z. B. 2026-06-18"
-                  />
-                  <input
-                    value={editingAttendeeCount}
-                    onChange={(event) => setEditingAttendeeCount(event.target.value)}
-                    placeholder="Teilnehmerzahl"
-                  />
-                  <input
-                    value={editingServiceForm}
-                    onChange={(event) => setEditingServiceForm(event.target.value)}
-                    placeholder="Serviceform, z. B. Buffet"
-                  />
-                  <textarea
-                    value={editingMenuItems}
-                    onChange={(event) => setEditingMenuItems(event.target.value)}
-                    placeholder="Menüpunkte, durch Komma getrennt"
-                  />
-                  <div className="action-row">
-                    <button disabled={submitting} onClick={() => void handleSaveSpecEdit()}>
-                      Spezifikation speichern
-                    </button>
-                    <button className="secondary-button" disabled={submitting} onClick={() => resetSpecEdit()}>
-                      Abbrechen
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : null}
-          </article>
-          </section>
-        </div>
+        <OfferConversationalWorkbench
+          submitting={submitting}
+          latestSourceLabel={latestIntakeRequestSummary}
+          offerText={offerText}
+          setOfferText={setOfferText}
+          submitOfferText={handleOfferSubmit}
+          intakeText={intakeText}
+          setIntakeText={setIntakeText}
+          submitIntakeText={handleIntakeSubmit}
+          intakeChannel={intakeChannel}
+          setIntakeChannel={setIntakeChannel}
+          intakeFile={intakeFile}
+          setIntakeFile={setIntakeFile}
+          submitIntakeDocument={handleIntakeDocumentSubmit}
+          manualInput={{
+            eventType: manualEventType,
+            eventDate: manualEventDate,
+            attendeeCount: manualAttendeeCount,
+            serviceForm: manualServiceForm,
+            menuItems: manualMenuItems,
+            customerName: manualCustomerName,
+            venueName: manualVenueName,
+            notes: manualNotes
+          }}
+          manualActions={{
+            setEventType: setManualEventType,
+            setEventDate: setManualEventDate,
+            setAttendeeCount: setManualAttendeeCount,
+            setServiceForm: setManualServiceForm,
+            setMenuItems: setManualMenuItems,
+            setCustomerName: setManualCustomerName,
+            setVenueName: setManualVenueName,
+            setNotes: setManualNotes,
+            submitManualSpec: handleManualSpecSubmit
+          }}
+          filteredOfferDrafts={filteredOfferDrafts}
+          activeDraft={activeOfferDraft}
+          selectedDraft={selectedDraft}
+          setSelectedDraftId={setSelectedDraftId}
+          promoteDraft={handlePromoteDraft}
+          filteredSpecs={filteredSpecs}
+          activeSpec={activeOfferSpec}
+          completeSpecCount={offerHandoffCounts.complete}
+          partialSpecCount={offerHandoffCounts.partial}
+          specEdit={{
+            editingSpecId,
+            eventType: editingEventType,
+            eventDate: editingEventDate,
+            attendeeCount: editingAttendeeCount,
+            serviceForm: editingServiceForm,
+            menuItems: editingMenuItems
+          }}
+          specEditActions={{
+            beginSpecEdit,
+            setEventType: setEditingEventType,
+            setEventDate: setEditingEventDate,
+            setAttendeeCount: setEditingAttendeeCount,
+            setServiceForm: setEditingServiceForm,
+            setMenuItems: setEditingMenuItems,
+            saveSpecEdit: handleSaveSpecEdit,
+            resetSpecEdit
+          }}
+        />
       ) : null}
-
       {route === "production" ? (
         <section className="production-layout">
           <div className="production-column">
