@@ -2206,95 +2206,19 @@ export function App() {
                         </div>
                       </article>
                     ))}
-                  </div>
-                  {productionAssumptions.length > 0 ? (
-                    <>
-                      <p className="eyebrow">Annahmen des Agenten</p>
-                      <ul className="item-list compact">
-                        {productionAssumptions.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : null}
-                  {focusedProductionSpec ? (
-                    <div className="component-answer-card">
-                      <p className="eyebrow">Spezifikationsdetails</p>
-                      <p className="helper-text">
-                        {`Eventtyp: ${String(
-                          focusedProductionSpecEvent?.type ?? focusedProductionSpecServicePlan?.eventType ?? "-"
-                        )} · ${formatProductionTimingWindow(focusedProductionSpecRecord)}`}
-                      </p>
-                      <p className="helper-text">
-                        {`Teilnehmerzahl: ${String(focusedProductionSpecAttendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
-                          String(focusedProductionSpecServicePlan?.serviceForm ?? "")
-                        )} · Readiness: ${translateReadiness(
-                          String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                        )}`}
-                      </p>
-                      <p className="helper-text">Menüpunkte / Komponenten:</p>
-                      <ul className="item-list compact">
-                        {focusedProductionSpecMenuPlan
-                          ? focusedProductionSpecMenuPlan.map((entry) => {
-                              const component = entry as Record<string, unknown>;
-                              return (
-                                <li key={String(component.componentId ?? component.label)}>
-                                  <strong>{String(component.label ?? component.componentId ?? "-")}</strong>
-                                  <p className="helper-text">
-                                    {`${translateMenuCategory(String(component.menuCategory ?? ""))} · ${translateProductionMode(
-                                      String((component.productionDecision as Record<string, unknown> | undefined)?.mode ?? "")
-                                    )}`}
-                                  </p>
-                                </li>
-                              );
-                            })
-                          : null}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {intakeRequestDetailError ? (
-                    <p className="helper-text" role="status">
-                      {intakeRequestDetailError}
-                    </p>
-                  ) : null}
-                  {intakeRequestDetail ? (
-                    <div className="component-answer-card">
-                      <p className="eyebrow">Ursprüngliche Intake-Anfrage</p>
-                      <p className="helper-text">
-                        {`requestId: ${String(intakeRequestDetail.requestId ?? "-")} · channel: ${String(
-                          (intakeRequestDetail.source as Record<string, unknown> | undefined)?.channel ?? "-"
-                        )} · receivedAt: ${String(
-                          (intakeRequestDetail.source as Record<string, unknown> | undefined)?.receivedAt ?? "-"
-                        )}`}
-                      </p>
-                      <ul className="item-list compact">
-                        {Array.isArray(intakeRequestDetail.rawInputs)
-                          ? intakeRequestDetail.rawInputs.map((rawInput, index) => {
-                              const rawInputRecord = rawInput as Record<string, unknown>;
-                              return (
-                                <li key={`${String(rawInputRecord.documentId ?? rawInputRecord.kind ?? index)}-${index}`}>
-                                  <strong>{String(rawInputRecord.kind ?? "-")}</strong>
-                                  <p className="helper-text">
-                                    {`${String(rawInputRecord.mimeType ? ` · ${rawInputRecord.mimeType}` : "")}`}
-                                  </p>
-                                  <p>{summarizeRawInput(rawInputRecord)}</p>
-                                </li>
-                              );
-                            })
-                          : null}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {editingSpecId === String(focusedProductionSpec.specId) ? (
-                    <>
-                      <div className="divider" />
-                      <header className="structured-answer-anchor">
-                        <p className="eyebrow">Strukturierte Antwortfelder</p>
-                        <h4 className="subsection-title">Rückfragen unmittelbar ergänzen</h4>
-                        <p className="helper-text">
-                          Diese Felder beantworten die Rückfragen strukturiert im bestehenden Spezifikationspfad; kein freier LLM-Chat.
-                        </p>
-                      </header>
+                    {editingSpecId === String(focusedProductionSpec.specId) ? (
+                      <article className="structured-chat-message structured-chat-message--user">
+                        <div className="structured-chat-avatar structured-chat-avatar--user" aria-hidden="true">
+                          Du
+                        </div>
+                        <div className="structured-chat-bubble structured-chat-bubble--user">
+                          <header className="structured-answer-anchor">
+                            <p className="eyebrow">Deine strukturierte Antwort im Chatfluss</p>
+                            <h4 className="subsection-title">Antwort direkt zur Agentenfrage</h4>
+                            <p className="helper-text">
+                              Diese Felder beantworten die Rückfragen strukturiert im bestehenden Spezifikationspfad; kein freier LLM-Chat.
+                            </p>
+                          </header>
                       <div className="answer-grid">
                         <label className="field-block">
                           <span>Veranstaltungstyp</span>
@@ -2487,7 +2411,87 @@ export function App() {
                           </div>
                         </>
                       ) : null}
+                        </div>
+                      </article>
+                    ) : null}
+                  </div>
+                  {productionAssumptions.length > 0 ? (
+                    <>
+                      <p className="eyebrow">Annahmen des Agenten</p>
+                      <ul className="item-list compact">
+                        {productionAssumptions.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
                     </>
+                  ) : null}
+                  {focusedProductionSpec ? (
+                    <div className="component-answer-card">
+                      <p className="eyebrow">Spezifikationsdetails</p>
+                      <p className="helper-text">
+                        {`Eventtyp: ${String(
+                          focusedProductionSpecEvent?.type ?? focusedProductionSpecServicePlan?.eventType ?? "-"
+                        )} · ${formatProductionTimingWindow(focusedProductionSpecRecord)}`}
+                      </p>
+                      <p className="helper-text">
+                        {`Teilnehmerzahl: ${String(focusedProductionSpecAttendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
+                          String(focusedProductionSpecServicePlan?.serviceForm ?? "")
+                        )} · Readiness: ${translateReadiness(
+                          String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+                        )}`}
+                      </p>
+                      <p className="helper-text">Menüpunkte / Komponenten:</p>
+                      <ul className="item-list compact">
+                        {focusedProductionSpecMenuPlan
+                          ? focusedProductionSpecMenuPlan.map((entry) => {
+                              const component = entry as Record<string, unknown>;
+                              return (
+                                <li key={String(component.componentId ?? component.label)}>
+                                  <strong>{String(component.label ?? component.componentId ?? "-")}</strong>
+                                  <p className="helper-text">
+                                    {`${translateMenuCategory(String(component.menuCategory ?? ""))} · ${translateProductionMode(
+                                      String((component.productionDecision as Record<string, unknown> | undefined)?.mode ?? "")
+                                    )}`}
+                                  </p>
+                                </li>
+                              );
+                            })
+                          : null}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {intakeRequestDetailError ? (
+                    <p className="helper-text" role="status">
+                      {intakeRequestDetailError}
+                    </p>
+                  ) : null}
+                  {intakeRequestDetail ? (
+                    <div className="component-answer-card">
+                      <p className="eyebrow">Ursprüngliche Intake-Anfrage</p>
+                      <p className="helper-text">
+                        {`requestId: ${String(intakeRequestDetail.requestId ?? "-")} · channel: ${String(
+                          (intakeRequestDetail.source as Record<string, unknown> | undefined)?.channel ?? "-"
+                        )} · receivedAt: ${String(
+                          (intakeRequestDetail.source as Record<string, unknown> | undefined)?.receivedAt ?? "-"
+                        )}`}
+                      </p>
+                      <ul className="item-list compact">
+                        {Array.isArray(intakeRequestDetail.rawInputs)
+                          ? intakeRequestDetail.rawInputs.map((rawInput, index) => {
+                              const rawInputRecord = rawInput as Record<string, unknown>;
+                              return (
+                                <li key={`${String(rawInputRecord.documentId ?? rawInputRecord.kind ?? index)}-${index}`}>
+                                  <strong>{String(rawInputRecord.kind ?? "-")}</strong>
+                                  <p className="helper-text">
+                                    {`${String(rawInputRecord.mimeType ? ` · ${rawInputRecord.mimeType}` : "")}`}
+                                  </p>
+                                  <p>{summarizeRawInput(rawInputRecord)}</p>
+                                </li>
+                              );
+                            })
+                          : null}
+                      </ul>
+                    </div>
                   ) : null}
                 </div>
                 <div className="action-row">

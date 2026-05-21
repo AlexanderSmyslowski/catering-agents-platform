@@ -1470,6 +1470,31 @@ button:disabled {
   margin-top: 0.3rem;
 }
 
+.structured-chat-message--user {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.structured-chat-message--user .structured-chat-avatar {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.structured-chat-message--user .structured-chat-bubble {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.structured-chat-avatar--user {
+  background: #e6f0ff;
+  color: #12335f;
+}
+
+.structured-chat-bubble--user {
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+  background: rgba(240, 246, 255, 0.86);
+  border-color: rgba(37, 99, 235, 0.16);
+}
+
 .structured-answer-anchor {
   padding-top: 0.15rem;
 }

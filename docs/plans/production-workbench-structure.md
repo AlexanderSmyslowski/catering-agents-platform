@@ -1,6 +1,6 @@
 # /produktion Strukturplan: Ultra-clean Conversational Workbench
 
-Status: Plan, keine Umsetzung
+Status: Plan mit begonnenen UI-Slices, keine neue Fachlogik
 Datum: 2026-05-21
 Scope: Backoffice-UI-Route `/produktion`, Layout-/Strukturumbau mit bestehenden Daten, bestehenden Aktionen und bestehenden API-Pfaden.
 
@@ -20,7 +20,7 @@ Verbindliche Grenze fuer kleine Schritte:
 - Keine neue API, Persistenz, Multi-Tenancy, Plattform- oder White-Label-Schiene fuer diesen UI-Schritt.
 - Bestehende progressive Produktionsobjekte, Einkaufslisten, Rezeptbibliothek und Exportlinks bleiben Quelle der Wahrheit und werden nur chatzentrierter eingeordnet.
 
-Erste daraus abgeleitete Umsetzung: sichtbare Chat-/Upload-Affordance in `/produktion`, klare Rueckfrage-/Status-/Download-Zonen und Tests auf diese Anker.
+Erste daraus abgeleitete Umsetzung: sichtbare Chat-/Upload-Affordance in `/produktion`, klare Rueckfrage-/Status-/Download-Zonen und Tests auf diese Anker. Danach wurde die Rueckfragezone in zwei kleinen UI-Slices enger an den Chatfluss gerueckt: Agent-Fragen erscheinen als strukturierte Assistant-Bubbles, und die bestehenden Antwortfelder erscheinen nun als Nutzerantwort-Bubble direkt im selben Chatfluss.
 
 ## Ziel
 
@@ -130,6 +130,7 @@ Zweck:
 
 - Standardmaessig offen, wenn Rueckfragen vorhanden sind.
 - Enthält bestehende `productionQuestions`, Annahmen und das bestehende Antwortformular.
+- Umgesetzter kleiner UI-Slice: Das bestehende Antwortformular bleibt fachlich unveraendert, wird aber als Nutzerantwort direkt nach den Agent-Fragen im strukturierten Chatfluss angezeigt.
 - Die Detaildaten der Spezifikation bleiben pruefbar, aber nicht als zweite Hauptflaeche.
 
 ### Zone 4: Progressive Produktionsobjekte
