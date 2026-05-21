@@ -8,6 +8,11 @@ import {
   getDemoIntakeRequests,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromActorName,
+  multipartLimitsForUpload,
+  readLimitedUploadBuffer,
+  uploadErrorResponse,
+  validateUploadedDocument,
+  validateUploadedDocumentMetadata,
   withEvaluatedReadiness,
   validateAcceptedEventSpec,
   validateEventRequest,
@@ -239,12 +244,13 @@ async function extractMultipartDocuments(
 ): Promise<MultipartDocumentUpload> {
   const multipartRequest = request as FastifyRequest & {
     isMultipart: () => boolean;
-    parts: () => AsyncIterable<{
+    parts: (options?: { limits?: { fileSize?: number; files?: number; fields?: number; parts?: number } }) => AsyncIterable<{
       type: "file" | "field";
       fieldname: string;
       filename?: string;
       mimetype?: string;
       value?: string;
+      file?: AsyncIterable<Buffer | Uint8Array>;
       toBuffer?: () => Promise<Buffer>;
     }>;
   };
@@ -257,17 +263,23 @@ async function extractMultipartDocuments(
   let channel: EventRequest["source"]["channel"] | undefined;
   let requestId: string | undefined;
 
-  for await (const part of multipartRequest.parts()) {
+  for await (const part of multipartRequest.parts({ limits: multipartLimitsForUpload("intake") })) {
     if (part.type === "file") {
       if (!part.toBuffer || !part.filename) {
         continue;
       }
 
-      documents.push({
+      const mimeType = part.mimetype ?? "application/octet-stream";
+      validateUploadedDocumentMetadata({ filename: part.filename, mimeType });
+      const document = {
         filename: part.filename,
-        mimeType: part.mimetype ?? "application/octet-stream",
-        content: await part.toBuffer()
-      });
+        mimeType,
+        content: part.file
+          ? await readLimitedUploadBuffer(part.file, "intake")
+          : await part.toBuffer()
+      };
+      validateUploadedDocument(document, "intake");
+      documents.push(document);
       continue;
     }
 
@@ -439,34 +451,43 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     }
 
     const body = request.body;
-    const documents: DocumentInput[] = body.documents.map((document) => ({
-      filename: document.filename,
-      mimeType: document.mimeType,
-      content: Buffer.from(document.contentBase64, "base64")
-    }));
-    const normalized = await normalizeUploadedDocuments({
-      documents,
-      requestId: body.requestId,
-      channel: body.channel
-    });
+    try {
+      const documents: DocumentInput[] = body.documents.map((document) => {
+        const decodedDocument = {
+          filename: document.filename,
+          mimeType: document.mimeType,
+          content: Buffer.from(document.contentBase64, "base64")
+        };
+        validateUploadedDocument(decodedDocument, "intake");
+        return decodedDocument;
+      });
+      const normalized = await normalizeUploadedDocuments({
+        documents,
+        requestId: body.requestId,
+        channel: body.channel
+      });
 
-    await store.saveRequest(normalized.eventRequest);
-    await store.saveSpec(normalized.acceptedEventSpec);
-    await auditLog.log({
-      action: "intake.documents_normalized",
-      entityType: "AcceptedEventSpec",
-      entityId: normalized.acceptedEventSpec.specId,
-      actor: actorForRequest(request),
-      summary: `${documents.length} hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert.`,
-      details: {
-        requestId: normalized.eventRequest.requestId,
-        documentCount: documents.length,
-        readiness: normalized.acceptedEventSpec.readiness.status,
-        uploadMode: "json_base64"
-      }
-    });
+      await store.saveRequest(normalized.eventRequest);
+      await store.saveSpec(normalized.acceptedEventSpec);
+      await auditLog.log({
+        action: "intake.documents_normalized",
+        entityType: "AcceptedEventSpec",
+        entityId: normalized.acceptedEventSpec.specId,
+        actor: actorForRequest(request),
+        summary: `${documents.length} hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert.`,
+        details: {
+          requestId: normalized.eventRequest.requestId,
+          documentCount: documents.length,
+          readiness: normalized.acceptedEventSpec.readiness.status,
+          uploadMode: "json_base64"
+        }
+      });
 
-    return reply.code(201).send(normalized);
+      return reply.code(201).send(normalized);
+    } catch (error) {
+      const uploadError = uploadErrorResponse(error);
+      return reply.code(uploadError.statusCode).send({ message: uploadError.message });
+    }
   });
 
   app.post("/v1/intake/documents/upload", async (request, reply) => {
@@ -476,26 +497,31 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       });
     }
 
-    const upload = await extractMultipartDocuments(request);
-    const normalized = await normalizeUploadedDocuments(upload);
+    try {
+      const upload = await extractMultipartDocuments(request);
+      const normalized = await normalizeUploadedDocuments(upload);
 
-    await store.saveRequest(normalized.eventRequest);
-    await store.saveSpec(normalized.acceptedEventSpec);
-    await auditLog.log({
-      action: "intake.documents_normalized",
-      entityType: "AcceptedEventSpec",
-      entityId: normalized.acceptedEventSpec.specId,
-      actor: actorForRequest(request),
-      summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload in AcceptedEventSpec normalisiert.`,
-      details: {
-        requestId: normalized.eventRequest.requestId,
-        documentCount: upload.documents.length,
-        readiness: normalized.acceptedEventSpec.readiness.status,
-        uploadMode: "multipart"
-      }
-    });
+      await store.saveRequest(normalized.eventRequest);
+      await store.saveSpec(normalized.acceptedEventSpec);
+      await auditLog.log({
+        action: "intake.documents_normalized",
+        entityType: "AcceptedEventSpec",
+        entityId: normalized.acceptedEventSpec.specId,
+        actor: actorForRequest(request),
+        summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload in AcceptedEventSpec normalisiert.`,
+        details: {
+          requestId: normalized.eventRequest.requestId,
+          documentCount: upload.documents.length,
+          readiness: normalized.acceptedEventSpec.readiness.status,
+          uploadMode: "multipart"
+        }
+      });
 
-    return reply.code(201).send(normalized);
+      return reply.code(201).send(normalized);
+    } catch (error) {
+      const uploadError = uploadErrorResponse(error);
+      return reply.code(uploadError.statusCode).send({ message: uploadError.message });
+    }
   });
 
   app.post<{ Body: ManualSpecBody }>("/v1/intake/specs/manual", async (request, reply) => {

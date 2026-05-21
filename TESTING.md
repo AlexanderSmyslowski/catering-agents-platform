@@ -35,9 +35,10 @@ Relevante bestehende Tests:
 - `tests/purchase-coverage-check.test.ts`
 - `tests/production-plan-fallbacks.test.ts`
 - `tests/document-text.test.ts`
+- `tests/upload-security.test.ts`
 - `tests/production-language.test.ts`
 
-Diese Tests pruefen den Kernpfad von Intake/AcceptedEventSpec ueber Produktionsplanung, Rezept-/Kitchen-Sheet-Erzeugung, Einkaufsliste, Fallbacks und produktionsnahe Sprache.
+Diese Tests pruefen den Kernpfad von Intake/AcceptedEventSpec ueber Produktionsplanung, Rezept-/Kitchen-Sheet-Erzeugung, Einkaufsliste, Fallbacks, produktionsnahe Sprache sowie den schmalen Upload-/PDF-Haertungskorridor fuer Groessenlimits und MIME-/Extension-Allowlist.
 
 ### 3.2 API-, Rollen- und Audit-Regressionen
 

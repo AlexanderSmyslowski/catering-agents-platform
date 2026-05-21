@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import pdf from "pdf-parse";
 import type { DocumentInput } from "./types.js";
+import { validateUploadedDocumentMetadata } from "./upload-security.js";
 
 const PDF_PARSE_TIMEOUT_MS = 3000;
 const execFileAsync = promisify(execFile);
@@ -114,6 +115,8 @@ async function extractTextFromPagesPreview(document: DocumentInput): Promise<str
 }
 
 export async function extractTextFromDocument(document: DocumentInput): Promise<string> {
+  validateUploadedDocumentMetadata(document);
+
   const filename = document.filename.toLowerCase();
   if (filename.endsWith(".pages")) {
     const text = await extractTextFromPagesPreview(document);

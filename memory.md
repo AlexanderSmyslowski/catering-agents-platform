@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.103
+version: 5.104
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -68,6 +68,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Die bestehende Rueckfragezone in `/produktion` ist als kleiner Step-3-Slice chataehnlicher: vorhandene `productionQuestions` erscheinen als Assistant-/Agent-Fragen im strukturierten Chatfluss, die bestehenden Antwortfelder erscheinen als Nutzerantwort-Bubble direkt im Chatfluss, und die UI markiert ausdruecklich, dass es kein freier LLM-Chat ist.
 - Als Step-4-Slice benennt `/produktion` nach den strukturierten Antworten nun einen klaren naechsten Agent-Schritt fuer Produktionsobjekte und Downloads: Produktionsplan, Rezepte/Objektuebersicht, Einkaufsliste und Downloads werden als vorhandene bzw. entstehende pruefbare Ergebniszone eingeordnet, ohne neue Generierungslogik, API oder Persistenz.
 - Security-Hardening Block 1 ist abgeschlossen: `npm audit --omit=dev` ist nach minimalem `npm audit fix` gruen, HTML-Exports escapen datengetriebene Angebots- und Produktionsplan-Texte, und ein fokussierter XSS-Regressionstest schuetzt Script-/Tag-/Event-Attribut-/Quote-Faelle; kein Featurebau, keine neue Persistenzwelt.
+- Security-Hardening Block 2 haertet Upload-/PDF-Pfade minimal: zentrale Upload-Limits und MIME-/Extension-Allowlist fuer Intake-, Offer- und Production-Dokumentuploads, streambasierte Groessenpruefung vor Parser-Aufruf sowie Regressionstests fuer zu grosse, unerlaubte und weiterhin erlaubte Dateien; keine neue Parser-Engine, keine OCR, keine neue Persistenzwelt.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -570,3 +571,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.103 - 2026-05-21
 - Security-Hardening Block 1 ist umgesetzt: `npm audit --omit=dev` meldet nach minimalem Dependency-Fix keine Vulnerabilities mehr, und `print-export` escaped datengetriebene HTML-Textausgaben fuer Angebots- und Produktionsplan-Exports.
 - Der Block ist mit fokussierten XSS-Regressionen fuer `<script>`, HTML-Tags, `onerror=` und Quotes abgesichert; CSV-Verhalten, Fachfeatures, Persistenz, PDF-/Upload-Logik und LLM-/Rezept-/Allergenlogik bleiben unveraendert.
+
+### 5.104 - 2026-05-21
+- Security-Hardening Block 2 ist umgesetzt: Intake-, Angebots- und Produktions-Dokumentuploads nutzen zentrale Datei-/Part-/Field-Grenzen, MIME-/Extension-Allowlist und streambasierte Groessenpruefung vor Textgewinnung/PDF-Parsing.
+- Der Block ist mit fokussierten Upload-Security-Regressionen fuer zu grosse Intake-Dateien, unerlaubte Intake-/Offer-Dateien und weiterhin erlaubte Intake-/Production-Textuploads abgesichert; keine neue Parser-Engine, OCR, Persistenzwelt oder Fake-LLM-/Rezept-/Allergenlogik.

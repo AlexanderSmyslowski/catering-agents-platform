@@ -7,7 +7,12 @@ import {
   getDemoProductionSpecs,
   parseUploadedRecipeText,
   resolveMinimalMvpRoleFromActorName,
+  multipartLimitsForUpload,
+  readLimitedUploadBuffer,
+  uploadErrorResponse,
   validateAcceptedEventSpec,
+  validateUploadedDocument,
+  validateUploadedDocumentMetadata,
   type AcceptedEventSpec,
   type Queryable
 } from "@catering/shared-core";
@@ -50,11 +55,12 @@ async function recipeImportFromMultipart(
 ): Promise<RecipeTextImportBody> {
   const multipartRequest = request as FastifyRequest & {
     isMultipart: () => boolean;
-    file: () => Promise<
+    file: (options?: { limits?: { fileSize?: number; files?: number; fields?: number; parts?: number } }) => Promise<
       | {
           filename: string;
           mimetype: string;
           fields: Record<string, unknown>;
+          file: AsyncIterable<Buffer | Uint8Array>;
           toBuffer: () => Promise<Buffer>;
         }
       | undefined
@@ -65,16 +71,19 @@ async function recipeImportFromMultipart(
     throw new Error("Expected multipart upload.");
   }
 
-  const file = await multipartRequest.file();
+  const file = await multipartRequest.file({ limits: multipartLimitsForUpload("recipe") });
   if (!file) {
     throw new Error("No recipe file provided.");
   }
 
-  const text = await extractTextFromDocument({
+  validateUploadedDocumentMetadata({ filename: file.filename, mimeType: file.mimetype });
+  const document = {
     filename: file.filename,
     mimeType: file.mimetype,
-    content: await file.toBuffer()
-  });
+    content: await readLimitedUploadBuffer(file.file, "recipe")
+  };
+  validateUploadedDocument(document, "recipe");
+  const text = await extractTextFromDocument(document);
 
   return {
     text,
@@ -318,23 +327,28 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       });
     }
 
-    const payload = await recipeImportFromMultipart(request);
-    const recipe = parseUploadedRecipeText(payload);
-    await repository.save(recipe);
-    await auditLog.log({
-      action: "recipe.uploaded_file",
-      entityType: "Recipe",
-      entityId: recipe.recipeId,
-      actor: actorForRequest(request),
-      summary: `Rezeptdatei in gemeinsame Bibliothek hochgeladen: ${recipe.name}.`,
-      details: {
-        recipeName: recipe.name,
-        filename: payload.filename,
-        sourceTier: recipe.source.tier,
-        approvalState: recipe.source.approvalState
-      }
-    });
-    return reply.code(201).send({ recipe });
+    try {
+      const payload = await recipeImportFromMultipart(request);
+      const recipe = parseUploadedRecipeText(payload);
+      await repository.save(recipe);
+      await auditLog.log({
+        action: "recipe.uploaded_file",
+        entityType: "Recipe",
+        entityId: recipe.recipeId,
+        actor: actorForRequest(request),
+        summary: `Rezeptdatei in gemeinsame Bibliothek hochgeladen: ${recipe.name}.`,
+        details: {
+          recipeName: recipe.name,
+          filename: payload.filename,
+          sourceTier: recipe.source.tier,
+          approvalState: recipe.source.approvalState
+        }
+      });
+      return reply.code(201).send({ recipe });
+    } catch (error) {
+      const uploadError = uploadErrorResponse(error);
+      return reply.code(uploadError.statusCode).send({ message: uploadError.message });
+    }
   });
 
   app.patch<{ Params: { recipeId: string }; Body: RecipeReviewBody }>(
