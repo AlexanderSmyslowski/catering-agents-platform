@@ -2076,6 +2076,16 @@ export function App() {
           }
           purchaseStatusLabel={currentSpecPurchaseLists.length > 0 ? `${currentSpecPurchaseLists.length} Liste(n)` : "offen"}
           questionCount={productionQuestions.length}
+          productionObjectCount={currentSpecPlans.length}
+          productionObjectStatusLabel={
+            selectedPlan
+              ? `${currentSpecPlans.length} Plan(e) · ${translateReadiness(
+                  String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+                )}`
+              : currentSpecPlans.length > 0
+                ? `${currentSpecPlans.length} Plan(e)`
+                : "noch kein Plan"
+          }
         >
           <div className="production-column">
           <ProductionInputPanel
@@ -2550,8 +2560,8 @@ export function App() {
           <div className="production-column">
           <article className="panel production-step-card">
             <header>
-              <p className="eyebrow">Schritt 3</p>
-              <h3>Berechnete Ergebnisse</h3>
+              <p className="eyebrow">Produktionsobjekte</p>
+              <h3>Plan und Ergebnis leise prüfen</h3>
             </header>
             <div className="activity-slot">
               {planPhase === "planning" && planningSpecLabel ? (
@@ -2769,6 +2779,8 @@ export function App() {
               </>
             ) : null}
           </article>
+          </div>
+          <div className="production-column">
 
           <details className="panel secondary-panel secondary-rail-details">
             <summary>

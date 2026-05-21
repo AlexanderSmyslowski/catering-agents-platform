@@ -247,6 +247,9 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Was braucht die Produktion als Nächstes?");
     expect(content).toContain("production-calm-summary");
+    expect(content).toContain("production-objects-zone");
+    expect(content).toContain("Produktionsobjekte");
+    expect(content).not.toContain("Schritt 3");
     expect(content).toContain("Workbench-Projektion");
     expect(content).toContain("Strukturierte Veranstaltungsdaten bleiben führend");
     expect(content).toContain("Klärbereich");

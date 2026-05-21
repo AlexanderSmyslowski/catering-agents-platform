@@ -1412,7 +1412,19 @@ button:disabled {
 }
 
 .production-progressive-zone,
+.production-objects-zone,
 .production-lower-zones {
   display: grid;
   gap: 0.9rem;
+}
+
+.production-objects-panel .production-step-card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0 0 0.25rem;
+}
+
+.production-objects-panel .activity-slot {
+  min-height: 0;
 }
