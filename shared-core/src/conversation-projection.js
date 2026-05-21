@@ -1,3 +1,5 @@
+import { buildProductionClarificationQuestions } from "./production-clarification.js";
+
 function readId(record, keys) {
   for (const key of keys) {
     const value = record[key];
@@ -155,14 +157,27 @@ export function buildProductionConversationProjection(input) {
     });
   }
 
-  input.questions.forEach((question, index) => {
+  const clarificationQuestions = buildProductionClarificationQuestions({
+    spec: input.spec,
+    sourceInputs: input.sourceInputs
+  });
+  const structuredQuestions = [
+    ...clarificationQuestions.map((clarificationQuestion) => ({
+      text: clarificationQuestion.prompt,
+      clarificationQuestion
+    })),
+    ...input.questions.map((question) => ({ text: question }))
+  ];
+
+  structuredQuestions.forEach((question, index) => {
     messages.push({
       messageId: `${sessionId}-question-${index + 1}`,
       type: "structured_agent_question",
       role: "agent",
       title: "Agent fragt",
-      text: question,
-      questionIndex: index + 1
+      text: question.text,
+      questionIndex: index + 1,
+      ...(question.clarificationQuestion ? { clarificationQuestion: question.clarificationQuestion } : {})
     });
   });
 

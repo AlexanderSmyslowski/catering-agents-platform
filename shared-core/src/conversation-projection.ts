@@ -1,3 +1,5 @@
+import { buildProductionClarificationQuestions, type ProductionClarificationQuestion } from "./production-clarification.js";
+
 export type ProductionConversationMessageType =
   | "system_agent_hint"
   | "source_provenance_anchor"
@@ -18,6 +20,7 @@ export interface ProductionConversationMessage {
   planIds?: string[];
   purchaseListIds?: string[];
   sourceAnchors?: ProductionConversationSourceAnchor[];
+  clarificationQuestion?: ProductionClarificationQuestion;
 }
 
 export interface ProductionConversationSourceAnchor {
@@ -32,7 +35,7 @@ export interface ProductionConversationSourceAnchor {
   ingestionWarnings?: string[];
 }
 
-interface ProductionConversationSourceInput {
+export interface ProductionConversationSourceInput {
   kind?: string;
   content?: string;
   documentId?: string;
@@ -225,14 +228,27 @@ export function buildProductionConversationProjection(
     });
   }
 
-  input.questions.forEach((question, index) => {
+  const clarificationQuestions = buildProductionClarificationQuestions({
+    spec: input.spec,
+    sourceInputs: input.sourceInputs
+  });
+  const structuredQuestions: Array<{ text: string; clarificationQuestion?: ProductionClarificationQuestion }> = [
+    ...clarificationQuestions.map((clarificationQuestion) => ({
+      text: clarificationQuestion.prompt,
+      clarificationQuestion
+    })),
+    ...input.questions.map((question) => ({ text: question }))
+  ];
+
+  structuredQuestions.forEach((question, index) => {
     messages.push({
       messageId: `${sessionId}-question-${index + 1}`,
       type: "structured_agent_question",
       role: "agent",
       title: "Agent fragt",
-      text: question,
-      questionIndex: index + 1
+      text: question.text,
+      questionIndex: index + 1,
+      ...(question.clarificationQuestion ? { clarificationQuestion: question.clarificationQuestion } : {})
     });
   });
 

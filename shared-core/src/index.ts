@@ -6,6 +6,7 @@ export * from "./document-text.js";
 export * from "./fixtures/sample-data.js";
 export * from "./fixtures/demo-scenarios.js";
 export * from "./persistence.js";
+export * from "./production-clarification.js";
 export * from "./recipe-library.js";
 export * from "./request-factory.js";
 export * from "./rules/normalization.js";

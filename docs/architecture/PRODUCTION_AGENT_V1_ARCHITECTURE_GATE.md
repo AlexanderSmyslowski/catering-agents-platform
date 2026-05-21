@@ -219,6 +219,14 @@ PA13 Ingestion-Warnungen in Exportankern:
 - Exportanker enthalten nur Dateiname, Status und Warncodes, keine Rohtexte, extrahierten Inhalte oder fachliche Angebotsinterpretation.
 - Der Slice fuehrt keine neue API, Persistenz, Migration, Parser-Engine, OCR, LLM-/Tool-Use-Schicht, Angebotssemantik, Rezept-/Allergenlogik oder neue Produktlogik ein.
 
+PA16 Clarification Model Slice 1:
+
+- `shared-core` definiert ein kleines `ProductionClarificationQuestion`-Modell fuer strukturierte Rueckfragen aus vorhandenen Unsicherheiten.
+- Erlaubte Ursachen sind im ersten Slice strikt begrenzt auf `missingFields`, `readiness.reasons`, `documentIngestion.status` und `documentIngestion.warnings`.
+- Jede Rueckfrage traegt eine stabile `questionId`, Ursache/Code, Schwere/blockierende Einordnung, neutralen Prompt, sichere `sourceAnchors` und optional einen Antworttyp; Nutzerantworten werden nicht gespeichert oder verarbeitet.
+- Die bestehende `ProductionConversationProjection` darf diese Rueckfragen read-only als strukturierte Agent-Fragen transportieren, ohne neue API, Persistenz, Workflow, LLM-/Tool-Use, Parser-, Rezept-, Mengen- oder Allergenlogik.
+- Rueckfragen- und Quellenanker enthalten nur sichere Status-/Warn-/Hash-/Metadatenmarker und keine Rohtexte, extrahierten Texte oder fachliche Angebotsinterpretationen.
+
 ### 5.3 LLM Orchestrator
 
 Zweck:

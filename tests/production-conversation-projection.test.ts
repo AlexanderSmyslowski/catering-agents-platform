@@ -58,6 +58,8 @@ describe("production conversation projection", () => {
     expect(projection.messages.map((message) => message.type)).toEqual([
       "system_agent_hint",
       "structured_agent_question",
+      "structured_agent_question",
+      "structured_agent_question",
       "user_structured_answer",
       "production_output_anchor"
     ]);
@@ -69,13 +71,18 @@ describe("production conversation projection", () => {
     expect(projection.messages[1]).toMatchObject({
       role: "agent",
       questionIndex: 1,
+      text: "Bitte klären: attendees.expected."
+    });
+    expect(projection.messages[3]).toMatchObject({
+      role: "agent",
+      questionIndex: 3,
       text: "Mit welcher verbindlichen Teilnehmerzahl soll kalkuliert und produziert werden?"
     });
-    expect(projection.messages[2]).toMatchObject({
+    expect(projection.messages[4]).toMatchObject({
       role: "user",
       text: "Teilnehmerzahl: 36 Personen · Serviceform: Buffet"
     });
-    expect(projection.messages[3]).toMatchObject({
+    expect(projection.messages[5]).toMatchObject({
       role: "agent",
       planIds: ["plan-pa1-1"],
       purchaseListIds: ["purchase-pa1-1"]
@@ -108,7 +115,9 @@ describe("production conversation projection", () => {
 
     expect(projection.messages.map((message) => message.type)).toEqual([
       "system_agent_hint",
-      "source_provenance_anchor"
+      "source_provenance_anchor",
+      "structured_agent_question",
+      "structured_agent_question"
     ]);
     expect(projection.messages[1]).toMatchObject({
       role: "system",
