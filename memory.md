@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.112
+version: 5.113
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -77,6 +77,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA4 verbindet diese Quellenanker minimal mit bestehenden Traceability-Sichten: der Produktionsoutput-/Downloadanker traegt dieselben sicheren Hash-Kurzanker testbar mit, die `/produktion`-Detailansicht zeigt Upload-Provenance read-only bei der urspruenglichen Intake-Anfrage, und Produktionsplan-HTML-Exports koennen vorhandene sichere Quellenanker anzeigen; keine rechtssichere Audit-Behauptung, keine neue API, keine neue Persistenzwelt.
 - PA5 konsolidiert den Nachvollziehbarkeitskorridor als read-only MVP-Korridor: Upload-Provenance -> Conversation-Quellenanker -> Produktionsoutput/Exportdarstellung. Er ist intern nachvollziehbar, aber kein rechtssicherer Audit und keine Vollständigkeitsgarantie für spätere LLM-/Rezept-/Allergen-Outputs.
 - PA6 fasst die interne Beta-/Abnahme-Readiness als Doku-only-Sicht in `docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md` zusammen: interner MVP-Korridor ist ueber bestehende Status-, Test-, Export-, Audit- und Gate-Signale lesbar; externe Nutzung und echte Produktionsagent-v1-Features bleiben ohne OIDC/SSO, read-path Auth, Sandbox/AV, Retention/PII, Human Approval und Architekturentscheidungen nicht freigegeben.
+- PA7 AuthN/AuthZ + read-path Auth ist als Entscheidungs-ADR in `docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md` dokumentiert: empfohlen ist Option D als Stufenmodell, zuerst read-only Detail-/Export-/Audit-Pfade auf bestehender Trusted-Actor-/Rollenbasis haerten, externe oder produktionsnahe Nutzung aber weiter an Reverse Proxy/OIDC/SSO bzw. gleichwertigen Identity-Aware Proxy koppeln; keine Login-, Session-, Persistenz- oder OIDC-Implementierung in diesem ADR-Slice.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -615,3 +616,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.112 - 2026-05-21
 - PA6 Interne Beta-/Abnahme-Readiness ist als Doku-only-Slice in `docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md` umgesetzt und mit `tests/pa6-beta-readiness-summary.test.ts` gegen die zentralen Readiness-/Gate-Aussagen abgesichert.
 - Der Slice fuehrt keine neue Runtime-Funktion, UI, API, Persistenz, Monitoring-Engine, LLM-/Tool-Use-/PDF-Parser-/OCR-/Rezept-/Allergenlogik ein; externe oder echte produktive Nutzung bleibt ohne OIDC/SSO, read-path Auth, Sandbox/AV, Retention/PII und Human-Approval-/Architekturentscheidungen nicht freigegeben.
+
+### 5.113 - 2026-05-21
+- PA7 AuthN/AuthZ + read-path Auth ist als Doku-only-Entscheidungs-ADR in `docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md` umgesetzt und mit `tests/pa7-auth-read-path-decision-adr.test.ts` gegen Optionen, Empfehlung und Scope-Grenzen abgesichert.
+- Empfohlen ist Option D als Stufenmodell: naechster Runtime-Slice nur read-only Detail-/Export-/Audit-Pfade auf bestehender Trusted-Actor-/Rollenbasis haerten; externe oder produktionsnahe Nutzung bleibt bis zur Reverse-Proxy/OIDC/SSO- bzw. Identity-Aware-Proxy-Entscheidung gesperrt, ohne Login-, Session-, Persistenz- oder OIDC-Implementierung in diesem ADR-Slice.
