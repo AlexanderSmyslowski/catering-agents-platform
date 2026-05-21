@@ -139,6 +139,56 @@ function stableQuestions(questions) {
     .map(({ sortKey: _sortKey, ...question }) => question);
 }
 
+
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+function answerIdFor(questionId, timestamp) {
+    return `answer-${slug(questionId)}-${slug(timestamp)}`;
+}
+export function createSubmittedProductionClarificationAnswer(input) {
+    const question = input.questions.find((candidate) => candidate.questionId === input.questionId);
+    if (!question) {
+        throw new Error("Bekannte Rückfrage erforderlich.");
+    }
+    if (question.reason !== input.questionKey.reason || question.reasonCode !== input.questionKey.reasonCode) {
+        throw new Error("Question-Key passt nicht zur Rückfrage.");
+    }
+    if (input.answerType !== "shortText") {
+        throw new Error("Nur shortText-Antworten sind aktiv erlaubt.");
+    }
+    const normalizedAnswer = input.answerText.normalize("NFC").trim();
+    if (!normalizedAnswer) {
+        throw new Error("Antwort darf nicht leer sein.");
+    }
+    if (normalizedAnswer.length > productionClarificationAnswerTextMaxLength) {
+        throw new Error("Antwort darf maximal 500 Zeichen lang sein.");
+    }
+    const timestamp = input.now ?? new Date().toISOString();
+    const actorName = input.actorName?.trim();
+    return {
+        answerId: answerIdFor(question.questionId, timestamp),
+        questionId: question.questionId,
+        questionKey: {
+            reason: question.reason,
+            reasonCode: question.reasonCode
+        },
+        answerType: "shortText",
+        status: "submitted",
+        answerText: {
+            kind: "shortText",
+            value: escapeHtml(normalizedAnswer)
+        },
+        ...(actorName ? { actor: { actorName } } : {}),
+        createdAt: timestamp,
+        updatedAt: timestamp
+    };
+}
 export function buildProductionClarificationQuestions(input) {
   const questions = [];
   const specId = specIdFor(input.spec);

@@ -1,4 +1,8 @@
-import { buildProductionClarificationQuestions, type ProductionClarificationQuestion } from "./production-clarification.js";
+import {
+  buildProductionClarificationQuestions,
+  type ProductionClarificationAnswer,
+  type ProductionClarificationQuestion
+} from "./production-clarification.js";
 
 export type ProductionConversationMessageType =
   | "system_agent_hint"
@@ -21,6 +25,7 @@ export interface ProductionConversationMessage {
   purchaseListIds?: string[];
   sourceAnchors?: ProductionConversationSourceAnchor[];
   clarificationQuestion?: ProductionClarificationQuestion;
+  clarificationAnswer?: ProductionClarificationAnswer;
 }
 
 export interface ProductionConversationSourceAnchor {
@@ -58,6 +63,7 @@ export interface ProductionConversationProjectionInput {
   questions: string[];
   assumptions?: string[];
   answerSummary?: string;
+  clarificationAnswers?: ProductionClarificationAnswer[];
   sourceInputs?: ProductionConversationSourceInput[];
   productionPlans?: Array<Record<string, unknown>>;
   purchaseLists?: Array<Record<string, unknown>>;
@@ -190,6 +196,16 @@ function formatOutputAnchorIngestionWarning(anchor: ProductionConversationSource
     .join(" · ");
 }
 
+function answerMatchesQuestion(answer: ProductionClarificationAnswer, question: ProductionClarificationQuestion): boolean {
+  return answer.status === "submitted" &&
+    answer.answerType === "shortText" &&
+    answer.questionId === question.questionId &&
+    answer.questionKey.reason === question.reason &&
+    answer.questionKey.reasonCode === question.reasonCode &&
+    answer.answerText.kind === "shortText" &&
+    Boolean(answer.answerText.value.trim());
+}
+
 export function buildProductionConversationProjection(
   input: ProductionConversationProjectionInput
 ): ProductionConversationProjection {
@@ -250,6 +266,23 @@ export function buildProductionConversationProjection(
       questionIndex: index + 1,
       ...(question.clarificationQuestion ? { clarificationQuestion: question.clarificationQuestion } : {})
     });
+
+    if (question.clarificationQuestion) {
+      (input.clarificationAnswers ?? [])
+        .filter((answer) => answerMatchesQuestion(answer, question.clarificationQuestion as ProductionClarificationQuestion))
+        .forEach((answer) => {
+          messages.push({
+            messageId: `${sessionId}-clarification-answer-${answer.answerId}`,
+            type: "user_structured_answer",
+            role: "user",
+            title: "Antwort auf Rückfrage",
+            text: answer.answerText.value,
+            questionIndex: index + 1,
+            clarificationQuestion: question.clarificationQuestion,
+            clarificationAnswer: answer
+          });
+        });
+    }
   });
 
   if (input.answerSummary?.trim()) {

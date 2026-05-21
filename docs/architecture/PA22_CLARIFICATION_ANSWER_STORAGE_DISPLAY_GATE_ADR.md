@@ -140,3 +140,27 @@ Weiter gesperrt bleiben:
 Nach PA22 bleibt allgemeine Runtime weiter blockiert, aber ein PA23-Minimalslice ist vertretbar, wenn Alexander die drei offenen Entscheidungen eng beantwortet.
 
 Empfohlener PA23-Scope: eine kurze `shortText`-Antwort auf eine bestehende Frage validieren, als `submitted` im freigegebenen Modell ueber die bestehende Persistenzgrenze speichern und read-only im bestehenden `/produktion`-Conversation-Anker anzeigen. Ausdruecklich nicht Teil von PA23 waeren Antwortbearbeitung, Spec-Korrektur, Fachableitung, neue API-Welt, Migration, LLM-/Tool-Use, Rezept-, Mengen-, Einkaufslisten- oder Allergenlogik.
+
+## 10. PA23-Umsetzungsgrenze nach Freigabe
+
+Alexander hat PA23 als engen Runtime-Slice freigegeben: direkt starten, nur `submitted` aktiv erzeugen und zuerst read-only in der bestehenden `/produktion`-`ProductionConversationProjection` anzeigen.
+
+Real umgesetzt wurde nur dieser minimale Runtime-Korridor:
+
+- `shortText`-Antworten werden gegen bestehende `ProductionClarificationQuestion`-Datensaetze validiert.
+- `questionId` und stabiler Question-Key (`reason`, `reasonCode`) muessen zur Frage passen.
+- leere Antworten, Antworten ueber 500 Zeichen, falsche Antworttypen sowie unbekannte Frage-IDs werden kontrolliert abgelehnt.
+- HTML-/Script-Inhalte werden fuer die read-only Anzeige escaped und nicht als HTML interpretiert.
+- gespeicherte Antworten entstehen direkt mit `status: submitted`.
+- technische Speicherung erfolgt ueber die bestehende `ProductionStore`-/`PersistentCollection`-Grenze `production/clarification-answers`.
+- die bestehende `ProductionConversationProjection` kann passende `submitted`-Antworten read-only direkt unter der Agent-Frage anzeigen.
+
+Bewusst weiter nicht umgesetzt:
+
+- keine neue HTTP-API-Welt und kein neuer UI-Editor
+- keine Migration, kein Prisma und keine neue Persistenzwelt
+- keine Antwortbearbeitung
+- kein aktiv erzeugtes `draft` und kein automatisch gesetztes `reviewed`
+- keine automatische Spec-Korrektur oder fachliche Ableitung
+- keine Rezept-, Mengen-, Einkaufslisten-, Download-, Freigabe- oder Allergenlogik
+- keine LLM-/Tool-Use-/OCR-/Parser-Erweiterung

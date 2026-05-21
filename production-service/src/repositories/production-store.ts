@@ -2,6 +2,7 @@ import {
   createPersistentCollection,
   type CollectionStorageOptions,
   type PersistentCollection,
+  type ProductionClarificationAnswer,
   type ProductionPlan,
   type PurchaseList
 } from "@catering/shared-core";
@@ -9,6 +10,7 @@ import {
 export class ProductionStore {
   private readonly plans: PersistentCollection<ProductionPlan>;
   private readonly purchaseLists: PersistentCollection<PurchaseList>;
+  private readonly clarificationAnswers: PersistentCollection<ProductionClarificationAnswer>;
 
   constructor(options?: CollectionStorageOptions) {
     this.plans = createPersistentCollection<ProductionPlan>({
@@ -21,6 +23,13 @@ export class ProductionStore {
     this.purchaseLists = createPersistentCollection<PurchaseList>({
       collectionName: "production/purchase-lists",
       getId: (list) => list.purchaseListId,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    });
+    this.clarificationAnswers = createPersistentCollection<ProductionClarificationAnswer>({
+      collectionName: "production/clarification-answers",
+      getId: (answer) => answer.answerId,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
@@ -49,5 +58,17 @@ export class ProductionStore {
 
   async listPurchaseLists(): Promise<PurchaseList[]> {
     return this.purchaseLists.list();
+  }
+
+  async saveClarificationAnswer(answer: ProductionClarificationAnswer): Promise<void> {
+    await this.clarificationAnswers.set(answer);
+  }
+
+  async getClarificationAnswer(answerId: string): Promise<ProductionClarificationAnswer | undefined> {
+    return this.clarificationAnswers.get(answerId);
+  }
+
+  async listClarificationAnswers(): Promise<ProductionClarificationAnswer[]> {
+    return this.clarificationAnswers.list();
   }
 }

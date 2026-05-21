@@ -120,6 +120,15 @@ function formatOutputAnchorIngestionWarning(anchor) {
     .filter(Boolean)
     .join(" · ");
 }
+function answerMatchesQuestion(answer, question) {
+  return answer.status === "submitted" &&
+    answer.answerType === "shortText" &&
+    answer.questionId === question.questionId &&
+    answer.questionKey.reason === question.reason &&
+    answer.questionKey.reasonCode === question.reasonCode &&
+    answer.answerText.kind === "shortText" &&
+    Boolean(answer.answerText.value.trim());
+}
 
 export function buildProductionConversationProjection(input) {
   const sourceSpecId = input.spec ? readId(input.spec, ["specId", "id"]) : undefined;
@@ -179,6 +188,22 @@ export function buildProductionConversationProjection(input) {
       questionIndex: index + 1,
       ...(question.clarificationQuestion ? { clarificationQuestion: question.clarificationQuestion } : {})
     });
+    if (question.clarificationQuestion) {
+      (input.clarificationAnswers ?? [])
+        .filter((answer) => answerMatchesQuestion(answer, question.clarificationQuestion))
+        .forEach((answer) => {
+          messages.push({
+            messageId: `${sessionId}-clarification-answer-${answer.answerId}`,
+            type: "user_structured_answer",
+            role: "user",
+            title: "Antwort auf Rückfrage",
+            text: answer.answerText.value,
+            questionIndex: index + 1,
+            clarificationQuestion: question.clarificationQuestion,
+            clarificationAnswer: answer
+          });
+        });
+    }
   });
 
   if (input.answerSummary?.trim()) {
