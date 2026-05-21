@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.119
+version: 5.120
 date: 2026-05-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -84,6 +84,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA11 Intake DocumentIngestion Bridge ist umgesetzt: bestehende Intake-Dokumentnormalisierung fuer JSON/Base64 und Multipart nutzt intern `ingestDocument(...)`; Antworten und Audit-Details transportieren nur sichere Ingestion-Status-/Warnungsmarker und vorhandene `sourceMetadata`, waehrend Conversation-/Export-Provenance-Anker weiterhin keine Rohtexte spiegeln.
 - PA12 Read-only Ingestion-Warnungen sind sichtbar: bestehende Intake-Detail- und `/produktion`-Conversation-Kontexte zeigen sichere `documentIngestion`-Marker fuer fallback/failed Quellen als knappe Warnhinweise, extracted/ok bleibt ruhig. Keine neue API-Welt, Persistenz, Migration, Parser-Engine, OCR, LLM-/Tool-Use-, Rezept-, Allergen- oder neue Produktlogik.
 - PA13 Ingestion-Warnungen in Exportankern ist umgesetzt: sichere fallback/failed `documentIngestion`-Marker werden ueber vorhandene `sourceAnchors` in Produktionsoutput-/Downloadanker und Produktionsplan-HTML-Exports weitergereicht; extracted/ok bleibt ruhig, Rohtexte/extractedText werden nicht gespiegelt.
+- PA14 DocumentIngestion-Korridor ist als read-only Abnahmeanker in `tests/pa14-document-ingestion-corridor-readiness.test.ts` und `TESTING.md` abgesichert: Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher; Rohtexte werden nicht gespiegelt und es wurde keine neue API, UI, Persistenz, Parser-, OCR-, LLM-, Rezept- oder Allergenlogik eingefuehrt.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -650,3 +651,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.119 - 2026-05-21
 - PA13 Ingestion-Warnungen in Produktionsoutput-/Exportankern ist umgesetzt: `ProductionConversationProjection` haengt sichere `ingestionStatus`-/`ingestionWarnings`-Marker nur bei fallback/failed bzw. vorhandenen Warnungen an bestehende `sourceAnchors`; der Produktionsoutput-/Downloadanker benennt diese Warnung knapp.
 - `print-export` zeigt dieselben sicheren Warnmarker im Produktionsplan-HTML-Export als read-only `Ingestion-Warnungen`; extracted/ok bleibt ohne Warnspur und Rohtexte/extractedText werden nicht in Conversation-/Exportanker gespiegelt. Keine neue API, Persistenz, Parser-Engine, OCR, LLM-/Tool-Use-, Angebotsanalyse-, Rezept- oder Allergenlogik.
+
+### 5.120 - 2026-05-21
+- PA14 Read-only Abnahmeanker fuer den PA10-PA13 DocumentIngestion-Korridor ist umgesetzt: `tests/pa14-document-ingestion-corridor-readiness.test.ts` prueft Quelle, Ingestion-Status, Warnhinweis, Produktionsoutput-/Exportanker und die Sicherheitsgrenze ohne Rohtextspiegelung.
+- `TESTING.md` benennt den Korridor als internen Abnahmeanker: Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher. Keine neue UI, API, Persistenz, Migration, Parser-Engine, OCR, LLM-/Tool-Use-, Rezept-, Allergen-, Dashboard- oder Monitoring-Logik.
