@@ -85,6 +85,16 @@ describe("local ops check contract", () => {
     expect(projection.messages.some((message) => message.type === "user_structured_answer")).toBe(true);
     expect(demoScenarios).toContain("demo-production-answered-clarification");
     expect(demoScenarios).toContain("Synthetische Demo-Antwort");
+
+    for (const doc of [c8AcceptanceDoc, testingDoc]) {
+      expect(doc).toContain("spec-demo-production-answered-clarification");
+      expect(doc).toContain("Agent fragt · beantwortet");
+      expect(doc).toContain("Agent fragt · offen");
+      expect(doc).toContain("user_structured_answer");
+      expect(doc).toContain("keine automatische Spec-Korrektur");
+      expect(doc).toContain("keine Fachableitung");
+      expect(doc).toContain("Produktionsobjekte/Downloads bleiben read-only Ergebnis-/Exportanker");
+    }
   });
 
   it("keeps the C8 acceptance path discoverable and tied to real repo anchors", () => {

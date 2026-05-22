@@ -134,7 +134,16 @@ Diese Anker sind in den bestehenden Tests dokumentiert und abgesichert, insbeson
 - `tests/backoffice-internal-usage-smoke.test.ts`
 - `tests/pa14-document-ingestion-corridor-readiness.test.ts`
 
-## 7. Exporte mit Trusted-Actor-Kontext
+## 7. Rueckfragen-Fortsetzung im synthetischen Demo-Korridor
+
+Der Plan-4-Rueckfragenstand ist fuer interne Nutzer ohne echte Daten nachvollziehbar:
+
+- Der synthetische Fixture-Anker `spec-demo-production-answered-clarification` / `demo-production-answered-clarification` belegt eine beantwortete Rueckfrage mit `Synthetische Demo-Antwort`.
+- In der Conversation-/Workbench-Sicht bleiben Rueckfragen als `Agent fragt · offen` oder `Agent fragt · beantwortet` lesbar; passende Antworten erscheinen read-only als `user_structured_answer` direkt im bestehenden Verlauf.
+- Produktionsobjekte/Downloads bleiben read-only Ergebnis-/Exportanker; beantwortete Rueckfragen loesen keine automatische Spec-Korrektur, keine Fachableitung, keine Rezept-/Allergenautomatik und keine LLM-/Tool-Use-Behauptung aus.
+- Der lokale Nachweis ist test-/dokumentationsseitig ueber `tests/local-ops-check-contract.test.ts` und die vorhandenen Projection-/Backoffice-Smokes auffindbar; er ersetzt keinen produktionsnahen Pilot, keine echte Datenfreigabe und keine externe Freigabe.
+
+## 8. Exporte mit Trusted-Actor-Kontext
 
 Der Demo-Durchlauf betrachtet Exporte als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext:
 
@@ -151,7 +160,7 @@ Im lokalen Dev-/Testbetrieb funktionieren die vorhandenen Pfade ueber den bekann
 
 Die Export-/Read-path-Auth-Annahmen werden durch bestehende Tests und Doku getragen, insbesondere `tests/pa8-read-path-auth.test.ts` und `docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md`.
 
-## 8. Full Gates fuer einen C8-Abnahmelauf
+## 9. Full Gates fuer einen C8-Abnahmelauf
 
 Fuer einen vollstaendigen internen C8-Abnahmelauf werden die bestehenden Gates in dieser Reihenfolge genutzt:
 
@@ -169,7 +178,7 @@ Ein gruener Lauf bedeutet nur: Der aktuelle interne MVP-/Demo-Korridor ist anhan
 
 Ein roter Lauf bedeutet: Der konkrete Check oder Gate-Fehler ist zu dokumentieren und gezielt zu beheben. Daraus folgt nicht automatisch ein neuer Produkt- oder Infrastrukturauftrag.
 
-## 9. Klare Grenzen
+## 10. Klare Grenzen
 
 Dieser C8-Abnahmeweg ist bewusst begrenzt.
 Der Rahmen bleibt ein interner Demo-/Abnahmeweg und keine externe Freigabe.
@@ -190,7 +199,7 @@ Er ist ausdruecklich nicht:
 - keine neue API, Persistenz, Migration oder Recovery-Plattform,
 - kein Parser-/OCR-/LLM-/Rezept-/Allergen-Ausbau.
 
-## 10. Minimaler Ergebnisvermerk nach einem Demo-Durchlauf
+## 11. Minimaler Ergebnisvermerk nach einem Demo-Durchlauf
 
 Nach einem internen Demo-Durchlauf genuegt ein knapper Vermerk mit:
 

@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.177
+version: 5.178
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -135,6 +135,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P4-B44 Read-only Status in `/produktion` ist minimal geschaerft: die bestehende Production Conversation Projection wird in der UI nun auch fuer optionale vorhandene `clarificationAnswers` genutzt, zeigt beantwortete Rueckfragen als read-only Nutzerantworten und fasst offene/beantwortete Rueckfragen in der ruhigen Zusammenfassung zusammen; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue API, Persistenz, Migration, Antwortbearbeitung, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik oder echte Daten.
 - P4-B45 synthetischer beantworteter Rueckfragen-Demoanker ist als Testfixture umgesetzt: `shared-core/src/fixtures/demo-scenarios.ts` stellt einen nicht-sensitiven beantworteten Clarification-Anker bereit, und `tests/local-ops-check-contract.test.ts` schuetzt dessen Projektion als beantwortete Rueckfrage. Keine echte Datenverarbeitung, keine neue API, Persistenz/Migration, Antwortbearbeitung, automatische Spec-Korrektur, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets oder Login/OIDC.
 - P4-B46 Antwort-Fortsetzung im Conversation-Fluss ist minimal gehaertet: `ProductionConversationProjection` labelt strukturierte Rueckfragen nun als `Agent fragt · beantwortet` bzw. `Agent fragt · offen`, und ein fokussierter Projection-Test schuetzt die deterministische Reihenfolge offene/beantwortete Rueckfrage, Antwort-Bubble und Produktionsoutput-/Downloadanker. Keine neue Chat-/Agent-Runtime, Produktflaeche, API, Persistenz/Migration, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
+- P4-B47 interner synthetischer Beta-Durchlauf fuer Rueckfragen ist Doku-/Test-only auffindbar gemacht: C8 und TESTING benennen den synthetischen Answer-Anker `spec-demo-production-answered-clarification`, die Labels `Agent fragt · offen`/`Agent fragt · beantwortet`, die `user_structured_answer`-Antwort-Bubble und die read-only Ergebnis-/Exportanker; der lokale Ops-Vertrag schuetzt diese Auffindbarkeit. Keine neue Runtime, API, Persistenz/Migration, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -933,3 +934,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.177 - 2026-05-22
 - P4-B46 Antwort-Fortsetzung im Conversation-Fluss ist umgesetzt: `shared-core/src/conversation-projection.ts` und synchroner Runtime-Pfad `.js` labeln bestehende strukturierte Rueckfragen deterministisch als beantwortet oder offen.
 - `tests/pa25-clarification-answered-status-anchor.test.ts` schuetzt die geordnete Projection-Abfolge aus beantworteter Rueckfrage, Antwort-Bubble, offener Rueckfrage und Produktionsoutput-/Downloadanker. Keine neue Chat-/Agent-Runtime, Produktflaeche, API, Persistenz/Migration, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
+
+### 5.178 - 2026-05-22
+- P4-B47 interner synthetischer Beta-Durchlauf fuer Rueckfragen ist Doku-/Test-only umgesetzt: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` und `TESTING.md` machen den synthetischen beantworteten Rueckfragenanker `spec-demo-production-answered-clarification` / `demo-production-answered-clarification` fuer lokale interne Demo-/Beta-Sicht auffindbar.
+- `tests/local-ops-check-contract.test.ts` schuetzt die Dokumentationsauffindbarkeit der Labels `Agent fragt · offen` / `Agent fragt · beantwortet`, der read-only `user_structured_answer`-Antwort-Bubble und der Abgrenzung von Produktionsobjekten/Downloads als Ergebnis-/Exportanker. Keine neue Runtime, API, Persistenz/Migration, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.

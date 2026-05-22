@@ -211,6 +211,8 @@ Der bestehende Repo-Befehl `npm run local:check` fuehrt genau diesen schmalen lo
 
 Die erwarteten sichtbaren Demo-Anker bleiben testbar: Der lokale Check prueft Start-, Intake-/Request-, Angebots-, Produktions- und Exportanker aus den vorhandenen Demo-Fixtures, insbesondere `demo-intake-conference-lunch`, `spec-demo-intake-conference-lunch`, `demo-offer-conference-buffet`, `draft-demo-offer-conference-buffet`, `demo-production-coffee`, `plan-spec-demo-production-coffee` und `purchase-spec-demo-production-coffee`.
 
+Der synthetische Rueckfragen-Demoanker fuer Plan 4 ist ebenfalls auffindbar: `spec-demo-production-answered-clarification` / `demo-production-answered-clarification` zeigt ohne echte Daten eine beantwortete Rueckfrage mit `Synthetische Demo-Antwort`. Im bestehenden Conversation-Fluss bleiben Rueckfragen als `Agent fragt · offen` oder `Agent fragt · beantwortet` lesbar; passende Antworten erscheinen read-only als `user_structured_answer`. Produktionsobjekte/Downloads bleiben read-only Ergebnis-/Exportanker; dieser Korridor fuehrt keine automatische Spec-Korrektur, keine Fachableitung, keine neue API, keine neue Persistenz, keine Rezept-/Allergenautomatik und keinen LLM-/Tool-Use-Ausbau ein.
+
 Die Auditpruefung fragt bewusst das lokale Production-Auditfenster mit `limit=200` ab und erwartet einen `production.seed_demo`-Beleg des lokalen `Betriebs-/Audit-Operator`. Fehlt dieser Beleg oder ist er inhaltlich ungueltig, muss der Check deterministisch rot werden und auf kontrolliertes Neu-Seeden via `npm run local:start` verweisen.
 
 Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Framework. Er ist keine CI-Pflicht, keine Produktionsfreigabe und keine rechtssichere Audit-Aussage.
