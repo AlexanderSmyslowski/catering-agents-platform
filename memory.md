@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.149
+version: 5.150
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -796,3 +796,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.149 - 2026-05-22
 - B11 lokaler Demo-/Pilotdaten-Abnahmedurchlauf ist Doku-/Vertragstest-only umgesetzt: `docs/product/B11_LOCAL_DEMO_PILOT_ACCEPTANCE_RUN.md` strukturiert vorhandene lokale Gates, Backoffice-/Export-/Ingestion-Smokes und Ergebniszustaende `go`, `blocked` und `not assessed`.
 - `tests/b11-local-demo-pilot-acceptance-contract.test.ts` schuetzt, dass ein gruener B11-Lauf nur interne Demo-/Abnahmefaehigkeit bedeutet und ein produktionsnaher Pilot ohne B10-Preflight, PII-/Retention-/Backup- sowie Sandbox-/AV-Gates `blocked` bleibt. Keine neue Produktlogik, API, Persistenz, Exportlogik, Deployment- oder Compliance-/Audit-Freigabe.
+
+### 5.150 - 2026-05-22
+- B12 lokaler Demo-Ergebnisvermerk ist Doku-/Vertragstest-only umgesetzt: `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` strukturiert Datum/Scope, tatsaechliche lokale Nachweise, zulaessige Artefaktquellen ohne Secrets/PII/echte Kunden- oder Pilotdaten, Ergebniszustaende `go`, `blocked` und `not assessed`, offene Blocker und klare Nicht-Behauptungen.
+- `tests/b12-local-demo-result-note-contract.test.ts` schuetzt, dass lokale Gruen-Signale nur interne Demo-Abnahmefaehigkeit tragen und daraus kein produktionsnaher Pilot, keine externe Freigabe oder rechtssichere Compliance-/Audit-Aussage abgeleitet wird; konkrete Zielumgebung, B10-Preflight-Ausfuellung, PII/Retention/Backup sowie Sandbox/Worker/AV bleiben `blocked` oder `not assessed`. Keine Produktlogik, UI, API, Persistenz, Migration, Exportlogik oder Deployment-Code.

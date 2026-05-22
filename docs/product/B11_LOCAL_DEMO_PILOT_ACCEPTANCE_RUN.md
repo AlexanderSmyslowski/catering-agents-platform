@@ -12,6 +12,8 @@ Der Anker nutzt nur vorhandene Repo-Kommandos, bestehende Backoffice-/Demo-Smoke
 
 B11 beantwortet nur: Ist der lokale interne Demo-/Abnahmekorridor anhand vorhandener Nachweise gruen, blockiert oder noch nicht bewertet?
 
+Der nachgelagerte B12-Ergebnisvermerk `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` strukturiert den konkreten lokalen Ergebnisnachweis dieses Korridors: tatsaechlich ausgefuehrte Checks, belegende Quellen, Ergebniszustand, offene Blocker und klare Nicht-Behauptungen.
+
 ## 2. Vorhandene Kommandos und Gates
 
 Ein B11-Durchlauf nutzt die vorhandenen Kommandos in dieser Reihenfolge:
@@ -107,3 +109,5 @@ Ein Ergebnisvermerk fuer B11 enthaelt knapp:
 ## 8. Abnahmehinweis
 
 B11 ist erfuellt, wenn dieses Dokument im Repo auffindbar bleibt, C8 und TESTING auf den B11-Anker verweisen und `tests/b11-local-demo-pilot-acceptance-contract.test.ts` gruen ist.
+
+B12 ist erfuellt, wenn `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` auffindbar bleibt und der fokussierte Vertragstest `tests/b12-local-demo-result-note-contract.test.ts` den konkreten lokalen Ergebnisvermerk schuetzt.

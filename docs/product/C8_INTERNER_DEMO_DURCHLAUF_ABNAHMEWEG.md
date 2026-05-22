@@ -10,7 +10,7 @@ Dieses Dokument beschreibt den kleinsten reproduzierbaren internen Demo- und Abn
 
 Der Weg verknuepft nur bereits vorhandene Scripts, UI-Routen, Exportpfade, Upload-/Warnanker und Test-/Build-Gates. Er baut keine neue Demo-Plattform und fuehrt keine neuen Produktfeatures ein.
 
-Repo-Anker: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` ist aus `README.md` und `TESTING.md` auffindbar und wird durch den schmalen Vertragstest `tests/local-ops-check-contract.test.ts` gegen vorhandene Scripts, Routen und Gates abgesichert. Der B11-Ergebnisanker `docs/product/B11_LOCAL_DEMO_PILOT_ACCEPTANCE_RUN.md` ordnet den lokalen Demo-/Pilotdaten-Durchlauf zusaetzlich in `go`, `blocked` oder `not assessed` ein, ohne Produktionsfreigabe oder rechtssichere Compliance-/Audit-Freigabe zu behaupten.
+Repo-Anker: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` ist aus `README.md` und `TESTING.md` auffindbar und wird durch den schmalen Vertragstest `tests/local-ops-check-contract.test.ts` gegen vorhandene Scripts, Routen und Gates abgesichert. Der B11-Ergebnisanker `docs/product/B11_LOCAL_DEMO_PILOT_ACCEPTANCE_RUN.md` ordnet den lokalen Demo-/Pilotdaten-Durchlauf zusaetzlich in `go`, `blocked` oder `not assessed` ein, ohne Produktionsfreigabe oder rechtssichere Compliance-/Audit-Freigabe zu behaupten. Der B12-Ergebnisvermerk `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` strukturiert den konkreten lokalen Ergebnisnachweis mit tatsaechlichen Checks, Quellen, Ergebniszustand, offenen Blockern und klaren Nicht-Behauptungen.
 
 ## 2. Lokale Voraussetzungen
 
@@ -173,3 +173,5 @@ Nach einem internen Demo-Durchlauf genuegt ein knapper Vermerk mit:
 - Ergebnis von `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`,
 - bekannte Blocker oder Risiken,
 - klare Aussage, dass keine externe/produktive Freigabe behauptet wird.
+
+Fuer B12 wird dieser Vermerk durch `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` konkretisiert und durch `tests/b12-local-demo-result-note-contract.test.ts` als Doku-Vertrag abgesichert.
