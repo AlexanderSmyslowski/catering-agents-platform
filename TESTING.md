@@ -118,6 +118,7 @@ Der Frontend-Smoke bleibt bewusst schmal:
 - `/angebot` rendert den Angebotsbereich mit route-eindeutigem Marker.
 - `/produktion` rendert den Produktionsbereich mit route-eindeutigem Marker.
 - der Produktionsbereich zeigt fuer vorhandene Daten sowohl nutzbare Plaene als auch blockierte/Fallback-Zustaende ehrlich an.
+- die Production Workbench zeigt Rueckfragenstatus, naechsten sinnvollen Schritt, interne Produktionsobjekte/Downloads, Rezeptpruefstatus sowie Herkunft/Uebergabe als ruhige read-only Zonen aus bestehenden Daten.
 - ein interner Nutzpfad von manueller Anfrage bis nutzbarem Produktionsplan ist im jsdom/Vitest-Kontext abgesichert.
 
 ## 4. Lokaler Smoke-Korridor
@@ -147,7 +148,7 @@ Der minimale lokale Smoke-Korridor umfasst:
 - Health: `http://127.0.0.1:3104/health`
 - read-only Exportpfade fuer Angebot, Produktionsblatt und Einkaufsliste, soweit Demo-Daten vorhanden sind
 
-Der bestehende Repo-Befehl `npm run local:check` fuehrt genau diesen schmalen lokalen Betriebscheck gegen einen laufenden lokalen Stack aus und prueft zusaetzlich den Demo-Start-/Audit-Beleg.
+Der bestehende Repo-Befehl `npm run local:check` fuehrt genau diesen schmalen lokalen Betriebscheck gegen einen laufenden lokalen Stack aus und prueft zusaetzlich den Demo-Start-/Audit-Beleg. Er startet keine neue Infrastruktur; wenn der lokale Stack fehlt oder lokale Demo-/Audit-Laufzeitdaten nicht zum erwarteten Seed-Stand passen, ist das als lokaler Betriebsstatus zu melden und nicht durch Featurebau oder Infrastrukturbehauptungen zu ueberdecken.
 
 Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Framework.
 
