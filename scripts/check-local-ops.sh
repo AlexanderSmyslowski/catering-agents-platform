@@ -82,9 +82,9 @@ printf '  Export-Check: erreichbar (%s, enthält CSV-Header)\n' "${purchase_list
 
 echo ""
 echo "Bootstrapp-/Auditpruefung:"
-audit_url="http://127.0.0.1:3103/v1/production/audit/events?limit=5"
+audit_url="http://127.0.0.1:3103/v1/production/audit/events?limit=200"
 audit_body="$(curl -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${audit_url}")"
-audit_entry="$(printf '%s' "${audit_body}" | node -e '
+if ! audit_entry="$(printf '%s' "${audit_body}" | node -e '
 let input = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
@@ -93,6 +93,7 @@ process.stdin.on("data", (chunk) => {
 process.stdin.on("end", () => {
   const payload = JSON.parse(input);
   if (!Array.isArray(payload.items)) {
+    console.error("Audit-Feed enthaelt keine items-Liste.");
     process.exit(1);
   }
 
@@ -104,22 +105,28 @@ process.stdin.on("end", () => {
   );
 
   if (!item) {
+    const actions = [...new Set(payload.items.map((entry) => entry.action).filter(Boolean))].slice(0, 8);
+    console.error(
+      `Kein production.seed_demo-Beleg unter den letzten ${payload.items.length} Audit-Eintraegen gefunden. ` +
+      `Bitte lokalen Stack kontrolliert mit npm run local:start neu seed-en. Sichtbare Aktionen: ${actions.join(", ") || "keine"}.`
+    );
     process.exit(1);
   }
 
   if (typeof item.summary !== "string" || !item.summary.includes("Produktions-Demoplaene angelegt")) {
+    console.error("production.seed_demo-Beleg hat eine unerwartete Summary.");
     process.exit(1);
   }
 
   if (typeof item.entityId !== "string" || !item.entityId.startsWith("production-demo-")) {
+    console.error("production.seed_demo-Beleg hat eine unerwartete entityId.");
     process.exit(1);
   }
 
   process.stdout.write(JSON.stringify(item));
 });
-')"
-if [[ -z "${audit_entry}" ]]; then
-  echo "  Audit-Check: erwarteter Seed-Demo-Eintrag fehlt (${audit_url})" >&2
+')"; then
+  echo "  Audit-Check: erwarteter Seed-Demo-Eintrag fehlt oder ist ungueltig (${audit_url})" >&2
   exit 1
 fi
 printf '  Audit-Check: erreichbar (%s, enthält production.seed_demo und Betriebs-/Audit-Operator)\n' "${audit_url}"
