@@ -81,6 +81,10 @@ export function ProductionConversationalWorkbench({
           Beta-Pfad: Rückfragen -&gt; Ergebnisobjekte -&gt; Exporte/Audit.
         </p>
         <p className="helper-text">
+          Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar
+          sind; offene Stop-Punkte bleiben Stop statt Freigabe.
+        </p>
+        <p className="helper-text">
           Planstatus: {planStatusLabel} · Einkaufstatus: {purchaseStatusLabel}
         </p>
         <p className="helper-text">Ergebnisobjekte: {productionObjectStatusLabel}</p>
