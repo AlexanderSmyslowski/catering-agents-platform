@@ -10,6 +10,8 @@ Dieses Dokument beschreibt den kleinsten reproduzierbaren internen Demo- und Abn
 
 Der Weg verknuepft nur bereits vorhandene Scripts, UI-Routen, Exportpfade, Upload-/Warnanker und Test-/Build-Gates. Er baut keine neue Demo-Plattform und fuehrt keine neuen Produktfeatures ein.
 
+Repo-Anker: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` ist aus `README.md` und `TESTING.md` auffindbar und wird durch den schmalen Vertragstest `tests/local-ops-check-contract.test.ts` gegen vorhandene Scripts, Routen und Gates abgesichert.
+
 ## 2. Lokale Voraussetzungen
 
 Vor einem internen Demo-Durchlauf gelten diese Voraussetzungen:

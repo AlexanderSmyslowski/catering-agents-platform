@@ -1,7 +1,10 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
 const checkScript = readFileSync("scripts/check-local-ops.sh", "utf8");
+const c8AcceptanceDoc = readFileSync("docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md", "utf8");
+const readmeDoc = readFileSync("README.md", "utf8");
 const testingDoc = readFileSync("TESTING.md", "utf8");
 
 describe("local ops check contract", () => {
@@ -19,5 +22,43 @@ describe("local ops check contract", () => {
     expect(testingDoc).toContain("keine CI-Pflicht");
     expect(testingDoc).toContain("keine Produktionsfreigabe");
     expect(testingDoc).toContain("keine rechtssichere Audit-Aussage");
+  });
+
+  it("keeps the C8 acceptance path discoverable and tied to real repo anchors", () => {
+    expect(packageJson.scripts["local:status"]).toBe("bash ./scripts/status-local-stack.sh");
+    expect(packageJson.scripts["local:check"]).toBe("bash ./scripts/check-local-ops.sh");
+    expect(packageJson.scripts.test).toBe("vitest run");
+    expect(packageJson.scripts.build).toContain("tsc --noEmit");
+
+    expect(existsSync("scripts/status-local-stack.sh")).toBe(true);
+    expect(existsSync("scripts/check-local-ops.sh")).toBe(true);
+    expect(existsSync("tests/backoffice-route-smoke.test.ts")).toBe(true);
+    expect(existsSync("tests/backoffice-production-acceptance-smoke.test.ts")).toBe(true);
+    expect(existsSync("tests/backoffice-internal-usage-smoke.test.ts")).toBe(true);
+    expect(existsSync("tests/pa14-document-ingestion-corridor-readiness.test.ts")).toBe(true);
+    expect(existsSync("tests/pa8-read-path-auth.test.ts")).toBe(true);
+
+    for (const doc of [c8AcceptanceDoc, readmeDoc, testingDoc]) {
+      expect(doc).toContain("docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md");
+    }
+
+    for (const requiredAnchor of [
+      "`npm run local:status`",
+      "`npm run local:check`",
+      "`/angebot`",
+      "`/produktion`",
+      "Angebot-Happy-Path",
+      "Handoff-Anker",
+      "Upload-/Import-Warnanker",
+      "Trusted-Actor-Kontext",
+      "Full Gates",
+      "`npm test`",
+      "`npm run build`",
+      "`npm audit --omit=dev`",
+      "`git diff --check`"
+    ]) {
+      expect(c8AcceptanceDoc).toContain(requiredAnchor);
+      expect(testingDoc).toContain(requiredAnchor);
+    }
   });
 });
