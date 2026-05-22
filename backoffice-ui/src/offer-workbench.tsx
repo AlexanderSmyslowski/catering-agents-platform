@@ -180,6 +180,9 @@ export function OfferConversationalWorkbench({
           Übergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktive Spezifikation:{" "}
           {activeSpec ? `${String(activeSpec.specId ?? "-")} (${getReadinessLabel(activeSpec)})` : "keine"}
         </p>
+        <p className="helper-text">
+          Export: {focusedDraft ? `Angebots-HTML für ${focusedDraftId} bereit` : "noch kein Angebotsentwurf"}
+        </p>
       </aside>
 
       <div className="offer-progressive-zone">
