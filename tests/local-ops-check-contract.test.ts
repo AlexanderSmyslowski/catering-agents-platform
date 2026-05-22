@@ -24,6 +24,19 @@ describe("local ops check contract", () => {
     expect(testingDoc).toContain("keine rechtssichere Audit-Aussage");
   });
 
+  it("keeps Demo-Seed, local checks, and audit evidence narratively bounded across docs", () => {
+    for (const doc of [readmeDoc, testingDoc, c8AcceptanceDoc]) {
+      expect(doc).toContain("`npm run local:status` ist");
+      expect(doc).toContain("`npm run local:check` ist");
+      expect(doc).toContain("Demo-Seed ist eine interne Verifikationshilfe");
+      expect(doc).toContain("kein Produktionsdatenmodell");
+      expect(doc).toContain("Auditbeleg ist ein interner Betriebs-/Kontrollnachweis");
+      expect(doc).toContain("keine rechtssichere Audit-/Compliance-Aussage");
+      expect(doc).toContain("interner Demo-/Abnahmeweg");
+      expect(doc).toContain("keine externe Freigabe");
+    }
+  });
+
   it("keeps the C8 acceptance path discoverable and tied to real repo anchors", () => {
     expect(packageJson.scripts["local:status"]).toBe("bash ./scripts/status-local-stack.sh");
     expect(packageJson.scripts["local:check"]).toBe("bash ./scripts/check-local-ops.sh");

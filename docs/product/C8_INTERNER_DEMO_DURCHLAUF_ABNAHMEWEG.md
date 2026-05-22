@@ -41,7 +41,7 @@ Der Demo-Durchlauf beginnt mit der lokalen Statussicht:
 npm run local:status
 ```
 
-Ein plausibler Status zeigt, dass die erwarteten lokalen Services bzw. `screen`-Sitzungen laufen und die Service-Ports erreichbar sind.
+Ein plausibler Status zeigt, dass die erwarteten lokalen Services bzw. `screen`-Sitzungen laufen und die Service-Ports erreichbar sind. `npm run local:status` ist damit nur eine lokale Prozess- und Erreichbarkeitsuebersicht; der Befehl belegt noch keinen vollstaendigen Betriebsweg.
 
 Danach folgt der bestehende lokale Betriebscheck:
 
@@ -49,7 +49,9 @@ Danach folgt der bestehende lokale Betriebscheck:
 npm run local:check
 ```
 
-`npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack. Der Check prueft den schmalen MVP-Betriebsweg mit UI-Routen, Health-Endpunkten, read-only Exportpfaden und Demo-Start-/Audit-Beleg.
+`npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack. Der Check prueft den schmalen MVP-Betriebsweg mit UI-Routen, Health-Endpunkten, read-only Exportpfaden und Demo-Start-/Auditbeleg.
+
+Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 
 Wenn `local:check` rot wird, ist das zuerst als lokaler Betriebs- oder Demo-Datenstand zu behandeln. Der Abnahmeweg wird dann nicht durch Featurebau repariert, sondern der lokale Stack wird kontrolliert neu gestartet oder die konkrete Check-Meldung wird als Blocker dokumentiert.
 
@@ -138,6 +140,7 @@ Ein roter Lauf bedeutet: Der konkrete Check oder Gate-Fehler ist zu dokumentiere
 ## 9. Klare Grenzen
 
 Dieser C8-Abnahmeweg ist bewusst begrenzt.
+Der Rahmen bleibt ein interner Demo-/Abnahmeweg und keine externe Freigabe.
 
 Er ist:
 
