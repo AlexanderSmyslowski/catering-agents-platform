@@ -127,6 +127,14 @@ function renderDraftSummary(draft?: Record<string, unknown>): string {
   return `${String(draft.eventSummary ?? "Unbenannter Entwurf")} · ${variants} Varianten · ${questions} offene Punkte`;
 }
 
+function renderOfferNextStep(draft?: Record<string, unknown>): string {
+  if (!draft) {
+    return "Nächster Angebotsschritt: Anfrage einfügen oder Demo über Start nutzen, dann Entwurf prüfen.";
+  }
+
+  return `Nächster Angebotsschritt: Entwurf ${getDraftId(draft)} prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.`;
+}
+
 function getSpecRequestId(spec: Record<string, unknown>): string {
   const requestId = spec.requestId;
   return typeof requestId === "string" && requestId.trim() ? requestId.trim() : "-";
@@ -198,6 +206,7 @@ export function OfferConversationalWorkbench({
         <strong>{renderDraftSummary(focusedDraft)}</strong>
         <p className="helper-text">Quelle: {latestSourceLabel}</p>
         <p className="helper-text">Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.</p>
+        <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
         <p className="helper-text">
           Übergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktive Spezifikation:{" "}
           {activeSpec ? `${String(activeSpec.specId ?? "-")} (${getReadinessLabel(activeSpec)})` : "keine"}

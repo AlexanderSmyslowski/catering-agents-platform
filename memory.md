@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.181
+version: 5.182
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -128,6 +128,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - C5 Exportlinks mit Trusted-Actor-Kontext ist als read-only Regression in `tests/pa8-read-path-auth.test.ts` ergänzt: Angebot-, Produktionsplan-/Produktionsblatt- und Einkaufslisten-Exports verlangen bei gesetztem Trusted-Secret passende Trusted-Actor-Rollen, frei gesetztes `x-actor-name` bleibt wirkungslos und Health bleibt offen.
 - P3-B34 Startseite als Beta-Kontrollzentrum ist minimal gehaertet: Die Startseite benennt nun explizit den internen Beta-Kontrollzentrum-Kontext fuer Demo, Erfassung, Angebot, Produktion, Export und Audit aus vorhandenen Daten; `tests/backoffice-route-smoke.test.ts` schuetzt diesen Marker. Keine neue Dashboard-Welt, keine neue Datenquelle, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P5-B50 Startseite als Beta-Einstieg ist minimal geschaerft: Die bestehende Startseite nennt jetzt den expliziten Beta-Weg `Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit` und den naechsten Einstieg Angebot/Produktion/Rueckfragen; abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Dashboard-Welt, Datenquelle, API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
+- P5-B51 `/angebot` Nutzerfuehrung fuer Entwurf und Uebergabe ist minimal geschaerft: Die bestehende Angebotszusammenfassung nennt jetzt den naechsten Angebotsschritt Entwurf pruefen, Variante uebernehmen, Angebots-HTML exportieren und zur Produktion wechseln; abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Angebotslogik, automatische Spec-Korrektur, API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P3-B35 Angebot-Route fuer Beta-Durchlauf ist minimal gehaertet: Die bestehende `/angebot`-Zusammenfassung benennt den internen Beta-Schritt fuer Anfrage, Entwurf, Export und Uebergabe aus vorhandenen Daten; `tests/backoffice-route-smoke.test.ts` schuetzt den Marker zusammen mit Anfrage-/Spec-Bezug, Entwurfsstatus, Exportanker und Produktionsuebergabe. Keine neue Angebotslogik, API, automatische Spec-Korrektur, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P3-B36 Produktion-Route fuer Beta-Durchlauf ist minimal gehaertet: Die bestehende `/produktion`-Zusammenfassung benennt den internen Beta-Schritt fuer Produktion, Einkaufsliste, Exporte, Herkunft und offene Rueckfragen aus vorhandenen Daten; `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Marker neben Plan-/Einkauf-/Export-/Herkunftsankern. Keine neue Produktionslogik, kein neuer Workflow, keine Rezept-/Allergenautomatik, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P3-B37 Upload-Grenzen als Beta-Risiko ist Doku-/Test-only sichtbar gemacht: TESTING und C8 benennen Intake-Limit 8 MiB/bis zu 3 Multipart-Dateien, Rezeptupload-Limit 5 MiB/genau eine Datei, erlaubten Dokumentkorridor PDF/TXT/MD/EML/Pages, kontrollierte Abweisung zu grosser/unerlaubter Dateien und die Blockade produktionsnaher echter/beliebiger Uploads ohne Sandbox/Worker/AV-Gate; `tests/pa14-document-ingestion-corridor-readiness.test.ts` schuetzt diese Marker ohne Rohtext-/Vollhash-Leaks. Keine Parser-/OCR-/LLM-Engine, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
@@ -952,3 +953,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.181 - 2026-05-22
 - P5-B50 Startseite als Beta-Einstieg ist als kleiner UI-/Smoke-Baustein umgesetzt: `backoffice-ui/src/App.tsx` nennt auf der bestehenden Startseite nun explizit den Beta-Weg `Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit` und den naechsten Einstieg ueber Angebot, Produktion und offene Rueckfragen.
 - `tests/backoffice-route-smoke.test.ts` schuetzt die sichtbaren Startseiten-Marker. Keine neue Dashboard-Welt, keine neue Datenquelle, keine API, Persistenz, Deployment, SSH, Secrets, echte Daten, Login/OIDC, automatische Spec-Korrektur oder Rezept-/Allergenautomatik.
+
+### 5.182 - 2026-05-22
+- P5-B51 `/angebot` Nutzerfuehrung fuer Entwurf und Uebergabe ist als kleiner UI-/Smoke-Baustein umgesetzt: `backoffice-ui/src/offer-workbench.tsx` nennt in der bestehenden Angebotszusammenfassung den naechsten Angebotsschritt Entwurf pruefen, Variante uebernehmen, Angebots-HTML exportieren und zur Produktion wechseln.
+- `tests/backoffice-route-smoke.test.ts` schuetzt den sichtbaren Angebotsschritt im bestehenden Offer-Route-Smoke. Keine neue Angebotslogik, keine automatische Spec-Korrektur, keine API, Persistenz, Deployment, SSH, Secrets, echten Daten, Login/OIDC oder Rezept-/Allergenautomatik.
