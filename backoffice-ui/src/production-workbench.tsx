@@ -59,7 +59,7 @@ export function ProductionConversationalWorkbench({
 
       <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
         <span className="visually-hidden">production-calm-summary</span>
-        <p className="eyebrow">Zusammenfassung</p>
+        <p className="eyebrow">Aktiver Vorgang</p>
         <strong>{activeSpecLabel}</strong>
         <p className="helper-text">
           Klarheit: {readinessLabel} · Rückfragen: {formatQuestionStatus(questionCount)}

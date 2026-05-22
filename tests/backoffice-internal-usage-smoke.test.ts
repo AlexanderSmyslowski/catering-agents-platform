@@ -100,6 +100,16 @@ function findButtonByText(text: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
+function findAnchorByText(text: string): HTMLAnchorElement {
+  const anchor = Array.from(document.querySelectorAll("a")).find((el) =>
+    (el.textContent ?? "").includes(text)
+  );
+  if (!anchor) {
+    throw new Error(`Link not found: ${text}`);
+  }
+  return anchor as HTMLAnchorElement;
+}
+
 function findInputByPlaceholder<T extends HTMLInputElement | HTMLTextAreaElement = HTMLInputElement>(
   placeholder: string
 ): T {
@@ -354,6 +364,10 @@ describe("backoffice internal usage smoke", () => {
 
     await renderProductionRoute();
 
+    expect(document.body.textContent ?? "").toContain("Was braucht die Produktion als Nächstes?");
+    expect(document.body.textContent ?? "").toContain("Aktiver Vorgang");
+    expect(document.body.textContent ?? "").toContain("Auftrag einfügen oder Datei ablegen");
+
     const manualEventType = findInputByPlaceholder<HTMLInputElement>("Veranstaltungstyp, z. B. Konferenz");
     const manualEventDate = findInputByPlaceholder<HTMLInputElement>("Datum, z. B. 2026-10-10");
     const manualAttendeeCount = findInputByPlaceholder<HTMLInputElement>("Teilnehmerzahl");
@@ -381,6 +395,7 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Serviceform: buffet");
     expect(document.body.textContent ?? "").toContain("Notizen: Bitte vegetarisch");
     expect(document.body.textContent ?? "").toContain("Status: vollständig");
+    expect(document.body.textContent ?? "").toContain("Speichern und Berechnung starten");
 
     await act(async () => {
       findButtonByText("Antworten bearbeiten").click();
@@ -414,6 +429,17 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Arbeitsblätter: 1");
     expect(document.body.textContent ?? "").toContain("Rezeptblätter: 1");
     expect(document.body.textContent ?? "").toContain("Rezeptauswahl: 1");
+    expect(document.body.textContent ?? "").toContain("Produktionsobjekte und Downloads prüfen");
+    expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
+    expect(document.body.textContent ?? "").toContain("Einkaufsliste");
+    expect(document.body.textContent ?? "").toContain("Einkaufsliste herunterladen");
+    expect(document.body.textContent ?? "").toContain("Tomaten");
+    expect(findAnchorByText("Produktionsblatt exportieren").href).toContain(
+      `/api/exports/v1/exports/production-plans/${artifacts.productionPlan.planId}/html`
+    );
+    expect(findAnchorByText("Einkaufsliste herunterladen").href).toContain(
+      `/api/exports/v1/exports/purchase-lists/${artifacts.purchaseList.purchaseListId}/csv`
+    );
     expect(document.body.textContent ?? "").toContain("Vegetarische Tomatensuppe");
     expect(document.body.textContent ?? "").toContain("Küche, Beschaffung und Klärungen");
     expect(document.body.textContent ?? "").not.toContain("Status: unzureichend");
