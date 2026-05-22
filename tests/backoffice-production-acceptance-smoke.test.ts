@@ -302,6 +302,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("1 offene Rückfrage");
     expect(content).toContain("Strukturierte Rückfragen im Chatfluss");
     expect(content).toContain("Agent fragt");
+    expect(content).toContain("Rückfrage offen");
     expect(content).toContain("Deine strukturierte Antwort im Chatfluss");
     expect(content).toContain("Antwort direkt zur Agentenfrage");
     expect(content).toContain("kein freier LLM-Chat");

@@ -2299,7 +2299,16 @@ export function App() {
                             {message.role === "system" ? "S" : "A"}
                           </div>
                           <div className="structured-chat-bubble">
-                            <p className="eyebrow">{message.title}</p>
+                            <div className="structured-chat-bubble__meta">
+                              <p className="eyebrow">{message.title}</p>
+                              {message.clarificationAnswerStatus ? (
+                                <span
+                                  className={`clarification-status-badge clarification-status-badge--${message.clarificationAnswerStatus}`}
+                                >
+                                  {message.clarificationAnswerStatus === "answered" ? "Rückfrage beantwortet" : "Rückfrage offen"}
+                                </span>
+                              ) : null}
+                            </div>
                             <p>{message.text}</p>
                           </div>
                         </article>
