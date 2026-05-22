@@ -416,6 +416,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("production-purchase-zone");
     expect(content).toContain("Einkaufsliste");
     expect(content).toContain("1 Liste · 2 Positionen");
+    expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-fallback-1");
     expect(content).toContain("Einkaufsliste herunterladen");
     expect(content).toContain("Glutenfreies Baguette");
     expect(content).toContain("Olivenöl");

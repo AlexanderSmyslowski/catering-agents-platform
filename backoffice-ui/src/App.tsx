@@ -3088,6 +3088,9 @@ export function App() {
                   <li key={String(purchaseList.purchaseListId)}>
                     <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
                     <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
+                    <p className="helper-text">
+                      purchaseListId: {String(purchaseList.purchaseListId)} · specId: {String(purchaseList.eventSpecId ?? "-")}
+                    </p>
                     <a
                       className="ghost-link"
                       href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
