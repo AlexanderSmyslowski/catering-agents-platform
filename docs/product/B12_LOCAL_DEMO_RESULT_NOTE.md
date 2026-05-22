@@ -7,6 +7,7 @@ Scope: lokaler interner Demo-Durchlauf; interne Stabilisierung / Abnahmefaehigke
 ## 1. Zweck
 
 B12 strukturiert den lokalen Demo-Ergebnisvermerk als kleinen operativ sichtbaren Nachweisanker.
+Die manuelle P5-B54-Checkliste `docs/product/P5_B54_MANUELLE_BETA_TEST_CHECKLISTE.md` liefert dafuer einen knappen Alexander-Pruefpfad mit URLs, sichtbaren Markern, Stop-Gates und Nicht-Freigaben; B12 bleibt der fuehrende Ergebnisvermerk.
 
 Der Vermerk beantwortet nur:
 
