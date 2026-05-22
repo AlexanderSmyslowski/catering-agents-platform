@@ -153,6 +153,50 @@ describe("PA8 read-path auth hardening", () => {
     });
   });
 
+  it("requires trusted offer actor for offer export read path when a trusted secret is configured", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+
+    let draftId = "";
+    await withApp(buildOfferApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET }), async (app) => {
+      const seedResponse = await app.inject({
+        method: "POST",
+        url: "/v1/offers/seed-demo",
+        headers: trustedHeaders("Betriebs-/Audit-Operator")
+      });
+      expect(seedResponse.statusCode).toBe(201);
+      [{ draftId }] = seedResponse.json<{ seeded: Array<{ draftId: string }> }>().seeded;
+    });
+
+    await withApp(buildPrintExportApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET }), async (app) => {
+      const spoofedExport = await app.inject({
+        method: "GET",
+        url: `/v1/exports/offers/${draftId}/html`,
+        headers: spoofedHeaders("Angebots-Mitarbeiter")
+      });
+      expect(spoofedExport.statusCode).toBe(403);
+
+      const wrongRoleExport = await app.inject({
+        method: "GET",
+        url: `/v1/exports/offers/${draftId}/html`,
+        headers: trustedHeaders("Produktions-Mitarbeiter")
+      });
+      expect(wrongRoleExport.statusCode).toBe(403);
+
+      const trustedExport = await app.inject({
+        method: "GET",
+        url: `/v1/exports/offers/${draftId}/html`,
+        headers: trustedHeaders("Angebots-Mitarbeiter")
+      });
+      expect(trustedExport.statusCode).toBe(200);
+      expect(trustedExport.headers["content-type"]).toContain("text/html");
+      expect(trustedExport.body).toContain(draftId);
+
+      const health = await app.inject({ method: "GET", url: "/health" });
+      expect(health.statusCode).toBe(200);
+    });
+  });
+
   it("requires trusted production actor for production detail and export read paths when a trusted secret is configured", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

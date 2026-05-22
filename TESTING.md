@@ -42,6 +42,7 @@ Relevante bestehende Tests:
 - `tests/pa6-beta-readiness-summary.test.ts`
 - `tests/pa7-auth-read-path-decision-adr.test.ts`
 - `tests/pa8-read-path-auth.test.ts`
+  - C5 ergaenzt hier die explizite read-only Exportlink-Regression fuer den vorhandenen Angebot-HTML-Export unter Trusted-Actor-Kontext; Produktionsplan-/Produktionsblatt-HTML und Einkaufslisten-CSV waren bereits im PA8-Korridor enthalten.
 - `tests/pa9-proxy-deployment-readiness-adr.test.ts`
 - `tests/document-ingestion-boundary.test.ts`
 - `tests/pa11-intake-document-ingestion-bridge.test.ts`
