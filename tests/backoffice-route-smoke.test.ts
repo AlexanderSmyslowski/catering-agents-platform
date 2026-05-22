@@ -565,6 +565,7 @@ describe("backoffice route smoke", () => {
       ],
       offerDrafts: [{ draftId: "start-offer-1" }],
       productionPlans: [{ planId: "start-plan-1" }],
+      purchaseLists: [{ purchaseListId: "start-purchase-1" }],
       recipes: [
         { recipeId: "start-recipe-approved", source: { approvalState: "approved_internal" } },
         { recipeId: "start-recipe-review", source: { approvalState: "review_required" } }
@@ -586,7 +587,7 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("2 operative Datensätze stehen dienstübergreifend bereit.");
     expect(home).toContain("1 vollständig · 1 teilweise vollständig");
     expect(home).toContain("1 kaufmännische Entwürfe können direkt übernommen werden.");
-    expect(home).toContain("1 Küchenpläne mit Rezept- und Einkaufsbezug sind verfügbar.");
+    expect(home).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
     expect(home).toContain("2 Rezepte · 1 intern freigegeben · 1 Prüfung nötig");
     expect(home).toContain("letzte Erfassung: start-intake-new via manual_form");
     expect(home).toContain("1 Änderungen geladen · neueste: Demo-Daten geladen");

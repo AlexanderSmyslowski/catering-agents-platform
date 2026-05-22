@@ -2050,7 +2050,7 @@ export function App() {
           />
           <StatusCard
             title="Produktionspläne"
-            body={`${dashboard.productionPlans.length} Küchenpläne mit Rezept- und Einkaufsbezug sind verfügbar.`}
+            body={`${dashboard.productionPlans.length} Küchenpläne · ${dashboard.purchaseLists.length} Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.`}
           />
           <StatusCard
             title="Rezeptbibliothek"
