@@ -69,11 +69,12 @@ describe("PA25 clarification answered status anchor", () => {
     expect(projection.messages.filter((message) => message.type === "user_structured_answer")).toHaveLength(1);
   });
 
-  it("keeps the question unanswered for wrong spec/session context wrong question key draft reviewed wrong type or malformed answers", () => {
+  it("keeps the question unanswered for wrong spec/session context wrong question id wrong question key draft reviewed wrong type or malformed answers", () => {
     const answer = submittedAnswer();
     const invalidAnswers = [
       { ...answer, answerId: "answer-wrong-context", context: { specId: "other-spec", productionSessionId: "production-session-other-spec" } },
       { ...answer, answerId: "answer-wrong-session", context: { specId: context.specId, productionSessionId: "production-session-other" } },
+      { ...answer, answerId: "answer-wrong-question", questionId: "spec-pa25-missingFields-event-date" },
       { ...answer, answerId: "answer-wrong-reason", questionKey: { ...answer.questionKey, reasonCode: "wrong-key" } },
       { ...answer, answerId: "answer-draft", status: "draft" },
       { ...answer, answerId: "answer-reviewed", status: "reviewed" },
@@ -85,6 +86,50 @@ describe("PA25 clarification answered status anchor", () => {
 
     expect(questionMessage.clarificationAnswerStatus).toBe("unanswered");
     expect(projection.messages.filter((message) => message.type === "user_structured_answer")).toHaveLength(0);
+  });
+
+  it("projects each submitted answer only on its exact clarification question binding", () => {
+    const specWithTwoQuestions = {
+      ...spec,
+      missingFields: ["attendees.expected", "event.date"]
+    };
+    const [attendeesQuestion, dateQuestion] = buildProductionClarificationQuestions({ spec: specWithTwoQuestions });
+    const answerForAttendees = createSubmittedProductionClarificationAnswer({
+      questions: [attendeesQuestion, dateQuestion],
+      context,
+      questionId: attendeesQuestion.questionId,
+      questionKey: { reason: attendeesQuestion.reason, reasonCode: attendeesQuestion.reasonCode },
+      answerType: "shortText",
+      answerText: "42 Personen final bestätigt.",
+      now: "2026-05-22T10:01:00.000Z"
+    });
+    const answerForDate = createSubmittedProductionClarificationAnswer({
+      questions: [attendeesQuestion, dateQuestion],
+      context,
+      questionId: dateQuestion.questionId,
+      questionKey: { reason: dateQuestion.reason, reasonCode: dateQuestion.reasonCode },
+      answerType: "shortText",
+      answerText: "Termin final bestätigt.",
+      now: "2026-05-22T10:02:00.000Z"
+    });
+
+    const projection = buildProductionConversationProjection({
+      spec: specWithTwoQuestions,
+      questions: [],
+      clarificationAnswers: [answerForAttendees, answerForDate],
+      productionPlans: [],
+      purchaseLists: []
+    });
+    const questionMessages = projection.messages.filter((message) => message.type === "structured_agent_question");
+    const answerMessages = projection.messages.filter((message) => message.type === "user_structured_answer");
+
+    expect(questionMessages).toHaveLength(2);
+    expect(questionMessages.map((message) => message.clarificationAnswerStatus)).toEqual(["answered", "answered"]);
+    expect(answerMessages).toHaveLength(2);
+    expect(answerMessages.map((message) => message.clarificationQuestion?.questionId)).toEqual([
+      attendeesQuestion.questionId,
+      dateQuestion.questionId
+    ]);
   });
 
   it("keeps escaped answer display read-only and does not trigger spec correction or domain output", () => {
