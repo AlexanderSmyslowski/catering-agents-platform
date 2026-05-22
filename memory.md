@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.172
+version: 5.173
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -130,6 +130,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P3-B35 Angebot-Route fuer Beta-Durchlauf ist minimal gehaertet: Die bestehende `/angebot`-Zusammenfassung benennt den internen Beta-Schritt fuer Anfrage, Entwurf, Export und Uebergabe aus vorhandenen Daten; `tests/backoffice-route-smoke.test.ts` schuetzt den Marker zusammen mit Anfrage-/Spec-Bezug, Entwurfsstatus, Exportanker und Produktionsuebergabe. Keine neue Angebotslogik, API, automatische Spec-Korrektur, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P3-B36 Produktion-Route fuer Beta-Durchlauf ist minimal gehaertet: Die bestehende `/produktion`-Zusammenfassung benennt den internen Beta-Schritt fuer Produktion, Einkaufsliste, Exporte, Herkunft und offene Rueckfragen aus vorhandenen Daten; `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Marker neben Plan-/Einkauf-/Export-/Herkunftsankern. Keine neue Produktionslogik, kein neuer Workflow, keine Rezept-/Allergenautomatik, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P3-B37 Upload-Grenzen als Beta-Risiko ist Doku-/Test-only sichtbar gemacht: TESTING und C8 benennen Intake-Limit 8 MiB/bis zu 3 Multipart-Dateien, Rezeptupload-Limit 5 MiB/genau eine Datei, erlaubten Dokumentkorridor PDF/TXT/MD/EML/Pages, kontrollierte Abweisung zu grosser/unerlaubter Dateien und die Blockade produktionsnaher echter/beliebiger Uploads ohne Sandbox/Worker/AV-Gate; `tests/pa14-document-ingestion-corridor-readiness.test.ts` schuetzt diese Marker ohne Rohtext-/Vollhash-Leaks. Keine Parser-/OCR-/LLM-Engine, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
+- P3-B38 Echte-Daten-Stop-Gate ist Doku-/Test-only im Beta-Runbook verankert: C8 und TESTING trennen Demo-/Seed-/synthetische Daten als erlaubten internen Beta-Korridor von echten Personen-/Kunden-/Einsatzdaten, die ohne entschiedenes PII/Retention/Backup-Gate und Sandbox/Worker/AV-Gate `blocked` bleiben; lokale Demo-/Upload-/Health-/Export-Gruensignale sind kein Compliance-Freibrief. Keine echte Datenverarbeitung, keine API, Persistenz, Deployment, SSH, Secrets, Login/OIDC oder Compliance-/DSGVO-Freigabe.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -908,3 +909,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.172 - 2026-05-22
 - P3-B37 Upload-Grenzen als Beta-Risiko ist Doku-/Test-only sichtbar gemacht: TESTING und C8 benennen Intake-Limit 8 MiB/bis zu 3 Multipart-Dateien, Rezeptupload-Limit 5 MiB/genau eine Datei, erlaubten Dokumentkorridor PDF/TXT/MD/EML/Pages, kontrollierte Abweisung zu grosser/unerlaubter Dateien und die Blockade produktionsnaher echter/beliebiger Uploads ohne Sandbox/Worker/AV-Gate.
 - `tests/pa14-document-ingestion-corridor-readiness.test.ts` schuetzt diese Marker zusammen mit vorhandenen Upload-/Ingestion-Grenzen; Rohtext- und Vollhash-Spiegelung bleiben ausgeschlossen. Keine Parser-/OCR-/LLM-Engine, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
+
+### 5.173 - 2026-05-22
+- P3-B38 Echte-Daten-Stop-Gate ist Doku-/Test-only im Beta-Runbook verankert: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` und `TESTING.md` trennen Demo-/Seed-/synthetische Daten als erlaubten internen Beta-Korridor von echten Personen-/Kunden-/Einsatzdaten, die ohne entschiedenes PII/Retention/Backup-Gate und Sandbox/Worker/AV-Gate `blocked` bleiben.
+- `tests/pa14-document-ingestion-corridor-readiness.test.ts` schuetzt den P3-B38-Marker und die Nicht-Ableitung lokaler Demo-/Upload-/Health-/Export-Gruensignale als Compliance-Freibrief. Keine echte Datenverarbeitung, keine API, Persistenz, Deployment, SSH, Secrets, Login/OIDC oder Compliance-/DSGVO-Freigabe.

@@ -121,7 +121,11 @@ In `/produktion` wird fuer die interne Demo geprueft:
    - erlaubte Demo-Dateien laufen im internen Korridor weiter,
    - Produktionsnahe Verarbeitung echter oder beliebiger Uploads bleibt ohne Sandbox/Worker/AV-Gate `blocked`,
    - Warnungen bleiben sichere Status-/Warnkey-Marker ohne Rohtext- oder Vollhash-Spiegelung.
-5. Wenn Plan, Einkaufsliste oder Exportlinks noch fehlen, erklaert die UI den Zustand ruhig und benennt den naechsten Schritt, insbesondere `Berechnung starten`.
+5. P3-B38 Echte-Daten-Stop-Gate bleibt fuer den Beta-Runbook-Kontext verbindlich:
+   - Demo-/Seed-/synthetische Daten bleiben der erlaubte interne Beta-Korridor,
+   - echte Personen-/Kunden-/Einsatzdaten bleiben `blocked`, solange PII/Retention/Backup-Gate und Sandbox/Worker/AV-Gate nicht bewusst entschieden sind,
+   - ein lokaler Demo- oder Upload-Gruenstatus ist kein Compliance-Freibrief und keine Freigabe fuer echte Daten.
+6. Wenn Plan, Einkaufsliste oder Exportlinks noch fehlen, erklaert die UI den Zustand ruhig und benennt den naechsten Schritt, insbesondere `Berechnung starten`.
 
 Diese Anker sind in den bestehenden Tests dokumentiert und abgesichert, insbesondere in:
 

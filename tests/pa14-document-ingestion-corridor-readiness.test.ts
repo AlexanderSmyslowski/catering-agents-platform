@@ -130,4 +130,22 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
       expect(document).not.toContain("sha256:44df5c6bb17828b242fa96cd873be7e535be26cc742aecadd77237b1f86db31d");
     }
   });
+
+  it("anchors the beta real-data stop gate against PII and sandbox gate decisions", () => {
+    const testingGuide = readFileSync(new URL("../TESTING.md", import.meta.url), "utf8");
+    const c8DemoPath = readFileSync(
+      new URL("../docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md", import.meta.url),
+      "utf8"
+    );
+
+    for (const document of [testingGuide, c8DemoPath]) {
+      expect(document).toContain("P3-B38 Echte-Daten-Stop-Gate");
+      expect(document).toContain("Demo-/Seed-/synthetische Daten bleiben der erlaubte interne Beta-Korridor");
+      expect(document).toContain("echte Personen-/Kunden-/Einsatzdaten bleiben `blocked`");
+      expect(document).toContain("PII/Retention/Backup-Gate");
+      expect(document).toContain("Sandbox/Worker/AV-Gate");
+      expect(document).toContain("kein Compliance-Freibrief");
+      expect(document).not.toContain("echte Daten freigegeben");
+    }
+  });
 });
