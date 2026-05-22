@@ -207,6 +207,8 @@ Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und 
 
 Der bestehende Repo-Befehl `npm run local:check` fuehrt genau diesen schmalen lokalen Betriebscheck gegen einen laufenden lokalen Stack aus und prueft zusaetzlich den Demo-Start-/Audit-Beleg. Er startet keine neue Infrastruktur; wenn der lokale Stack fehlt oder lokale Demo-/Audit-Laufzeitdaten nicht zum erwarteten Seed-Stand passen, ist das als lokaler Betriebsstatus zu melden und nicht durch Featurebau oder Infrastrukturbehauptungen zu ueberdecken.
 
+Die erwarteten sichtbaren Demo-Anker bleiben testbar: Der lokale Check prueft Start-, Intake-/Request-, Angebots-, Produktions- und Exportanker aus den vorhandenen Demo-Fixtures, insbesondere `demo-intake-conference-lunch`, `spec-demo-intake-conference-lunch`, `demo-offer-conference-buffet`, `draft-demo-offer-conference-buffet`, `demo-production-coffee`, `plan-spec-demo-production-coffee` und `purchase-spec-demo-production-coffee`.
+
 Die Auditpruefung fragt bewusst das lokale Production-Auditfenster mit `limit=200` ab und erwartet einen `production.seed_demo`-Beleg des lokalen `Betriebs-/Audit-Operator`. Fehlt dieser Beleg oder ist er inhaltlich ungueltig, muss der Check deterministisch rot werden und auf kontrolliertes Neu-Seeden via `npm run local:start` verweisen.
 
 Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Framework. Er ist keine CI-Pflicht, keine Produktionsfreigabe und keine rechtssichere Audit-Aussage.

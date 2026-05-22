@@ -54,6 +54,40 @@ for entry in "${required_urls[@]}"; do
 done
 
 echo ""
+echo "Erwartungsankerpruefung:"
+intake_requests_url="http://127.0.0.1:3101/v1/intake/requests"
+intake_requests_body="$(curl -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${intake_requests_url}")"
+if [[ "${intake_requests_body}" != *"demo-intake-conference-lunch"* ]]; then
+  echo "  Intake-Request-Check: erwarteter Demo-Request demo-intake-conference-lunch fehlt (${intake_requests_url})" >&2
+  exit 1
+fi
+printf '  Intake-Request-Check: erreichbar (%s, enthält demo-intake-conference-lunch)\n' "${intake_requests_url}"
+
+intake_specs_url="http://127.0.0.1:3101/v1/intake/specs"
+intake_specs_body="$(curl -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${intake_specs_url}")"
+if [[ "${intake_specs_body}" != *"spec-demo-intake-conference-lunch"* ]]; then
+  echo "  Intake-Spec-Check: erwartete Demo-Spec spec-demo-intake-conference-lunch fehlt (${intake_specs_url})" >&2
+  exit 1
+fi
+printf '  Intake-Spec-Check: erreichbar (%s, enthält spec-demo-intake-conference-lunch)\n' "${intake_specs_url}"
+
+offer_drafts_url="http://127.0.0.1:3102/v1/offers/drafts"
+offer_drafts_body="$(curl -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${offer_drafts_url}")"
+if [[ "${offer_drafts_body}" != *"draft-demo-offer-conference-buffet"* ]]; then
+  echo "  Angebots-Check: erwarteter Demo-Entwurf draft-demo-offer-conference-buffet fehlt (${offer_drafts_url})" >&2
+  exit 1
+fi
+printf '  Angebots-Check: erreichbar (%s, enthält draft-demo-offer-conference-buffet)\n' "${offer_drafts_url}"
+
+production_plans_url="http://127.0.0.1:3103/v1/production/plans"
+production_plans_body="$(curl -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${production_plans_url}")"
+if [[ "${production_plans_body}" != *"plan-spec-demo-production-coffee"* ]]; then
+  echo "  Produktions-Check: erwarteter Demo-Plan plan-spec-demo-production-coffee fehlt (${production_plans_url})" >&2
+  exit 1
+fi
+printf '  Produktions-Check: erreichbar (%s, enthält plan-spec-demo-production-coffee)\n' "${production_plans_url}"
+
+echo ""
 echo "Exportpruefung:"
 export_url="http://127.0.0.1:3200/api/exports/v1/exports/production-plans/plan-spec-demo-production-coffee/html"
 export_anchor="Produktionsplan plan-spec-demo-production-coffee"

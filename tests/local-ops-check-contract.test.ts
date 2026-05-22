@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
 const checkScript = readFileSync("scripts/check-local-ops.sh", "utf8");
+const demoScenarios = readFileSync("shared-core/src/fixtures/demo-scenarios.ts", "utf8");
 const c8AcceptanceDoc = readFileSync("docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md", "utf8");
 const readmeDoc = readFileSync("README.md", "utf8");
 const testingDoc = readFileSync("TESTING.md", "utf8");
@@ -37,6 +38,34 @@ describe("local ops check contract", () => {
       expect(doc).toContain("interner Demo-/Abnahmeweg");
       expect(doc).toContain("keine externe Freigabe");
     }
+  });
+
+  it("keeps the expected demo fixture anchors discoverable and covered by the local check", () => {
+    for (const expectedFixtureAnchor of [
+      "demo-intake-conference-lunch",
+      "demo-offer-conference-buffet",
+      "demo-production-coffee"
+    ]) {
+      expect(demoScenarios).toContain(expectedFixtureAnchor);
+      expect(checkScript).toContain(expectedFixtureAnchor);
+      expect(testingDoc).toContain(expectedFixtureAnchor);
+    }
+
+    for (const expectedLocalCheckAnchor of [
+      "Startweg vorhanden",
+      "Erwartungsankerpruefung",
+      "/v1/intake/requests",
+      "/v1/intake/specs",
+      "/v1/offers/drafts",
+      "/v1/production/plans",
+      "draft-demo-offer-conference-buffet",
+      "plan-spec-demo-production-coffee",
+      "purchase-spec-demo-production-coffee"
+    ]) {
+      expect(checkScript).toContain(expectedLocalCheckAnchor);
+    }
+
+    expect(testingDoc).toContain("Start-, Intake-/Request-, Angebots-, Produktions- und Exportanker");
   });
 
   it("keeps the C8 acceptance path discoverable and tied to real repo anchors", () => {
