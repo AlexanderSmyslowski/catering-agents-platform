@@ -434,6 +434,19 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Exportlinks erscheinen erst, wenn Produktionsplan und Einkaufsliste vorhanden sind.");
   });
 
+  it("shows the purchase-list gap when a production plan exists but the purchase list is still missing", async () => {
+    installProductionAcceptanceMocks({ completeSpec: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Produktionsplan");
+    expect(content).toContain("Produktionsblatt exportieren");
+    expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste offen");
+    expect(content).toContain("Einkaufsliste noch offen");
+    expect(content).toContain("Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch.");
+    expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
+  });
+
   it("shows the next step to inspect downloads when production objects already exist", async () => {
     installProductionAcceptanceMocks({ completeSpec: true, withCurrentPurchaseList: true });
 

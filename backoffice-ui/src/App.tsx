@@ -1324,11 +1324,17 @@ export function App() {
         description: "Die vorhandene Spezifikation kann nun in vorhandene Produktionsobjekte überführt werden."
       };
     }
+    if (currentSpecPurchaseLists.length === 0) {
+      return {
+        title: "Einkaufsliste noch offen",
+        description: "Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch."
+      };
+    }
     return {
       title: "Produktionsobjekte und Downloads prüfen",
       description: "Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar."
     };
-  }, [focusedProductionSpec, productionQuestions.length, selectedPlan]);
+  }, [currentSpecPurchaseLists.length, focusedProductionSpec, productionQuestions.length, selectedPlan]);
 
   useEffect(() => {
     if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {

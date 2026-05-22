@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.141
+version: 5.142
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -36,6 +36,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Minimaler UI-/API-Fix: `backoffice-ui/src/api.ts` uebernimmt vorhandene JSON-`message`-Fehler aus Fetch-Antworten fuer JSON- und Multipart-Pfade, damit Limit-/MIME-Abweisungen nicht auf generische HTTP-Statuszeilen reduziert werden. Keine neue API, Persistenz, Parser-/OCR-/LLM-Engine oder Upload-Framework-Erweiterung.
 - C7 Leer-/Fehlerzustaende fuer interne Nutzung ist umgesetzt: `/produktion` erklaert beim klaren Spec-ohne-Plan-/Einkaufsliste-Zustand den naechsten Schritt und die noch fehlenden Exportlinks explizit; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Recovery-Plattform, API, Persistenz oder Produktlogik.
 - C8 interner Demo-Durchlauf als reproduzierbarer Abnahmeweg ist Doku-only umgesetzt und in B1/B2 als Vertrag pruefbar und narrativ geschaerft: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` verknuepft lokale Voraussetzungen, `npm run local:status`, `npm run local:check`, `/angebot`, `/produktion`, Angebot-Happy-Path/Handoff, Upload-/Import-Warnanker, Exportlinks mit Trusted-Actor-Kontext und Full Gates; `tests/local-ops-check-contract.test.ts` prueft Auffindbarkeit, reale Scripts/Testanker und die Kernanker in C8/TESTING/README. Klar begrenzt auf interne Demo-/Abnahmesicht: Demo-Seed ist interne Verifikationshilfe, Auditbeleg ist interner Betriebs-/Kontrollnachweis; keine Produktionsdatenwelt, keine Produktionsfreigabe, keine externe Freigabe und keine rechtssichere Audit-/Compliance-Aussage.
+- B4 Produktionsobjekt-/Export-Readiness ist minimal gehaertet: `/produktion` benennt bei vorhandenem Produktionsplan, aber fehlender Einkaufsliste den Zustand `Einkaufsliste noch offen` und vermeidet die Aussage, dass alle Exporte schon verfuegbar sind; Regression in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Generierungslogik, API, Persistenz oder Produktlogik.
 - P8 UI-Rollenverantwortung und Operator-Zuordnung ist als schmale Mini-Spezifikation fuer den Backoffice-UI-Kern ergänzt worden; sie ordnet Home, Angebotsansicht, Produktionsansicht sowie read-only Detail-/Export-/Audit-Kontexte den bestehenden Minimalrollen und Operatornamen zu
 - P9 formaler AuthN-/AuthZ-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; sie fasst die bestehende Rollen-/Guard-Grundlage, die Actor-Zuordnung und den Proxy-Rahmen zu einem konservativen internen AuthN-/AuthZ-Rahmen zusammen
 - P10 manuelle Betriebsinterventionen und Fallbacks im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie ordnen nur die manuellen Betriebswege, Fallbacks und Grenzen im bestehenden MVP-Rahmen ein, ohne eine neue Incident- oder Recovery-Plattform einzuführen
@@ -758,3 +759,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.141 - 2026-05-22
 - B2 schaerft den Demo-Start-/Seed-/Audit-Korridor narrativ in README, TESTING und C8: `local:status` ist nur Prozess-/Erreichbarkeitsuebersicht, `local:check` ist lokaler Betriebs-/Seed-/Export-/Auditbeleg gegen einen laufenden Stack.
 - Demo-Seed ist als interne Verifikationshilfe und nicht als Produktionsdatenmodell beschrieben; Auditbeleg als interner Betriebs-/Kontrollnachweis und nicht als rechtssichere Audit-/Compliance-Aussage; C8 bleibt interner Demo-/Abnahmeweg ohne Produktionsfreigabe oder externe Freigabe. Keine Produktlogik, API, Persistenz, Migration, OAuth/Google/Login/OIDC oder neue Audit-/Compliance-Welt.
+
+### 5.142 - 2026-05-22
+- B4 Produktionsobjekt-/Export-Readiness ist minimal umgesetzt: `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt nun den Zustand vorhandener Produktionsplan, aber noch fehlende Einkaufsliste/fehlender Einkaufslisten-Export.
+- Minimaler UI-/Copy-Fix in `/produktion`: Der naechste Schritt lautet in diesem Zustand `Einkaufsliste noch offen` statt pauschal alle Downloads als verfuegbar einzuordnen. Keine neue Generierungslogik, API, Persistenz, Migration oder Produktlogik.
