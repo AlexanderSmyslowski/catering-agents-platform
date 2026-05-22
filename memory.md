@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.143
+version: 5.144
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -38,6 +38,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - C8 interner Demo-Durchlauf als reproduzierbarer Abnahmeweg ist Doku-only umgesetzt und in B1/B2 als Vertrag pruefbar und narrativ geschaerft: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` verknuepft lokale Voraussetzungen, `npm run local:status`, `npm run local:check`, `/angebot`, `/produktion`, Angebot-Happy-Path/Handoff, Upload-/Import-Warnanker, Exportlinks mit Trusted-Actor-Kontext und Full Gates; `tests/local-ops-check-contract.test.ts` prueft Auffindbarkeit, reale Scripts/Testanker und die Kernanker in C8/TESTING/README. Klar begrenzt auf interne Demo-/Abnahmesicht: Demo-Seed ist interne Verifikationshilfe, Auditbeleg ist interner Betriebs-/Kontrollnachweis; keine Produktionsdatenwelt, keine Produktionsfreigabe, keine externe Freigabe und keine rechtssichere Audit-/Compliance-Aussage.
 - B4 Produktionsobjekt-/Export-Readiness ist minimal gehaertet: `/produktion` benennt bei vorhandenem Produktionsplan, aber fehlender Einkaufsliste den Zustand `Einkaufsliste noch offen` und vermeidet die Aussage, dass alle Exporte schon verfuegbar sind; Regression in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Generierungslogik, API, Persistenz oder Produktlogik.
 - B5 Upload-/Warnungszustand im Demo-Weg ist minimal gehaertet: `/produktion` zeigt vorhandene DocumentIngestion-Warnungen im Detailanker als `Ingestion-Warnung: Status ... · Warnkey ...`, Quellenmetadaten als `Quellenmetadaten (gekürzt)` mit Hash-Kurzanker, und der Backoffice-Smoke schuetzt Rohtext- und Vollhash-Nichtspiegelung. Keine Parser-/OCR-/LLM-Erweiterung, keine neue API und keine Persistenz.
+- B6 Trusted-Actor-/Export-Grenzen fuer Abnahme ist Doku-/Test-only geschaerft: C8, TESTING und PA9 ordnen Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext ein; `tests/b6-trusted-export-acceptance-boundary.test.ts` schuetzt die PA8-Exportpfade und Grenzen. Keine Exportlogik, API, Persistenz, OIDC/Login, externe Freigabe, Produktionsfreigabe oder rechtssichere Audit-/Compliance-Behauptung.
 - P8 UI-Rollenverantwortung und Operator-Zuordnung ist als schmale Mini-Spezifikation fuer den Backoffice-UI-Kern ergänzt worden; sie ordnet Home, Angebotsansicht, Produktionsansicht sowie read-only Detail-/Export-/Audit-Kontexte den bestehenden Minimalrollen und Operatornamen zu
 - P9 formaler AuthN-/AuthZ-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; sie fasst die bestehende Rollen-/Guard-Grundlage, die Actor-Zuordnung und den Proxy-Rahmen zu einem konservativen internen AuthN-/AuthZ-Rahmen zusammen
 - P10 manuelle Betriebsinterventionen und Fallbacks im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie ordnen nur die manuellen Betriebswege, Fallbacks und Grenzen im bestehenden MVP-Rahmen ein, ohne eine neue Incident- oder Recovery-Plattform einzuführen
@@ -768,3 +769,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.143 - 2026-05-22
 - B5 Upload-/Warnungszustand im Demo-Weg ist minimal umgesetzt: `tests/backoffice-route-smoke.test.ts` schuetzt, dass `/produktion` vorhandene DocumentIngestion-Warnungen fuer die Demo-Abnahme als Warnstatus plus Warnkey sichtbar macht und dabei Rohtexte sowie volle SHA-256-Hashes nicht spiegelt.
 - Kleine UI-/Copy- und Doku-Schaerfung in `/produktion`, TESTING und C8: Quellenmetadaten sind als gekuerzt benannt; Hashes bleiben Kurzanker. Keine Produktlogik, Parser-/OCR-/LLM-Erweiterung, neue API, Persistenz oder Migration.
+
+### 5.144 - 2026-05-22
+- B6 Trusted-Actor-/Export-Grenzen fuer Abnahme ist Doku-/Test-only umgesetzt: `tests/b6-trusted-export-acceptance-boundary.test.ts` verankert die drei bestehenden PA8-Exportpfade fuer Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV und verlangt eine konsistente Einordnung in C8, TESTING und PA9.
+- C8, TESTING und PA9 benennen Exporte nun als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext und grenzen sie von externer Freigabe, Produktionsfreigabe, rechtssicherer Audit-/Compliance-Behauptung und OIDC/Login ab. Keine neue Exportlogik, API, Persistenz oder Security-/Login-Welt.

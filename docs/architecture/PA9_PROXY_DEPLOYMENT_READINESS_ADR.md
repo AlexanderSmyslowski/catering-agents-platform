@@ -111,3 +111,5 @@ Vor produktionsnaher Exposition muss ein Deployment-Agent mindestens diesen Pref
 Der Trusted-Actor-Korridor ist nach PA8 ein technisches Mindest-Gate fuer interne und produktionsnahe Servicepfade, aber keine eigenstaendige Nutzer-Authentifizierung.
 
 PA9 macht deshalb die Proxy-/Deployment-Grenze verbindlich: Client-Header sind nicht vertrauenswuerdig; vertrauenswuerdig ist nur der vom Edge kontrolliert erzeugte Header-Kontext. Ohne Header-Stripping, kontrollierte Header-Injektion, gesetztes Server-Secret und nicht direkt exponierte Services darf der Stand nicht als produktionsnah bereit gelten.
+
+B6 ordnet die bestehenden Exportpfade fuer Angebot, Produktionsblatt-/Produktionsplan und Einkaufsliste nur als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext ein. Diese Exportartefakte sind keine externe Freigabe, keine Produktionsfreigabe, keine rechtssichere Audit-/Compliance-Behauptung und kein OIDC/Login; die PA9-Grenze bleibt Proxy-/Deployment-Readiness ohne neue Login-, Session-, Persistenz- oder Exportlogik.

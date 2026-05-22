@@ -108,7 +108,7 @@ Diese Anker sind in den bestehenden Tests dokumentiert und abgesichert, insbeson
 
 ## 7. Exporte mit Trusted-Actor-Kontext
 
-Der Demo-Durchlauf betrachtet Exporte als interne Arbeitsbelege:
+Der Demo-Durchlauf betrachtet Exporte als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext:
 
 - Angebots-HTML
 - Produktionsblatt-/Produktionsplan-HTML
@@ -118,7 +118,8 @@ Im lokalen Dev-/Testbetrieb funktionieren die vorhandenen Pfade ueber den bekann
 
 - Bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET` zaehlen Rollen nur aus `x-catering-actor-name` plus passendem `x-catering-trusted-secret`.
 - Frei gesetztes `x-actor-name` ist nur lokale Dev-/Test-Kompatibilitaet und kein produktionsnaher Sicherheitskontext.
-- Exporte bleiben read-only Arbeitsartefakte und sind keine Signatur, keine externe Freigabe und keine rechtliche Verbindlichkeit.
+- Exporte bleiben read-only Arbeitsartefakte und sind keine Signatur, keine externe Freigabe, keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Behauptung.
+- Dieser Abnahmeanker fuehrt kein OIDC/Login, keine Session-Welt und keine neue Exportlogik ein.
 
 Die Export-/Read-path-Auth-Annahmen werden durch bestehende Tests und Doku getragen, insbesondere `tests/pa8-read-path-auth.test.ts` und `docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md`.
 
@@ -154,7 +155,7 @@ Er ist ausdruecklich nicht:
 
 - keine Produktionsfreigabe,
 - keine Freigabe fuer externe Nutzung,
-- keine rechtssichere Audit- oder Compliance-Behauptung,
+- keine rechtssichere Audit-/Compliance-Behauptung,
 - keine Signatur- oder Freigabewelt fuer Exporte,
 - keine neue QA-, Release- oder Monitoring-Plattform,
 - keine neue API, Persistenz, Migration oder Recovery-Plattform,

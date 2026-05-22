@@ -43,7 +43,7 @@ Relevante bestehende Tests:
 - `tests/pa6-beta-readiness-summary.test.ts`
 - `tests/pa7-auth-read-path-decision-adr.test.ts`
 - `tests/pa8-read-path-auth.test.ts`
-  - C5 ergaenzt hier die explizite read-only Exportlink-Regression fuer den vorhandenen Angebot-HTML-Export unter Trusted-Actor-Kontext; Produktionsplan-/Produktionsblatt-HTML und Einkaufslisten-CSV waren bereits im PA8-Korridor enthalten.
+  - C5/B6 ergaenzt und benennt hier die explizite read-only Exportlink-Regression fuer die vorhandenen internen read-only Arbeitsbelege unter Trusted-Actor-Kontext: Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV. Diese Exporte bleiben Arbeitsbelege, keine externe Freigabe, keine Produktionsfreigabe, keine rechtssichere Audit-/Compliance-Behauptung und kein OIDC/Login.
 - `tests/pa9-proxy-deployment-readiness-adr.test.ts`
 - `tests/document-ingestion-boundary.test.ts`
 - `tests/pa11-intake-document-ingestion-bridge.test.ts`
@@ -170,6 +170,8 @@ Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Frame
 ### 4.1 Interner Demo-/Abnahmeweg C8
 
 Der C8-Demo-/Abnahmeweg ist unter `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` dokumentiert. Er verknuepft die bestehenden lokalen Befehle `npm run local:status` und `npm run local:check` mit den UI-Routen `/angebot` und `/produktion`, dem vorhandenen Angebot-Happy-Path, dem Angebot-zu-Produktion-Handoff-Anker, sicheren Upload-/Import-Warnankern, read-only Exportlinks unter Trusted-Actor-Kontext und den Full Gates `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.
+
+B6 ordnet diese Exportlinks ausdruecklich als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext ein: Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV. Der Korridor bleibt ohne externe Freigabe, ohne Produktionsfreigabe, ohne rechtssichere Audit-/Compliance-Behauptung und ohne OIDC/Login.
 
 Der C8-Weg ist Doku-only und bleibt ein interner MVP-/Demo-Korridor. Er ist ein interner Demo-/Abnahmeweg, keine Produktionsfreigabe, keine externe Freigabe, keine externe Compliance-Abnahme und keine rechtssichere Auditbehauptung.
 
