@@ -271,6 +271,13 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     await expect(store.saveClarificationAnswer({ ...validAnswer, status: "draft" } as never)).rejects.toThrow(
       "Nur submitted shortText-Klärungsantworten dürfen gespeichert werden."
     );
+    await expect(
+      store.saveClarificationAnswer({
+        ...validAnswer,
+        answerId: "answer-store-wrong-session",
+        context: { ...validAnswer.context, productionSessionId: "production-session-other-spec" }
+      } as never)
+    ).rejects.toThrow("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
     await expect(store.saveClarificationAnswer({ ...validAnswer, answerType: "yesNo" } as never)).rejects.toThrow(
       "Nur submitted shortText-Klärungsantworten dürfen gespeichert werden."
     );

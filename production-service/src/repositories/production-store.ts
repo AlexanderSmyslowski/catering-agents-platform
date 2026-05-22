@@ -28,12 +28,15 @@ function safeClarificationAnswerForStorage(answer: ProductionClarificationAnswer
 }
 
 function isSubmittedShortTextAnswer(answer: ProductionClarificationAnswer): boolean {
+  const specId = typeof answer.context?.specId === "string" ? answer.context.specId.trim() : "";
+  const productionSessionId = typeof answer.context?.productionSessionId === "string"
+    ? answer.context.productionSessionId.trim()
+    : "";
+
   return typeof answer.answerId === "string" &&
     Boolean(answer.answerId.trim()) &&
-    typeof answer.context?.specId === "string" &&
-    Boolean(answer.context.specId.trim()) &&
-    typeof answer.context?.productionSessionId === "string" &&
-    Boolean(answer.context.productionSessionId.trim()) &&
+    Boolean(specId) &&
+    productionSessionId === `production-session-${specId}` &&
     typeof answer.questionId === "string" &&
     Boolean(answer.questionId.trim()) &&
     typeof answer.questionKey?.reason === "string" &&
