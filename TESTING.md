@@ -148,9 +148,16 @@ Der minimale lokale Smoke-Korridor umfasst:
 - Health: `http://127.0.0.1:3104/health`
 - read-only Exportpfade fuer Angebot, Produktionsblatt und Einkaufsliste, soweit Demo-Daten vorhanden sind
 
+Abgrenzung der lokalen Befehle:
+
+- `npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht fuer die erwarteten `screen`-Sitzungen und Service-Ports. Der Befehl zeigt, ob der lokale Stack gerade plausibel laeuft; er belegt noch keinen vollstaendigen Betriebsweg.
+- `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack. Der Check prueft Startweg, Status, UI-Routen, Health-Endpunkte, read-only Exportpfade und einen vorhandenen Demo-Start-/Auditbeleg.
+
 Der bestehende Repo-Befehl `npm run local:check` fuehrt genau diesen schmalen lokalen Betriebscheck gegen einen laufenden lokalen Stack aus und prueft zusaetzlich den Demo-Start-/Audit-Beleg. Er startet keine neue Infrastruktur; wenn der lokale Stack fehlt oder lokale Demo-/Audit-Laufzeitdaten nicht zum erwarteten Seed-Stand passen, ist das als lokaler Betriebsstatus zu melden und nicht durch Featurebau oder Infrastrukturbehauptungen zu ueberdecken.
 
-Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Framework.
+Die Auditpruefung fragt bewusst das lokale Production-Auditfenster mit `limit=200` ab und erwartet einen `production.seed_demo`-Beleg des lokalen `Betriebs-/Audit-Operator`. Fehlt dieser Beleg oder ist er inhaltlich ungueltig, muss der Check deterministisch rot werden und auf kontrolliertes Neu-Seeden via `npm run local:start` verweisen.
+
+Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Framework. Er ist keine CI-Pflicht, keine Produktionsfreigabe und keine rechtssichere Audit-Aussage.
 
 ## 5. Was Phase 4 bewusst nicht tut
 
