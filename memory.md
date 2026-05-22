@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.175
+version: 5.176
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -133,6 +133,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P3-B38 Echte-Daten-Stop-Gate ist Doku-/Test-only im Beta-Runbook verankert: C8 und TESTING trennen Demo-/Seed-/synthetische Daten als erlaubten internen Beta-Korridor von echten Personen-/Kunden-/Einsatzdaten, die ohne entschiedenes PII/Retention/Backup-Gate und Sandbox/Worker/AV-Gate `blocked` bleiben; lokale Demo-/Upload-/Health-/Export-Gruensignale sind kein Compliance-Freibrief. Keine echte Datenverarbeitung, keine API, Persistenz, Deployment, SSH, Secrets, Login/OIDC oder Compliance-/DSGVO-Freigabe.
 - P3-B39 Full Gates und Status-Snapshot ist No-Product-Change abgeschlossen: Plan-3-Zwischenstand wurde ueber fokussierte P3-Smokes, `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check` und `npm run local:status` verifiziert; Snapshot liegt unter `docs/agent-memory/memory_v5.174_2026-05-22.md`. Keine Produktlogik, API, Persistenz, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
 - P4-B44 Read-only Status in `/produktion` ist minimal geschaerft: die bestehende Production Conversation Projection wird in der UI nun auch fuer optionale vorhandene `clarificationAnswers` genutzt, zeigt beantwortete Rueckfragen als read-only Nutzerantworten und fasst offene/beantwortete Rueckfragen in der ruhigen Zusammenfassung zusammen; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue API, Persistenz, Migration, Antwortbearbeitung, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik oder echte Daten.
+- P4-B45 synthetischer beantworteter Rueckfragen-Demoanker ist als Testfixture umgesetzt: `shared-core/src/fixtures/demo-scenarios.ts` stellt einen nicht-sensitiven beantworteten Clarification-Anker bereit, und `tests/local-ops-check-contract.test.ts` schuetzt dessen Projektion als beantwortete Rueckfrage. Keine echte Datenverarbeitung, keine neue API, Persistenz/Migration, Antwortbearbeitung, automatische Spec-Korrektur, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets oder Login/OIDC.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -923,3 +924,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.175 - 2026-05-22
 - P4-B44 Read-only Status in `/produktion` ist umgesetzt: vorhandene `clarificationAnswers`, sofern sie im bestehenden Spec-/Projection-Read-Pfad mitgeliefert werden, werden in der bestehenden `ProductionConversationProjection` ausgewertet und in `/produktion` read-only als beantwortete Rueckfragen plus Antwort-Bubble sichtbar.
 - Die kompakte Production-Workbench-Zusammenfassung nennt nun offene und beantwortete Rueckfragen getrennt; der Smoke-Test `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den beantworteten Statusanker. Keine neue API, Persistenz, Migration, Antwortbearbeitung, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
+
+### 5.176 - 2026-05-22
+- P4-B45 synthetischer beantworteter Rueckfragen-Demoanker ist umgesetzt: `shared-core/src/fixtures/demo-scenarios.ts` und synchroner Runtime-Pfad `.js` liefern einen nicht-sensitiven Demoanker `spec-demo-production-answered-clarification` mit einer submitted `shortText`-Antwort.
+- `tests/local-ops-check-contract.test.ts` schuetzt, dass dieser Anker ohne echte Daten in der bestehenden `ProductionConversationProjection` als beantwortete Rueckfrage plus Nutzerantwort projiziert wird. Keine neue API, Persistenz/Migration, Antwortbearbeitung, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.

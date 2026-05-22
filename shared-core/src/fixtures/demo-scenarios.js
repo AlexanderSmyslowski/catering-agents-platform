@@ -1,3 +1,7 @@
+import {
+    buildProductionClarificationQuestions,
+    createSubmittedProductionClarificationAnswer
+} from "../production-clarification.js";
 import { createEventRequestFromText } from "../request-factory.js";
 import { normalizeEventRequestToSpec } from "../rules/normalization.js";
 export function getDemoIntakeRequests() {
@@ -49,4 +53,40 @@ export function getDemoProductionSpecs() {
             commercialState: "manual"
         })
     ];
+}
+export function getDemoProductionAnsweredClarificationAnchor() {
+    const spec = normalizeEventRequestToSpec(createEventRequestFromText({
+        requestId: "demo-production-answered-clarification",
+        channel: "text",
+        rawText: "Synthetischer Demoanker am 2026-12-16 fuer 42 Teilnehmer mit Lunchbuffet und Rueckfragen-Fortsetzung."
+    }), {
+        sourceType: "manual_input",
+        reference: "demo-production-answered-clarification",
+        commercialState: "manual"
+    });
+    const questions = buildProductionClarificationQuestions({ spec });
+    const [question] = questions;
+    return {
+        spec,
+        clarificationAnswers: question
+            ? [
+                createSubmittedProductionClarificationAnswer({
+                    questions,
+                    context: {
+                        specId: spec.specId,
+                        productionSessionId: `production-session-${spec.specId}`
+                    },
+                    questionId: question.questionId,
+                    questionKey: {
+                        reason: question.reason,
+                        reasonCode: question.reasonCode
+                    },
+                    answerType: "shortText",
+                    answerText: "Synthetische Demo-Antwort: Rueckfrage im internen Demo-Pfad beantwortet.",
+                    actorName: "Betriebs-/Audit-Operator",
+                    now: "2026-05-22T20:45:00.000Z"
+                })
+            ]
+            : []
+    };
 }

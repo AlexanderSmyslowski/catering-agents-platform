@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
+import { buildProductionConversationProjection } from "../shared-core/src/conversation-projection.js";
+import { getDemoProductionAnsweredClarificationAnchor } from "../shared-core/src/fixtures/demo-scenarios.js";
 import { describe, expect, it } from "vitest";
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
@@ -66,6 +68,23 @@ describe("local ops check contract", () => {
     }
 
     expect(testingDoc).toContain("Start-, Intake-/Request-, Angebots-, Produktions- und Exportanker");
+  });
+
+  it("keeps a synthetic answered clarification demo anchor traceable without real data", () => {
+    const anchor = getDemoProductionAnsweredClarificationAnchor();
+    const projection = buildProductionConversationProjection({
+      spec: anchor.spec as unknown as Record<string, unknown>,
+      questions: [],
+      clarificationAnswers: anchor.clarificationAnswers
+    });
+
+    expect(anchor.spec.specId).toBe("spec-demo-production-answered-clarification");
+    expect(anchor.clarificationAnswers).toHaveLength(1);
+    expect(anchor.clarificationAnswers[0]?.answerText.value).toContain("Synthetische Demo-Antwort");
+    expect(projection.messages.some((message) => message.clarificationAnswerStatus === "answered")).toBe(true);
+    expect(projection.messages.some((message) => message.type === "user_structured_answer")).toBe(true);
+    expect(demoScenarios).toContain("demo-production-answered-clarification");
+    expect(demoScenarios).toContain("Synthetische Demo-Antwort");
   });
 
   it("keeps the C8 acceptance path discoverable and tied to real repo anchors", () => {
