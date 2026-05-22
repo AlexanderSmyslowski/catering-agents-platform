@@ -29,4 +29,17 @@ describe("PA6 internal beta readiness summary", () => {
     expect(doc).toContain("keine LLM-Rezeptgenerierung");
     expect(doc).toContain("keine fachlich/rechtlich abgesicherte Allergen Engine Deutsch/Englisch");
   });
+
+  it("keeps the management view explicit about implemented, internal-only, open, risk and Alexander decision", () => {
+    const doc = readFileSync(readinessDocPath, "utf8");
+
+    expect(doc).toContain("## 9. Management-/Lageuebersicht B7");
+    expect(doc).toContain("### Tatsaechlich umgesetzt");
+    expect(doc).toContain("### Nur dokumentiert / nur intern abnahmefaehig");
+    expect(doc).toContain("### Offen");
+    expect(doc).toContain("### Risiko");
+    expect(doc).toContain("### Naechste Entscheidung fuer Alexander");
+    expect(doc).toContain("Keine Produktionsfreigabe, keine externe Freigabe und keine rechtssichere Audit-/Compliance-Behauptung.");
+    expect(doc).toContain("Alexander muss entscheiden, ob B8 zuerst AuthN/AuthZ/read-path Auth, PII-/Retention/Backup oder Sandbox-/Worker/AV schliesst.");
+  });
 });

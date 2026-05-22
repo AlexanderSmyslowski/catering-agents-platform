@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.144
+version: 5.145
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -39,6 +39,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - B4 Produktionsobjekt-/Export-Readiness ist minimal gehaertet: `/produktion` benennt bei vorhandenem Produktionsplan, aber fehlender Einkaufsliste den Zustand `Einkaufsliste noch offen` und vermeidet die Aussage, dass alle Exporte schon verfuegbar sind; Regression in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Generierungslogik, API, Persistenz oder Produktlogik.
 - B5 Upload-/Warnungszustand im Demo-Weg ist minimal gehaertet: `/produktion` zeigt vorhandene DocumentIngestion-Warnungen im Detailanker als `Ingestion-Warnung: Status ... · Warnkey ...`, Quellenmetadaten als `Quellenmetadaten (gekürzt)` mit Hash-Kurzanker, und der Backoffice-Smoke schuetzt Rohtext- und Vollhash-Nichtspiegelung. Keine Parser-/OCR-/LLM-Erweiterung, keine neue API und keine Persistenz.
 - B6 Trusted-Actor-/Export-Grenzen fuer Abnahme ist Doku-/Test-only geschaerft: C8, TESTING und PA9 ordnen Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext ein; `tests/b6-trusted-export-acceptance-boundary.test.ts` schuetzt die PA8-Exportpfade und Grenzen. Keine Exportlogik, API, Persistenz, OIDC/Login, externe Freigabe, Produktionsfreigabe oder rechtssichere Audit-/Compliance-Behauptung.
+- B7 Management-/Lageuebersicht ist Doku-/Test-only geschaerft: PA6 trennt jetzt hart zwischen tatsaechlich umgesetzt, nur dokumentiert / nur intern abnahmefaehig, offen, Risiko und naechster Entscheidung fuer Alexander; `tests/pa6-beta-readiness-summary.test.ts` schuetzt diese Struktur. Keine Produktlogik, UI, API, Persistenz, Migration, OIDC/Login, Produktionsfreigabe, externe Freigabe oder rechtssichere Audit-/Compliance-Behauptung.
 - P8 UI-Rollenverantwortung und Operator-Zuordnung ist als schmale Mini-Spezifikation fuer den Backoffice-UI-Kern ergänzt worden; sie ordnet Home, Angebotsansicht, Produktionsansicht sowie read-only Detail-/Export-/Audit-Kontexte den bestehenden Minimalrollen und Operatornamen zu
 - P9 formaler AuthN-/AuthZ-Rahmen im MVP ist als schmale Mini-Spezifikation ergänzt worden; sie fasst die bestehende Rollen-/Guard-Grundlage, die Actor-Zuordnung und den Proxy-Rahmen zu einem konservativen internen AuthN-/AuthZ-Rahmen zusammen
 - P10 manuelle Betriebsinterventionen und Fallbacks im MVP sind als schmale Mini-Spezifikation ergänzt worden; sie ordnen nur die manuellen Betriebswege, Fallbacks und Grenzen im bestehenden MVP-Rahmen ein, ohne eine neue Incident- oder Recovery-Plattform einzuführen
@@ -773,3 +774,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.144 - 2026-05-22
 - B6 Trusted-Actor-/Export-Grenzen fuer Abnahme ist Doku-/Test-only umgesetzt: `tests/b6-trusted-export-acceptance-boundary.test.ts` verankert die drei bestehenden PA8-Exportpfade fuer Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV und verlangt eine konsistente Einordnung in C8, TESTING und PA9.
 - C8, TESTING und PA9 benennen Exporte nun als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext und grenzen sie von externer Freigabe, Produktionsfreigabe, rechtssicherer Audit-/Compliance-Behauptung und OIDC/Login ab. Keine neue Exportlogik, API, Persistenz oder Security-/Login-Welt.
+
+### 5.145 - 2026-05-22
+- B7 Management-/Lageuebersicht ist Doku-/Test-only umgesetzt: `docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md` enthaelt jetzt eine harte B7-Lageuebersicht mit den getrennten Bereichen tatsaechlich umgesetzt, nur dokumentiert / nur intern abnahmefaehig, offen, Risiko und naechste Entscheidung fuer Alexander.
+- `tests/pa6-beta-readiness-summary.test.ts` schuetzt diese Management-Struktur und die Grenze: keine Produktionsfreigabe, keine externe Freigabe und keine rechtssichere Audit-/Compliance-Behauptung. Keine Produktlogik, UI, API, Persistenz, Migration oder OIDC/Login.

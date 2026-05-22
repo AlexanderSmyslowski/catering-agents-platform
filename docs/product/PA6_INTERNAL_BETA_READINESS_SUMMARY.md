@@ -1,7 +1,7 @@
 # PA6 Interne Beta-/Abnahme-Readiness-Zusammenfassung
 
 Status: interne Readiness-Zusammenfassung v0.1 auf Basis bestehender Repo-Signale
-Stand: 2026-05-21
+Stand: 2026-05-22
 Scope: Doku-only; keine neue Runtime-Funktion, keine neue API, keine neue Persistenz
 
 ## 1. Zweck und Abgrenzung
@@ -105,3 +105,44 @@ Empfohlene Entscheidungsreihenfolge:
 3. Sandbox-/Worker-Entscheidung fuer Dokumentverarbeitung
 4. Human Approval fuer produktionsrelevante Artefakte
 5. erst danach weitere Produktionsagent-v1-ADRs oder Feature-Slices
+
+## 9. Management-/Lageuebersicht B7
+
+Diese Lageuebersicht ist bewusst hart und knapp. Sie ersetzt keine Freigabeentscheidung und fuehrt keine neue Produktlogik ein.
+
+### Tatsaechlich umgesetzt
+
+- Bestehende Kernrouten `/`, `/angebot` und `/produktion` sind im Backoffice-Korridor testseitig abgesichert.
+- Bestehende lokale Abnahmesignale sind dokumentiert: `npm run local:status`, `npm run local:check`, `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.
+- Read-only Exportpfade fuer Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV sind im bestehenden PA8/B6-Korridor unter Trusted-Actor-Kontext abgesichert.
+- Upload-/Ingestion-Warnungen und Quellenanker werden als sichere Marker sichtbar, ohne Rohtext- oder Vollhash-Spiegelung.
+- Produktionsobjekt-/Export-Readiness in `/produktion` benennt fehlende Einkaufsliste oder fehlende Exportlinks als offenen Zustand statt als fertigen Export.
+
+### Nur dokumentiert / nur intern abnahmefaehig
+
+- C8 ist ein interner Demo-/Abnahmeweg aus bestehenden Scripts, Routen, Exporten, Warnankern und Gates; C8 ist keine neue Runtime-Funktion.
+- PA6 ist eine Management-/Readiness-Sicht aus bestehenden Repo-Signalen; sie ist kein Monitoring, keine Release-Plattform und keine produktive Freigabe.
+- PA9 beschreibt Proxy-/Deployment-Annahmen fuer Trusted Actor; PA9 implementiert kein OIDC/Login und keine Session-Welt.
+- Audit-/Review- und Exportartefakte sind interne Betriebs-, Kontroll- und Arbeitsbelege. Keine Produktionsfreigabe, keine externe Freigabe und keine rechtssichere Audit-/Compliance-Behauptung.
+
+### Offen
+
+- Echte AuthN/AuthZ-Schicht fuer reale Nutzer, insbesondere OIDC/SSO oder gleichwertiger Identity-Aware Proxy.
+- Vollstaendig entschiedener read-path Auth-/Proxy-Rahmen fuer echte Detail-, Export- und Auditdaten.
+- PII-, Retention-, Backup-/Restore- und Access-Regeln fuer Rohdokumente, extrahierte Texte, Exporte, Audit und spaetere Sessions.
+- Sandbox-/Worker- und AV-Entscheidung fuer PDF-/Dokumentverarbeitung und unsichere Eingaben.
+- Human-Approval-Regeln fuer produktionsrelevante Artefakte.
+- Echter ProductionAgent-v1 mit LLM-/Tool-Use-/Rezept-/Allergen-Faehigkeiten bleibt durch das Architektur-Gate gesperrt.
+
+### Risiko
+
+- Ohne vorgeschalteten Proxy mit Header-Stripping und kontrollierter Trusted-Header-Injektion darf der Trusted-Actor-Korridor nicht als produktionsnah sicher gelten.
+- Ohne `CATERING_TRUSTED_ACTOR_SECRET` bleibt die App im Dev-/Test-Kompatibilitaetsmodus.
+- Lokale Gruen-Signale belegen nur den internen MVP-/Demo-Korridor, nicht reale Betriebs-, Rechts-, Datenschutz- oder Compliance-Reife.
+- Dokumentierte Abnahme kann falsch gelesen werden, wenn interne Arbeitsbelege als externe Freigabe oder produktionsreife Artefakte behandelt werden.
+
+### Naechste Entscheidung fuer Alexander
+
+Alexander muss entscheiden, ob B8 zuerst AuthN/AuthZ/read-path Auth, PII-/Retention/Backup oder Sandbox-/Worker/AV schliesst.
+
+Empfehlung: B8 sollte AuthN/AuthZ/read-path Auth priorisieren, weil diese Entscheidung die Grenze fuer echte Daten, Exporte, Auditpfade und jeden spaeteren produktionsnahen Pilotbetrieb bestimmt.
