@@ -55,6 +55,7 @@ Relevante bestehende Tests:
 - `tests/b26-hetzner-preflight-evidence-checklist-contract.test.ts`
 - `tests/b27-hetzner-preflight-status-template-contract.test.ts`
 - `tests/b28-hetzner-preflight-decision-packet-contract.test.ts`
+- `tests/b29-hetzner-preflight-operator-questions-contract.test.ts`
 - `tests/document-ingestion-boundary.test.ts`
 - `tests/pa11-intake-document-ingestion-bridge.test.ts`
 - `tests/pa13-ingestion-warnings-export-anchors.test.ts`
@@ -95,6 +96,8 @@ B26 Hetzner-Preflight-Nachweischeckliste ist als Doku-/Vertragsanker codiert: `d
 B27 Hetzner-Preflight-Statusvorlage ist als Doku-/Vertragsanker codiert: `docs/deployment/B27_HETZNER_PREFLIGHT_STATUS_TEMPLATE.md` macht die B26-Nachweiszeilen als ausfuellbare, nicht-sensitive Statusvorlage sichtbar: Status `go`/`blocked`/`not assessed`, nicht-sensitive Begruendung und naechster sicherer Schritt je Zeile. `tests/b27-hetzner-preflight-status-template-contract.test.ts` schuetzt Bezug zu B25/B26, blockierte Defaults, Secret-/PII-/IP-Dokumentationsgrenzen und die klare Grenze: kein Deployment, keine Serveraenderung, keine SSH-Verbindung, keine Secret-Erstellung, keine produktive Config, keine neue API/Persistenz/Migration, keine Produktlogik und keine echten Daten.
 
 B28 Hetzner-Preflight-Entscheidungspaket ist als Doku-/Vertragsanker codiert: `docs/deployment/B28_HETZNER_PREFLIGHT_DECISION_PACKET.md` verdichtet B25/B26/B27 zu Mussgruppen, die vor einem spaeteren Hetzner-Schritt explizit auf `go` oder `blocked` gesetzt werden muessten. `tests/b28-hetzner-preflight-decision-packet-contract.test.ts` schuetzt die konservative Default-Blockade, die Secret-/PII-/IP-Dokumentationsgrenzen, die Teil-Go-Grenze und die klare Grenze: kein Deployment, keine Serveraenderung, keine SSH-Verbindung, keine Secret-Erstellung, keine produktive Config, keine neue API/Persistenz/Migration, keine Produktlogik und keine echten Daten.
+
+B29 Hetzner-Preflight-Operatorfragen ist als Doku-/Vertragsanker codiert: `docs/deployment/B29_HETZNER_PREFLIGHT_OPERATOR_QUESTIONS.md` uebersetzt das B28-Entscheidungspaket in nicht-sensitive Operatorfragen zu Zielumgebung/Verantwortlichen, Zugriffsschicht, Trusted-Headern, TLS/Health, Rollback/Stop, Daten-/PII-/Retention-/Backup-Gate und Sandbox-/Worker-/AV-Gate. `tests/b29-hetzner-preflight-operator-questions-contract.test.ts` schuetzt die konservative Default-Blockade, die Secret-/PII-/IP-Dokumentationsgrenzen, die Teilantwort-Grenze und die klare Grenze: kein Deployment, keine Serveraenderung, keine SSH-Verbindung, keine Secret-Erstellung, keine produktive Config, keine neue API/Persistenz/Migration, keine Produktlogik und keine echten Daten.
 
 PA14 DocumentIngestion-Korridor ist als interner read-only Abnahmeanker codiert: Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher. Der Anker bestaetigt dabei nur vorhandene sichere Metadaten-/Warnmarker und die Grenze: keine Rohtextspiegelung in Conversation-/Output-/Exportankern; er ist kein neues Dashboard, kein Monitoring, keine neue API und keine Parser-, OCR-, LLM-, Rezept- oder Allergen-Implementierung. Backoffice-Demo-Marker: `Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback`; Quellenmetadaten (gekürzt) zeigen nur Dateiname, MIME, Groesse, Hash-Kurzanker und Kontext, keine vollen SHA-256-Hashes.
 
