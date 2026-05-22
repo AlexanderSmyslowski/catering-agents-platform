@@ -4,7 +4,9 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
 
-function installProductionAcceptanceMocks(options: { stalePlanOnly?: boolean; withCurrentPurchaseList?: boolean } = {}) {
+function installProductionAcceptanceMocks(
+  options: { stalePlanOnly?: boolean; withCurrentPurchaseList?: boolean; completeSpec?: boolean; withoutPlans?: boolean } = {}
+) {
   const storage = new Map<string, string>();
   const localStorageMock = {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -88,10 +90,15 @@ function installProductionAcceptanceMocks(options: { stalePlanOnly?: boolean; wi
                     reference: requestId
                   }
                 ],
-                readiness: {
-                  status: "insufficient",
-                  reasons: ["Glutenfrei-Konflikt mit Brot-Baguette und fehlender Ersatzklassifikation."]
-                },
+                readiness: options.completeSpec
+                  ? {
+                      status: "complete",
+                      reasons: []
+                    }
+                  : {
+                      status: "insufficient",
+                      reasons: ["Glutenfrei-Konflikt mit Brot-Baguette und fehlender Ersatzklassifikation."]
+                    },
                 event: {
                   type: "conference",
                   date: "2026-07-13"
@@ -130,22 +137,31 @@ function installProductionAcceptanceMocks(options: { stalePlanOnly?: boolean; wi
       if (url.endsWith("/api/production/v1/production/plans")) {
         return new Response(
           JSON.stringify({
-            items: [
-              {
-                planId: "plan-production-fallback-1",
-                eventSpecId: planSpecId,
-                readiness: {
-                  status: "insufficient",
-                  reasons: ["Glutenfrei-Konflikt bleibt ungelöst."]
-                },
-                isFallback: true,
-                fallbackReason: "Glutenfrei-Konflikt bleibt ungelöst.",
-                unresolvedItems: ["Glutenfrei-Konflikt bleibt ungelöst.", "Klassifikation für Brot-Baguette fehlt."],
-                productionBatches: [],
-                kitchenSheets: [],
-                recipeSelections: []
-              }
-            ]
+            items: options.withoutPlans
+              ? []
+              : [
+                  {
+                    planId: "plan-production-fallback-1",
+                    eventSpecId: planSpecId,
+                    readiness: options.completeSpec
+                      ? {
+                          status: "complete",
+                          reasons: []
+                        }
+                      : {
+                          status: "insufficient",
+                          reasons: ["Glutenfrei-Konflikt bleibt ungelöst."]
+                        },
+                    isFallback: !options.completeSpec,
+                    fallbackReason: options.completeSpec ? undefined : "Glutenfrei-Konflikt bleibt ungelöst.",
+                    unresolvedItems: options.completeSpec
+                      ? []
+                      : ["Glutenfrei-Konflikt bleibt ungelöst.", "Klassifikation für Brot-Baguette fehlt."],
+                    productionBatches: [],
+                    kitchenSheets: [],
+                    recipeSelections: []
+                  }
+                ]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
@@ -303,6 +319,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Strukturierte Rückfragen im Chatfluss");
     expect(content).toContain("Agent fragt");
     expect(content).toContain("Rückfrage offen");
+    expect(content).toContain("Rückfragen beantworten");
     expect(content).toContain("Deine strukturierte Antwort im Chatfluss");
     expect(content).toContain("Antwort direkt zur Agentenfrage");
     expect(content).toContain("kein freier LLM-Chat");
@@ -344,5 +361,23 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Glutenfreies Baguette");
     expect(content).toContain("Olivenöl");
     expect(content).not.toContain("Aktueller Vorgang zuerst");
+  });
+
+  it("shows the next step to calculate a production plan when the spec is clear but no plan exists", async () => {
+    installProductionAcceptanceMocks({ completeSpec: true, withoutPlans: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Produktionsplan berechnen");
+    expect(content).toContain("Die vorhandene Spezifikation kann nun in vorhandene Produktionsobjekte überführt werden.");
+  });
+
+  it("shows the next step to inspect downloads when production objects already exist", async () => {
+    installProductionAcceptanceMocks({ completeSpec: true, withCurrentPurchaseList: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Produktionsobjekte und Downloads prüfen");
+    expect(content).toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
   });
 });

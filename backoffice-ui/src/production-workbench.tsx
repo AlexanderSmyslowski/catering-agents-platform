@@ -5,6 +5,8 @@ type ProductionConversationalWorkbenchProps = {
   readinessLabel: string;
   planStatusLabel: string;
   purchaseStatusLabel: string;
+  nextStepTitle: string;
+  nextStepDescription: string;
   questionCount: number;
   productionObjectCount: number;
   productionObjectStatusLabel: string;
@@ -27,6 +29,8 @@ export function ProductionConversationalWorkbench({
   readinessLabel,
   planStatusLabel,
   purchaseStatusLabel,
+  nextStepTitle,
+  nextStepDescription,
   questionCount,
   productionObjectCount,
   productionObjectStatusLabel,
@@ -44,6 +48,11 @@ export function ProductionConversationalWorkbench({
           <p className="helper-text">
             Angebot als Datei oder Text in den Chatbereich geben; der Agent zeigt Rückfragen, Status und druckbare Ergebnisse als prüfbare Zonen.
           </p>
+          <div className="production-next-step" aria-label="Nächster Produktionsschritt">
+            <p className="eyebrow">Nächster Schritt</p>
+            <strong>{nextStepTitle}</strong>
+            <p className="helper-text">{nextStepDescription}</p>
+          </div>
         </header>
         {inputPanel}
       </article>

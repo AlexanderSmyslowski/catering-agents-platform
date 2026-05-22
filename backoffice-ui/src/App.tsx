@@ -1274,6 +1274,31 @@ export function App() {
       ? `${currentSpecPurchaseLists.length} Liste${currentSpecPurchaseLists.length === 1 ? "" : "n"} · ${currentPurchaseListItemCount} Positionen`
       : "noch keine Liste";
 
+  const productionNextStep = useMemo(() => {
+    if (!focusedProductionSpec) {
+      return {
+        title: "Auftrag einfügen oder Datei ablegen",
+        description: "Starte mit Angebot, E-Mail, Text oder manuellen Veranstaltungsdaten."
+      };
+    }
+    if (productionQuestions.length > 0) {
+      return {
+        title: "Rückfragen beantworten",
+        description: "Die Produktion braucht noch strukturierte Antworten, bevor Ergebnisse belastbar sind."
+      };
+    }
+    if (!selectedPlan) {
+      return {
+        title: "Produktionsplan berechnen",
+        description: "Die vorhandene Spezifikation kann nun in vorhandene Produktionsobjekte überführt werden."
+      };
+    }
+    return {
+      title: "Produktionsobjekte und Downloads prüfen",
+      description: "Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar."
+    };
+  }, [focusedProductionSpec, productionQuestions.length, selectedPlan]);
+
   useEffect(() => {
     if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {
       return;
@@ -2182,6 +2207,8 @@ export function App() {
               : "offen"
           }
           purchaseStatusLabel={purchaseZoneStatusLabel}
+          nextStepTitle={productionNextStep.title}
+          nextStepDescription={productionNextStep.description}
           questionCount={productionQuestions.length}
           productionObjectCount={currentSpecPlans.length}
           productionObjectStatusLabel={
