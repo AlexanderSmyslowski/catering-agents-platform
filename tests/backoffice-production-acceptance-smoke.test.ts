@@ -429,6 +429,9 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Produktionsplan berechnen");
     expect(content).toContain("Die vorhandene Spezifikation kann nun in vorhandene Produktionsobjekte überführt werden.");
+    expect(content).toContain("Noch kein Produktionsplan für den aktuellen Vorgang. Nächster Schritt: Berechnung starten.");
+    expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
+    expect(content).toContain("Exportlinks erscheinen erst, wenn Produktionsplan und Einkaufsliste vorhanden sind.");
   });
 
   it("shows the next step to inspect downloads when production objects already exist", async () => {

@@ -839,7 +839,12 @@ function renderPlanList(
           </li>
         );
       })}
-      {plans.length === 0 ? <li>Noch keine Produktionspläne vorhanden.</li> : null}
+      {plans.length === 0 ? (
+        <li>
+          Noch keine Produktionspläne vorhanden. Noch kein Produktionsplan für den aktuellen Vorgang. Nächster Schritt:
+          Berechnung starten.
+        </li>
+      ) : null}
     </ul>
   );
 }
@@ -3064,7 +3069,12 @@ export function App() {
                   </li>
                 );
               })}
-              {currentSpecPurchaseLists.length === 0 ? <li>Noch keine Einkaufslisten für den aktuellen Vorgang vorhanden.</li> : null}
+              {currentSpecPurchaseLists.length === 0 ? (
+                <li>
+                  Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan. Exportlinks
+                  erscheinen erst, wenn Produktionsplan und Einkaufsliste vorhanden sind.
+                </li>
+              ) : null}
             </ul>
             {archivedPurchaseLists.length > 0 ? (
               <details className="secondary-workspace">

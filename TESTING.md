@@ -123,6 +123,7 @@ Der Frontend-Smoke bleibt bewusst schmal:
 - `/produktion` rendert den Produktionsbereich mit route-eindeutigem Marker.
 - der Produktionsbereich zeigt fuer vorhandene Daten sowohl nutzbare Plaene als auch blockierte/Fallback-Zustaende ehrlich an.
 - die Production Workbench zeigt Rueckfragenstatus, naechsten sinnvollen Schritt, interne Produktionsobjekte/Downloads, Rezeptpruefstatus sowie Herkunft/Uebergabe als ruhige read-only Zonen aus bestehenden Daten.
+- C7 schuetzt den Empty-State klare Spezifikation ohne Produktionsplan/Einkaufsliste: Der naechste Schritt `Berechnung starten`, die fehlende Einkaufsliste und noch fehlende Exportlinks muessen im bestehenden `/produktion`-Kontext verstaendlich sichtbar bleiben.
 - ein interner Nutzpfad von manueller Anfrage bis nutzbarem Produktionsplan ist im jsdom/Vitest-Kontext abgesichert.
 
 ## 4. Lokaler Smoke-Korridor
