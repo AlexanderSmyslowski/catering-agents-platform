@@ -136,6 +136,8 @@ P5-B49 Beta-Durchlauf Ist-Karte ist als Doku-/Vertragstestanker codiert: `docs/p
 
 P5-B54 Manuelle Beta-Test-Checkliste ist als Doku-/Vertragstestanker codiert: `docs/product/P5_B54_MANUELLE_BETA_TEST_CHECKLISTE.md` fuehrt Alexander lokal durch `Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit`, nennt die URLs `http://127.0.0.1:3200/`, `http://127.0.0.1:3200/angebot` und `http://127.0.0.1:3200/produktion`, erwartete sichtbare Marker, Stop-Gates, Reibungspunkt-Notizen und den B12-Ergebnisvermerk. `tests/p5-b54-manual-beta-checklist-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING, C8 und B12 sowie die Grenzen: keine echten Daten, keine Produktionsfreigabe, keine externe Freigabe, keine rechtssichere Audit-/Compliance-Aussage, kein OAuth/Login/OIDC, keine automatische Spec-Korrektur und keine Rezept-/Allergenautomatik.
 
+P6-B56 Beta-Onboarding-Iststand und Lueckenkarte ist als Doku-/Vertragstestanker codiert: `docs/product/P6_B56_BETA_ONBOARDING_ISTSTAND_LUECKENKARTE.md` buendelt Starten -> Durchlaufen -> Reibung notieren -> Stop-Gates, trennt intern testbar, nur synthetisch, blockiert und verboten, und benennt die naechsten sicheren Plan-6-Luecken ohne Produktlogik, API, Persistenz, Deployment oder echte Daten. `tests/p6-b56-beta-onboarding-gap-map-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING, C8 und P5-B54 sowie die Grenzen: keine echten Daten, kein Deployment, keine SSH-Verbindung, keine Secrets, keine neue Persistenz, kein OAuth/Login/OIDC, keine automatische Spec-Korrektur und keine Rezept-/Allergenautomatik.
+
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
 Relevante bestehende Tests:

@@ -72,3 +72,5 @@ Nach dem manuellen Durchgang genuegt ein kurzer B12-Ergebnisvermerk mit:
 - klare Nicht-Behauptung: keine Produktionsfreigabe, keine externe Freigabe und keine rechtssichere Audit-/Compliance-Aussage.
 
 Fuehrender Ergebnisanker bleibt `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md`; diese Checkliste liefert nur den manuellen Beta-Pruefpfad fuer Alexander.
+
+Fuer Plan 6 ergaenzt `docs/product/P6_B56_BETA_ONBOARDING_ISTSTAND_LUECKENKARTE.md` den aktuellen Beta-Onboarding-Iststand Starten -> Durchlaufen -> Reibung notieren -> Stop-Gates und benennt die verbleibenden Luecken, ohne neue Produktlogik oder eine neue QA-Plattform einzufuehren.
