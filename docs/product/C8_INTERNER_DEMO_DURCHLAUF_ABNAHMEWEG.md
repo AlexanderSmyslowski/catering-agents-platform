@@ -35,7 +35,15 @@ Vor einem internen Demo-Durchlauf gelten diese Voraussetzungen:
 
 ## 3. Start- und Statuspruefung
 
-Der Demo-Durchlauf beginnt mit der lokalen Statussicht:
+Der Demo-Durchlauf beginnt mit dem vorhandenen lokalen Startweg:
+
+```bash
+npm run local:start
+```
+
+`npm run local:start` startet den lokalen Stack mit Demo-Seeding in den bestehenden `screen`-Sitzungen. Der Befehl nutzt die vorhandenen Services und Demo-Fixtures; er ist kein Deployment und keine Produktionsfreigabe.
+
+Danach folgt die lokale Statussicht:
 
 ```bash
 npm run local:status
@@ -54,6 +62,14 @@ npm run local:check
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 
 Wenn `local:check` rot wird, ist das zuerst als lokaler Betriebs- oder Demo-Datenstand zu behandeln. Der Abnahmeweg wird dann nicht durch Featurebau repariert, sondern der lokale Stack wird kontrolliert neu gestartet oder die konkrete Check-Meldung wird als Blocker dokumentiert.
+
+Der lokale Demo-Durchlauf endet kontrolliert mit:
+
+```bash
+npm run local:stop
+```
+
+`npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse wieder. Der Befehl ist der Abschluss des lokalen Demo-Durchlaufs und kein Server- oder Deployment-Eingriff.
 
 ## 4. Relevante UI-Routen fuer die manuelle Demo
 
@@ -134,6 +150,7 @@ npm test
 npm run build
 npm audit --omit=dev
 git diff --check
+npm run local:stop
 ```
 
 Ein gruener Lauf bedeutet nur: Der aktuelle interne MVP-/Demo-Korridor ist anhand der bestehenden Repo-Signale reproduzierbar abnehmbar.
@@ -166,8 +183,10 @@ Er ist ausdruecklich nicht:
 Nach einem internen Demo-Durchlauf genuegt ein knapper Vermerk mit:
 
 - Zeitpunkt und Commit-SHA,
+- Ergebnis von `npm run local:start`,
 - Ergebnis von `npm run local:status`,
 - Ergebnis von `npm run local:check`,
+- Ergebnis von `npm run local:stop`,
 - manuell betrachtete UI-Routen,
 - betrachtete Exportanker,
 - Ergebnis von `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`,

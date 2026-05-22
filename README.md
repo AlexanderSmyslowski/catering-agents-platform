@@ -44,6 +44,7 @@ npm run local:stop
 ```
 
 `npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht fuer die erwarteten `screen`-Sitzungen und Service-Ports. `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack: UI-Routen, Health-Endpunkte, read-only Exportpfade und Demo-Start-/Auditbeleg.
+`npm run local:start` startet diesen lokalen Stack mit Demo-Seeding; `npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse wieder. Dieser lokale Runbook-Weg bleibt interne Demo-/Abnahmeverifikation und ist kein Deployment, keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Aussage.
 
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage. Der C8-Rahmen bleibt ein interner Demo-/Abnahmeweg, keine Produktionsfreigabe und keine externe Freigabe.
 

@@ -16,9 +16,11 @@ describe("local ops check contract", () => {
     expect(checkScript).toContain("production.seed_demo-Beleg hat eine unerwartete entityId.");
   });
 
-  it("documents local:check as a local operational proof without CI, production, or legal-audit claims", () => {
+  it("documents the compact local demo runbook commands and their bounded roles", () => {
+    expect(testingDoc).toContain("`npm run local:start` startet den lokalen Stack mit Demo-Seeding");
     expect(testingDoc).toContain("`npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht");
     expect(testingDoc).toContain("`npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg");
+    expect(testingDoc).toContain("`npm run local:stop` beendet die lokalen `screen`-Sitzungen");
     expect(testingDoc).toContain("keine CI-Pflicht");
     expect(testingDoc).toContain("keine Produktionsfreigabe");
     expect(testingDoc).toContain("keine rechtssichere Audit-Aussage");
@@ -38,13 +40,17 @@ describe("local ops check contract", () => {
   });
 
   it("keeps the C8 acceptance path discoverable and tied to real repo anchors", () => {
+    expect(packageJson.scripts["local:start"]).toBe("bash ./scripts/start-local-stack.sh --seed-demo");
     expect(packageJson.scripts["local:status"]).toBe("bash ./scripts/status-local-stack.sh");
     expect(packageJson.scripts["local:check"]).toBe("bash ./scripts/check-local-ops.sh");
+    expect(packageJson.scripts["local:stop"]).toBe("bash ./scripts/stop-local-stack.sh");
     expect(packageJson.scripts.test).toBe("vitest run");
     expect(packageJson.scripts.build).toContain("tsc --noEmit");
 
+    expect(existsSync("scripts/start-local-stack.sh")).toBe(true);
     expect(existsSync("scripts/status-local-stack.sh")).toBe(true);
     expect(existsSync("scripts/check-local-ops.sh")).toBe(true);
+    expect(existsSync("scripts/stop-local-stack.sh")).toBe(true);
     expect(existsSync("tests/backoffice-route-smoke.test.ts")).toBe(true);
     expect(existsSync("tests/backoffice-production-acceptance-smoke.test.ts")).toBe(true);
     expect(existsSync("tests/backoffice-internal-usage-smoke.test.ts")).toBe(true);
