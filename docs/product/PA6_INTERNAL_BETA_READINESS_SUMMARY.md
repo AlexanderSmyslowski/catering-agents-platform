@@ -146,3 +146,16 @@ Diese Lageuebersicht ist bewusst hart und knapp. Sie ersetzt keine Freigabeentsc
 Alexander muss entscheiden, ob B8 zuerst AuthN/AuthZ/read-path Auth, PII-/Retention/Backup oder Sandbox-/Worker/AV schliesst.
 
 Empfehlung: B8 sollte AuthN/AuthZ/read-path Auth priorisieren, weil diese Entscheidung die Grenze fuer echte Daten, Exporte, Auditpfade und jeden spaeteren produktionsnahen Pilotbetrieb bestimmt.
+
+## 10. B8 AuthN/AuthZ/read-path Auth Entscheidungsgrenze
+
+Die B8 AuthN/AuthZ/read-path Auth Entscheidungsgrenze ist in `docs/architecture/B8_AUTH_GATE_DECISION_BOUNDARY.md` als Doku-/Vertragsanker erfasst.
+
+B8 trennt:
+
+- tatsaechlich umgesetzt / intern geschuetzt: PA8 Read-path Auth Hardening Slice 1, Trusted-Actor-Modus bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET`, Schutz gegen frei gesetztes `x-actor-name`, bestehende Rollenpruefung und offene nicht-sensitive Health-Endpunkte.
+- read-only Pfade am Trusted-Actor-/internen Kontext: Intake-Requests/-Specs, Offer-Drafts/-Recipes, Production-Plaene/-Einkaufslisten/-Rezepte, Export-Read fuer Angebots-HTML/Produktionsplan-/Produktionsblatt-HTML/Einkaufslisten-CSV und Audit-Read.
+- nicht produktionsnah nutzbar ohne naechste Auth-Entscheidung: direkte oeffentliche Service-Exposition, echte Detail-/Export-/Auditdaten ohne Proxy/IAP, Deployments ohne serverseitiges Trusted Secret und jede Gleichsetzung von Trusted-Actor mit echter Nutzer-AuthN.
+- Minimalentscheidung fuer Alexander: Soll B9 den kleinsten produktionsnahen Auth-Korridor als Reverse-Proxy/OIDC-/Identity-Aware-Proxy-Korridor festlegen, ohne applikationsinterne Login-/Session-Welt zu bauen?
+
+B8 bleibt ohne OIDC-/Login-Bau, externe Rollen-/Mandantenlogik, neue Exportlogik, neue API, neue Persistenz, Migration, produktionsnahe Freigabe oder rechtssichere Audit-/Compliance-Behauptung.
