@@ -197,6 +197,7 @@ export function OfferConversationalWorkbench({
         <p className="eyebrow">Zusammenfassung</p>
         <strong>{renderDraftSummary(focusedDraft)}</strong>
         <p className="helper-text">Quelle: {latestSourceLabel}</p>
+        <p className="helper-text">Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.</p>
         <p className="helper-text">
           Übergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktive Spezifikation:{" "}
           {activeSpec ? `${String(activeSpec.specId ?? "-")} (${getReadinessLabel(activeSpec)})` : "keine"}

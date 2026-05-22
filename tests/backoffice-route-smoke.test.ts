@@ -285,6 +285,7 @@ describe("backoffice route smoke", () => {
     const offer = (await renderRoute("/angebot")).text;
 
     expect(offer).toContain("Zusammenfassung");
+    expect(offer).toContain("Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.");
     expect(offer).toContain("Sommerfest mit Buffet · 1 Varianten · 1 offene Punkte");
     expect(offer).toContain("Übergabe: 1 vollständig · 1 teilweise");
     expect(offer).toContain("Export: Angebots-HTML für offer-draft-buffet bereit");
