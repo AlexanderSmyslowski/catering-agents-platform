@@ -297,6 +297,19 @@ function formatAuditEventHandoffLabel(event: Record<string, unknown>): string {
   return parts.length > 0 ? parts.join(" · ") : "Audit-Eintrag vorhanden";
 }
 
+function formatLatestAuditOverviewLabel(event: Record<string, unknown>): string {
+  const actor = asRecord(event.actor);
+  const summary = readStringOrNumber(event, ["summary", "action", "auditId"]) ?? "Audit-Eintrag vorhanden";
+  const parts = [
+    summary,
+    readStringOrNumber(actor, ["name"]) ? `Actor: ${readStringOrNumber(actor, ["name"])}` : undefined,
+    readStringOrNumber(event, ["action"]) ? `Action: ${readStringOrNumber(event, ["action"])}` : undefined,
+    readStringOrNumber(event, ["at"])
+  ].filter(Boolean);
+
+  return parts.join(" · ");
+}
+
 function getPurchaseListPreviewItems(
   purchaseList: Record<string, unknown>
 ): Array<{ articleName: string; quantity: string; unit: string }> {
@@ -2153,8 +2166,8 @@ export function App() {
               <h3>Letzte Bearbeitungsschritte über alle Dienste</h3>
               <p className="helper-text">
                 {filteredAuditEvents.length > 0
-                  ? `${filteredAuditEvents.length} Änderungen geladen · neueste: ${String(
-                      filteredAuditEvents[0]?.summary ?? filteredAuditEvents[0]?.action ?? filteredAuditEvents[0]?.auditId
+                  ? `${filteredAuditEvents.length} Änderungen geladen · neueste: ${formatLatestAuditOverviewLabel(
+                      filteredAuditEvents[0] as Record<string, unknown>
                     )}`
                   : "Noch keine Änderungen geladen."}
               </p>
