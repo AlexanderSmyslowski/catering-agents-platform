@@ -228,7 +228,7 @@ describe("PA16 production clarification model slice 1", () => {
     const questionMessage = clarificationProjection.messages.find((message) => message.type === "structured_agent_question");
     expect(questionMessage).toMatchObject({
       role: "agent",
-      title: "Agent fragt",
+      title: "Agent fragt · offen",
       text: "Bitte klären: Veranstaltungsdatum.",
       questionIndex: 1,
       clarificationQuestion: {

@@ -246,6 +246,10 @@ function safeClarificationAnswer(answer: ProductionClarificationAnswer): Product
   };
 }
 
+function clarificationQuestionTitle(hasMatchingAnswer: boolean): string {
+  return hasMatchingAnswer ? "Agent fragt · beantwortet" : "Agent fragt · offen";
+}
+
 export function buildProductionConversationProjection(
   input: ProductionConversationProjectionInput
 ): ProductionConversationProjection {
@@ -307,7 +311,7 @@ export function buildProductionConversationProjection(
       messageId: `${sessionId}-question-${index + 1}`,
       type: "structured_agent_question",
       role: "agent",
-      title: "Agent fragt",
+      title: question.clarificationQuestion ? clarificationQuestionTitle(matchingAnswers.length > 0) : "Agent fragt",
       text: question.text,
       questionIndex: index + 1,
       ...(question.clarificationQuestion

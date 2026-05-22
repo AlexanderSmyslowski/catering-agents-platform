@@ -132,6 +132,46 @@ describe("PA25 clarification answered status anchor", () => {
     ]);
   });
 
+  it("keeps open question answer continuation and output anchors in a deterministic understandable flow", () => {
+    const specWithOpenAndAnsweredQuestion = {
+      ...spec,
+      missingFields: ["attendees.expected", "event.date"]
+    };
+    const [attendeesQuestion, dateQuestion] = buildProductionClarificationQuestions({ spec: specWithOpenAndAnsweredQuestion });
+    const answerForAttendees = createSubmittedProductionClarificationAnswer({
+      questions: [attendeesQuestion, dateQuestion],
+      context,
+      questionId: attendeesQuestion.questionId,
+      questionKey: { reason: attendeesQuestion.reason, reasonCode: attendeesQuestion.reasonCode },
+      answerType: "shortText",
+      answerText: "42 Personen final bestätigt.",
+      now: "2026-05-22T10:03:00.000Z"
+    });
+
+    const projection = buildProductionConversationProjection({
+      spec: specWithOpenAndAnsweredQuestion,
+      questions: [],
+      clarificationAnswers: [answerForAttendees],
+      productionPlans: [{ planId: "plan-pa25-continuation" }],
+      purchaseLists: [{ purchaseListId: "purchase-pa25-continuation" }]
+    });
+
+    expect(
+      projection.messages.map((message) => ({ type: message.type, title: message.title, status: message.clarificationAnswerStatus }))
+    ).toEqual([
+      { type: "system_agent_hint", title: "Session-Grundlage", status: undefined },
+      { type: "structured_agent_question", title: "Agent fragt · beantwortet", status: "answered" },
+      { type: "user_structured_answer", title: "Antwort auf Rückfrage", status: undefined },
+      { type: "structured_agent_question", title: "Agent fragt · offen", status: "unanswered" },
+      { type: "production_output_anchor", title: "Produktionsoutput / Downloadanker", status: undefined }
+    ]);
+    expect(projection.messages[1]?.clarificationQuestion?.questionId).toBe(attendeesQuestion.questionId);
+    expect(projection.messages[2]?.clarificationAnswer?.questionId).toBe(attendeesQuestion.questionId);
+    expect(projection.messages[3]?.clarificationQuestion?.questionId).toBe(dateQuestion.questionId);
+    expect(projection.messages[4]?.planIds).toEqual(["plan-pa25-continuation"]);
+    expect(projection.messages[4]?.purchaseListIds).toEqual(["purchase-pa25-continuation"]);
+  });
+
   it("keeps escaped answer display read-only and does not trigger spec correction or domain output", () => {
     const answer = submittedAnswer("<script>alert('x')</script><b>42</b>");
     const { projection, questionMessage } = projectedQuestionStatus([answer]);

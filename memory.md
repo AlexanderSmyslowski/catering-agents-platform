@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.176
+version: 5.177
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -134,6 +134,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P3-B39 Full Gates und Status-Snapshot ist No-Product-Change abgeschlossen: Plan-3-Zwischenstand wurde ueber fokussierte P3-Smokes, `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check` und `npm run local:status` verifiziert; Snapshot liegt unter `docs/agent-memory/memory_v5.174_2026-05-22.md`. Keine Produktlogik, API, Persistenz, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
 - P4-B44 Read-only Status in `/produktion` ist minimal geschaerft: die bestehende Production Conversation Projection wird in der UI nun auch fuer optionale vorhandene `clarificationAnswers` genutzt, zeigt beantwortete Rueckfragen als read-only Nutzerantworten und fasst offene/beantwortete Rueckfragen in der ruhigen Zusammenfassung zusammen; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue API, Persistenz, Migration, Antwortbearbeitung, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik oder echte Daten.
 - P4-B45 synthetischer beantworteter Rueckfragen-Demoanker ist als Testfixture umgesetzt: `shared-core/src/fixtures/demo-scenarios.ts` stellt einen nicht-sensitiven beantworteten Clarification-Anker bereit, und `tests/local-ops-check-contract.test.ts` schuetzt dessen Projektion als beantwortete Rueckfrage. Keine echte Datenverarbeitung, keine neue API, Persistenz/Migration, Antwortbearbeitung, automatische Spec-Korrektur, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets oder Login/OIDC.
+- P4-B46 Antwort-Fortsetzung im Conversation-Fluss ist minimal gehaertet: `ProductionConversationProjection` labelt strukturierte Rueckfragen nun als `Agent fragt · beantwortet` bzw. `Agent fragt · offen`, und ein fokussierter Projection-Test schuetzt die deterministische Reihenfolge offene/beantwortete Rueckfrage, Antwort-Bubble und Produktionsoutput-/Downloadanker. Keine neue Chat-/Agent-Runtime, Produktflaeche, API, Persistenz/Migration, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -928,3 +929,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.176 - 2026-05-22
 - P4-B45 synthetischer beantworteter Rueckfragen-Demoanker ist umgesetzt: `shared-core/src/fixtures/demo-scenarios.ts` und synchroner Runtime-Pfad `.js` liefern einen nicht-sensitiven Demoanker `spec-demo-production-answered-clarification` mit einer submitted `shortText`-Antwort.
 - `tests/local-ops-check-contract.test.ts` schuetzt, dass dieser Anker ohne echte Daten in der bestehenden `ProductionConversationProjection` als beantwortete Rueckfrage plus Nutzerantwort projiziert wird. Keine neue API, Persistenz/Migration, Antwortbearbeitung, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
+
+### 5.177 - 2026-05-22
+- P4-B46 Antwort-Fortsetzung im Conversation-Fluss ist umgesetzt: `shared-core/src/conversation-projection.ts` und synchroner Runtime-Pfad `.js` labeln bestehende strukturierte Rueckfragen deterministisch als beantwortet oder offen.
+- `tests/pa25-clarification-answered-status-anchor.test.ts` schuetzt die geordnete Projection-Abfolge aus beantworteter Rueckfrage, Antwort-Bubble, offener Rueckfrage und Produktionsoutput-/Downloadanker. Keine neue Chat-/Agent-Runtime, Produktflaeche, API, Persistenz/Migration, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
