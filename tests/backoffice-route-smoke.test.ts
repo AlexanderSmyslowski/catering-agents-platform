@@ -215,6 +215,45 @@ describe("backoffice route smoke", () => {
     expect(production).toContain("Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.");
   });
 
+  it("keeps the intake status summary anchored on safe source and ingestion warning markers", async () => {
+    installBackofficeEnvironmentMocks({
+      intakeRequests: [
+        {
+          requestId: "intake-source-warning-1",
+          source: {
+            channel: "pdf_upload",
+            receivedAt: "2026-05-22T09:15:00.000Z"
+          },
+          rawInputs: [
+            {
+              kind: "document",
+              documentIngestion: {
+                status: "fallback",
+                warnings: ["document_text_extraction_fallback"]
+              },
+              sourceMetadata: {
+                filename: "kundenanfrage-b21.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 3072,
+                sha256: "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+                ingestedAt: "2026-05-22T09:16:00.000Z",
+                uploadContext: "intake"
+              }
+            }
+          ]
+        }
+      ]
+    });
+
+    const home = (await renderRoute("/")).text;
+
+    expect(home).toContain("Erfassung");
+    expect(home).toContain("letzte Erfassung: intake-source-warning-1 via pdf_upload");
+    expect(home).toContain("Quelle: kundenanfrage-b21.pdf");
+    expect(home).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
+    expect(home).not.toContain("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd");
+  });
+
   it("keeps the offer route anchored on existing drafts and operative handoff status", async () => {
     installBackofficeEnvironmentMocks({
       acceptedSpecs: [

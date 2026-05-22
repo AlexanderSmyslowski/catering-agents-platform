@@ -253,8 +253,24 @@ function formatLatestIntakeRequest(requests: Array<Record<string, unknown>>): st
 
   const requestId = String(latestRequest.requestId ?? latestRequest.id ?? "unbekannt");
   const channel = String((latestRequest.source as Record<string, unknown> | undefined)?.channel ?? "-");
+  const rawInputs = Array.isArray(latestRequest.rawInputs) ? latestRequest.rawInputs : [];
+  const firstInputWithSource = rawInputs.find((input) => {
+    const sourceMetadata = asRecord((input as Record<string, unknown>).sourceMetadata);
+    return Boolean(readStringOrNumber(sourceMetadata, ["filename"]));
+  }) as Record<string, unknown> | undefined;
+  const firstInputWithWarning = rawInputs.find((input) =>
+    Boolean(formatDocumentIngestionSummary(input as Record<string, unknown>))
+  ) as Record<string, unknown> | undefined;
+  const sourceFilename = readStringOrNumber(asRecord(firstInputWithSource?.sourceMetadata), ["filename"]);
+  const ingestionSummary = firstInputWithWarning ? formatDocumentIngestionSummary(firstInputWithWarning) : undefined;
 
-  return `letzte Erfassung: ${requestId} via ${channel}`;
+  return [
+    `letzte Erfassung: ${requestId} via ${channel}`,
+    sourceFilename ? `Quelle: ${sourceFilename}` : undefined,
+    ingestionSummary ? `Ingestion-Warnung: ${ingestionSummary}` : undefined
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
