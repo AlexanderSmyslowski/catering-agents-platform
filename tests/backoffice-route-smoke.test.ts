@@ -594,6 +594,46 @@ describe("backoffice route smoke", () => {
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/c4-purchase-handoff/csv");
   });
 
+  it("keeps production plan details anchored on plan and spec identifiers before export", async () => {
+    installBackofficeEnvironmentMocks({
+      acceptedSpecs: [
+        {
+          specId: "b23-spec-detail",
+          requestId: "b23-request-detail",
+          readiness: { status: "complete", reasons: [] },
+          event: { type: "lunch", date: "2026-09-12" },
+          servicePlan: { serviceForm: "buffet" },
+          attendees: { expected: 42 },
+          menuPlan: [
+            {
+              componentId: "b23-component-salat",
+              label: "Herbstsalat",
+              menuCategory: "vegetarian",
+              productionDecision: { mode: "scratch" }
+            }
+          ]
+        }
+      ],
+      productionPlans: [
+        {
+          planId: "b23-plan-detail",
+          eventSpecId: "b23-spec-detail",
+          readiness: { status: "complete", reasons: [] },
+          productionBatches: [],
+          kitchenSheets: [{ sheetId: "b23-sheet-1" }],
+          recipeSelections: []
+        }
+      ]
+    });
+
+    const production = await renderRoute("/produktion");
+
+    expect(production.text).toContain("Downloadbereich");
+    expect(production.text).toContain("Plan-Kontext: planId b23-plan-detail · specId b23-spec-detail");
+    expect(production.text).toContain("Produktionsblatt exportieren");
+    expect(production.html).toContain("/api/exports/v1/exports/production-plans/b23-plan-detail/html");
+  });
+
   it("keeps the start overview anchored on existing operational counts", async () => {
     installBackofficeEnvironmentMocks({
       intakeRequests: [

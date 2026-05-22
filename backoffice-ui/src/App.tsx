@@ -2914,6 +2914,11 @@ export function App() {
                   <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
                 </header>
                 <p className="helper-text">
+                  {`Plan-Kontext: planId ${String(selectedPlan.planId ?? "-")} · specId ${String(
+                    selectedPlan.eventSpecId ?? selectedPlanSpec?.specId ?? "-"
+                  )}`}
+                </p>
+                <p className="helper-text">
                   Status:{" "}
                   {translateReadiness(
                     String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")

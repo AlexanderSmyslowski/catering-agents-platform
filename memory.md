@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.158
+version: 5.159
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -101,6 +101,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - B19 Angebotsdetail-Kontext ist als kleiner UI-/Smoke-Baustein umgesetzt: Die bestehende `/angebot`-Detailzone `Ausgewählter Entwurf` nennt aus vorhandenen `proposedEventSpec`-Daten frueh Entwurfs-Spec, Readiness und ersten Source-Lineage-Anker; abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Angebotslogik, Intake-Logik, API, Persistenz, Migration oder Produktflaeche.
 - B20 Start-/Audit-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die bestehende Startseiten-Änderungsprotokoll-Zusammenfassung nennt beim neuesten Audit-Eintrag neben Summary nun vorhandenen Actor, Action-Key und Zeitstempel; abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Auditlogik, Operatorlogik, API, Persistenz, Migration oder Produktflaeche.
 - B21 Intake-Status-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die bestehende Startseiten-Erfassungsstatuskarte nennt beim neuesten Intake-Request neben requestId und Kanal nun vorhandenen sicheren Quell-Dateinamen und sichere Ingestion-Warnmarker; abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Intake-Logik, API, Persistenz, Migration, Parser-/OCR-/LLM-Engine oder Produktflaeche.
+- B23 Produktionsplan-Detailkontext ist als kleiner UI-/Smoke-Baustein umgesetzt: Der bestehende `/produktion`-Downloadbereich nennt beim ausgewählten Produktionsplan nun vorhandene `planId` und `eventSpecId` als `Plan-Kontext`, abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Produktflaeche, Fachlogik, API, Persistenz, Migration oder Exportlogik.
 - PA15 ProductionAgent-v1 Next Capability ADR ist als Entscheidungsvorlage in `docs/architecture/PA15_PRODUCTION_AGENT_NEXT_CAPABILITY_ADR.md` dokumentiert und mit `tests/pa15-productionagent-next-capability-adr.test.ts` abgesichert: Empfohlen wird Option A Rueckfragenmodell / Clarification Model als naechste echte, eng begrenzte Agentenfaehigkeit; keine Runtime-Implementierung, API, Persistenz, LLM-/Tool-Use-, Rezept- oder Allergenlogik.
 - PA16 Clarification Model Slice 1 ist umgesetzt: `shared-core` definiert `ProductionClarificationQuestion` und leitet read-only Rueckfragen nur aus `missingFields`, `readiness.reasons`, `documentIngestion.status` und `documentIngestion.warnings` ab; die bestehende `ProductionConversationProjection` transportiert diese Fragen als strukturierte Agent-Fragen mit sicheren Quellenankern, ohne Nutzerantwortlogik, neue API, Persistenz, LLM-/Tool-Use-, Parser-, Rezept-, Mengen- oder Allergenlogik.
 - PA17 Clarification Question Quality Slice ist umgesetzt: Rueckfragen werden deterministisch nach Schwere/Ursache sortiert, identische Ursachen je sicherem Quellenanker dedupliziert und bekannte sichere Feld-/Warnkeys mit neutralen deutschen Kurzlabels angezeigt; unbekannte Keys bleiben technische Fallbacks, sensible Roh-/Extraktionstexte werden nicht gespiegelt.
@@ -839,3 +840,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.158 - 2026-05-22
 - B21 Intake-Status-Lesbarkeit ist als kleiner regressionssicherer UI-/Smoke-Baustein umgesetzt: `tests/backoffice-route-smoke.test.ts` schuetzt, dass die bestehende Startseiten-Erfassungsstatuskarte vorhandene sichere Source-/Warnmarker des neuesten Intake-Requests frueh sichtbar macht.
 - Minimaler UI-Fix in `backoffice-ui/src/App.tsx`: `formatLatestIntakeRequest(...)` ergaenzt nur vorhandene `rawInputs.sourceMetadata.filename` und sichere `documentIngestion`-Status-/Warnkeys; Vollhashes und Rohtexte bleiben verborgen. Keine neue Intake-Logik, API, Persistenz, Migration, Parser-/OCR-/LLM-Engine oder Produktflaeche.
+
+### 5.159 - 2026-05-22
+- B23 Produktionsplan-Detailkontext ist als kleiner regressionssicherer UI-/Smoke-Baustein umgesetzt: `tests/backoffice-route-smoke.test.ts` schuetzt, dass der bestehende `/produktion`-Downloadbereich beim ausgewaehlten Produktionsplan vorhandene `planId` und `eventSpecId` vor dem Produktionsblatt-Export sichtbar macht.
+- Minimaler UI-Fix in `backoffice-ui/src/App.tsx`: Der vorhandene Downloadbereich rendert `Plan-Kontext: planId ... · specId ...` aus dem bereits geladenen Produktionsplan. Keine neue Produktflaeche, Fachlogik, API, Persistenz, Migration oder Exportlogik.
