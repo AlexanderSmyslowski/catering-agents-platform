@@ -132,6 +132,46 @@ async function renderRoute(pathname: string): Promise<{ text: string; html: stri
   return result;
 }
 
+async function renderRouteLive(pathname: string): Promise<{ root: ReturnType<typeof createRoot>; container: HTMLDivElement }> {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  window.history.pushState({}, "", pathname);
+
+  await act(async () => {
+    root.render(createElement(App));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  return { root, container };
+}
+
+function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(element);
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  setter?.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function findButtonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll("button")).find((el) =>
+    (el.textContent ?? "").includes(text)
+  );
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+  return button as HTMLButtonElement;
+}
+
+async function flush(times = 4) {
+  for (let i = 0; i < times; i += 1) {
+    await Promise.resolve();
+  }
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
@@ -197,6 +237,152 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("Status: teilweise vollständig");
     expect(offer).not.toContain("1 Entwürfe mit Varianten und Export stehen bereit.");
     expect(offer).not.toContain("Angebotsdienst");
+  });
+
+  it("walks the offer happy path from central request input to focused draft and handoff anchors", async () => {
+    const acceptedSpecs = [
+      { specId: "c3-spec-complete", readiness: { status: "complete" }, event: { type: "lunch" } }
+    ];
+    const offerDrafts: Array<Record<string, unknown>> = [
+      {
+        draftId: "c3-draft-existing",
+        eventSummary: "Bestehender Lunch-Entwurf",
+        variantSet: [{ variantId: "existing", label: "Bestehend" }],
+        openQuestions: []
+      }
+    ];
+    const postedBodies: Array<Record<string, unknown>> = [];
+
+    installBackofficeEnvironmentMocks({ acceptedSpecs, offerDrafts });
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/offers/v1/offers/from-text")) {
+        postedBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+        const createdDraft = {
+          draftId: "c3-draft-created",
+          eventSummary: "C3 Sommerfest-Angebot für 80 Personen",
+          variantSet: [{ variantId: "classic", label: "Klassisch" }],
+          openQuestions: ["Getränkepaket noch klären"],
+          customerFacingText: "Gerne bieten wir ein Sommerfest für 80 Personen an.",
+          internalWorkingText: "Interne Angebotsnotiz: Buffet und Getränkepaket prüfen."
+        };
+        offerDrafts.push(createdDraft);
+        return new Response(JSON.stringify(createdDraft), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/intake/v1/intake/requests")) {
+        return new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/intake/v1/intake/specs")) {
+        return new Response(JSON.stringify({ items: acceptedSpecs }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/offers/v1/offers/drafts")) {
+        return new Response(JSON.stringify({ items: offerDrafts }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/production/v1/production/plans")) {
+        return new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/production/v1/production/purchase-lists")) {
+        return new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/production/v1/production/recipes")) {
+        return new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.includes("/api/production/v1/production/audit/events")) {
+        return new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (
+        url.endsWith("/api/intake/health") ||
+        url.endsWith("/api/offers/health") ||
+        url.endsWith("/api/production/health") ||
+        url.endsWith("/api/exports/health")
+      ) {
+        return new Response(
+          JSON.stringify({ service: "ok", status: "ok", timestamp: "2026-04-10T09:30:00.000Z", counts: {} }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    const { root, container } = await renderRouteLive("/angebot");
+    expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(document.body.textContent ?? "").toContain("Aktueller Fokus: c3-draft-existing");
+
+    const offerInput = document.querySelector(
+      "textarea[placeholder='Kundenanfrage, E-Mail oder Angebotsnotiz hier einfügen ...']"
+    ) as HTMLTextAreaElement | null;
+    if (!offerInput) {
+      throw new Error("Central offer request input not found");
+    }
+
+    await act(async () => {
+      setNativeValue(
+        offerInput,
+        "C3 Sommerfest am 2026-08-20 für 80 Personen mit Buffet, Getränkepaket und Dessertstation."
+      );
+      findButtonByText("Angebotsentwurf erzeugen").click();
+      await flush();
+    });
+
+    const text = document.body.textContent ?? "";
+    const createdExport = Array.from(document.querySelectorAll("a")).find((anchor) =>
+      (anchor.textContent ?? "").includes("Angebot exportieren")
+    ) as HTMLAnchorElement | undefined;
+
+    expect(postedBodies).toEqual([
+      {
+        text: "C3 Sommerfest am 2026-08-20 für 80 Personen mit Buffet, Getränkepaket und Dessertstation."
+      }
+    ]);
+    expect(text).toContain("Angebotsentwurf wurde erstellt.");
+    expect(text).toContain("Aktueller Fokus: c3-draft-created");
+    expect(text).toContain("C3 Sommerfest-Angebot für 80 Personen · 1 Varianten · 1 offene Punkte");
+    expect(text).toContain("Getränkepaket noch klären");
+    expect(text).toContain("Variante übernehmen: Klassisch");
+    expect(createdExport?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/c3-draft-created/html");
+    expect(text).toContain("Operative Übergabe und Audit");
+    expect(text).toContain("Status: vollständig");
+    expect(text).toContain("Zur Produktion");
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
   });
 
   it("keeps the start overview anchored on existing operational counts", async () => {

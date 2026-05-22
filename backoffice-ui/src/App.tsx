@@ -1414,7 +1414,11 @@ export function App() {
     setSubmitting(true);
     clearMessages();
     try {
-      await createOfferFromText(offerText);
+      const response = await createOfferFromText(offerText);
+      const createdDraftId = typeof response.draftId === "string" ? response.draftId : undefined;
+      if (createdDraftId) {
+        setSelectedDraftId(createdDraftId);
+      }
       await refreshDashboard();
       setNotice("Angebotsentwurf wurde erstellt.");
     } catch (submitError) {

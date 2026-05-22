@@ -116,6 +116,7 @@ Der Frontend-Smoke bleibt bewusst schmal:
 
 - `/` rendert die Startseite mit Agentenwahl und gemeinsamem Regelkern.
 - `/angebot` rendert den Angebotsbereich mit route-eindeutigem Marker.
+- `/angebot` schuetzt zusaetzlich einen internen Angebots-Happy-Path: zentrale Anfrage absenden, neuen Entwurf fokussieren, Status-/Uebergabe-/Exportanker sichtbar halten.
 - `/produktion` rendert den Produktionsbereich mit route-eindeutigem Marker.
 - der Produktionsbereich zeigt fuer vorhandene Daten sowohl nutzbare Plaene als auch blockierte/Fallback-Zustaende ehrlich an.
 - die Production Workbench zeigt Rueckfragenstatus, naechsten sinnvollen Schritt, interne Produktionsobjekte/Downloads, Rezeptpruefstatus sowie Herkunft/Uebergabe als ruhige read-only Zonen aus bestehenden Daten.
