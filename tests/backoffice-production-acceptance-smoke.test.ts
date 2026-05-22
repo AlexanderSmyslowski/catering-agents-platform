@@ -11,6 +11,7 @@ function installProductionAcceptanceMocks(
     completeSpec?: boolean;
     withoutPlans?: boolean;
     withRecipeReviewStates?: boolean;
+    withAuditEvent?: boolean;
   } = {}
 ) {
   const storage = new Map<string, string>();
@@ -236,7 +237,19 @@ function installProductionAcceptanceMocks(
       }
 
       if (url.includes("/api/production/v1/production/audit/events")) {
-        return new Response(JSON.stringify({ items: [] }), {
+        return new Response(JSON.stringify({
+          items: options.withAuditEvent
+            ? [
+                {
+                  auditId: "audit-production-handoff-1",
+                  at: "2026-05-21T09:15:00.000Z",
+                  action: "production.plan.created",
+                  summary: "Produktionsplan erstellt",
+                  actor: { name: "Küche" }
+                }
+              ]
+            : []
+        }), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
@@ -360,10 +373,27 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Ursprüngliche Intake-Anfrage");
     expect(content).toContain("requestId: request-production-fallback-1");
     expect(content).toContain("channel: manual_form");
-    expect(content).toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
     expect(content).toContain("Quellenmetadaten: produktion-angebot.pdf · application/pdf · 24.2 KB · sha256:fedcba987654 · intake");
     expect(content).not.toContain("sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
+    expect(content).not.toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
     expect(content).not.toContain("Offene Punkte: keine");
+  });
+
+  it("shows handoff provenance without claiming legal audit certainty", async () => {
+    installProductionAcceptanceMocks({ withCurrentPurchaseList: true, withAuditEvent: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Herkunft und Übergabe");
+    expect(content).toContain("Intake-Ursprung");
+    expect(content).toContain("manual_form · 2026-04-18T10:30:00.000Z · request-production-fallback-1");
+    expect(content).toContain("Audit-Spur");
+    expect(content).toContain("Produktionsplan erstellt");
+    expect(content).toContain("Übergabe-/Exportartefakte");
+    expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
+    expect(content).toContain("Keine rechtssichere Audit-Behauptung");
+    expect(content).not.toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
+    expect(content).not.toContain("sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
   });
 
   it("does not surface a previous plan as current results for a newly focused production spec", async () => {

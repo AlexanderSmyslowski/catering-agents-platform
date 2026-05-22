@@ -165,7 +165,9 @@ describe("backoffice intake request detail", () => {
     expect(document.body.textContent).toContain("requestId: request-detail-1");
     expect(document.body.textContent).toContain("channel: text");
     expect(document.body.textContent).toContain("2026-04-10T09:30:00.000Z");
-    expect(document.body.textContent).toContain("Konferenz am 2026-04-18 fuer 45 Teilnehmer");
+    expect(document.body.textContent).toContain("Herkunft und Übergabe");
+    expect(document.body.textContent).toContain("Intake-Ursprung");
+    expect(document.body.textContent).not.toContain("Konferenz am 2026-04-18 fuer 45 Teilnehmer");
     expect(document.body.textContent).toContain("Ingestion-Warnung");
     expect(document.body.textContent).toContain(
       "Quelle unsicher/fallback: angebot-detail.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"

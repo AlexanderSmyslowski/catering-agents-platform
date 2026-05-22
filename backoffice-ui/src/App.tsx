@@ -355,15 +355,6 @@ function getIntakeRequestIdForSpec(spec: Record<string, unknown> | undefined): s
   return typeof reference === "string" && reference.trim() ? reference.trim() : undefined;
 }
 
-function summarizeRawInput(input: Record<string, unknown>): string {
-  const content = String(input.content ?? input.text ?? input.rawText ?? "").trim();
-  const fallback = content || String(input.excerpt ?? input.value ?? input.documentId ?? "").trim();
-  if (!fallback) {
-    return "(kein Vorschautext)";
-  }
-  return fallback.length > 160 ? `${fallback.slice(0, 157)}...` : fallback;
-}
-
 function formatBytes(sizeBytes: number): string {
   if (sizeBytes < 1024) {
     return `${sizeBytes} B`;
@@ -1283,6 +1274,26 @@ export function App() {
     currentSpecPurchaseLists.length > 0
       ? `${currentSpecPurchaseLists.length} Liste${currentSpecPurchaseLists.length === 1 ? "" : "n"} · ${currentPurchaseListItemCount} Positionen`
       : "noch keine Liste";
+
+  const productionIntakeOriginLabel = intakeRequestDetail
+    ? `${String((intakeRequestDetail.source as Record<string, unknown> | undefined)?.channel ?? "-")} · ${String(
+        (intakeRequestDetail.source as Record<string, unknown> | undefined)?.receivedAt ?? "-"
+      )} · ${String(intakeRequestDetail.requestId ?? "-")}`
+    : currentIntakeRequestId
+      ? `Intake-Anfrage ${currentIntakeRequestId}`
+      : "kein Intake-Ursprung verknüpft";
+
+  const productionHandoffExportLabel = [
+    selectedPlan ? "Produktionsblatt vorhanden" : "Produktionsblatt offen",
+    currentSpecPurchaseLists.length > 0 ? "Einkaufsliste vorhanden" : "Einkaufsliste offen"
+  ].join(" · ");
+
+  const latestProductionAuditEvent = filteredAuditEvents[0];
+  const productionAuditTrailLabel = latestProductionAuditEvent
+    ? String(
+        latestProductionAuditEvent.summary ?? latestProductionAuditEvent.action ?? latestProductionAuditEvent.auditId ?? "Audit-Eintrag vorhanden"
+      )
+    : "keine Audit-Ereignisse geladen";
 
   const productionNextStep = useMemo(() => {
     if (!focusedProductionSpec) {
@@ -2645,7 +2656,6 @@ export function App() {
                                   <p className="helper-text">
                                     {`${String(rawInputRecord.mimeType ? ` · ${rawInputRecord.mimeType}` : "")}`}
                                   </p>
-                                  <p>{summarizeRawInput(rawInputRecord)}</p>
                                   {documentIngestionSummary ? (
                                     <p className="helper-text">Ingestion: {documentIngestionSummary}</p>
                                   ) : null}
@@ -3080,6 +3090,33 @@ export function App() {
           </article>
           </div>
           <div className="production-column">
+
+          <article className="production-handoff-zone" aria-label="Herkunft und Übergabe">
+            <header>
+              <p className="eyebrow">Abschlusszone</p>
+              <h3>Herkunft und Übergabe</h3>
+              <p className="helper-text">
+                Ruhige Bündelung vorhandener Herkunfts-, Audit- und Exporthinweise. Keine rechtssichere Audit-Behauptung.
+              </p>
+            </header>
+            <div className="handoff-fact-grid">
+              <div className="handoff-fact">
+                <span>Intake-Ursprung</span>
+                <strong>{productionIntakeOriginLabel}</strong>
+              </div>
+              <div className="handoff-fact">
+                <span>Audit-Spur</span>
+                <strong>{productionAuditTrailLabel}</strong>
+              </div>
+              <div className="handoff-fact">
+                <span>Übergabe-/Exportartefakte</span>
+                <strong>{productionHandoffExportLabel}</strong>
+              </div>
+            </div>
+            <p className="helper-text">
+              Es werden nur bestehende Metadaten und Artefaktzustände gezeigt; Rohtexte oder PDF-Extrakte werden hier nicht gespiegelt.
+            </p>
+          </article>
 
           <article className="recipe-review-status-zone" aria-label="Rezeptprüfung">
             <div>
