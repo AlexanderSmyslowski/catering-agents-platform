@@ -12,6 +12,7 @@ type RouteSmokeDashboardFixture = {
   purchaseLists?: Array<Record<string, unknown>>;
   recipes?: Array<Record<string, unknown>>;
   auditEvents?: Array<Record<string, unknown>>;
+  intakeRequestDetails?: Record<string, Record<string, unknown>>;
 };
 
 function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture = {}) {
@@ -87,6 +88,18 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
           status: 200,
           headers: { "content-type": "application/json" }
         });
+      }
+
+      const intakeRequestDetailMatch = url.match(/\/api\/intake\/v1\/intake\/requests\/([^/?#]+)$/);
+      if (intakeRequestDetailMatch) {
+        const requestId = decodeURIComponent(intakeRequestDetailMatch[1]);
+        const detail = fixture.intakeRequestDetails?.[requestId];
+        if (detail) {
+          return new Response(JSON.stringify(detail), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
       }
 
       if (
@@ -383,6 +396,82 @@ describe("backoffice route smoke", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it("keeps offer and production handoff anchored on the same request, spec, and export markers", async () => {
+    installBackofficeEnvironmentMocks({
+      acceptedSpecs: [
+        {
+          schemaVersion: 1,
+          specId: "c4-spec-handoff",
+          requestId: "c4-request-handoff",
+          sourceLineage: [{ sourceType: "offer_draft", reference: "c4-draft-handoff" }],
+          readiness: { status: "complete", reasons: [] },
+          event: { type: "lunch", date: "2026-08-21" },
+          servicePlan: { eventType: "lunch", serviceForm: "buffet" },
+          attendees: { expected: 80 },
+          menuPlan: [
+            {
+              componentId: "c4-component-buffet",
+              label: "Sommerbuffet",
+              menuCategory: "classic",
+              productionDecision: { mode: "scratch" }
+            }
+          ]
+        }
+      ],
+      offerDrafts: [
+        {
+          draftId: "c4-draft-handoff",
+          eventSummary: "C4 Sommerbuffet-Angebot",
+          variantSet: [{ variantId: "classic", label: "Klassisch" }],
+          openQuestions: []
+        }
+      ],
+      productionPlans: [
+        {
+          planId: "c4-plan-handoff",
+          eventSpecId: "c4-spec-handoff",
+          readiness: { status: "complete", reasons: [] },
+          productionBatches: [],
+          kitchenSheets: [],
+          recipeSelections: []
+        }
+      ],
+      purchaseLists: [
+        {
+          purchaseListId: "c4-purchase-handoff",
+          eventSpecId: "c4-spec-handoff",
+          totals: { itemCount: 1 },
+          items: [{ articleName: "Tomaten", purchaseQty: 8, purchaseUnit: "kg" }]
+        }
+      ],
+      intakeRequestDetails: {
+        "c4-request-handoff": {
+          requestId: "c4-request-handoff",
+          source: { channel: "offer", receivedAt: "2026-05-22T11:30:00.000Z" },
+          rawInputs: [{ kind: "offer_draft", documentId: "c4-draft-handoff" }]
+        }
+      }
+    });
+
+    const offer = await renderRoute("/angebot");
+
+    expect(offer.text).toContain("Aktueller Fokus: c4-draft-handoff");
+    expect(offer.text).toContain("aktive Spezifikation: c4-spec-handoff (vollständig)");
+    expect(offer.text).toContain("specId: c4-spec-handoff");
+    expect(offer.text).toContain("requestId: c4-request-handoff");
+    expect(offer.html).toContain('href="/produktion"');
+
+    const production = await renderRoute("/produktion");
+
+    expect(production.text).toContain("Lunch · 80 Teilnehmer · 2026-08-21");
+    expect(production.text).toContain("specId: c4-spec-handoff");
+    expect(production.text).toContain("requestId: c4-request-handoff");
+    expect(production.text).toContain("Produktionsblatt exportieren");
+    expect(production.html).toContain("/api/exports/v1/exports/production-plans/c4-plan-handoff/html");
+    expect(production.text).toContain("Einkaufsliste herunterladen");
+    expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/c4-purchase-handoff/csv");
   });
 
   it("keeps the start overview anchored on existing operational counts", async () => {

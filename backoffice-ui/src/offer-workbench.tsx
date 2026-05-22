@@ -108,6 +108,11 @@ function renderDraftSummary(draft?: Record<string, unknown>): string {
   return `${String(draft.eventSummary ?? "Unbenannter Entwurf")} · ${variants} Varianten · ${questions} offene Punkte`;
 }
 
+function getSpecRequestId(spec: Record<string, unknown>): string {
+  const requestId = spec.requestId;
+  return typeof requestId === "string" && requestId.trim() ? requestId.trim() : "-";
+}
+
 export function OfferConversationalWorkbench({
   submitting,
   latestSourceLabel,
@@ -310,6 +315,8 @@ export function OfferConversationalWorkbench({
                 <div>
                   <strong>{getSpecLabel(spec)}</strong>
                   <span>Status: {getReadinessLabel(spec)}</span>
+                  <span>specId: {String(spec.specId ?? "-")}</span>
+                  <span>requestId: {getSpecRequestId(spec)}</span>
                 </div>
                 <div className="quiet-action-row">
                   <button className="secondary-button" disabled={submitting} onClick={() => specEditActions.beginSpecEdit(spec)}>

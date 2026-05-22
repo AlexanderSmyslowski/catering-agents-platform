@@ -346,6 +346,11 @@ function extractAcceptedSpecId(payload: Record<string, unknown>): string | undef
 }
 
 function getIntakeRequestIdForSpec(spec: Record<string, unknown> | undefined): string | undefined {
+  const requestId = spec?.requestId;
+  if (typeof requestId === "string" && requestId.trim()) {
+    return requestId.trim();
+  }
+
   const sourceLineage = Array.isArray(spec?.sourceLineage) ? spec?.sourceLineage : [];
   const intakeSource = sourceLineage.find((lineage) => {
     const sourceType = String((lineage as Record<string, unknown>)?.sourceType ?? "");
@@ -2601,6 +2606,7 @@ export function App() {
                   {focusedProductionSpec ? (
                     <div className="component-answer-card">
                       <p className="eyebrow">Spezifikationsdetails</p>
+                      <p className="helper-text">specId: {String(focusedProductionSpec.specId ?? "-")}</p>
                       <p className="helper-text">
                         {`Eventtyp: ${String(
                           focusedProductionSpecEvent?.type ?? focusedProductionSpecServicePlan?.eventType ?? "-"
