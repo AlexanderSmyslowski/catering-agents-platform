@@ -229,9 +229,10 @@ function answerMatchesQuestion(
     answer.status === "submitted" &&
     answer.answerType === "shortText" &&
     answer.questionId === question.questionId &&
-    answer.questionKey.reason === question.reason &&
+    answer.questionKey?.reason === question.reason &&
     answer.questionKey.reasonCode === question.reasonCode &&
-    answer.answerText.kind === "shortText" &&
+    answer.answerText?.kind === "shortText" &&
+    typeof answer.answerText.value === "string" &&
     Boolean(answer.answerText.value.trim());
 }
 

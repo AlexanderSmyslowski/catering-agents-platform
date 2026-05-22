@@ -144,4 +144,30 @@ describe("PA25 clarification answered status anchor", () => {
     expect(JSON.stringify(spec)).not.toContain("42");
     expect(projection.messages.some((message) => message.type === "production_output_anchor")).toBe(false);
   });
+
+  it("ignores malformed unsafe answer records without leaking raw content into projection markers", () => {
+    const answer = submittedAnswer();
+    const malformedAnswers = [
+      { ...answer, answerId: "answer-missing-context", context: undefined },
+      { ...answer, answerId: "answer-missing-question-key", questionKey: undefined },
+      { ...answer, answerId: "answer-missing-text", answerText: undefined },
+      { ...answer, answerId: "answer-numeric-text", answerText: { kind: "shortText", value: 42 } },
+      { ...answer, answerId: "answer-unexpected-status", status: "published" },
+      {
+        ...answer,
+        answerId: "answer-unsafe-raw",
+        status: "published",
+        answerText: { kind: "shortText", value: "Kundin Erika Mustermann <script>alert('pii')</script> sha256:abcdef1234567890" }
+      }
+    ] as never as ProductionClarificationAnswer[];
+
+    const { projection, questionMessage } = projectedQuestionStatus(malformedAnswers);
+    const serializedProjection = JSON.stringify(projection.messages);
+
+    expect(questionMessage.clarificationAnswerStatus).toBe("unanswered");
+    expect(projection.messages.filter((message) => message.type === "user_structured_answer")).toHaveLength(0);
+    expect(serializedProjection).not.toContain("Erika Mustermann");
+    expect(serializedProjection).not.toContain("<script>");
+    expect(serializedProjection).not.toContain("abcdef1234567890");
+  });
 });
