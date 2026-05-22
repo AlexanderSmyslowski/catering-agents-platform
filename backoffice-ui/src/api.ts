@@ -95,6 +95,19 @@ function buildHeaders(
   return headers;
 }
 
+async function responseErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.clone().json()) as { message?: unknown };
+    if (typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message.trim();
+    }
+  } catch {
+    // Keep the generic HTTP fallback when the server did not return JSON.
+  }
+
+  return `${response.status} ${response.statusText}`.trim();
+}
+
 async function fetchJson<T>(input: string, init?: RequestInit, defaultActorName?: string): Promise<T> {
   const response = await fetch(input, {
     ...init,
@@ -102,7 +115,7 @@ async function fetchJson<T>(input: string, init?: RequestInit, defaultActorName?
   });
 
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    throw new Error(await responseErrorMessage(response));
   }
 
   return (await response.json()) as T;
@@ -205,7 +218,7 @@ export async function createAcceptedSpecFromDocument(
   });
 
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    throw new Error(await responseErrorMessage(response));
   }
 
   return (await response.json()) as Record<string, unknown>;
@@ -303,7 +316,7 @@ export async function uploadRecipeFile(
   });
 
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    throw new Error(await responseErrorMessage(response));
   }
 
   return (await response.json()) as { recipe: Record<string, unknown> };

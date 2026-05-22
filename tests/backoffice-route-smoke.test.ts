@@ -398,6 +398,51 @@ describe("backoffice route smoke", () => {
     container.remove();
   });
 
+  it("keeps production upload limit errors visible in the workbench", async () => {
+    installBackofficeEnvironmentMocks();
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    const defaultFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/intake/v1/intake/documents/upload")) {
+        return new Response(JSON.stringify({ message: "Datei ist zu gross fuer den Import." }), {
+          status: 413,
+          statusText: "Payload Too Large",
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      return await defaultFetch?.(input, init);
+    });
+
+    const { root, container } = await renderRouteLive("/produktion");
+    const fileInput = document.querySelector("input[type='file']") as HTMLInputElement | null;
+    if (!fileInput) {
+      throw new Error("Production upload input not found");
+    }
+
+    const oversizedFile = new File(["x".repeat(64)], "zu-gross.txt", { type: "text/plain" });
+    Object.defineProperty(fileInput, "files", {
+      value: [oversizedFile],
+      configurable: true
+    });
+
+    await act(async () => {
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+      await flush(8);
+    });
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Datei ist zu gross fuer den Import.");
+    expect(text).not.toContain("Dokument zu-gross.txt wurde übernommen und analysiert.");
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it("keeps offer and production handoff anchored on the same request, spec, and export markers", async () => {
     installBackofficeEnvironmentMocks({
       acceptedSpecs: [
@@ -450,7 +495,25 @@ describe("backoffice route smoke", () => {
         "c4-request-handoff": {
           requestId: "c4-request-handoff",
           source: { channel: "offer", receivedAt: "2026-05-22T11:30:00.000Z" },
-          rawInputs: [{ kind: "offer_draft", documentId: "c4-draft-handoff" }]
+          rawInputs: [
+            {
+              kind: "pdf",
+              mimeType: "application/pdf",
+              documentId: "c4-document-upload-warning",
+              sourceMetadata: {
+                filename: "c4-angebot.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 2048,
+                sha256: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                ingestedAt: "2026-05-22T11:29:00.000Z",
+                uploadContext: "intake"
+              },
+              documentIngestion: {
+                status: "fallback",
+                warnings: ["document_text_extraction_fallback"]
+              }
+            }
+          ]
         }
       }
     });
@@ -468,6 +531,9 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Lunch · 80 Teilnehmer · 2026-08-21");
     expect(production.text).toContain("specId: c4-spec-handoff");
     expect(production.text).toContain("requestId: c4-request-handoff");
+    expect(production.text).toContain("Ingestion: fallback · document_text_extraction_fallback");
+    expect(production.text).toContain("Quellenmetadaten: c4-angebot.pdf · application/pdf · 2.0 KB · sha256:abcdef123456 · intake");
+    expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
     expect(production.text).toContain("Produktionsblatt exportieren");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/c4-plan-handoff/html");
     expect(production.text).toContain("Einkaufsliste herunterladen");
