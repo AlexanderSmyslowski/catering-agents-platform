@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.168
+version: 5.169
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -126,6 +126,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - C3 Angebot-Happy-Path ist als interner jsdom-Smoke abgesichert: `/angebot` prueft zentrale Anfrageeingabe, neu erzeugten fokussierten Angebotsentwurf, Status-/Uebergabe-/Exportanker und den bestehenden Link zur Produktion; Code-Fix nur fuer den echten Fokus-Marker nach Entwurfserzeugung, keine Angebotslogik/API/Persistenz.
 - C4 Angebot-zu-Produktion-Uebergabeanker ist als interner jsdom-Smoke abgesichert: derselbe vorhandene Draft-/Spec-/Request-Kontext bleibt zwischen `/angebot` und `/produktion` ueber sichtbare `draftId`-, `specId`-, `requestId`- und Exportanker pruefbar; minimaler UI-/Read-Fix nur fuer sichtbare Marker und vorhandenes `requestId`-Detailloading, keine neue API, Persistenz oder Uebergabelogik.
 - C5 Exportlinks mit Trusted-Actor-Kontext ist als read-only Regression in `tests/pa8-read-path-auth.test.ts` ergänzt: Angebot-, Produktionsplan-/Produktionsblatt- und Einkaufslisten-Exports verlangen bei gesetztem Trusted-Secret passende Trusted-Actor-Rollen, frei gesetztes `x-actor-name` bleibt wirkungslos und Health bleibt offen.
+- P3-B34 Startseite als Beta-Kontrollzentrum ist minimal gehaertet: Die Startseite benennt nun explizit den internen Beta-Kontrollzentrum-Kontext fuer Demo, Erfassung, Angebot, Produktion, Export und Audit aus vorhandenen Daten; `tests/backoffice-route-smoke.test.ts` schuetzt diesen Marker. Keine neue Dashboard-Welt, keine neue Datenquelle, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -888,3 +889,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.168 - 2026-05-22
 - P3-B33 Demo-Fixture-/Seed-Erwartung ist minimal gehaertet: `scripts/check-local-ops.sh` prueft im bestehenden lokalen Check jetzt zusaetzlich erwartete Demo-Anker fuer Intake-Request, Intake-Spec, Angebotsentwurf und Produktionsplan, bevor die vorhandenen read-only Export- und Auditbelege laufen.
 - `tests/local-ops-check-contract.test.ts` schuetzt die Auffindbarkeit der vorhandenen Demo-Fixtures und Local-Check-Anker; `TESTING.md` benennt Start-, Intake-/Request-, Angebots-, Produktions- und Exportanker inklusive der relevanten Demo-IDs. Keine neuen Beispieldaten, keine echte Datenverarbeitung, keine neue API, keine Persistenz, kein Deployment und keine rechtssichere Audit-/Compliance-Behauptung.
+
+### 5.169 - 2026-05-22
+- P3-B34 Startseite als Beta-Kontrollzentrum ist minimal gehaertet: `backoffice-ui/src/App.tsx` zeigt auf der bestehenden Startseite einen knappen internen Beta-Kontrollzentrum-Hinweis fuer Demo, Erfassung, Angebot, Produktion, Export und Audit aus vorhandenen Daten.
+- `tests/backoffice-route-smoke.test.ts` schuetzt den neuen Startseiten-Marker. Keine neue Dashboard-Welt, keine neue Datenquelle, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.

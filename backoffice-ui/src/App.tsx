@@ -2027,18 +2027,24 @@ export function App() {
           ) : null}
         </div>
         {route === "home" ? (
-          <div className="agent-shortcuts" aria-label="Direkteinstieg Agenten">
-            {agentShortcutButtons.map((button) => (
-              <a
-                key={button.href}
-                className={button.active ? "agent-shortcut agent-shortcut--active" : "agent-shortcut"}
-                href={button.href}
-              >
-                <strong>{button.title}</strong>
-                <span>{button.description}</span>
-              </a>
-            ))}
-          </div>
+          <>
+            <div className="agent-shortcuts" aria-label="Direkteinstieg Agenten">
+              {agentShortcutButtons.map((button) => (
+                <a
+                  key={button.href}
+                  className={button.active ? "agent-shortcut agent-shortcut--active" : "agent-shortcut"}
+                  href={button.href}
+                >
+                  <strong>{button.title}</strong>
+                  <span>{button.description}</span>
+                </a>
+              ))}
+            </div>
+            <p className="helper-text">
+              <strong>Internes Beta-Kontrollzentrum:</strong> Demo, Erfassung, Angebot, Produktion, Export und Audit
+              aus bestehenden Daten prüfen.
+            </p>
+          </>
         ) : null}
 
         {route === "home" ? (
