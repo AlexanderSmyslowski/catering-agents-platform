@@ -943,3 +943,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.179 - 2026-05-22
 - P4-B48 Full Gates, Memory-Snapshot und naechster Nutzwertentscheid ist als No-Product-Change abgeschlossen: Plan 4 wurde mit fokussierten Clarification-/Production-/Local-Ops-Tests, `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check` und kontrolliertem `npm run local:status` verifiziert.
 - Snapshot `docs/agent-memory/memory_v5.179_2026-05-22.md` haelt den verifizierten Stand fest. Naechster Nutzwert liegt nicht in weiterem Clarification-Mikroausbau, sondern in einer bewussten Entscheidung fuer den naechsten kleinsten Produktwertblock ausserhalb des abgeschlossenen Plan-4-Strangs. Keine Produktlogik, API, Persistenz/Migration, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
+
+### 5.180 - 2026-05-22
+- P5-B49 Beta-Durchlauf Ist-Karte ist Doku-/Vertragstest-only umgesetzt: `docs/product/P5_BETA_DURCHLAUF_IST_KARTE.md` kartiert den vorhandenen Nutzerweg `Start -> Angebot -> Produktion -> Exporte/Audit` und trennt intern nutzbar, nur dokumentiert / nur intern abnahmefaehig, blockiert und schon testbar.
+- `tests/p5-b49-beta-flow-map-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING und C8 sowie die Grenzen: keine Produktlogik, API, Persistenz, Migration, Deployment, SSH, echten Daten, OAuth/Login/OIDC, automatische Spec-Korrektur oder Rezept-/Allergenautomatik.

@@ -85,6 +85,7 @@ Fuehrendes Architektur-Gate vor weiterem Produktionsagent-v1-Featurebau:
 
 - [docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md](docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md)
 - [docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md](docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md) fasst die interne Beta-/Abnahme-Readiness aus bestehenden Status-, Test-, Export-, Audit- und Gate-Signalen zusammen; externe Nutzung und echte Produktionsagent-v1-Faehigkeiten bleiben gesperrt, bis die benannten Gates bewusst entschieden sind.
+- [docs/product/P5_BETA_DURCHLAUF_IST_KARTE.md](docs/product/P5_BETA_DURCHLAUF_IST_KARTE.md) kartiert den aktuellen internen Beta-Durchlauf Start -> Angebot -> Produktion -> Exporte/Audit aus Nutzersicht und trennt intern nutzbar, nur dokumentiert, blockiert und schon testbar.
 - [docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md](docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md) beschreibt den reproduzierbaren internen Demo-/Abnahmeweg ueber bestehende lokale Scripts, UI-Routen, Angebot-zu-Produktion-Handoff, Upload-/Warnanker, Exporte und Full Gates; er ist keine Produktionsfreigabe und keine rechtssichere Audit- oder Compliance-Aussage.
 
 Die Web-App bietet Exportlinks fuer:
