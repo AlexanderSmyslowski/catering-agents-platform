@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.152
+version: 5.153
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -95,6 +95,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA13 Ingestion-Warnungen in Exportankern ist umgesetzt: sichere fallback/failed `documentIngestion`-Marker werden ueber vorhandene `sourceAnchors` in Produktionsoutput-/Downloadanker und Produktionsplan-HTML-Exports weitergereicht; extracted/ok bleibt ruhig, Rohtexte/extractedText werden nicht gespiegelt.
 - PA14 DocumentIngestion-Korridor ist als read-only Abnahmeanker in `tests/pa14-document-ingestion-corridor-readiness.test.ts` und `TESTING.md` abgesichert: Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher; Rohtexte werden nicht gespiegelt und es wurde keine neue API, UI, Persistenz, Parser-, OCR-, LLM-, Rezept- oder Allergenlogik eingefuehrt.
 - B14 Sandbox/Worker/AV-Gate ist als Doku-/Vertragstest-only Anker in `docs/architecture/B14_SANDBOX_WORKER_AV_GATE.md` und `tests/b14-sandbox-worker-av-gate-contract.test.ts` vorbereitet: aktueller Demo-/Ingestion-/Upload-Korridor bleibt intern/testbezogen; produktionsnahe Verarbeitung echter Uploads bleibt ohne Entscheidungen zu erlaubten Dateitypen, Groessenlimits, Quarantaene-/Reject-Verhalten, Scan-/Sandbox-Verantwortung, Worker-Isolation, Fehler-/Warnpfad und Betriebsverantwortung `blocked`.
+- B15 Produktions-Demo-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die kompakte `/produktion`-Zusammenfassung nennt neben Klarheit, Rueckfragen, Plan- und Einkaufstatus nun auch den vorhandenen Produktionsobjektstatus (`Ergebnisobjekte: ...`); abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Fachlogik, API, Persistenz oder Produktflaeche.
 - PA15 ProductionAgent-v1 Next Capability ADR ist als Entscheidungsvorlage in `docs/architecture/PA15_PRODUCTION_AGENT_NEXT_CAPABILITY_ADR.md` dokumentiert und mit `tests/pa15-productionagent-next-capability-adr.test.ts` abgesichert: Empfohlen wird Option A Rueckfragenmodell / Clarification Model als naechste echte, eng begrenzte Agentenfaehigkeit; keine Runtime-Implementierung, API, Persistenz, LLM-/Tool-Use-, Rezept- oder Allergenlogik.
 - PA16 Clarification Model Slice 1 ist umgesetzt: `shared-core` definiert `ProductionClarificationQuestion` und leitet read-only Rueckfragen nur aus `missingFields`, `readiness.reasons`, `documentIngestion.status` und `documentIngestion.warnings` ab; die bestehende `ProductionConversationProjection` transportiert diese Fragen als strukturierte Agent-Fragen mit sicheren Quellenankern, ohne Nutzerantwortlogik, neue API, Persistenz, LLM-/Tool-Use-, Parser-, Rezept-, Mengen- oder Allergenlogik.
 - PA17 Clarification Question Quality Slice ist umgesetzt: Rueckfragen werden deterministisch nach Schwere/Ursache sortiert, identische Ursachen je sicherem Quellenanker dedupliziert und bekannte sichere Feld-/Warnkeys mit neutralen deutschen Kurzlabels angezeigt; unbekannte Keys bleiben technische Fallbacks, sensible Roh-/Extraktionstexte werden nicht gespiegelt.
@@ -809,3 +810,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.152 - 2026-05-22
 - B14 Sandbox/Worker/AV-Gate ist Doku-/Vertragstest-only umgesetzt: `docs/architecture/B14_SANDBOX_WORKER_AV_GATE.md` trennt den aktuellen internen Demo-/Ingestion-/Upload-Korridor von produktionsnaher Verarbeitung beliebiger Dateien.
 - `tests/b14-sandbox-worker-av-gate-contract.test.ts` schuetzt die fehlenden Mindestentscheidungen erlaubte Dateitypen, Groessenlimits, Quarantaene-/Reject-Verhalten, Scan-/Sandbox-Verantwortung, Worker-Isolation, Timeout-/Ressourcenlimit, Fehler-/Warnpfad und Betreiber-/Betriebsverantwortung. Health-/Demo-/Read-only-Export-Gruensignale ersetzen keine Sandbox/AV-Freigabe; B13 PII/Retention/Backup bleibt separat. Keine Sandbox-/Worker-/AV-Implementierung, neue Parser-/OCR-/LLM-Engine, neue Upload-/Ingestion-Produktlogik, API, Persistenz, Migration, Runtime oder produktionsnahe Dateiverarbeitungsfreigabe.
+
+### 5.153 - 2026-05-22
+- B15 Produktions-Demo-Lesbarkeit ist als kleiner regressionssicherer UI-/Smoke-Baustein umgesetzt: `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt, dass die kompakte `/produktion`-Zusammenfassung bei vorhandenen Produktionsobjekten den Ergebnisobjektstatus sichtbar macht.
+- Minimaler UI-Fix in `backoffice-ui/src/production-workbench.tsx`: Die Calm Summary zeigt `Ergebnisobjekte: ...` aus dem bereits vorhandenen `productionObjectStatusLabel`. Keine neue Produktflaeche, Fachlogik, API, Persistenz, Migration oder neue Demo-/Gate-Doku.

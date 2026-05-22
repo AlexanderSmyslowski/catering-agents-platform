@@ -67,6 +67,7 @@ export function ProductionConversationalWorkbench({
         <p className="helper-text">
           Planstatus: {planStatusLabel} · Einkaufstatus: {purchaseStatusLabel}
         </p>
+        <p className="helper-text">Ergebnisobjekte: {productionObjectStatusLabel}</p>
       </aside>
 
       <div className="production-progressive-zone">

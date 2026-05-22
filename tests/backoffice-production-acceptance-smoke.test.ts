@@ -454,6 +454,7 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
+    expect(content).toContain("Ergebnisobjekte: 1 Plan(e) · vollständig");
   });
 
   it("summarizes recipe review status as a quiet production blocker zone", async () => {
