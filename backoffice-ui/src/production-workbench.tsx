@@ -8,6 +8,8 @@ type ProductionConversationalWorkbenchProps = {
   nextStepTitle: string;
   nextStepDescription: string;
   questionCount: number;
+  answeredQuestionCount: number;
+  unansweredQuestionCount: number;
   productionObjectCount: number;
   productionObjectStatusLabel: string;
   purchaseListCount: number;
@@ -32,6 +34,8 @@ export function ProductionConversationalWorkbench({
   nextStepTitle,
   nextStepDescription,
   questionCount,
+  answeredQuestionCount,
+  unansweredQuestionCount,
   productionObjectCount,
   productionObjectStatusLabel,
   purchaseListCount,
@@ -65,6 +69,9 @@ export function ProductionConversationalWorkbench({
           Klarheit: {readinessLabel} · Rückfragen: {formatQuestionStatus(questionCount)}
         </p>
         <p className="helper-text">
+          Rückfragenstatus: offen {unansweredQuestionCount} · beantwortet {answeredQuestionCount}
+        </p>
+        <p className="helper-text">
           Interner Beta-Schritt: Produktion, Einkaufsliste, Exporte, Herkunft und offene Rückfragen bleiben nachvollziehbar.
         </p>
         <p className="helper-text">
@@ -77,7 +84,7 @@ export function ProductionConversationalWorkbench({
         <details className="progressive-panel" open={questionCount > 0}>
           <summary>
             <span>Rückfragen und Antworten</span>
-            <strong>{formatQuestionStatus(questionCount)}</strong>
+            <strong>offen {unansweredQuestionCount} · beantwortet {answeredQuestionCount}</strong>
           </summary>
           <div className="progressive-panel__body">{questionsPanel}</div>
         </details>

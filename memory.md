@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.174
+version: 5.175
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -132,6 +132,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P3-B37 Upload-Grenzen als Beta-Risiko ist Doku-/Test-only sichtbar gemacht: TESTING und C8 benennen Intake-Limit 8 MiB/bis zu 3 Multipart-Dateien, Rezeptupload-Limit 5 MiB/genau eine Datei, erlaubten Dokumentkorridor PDF/TXT/MD/EML/Pages, kontrollierte Abweisung zu grosser/unerlaubter Dateien und die Blockade produktionsnaher echter/beliebiger Uploads ohne Sandbox/Worker/AV-Gate; `tests/pa14-document-ingestion-corridor-readiness.test.ts` schuetzt diese Marker ohne Rohtext-/Vollhash-Leaks. Keine Parser-/OCR-/LLM-Engine, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P3-B38 Echte-Daten-Stop-Gate ist Doku-/Test-only im Beta-Runbook verankert: C8 und TESTING trennen Demo-/Seed-/synthetische Daten als erlaubten internen Beta-Korridor von echten Personen-/Kunden-/Einsatzdaten, die ohne entschiedenes PII/Retention/Backup-Gate und Sandbox/Worker/AV-Gate `blocked` bleiben; lokale Demo-/Upload-/Health-/Export-Gruensignale sind kein Compliance-Freibrief. Keine echte Datenverarbeitung, keine API, Persistenz, Deployment, SSH, Secrets, Login/OIDC oder Compliance-/DSGVO-Freigabe.
 - P3-B39 Full Gates und Status-Snapshot ist No-Product-Change abgeschlossen: Plan-3-Zwischenstand wurde ueber fokussierte P3-Smokes, `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check` und `npm run local:status` verifiziert; Snapshot liegt unter `docs/agent-memory/memory_v5.174_2026-05-22.md`. Keine Produktlogik, API, Persistenz, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
+- P4-B44 Read-only Status in `/produktion` ist minimal geschaerft: die bestehende Production Conversation Projection wird in der UI nun auch fuer optionale vorhandene `clarificationAnswers` genutzt, zeigt beantwortete Rueckfragen als read-only Nutzerantworten und fasst offene/beantwortete Rueckfragen in der ruhigen Zusammenfassung zusammen; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue API, Persistenz, Migration, Antwortbearbeitung, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik oder echte Daten.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -918,3 +919,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.174 - 2026-05-22
 - P3-B39 Full Gates und Status-Snapshot ist No-Product-Change abgeschlossen: Der Plan-3-Zwischenstand wurde mit fokussierten P3-Smokes, `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check` und `npm run local:status` verifiziert.
 - Snapshot `docs/agent-memory/memory_v5.174_2026-05-22.md` haelt den verifizierten Stand fest. Keine Produktlogik, API, Persistenz, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.
+
+### 5.175 - 2026-05-22
+- P4-B44 Read-only Status in `/produktion` ist umgesetzt: vorhandene `clarificationAnswers`, sofern sie im bestehenden Spec-/Projection-Read-Pfad mitgeliefert werden, werden in der bestehenden `ProductionConversationProjection` ausgewertet und in `/produktion` read-only als beantwortete Rueckfragen plus Antwort-Bubble sichtbar.
+- Die kompakte Production-Workbench-Zusammenfassung nennt nun offene und beantwortete Rueckfragen getrennt; der Smoke-Test `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den beantworteten Statusanker. Keine neue API, Persistenz, Migration, Antwortbearbeitung, automatische Spec-Korrektur, Fachableitung, LLM-/Tool-Use-, Rezept-/Allergenlogik, Deployment, SSH, Secrets, Login/OIDC oder echte Datenverarbeitung.

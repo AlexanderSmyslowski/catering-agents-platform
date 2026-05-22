@@ -3,6 +3,10 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
+import {
+  buildProductionClarificationQuestions,
+  createSubmittedProductionClarificationAnswer
+} from "../shared-core/src/production-clarification.js";
 
 function installProductionAcceptanceMocks(
   options: {
@@ -12,6 +16,7 @@ function installProductionAcceptanceMocks(
     withoutPlans?: boolean;
     withRecipeReviewStates?: boolean;
     withAuditEvent?: boolean;
+    withSubmittedClarificationAnswer?: boolean;
   } = {}
 ) {
   const storage = new Map<string, string>();
@@ -38,6 +43,70 @@ function installProductionAcceptanceMocks(
   const specId = "spec-production-fallback-1";
   const previousSpecId = "spec-production-previous-1";
   const planSpecId = options.stalePlanOnly ? previousSpecId : specId;
+  const focusedSpec: Record<string, unknown> = {
+    schemaVersion: 1,
+    specId,
+    requestId,
+    sourceLineage: [
+      {
+        sourceType: "manual_input",
+        reference: requestId
+      }
+    ],
+    readiness: options.completeSpec
+      ? {
+          status: "complete",
+          reasons: []
+        }
+      : {
+          status: "insufficient",
+          reasons: ["Glutenfrei-Konflikt mit Brot-Baguette und fehlender Ersatzklassifikation."]
+        },
+    event: {
+      type: "conference",
+      date: "2026-07-13"
+    },
+    servicePlan: {
+      eventType: "conference",
+      serviceForm: "buffet"
+    },
+    attendees: {
+      expected: 36
+    },
+    menuPlan: [
+      {
+        componentId: "component-bread-baguette",
+        label: "Brot-Baguette",
+        menuCategory: "classic",
+        productionDecision: {
+          mode: "scratch"
+        }
+      }
+    ]
+  };
+
+  if (options.withSubmittedClarificationAnswer) {
+    const questions = buildProductionClarificationQuestions({ spec: focusedSpec });
+    const [question] = questions;
+    focusedSpec.clarificationAnswers = [
+      createSubmittedProductionClarificationAnswer({
+        questions,
+        context: {
+          specId,
+          productionSessionId: `production-session-${specId}`
+        },
+        questionId: question.questionId,
+        questionKey: {
+          reason: question.reason,
+          reasonCode: question.reasonCode
+        },
+        answerType: "shortText",
+        answerText: "Glutenfreies Baguette wird separat ersetzt.",
+        actorName: "Küche",
+        now: "2026-05-22T20:30:00.000Z"
+      })
+    ];
+  }
 
   vi.stubGlobal(
     "fetch",
@@ -87,47 +156,7 @@ function installProductionAcceptanceMocks(
                     }
                   ]
                 : []),
-              {
-                schemaVersion: 1,
-                specId,
-                requestId,
-                sourceLineage: [
-                  {
-                    sourceType: "manual_input",
-                    reference: requestId
-                  }
-                ],
-                readiness: options.completeSpec
-                  ? {
-                      status: "complete",
-                      reasons: []
-                    }
-                  : {
-                      status: "insufficient",
-                      reasons: ["Glutenfrei-Konflikt mit Brot-Baguette und fehlender Ersatzklassifikation."]
-                    },
-                event: {
-                  type: "conference",
-                  date: "2026-07-13"
-                },
-                servicePlan: {
-                  eventType: "conference",
-                  serviceForm: "buffet"
-                },
-                attendees: {
-                  expected: 36
-                },
-                menuPlan: [
-                  {
-                    componentId: "component-bread-baguette",
-                    label: "Brot-Baguette",
-                    menuCategory: "classic",
-                    productionDecision: {
-                      mode: "scratch"
-                    }
-                  }
-                ]
-              }
+              focusedSpec
             ]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -457,6 +486,18 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
     expect(content).toContain("Ergebnisobjekte: 1 Plan(e) · vollständig");
+  });
+
+  it("shows answered clarification questions as read-only status anchors", async () => {
+    installProductionAcceptanceMocks({ withSubmittedClarificationAnswer: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 1");
+    expect(content).toContain("Rückfrage beantwortet");
+    expect(content).toContain("Antwort auf Rückfrage");
+    expect(content).toContain("Glutenfreies Baguette wird separat ersetzt.");
+    expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
   });
 
   it("summarizes recipe review status as a quiet production blocker zone", async () => {

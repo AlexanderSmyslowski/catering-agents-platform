@@ -1260,6 +1260,14 @@ export function App() {
     [focusedProductionSpec]
   );
 
+  const focusedClarificationAnswers = useMemo(
+    () =>
+      Array.isArray(focusedProductionSpecRecord?.clarificationAnswers)
+        ? focusedProductionSpecRecord.clarificationAnswers
+        : [],
+    [focusedProductionSpecRecord]
+  );
+
   const productionConversationProjection = useMemo(
     () =>
       buildProductionConversationProjection({
@@ -1267,11 +1275,36 @@ export function App() {
         questions: productionQuestions,
         assumptions: productionAssumptions,
         answerSummary: formatStructuredProductionAnswerSummary(focusedProductionSpec),
+        clarificationAnswers: focusedClarificationAnswers as Parameters<typeof buildProductionConversationProjection>[0]["clarificationAnswers"],
         sourceInputs: intakeRequestDetail?.rawInputs,
         productionPlans: currentSpecPlans,
         purchaseLists: currentSpecPurchaseLists
       }),
-    [currentSpecPlans, currentSpecPurchaseLists, focusedProductionSpec, intakeRequestDetail?.rawInputs, productionAssumptions, productionQuestions]
+    [
+      currentSpecPlans,
+      currentSpecPurchaseLists,
+      focusedClarificationAnswers,
+      focusedProductionSpec,
+      intakeRequestDetail?.rawInputs,
+      productionAssumptions,
+      productionQuestions
+    ]
+  );
+
+  const clarificationStatusCounts = useMemo(
+    () =>
+      productionConversationProjection.messages.reduce(
+        (counts, message) => {
+          if (message.clarificationAnswerStatus === "answered") {
+            counts.answered += 1;
+          } else if (message.clarificationAnswerStatus === "unanswered") {
+            counts.unanswered += 1;
+          }
+          return counts;
+        },
+        { answered: 0, unanswered: 0 }
+      ),
+    [productionConversationProjection.messages]
   );
 
   const workbenchSpecFacts = useMemo(() => {
@@ -2296,6 +2329,8 @@ export function App() {
           nextStepTitle={productionNextStep.title}
           nextStepDescription={productionNextStep.description}
           questionCount={productionQuestions.length}
+          answeredQuestionCount={clarificationStatusCounts.answered}
+          unansweredQuestionCount={clarificationStatusCounts.unanswered}
           productionObjectCount={currentSpecPlans.length}
           productionObjectStatusLabel={
             selectedPlan
@@ -2402,16 +2437,41 @@ export function App() {
                   </div>
                   <div className="structured-chat-thread" aria-label="Strukturierte Rückfragen als Chatfluss">
                     {productionConversationProjection.messages.map((message) => {
-                      if (message.type === "user_structured_answer" || message.type === "production_output_anchor") {
+                      if (message.type === "production_output_anchor") {
+                        return null;
+                      }
+                      if (message.type === "user_structured_answer" && !message.clarificationAnswer) {
                         return null;
                       }
 
+                      const isClarificationAnswer = message.type === "user_structured_answer";
+
                       return (
-                        <article className="structured-chat-message" key={message.messageId}>
-                          <div className="structured-chat-avatar" aria-hidden="true">
-                            {message.role === "system" ? "S" : "A"}
+                        <article
+                          className={
+                            isClarificationAnswer
+                              ? "structured-chat-message structured-chat-message--user"
+                              : "structured-chat-message"
+                          }
+                          key={message.messageId}
+                        >
+                          <div
+                            className={
+                              isClarificationAnswer
+                                ? "structured-chat-avatar structured-chat-avatar--user"
+                                : "structured-chat-avatar"
+                            }
+                            aria-hidden="true"
+                          >
+                            {isClarificationAnswer ? "Du" : message.role === "system" ? "S" : "A"}
                           </div>
-                          <div className="structured-chat-bubble">
+                          <div
+                            className={
+                              isClarificationAnswer
+                                ? "structured-chat-bubble structured-chat-bubble--user"
+                                : "structured-chat-bubble"
+                            }
+                          >
                             <div className="structured-chat-bubble__meta">
                               <p className="eyebrow">{message.title}</p>
                               {message.clarificationAnswerStatus ? (
