@@ -524,7 +524,12 @@ describe("backoffice route smoke", () => {
     expect(offer.text).toContain("aktive Spezifikation: c4-spec-handoff (vollständig)");
     expect(offer.text).toContain("specId: c4-spec-handoff");
     expect(offer.text).toContain("requestId: c4-request-handoff");
-    expect(offer.html).toContain('href="/produktion"');
+
+    const offerDocument = new DOMParser().parseFromString(offer.html, "text/html");
+    const productionHandoffLink = Array.from(offerDocument.querySelectorAll("a")).find((anchor) =>
+      (anchor.textContent ?? "").includes("Zur Produktion")
+    ) as HTMLAnchorElement | undefined;
+    expect(productionHandoffLink?.getAttribute("href")).toBe("/produktion");
 
     const production = await renderRoute("/produktion");
 
