@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.148
+version: 5.149
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -792,3 +792,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.148 - 2026-05-22
 - B10 Pilot-Preflight-Runbook ist Doku-/Test-only umgesetzt: `docs/architecture/B10_PILOT_PREFLIGHT_RUNBOOK.md` macht die B9-Mussbedingungen fuer eine konkrete Zielumgebung abfragbar: Zielumgebung, Betreiber, Proxy-/IAP-Rahmen, direkte Service-Exposition, Header-Stripping, Trusted-Header-Injektion, serverseitiges Trusted Secret, Health-Grenzen, Export-/Read-Kontext und Ergebniszustaende `go`, `blocked` und `not assessed`.
 - `tests/b10-pilot-preflight-runbook-contract.test.ts` schuetzt den Runbookanker und die Grenzen: PII, Retention, Backup, Sandbox und AV bleiben separate Gates; keine produktionsnahe Freigabe ohne ausgefuellten und erfuellten Preflight; kein Deployment-Code, keine neue Runtime, keine App-Login-/Session-/OIDC-Implementierung, keine neue API, Persistenz, Migration oder rechtssichere Compliance-Behauptung.
+
+### 5.149 - 2026-05-22
+- B11 lokaler Demo-/Pilotdaten-Abnahmedurchlauf ist Doku-/Vertragstest-only umgesetzt: `docs/product/B11_LOCAL_DEMO_PILOT_ACCEPTANCE_RUN.md` strukturiert vorhandene lokale Gates, Backoffice-/Export-/Ingestion-Smokes und Ergebniszustaende `go`, `blocked` und `not assessed`.
+- `tests/b11-local-demo-pilot-acceptance-contract.test.ts` schuetzt, dass ein gruener B11-Lauf nur interne Demo-/Abnahmefaehigkeit bedeutet und ein produktionsnaher Pilot ohne B10-Preflight, PII-/Retention-/Backup- sowie Sandbox-/AV-Gates `blocked` bleibt. Keine neue Produktlogik, API, Persistenz, Exportlogik, Deployment- oder Compliance-/Audit-Freigabe.

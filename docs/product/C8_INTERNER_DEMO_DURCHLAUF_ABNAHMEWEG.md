@@ -10,7 +10,7 @@ Dieses Dokument beschreibt den kleinsten reproduzierbaren internen Demo- und Abn
 
 Der Weg verknuepft nur bereits vorhandene Scripts, UI-Routen, Exportpfade, Upload-/Warnanker und Test-/Build-Gates. Er baut keine neue Demo-Plattform und fuehrt keine neuen Produktfeatures ein.
 
-Repo-Anker: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` ist aus `README.md` und `TESTING.md` auffindbar und wird durch den schmalen Vertragstest `tests/local-ops-check-contract.test.ts` gegen vorhandene Scripts, Routen und Gates abgesichert.
+Repo-Anker: `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` ist aus `README.md` und `TESTING.md` auffindbar und wird durch den schmalen Vertragstest `tests/local-ops-check-contract.test.ts` gegen vorhandene Scripts, Routen und Gates abgesichert. Der B11-Ergebnisanker `docs/product/B11_LOCAL_DEMO_PILOT_ACCEPTANCE_RUN.md` ordnet den lokalen Demo-/Pilotdaten-Durchlauf zusaetzlich in `go`, `blocked` oder `not assessed` ein, ohne Produktionsfreigabe oder rechtssichere Compliance-/Audit-Freigabe zu behaupten.
 
 ## 2. Lokale Voraussetzungen
 
