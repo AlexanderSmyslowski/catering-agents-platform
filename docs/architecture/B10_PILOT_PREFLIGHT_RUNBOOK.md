@@ -62,6 +62,8 @@ Diese Punkte bleiben separate Gates und duerfen nicht durch ein `go` in B10 als 
 
 PII, Retention, Backup, Sandbox und AV sind separate Gates, nicht durch B10 geloest.
 
+Der separate B13-Entscheidungsanker `docs/architecture/B13_PII_RETENTION_BACKUP_GATE.md` konkretisiert das PII-/Retention-/Backup-Gate ohne B10 fuer eine Zielumgebung auszufuellen.
+
 ## Gesamtentscheidung
 
 | Gesamtzustand | Bedeutung |

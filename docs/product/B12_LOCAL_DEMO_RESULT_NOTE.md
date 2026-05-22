@@ -113,7 +113,7 @@ Diese Punkte duerfen im B12-Vermerk nur als offen, `blocked` oder `not assessed`
 Naechste Entscheidung fuer Alexander:
 
 1. Ob jetzt eine konkrete Zielumgebung benannt wird und der B10-Preflight dafuer ausgefuellt wird.
-2. Oder ob zuerst PII/Retention/Backup als eigenes Gate vorbereitet wird.
+2. Oder ob zuerst PII/Retention/Backup als eigenes Gate vorbereitet wird; der separate B13-Anker `docs/architecture/B13_PII_RETENTION_BACKUP_GATE.md` haelt lokale Demo-Daten von echten Daten und produktionsnahen Pilotdaten getrennt.
 3. Oder ob zuerst Sandbox/AV fuer Upload-, Dokument- und Worker-Pfade als Gate vorbereitet wird.
 
 Empfehlung fuer den naechsten Block: keine weitere abstrakte Auth-/Preflight-Doku ausbauen, sondern bewusst entscheiden, welches der drei offenen Gates als B13 zuerst operativ vorbereitet wird.
