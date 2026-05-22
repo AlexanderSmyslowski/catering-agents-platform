@@ -113,3 +113,11 @@ Der Trusted-Actor-Korridor ist nach PA8 ein technisches Mindest-Gate fuer intern
 PA9 macht deshalb die Proxy-/Deployment-Grenze verbindlich: Client-Header sind nicht vertrauenswuerdig; vertrauenswuerdig ist nur der vom Edge kontrolliert erzeugte Header-Kontext. Ohne Header-Stripping, kontrollierte Header-Injektion, gesetztes Server-Secret und nicht direkt exponierte Services darf der Stand nicht als produktionsnah bereit gelten.
 
 B6 ordnet die bestehenden Exportpfade fuer Angebot, Produktionsblatt-/Produktionsplan und Einkaufsliste nur als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext ein. Diese Exportartefakte sind keine externe Freigabe, keine Produktionsfreigabe, keine rechtssichere Audit-/Compliance-Behauptung und kein OIDC/Login; die PA9-Grenze bleibt Proxy-/Deployment-Readiness ohne neue Login-, Session-, Persistenz- oder Exportlogik.
+
+## 9. B9 Proxy/IAP-AuthN-Preflight-Vertrag
+
+Der B9 Proxy/IAP-AuthN-Preflight-Vertrag ist in `docs/architecture/B9_PROXY_IAP_AUTHN_PREFLIGHT_CONTRACT.md` als aktueller Doku-/Vertragsanker erfasst.
+
+B9 schaerft PA9 fuer einen spaeteren produktionsnahen Pilot auf die kleinsten Muss-Bedingungen: Header-Stripping am aeusseren Proxy-/IAP-Rand, kontrollierte Trusted-Header-Injektion ausschliesslich durch Proxy/IAP, serverseitig gesetztes `CATERING_TRUSTED_ACTOR_SECRET`, kein clientseitiges oder oeffentliches Secret, keine direkte Service-Exposition am Proxy vorbei, nicht-sensitive Health-Endpunkte sowie Exporte/read-only Arbeitsbelege hinter Trusted-Actor-/Proxy-Kontext.
+
+B9 bleibt ausdruecklich ohne Login-/Session-/OIDC-Implementierung in der App, ohne echten Proxy-/IAP-Deployment-Code, ohne neue API, Persistenz, Migration, Exportlogik, Produktlogik-Ausweitung, Multi-Tenancy-/White-Label-/Plattform-Erweiterung, produktionsreife Auth, externe Freigabe oder rechtssichere Compliance.

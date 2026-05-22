@@ -159,3 +159,18 @@ B8 trennt:
 - Minimalentscheidung fuer Alexander: Soll B9 den kleinsten produktionsnahen Auth-Korridor als Reverse-Proxy/OIDC-/Identity-Aware-Proxy-Korridor festlegen, ohne applikationsinterne Login-/Session-Welt zu bauen?
 
 B8 bleibt ohne OIDC-/Login-Bau, externe Rollen-/Mandantenlogik, neue Exportlogik, neue API, neue Persistenz, Migration, produktionsnahe Freigabe oder rechtssichere Audit-/Compliance-Behauptung.
+
+## 11. B9 Proxy/IAP-AuthN-Preflight-Vertrag
+
+Der B9 Proxy/IAP-AuthN-Preflight-Vertrag ist in `docs/architecture/B9_PROXY_IAP_AUTHN_PREFLIGHT_CONTRACT.md` als Doku-/Vertragsanker erfasst.
+
+B9 konkretisiert die kleinsten Muss-Bedingungen vor einem spaeteren produktionsnahen Pilot:
+
+- Header-Stripping am aeusseren Proxy-/IAP-Rand; keine ungeprueften Client-Header duerfen als Trusted Actor durchgereicht werden.
+- kontrollierte Trusted-Header-Injektion ausschliesslich durch Proxy/IAP.
+- serverseitig gesetztes `CATERING_TRUSTED_ACTOR_SECRET`; kein clientseitiges oder oeffentliches Secret.
+- keine direkte Service-Exposition der App/API am Proxy vorbei.
+- Health-Endpunkte bleiben nicht-sensitiv.
+- Exporte und read-only Arbeitsbelege bleiben hinter dem Trusted-Actor-/Proxy-Kontext.
+
+B9 ist weiterhin nur ein Preflight-Vertrag: keine Login-/Session-/OIDC-Implementierung in der App, kein echter Proxy-/IAP-Deployment-Code, keine neue API, Persistenz, Migration, Exportlogik, produktionsreife Auth, externe Freigabe oder rechtssichere Compliance.
