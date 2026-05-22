@@ -395,6 +395,9 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Klärbereich");
     expect(content).toContain("production-objects-zone");
     expect(content).toContain("Produktionsobjekte");
+    expect(content).toContain("Vorhandene Pläne, Einkaufslisten und Exportlinks");
+    expect(content).toContain("Produktionsblatt exportieren");
+    expect(content).toContain("Einkaufsliste exportieren");
     expect(content).toContain("Plan und Ergebnis leise prüfen");
     expect(content).toContain("Status: vollständig");
     expect(content).toContain("Arbeitsblätter: 1");

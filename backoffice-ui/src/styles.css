@@ -1439,6 +1439,23 @@ button:disabled {
   margin: 0.35rem 0 0;
 }
 
+.production-output-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0.8rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 1.15rem;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(15, 23, 34, 0.07);
+}
+
+.production-output-summary p {
+  margin: 0.2rem 0 0;
+}
+
 .production-objects-panel .production-step-card,
 .production-purchase-panel .secondary-panel {
   background: transparent;

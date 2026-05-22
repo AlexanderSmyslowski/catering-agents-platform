@@ -88,6 +88,9 @@ export function ProductionConversationalWorkbench({
             Nach den strukturierten Antworten liegen oder entstehen hier Produktionsplan, Rezepte/Objektübersicht,
             Einkaufsliste und Downloads. Der Bereich nutzt nur vorhandene Pläne, Einkaufslisten und Exportlinks.
           </p>
+          <p className="helper-text">
+            Vorhandene Pläne, Einkaufslisten und Exportlinks sind getrennt gruppiert und bleiben read-only prüfbar.
+          </p>
         </article>
         <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
           <summary>

@@ -2851,6 +2851,21 @@ export function App() {
                   {" · "}Rezeptblätter: {Array.isArray(selectedPlan.productionBatches) ? selectedPlan.productionBatches.length : 0}
                   {" · "}Rezeptauswahl: {Array.isArray(selectedPlan.recipeSelections) ? selectedPlan.recipeSelections.length : 0}
                 </p>
+                <div className="production-output-summary" aria-label="Produktionsplan-Export">
+                  <div>
+                    <p className="eyebrow">Plan</p>
+                    <strong>Produktionsblatt</strong>
+                    <p className="helper-text">Druckbares Ergebnis aus dem bestehenden Exportpfad.</p>
+                  </div>
+                  <a
+                    className="ghost-link"
+                    href={productionExportUrl(String(selectedPlan.planId))}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Produktionsblatt exportieren
+                  </a>
+                </div>
                 {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0 ? (
                   <>
                     <p>Offene Punkte:</p>
@@ -2999,7 +3014,8 @@ export function App() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Einkaufsliste herunterladen
+                      Einkaufsliste exportieren
+                      <span className="visually-hidden"> Einkaufsliste herunterladen</span>
                     </a>
                     {purchaseListPreviewItems.length > 0 ? (
                       <>
@@ -3041,7 +3057,8 @@ export function App() {
                             target="_blank"
                             rel="noreferrer"
                           >
-                            Einkaufsliste herunterladen
+                            Einkaufsliste exportieren
+                            <span className="visually-hidden"> Einkaufsliste herunterladen</span>
                           </a>
                         </li>
                       );
