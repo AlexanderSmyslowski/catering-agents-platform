@@ -128,8 +128,18 @@ function escapeHtml(value) {
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-function answerMatchesQuestion(answer, question) {
-  return answer.status === "submitted" &&
+function contextForProjection(sourceSpecId) {
+  return sourceSpecId ? { specId: sourceSpecId, productionSessionId: `production-session-${sourceSpecId}` } : undefined;
+}
+function sameContext(left, right) {
+  return Boolean(left?.specId && left.productionSessionId && right?.specId && right.productionSessionId) &&
+    left?.specId === right?.specId &&
+    left?.productionSessionId === right?.productionSessionId;
+}
+function answerMatchesQuestion(answer, question, projectionContext) {
+  return sameContext(answer.context, question.context) &&
+    sameContext(answer.context, projectionContext) &&
+    answer.status === "submitted" &&
     answer.answerType === "shortText" &&
     answer.questionId === question.questionId &&
     answer.questionKey.reason === question.reason &&
@@ -207,7 +217,7 @@ export function buildProductionConversationProjection(input) {
     });
     if (question.clarificationQuestion) {
       (input.clarificationAnswers ?? [])
-        .filter((answer) => answerMatchesQuestion(answer, question.clarificationQuestion))
+        .filter((answer) => answerMatchesQuestion(answer, question.clarificationQuestion, contextForProjection(sourceSpecId)))
         .forEach((answer) => {
           const safeAnswer = safeClarificationAnswer(answer);
           messages.push({

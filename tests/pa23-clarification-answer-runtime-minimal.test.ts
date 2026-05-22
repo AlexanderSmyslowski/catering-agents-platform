@@ -17,6 +17,11 @@ const specWithClarification = {
   event: { type: "conference" }
 };
 
+const specContext = {
+  specId: specWithClarification.specId,
+  productionSessionId: `production-session-${specWithClarification.specId}`
+};
+
 function firstQuestion(): ProductionClarificationQuestion {
   const [question] = buildProductionClarificationQuestions({ spec: specWithClarification });
   if (!question) {
@@ -43,6 +48,7 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     const question = firstQuestion();
     const answer = createSubmittedProductionClarificationAnswer({
       questions: [question],
+      context: specContext,
       questionId: question.questionId,
       questionKey: { reason: question.reason, reasonCode: question.reasonCode },
       answerType: "shortText",
@@ -97,6 +103,7 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     expect(() =>
       createSubmittedProductionClarificationAnswer({
         questions: [question],
+        context: specContext,
         questionId: "unknown-question-id",
         questionKey: { reason: question.reason, reasonCode: question.reasonCode },
         answerType: "shortText",
@@ -107,6 +114,7 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     expect(() =>
       createSubmittedProductionClarificationAnswer({
         questions: [question],
+        context: specContext,
         questionId: question.questionId,
         questionKey: { reason: question.reason, reasonCode: "wrong-key" },
         answerType: "shortText",
@@ -119,6 +127,7 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     const question = firstQuestion();
     const baseInput = {
       questions: [question],
+      context: specContext,
       questionId: question.questionId,
       questionKey: { reason: question.reason, reasonCode: question.reasonCode }
     };
@@ -152,6 +161,7 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     const question = firstQuestion();
     const answer = createSubmittedProductionClarificationAnswer({
       questions: [question],
+      context: specContext,
       questionId: question.questionId,
       questionKey: { reason: question.reason, reasonCode: question.reasonCode },
       answerType: "shortText",
@@ -186,6 +196,7 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     const question = firstQuestion();
     const forgedRawAnswer = {
       answerId: "answer-forged-raw-html",
+      context: specContext,
       questionId: question.questionId,
       questionKey: { reason: question.reason, reasonCode: question.reasonCode },
       answerType: "shortText",
@@ -216,6 +227,7 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     const question = firstQuestion();
     const baseAnswer = createSubmittedProductionClarificationAnswer({
       questions: [question],
+      context: specContext,
       questionId: question.questionId,
       questionKey: { reason: question.reason, reasonCode: question.reasonCode },
       answerType: "shortText",
@@ -245,6 +257,7 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     const question = firstQuestion();
     const validAnswer = createSubmittedProductionClarificationAnswer({
       questions: [question],
+      context: specContext,
       questionId: question.questionId,
       questionKey: { reason: question.reason, reasonCode: question.reasonCode },
       answerType: "shortText",

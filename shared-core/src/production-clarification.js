@@ -48,13 +48,22 @@ function slug(value) {
   return value.trim().toLowerCase().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
 }
 
-function specIdFor(spec) {
+function explicitSpecIdFor(spec) {
   const id = typeof spec?.specId === "string" && spec.specId.trim()
     ? spec.specId.trim()
     : typeof spec?.id === "string" && spec.id.trim()
       ? spec.id.trim()
-      : "draft";
-  return slug(id);
+      : undefined;
+  return id?.trim();
+}
+
+function specIdFor(spec) {
+  return slug(explicitSpecIdFor(spec) ?? "draft");
+}
+
+function contextForSpec(spec) {
+  const specId = explicitSpecIdFor(spec);
+  return specId ? { specId, productionSessionId: `production-session-${specId}` } : undefined;
 }
 
 function safeWarnings(sourceInput) {
@@ -152,9 +161,18 @@ function answerIdFor(questionId, timestamp) {
     return `answer-${slug(questionId)}-${slug(timestamp)}`;
 }
 export function createSubmittedProductionClarificationAnswer(input) {
+    if (!input.context?.specId?.trim() || !input.context.productionSessionId?.trim()) {
+        throw new Error("Eindeutige Spec-/Session-Bindung erforderlich.");
+    }
     const question = input.questions.find((candidate) => candidate.questionId === input.questionId);
     if (!question) {
         throw new Error("Bekannte Rückfrage erforderlich.");
+    }
+    if (!question.context?.specId?.trim() || !question.context.productionSessionId?.trim()) {
+        throw new Error("Rückfrage ohne eindeutige Spec-/Session-Bindung kann nicht beantwortet werden.");
+    }
+    if (question.context.specId !== input.context.specId || question.context.productionSessionId !== input.context.productionSessionId) {
+        throw new Error("Spec-/Session-Bindung passt nicht zur Rückfrage.");
     }
     if (question.reason !== input.questionKey.reason || question.reasonCode !== input.questionKey.reasonCode) {
         throw new Error("Question-Key passt nicht zur Rückfrage.");
@@ -173,6 +191,10 @@ export function createSubmittedProductionClarificationAnswer(input) {
     const actorName = input.actorName?.trim();
     return {
         answerId: answerIdFor(question.questionId, timestamp),
+        context: {
+            specId: question.context.specId,
+            productionSessionId: question.context.productionSessionId
+        },
         questionId: question.questionId,
         questionKey: {
             reason: question.reason,
@@ -192,6 +214,7 @@ export function createSubmittedProductionClarificationAnswer(input) {
 export function buildProductionClarificationQuestions(input) {
   const questions = [];
   const specId = specIdFor(input.spec);
+  const context = contextForSpec(input.spec);
   const missingFields = Array.isArray(input.spec?.missingFields)
     ? input.spec.missingFields.filter((field) => typeof field === "string" && field.trim().length > 0)
     : [];
@@ -201,6 +224,7 @@ export function buildProductionClarificationQuestions(input) {
     const reasonCode = reasonCodeForField(cleanField);
     questions.push({
       questionId: `${specId}-missingFields-${slug(reasonCode)}`,
+      ...(context ? { context } : {}),
       reason: "missingFields",
       reasonCode,
       severity: "blocking",
@@ -221,6 +245,7 @@ export function buildProductionClarificationQuestions(input) {
     const cleanReason = reason.trim();
     questions.push({
       questionId: `${specId}-readiness-reasons-${slug(cleanReason)}`,
+      ...(context ? { context } : {}),
       reason: "readiness.reasons",
       reasonCode: cleanReason,
       severity: "warning",
@@ -242,6 +267,7 @@ export function buildProductionClarificationQuestions(input) {
     if (status === "fallback" || status === "failed") {
       questions.push({
         questionId: `${specId}-documentIngestion-status-${slug(anchorRef)}`,
+        ...(context ? { context } : {}),
         reason: "documentIngestion.status",
         reasonCode: status,
         severity: "blocking",
@@ -256,6 +282,7 @@ export function buildProductionClarificationQuestions(input) {
     warnings.forEach((warning) => {
       questions.push({
         questionId: `${specId}-documentIngestion-warnings-${slug(anchorRef)}-${slug(warning)}`,
+        ...(context ? { context } : {}),
         reason: "documentIngestion.warnings",
         reasonCode: warning,
         severity: "warning",

@@ -12,6 +12,10 @@ const safeSourceMetadata = {
 
 describe("PA16 production clarification model slice 1", () => {
   it("creates typed clarification questions from missing fields and readiness reasons", () => {
+    const context = {
+      specId: "spec-pa16-missing",
+      productionSessionId: "production-session-spec-pa16-missing"
+    };
     const questions = buildProductionClarificationQuestions({
       spec: {
         specId: "spec-pa16-missing",
@@ -27,6 +31,7 @@ describe("PA16 production clarification model slice 1", () => {
     expect(questions).toEqual([
       {
         questionId: "spec-pa16-missing-missingFields-attendees-expected",
+        context,
         reason: "missingFields",
         reasonCode: "attendees.expected",
         severity: "blocking",
@@ -37,6 +42,7 @@ describe("PA16 production clarification model slice 1", () => {
       },
       {
         questionId: "spec-pa16-missing-readiness-reasons-teilnehmerzahl-noch-nicht-verbindlich",
+        context,
         reason: "readiness.reasons",
         reasonCode: "Teilnehmerzahl noch nicht verbindlich.",
         severity: "warning",
@@ -49,6 +55,10 @@ describe("PA16 production clarification model slice 1", () => {
   });
 
   it("creates typed clarification questions from fallback or warning document ingestion markers without raw text", () => {
+    const context = {
+      specId: "spec-pa16-ingestion",
+      productionSessionId: "production-session-spec-pa16-ingestion"
+    };
     const questions = buildProductionClarificationQuestions({
       spec: { specId: "spec-pa16-ingestion", readiness: { status: "complete", reasons: [] } },
       sourceInputs: [
@@ -68,6 +78,7 @@ describe("PA16 production clarification model slice 1", () => {
     expect(questions).toEqual([
       {
         questionId: "spec-pa16-ingestion-documentIngestion-status-document-pa16-1",
+        context,
         reason: "documentIngestion.status",
         reasonCode: "fallback",
         severity: "blocking",
@@ -90,6 +101,7 @@ describe("PA16 production clarification model slice 1", () => {
       },
       {
         questionId: "spec-pa16-ingestion-documentIngestion-warnings-document-pa16-1-document-text-extraction-fallback",
+        context,
         reason: "documentIngestion.warnings",
         reasonCode: "document_text_extraction_fallback",
         severity: "warning",

@@ -164,3 +164,37 @@ Bewusst weiter nicht umgesetzt:
 - keine automatische Spec-Korrektur oder fachliche Ableitung
 - keine Rezept-, Mengen-, Einkaufslisten-, Download-, Freigabe- oder Allergenlogik
 - keine LLM-/Tool-Use-/OCR-/Parser-Erweiterung
+
+## 11. PA24 Spec-/Session-Bindungsanker nach PA23-Haertung
+
+Alexander hat nach dem gehaerteten PA23 entschieden: als naechster Schritt wird zuerst die Session-/Spec-Bindung der Clarification-Antworten verankert.
+
+Bestandspruefung:
+
+- Eine explizite `ProductionConversation`-Persistenz-ID existiert nicht.
+- Die bestehende `ProductionConversationProjection` erzeugt jedoch bereits eindeutig aus `specId` die `sessionId` im Format `production-session-${specId}`.
+- `AcceptedEventSpec.specId` ist im Rueckfragen-/Projection-Kontext vorhanden und wird bereits fuer stabile `questionId`s genutzt.
+- `ProductionPlan.eventSpecId` und `plan-${specId}` bestaetigen denselben bestehenden Production-Kontext, werden fuer diesen Slice aber nicht als neue Antwort-ID-Welt verwendet.
+
+Entscheidung PA24:
+
+- `specId` plus bestehende Projection-Session-ID `production-session-${specId}` bilden den minimalen `ProductionClarificationContextBinding`-Anker.
+- `ProductionClarificationQuestion`, `ProductionClarificationAnswerDraft` und `ProductionClarificationAnswer` tragen diese Bindung, wenn eine eindeutige `specId` vorhanden ist.
+- Antworterzeugung verlangt eine eindeutige Spec-/Session-Bindung und lehnt fehlende oder zur Rueckfrage unpassende Bindungen ab.
+- Die `ProductionConversationProjection` zeigt Antworten nur, wenn Antwort, Rueckfrage und aktuelle Projection dieselbe Spec-/Session-Bindung tragen.
+- Die `ProductionStore`-Grenze akzeptiert nur `submitted`-`shortText`-Antworten mit dieser expliziten Bindung.
+
+Stopgrenze:
+
+- Rueckfragen ohne explizite `specId` erhalten keine bindbare Antwortannahme; es wird keine frei erfundene Draft-/Conversation-/Production-ID erzeugt.
+- Wenn spaeter ein anderer Conversation- oder Production-Identity-Anker fuehrend werden soll, braucht das einen separaten Architektur-/Migrationsentscheid.
+
+Bewusst weiter nicht umgesetzt:
+
+- keine neue ID-Welt
+- keine Conversation-Persistenz
+- keine neue API oder UI-Erweiterung
+- keine Migration, kein Prisma, keine neue Persistenzwelt
+- keine Antwortbearbeitung
+- keine automatische Spec-Korrektur oder fachliche Antwortinterpretation
+- keine Rezept-, Mengen-, Einkaufslisten-, Download-, Freigabe- oder Allergenlogik

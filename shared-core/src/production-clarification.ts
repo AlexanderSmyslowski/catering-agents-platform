@@ -22,7 +22,13 @@ export const futureProductionClarificationAnswerTypeConcepts = [
 
 export type FutureProductionClarificationAnswerTypeConcept = typeof futureProductionClarificationAnswerTypeConcepts[number];
 
+export interface ProductionClarificationContextBinding {
+  specId: string;
+  productionSessionId: string;
+}
+
 export interface ProductionClarificationAnswerDraft {
+  context: ProductionClarificationContextBinding;
   questionId: string;
   questionKey: {
     reason: ProductionClarificationReason;
@@ -52,6 +58,7 @@ export type ProductionClarificationAnswerModelBoundary = typeof productionClarif
 
 export interface ProductionClarificationAnswer {
   answerId: string;
+  context: ProductionClarificationContextBinding;
   questionId: string;
   questionKey: {
     reason: ProductionClarificationReason;
@@ -72,6 +79,7 @@ export interface ProductionClarificationAnswer {
 
 export interface CreateSubmittedProductionClarificationAnswerInput {
   questions: ProductionClarificationQuestion[];
+  context: ProductionClarificationContextBinding;
   questionId: string;
   questionKey: {
     reason: ProductionClarificationReason;
@@ -99,9 +107,21 @@ function answerIdFor(questionId: string, timestamp: string): string {
 export function createSubmittedProductionClarificationAnswer(
   input: CreateSubmittedProductionClarificationAnswerInput
 ): ProductionClarificationAnswer {
+  if (!input.context?.specId?.trim() || !input.context.productionSessionId?.trim()) {
+    throw new Error("Eindeutige Spec-/Session-Bindung erforderlich.");
+  }
+
   const question = input.questions.find((candidate) => candidate.questionId === input.questionId);
   if (!question) {
     throw new Error("Bekannte Rückfrage erforderlich.");
+  }
+
+  if (!question.context?.specId?.trim() || !question.context.productionSessionId?.trim()) {
+    throw new Error("Rückfrage ohne eindeutige Spec-/Session-Bindung kann nicht beantwortet werden.");
+  }
+
+  if (question.context.specId !== input.context.specId || question.context.productionSessionId !== input.context.productionSessionId) {
+    throw new Error("Spec-/Session-Bindung passt nicht zur Rückfrage.");
   }
 
   if (question.reason !== input.questionKey.reason || question.reasonCode !== input.questionKey.reasonCode) {
@@ -126,6 +146,10 @@ export function createSubmittedProductionClarificationAnswer(
 
   return {
     answerId: answerIdFor(question.questionId, timestamp),
+    context: {
+      specId: question.context.specId,
+      productionSessionId: question.context.productionSessionId
+    },
     questionId: question.questionId,
     questionKey: {
       reason: question.reason,
@@ -145,6 +169,7 @@ export function createSubmittedProductionClarificationAnswer(
 
 export interface ProductionClarificationQuestion {
   questionId: string;
+  context?: ProductionClarificationContextBinding;
   reason: ProductionClarificationReason;
   reasonCode: string;
   severity: ProductionClarificationSeverity;
@@ -212,13 +237,22 @@ function slug(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
 }
 
-function specIdFor(spec?: Record<string, unknown>): string {
+function explicitSpecIdFor(spec?: Record<string, unknown>): string | undefined {
   const id = typeof spec?.specId === "string" && spec.specId.trim()
     ? spec.specId.trim()
     : typeof spec?.id === "string" && spec.id.trim()
       ? spec.id.trim()
-      : "draft";
-  return slug(id);
+      : undefined;
+  return id?.trim();
+}
+
+function specIdFor(spec?: Record<string, unknown>): string {
+  return slug(explicitSpecIdFor(spec) ?? "draft");
+}
+
+function contextForSpec(spec?: Record<string, unknown>): ProductionClarificationContextBinding | undefined {
+  const specId = explicitSpecIdFor(spec);
+  return specId ? { specId, productionSessionId: `production-session-${specId}` } : undefined;
 }
 
 function safeWarnings(sourceInput: ProductionClarificationSourceInput): string[] {
@@ -306,6 +340,7 @@ function stableQuestions(questions: ProductionClarificationQuestionDraft[]): Pro
 export function buildProductionClarificationQuestions(input: ProductionClarificationInput): ProductionClarificationQuestion[] {
   const questions: ProductionClarificationQuestionDraft[] = [];
   const specId = specIdFor(input.spec);
+  const context = contextForSpec(input.spec);
   const missingFields = Array.isArray(input.spec?.missingFields)
     ? input.spec.missingFields.filter((field): field is string => typeof field === "string" && field.trim().length > 0)
     : [];
@@ -315,6 +350,7 @@ export function buildProductionClarificationQuestions(input: ProductionClarifica
     const reasonCode = reasonCodeForField(cleanField);
     questions.push({
       questionId: `${specId}-missingFields-${slug(reasonCode)}`,
+      ...(context ? { context } : {}),
       reason: "missingFields",
       reasonCode,
       severity: "blocking",
@@ -335,6 +371,7 @@ export function buildProductionClarificationQuestions(input: ProductionClarifica
     const cleanReason = reason.trim();
     questions.push({
       questionId: `${specId}-readiness-reasons-${slug(cleanReason)}`,
+      ...(context ? { context } : {}),
       reason: "readiness.reasons",
       reasonCode: cleanReason,
       severity: "warning",
@@ -356,6 +393,7 @@ export function buildProductionClarificationQuestions(input: ProductionClarifica
     if (status === "fallback" || status === "failed") {
       questions.push({
         questionId: `${specId}-documentIngestion-status-${slug(anchorRef)}`,
+        ...(context ? { context } : {}),
         reason: "documentIngestion.status",
         reasonCode: status,
         severity: "blocking",
@@ -370,6 +408,7 @@ export function buildProductionClarificationQuestions(input: ProductionClarifica
     warnings.forEach((warning) => {
       questions.push({
         questionId: `${specId}-documentIngestion-warnings-${slug(anchorRef)}-${slug(warning)}`,
+        ...(context ? { context } : {}),
         reason: "documentIngestion.warnings",
         reasonCode: warning,
         severity: "warning",

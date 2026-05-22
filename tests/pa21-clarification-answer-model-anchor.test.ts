@@ -12,6 +12,10 @@ const adr = readFileSync("docs/architecture/PA20_CLARIFICATION_ANSWER_DATA_MODEL
 
 const answerModelAnchor = {
   answerId: "answer-pa21-001",
+  context: {
+    specId: "spec-pa21",
+    productionSessionId: "production-session-spec-pa21"
+  },
   questionId: "spec-pa21-missingFields-attendees-expected",
   questionKey: {
     reason: "missingFields",
@@ -41,7 +45,11 @@ describe("PA21 clarification answer model anchor", () => {
     expect(adr).toContain("keine Migration in PA21");
   });
 
-  it("requires binding to questionId and stable question key", () => {
+  it("requires binding to spec/session context questionId and stable question key", () => {
+    expect(answerModelAnchor.context).toEqual({
+      specId: "spec-pa21",
+      productionSessionId: "production-session-spec-pa21"
+    });
     expect(answerModelAnchor.questionId).toBe("spec-pa21-missingFields-attendees-expected");
     expect(answerModelAnchor.questionKey).toEqual({
       reason: "missingFields",
@@ -82,6 +90,7 @@ describe("PA21 clarification answer model anchor", () => {
       "answerId",
       "answerText",
       "answerType",
+      "context",
       "createdAt",
       "questionId",
       "questionKey",

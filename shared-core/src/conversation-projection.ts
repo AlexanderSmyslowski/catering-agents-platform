@@ -1,6 +1,7 @@
 import {
   buildProductionClarificationQuestions,
   type ProductionClarificationAnswer,
+  type ProductionClarificationContextBinding,
   type ProductionClarificationQuestion
 } from "./production-clarification.js";
 
@@ -205,8 +206,24 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function answerMatchesQuestion(answer: ProductionClarificationAnswer, question: ProductionClarificationQuestion): boolean {
-  return answer.status === "submitted" &&
+function contextForProjection(sourceSpecId?: string): ProductionClarificationContextBinding | undefined {
+  return sourceSpecId ? { specId: sourceSpecId, productionSessionId: `production-session-${sourceSpecId}` } : undefined;
+}
+
+function sameContext(left?: ProductionClarificationContextBinding, right?: ProductionClarificationContextBinding): boolean {
+  return Boolean(left?.specId && left.productionSessionId && right?.specId && right.productionSessionId) &&
+    left?.specId === right?.specId &&
+    left?.productionSessionId === right?.productionSessionId;
+}
+
+function answerMatchesQuestion(
+  answer: ProductionClarificationAnswer,
+  question: ProductionClarificationQuestion,
+  projectionContext?: ProductionClarificationContextBinding
+): boolean {
+  return sameContext(answer.context, question.context) &&
+    sameContext(answer.context, projectionContext) &&
+    answer.status === "submitted" &&
     answer.answerType === "shortText" &&
     answer.questionId === question.questionId &&
     answer.questionKey.reason === question.reason &&
@@ -288,7 +305,7 @@ export function buildProductionConversationProjection(
 
     if (question.clarificationQuestion) {
       (input.clarificationAnswers ?? [])
-        .filter((answer) => answerMatchesQuestion(answer, question.clarificationQuestion as ProductionClarificationQuestion))
+        .filter((answer) => answerMatchesQuestion(answer, question.clarificationQuestion as ProductionClarificationQuestion, contextForProjection(sourceSpecId)))
         .forEach((answer) => {
           const safeAnswer = safeClarificationAnswer(answer);
           messages.push({

@@ -9,6 +9,10 @@ import {
 const adr = readFileSync("docs/architecture/PA18_CLARIFICATION_ANSWER_PROCESSING_GATE_ADR.md", "utf8");
 
 const answerDraft: ProductionClarificationAnswerDraft = {
+  context: {
+    specId: "spec-pa19",
+    productionSessionId: "production-session-spec-pa19"
+  },
   questionId: "spec-pa19-missingFields-attendees-expected",
   questionKey: {
     reason: "missingFields",
@@ -37,6 +41,10 @@ describe("PA19 clarification answer type anchor", () => {
 
   it("requires stable question binding without carrying answer content or runtime assumptions", () => {
     expect(answerDraft).toEqual({
+      context: {
+        specId: "spec-pa19",
+        productionSessionId: "production-session-spec-pa19"
+      },
       questionId: "spec-pa19-missingFields-attendees-expected",
       questionKey: {
         reason: "missingFields",
@@ -44,7 +52,7 @@ describe("PA19 clarification answer type anchor", () => {
       },
       answerType: "shortText"
     });
-    expect(Object.keys(answerDraft).sort()).toEqual(["answerType", "questionId", "questionKey"]);
+    expect(Object.keys(answerDraft).sort()).toEqual(["answerType", "context", "questionId", "questionKey"]);
     expect(JSON.stringify(answerDraft)).not.toContain("Rohtext");
     expect(JSON.stringify(answerDraft)).not.toContain("%PDF");
   });

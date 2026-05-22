@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.129
-date: 2026-05-21
+version: 5.130
+date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -94,6 +94,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PA21 ProductionClarificationAnswer Modellanker ist als reiner shared-core Typ-/Testanker umgesetzt: Option B ist als Zielrichtung bestaetigt, `ProductionClarificationAnswer` bindet an `questionId` plus Question-Key, erlaubt aktiv nur `shortText`, nutzt exakt `draft/submitted/reviewed` und verankert Textlaengen-/Sicherheitsgrenzen; keine Runtime, Persistenz, API, Migration, UI-/Projection-Erweiterung oder automatische Spec-Korrekturueberfuehrung.
 - PA22 Clarification Answer Storage/Display Gate ist als ADR-/Marker-Slice dokumentiert: spaetere kurze Freitextantworten duerfen nur im `ProductionClarificationAnswer`-Modell innerhalb bestehender Domain-/Persistenzgrenzen gespeichert und read-only in bestehenden `/produktion`-Projection-/Detailankern angezeigt werden; PA22 selbst fuehrt keine Runtime, Antwortannahme, Antwortspeicherung, API, UI-Erweiterung, Migration, neue Persistenzwelt, Fachableitung oder Rohtext-/PDF-Extrakt-Spiegelung ein.
 - PA23 Clarification Answer Runtime Minimal Slice ist umgesetzt: bestehende `ProductionClarificationQuestion` wird validiert, `shortText` bis 500 Zeichen als `submitted` erzeugt, HTML/Script fuer read-only Anzeige escaped, ueber die bestehende `ProductionStore`-/`PersistentCollection`-Grenze gespeichert und in der bestehenden `ProductionConversationProjection` angezeigt; keine neue HTTP-API, Migration, neue Persistenzwelt, Antwortbearbeitung, aktive `draft`-/`reviewed`-Runtime, automatische Spec-Korrektur, Fachableitung oder Rezept-/Mengen-/Allergenlogik.
+- PA24 Clarification Answer Session/Spec Binding Anchor ist umgesetzt: bestehende `specId` und daraus bereits vorhandene `production-session-${specId}`-Conversation-Session bilden die explizite Kontextbindung fuer Rueckfragen und Antworten; Antworten ohne eindeutige Spec-/Session-Bindung oder mit falscher Bindung werden nicht erzeugt bzw. nicht projiziert. Keine neue ID-Welt, keine neue Persistenzwelt, keine API-/UI-Erweiterung.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -701,3 +702,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.129 - 2026-05-21
 - PA23 Clarification Answer Runtime Minimal Slice ist als erster enger Runtime-Speicher-/Anzeige-Slice umgesetzt: `createSubmittedProductionClarificationAnswer(...)` validiert bekannte Rueckfrage, stabilen Question-Key, `answerType: shortText`, leere/zu lange Antworten und escaped HTML/Script vor Speicherung/Anzeige.
 - `ProductionStore` speichert `ProductionClarificationAnswer` in der bestehenden `PersistentCollection`-Grenze `production/clarification-answers`; `ProductionConversationProjection` zeigt passende `submitted`-Antworten read-only direkt unter der zugehoerigen Agent-Frage. Bewusst nicht umgesetzt: neue HTTP-API, Migration/Prisma/neue Persistenzwelt, Antwortbearbeitung, aktives `draft`/`reviewed`, automatische Spec-Korrektur/Fachableitung, LLM-/Tool-Use sowie Rezept-/Mengen-/Allergenlogik.
+
+### 5.130 - 2026-05-22
+- PA24 Clarification Answer Session/Spec Binding Anchor ist umgesetzt: `ProductionClarificationQuestion`, `ProductionClarificationAnswerDraft` und `ProductionClarificationAnswer` tragen eine explizite `context`-Bindung aus bestehender `specId` und bestehender `ProductionConversationProjection.sessionId` (`production-session-${specId}`).
+- Antworterzeugung, Store-Grenze und Projection verlangen diese eindeutige Bindung; falsche oder fehlende Spec-/Session-Kontexte werden abgelehnt beziehungsweise nicht angezeigt. Keine neue ID-Welt, keine neue Persistenz, Migration, Prisma, API-/UI-Erweiterung, Antwortbearbeitung, automatische Spec-Korrektur oder fachliche Antwortinterpretation.
