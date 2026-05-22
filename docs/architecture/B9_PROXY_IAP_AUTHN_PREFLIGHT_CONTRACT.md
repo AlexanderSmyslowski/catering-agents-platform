@@ -78,8 +78,14 @@ B9 fuehrt ausdruecklich nicht ein:
 - keine externe Freigabe
 - keine rechtssichere Compliance
 
+## B10 Pilot-Preflight-Runbook
+
+Der B10 Pilot-Preflight-Runbookanker ist in `docs/architecture/B10_PILOT_PREFLIGHT_RUNBOOK.md` erfasst.
+
+B10 macht die B9-Mussbedingungen fuer eine konkrete Zielumgebung abfragbar: Zielumgebung, Betreiber und Proxy-/IAP-Rahmen muessen benannt werden; direkte Service-Exposition, Header-Stripping, Trusted-Header-Injektion, serverseitiges Trusted Secret, Health-Grenzen und interne Export-/Read-Pfade muessen je mit `go`, `blocked` oder `not assessed` bewertet werden. PII, Retention, Backup, Sandbox und AV bleiben separate Gates und werden durch B10 nicht geloest.
+
 ## Abnahmehinweis
 
-B9 ist erfuellt, wenn dieser Vertrag im Repo auffindbar bleibt, PA9/PA6/TESTING auf ihn verweisen und der Marker-Test `tests/b9-proxy-iap-authn-preflight-contract.test.ts` gruen ist.
+B9 ist erfuellt, wenn dieser Vertrag im Repo auffindbar bleibt, PA9/PA6/TESTING auf ihn verweisen und der Marker-Test `tests/b9-proxy-iap-authn-preflight-contract.test.ts` gruen ist. B10 ist erfuellt, wenn das B10 Pilot-Preflight-Runbook im Repo auffindbar bleibt und der Marker-Test `tests/b10-pilot-preflight-runbook-contract.test.ts` gruen ist.
 
 Die technischen Standard-Gates bleiben unveraendert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

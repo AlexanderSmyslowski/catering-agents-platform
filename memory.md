@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.147
+version: 5.148
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -788,3 +788,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.147 - 2026-05-22
 - B9 Proxy/IAP-AuthN-Preflight-Vertrag ist Doku-/Test-only umgesetzt: `docs/architecture/B9_PROXY_IAP_AUTHN_PREFLIGHT_CONTRACT.md` konkretisiert den minimalen Preflight-Korridor fuer einen spaeteren produktionsnahen Pilot: Header-Stripping am Proxy-/IAP-Rand, kontrollierte Trusted-Header-Injektion, serverseitig gesetztes `CATERING_TRUSTED_ACTOR_SECRET`, keine direkte Service-Exposition, nicht-sensitive Health-Endpunkte und Exporte/read-only Arbeitsbelege hinter Trusted-Actor-/Proxy-Kontext.
 - `tests/b9-proxy-iap-authn-preflight-contract.test.ts` schuetzt diesen Vertrag und die Grenzen: keine Login-/Session-/OIDC-Implementierung in der App, kein echter Proxy-/IAP-Deployment-Code, keine neue API, Persistenz, Migration, Exportlogik, produktionsreife Auth, externe Freigabe oder rechtssichere Compliance.
+
+### 5.148 - 2026-05-22
+- B10 Pilot-Preflight-Runbook ist Doku-/Test-only umgesetzt: `docs/architecture/B10_PILOT_PREFLIGHT_RUNBOOK.md` macht die B9-Mussbedingungen fuer eine konkrete Zielumgebung abfragbar: Zielumgebung, Betreiber, Proxy-/IAP-Rahmen, direkte Service-Exposition, Header-Stripping, Trusted-Header-Injektion, serverseitiges Trusted Secret, Health-Grenzen, Export-/Read-Kontext und Ergebniszustaende `go`, `blocked` und `not assessed`.
+- `tests/b10-pilot-preflight-runbook-contract.test.ts` schuetzt den Runbookanker und die Grenzen: PII, Retention, Backup, Sandbox und AV bleiben separate Gates; keine produktionsnahe Freigabe ohne ausgefuellten und erfuellten Preflight; kein Deployment-Code, keine neue Runtime, keine App-Login-/Session-/OIDC-Implementierung, keine neue API, Persistenz, Migration oder rechtssichere Compliance-Behauptung.
