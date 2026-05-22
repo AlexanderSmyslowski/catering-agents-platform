@@ -3259,6 +3259,10 @@ export function App() {
               </div>
             </div>
             <p className="helper-text">
+              Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.
+              Fehlende Artefakte bleiben offen markiert; keine externe Freigabe, Signatur- oder Compliance-Behauptung.
+            </p>
+            <p className="helper-text">
               Es werden nur bestehende Metadaten und Artefaktzustände gezeigt; Rohtexte oder PDF-Extrakte werden hier nicht gespiegelt.
             </p>
           </article>

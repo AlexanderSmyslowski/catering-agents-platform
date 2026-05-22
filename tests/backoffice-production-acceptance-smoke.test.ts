@@ -422,6 +422,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T09:15:00.000Z");
     expect(content).toContain("Übergabe-/Exportartefakte");
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
+    expect(content).toContain("Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.");
+    expect(content).toContain("Fehlende Artefakte bleiben offen markiert; keine externe Freigabe, Signatur- oder Compliance-Behauptung.");
     expect(content).toContain("Keine rechtssichere Audit-Behauptung");
     expect(content).not.toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
     expect(content).not.toContain("sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
