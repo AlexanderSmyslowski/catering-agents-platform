@@ -64,6 +64,8 @@ PII, Retention, Backup, Sandbox und AV sind separate Gates, nicht durch B10 gelo
 
 Der separate B13-Entscheidungsanker `docs/architecture/B13_PII_RETENTION_BACKUP_GATE.md` konkretisiert das PII-/Retention-/Backup-Gate ohne B10 fuer eine Zielumgebung auszufuellen.
 
+Der separate B14-Entscheidungsanker `docs/architecture/B14_SANDBOX_WORKER_AV_GATE.md` konkretisiert das Sandbox-/Worker-/AV-Gate fuer Upload-, Ingestion- und Dokumentpfade. Ein produktionsnaher Pilot bleibt `blocked`, solange echte Uploads ohne diese Sandbox/Worker/AV-Entscheidung verarbeitet werden sollen.
+
 ## Gesamtentscheidung
 
 | Gesamtzustand | Bedeutung |

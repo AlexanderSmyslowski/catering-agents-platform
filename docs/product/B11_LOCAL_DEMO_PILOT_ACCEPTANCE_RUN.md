@@ -73,6 +73,8 @@ Ein produktionsnaher Pilot bleibt `blocked`, solange mindestens einer dieser Nac
 
 B11 kann diese Punkte hoechstens als `not assessed` oder `blocked` markieren. B11 loest sie nicht.
 
+Der separate B14-Entscheidungsanker `docs/architecture/B14_SANDBOX_WORKER_AV_GATE.md` konkretisiert das Sandbox-/Worker-/AV-Gate fuer Upload-, Ingestion- und Dokumentpfade. B11-Gruensignale ersetzen dieses Gate nicht; ein produktionsnaher Pilot bleibt ohne B14 `blocked`.
+
 ## 6. Klare Nicht-Behauptungen
 
 B11 behauptet ausdruecklich nicht:
