@@ -138,6 +138,8 @@ P5-B54 Manuelle Beta-Test-Checkliste ist als Doku-/Vertragstestanker codiert: `d
 
 P6-B56 Beta-Onboarding-Iststand und Lueckenkarte ist als Doku-/Vertragstestanker codiert: `docs/product/P6_B56_BETA_ONBOARDING_ISTSTAND_LUECKENKARTE.md` buendelt Starten -> Durchlaufen -> Reibung notieren -> Stop-Gates, trennt intern testbar, nur synthetisch, blockiert und verboten, und benennt die naechsten sicheren Plan-6-Luecken ohne Produktlogik, API, Persistenz, Deployment oder echte Daten. `tests/p6-b56-beta-onboarding-gap-map-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING, C8 und P5-B54 sowie die Grenzen: keine echten Daten, kein Deployment, keine SSH-Verbindung, keine Secrets, keine neue Persistenz, kein OAuth/Login/OIDC, keine automatische Spec-Korrektur und keine Rezept-/Allergenautomatik.
 
+P6-B57 Lokaler Start-/Status-Korridor ist als Doku-/Vertragstestanker codiert: `docs/product/P6_B57_LOKALER_START_STATUS_KORRIDOR.md` buendelt Starten -> Status pruefen -> Betriebscheck -> UI-Routen oeffnen -> kontrolliert stoppen, relevante lokale UI- und Health-URLs, die Rollen von `npm run local:start`, `npm run local:status`, `npm run local:check` und `npm run local:stop` sowie die sichere Reaktion auf rote Status-/Check-Signale. `tests/p6-b57-local-start-status-corridor-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING, C8 und P6-B56 sowie die Grenzen: keine echten Daten, kein Deployment, keine SSH-Verbindung, keine Secrets, keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Aussage.
+
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
 Relevante bestehende Tests:
