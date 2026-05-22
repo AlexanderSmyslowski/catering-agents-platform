@@ -99,6 +99,25 @@ function getDraftId(draft?: Record<string, unknown>): string {
   return draft ? String(draft.draftId ?? "-") : "kein Entwurf";
 }
 
+function getDraftProposedSpec(draft?: Record<string, unknown>): Record<string, unknown> | undefined {
+  const proposedSpec = draft?.proposedEventSpec;
+  return proposedSpec && typeof proposedSpec === "object" && !Array.isArray(proposedSpec)
+    ? (proposedSpec as Record<string, unknown>)
+    : undefined;
+}
+
+function formatDraftSourceLineage(spec?: Record<string, unknown>): string | undefined {
+  const sourceLineage = spec?.sourceLineage;
+  if (!Array.isArray(sourceLineage) || sourceLineage.length === 0) {
+    return undefined;
+  }
+
+  const firstSource = sourceLineage[0] as Record<string, unknown>;
+  const sourceType = typeof firstSource.sourceType === "string" ? firstSource.sourceType : "Quelle";
+  const reference = typeof firstSource.reference === "string" && firstSource.reference.trim() ? firstSource.reference : "-";
+  return `${sourceType}: ${reference}`;
+}
+
 function renderDraftSummary(draft?: Record<string, unknown>): string {
   if (!draft) {
     return "Noch kein Angebotsentwurf vorhanden.";
@@ -143,6 +162,8 @@ export function OfferConversationalWorkbench({
 }: OfferWorkbenchProps) {
   const focusedDraft = selectedDraft ?? activeDraft;
   const focusedDraftId = getDraftId(focusedDraft);
+  const focusedDraftSpec = getDraftProposedSpec(focusedDraft);
+  const focusedDraftSource = formatDraftSourceLineage(focusedDraftSpec);
   const focusedVariants = getDraftVariants(focusedDraft);
   const focusedOpenQuestions = Array.isArray(focusedDraft?.openQuestions)
     ? (focusedDraft.openQuestions as string[])
@@ -197,6 +218,12 @@ export function OfferConversationalWorkbench({
               <p className="helper-text">
                 Varianten: {focusedVariants.length} · Offene Punkte: {focusedOpenQuestions.length}
               </p>
+              {focusedDraftSpec ? (
+                <p className="helper-text">
+                  Entwurfs-Spec: {String(focusedDraftSpec.specId ?? "-")} ({getReadinessLabel(focusedDraftSpec)})
+                </p>
+              ) : null}
+              {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
               {focusedOpenQuestions.length > 0 ? (
                 <ul className="item-list compact">
                   {focusedOpenQuestions.map((question) => (

@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.155
+version: 5.156
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -98,6 +98,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - B15 Produktions-Demo-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die kompakte `/produktion`-Zusammenfassung nennt neben Klarheit, Rueckfragen, Plan- und Einkaufstatus nun auch den vorhandenen Produktionsobjektstatus (`Ergebnisobjekte: ...`); abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Fachlogik, API, Persistenz oder Produktflaeche.
 - B17 Angebots-/Export-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die kompakte `/angebot`-Zusammenfassung nennt bei fokussiertem Entwurf jetzt den vorhandenen Angebots-HTML-Exportstatus (`Export: Angebots-HTML fuer ... bereit`); abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Angebotslogik, Exportlogik, API, Persistenz oder neue Produktflaeche.
 - B18 Audit-/Handoff-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die bestehende `/produktion`-Herkunft-und-Uebergabe-Zone nennt beim neuesten Audit-Ereignis nicht mehr nur die Summary, sondern auch vorhandenen Actor, Action-Key und Zeitstempel; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Auditlogik, Operatorlogik, API, Persistenz, Exportlogik oder Produktflaeche.
+- B19 Angebotsdetail-Kontext ist als kleiner UI-/Smoke-Baustein umgesetzt: Die bestehende `/angebot`-Detailzone `Ausgewählter Entwurf` nennt aus vorhandenen `proposedEventSpec`-Daten frueh Entwurfs-Spec, Readiness und ersten Source-Lineage-Anker; abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Angebotslogik, Intake-Logik, API, Persistenz, Migration oder Produktflaeche.
 - PA15 ProductionAgent-v1 Next Capability ADR ist als Entscheidungsvorlage in `docs/architecture/PA15_PRODUCTION_AGENT_NEXT_CAPABILITY_ADR.md` dokumentiert und mit `tests/pa15-productionagent-next-capability-adr.test.ts` abgesichert: Empfohlen wird Option A Rueckfragenmodell / Clarification Model als naechste echte, eng begrenzte Agentenfaehigkeit; keine Runtime-Implementierung, API, Persistenz, LLM-/Tool-Use-, Rezept- oder Allergenlogik.
 - PA16 Clarification Model Slice 1 ist umgesetzt: `shared-core` definiert `ProductionClarificationQuestion` und leitet read-only Rueckfragen nur aus `missingFields`, `readiness.reasons`, `documentIngestion.status` und `documentIngestion.warnings` ab; die bestehende `ProductionConversationProjection` transportiert diese Fragen als strukturierte Agent-Fragen mit sicheren Quellenankern, ohne Nutzerantwortlogik, neue API, Persistenz, LLM-/Tool-Use-, Parser-, Rezept-, Mengen- oder Allergenlogik.
 - PA17 Clarification Question Quality Slice ist umgesetzt: Rueckfragen werden deterministisch nach Schwere/Ursache sortiert, identische Ursachen je sicherem Quellenanker dedupliziert und bekannte sichere Feld-/Warnkeys mit neutralen deutschen Kurzlabels angezeigt; unbekannte Keys bleiben technische Fallbacks, sensible Roh-/Extraktionstexte werden nicht gespiegelt.
@@ -824,3 +825,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.155 - 2026-05-22
 - B18 Audit-/Handoff-Lesbarkeit ist als kleiner regressionssicherer UI-/Smoke-Baustein umgesetzt: `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt, dass die bestehende `/produktion`-Zone `Herkunft und Übergabe` den neuesten Audit-Eintrag mit Summary, Actor, Action-Key und Zeitstempel sichtbar macht.
 - Minimaler UI-Fix in `backoffice-ui/src/App.tsx`: Das bestehende Audit-Spur-Label nutzt vorhandene Audit-Event-Felder (`summary`/`action`/`auditId`, `actor.name`, `action`, `at`) statt nur der Summary. Keine neue Auditlogik, Operatorlogik, Fachlogik, API, Persistenz, Migration, Exportlogik oder neue Produktflaeche.
+
+### 5.156 - 2026-05-22
+- B19 Angebotsdetail-Kontext ist als kleiner regressionssicherer UI-/Smoke-Baustein umgesetzt: `tests/backoffice-route-smoke.test.ts` schuetzt, dass der fokussierte Angebotsentwurf im bestehenden `/angebot`-Detailpanel frueh `Entwurfs-Spec` plus Readiness und `Entwurfs-Quelle` aus vorhandenen `proposedEventSpec.sourceLineage`-Daten zeigt.
+- Minimaler UI-Fix in `backoffice-ui/src/offer-workbench.tsx`: Die bestehende `Ausgewählter Entwurf`-Zone rendert nur bereits vorhandene Draft-/Spec-/Source-Marker. Keine neue Produktflaeche, Angebotslogik, Intake-Logik, API, Persistenz, Migration, Audit-/Operatorlogik oder Exportlogik.

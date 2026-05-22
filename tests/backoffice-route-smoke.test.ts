@@ -225,6 +225,11 @@ describe("backoffice route smoke", () => {
         {
           draftId: "offer-draft-buffet",
           eventSummary: "Sommerfest mit Buffet",
+          proposedEventSpec: {
+            specId: "offer-draft-buffet-spec",
+            readiness: { status: "partial" },
+            sourceLineage: [{ sourceType: "offer_service", reference: "offer-draft-buffet" }]
+          },
           variantSet: [
             {
               variantId: "basis",
@@ -243,6 +248,8 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("Übergabe: 1 vollständig · 1 teilweise");
     expect(offer).toContain("Export: Angebots-HTML für offer-draft-buffet bereit");
     expect(offer).toContain("offer-draft-buffet");
+    expect(offer).toContain("Entwurfs-Spec: offer-draft-buffet-spec (teilweise vollständig)");
+    expect(offer).toContain("Entwurfs-Quelle: offer_service: offer-draft-buffet");
     expect(offer).toContain("Ausgewählter Entwurf");
     expect(offer).toContain("Variante übernehmen: Basis");
     expect(offer).toContain("Angebot exportieren");
