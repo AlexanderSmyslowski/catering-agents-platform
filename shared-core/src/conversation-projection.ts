@@ -15,6 +15,8 @@ export type ProductionConversationMessageType =
 
 export type ProductionConversationRole = "system" | "agent" | "user";
 
+export type ProductionClarificationAnswerStatusAnchor = "answered" | "unanswered";
+
 export interface ProductionConversationMessage {
   messageId: string;
   type: ProductionConversationMessageType;
@@ -26,6 +28,7 @@ export interface ProductionConversationMessage {
   purchaseListIds?: string[];
   sourceAnchors?: ProductionConversationSourceAnchor[];
   clarificationQuestion?: ProductionClarificationQuestion;
+  clarificationAnswerStatus?: ProductionClarificationAnswerStatusAnchor;
   clarificationAnswer?: ProductionClarificationAnswer;
 }
 
@@ -293,6 +296,12 @@ export function buildProductionConversationProjection(
   ];
 
   structuredQuestions.forEach((question, index) => {
+    const matchingAnswers = question.clarificationQuestion
+      ? (input.clarificationAnswers ?? []).filter((answer) =>
+        answerMatchesQuestion(answer, question.clarificationQuestion as ProductionClarificationQuestion, contextForProjection(sourceSpecId))
+      )
+      : [];
+
     messages.push({
       messageId: `${sessionId}-question-${index + 1}`,
       type: "structured_agent_question",
@@ -300,25 +309,28 @@ export function buildProductionConversationProjection(
       title: "Agent fragt",
       text: question.text,
       questionIndex: index + 1,
-      ...(question.clarificationQuestion ? { clarificationQuestion: question.clarificationQuestion } : {})
+      ...(question.clarificationQuestion
+        ? {
+          clarificationQuestion: question.clarificationQuestion,
+          clarificationAnswerStatus: matchingAnswers.length > 0 ? "answered" : "unanswered"
+        }
+        : {})
     });
 
     if (question.clarificationQuestion) {
-      (input.clarificationAnswers ?? [])
-        .filter((answer) => answerMatchesQuestion(answer, question.clarificationQuestion as ProductionClarificationQuestion, contextForProjection(sourceSpecId)))
-        .forEach((answer) => {
-          const safeAnswer = safeClarificationAnswer(answer);
-          messages.push({
-            messageId: `${sessionId}-clarification-answer-${safeAnswer.answerId}`,
-            type: "user_structured_answer",
-            role: "user",
-            title: "Antwort auf Rückfrage",
-            text: safeAnswer.answerText.value,
-            questionIndex: index + 1,
-            clarificationQuestion: question.clarificationQuestion,
-            clarificationAnswer: safeAnswer
-          });
+      matchingAnswers.forEach((answer) => {
+        const safeAnswer = safeClarificationAnswer(answer);
+        messages.push({
+          messageId: `${sessionId}-clarification-answer-${safeAnswer.answerId}`,
+          type: "user_structured_answer",
+          role: "user",
+          title: "Antwort auf Rückfrage",
+          text: safeAnswer.answerText.value,
+          questionIndex: index + 1,
+          clarificationQuestion: question.clarificationQuestion,
+          clarificationAnswer: safeAnswer
         });
+      });
     }
   });
 

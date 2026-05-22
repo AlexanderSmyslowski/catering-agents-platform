@@ -198,3 +198,23 @@ Bewusst weiter nicht umgesetzt:
 - keine Antwortbearbeitung
 - keine automatische Spec-Korrektur oder fachliche Antwortinterpretation
 - keine Rezept-, Mengen-, Einkaufslisten-, Download-, Freigabe- oder Allergenlogik
+
+## 12. PA25 Read-only Statusanker fuer beantwortete Rueckfragen
+
+Alexander hat nach PA24 den engen PA25-Slice freigegeben: beantwortete Rueckfragen sollen in der bestehenden `ProductionConversationProjection` nur als read-only Status sichtbar werden.
+
+Real umgesetzt wurde nur dieser Statusanker:
+
+- Strukturierte Clarification-Fragen koennen `clarificationAnswerStatus: answered | unanswered` tragen.
+- `answered` gilt nur, wenn eine Antwort dieselbe `questionId`, denselben stabilen Question-Key (`reason`, `reasonCode`) und dieselbe Spec-/Session-Bindung (`specId`, `production-session-${specId}`) hat.
+- Zusaetzlich zaehlt nur `answerType = shortText`, `answerText.kind = shortText` und `status = submitted`.
+- Falscher Kontext, falscher Question-Key, `draft`, `reviewed`, falscher Typ und malformed Answers bleiben `unanswered`.
+- Der vorhandene Antworttext bleibt escaped/sicher und der Status ist nur ein Anzeigeanker.
+
+Bewusst weiter nicht umgesetzt:
+
+- kein automatisches Schliessen, Entfernen oder fachliches Erledigen von Rueckfragen
+- keine automatische Spec-Korrektur oder fachliche Antwortinterpretation
+- keine neue API, keine UI-Welt, keine Antwortbearbeitung
+- keine Migration, kein Prisma, keine neue Persistenzwelt
+- keine Rezept-, Mengen-, Einkaufslisten-, Download-, Freigabe- oder Allergenlogik
