@@ -140,6 +140,8 @@ P6-B56 Beta-Onboarding-Iststand und Lueckenkarte ist als Doku-/Vertragstestanker
 
 P6-B57 Lokaler Start-/Status-Korridor ist als Doku-/Vertragstestanker codiert: `docs/product/P6_B57_LOKALER_START_STATUS_KORRIDOR.md` buendelt Starten -> Status pruefen -> Betriebscheck -> UI-Routen oeffnen -> kontrolliert stoppen, relevante lokale UI- und Health-URLs, die Rollen von `npm run local:start`, `npm run local:status`, `npm run local:check` und `npm run local:stop` sowie die sichere Reaktion auf rote Status-/Check-Signale. `tests/p6-b57-local-start-status-corridor-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING, C8 und P6-B56 sowie die Grenzen: keine echten Daten, kein Deployment, keine SSH-Verbindung, keine Secrets, keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Aussage.
 
+P6-B58 Reibungslog fuer manuellen Beta-Durchlauf ist als Doku-/Vertragstestanker codiert: `docs/product/P6_B58_BETA_REIBUNGSLOG_VORLAGE.md` strukturiert sichere Beta-Reibungsnotizen ohne echte Daten mit Beobachtung, Route, erwartetem Verhalten, tatsaechlichem Verhalten, Schweregrad, Screenshot-Hinweis ohne personenbezogene Daten und naechster Entscheidung. `tests/p6-b58-beta-friction-log-template-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING, C8, P5-B54, P6-B56 und P6-B57 sowie die Grenzen: keine echten Daten, keine externe QA-Plattform, keine neue Speicherung echter Nutzerdaten, keine Produktionsfreigabe, keine externe Freigabe und keine rechtssichere Audit-/Compliance-Aussage.
+
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
 Relevante bestehende Tests:
