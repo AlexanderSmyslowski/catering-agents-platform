@@ -2081,6 +2081,9 @@ export function App() {
               <strong>Beta-Weg:</strong> Start → Angebot → Produktion → Rückfragen → Exporte/Audit.
             </p>
             <p className="helper-text">
+              <strong>Grenze:</strong> nur synthetischer interner Beta-Durchlauf; keine echten Daten, keine Produktionsfreigabe.
+            </p>
+            <p className="helper-text">
               <strong>Nächster Einstieg:</strong> zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.
             </p>
           </>

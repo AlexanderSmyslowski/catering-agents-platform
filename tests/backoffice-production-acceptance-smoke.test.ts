@@ -373,6 +373,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Downloadbereich");
     expect(content).toContain("production-calm-summary");
     expect(content).toContain("Interner Beta-Schritt: Produktion, Einkaufsliste, Exporte, Herkunft und offene Rückfragen bleiben nachvollziehbar.");
+    expect(content).toContain("Synthetische Beta-Grenze: Produktionsobjekte nur intern prüfen; keine echten Einsatzdaten und keine Produktionsfreigabe.");
     expect(content).toContain("Beta-Pfad: Rückfragen -> Ergebnisobjekte -> Exporte/Audit");
     expect(content).toContain("production-objects-zone");
     expect(content).toContain("Nächster Agent-Schritt");
