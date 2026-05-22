@@ -131,6 +131,7 @@ Der Frontend-Smoke bleibt bewusst schmal:
 Dokumentierte Grundlage:
 
 - `docs/product/P2_BROWSER_SMOKE_MINISPEZ.md`
+- `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md`
 - `README.md`
 
 Bestehender lokaler Stack:
@@ -163,6 +164,12 @@ Der bestehende Repo-Befehl `npm run local:check` fuehrt genau diesen schmalen lo
 Die Auditpruefung fragt bewusst das lokale Production-Auditfenster mit `limit=200` ab und erwartet einen `production.seed_demo`-Beleg des lokalen `Betriebs-/Audit-Operator`. Fehlt dieser Beleg oder ist er inhaltlich ungueltig, muss der Check deterministisch rot werden und auf kontrolliertes Neu-Seeden via `npm run local:start` verweisen.
 
 Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Framework. Er ist keine CI-Pflicht, keine Produktionsfreigabe und keine rechtssichere Audit-Aussage.
+
+### 4.1 Interner Demo-/Abnahmeweg C8
+
+Der C8-Demo-/Abnahmeweg ist unter `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` dokumentiert. Er verknuepft die bestehenden lokalen Befehle `npm run local:status` und `npm run local:check` mit den UI-Routen `/angebot` und `/produktion`, dem vorhandenen Angebot-zu-Produktion-Handoff, sicheren Upload-/Import-Warnankern, read-only Exportlinks unter Trusted-Actor-Kontext und den Full Gates `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.
+
+Der C8-Weg ist Doku-only und bleibt ein interner MVP-/Demo-Korridor. Er ist keine Produktionsfreigabe, keine externe Compliance-Abnahme und keine rechtssichere Auditbehauptung.
 
 ## 5. Was Phase 4 bewusst nicht tut
 
