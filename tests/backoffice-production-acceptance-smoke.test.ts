@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
 
 function installProductionAcceptanceMocks(
-  options: { stalePlanOnly?: boolean; withCurrentPurchaseList?: boolean; completeSpec?: boolean; withoutPlans?: boolean } = {}
+  options: {
+    stalePlanOnly?: boolean;
+    withCurrentPurchaseList?: boolean;
+    completeSpec?: boolean;
+    withoutPlans?: boolean;
+    withRecipeReviewStates?: boolean;
+  } = {}
 ) {
   const storage = new Map<string, string>();
   const localStorageMock = {
@@ -200,10 +206,33 @@ function installProductionAcceptanceMocks(
       }
 
       if (url.endsWith("/api/production/v1/production/recipes")) {
-        return new Response(JSON.stringify({ items: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
+        return new Response(
+          JSON.stringify({
+            items: options.withRecipeReviewStates
+              ? [
+                  {
+                    recipeId: "recipe-approved-1",
+                    name: "Freigegebenes Baguette",
+                    source: { tier: "internal_verified", approvalState: "approved_internal" }
+                  },
+                  {
+                    recipeId: "recipe-review-1",
+                    name: "Baguette in Prüfung",
+                    source: { tier: "digitized_cookbook", approvalState: "review_required" }
+                  },
+                  {
+                    recipeId: "recipe-rejected-1",
+                    name: "Abgelehnte Baguette-Variante",
+                    source: { tier: "internet_fallback", approvalState: "rejected" }
+                  }
+                ]
+              : []
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
       }
 
       if (url.includes("/api/production/v1/production/audit/events")) {
@@ -379,5 +408,15 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
+  });
+
+  it("summarizes recipe review status as a quiet production blocker zone", async () => {
+    installProductionAcceptanceMocks({ withRecipeReviewStates: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Rezeptprüfung");
+    expect(content).toContain("1 zu prüfen");
+    expect(content).toContain("Freigegebene Rezepte bleiben verwendbar");
   });
 });

@@ -999,6 +999,16 @@ export function App() {
     );
   }, [dashboard.recipes]);
 
+  const recipeReviewStatusLabel =
+    recipeReviewCounts.reviewRequired > 0
+      ? `${recipeReviewCounts.reviewRequired} zu prüfen`
+      : "keine offene Prüfung";
+
+  const recipeUsageStatusLabel =
+    recipeReviewCounts.approved > 0
+      ? "Freigegebene Rezepte bleiben verwendbar"
+      : "Noch keine freigegebenen Rezepte im Bestand";
+
   const offerHandoffCounts = useMemo(() => {
     return dashboard.acceptedSpecs.reduce(
       (counts: { complete: number; partial: number }, spec) => {
@@ -3070,6 +3080,18 @@ export function App() {
           </article>
           </div>
           <div className="production-column">
+
+          <article className="recipe-review-status-zone" aria-label="Rezeptprüfung">
+            <div>
+              <p className="eyebrow">Rezeptprüfung</p>
+              <h3>{recipeReviewStatusLabel}</h3>
+              <p className="helper-text">{recipeUsageStatusLabel}</p>
+            </div>
+            <p className="helper-text">
+              {recipeReviewCounts.rejected} abgelehnt · {dashboard.recipes.length} Rezepte insgesamt · Review-Actions bleiben in der
+              Bibliothek unverändert.
+            </p>
+          </article>
 
           <details className="panel secondary-panel secondary-rail-details">
             <summary>
