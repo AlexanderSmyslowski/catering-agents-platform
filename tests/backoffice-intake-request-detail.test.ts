@@ -172,7 +172,7 @@ describe("backoffice intake request detail", () => {
     expect(document.body.textContent).toContain(
       "Quelle unsicher/fallback: angebot-detail.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
     );
-    expect(document.body.textContent).toContain("Ingestion: fallback · document_text_extraction_fallback");
+    expect(document.body.textContent).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
 
     await act(async () => {
       root.unmount();

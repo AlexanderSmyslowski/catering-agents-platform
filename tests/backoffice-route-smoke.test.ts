@@ -499,6 +499,7 @@ describe("backoffice route smoke", () => {
             {
               kind: "pdf",
               mimeType: "application/pdf",
+              content: "%PDF B5 Rohtext darf im Demo-Warnanker nicht erscheinen.",
               documentId: "c4-document-upload-warning",
               sourceMetadata: {
                 filename: "c4-angebot.pdf",
@@ -536,8 +537,9 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Lunch · 80 Teilnehmer · 2026-08-21");
     expect(production.text).toContain("specId: c4-spec-handoff");
     expect(production.text).toContain("requestId: c4-request-handoff");
-    expect(production.text).toContain("Ingestion: fallback · document_text_extraction_fallback");
-    expect(production.text).toContain("Quellenmetadaten: c4-angebot.pdf · application/pdf · 2.0 KB · sha256:abcdef123456 · intake");
+    expect(production.text).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
+    expect(production.text).toContain("Quellenmetadaten (gekürzt): c4-angebot.pdf · application/pdf · 2.0 KB · sha256:abcdef123456 · intake");
+    expect(production.text).not.toContain("B5 Rohtext");
     expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
     expect(production.text).toContain("Produktionsblatt exportieren");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/c4-plan-handoff/html");

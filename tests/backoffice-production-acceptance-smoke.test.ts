@@ -373,7 +373,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Ursprüngliche Intake-Anfrage");
     expect(content).toContain("requestId: request-production-fallback-1");
     expect(content).toContain("channel: manual_form");
-    expect(content).toContain("Quellenmetadaten: produktion-angebot.pdf · application/pdf · 24.2 KB · sha256:fedcba987654 · intake");
+    expect(content).toContain("Quellenmetadaten (gekürzt): produktion-angebot.pdf · application/pdf · 24.2 KB · sha256:fedcba987654 · intake");
     expect(content).not.toContain("sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
     expect(content).not.toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
     expect(content).not.toContain("Offene Punkte: keine");

@@ -91,9 +91,11 @@ In `/produktion` wird fuer die interne Demo geprueft:
 1. Die aktive Spezifikation bzw. der Demo-Kontext ist sichtbar.
 2. Vorhandene Rueckfragen und Antworten erscheinen als strukturierte Workbench-/Conversation-Sicht.
 3. Upload-/Import-Warnungen erscheinen nur als sichere Status- und Warnmarker:
+   - Warnstatus und Warnkey, zum Beispiel `Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback`,
    - keine Rohtextspiegelung aus Dokumenten,
    - sichere Quellen-/Hash-Kurzanker,
    - gekuerzte Quellenmetadaten,
+   - keine vollen SHA-256-Hashes,
    - kontrollierte Servermeldungen statt generischer HTTP-Statuszeilen, soweit vorhanden.
 4. Wenn Plan, Einkaufsliste oder Exportlinks noch fehlen, erklaert die UI den Zustand ruhig und benennt den naechsten Schritt, insbesondere `Berechnung starten`.
 

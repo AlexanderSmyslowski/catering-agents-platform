@@ -404,7 +404,7 @@ function formatDocumentIngestionSummary(input: Record<string, unknown>): string 
     return undefined;
   }
 
-  return [status, warnings.length > 0 ? warnings.join(",") : undefined].filter(Boolean).join(" · ");
+  return [`Status ${status}`, warnings.length > 0 ? `Warnkey ${warnings.join(",")}` : undefined].filter(Boolean).join(" · ");
 }
 
 function extractProductionPlanId(payload: Record<string, unknown>): string | undefined {
@@ -2678,10 +2678,10 @@ export function App() {
                                     {`${String(rawInputRecord.mimeType ? ` · ${rawInputRecord.mimeType}` : "")}`}
                                   </p>
                                   {documentIngestionSummary ? (
-                                    <p className="helper-text">Ingestion: {documentIngestionSummary}</p>
+                                    <p className="helper-text">Ingestion-Warnung: {documentIngestionSummary}</p>
                                   ) : null}
                                   {sourceMetadataSummary ? (
-                                    <p className="helper-text">Quellenmetadaten: {sourceMetadataSummary}</p>
+                                    <p className="helper-text">Quellenmetadaten (gekürzt): {sourceMetadataSummary}</p>
                                   ) : null}
                                 </li>
                               );

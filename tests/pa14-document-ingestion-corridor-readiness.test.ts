@@ -98,9 +98,18 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
 
   it("documents the read-only PA14 acceptance anchor in the repo testing guide", () => {
     const testingGuide = readFileSync(new URL("../TESTING.md", import.meta.url), "utf8");
+    const c8DemoPath = readFileSync(
+      new URL("../docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md", import.meta.url),
+      "utf8"
+    );
 
     expect(testingGuide).toContain("PA14 DocumentIngestion-Korridor");
     expect(testingGuide).toContain("Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher");
     expect(testingGuide).toContain("keine Rohtextspiegelung");
+    expect(testingGuide).toContain("Backoffice-Demo-Marker: `Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback`");
+    expect(testingGuide).toContain("Quellenmetadaten (gekürzt)");
+    expect(testingGuide).toContain("keine vollen SHA-256-Hashes");
+    expect(c8DemoPath).toContain("Warnstatus und Warnkey, zum Beispiel `Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback`");
+    expect(c8DemoPath).toContain("keine vollen SHA-256-Hashes");
   });
 });
