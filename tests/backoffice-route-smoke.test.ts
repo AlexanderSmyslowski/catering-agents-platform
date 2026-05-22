@@ -198,6 +198,8 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("Catering-Agenten");
     expect(home).toMatch(/gemeinsam.*regelkern/i);
     expect(home).toContain("Internes Beta-Kontrollzentrum");
+    expect(home).toContain("Beta-Weg: Start → Angebot → Produktion → Rückfragen → Exporte/Audit.");
+    expect(home).toContain("Nächster Einstieg: zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.");
     expect(home).toContain("Demo, Erfassung, Angebot, Produktion, Export und Audit aus bestehenden Daten prüfen.");
 
     const offer = await renderRoute("/angebot");

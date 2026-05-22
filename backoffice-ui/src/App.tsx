@@ -2077,6 +2077,12 @@ export function App() {
               <strong>Internes Beta-Kontrollzentrum:</strong> Demo, Erfassung, Angebot, Produktion, Export und Audit
               aus bestehenden Daten prüfen.
             </p>
+            <p className="helper-text">
+              <strong>Beta-Weg:</strong> Start → Angebot → Produktion → Rückfragen → Exporte/Audit.
+            </p>
+            <p className="helper-text">
+              <strong>Nächster Einstieg:</strong> zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.
+            </p>
           </>
         ) : null}
 
