@@ -285,6 +285,18 @@ function readStringOrNumber(record: Record<string, unknown> | undefined, keys: s
   return undefined;
 }
 
+function formatAuditEventHandoffLabel(event: Record<string, unknown>): string {
+  const actor = asRecord(event.actor);
+  const parts = [
+    readStringOrNumber(event, ["summary", "action", "auditId"]),
+    readStringOrNumber(actor, ["name"]),
+    readStringOrNumber(event, ["action"]),
+    readStringOrNumber(event, ["at"])
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" · ") : "Audit-Eintrag vorhanden";
+}
+
 function getPurchaseListPreviewItems(
   purchaseList: Record<string, unknown>
 ): Array<{ articleName: string; quantity: string; unit: string }> {
@@ -1300,9 +1312,7 @@ export function App() {
 
   const latestProductionAuditEvent = filteredAuditEvents[0];
   const productionAuditTrailLabel = latestProductionAuditEvent
-    ? String(
-        latestProductionAuditEvent.summary ?? latestProductionAuditEvent.action ?? latestProductionAuditEvent.auditId ?? "Audit-Eintrag vorhanden"
-      )
+    ? formatAuditEventHandoffLabel(latestProductionAuditEvent)
     : "keine Audit-Ereignisse geladen";
 
   const productionNextStep = useMemo(() => {

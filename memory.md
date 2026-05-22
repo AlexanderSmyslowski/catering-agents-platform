@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.154
+version: 5.155
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -97,6 +97,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - B14 Sandbox/Worker/AV-Gate ist als Doku-/Vertragstest-only Anker in `docs/architecture/B14_SANDBOX_WORKER_AV_GATE.md` und `tests/b14-sandbox-worker-av-gate-contract.test.ts` vorbereitet: aktueller Demo-/Ingestion-/Upload-Korridor bleibt intern/testbezogen; produktionsnahe Verarbeitung echter Uploads bleibt ohne Entscheidungen zu erlaubten Dateitypen, Groessenlimits, Quarantaene-/Reject-Verhalten, Scan-/Sandbox-Verantwortung, Worker-Isolation, Fehler-/Warnpfad und Betriebsverantwortung `blocked`.
 - B15 Produktions-Demo-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die kompakte `/produktion`-Zusammenfassung nennt neben Klarheit, Rueckfragen, Plan- und Einkaufstatus nun auch den vorhandenen Produktionsobjektstatus (`Ergebnisobjekte: ...`); abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Fachlogik, API, Persistenz oder Produktflaeche.
 - B17 Angebots-/Export-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die kompakte `/angebot`-Zusammenfassung nennt bei fokussiertem Entwurf jetzt den vorhandenen Angebots-HTML-Exportstatus (`Export: Angebots-HTML fuer ... bereit`); abgesichert in `tests/backoffice-route-smoke.test.ts`. Keine neue Angebotslogik, Exportlogik, API, Persistenz oder neue Produktflaeche.
+- B18 Audit-/Handoff-Lesbarkeit ist als kleiner UI-/Smoke-Baustein umgesetzt: Die bestehende `/produktion`-Herkunft-und-Uebergabe-Zone nennt beim neuesten Audit-Ereignis nicht mehr nur die Summary, sondern auch vorhandenen Actor, Action-Key und Zeitstempel; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Auditlogik, Operatorlogik, API, Persistenz, Exportlogik oder Produktflaeche.
 - PA15 ProductionAgent-v1 Next Capability ADR ist als Entscheidungsvorlage in `docs/architecture/PA15_PRODUCTION_AGENT_NEXT_CAPABILITY_ADR.md` dokumentiert und mit `tests/pa15-productionagent-next-capability-adr.test.ts` abgesichert: Empfohlen wird Option A Rueckfragenmodell / Clarification Model als naechste echte, eng begrenzte Agentenfaehigkeit; keine Runtime-Implementierung, API, Persistenz, LLM-/Tool-Use-, Rezept- oder Allergenlogik.
 - PA16 Clarification Model Slice 1 ist umgesetzt: `shared-core` definiert `ProductionClarificationQuestion` und leitet read-only Rueckfragen nur aus `missingFields`, `readiness.reasons`, `documentIngestion.status` und `documentIngestion.warnings` ab; die bestehende `ProductionConversationProjection` transportiert diese Fragen als strukturierte Agent-Fragen mit sicheren Quellenankern, ohne Nutzerantwortlogik, neue API, Persistenz, LLM-/Tool-Use-, Parser-, Rezept-, Mengen- oder Allergenlogik.
 - PA17 Clarification Question Quality Slice ist umgesetzt: Rueckfragen werden deterministisch nach Schwere/Ursache sortiert, identische Ursachen je sicherem Quellenanker dedupliziert und bekannte sichere Feld-/Warnkeys mit neutralen deutschen Kurzlabels angezeigt; unbekannte Keys bleiben technische Fallbacks, sensible Roh-/Extraktionstexte werden nicht gespiegelt.
@@ -819,3 +820,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.154 - 2026-05-22
 - B17 Angebots-/Export-Lesbarkeit ist als kleiner regressionssicherer UI-/Smoke-Baustein umgesetzt: `tests/backoffice-route-smoke.test.ts` schuetzt, dass die kompakte `/angebot`-Zusammenfassung den vorhandenen Angebots-HTML-Exportstatus fuer den fokussierten Entwurf frueh sichtbar macht.
 - Minimaler UI-Fix in `backoffice-ui/src/offer-workbench.tsx`: Die Calm Summary zeigt `Export: Angebots-HTML fuer <draftId> bereit` bzw. ohne Entwurf `Export: noch kein Angebotsentwurf`. Keine neue Angebotslogik, Exportlogik, API, Persistenz, Migration oder neue Produktflaeche.
+
+### 5.155 - 2026-05-22
+- B18 Audit-/Handoff-Lesbarkeit ist als kleiner regressionssicherer UI-/Smoke-Baustein umgesetzt: `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt, dass die bestehende `/produktion`-Zone `Herkunft und Übergabe` den neuesten Audit-Eintrag mit Summary, Actor, Action-Key und Zeitstempel sichtbar macht.
+- Minimaler UI-Fix in `backoffice-ui/src/App.tsx`: Das bestehende Audit-Spur-Label nutzt vorhandene Audit-Event-Felder (`summary`/`action`/`auditId`, `actor.name`, `action`, `at`) statt nur der Summary. Keine neue Auditlogik, Operatorlogik, Fachlogik, API, Persistenz, Migration, Exportlogik oder neue Produktflaeche.

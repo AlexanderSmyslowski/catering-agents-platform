@@ -388,7 +388,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Intake-Ursprung");
     expect(content).toContain("manual_form · 2026-04-18T10:30:00.000Z · request-production-fallback-1");
     expect(content).toContain("Audit-Spur");
-    expect(content).toContain("Produktionsplan erstellt");
+    expect(content).toContain("Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T09:15:00.000Z");
     expect(content).toContain("Übergabe-/Exportartefakte");
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
     expect(content).toContain("Keine rechtssichere Audit-Behauptung");
