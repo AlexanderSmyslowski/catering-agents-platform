@@ -75,6 +75,9 @@ export function ProductionConversationalWorkbench({
           Interner Beta-Schritt: Produktion, Einkaufsliste, Exporte, Herkunft und offene Rückfragen bleiben nachvollziehbar.
         </p>
         <p className="helper-text">
+          Beta-Pfad: Rückfragen -&gt; Ergebnisobjekte -&gt; Exporte/Audit.
+        </p>
+        <p className="helper-text">
           Planstatus: {planStatusLabel} · Einkaufstatus: {purchaseStatusLabel}
         </p>
         <p className="helper-text">Ergebnisobjekte: {productionObjectStatusLabel}</p>
