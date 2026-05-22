@@ -113,7 +113,15 @@ In `/produktion` wird fuer die interne Demo geprueft:
    - gekuerzte Quellenmetadaten,
    - keine vollen SHA-256-Hashes,
    - kontrollierte Servermeldungen statt generischer HTTP-Statuszeilen, soweit vorhanden.
-4. Wenn Plan, Einkaufsliste oder Exportlinks noch fehlen, erklaert die UI den Zustand ruhig und benennt den naechsten Schritt, insbesondere `Berechnung starten`.
+4. P3-B37 Upload-Grenzen als Beta-Risiko bleibt fuer interne Beta-Nutzer sichtbar:
+   - Intake-Dokumentuploads: maximal 8 MiB pro Datei und bis zu 3 Dateien pro Multipart-Request,
+   - Rezeptuploads in Angebot und Produktion: maximal 5 MiB und genau eine Datei pro Upload,
+   - erlaubt bleibt nur der vorhandene Dokumentkorridor PDF/TXT/MD/EML/Pages mit passender MIME-/Extension-Kombination,
+   - zu grosse oder nicht erlaubte Dateien bleiben kontrolliert abgewiesen,
+   - erlaubte Demo-Dateien laufen im internen Korridor weiter,
+   - Produktionsnahe Verarbeitung echter oder beliebiger Uploads bleibt ohne Sandbox/Worker/AV-Gate `blocked`,
+   - Warnungen bleiben sichere Status-/Warnkey-Marker ohne Rohtext- oder Vollhash-Spiegelung.
+5. Wenn Plan, Einkaufsliste oder Exportlinks noch fehlen, erklaert die UI den Zustand ruhig und benennt den naechsten Schritt, insbesondere `Berechnung starten`.
 
 Diese Anker sind in den bestehenden Tests dokumentiert und abgesichert, insbesondere in:
 

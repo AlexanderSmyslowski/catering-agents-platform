@@ -112,4 +112,22 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
     expect(c8DemoPath).toContain("Warnstatus und Warnkey, zum Beispiel `Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback`");
     expect(c8DemoPath).toContain("keine vollen SHA-256-Hashes");
   });
+
+  it("makes upload limits and the beta sandbox risk visible without leaking raw document data", () => {
+    const testingGuide = readFileSync(new URL("../TESTING.md", import.meta.url), "utf8");
+    const c8DemoPath = readFileSync(
+      new URL("../docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md", import.meta.url),
+      "utf8"
+    );
+
+    for (const document of [testingGuide, c8DemoPath]) {
+      expect(document).toContain("P3-B37 Upload-Grenzen als Beta-Risiko");
+      expect(document).toContain("Intake-Dokumentuploads: maximal 8 MiB pro Datei und bis zu 3 Dateien pro Multipart-Request");
+      expect(document).toContain("Rezeptuploads in Angebot und Produktion: maximal 5 MiB und genau eine Datei pro Upload");
+      expect(document).toContain("PDF/TXT/MD/EML/Pages");
+      expect(document).toContain("Produktionsnahe Verarbeitung echter oder beliebiger Uploads bleibt ohne Sandbox/Worker/AV-Gate `blocked`");
+      expect(document).toContain("Warnungen bleiben sichere Status-/Warnkey-Marker ohne Rohtext- oder Vollhash-Spiegelung");
+      expect(document).not.toContain("sha256:44df5c6bb17828b242fa96cd873be7e535be26cc742aecadd77237b1f86db31d");
+    }
+  });
 });

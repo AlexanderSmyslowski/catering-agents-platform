@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.171
+version: 5.172
 date: 2026-05-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -129,6 +129,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P3-B34 Startseite als Beta-Kontrollzentrum ist minimal gehaertet: Die Startseite benennt nun explizit den internen Beta-Kontrollzentrum-Kontext fuer Demo, Erfassung, Angebot, Produktion, Export und Audit aus vorhandenen Daten; `tests/backoffice-route-smoke.test.ts` schuetzt diesen Marker. Keine neue Dashboard-Welt, keine neue Datenquelle, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P3-B35 Angebot-Route fuer Beta-Durchlauf ist minimal gehaertet: Die bestehende `/angebot`-Zusammenfassung benennt den internen Beta-Schritt fuer Anfrage, Entwurf, Export und Uebergabe aus vorhandenen Daten; `tests/backoffice-route-smoke.test.ts` schuetzt den Marker zusammen mit Anfrage-/Spec-Bezug, Entwurfsstatus, Exportanker und Produktionsuebergabe. Keine neue Angebotslogik, API, automatische Spec-Korrektur, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - P3-B36 Produktion-Route fuer Beta-Durchlauf ist minimal gehaertet: Die bestehende `/produktion`-Zusammenfassung benennt den internen Beta-Schritt fuer Produktion, Einkaufsliste, Exporte, Herkunft und offene Rueckfragen aus vorhandenen Daten; `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Marker neben Plan-/Einkauf-/Export-/Herkunftsankern. Keine neue Produktionslogik, kein neuer Workflow, keine Rezept-/Allergenautomatik, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
+- P3-B37 Upload-Grenzen als Beta-Risiko ist Doku-/Test-only sichtbar gemacht: TESTING und C8 benennen Intake-Limit 8 MiB/bis zu 3 Multipart-Dateien, Rezeptupload-Limit 5 MiB/genau eine Datei, erlaubten Dokumentkorridor PDF/TXT/MD/EML/Pages, kontrollierte Abweisung zu grosser/unerlaubter Dateien und die Blockade produktionsnaher echter/beliebiger Uploads ohne Sandbox/Worker/AV-Gate; `tests/pa14-document-ingestion-corridor-readiness.test.ts` schuetzt diese Marker ohne Rohtext-/Vollhash-Leaks. Keine Parser-/OCR-/LLM-Engine, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
 - Leitlinien bleiben bindend:
 
   - keine neue Persistenzwelt / kein Prisma ohne bewussten Grossschnitt
@@ -903,3 +904,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.171 - 2026-05-22
 - P3-B36 Produktion-Route fuer Beta-Durchlauf ist minimal gehaertet: `backoffice-ui/src/production-workbench.tsx` zeigt in der bestehenden `/produktion`-Zusammenfassung einen knappen internen Beta-Schritt-Hinweis fuer Produktion, Einkaufsliste, Exporte, Herkunft und offene Rueckfragen aus vorhandenen Daten.
 - `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Marker im bestehenden Production-Acceptance-Smoke neben vorhandenen Plan-, Einkauf-, Export-, Herkunfts- und Rueckfragenankern. Keine neue Produktionslogik, kein neuer Workflow, keine Rezept-/Allergenautomatik, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
+
+### 5.172 - 2026-05-22
+- P3-B37 Upload-Grenzen als Beta-Risiko ist Doku-/Test-only sichtbar gemacht: TESTING und C8 benennen Intake-Limit 8 MiB/bis zu 3 Multipart-Dateien, Rezeptupload-Limit 5 MiB/genau eine Datei, erlaubten Dokumentkorridor PDF/TXT/MD/EML/Pages, kontrollierte Abweisung zu grosser/unerlaubter Dateien und die Blockade produktionsnaher echter/beliebiger Uploads ohne Sandbox/Worker/AV-Gate.
+- `tests/pa14-document-ingestion-corridor-readiness.test.ts` schuetzt diese Marker zusammen mit vorhandenen Upload-/Ingestion-Grenzen; Rohtext- und Vollhash-Spiegelung bleiben ausgeschlossen. Keine Parser-/OCR-/LLM-Engine, keine API, Persistenz, Deployment, Login/OIDC oder echte Datenverarbeitung.
