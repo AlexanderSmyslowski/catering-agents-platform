@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.213
+version: 5.214
 date: 2026-05-24
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -178,6 +178,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P11-N3 Interner Nutzerkreis und Zugriffskontext ist Doku-/Vertragstest-only umgesetzt: `docs/product/P11_N3_INTERNER_PILOT_PREFLIGHT_RUNBOOK.md` macht Nutzerkreis, fachlichen/technischen Betreiber, Trusted-Actor-Kontext und Zugriffskontrollfragen als nicht-sensitive Entscheidungspunkte sichtbar; `tests/p11-n3-internal-pilot-preflight-runbook-contract.test.ts` schuetzt die Grenzen aus B24, PA7/PA8/PA9 und B8/B9. Lokales Rehearsal-Go bleibt kein Pilot-/Auth-/Deployment-Go; Auth/OIDC/Login/Session, Proxy/IAP-Code, Deployment, Secrets, neue Rollenplattform, API/Persistenz, echte Daten und Compliance-Freigabe bleiben blockiert.
 - P11-N5 Abschlussgate / Memory Snapshot / 10/10-Lage ist als No-Product-Change abgeschlossen: Plan 11 wurde ueber den fokussierten P11-/UI-Korridor, `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check`, `npm run local:status` und `npm run local:check` verifiziert; Snapshot `docs/agent-memory/memory_v5.212_2026-05-24.md` haelt den Plan-11-Abschlussstand fest. Der lokale Pilot-Preflight fuer Demo-/synthetische oder nachweisbar anonymisierte Daten ist besser pruefbar; ein echter begrenzter interner Pilot bleibt ohne Management-Go zu Nutzerkreis, Betreiber-/Zugriffskontext, Datenrahmen und Nachweisen `not assessed`, produktionsnahe Nutzung mit echten Daten bleibt `blocked`.
 - P11-N6 Plan-12-Ableitung ist Doku-/Vertragstest-only vorbereitet: `docs/plans/hans-night-build-plan-12-internal-pilot-go-no-go-decision-2026-05-24.md` macht das naechste echte Bottleneck als nicht-sensitives Management-Go/No-Go-Entscheidungspaket sichtbar; `tests/p12-plan-contract.test.ts` schuetzt, dass Plan 12 startbereit bleibt, aber keinen Pilot startet und keine Deployment-/Auth-/API-/Persistenz-/Daten-/Schedule-Gates ueberschreitet.
+- P12-N2 Management-Go/No-Go-Entscheidungspaket ist Doku-/Vertragstest-only umgesetzt: `docs/product/P12_N2_MANAGEMENT_GO_NO_GO_ENTSCHEIDUNGSPAKET.md` verdichtet P11-N1/N2/N3, B24, PA7/PA8/PA9, B8/B9, P6/P7/P9/C8 und R4 in nicht-sensitive Entscheidungsfelder fuer Nutzerkreis, fachlichen/technischen Betreiber, Zugriffskontext, Datenrahmen, Anonymisierungs-/Synthetiknachweis, Nachweis, Stop-Verantwortung und finale Bewertung; `tests/p12-n2-management-go-no-go-decision-packet-contract.test.ts` schuetzt Default `not assessed` fuer echten begrenzten Pilot und `blocked` fuer echte/produktive Daten. Kein Pilotstart, Deployment, Auth, echte Daten, neue API/Persistenz, produktive Config oder Rechts-/Compliance-Freigabe.
 
 ## Aktueller Gesamtstand
 - Der Governance-Pfad ist bis einschliesslich **Stufe 6c** umgesetzt und fachlich gruen / abnahmefaehig.
@@ -1109,3 +1110,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.213 - 2026-05-24
 - P11-N6 Plan-12-Ableitung ist Doku-/Vertragstest-only umgesetzt: `docs/plans/hans-night-build-plan-12-internal-pilot-go-no-go-decision-2026-05-24.md` ist startbereit und leitet den naechsten echten Bottleneck aus Plan 11 ab: ein nicht-sensitives Management-Go/No-Go-Entscheidungspaket fuer echten begrenzten internen Pilot vs. bewussten Stop.
 - `tests/p12-plan-contract.test.ts` schuetzt, dass Plan 12 keine Pilotdurchfuehrung startet, die Status-Trennung lokal Preflight `go` / echter begrenzter Pilot `not assessed` / produktionsnah echte Daten `blocked` erhaelt und keine Deployment-, Auth-, API-, Persistenz-, echte-Daten-, Compliance- oder Runtime-Schedule-Gates ueberschreitet.
+
+### 5.214 - 2026-05-24
+- P12-N2 Management-Go/No-Go-Entscheidungspaket ist Doku-/Vertragstest-only umgesetzt: `docs/product/P12_N2_MANAGEMENT_GO_NO_GO_ENTSCHEIDUNGSPAKET.md` verdichtet die offenen Plan-11-Pilotentscheidungen in nicht-sensitive Pflichtfelder fuer Nutzerkreis, fachlichen Betreiber, technischen Betreiber, Zugriffskontext, Datenrahmen, Anonymisierungs-/Synthetiknachweis, Nachweis, Stop-Verantwortung und finale Bewertung.
+- `tests/p12-n2-management-go-no-go-decision-packet-contract.test.ts` schuetzt die Status-Trennung: lokaler Preflight `go`, echter begrenzter interner Pilot bis zur bewussten Managemententscheidung `not assessed`, echte/produktive Daten und produktionsnahe Nutzung `blocked`. Keine Runtime-, UI-, API-, Persistenz-, Deployment-, Auth-, Secret-, Daten-, Schedule- oder Compliance-Aenderung und kein Pilotstart.
