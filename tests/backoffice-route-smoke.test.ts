@@ -200,6 +200,7 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("Internes Beta-Kontrollzentrum");
     expect(home).toContain("Beta-Weg: Start → Angebot → Produktion → Rückfragen → Exporte/Audit.");
     expect(home).toContain("Grenze: nur synthetischer interner Beta-Durchlauf; keine echten Daten, keine Produktionsfreigabe.");
+    expect(home).toContain("Reviewer-Hinweis: P7-Szenariokarte nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
     expect(home).toContain("Nächster Einstieg: zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.");
     expect(home).toContain("Demo, Erfassung, Angebot, Produktion, Export und Audit aus bestehenden Daten prüfen.");
 
@@ -290,6 +291,7 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("Zusammenfassung");
     expect(offer).toContain("Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.");
     expect(offer).toContain("Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten freigeben.");
+    expect(offer).toContain("Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
     expect(offer).toContain("Nächster Angebotsschritt: Entwurf offer-draft-buffet prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.");
     expect(offer).toContain("Sommerfest mit Buffet · 1 Varianten · 1 offene Punkte");
     expect(offer).toContain("Übergabe: 1 vollständig · 1 teilweise");

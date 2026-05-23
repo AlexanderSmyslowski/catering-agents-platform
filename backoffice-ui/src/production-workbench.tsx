@@ -81,6 +81,9 @@ export function ProductionConversationalWorkbench({
           Beta-Pfad: Rückfragen -&gt; Ergebnisobjekte -&gt; Exporte/Audit.
         </p>
         <p className="helper-text">
+          Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.
+        </p>
+        <p className="helper-text">
           Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar
           sind; offene Stop-Punkte bleiben Stop statt Freigabe.
         </p>

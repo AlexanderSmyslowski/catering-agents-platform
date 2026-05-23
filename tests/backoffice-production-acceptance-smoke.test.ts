@@ -375,6 +375,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Interner Beta-Schritt: Produktion, Einkaufsliste, Exporte, Herkunft und offene Rückfragen bleiben nachvollziehbar.");
     expect(content).toContain("Synthetische Beta-Grenze: Produktionsobjekte nur intern prüfen; keine echten Einsatzdaten und keine Produktionsfreigabe.");
     expect(content).toContain("Beta-Pfad: Rückfragen -> Ergebnisobjekte -> Exporte/Audit");
+    expect(content).toContain("Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
     expect(content).toContain("Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar sind; offene Stop-Punkte bleiben Stop statt Freigabe.");
     expect(content).toContain("production-objects-zone");
     expect(content).toContain("Nächster Agent-Schritt");

@@ -209,6 +209,9 @@ export function OfferConversationalWorkbench({
         <p className="helper-text">
           Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten freigeben.
         </p>
+        <p className="helper-text">
+          Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.
+        </p>
         <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
         <p className="helper-text">
           Übergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktive Spezifikation:{" "}

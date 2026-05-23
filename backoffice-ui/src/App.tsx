@@ -2084,6 +2084,9 @@ export function App() {
               <strong>Grenze:</strong> nur synthetischer interner Beta-Durchlauf; keine echten Daten, keine Produktionsfreigabe.
             </p>
             <p className="helper-text">
+              <strong>Reviewer-Hinweis:</strong> P7-Szenariokarte nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.
+            </p>
+            <p className="helper-text">
               <strong>Nächster Einstieg:</strong> zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.
             </p>
           </>
