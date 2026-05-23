@@ -58,6 +58,8 @@ Export und Audit bleiben im P7-B65-Durchlauf strikt im bestehenden read-only Kor
 - Einkaufsliste-CSV: vorhandener interner Arbeitsbeleg, keine Beschaffungsfreigabe.
 - Audit-Spur: vorhandener interner Betriebs-/Kontrollhinweis, keine rechtssichere Audit-/Compliance-Aussage.
 
+Export-/Auditbelege beweisen keine strukturierte Zeitfensterloesung. Export-/Auditbelege duerfen nicht als Nachweis gelesen werden, dass `event.schedule` fachlich strukturiert geloest ist. Die `Zeitfenster-Rehearsal-Notiz` bleibt eine manuelle Copy-/Anleitungsnotiz, kein strukturiertes Schedule-/Zeitfenster-Datenmodell und keine automatische oder halbautomatische Spec-Korrektur.
+
 P7-B65 fuehrt keine neue Betriebsintegration, keine externe Ablage, keinen Upload, keine Signatur, keine Export-Verbindlichkeit und keine rechtssichere Audit-/Compliance-Aussage ein.
 
 ## 6. Beispiel ohne echte Daten
