@@ -61,6 +61,8 @@ npm run local:check
 
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 
+Option-A-Zeitfenster-Grenze im lokalen Smoke-Korridor: lokale Gruensignale aus `npm run local:status` und `npm run local:check` belegen keine strukturierte Zeitfensterloesung; die `Zeitfenster-Rehearsal-Notiz` bleibt eine manuelle Copy-/Anleitungsnotiz; es gibt keine automatische `event.schedule`-Uebernahme und kein Schedule-/Zeitfenster-Datenmodell.
+
 Wenn `local:check` rot wird, ist das zuerst als lokaler Betriebs- oder Demo-Datenstand zu behandeln. Der Abnahmeweg wird dann nicht durch Featurebau repariert, sondern der lokale Stack wird kontrolliert neu gestartet oder die konkrete Check-Meldung wird als Blocker dokumentiert.
 
 Der lokale Demo-Durchlauf endet kontrolliert mit:

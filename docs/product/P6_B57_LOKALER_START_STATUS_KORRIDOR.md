@@ -44,6 +44,7 @@ Er baut keine neue Runtime-Funktion. Er ordnet nur die bestehenden Repo-Scripts,
 - `npm run local:status` ist nur eine lokale Prozess- und Erreichbarkeitsuebersicht. Ein gruener Status bedeutet: Der Stack wirkt lokal plausibel erreichbar.
 - `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg. Ein gruener Check bedeutet: Die erwarteten Demo-/Seed-Anker, UI-Routen, Health-Endpunkte, read-only Exportpfade und der Demo-Start-/Auditbeleg sind im laufenden lokalen Stack nachvollziehbar.
 - Beide Signale sind interne Beta-/Demo-Signale. Sie sind keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Aussage.
+- Option-A-Zeitfenster-Grenze im lokalen Smoke-Korridor: lokale Gruensignale aus `npm run local:status` und `npm run local:check` belegen keine strukturierte Zeitfensterloesung; die `Zeitfenster-Rehearsal-Notiz` bleibt eine manuelle Copy-/Anleitungsnotiz; es gibt keine automatische `event.schedule`-Uebernahme und kein Schedule-/Zeitfenster-Datenmodell.
 
 ## 5. Reaktion auf rote Signale
 

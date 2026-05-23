@@ -230,6 +230,8 @@ Abgrenzung der lokalen Befehle:
 
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 
+Option-A-Zeitfenster-Grenze im lokalen Smoke-Korridor: lokale Gruensignale aus `npm run local:status` und `npm run local:check` belegen keine strukturierte Zeitfensterloesung; die `Zeitfenster-Rehearsal-Notiz` bleibt eine manuelle Copy-/Anleitungsnotiz; es gibt keine automatische `event.schedule`-Uebernahme und kein Schedule-/Zeitfenster-Datenmodell.
+
 Der bestehende Repo-Befehl `npm run local:check` fuehrt genau diesen schmalen lokalen Betriebscheck gegen einen laufenden lokalen Stack aus und prueft zusaetzlich den Demo-Start-/Audit-Beleg. Er startet keine neue Infrastruktur; wenn der lokale Stack fehlt oder lokale Demo-/Audit-Laufzeitdaten nicht zum erwarteten Seed-Stand passen, ist das als lokaler Betriebsstatus zu melden und nicht durch Featurebau oder Infrastrukturbehauptungen zu ueberdecken.
 
 Die erwarteten sichtbaren Demo-Anker bleiben testbar: Der lokale Check prueft Start-, Intake-/Request-, Angebots-, Produktions- und Exportanker aus den vorhandenen Demo-Fixtures, insbesondere `demo-intake-conference-lunch`, `spec-demo-intake-conference-lunch`, `demo-offer-conference-buffet`, `draft-demo-offer-conference-buffet`, `demo-production-coffee`, `plan-spec-demo-production-coffee` und `purchase-spec-demo-production-coffee`.
