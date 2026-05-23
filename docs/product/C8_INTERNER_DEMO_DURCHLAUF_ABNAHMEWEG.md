@@ -59,6 +59,8 @@ npm run local:check
 
 `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack. Der Check prueft den schmalen MVP-Betriebsweg mit UI-Routen, Health-Endpunkten, read-only Exportpfaden und Demo-Start-/Auditbeleg.
 
+P9-N2 Gate-Bindung gegen Scheingruenheit: `npm run local:status` allein ist kein Rehearsal-Go. `npm run local:check` allein ist kein Rehearsal-Go. UI-/Smoke-Anker allein sind kein Rehearsal-Go. Rehearsal-Go darf nur vergeben werden, wenn Status, Check, manuelle UI-Routen, Evidence-Paket und Reibungslog gemeinsam widerspruchsfrei sind. Rote lokale Gates, fehlende Export-/Auditanker oder offene Stop-Gates sind als `blocked` oder `decision needed` zu dokumentieren.
+
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 
 Option-A-Zeitfenster-Grenze im lokalen Smoke-Korridor: lokale Gruensignale aus `npm run local:status` und `npm run local:check` belegen keine strukturierte Zeitfensterloesung; die `Zeitfenster-Rehearsal-Notiz` bleibt eine manuelle Copy-/Anleitungsnotiz; es gibt keine automatische `event.schedule`-Uebernahme und kein Schedule-/Zeitfenster-Datenmodell.

@@ -51,6 +51,20 @@ Ein lokales Gruensignal darf nur eng gelesen werden:
 - Read-only Arbeitsbelege wie Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML, Einkaufsliste-CSV und Audit-Spur koennen als vorhandene interne Arbeitsbelege beobachtet werden.
 - Ein ausgefuelltes Reibungslog oder Evidence-Paket belegt nur die Beobachtung im lokalen synthetischen Durchlauf, nicht eine fachliche oder produktionsnahe Freigabe.
 
+## 4.1 P9-N2 Gate-Bindung gegen Scheingruenheit
+
+Fuer den Rehearsal-Nachweis duerfen die bestehenden lokalen Gates nicht isoliert als Freigabe gelesen werden:
+
+- `npm run local:status` allein ist kein Rehearsal-Go. Der Befehl belegt nur lokale Prozess-/Port-/Session-Plausibilitaet.
+- `npm run local:check` allein ist kein Rehearsal-Go. Der Befehl belegt nur den lokalen Betriebs-/Seed-/Export-/Auditkorridor gegen einen bereits laufenden lokalen Stack.
+- UI-/Smoke-Anker allein sind kein Rehearsal-Go. Sie zeigen nur, dass vorhandene Routen, Marker und read-only Arbeitsbelege sichtbar bleiben.
+- Rehearsal-Go darf nur vergeben werden, wenn Status, Check, manuelle UI-Routen, Evidence-Paket und Reibungslog gemeinsam widerspruchsfrei sind.
+- Rote lokale Gates, fehlende Export-/Auditanker oder offene Stop-Gates sind als `blocked` oder `decision needed` zu dokumentieren.
+
+Die enge Nachweiskette lautet: `npm run local:status -> npm run local:check -> manuelle UI-Routen -> P7-B65-Evidence-Paket -> P6-B58-Reibungslog`.
+
+Auch bei gruener Nachweiskette bleibt der Befund begrenzt: keine Produktionsfreigabe, keine rechtssichere Audit-/Compliance-Aussage und keine echten Daten.
+
 ## 5. Was blocked bleibt
 
 Der Nachweisrahmen darf nicht als Freigabe missverstanden werden.

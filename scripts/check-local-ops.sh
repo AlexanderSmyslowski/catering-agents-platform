@@ -167,3 +167,6 @@ printf '  Audit-Check: erreichbar (%s, enthält production.seed_demo und Betrieb
 
 echo ""
 echo "Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health -> Export -> Bootstrap/Audit."
+echo "Rehearsal-Grenze: local:check ist nur ein lokaler Betriebs-/Seed-/Export-/Auditbeleg."
+echo "Kein Rehearsal-Go ohne manuelle UI-Sichtung, Evidence-Paket und Reibungslog."
+echo "Keine Produktionsfreigabe, keine echten Daten, keine rechtssichere Audit-/Compliance-Aussage."

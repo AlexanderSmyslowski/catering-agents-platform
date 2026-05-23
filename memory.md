@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.203
+version: 5.204
 date: 2026-05-23
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -167,6 +167,9 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
   - Governance additiv, nicht als zweiter Kern
   - keine Vermischung von Stufen
   - keine Out-of-Scope-Themen still mitziehen
+
+- P9-N2 Rehearsal-Gate-Bindung ist docs-/script-contract-only geschaerft: P9-N1, C8 und TESTING stellen klar, dass `npm run local:status`, `npm run local:check` oder UI-/Smoke-Anker isoliert kein Rehearsal-Go sind; ein Go ist nur bei widerspruchsfreier Kette aus Status, Check, manuellen UI-Routen, Evidence-Paket und Reibungslog zulaessig.
+- `scripts/check-local-ops.sh` gibt nach erfolgreichem lokalen Check eine explizite Rehearsal-Grenze aus; `tests/p9-n2-local-rehearsal-gate-binding-contract.test.ts` schuetzt diese Anker und Grenzen. Keine neue Runtime-Service-Welt, keine API, Persistenz, Deployment, echten Daten, Produktionsfreigabe oder rechtssichere Audit-/Compliance-Aussage.
 
 ## Aktueller Gesamtstand
 - Der Governance-Pfad ist bis einschliesslich **Stufe 6c** umgesetzt und fachlich gruen / abnahmefaehig.
@@ -1060,3 +1063,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.203 - 2026-05-23
 - P9-N1 Rehearsal-Nachweisrahmen ist Doku-/Vertragstest-only konsolidiert: `docs/product/P9_N1_LOKALER_REHEARSAL_NACHWEISRAHMEN.md` verlinkt C8, P6-B57, P6-B58, P7-B63/B64/B65/B67 und die Plan-8-Option-A-Grenze als lokalen Nachweisindex.
 - `tests/p9-n1-local-rehearsal-evidence-framework-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING und C8 sowie die klare Trennung: lokal/synthetisch gruen bleibt eng auf Demo-/Seed-/read-only Arbeitsbelege begrenzt; echte Daten, Produktionsfreigabe und Compliance bleiben blocked. Keine Produktlogik, UI, API, Persistenz, Deployment oder echte Daten.
+
+### 5.204 - 2026-05-23
+- P9-N2 Rehearsal-Gate-Bindung ist docs-/script-contract-only geschaerft: `docs/product/P9_N1_LOKALER_REHEARSAL_NACHWEISRAHMEN.md`, C8 und TESTING binden `npm run local:status`, `npm run local:check`, manuelle UI-Routen, Evidence-Paket und Reibungslog zu einer gemeinsamen Nachweiskette gegen Scheingruenheit.
+- `scripts/check-local-ops.sh` gibt nach erfolgreichem Check eine explizite Grenze aus; `tests/p9-n2-local-rehearsal-gate-binding-contract.test.ts` schuetzt, dass isolierte lokale Gruensignale kein Rehearsal-Go, keine Produktionsfreigabe, keine echten Daten und keine rechtssichere Audit-/Compliance-Aussage bedeuten. Keine neue API, Persistenz, Deployment, Runtime-Services oder Produktlogik.
