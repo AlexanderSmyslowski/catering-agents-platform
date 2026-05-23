@@ -36,10 +36,20 @@ Eine Evidenznotiz soll genau diese Felder enthalten:
 | Beleg | Kurzer interner Nachweis: sichtbarer UI-Marker, lokaler Check-Output, vorhandener Exportlink oder vorhandener Audit-Spur-Hinweis. Keine Rohlogs, keine echten Inhalte. |
 | Reibung | `keine`, `unklar`, `fehlender Marker`, `Fehler`, `Stop-Gate` oder Verweis auf eine separate P6-B58-Reibungsnotiz. |
 | Export-/Auditbeleg | `Angebots-HTML`, `Produktionsblatt-/Produktionsplan-HTML`, `Einkaufsliste-CSV`, `Audit-Spur`, `nicht vorhanden` oder `nicht geprueft`. |
+| Zeitfenster-Rehearsal-Notiz | Nur falls die Option-A-Zeitfensterfrage sichtbar ist: fiktive Zeitfensterantwort aus der Szenariokarte manuell notieren, z. B. `Aufbau 16:00 Uhr, Service 18:00 bis 21:00 Uhr, Abbau bis 22:00 Uhr`; nicht automatisch in event.schedule uebernommen. |
 | Screenshot-Hinweis ohne PII | Optionaler Hinweis wie `kein Screenshot`, `Screenshot mit Demo-Fixture vorhanden` oder `Screenshot verworfen wegen PII-Risiko`. Keine Dateiablage im Repo. |
 | Naechste Entscheidung | `weiter beobachten`, `kleiner UI-/Doku-Slice moeglich`, `lokaler Blocker`, `Alexander-Entscheidung noetig` oder `blocked wegen Gate`. |
 
-## 4. Export-/Audit-Grenze
+## 4. Option-A-Zeitfenstergrenze
+
+Wenn im Rehearsal die Zeitfensterfrage sichtbar bleibt, wird sie nur als manuelle Evidenznotiz behandelt:
+
+- Zeitfenster wurde manuell notiert bedeutet: Die interne Testperson hat eine fiktive Antwort aus der Szenariokarte in `Zeitfenster-Rehearsal-Notiz` dokumentiert.
+- Die Notiz ist keine Runtime-Loesung, kein Produktzustand, keine Produktionsfreigabe und kein Audit-/Compliance-Nachweis.
+- Die Notiz wird nicht automatisch in event.schedule uebernommen und loest keine automatische Spec-Korrektur aus.
+- Wenn eine echte strukturelle Zeitfensterloesung noetig waere, ist das eine separate Produkt-/Datenmodellentscheidung und kein Rehearsal-Schritt.
+
+## 5. Export-/Audit-Grenze
 
 Export und Audit bleiben im P7-B65-Durchlauf strikt im bestehenden read-only Korridor:
 
@@ -50,7 +60,7 @@ Export und Audit bleiben im P7-B65-Durchlauf strikt im bestehenden read-only Kor
 
 P7-B65 fuehrt keine neue Betriebsintegration, keine externe Ablage, keinen Upload, keine Signatur, keine Export-Verbindlichkeit und keine rechtssichere Audit-/Compliance-Aussage ein.
 
-## 5. Beispiel ohne echte Daten
+## 6. Beispiel ohne echte Daten
 
 | Feld | Beispiel |
 | --- | --- |
@@ -60,10 +70,11 @@ P7-B65 fuehrt keine neue Betriebsintegration, keine externe Ablage, keinen Uploa
 | Beleg | UI-Marker `Ergebnisobjekte`, vorhandener Link zu Produktionsblatt-/Produktionsplan-HTML, vorhandener Audit-Spur-Hinweis. |
 | Reibung | `keine` oder Verweis auf P6-B58, falls ein Marker unklar bleibt. |
 | Export-/Auditbeleg | `Produktionsblatt-/Produktionsplan-HTML`, `Einkaufsliste-CSV`, `Audit-Spur`. |
+| Zeitfenster-Rehearsal-Notiz | Zeitfenster wurde manuell notiert: `Aufbau 16:00 Uhr, Service 18:00 bis 21:00 Uhr, Abbau bis 22:00 Uhr`; nicht automatisch in event.schedule uebernommen. |
 | Screenshot-Hinweis ohne PII | Optionaler Screenshot nur mit Demo-Fixture; keine echten Namen, Kontakte, Adressen, Termine oder Dokumentinhalte. |
 | Naechste Entscheidung | `weiter beobachten` oder `kleiner UI-/Doku-Slice moeglich`. |
 
-## 6. Stop- und Nicht-Freigabegrenzen
+## 7. Stop- und Nicht-Freigabegrenzen
 
 Sofort stoppen und als `blocked wegen Gate` einordnen, wenn Evidenz nur mit einem davon moeglich waere:
 
@@ -78,7 +89,7 @@ Sofort stoppen und als `blocked wegen Gate` einordnen, wenn Evidenz nur mit eine
 - PII/Retention/Backup oder Sandbox/Worker/AV-Entscheidung,
 - Produktionsfreigabe, externe Freigabe, Signatur oder rechtssichere Audit-/Compliance-Aussage.
 
-## 7. Ergebnis von P7-B65
+## 8. Ergebnis von P7-B65
 
 P7-B65 baut keine Produktlogik und keine Betriebsintegration. Der messbare Nutzen ist eine auffindbare Evidence-Checklist: Der Reviewer kann strukturiert festhalten, welche Route geprueft wurde, welche Erwartung bestand, was beobachtet wurde, welcher read-only Export-/Auditbeleg sichtbar war, ob Reibung entstand und welche naechste Entscheidung daraus folgt.
 P7-B67 nutzt diese Evidenz anschliessend fuer die sichere Einordnung in sofort kleiner Fix, spaeter, Entscheidung noetig oder out of scope/verboten.

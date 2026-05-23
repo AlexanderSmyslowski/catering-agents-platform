@@ -78,7 +78,18 @@ Nicht eintragen und nicht in Screenshots festhalten:
 - kein LLM-/Tool-Use-/OCR-/Parser-Ausbau,
 - keine Produktionsfreigabe.
 
-## 6. Stop-Gates waehrend des Rehearsals
+## 6. Option-A-Zeitfenster fuer interne Testperson
+
+Im aktuellen internen Beta-MVP gilt fuer die Zeitfenster-Frage bewusst Option A: Copy-/Anleitungs-Loesung ohne Datenmodelländerung.
+
+Wenn im Produktionspfad die Frage nach dem verbindlichen Zeitfenster sichtbar bleibt:
+
+1. Zeitfenster manuell notieren: Die interne Testperson haelt die fiktive Antwort nur als `Zeitfenster-Rehearsal-Notiz` im Evidenzpaket `docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md` fest.
+2. Nicht als geloest werten: Die Notiz ist kein Produktzustand, kein Review-Status und keine Produktionsfreigabe.
+3. Grenze pruefen: Es gibt keine automatische event.schedule-Uebernahme, kein Schedule-/Zeitfenster-Datenmodell und keine automatische Spec-Korrektur aus dieser Notiz.
+4. Evidenz sammeln: Erwartung, Beobachtung, Beleg, Export-/Auditbeleg und naechste Entscheidung werden im bestehenden Evidenzpaket dokumentiert; Rohlogs und echte Inhalte bleiben ausgeschlossen.
+
+## 7. Stop-Gates waehrend des Rehearsals
 
 Sofort Stop statt Freigabe, wenn fuer den naechsten Schritt eines davon noetig waere:
 
@@ -91,7 +102,7 @@ Sofort Stop statt Freigabe, wenn fuer den naechsten Schritt eines davon noetig w
 - PII/Retention/Backup oder Sandbox/Worker/AV-Entscheidung,
 - rechtssichere Audit-, Compliance-, Signatur- oder Export-Verbindlichkeitsaussage.
 
-## 7. Startablauf fuer den Reviewer
+## 8. Startablauf fuer den Reviewer
 
 1. Lokalen Stack starten: `npm run local:start`.
 2. Status pruefen: `npm run local:status`.
@@ -99,10 +110,11 @@ Sofort Stop statt Freigabe, wenn fuer den naechsten Schritt eines davon noetig w
 4. UI-Pfad oeffnen: Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit.
 5. Reibung mit `docs/product/P6_B58_BETA_REIBUNGSLOG_VORLAGE.md` notieren.
 6. Fuer eigene Eingaben nur die synthetische Szenario- und Datenkarte `docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md` verwenden.
-7. Export-/Audit-/Route-Evidenz mit `docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md` festhalten.
-8. Ergebnis nur fuer den internen synthetischen Korridor einordnen: `go`, `blocked` oder `not assessed`.
-9. Lokal kontrolliert stoppen: `npm run local:stop`.
+7. Falls die Zeitfenster-Frage sichtbar bleibt: fiktive Antwort nur als `Zeitfenster-Rehearsal-Notiz` in der Evidenz festhalten; keine automatische Loesung erwarten.
+8. Export-/Audit-/Route-Evidenz mit `docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md` festhalten.
+9. Ergebnis nur fuer den internen synthetischen Korridor einordnen: `go`, `blocked` oder `not assessed`.
+10. Lokal kontrolliert stoppen: `npm run local:stop`.
 
-## 8. Ergebnis von P7-B63
+## 9. Ergebnis von P7-B63
 
 P7-B63 baut keine Produktlogik und keine neue QA-Plattform. Der messbare Nutzen ist eine auffindbare Startkarte: Ein interner Reviewer erkennt vor dem Start fiktive Testrolle, synthetisches Ziel, erlaubte Daten, Stop-Gates und den fuehrenden Pfad `Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit`.

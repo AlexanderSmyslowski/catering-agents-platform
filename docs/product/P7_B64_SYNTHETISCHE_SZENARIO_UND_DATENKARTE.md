@@ -24,7 +24,8 @@ Szenario:
 - Termin: 15. Oktober 2099, 18:00 Uhr
 - Anlass: internes Probe-Catering fuer 42 fiktive Gaeste
 - Gewuenschter Ablauf: Empfang, kleines Buffet, Abschlusskaffee
-- Besonderheit fuer Rueckfragen: Portions- und Zeitfenster sollen im Verlauf sichtbar pruefbar bleiben
+- Verbindliches Zeitfenster fuer Option-A-Rehearsal: `15. Oktober 2099, Aufbau 16:00 Uhr, Service 18:00 bis 21:00 Uhr, Abbau bis 22:00 Uhr`
+- Besonderheit fuer Rueckfragen: Portions- und Zeitfenster sollen im Verlauf sichtbar pruefbar bleiben; verbindliches Zeitfenster wird nur manuell als Rehearsal-Notiz festgehalten
 - Testquelle: synthetisches Testdokument oder manuelle Eingabe mit ausschliesslich diesen fiktiven Angaben
 
 Diese Angaben duerfen fuer Notizen, UI-Eingaben und anonymisierte Screenshots verwendet werden, solange keine echten Zusatzinformationen ergaenzt werden.
