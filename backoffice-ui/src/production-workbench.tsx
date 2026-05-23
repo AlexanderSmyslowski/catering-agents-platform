@@ -104,6 +104,9 @@ export function ProductionConversationalWorkbench({
           sind; offene Stop-Punkte bleiben Stop statt Freigabe.
         </p>
         <p className="helper-text">
+          Option-A-Zeitfenster: verbindliches Zeitfenster manuell klären und nur als Rehearsal-Notiz festhalten; keine automatische event.schedule-Übernahme.
+        </p>
+        <p className="helper-text">
           Planstatus: {planStatusLabel} · Einkaufstatus: {purchaseStatusLabel}
         </p>
         <p className="helper-text">Ergebnisobjekte: {productionObjectStatusLabel}</p>

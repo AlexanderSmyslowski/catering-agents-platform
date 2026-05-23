@@ -378,6 +378,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Beta-Pfad: Rückfragen -> Ergebnisobjekte -> Exporte/Audit");
     expect(content).toContain("Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
     expect(content).toContain("Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar sind; offene Stop-Punkte bleiben Stop statt Freigabe.");
+    expect(content).toContain("Option-A-Zeitfenster: verbindliches Zeitfenster manuell klären und nur als Rehearsal-Notiz festhalten; keine automatische event.schedule-Übernahme.");
     expect(content).toContain("production-objects-zone");
     expect(content).toContain("Nächster Agent-Schritt");
     expect(content).toContain("Produktionsplan, Rezepte/Objektübersicht, Einkaufsliste und Downloads");
