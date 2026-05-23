@@ -199,6 +199,7 @@ Dokumentierte Grundlage:
 
 - `docs/product/P2_BROWSER_SMOKE_MINISPEZ.md`
 - `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md`
+- `docs/product/P9_N1_LOKALER_REHEARSAL_NACHWEISRAHMEN.md`
 - `README.md`
 
 Bestehender lokaler Stack:
@@ -245,6 +246,8 @@ Dieser Smoke-Korridor ist kein neues Deployment-, Browser-Matrix- oder E2E-Frame
 ### 4.1 Interner Demo-/Abnahmeweg C8
 
 Der C8-Demo-/Abnahmeweg ist unter `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md` dokumentiert. Er verknuepft die bestehenden lokalen Befehle `npm run local:status` und `npm run local:check` mit den UI-Routen `/angebot` und `/produktion`, dem vorhandenen Angebot-Happy-Path, dem Angebot-zu-Produktion-Handoff-Anker, sicheren Upload-/Import-Warnankern, read-only Exportlinks unter Trusted-Actor-Kontext und den Full Gates `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.
+
+Der P9-N1-Rehearsal-Nachweisrahmen ist unter `docs/product/P9_N1_LOKALER_REHEARSAL_NACHWEISRAHMEN.md` dokumentiert. Er konsolidiert C8, P6-B57, P6-B58, P7-B63/B64/B65/B67 und die Plan-8-Option-A-Grenze zu einem lokalen Nachweisindex: lokal/synthetisch gruene Signale bleiben eng auf Demo-/Seed-/read-only Arbeitsbelege begrenzt; echte Daten, Produktionsfreigabe und Compliance bleiben blocked.
 
 B6 ordnet diese Exportlinks ausdruecklich als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext ein: Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV. Der Korridor bleibt ohne externe Freigabe, ohne Produktionsfreigabe, ohne rechtssichere Audit-/Compliance-Behauptung und ohne OIDC/Login.
 
