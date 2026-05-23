@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.204
+version: 5.205
 date: 2026-05-23
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -170,6 +170,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 
 - P9-N2 Rehearsal-Gate-Bindung ist docs-/script-contract-only geschaerft: P9-N1, C8 und TESTING stellen klar, dass `npm run local:status`, `npm run local:check` oder UI-/Smoke-Anker isoliert kein Rehearsal-Go sind; ein Go ist nur bei widerspruchsfreier Kette aus Status, Check, manuellen UI-Routen, Evidence-Paket und Reibungslog zulaessig.
 - `scripts/check-local-ops.sh` gibt nach erfolgreichem lokalen Check eine explizite Rehearsal-Grenze aus; `tests/p9-n2-local-rehearsal-gate-binding-contract.test.ts` schuetzt diese Anker und Grenzen. Keine neue Runtime-Service-Welt, keine API, Persistenz, Deployment, echten Daten, Produktionsfreigabe oder rechtssichere Audit-/Compliance-Aussage.
+- P9-N3 Rehearsal-Reibung-zu-Entscheidung ist Doku-/Vertragstest-only geschaerft: P7-B67, P6-B61, P6-B58 und TESTING verdichten Reibung nach lokalem synthetischem Rehearsal auf die vier kopierbaren Ergebnisanker `go`, `fix`, `blocked` und `decision needed`; `tests/p9-n3-rehearsal-friction-decision-contract.test.ts` schuetzt die Trennung zwischen kleinem Fix, Stop-Gate und bewusster Alexander-Entscheidung. Keine Produktentscheidung, kein neuer Workflow, keine automatische Ticket-/Backlog-/QA-Plattform, keine API/Persistenz/Deployment/echten Daten.
 
 ## Aktueller Gesamtstand
 - Der Governance-Pfad ist bis einschliesslich **Stufe 6c** umgesetzt und fachlich gruen / abnahmefaehig.
@@ -1067,3 +1068,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.204 - 2026-05-23
 - P9-N2 Rehearsal-Gate-Bindung ist docs-/script-contract-only geschaerft: `docs/product/P9_N1_LOKALER_REHEARSAL_NACHWEISRAHMEN.md`, C8 und TESTING binden `npm run local:status`, `npm run local:check`, manuelle UI-Routen, Evidence-Paket und Reibungslog zu einer gemeinsamen Nachweiskette gegen Scheingruenheit.
 - `scripts/check-local-ops.sh` gibt nach erfolgreichem Check eine explizite Grenze aus; `tests/p9-n2-local-rehearsal-gate-binding-contract.test.ts` schuetzt, dass isolierte lokale Gruensignale kein Rehearsal-Go, keine Produktionsfreigabe, keine echten Daten und keine rechtssichere Audit-/Compliance-Aussage bedeuten. Keine neue API, Persistenz, Deployment, Runtime-Services oder Produktlogik.
+
+### 5.205 - 2026-05-23
+- P9-N3 Rehearsal-Reibung-zu-Entscheidung ist Doku-/Vertragstest-only geschaerft: `docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md` ordnet jede Rehearsal-Beobachtung zusaetzlich den vier Ergebnisankern `go`, `fix`, `blocked` oder `decision needed` zu.
+- `docs/product/P6_B61_BETA_MANAGEMENT_ENTSCHEIDUNGSVORLAGE.md`, `docs/product/P6_B58_BETA_REIBUNGSLOG_VORLAGE.md` und TESTING sind darauf ausgerichtet; `tests/p9-n3-rehearsal-friction-decision-contract.test.ts` schuetzt die Copy-Anker, die Unterscheidung zwischen kleinem Fix, Stop-Gate und Alexander-Entscheidung sowie die Grenze: keine Produktentscheidung, kein neuer Workflow, keine automatische Ticket-/Backlog-/QA-Plattform, keine API/Persistenz/Deployment/echten Daten.

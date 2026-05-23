@@ -110,6 +110,8 @@ Fuer Plan 7 konkretisiert `docs/product/P7_B63_REVIEWER_REHEARSAL_STARTKARTE.md`
 
 Nach dem Plan-7-Durchlauf ordnet `docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md` beobachtete Reibung aus Reibungslog und Evidenzpaket in sofort kleiner Fix, spaeter, Entscheidung noetig oder out of scope/verboten ein, damit der naechste Produktwertblock nicht als unsortierte Wunschliste entsteht.
 
+P9-N3 Rehearsal-Reibung-zu-Entscheidung schaerft diese Management-Sicht auf den Abschlussanker `go` / `fix` / `blocked` / `decision needed`: `go` nur bei widerspruchsfreier lokaler Rehearsal-Kette, `fix` nur fuer kleine beobachtete Doku-/Copy-/Smoke-Reibung, `blocked` bei Stop-Gates oder roten lokalen Gates und `decision needed`, wenn Alexander bewusst Produkt-, Betriebs-, Daten-, Security-, Rechts-, API-, Persistenz-, Auth- oder Infrastrukturfragen entscheiden muss. Das bleibt eine reine Triage-/Management-Vorlage ohne Produktentscheidung; es gibt keine automatische Ticket-/Backlog-/QA-Plattform.
+
 ## 8. P6-B61-Ergebnis
 
 P6-B61 fuehrt keine Produktlogik ein. Der vorhandene lokale synthetische Beta-Korridor ist als Management-Entscheidungsvorlage verdichtet: sofort testbar ist der lokale Demo-/Seed-/synthetische Durchlauf; Stop-Gates und No-go-Grenzen bleiben sichtbar; der naechste Produktwertblock soll erst aus real beobachteter Reibung entstehen.

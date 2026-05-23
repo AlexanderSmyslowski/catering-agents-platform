@@ -47,6 +47,19 @@ Eine Triage-Zeile darf nur aus beobachteter Reibung entstehen. Mindestangaben:
 
 Die Triage soll den naechsten kleinsten sicheren Produktwertblock benennen, nicht mehrere parallele Aufgaben erzeugen.
 
+## 4.1 P9-N3 Rehearsal-Reibung-zu-Entscheidung
+
+Nach einem lokalen synthetischen Rehearsal wird jede Beobachtung zusaetzlich auf genau einen knappen Ergebnisanker verdichtet: `go`, `fix`, `blocked` oder `decision needed`. Diese Anker dienen nur der Management-/Triage-Schaerfung; sie erzeugen kein automatisches Ticket und keine Backlog- oder QA-Plattform.
+
+| Ergebnisanker | Wann verwenden | Naechster Schritt |
+| --- | --- | --- |
+| `go` | go: Rehearsal-Kette widerspruchsfrei; Status, Check, manuelle UI-Routen, Evidence-Paket und Reibungslog enthalten keinen Widerspruch und kein offenes Stop-Gate. | Lokalen synthetischen Rehearsal-Stand als intern testbar notieren; keine Produktionsfreigabe ableiten. |
+| `fix` | fix: klein, beobachtet, lokal reproduzierbar; betrifft nur vorhandene Doku, UI-Copy oder Smoke-/Contract-Anker und beruehrt keine Produkt-/Daten-/API-/Security-/Infra-Entscheidung. | Genau einen kleinen Doku-/Copy-/Smoke-Slice ableiten. |
+| `blocked` | blocked: Stop-Gate oder rotes lokales Gate; echte Daten, Deployment, Auth/OIDC, Persistenz/API, Compliance, Sandbox/Worker/AV, Schedule-Runtime oder andere absolute Gates waeren noetig. | Stoppen, Blocker mit Beleg notieren, nicht weiterbauen. |
+| `decision needed` | decision needed: bewusste Alexander-Entscheidung erforderlich; naechster Schritt ist fachlich/operativ/architektonisch moeglich, aber nicht durch Triage vorwegzunehmen. | Entscheidungsvorlage schreiben; keine echte Produkt-/Scope-Entscheidung im Cycle treffen. |
+
+P9-N3 ersetzt nicht die Kategorien aus Abschnitt 3, sondern macht den Abschluss einer Triage-Zeile kopierbar und eindeutig: `go` / `fix` / `blocked` / `decision needed`.
+
 ## 5. Guardrails
 
 P7-B67 bleibt strikt innerhalb des vorhandenen internen synthetischen Rehearsal-Korridors:

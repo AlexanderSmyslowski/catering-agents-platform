@@ -153,6 +153,8 @@ P7-B65 Evidenzpaket fuer Export/Audit/Route ist als Doku-/Vertragstestanker codi
 
 P7-B67 Reibung-zu-Backlog-Triage ist als Doku-/Vertragstestanker codiert: `docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md` verbindet P6-B58-Reibungslog, P6-B61-Managementregel und P7-B65-Evidenzpaket zu einer kleinen Triage-Matrix fuer beobachtete Reibung. `tests/p7-b67-friction-to-backlog-triage-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING, P6-B58, P6-B61 und P7-B65 sowie die Grenze: keine Produktlogik, keine neue API/Persistenz, kein Deployment, keine echten Daten, kein OAuth/Login/OIDC, keine automatische Spec-Korrektur und keine Rezept-/Allergenautomatik.
 
+P9-N3 Rehearsal-Reibung-zu-Entscheidung ist als Doku-/Vertragstestanker codiert: Die Triage-/Management-Vorlagen verdichten den Abschluss nach lokalem synthetischem Rehearsal auf go/fix/blocked/decision needed. `tests/p9-n3-rehearsal-friction-decision-contract.test.ts` schuetzt die vier Copy-Anker, die Trennung zwischen kleinem Fix, Stop-Gate und Alexander-Entscheidung sowie die Grenze: keine Produktentscheidung, kein neuer Workflow und keine automatische Ticket-/Backlog-/QA-Plattform.
+
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
 Relevante bestehende Tests:
