@@ -151,6 +151,8 @@ P7-B64 Synthetische Szenario- und Datenkarte ist als Doku-/Vertragstestanker cod
 
 P7-B65 Evidenzpaket fuer Export/Audit/Route ist als Doku-/Vertragstestanker codiert: `docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md` strukturiert den manuellen Beta-Rehearsal-Abschluss mit Route, Erwartung, Beobachtung, Beleg, Reibung, Export-/Auditbeleg, Screenshot-Hinweis ohne PII und naechster Entscheidung. `tests/p7-b65-export-audit-route-evidence-pack-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING, P7-B63 und P6-B58 sowie die Grenze: read-only Export/Audit, keine externe Ablage, kein Upload, keine echten Dateien mit personenbezogenen Daten und keine neue Betriebsintegration.
 
+P7-B67 Reibung-zu-Backlog-Triage ist als Doku-/Vertragstestanker codiert: `docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md` verbindet P6-B58-Reibungslog, P6-B61-Managementregel und P7-B65-Evidenzpaket zu einer kleinen Triage-Matrix fuer beobachtete Reibung. `tests/p7-b67-friction-to-backlog-triage-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING, P6-B58, P6-B61 und P7-B65 sowie die Grenze: keine Produktlogik, keine neue API/Persistenz, kein Deployment, keine echten Daten, kein OAuth/Login/OIDC, keine automatische Spec-Korrektur und keine Rezept-/Allergenautomatik.
+
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
 Relevante bestehende Tests:

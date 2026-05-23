@@ -19,6 +19,7 @@ Verbindlich gilt:
 - nur mit Demo-/Seed-/synthetischen Daten arbeiten,
 - fuer eigene P7-Rehearsal-Eingaben die Szenario- und Datenkarte `docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md` verwenden,
 - fuer Export-/Audit-/Route-Evidenz das P7-Evidenzpaket `docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md` verwenden,
+- fuer die Auswertung nach dem Durchlauf die Triage-Matrix `docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md` verwenden,
 - keine echten Daten verwenden: keine Kunden-, Mitarbeiter-, Einsatz-, Schicht-, Abrechnungs- oder produktionsnahen Pilotdaten,
 - keine personenbezogenen Daten in Textnotizen oder Screenshots uebernehmen,
 - Screenshots nur ohne Namen, Kontaktdaten, Adressen, echte Termine oder echte Dokumentinhalte,
@@ -83,3 +84,5 @@ Ein ausgefuelltes Reibungslog bedeutet ausdruecklich:
 ## 7. P6-B58-Ergebnis
 
 P6-B58 fuehrt keine neue Produktfunktion ein. Der manuelle Beta-Durchlauf hat nun eine sichere, einheitliche Reibungslog-Vorlage mit Beobachtung, Route, erwartetem Verhalten, tatsaechlichem Verhalten, Schweregrad, Screenshot-Hinweis ohne personenbezogene Daten und naechster Entscheidung. Der naechste sichere Plan-6-Schritt kann die synthetische Beta-Grenze in vorhandenen UI-Kontexten pruefen; echte Daten, Deployment, neue Persistenz/API, Auth/OIDC, automatische Spec-Korrektur sowie Rezept-/Allergenautomatik bleiben ausgeschlossen. P6-B61 ist in `docs/product/P6_B61_BETA_MANAGEMENT_ENTSCHEIDUNGSVORLAGE.md` als Entscheidungsvorlage verankert: sofort testbar, Stop-Gates, No-go und kein weiterer Mikroausbau ohne beobachtete Reibung.
+
+Fuer Plan 7 uebersetzt `docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md` die ausgefuellte Reibungsnotiz zusammen mit P7-Evidenz in die Kategorien sofort kleiner Fix, spaeter, Entscheidung noetig oder out of scope/verboten.

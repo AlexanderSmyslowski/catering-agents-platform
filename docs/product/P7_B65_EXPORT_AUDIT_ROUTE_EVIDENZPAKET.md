@@ -11,6 +11,7 @@ Dieses Evidenzpaket hilft dem Reviewer am Ende des manuellen synthetischen Beta-
 `Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit`
 
 Es ergaenzt die P7-B63-Startkarte, die P7-B64-Szenariokarte und die P6-B58-Reibungslog-Vorlage. Es ist keine QA-Plattform, keine externe Ablage, kein Upload-Weg und keine Produktfreigabe.
+Die Auswertung nach dem Durchlauf erfolgt ueber die Triage-Matrix `docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md`.
 
 ## 2. Vor der Evidenzsammlung
 
@@ -80,3 +81,4 @@ Sofort stoppen und als `blocked wegen Gate` einordnen, wenn Evidenz nur mit eine
 ## 7. Ergebnis von P7-B65
 
 P7-B65 baut keine Produktlogik und keine Betriebsintegration. Der messbare Nutzen ist eine auffindbare Evidence-Checklist: Der Reviewer kann strukturiert festhalten, welche Route geprueft wurde, welche Erwartung bestand, was beobachtet wurde, welcher read-only Export-/Auditbeleg sichtbar war, ob Reibung entstand und welche naechste Entscheidung daraus folgt.
+P7-B67 nutzt diese Evidenz anschliessend fuer die sichere Einordnung in sofort kleiner Fix, spaeter, Entscheidung noetig oder out of scope/verboten.

@@ -108,6 +108,8 @@ Wenn keine echte Reibung beobachtet wird: stoppen und P6-B62 Full Gates/Lage vor
 
 Fuer Plan 7 konkretisiert `docs/product/P7_B63_REVIEWER_REHEARSAL_STARTKARTE.md` den ersten Rehearsal-Start: interner Reviewer, fiktive Testrolle, synthetisches Ziel, erlaubte Daten, Stop-Gates und der fuehrende Pfad `Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit` werden vor dem manuellen Durchlauf auffindbar gebuendelt.
 
+Nach dem Plan-7-Durchlauf ordnet `docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md` beobachtete Reibung aus Reibungslog und Evidenzpaket in sofort kleiner Fix, spaeter, Entscheidung noetig oder out of scope/verboten ein, damit der naechste Produktwertblock nicht als unsortierte Wunschliste entsteht.
+
 ## 8. P6-B61-Ergebnis
 
 P6-B61 fuehrt keine Produktlogik ein. Der vorhandene lokale synthetische Beta-Korridor ist als Management-Entscheidungsvorlage verdichtet: sofort testbar ist der lokale Demo-/Seed-/synthetische Durchlauf; Stop-Gates und No-go-Grenzen bleiben sichtbar; der naechste Produktwertblock soll erst aus real beobachteter Reibung entstehen.
