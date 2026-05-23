@@ -91,11 +91,18 @@ export function getDemoProductionAnsweredClarificationAnchor(): DemoProductionAn
       commercialState: "manual"
     }
   );
-  const questions = buildProductionClarificationQuestions({ spec: spec as unknown as Record<string, unknown> });
+  const clarificationSpec = {
+    ...spec,
+    readiness: {
+      status: "partial" as const,
+      reasons: ["Synthetischer Rueckfragenanker fuer Demo."]
+    }
+  } satisfies AcceptedEventSpec;
+  const questions = buildProductionClarificationQuestions({ spec: clarificationSpec as unknown as Record<string, unknown> });
   const [question] = questions;
 
   return {
-    spec,
+    spec: clarificationSpec,
     clarificationAnswers: question
       ? [
           createSubmittedProductionClarificationAnswer({

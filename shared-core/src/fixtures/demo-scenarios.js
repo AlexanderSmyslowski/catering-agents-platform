@@ -64,10 +64,17 @@ export function getDemoProductionAnsweredClarificationAnchor() {
         reference: "demo-production-answered-clarification",
         commercialState: "manual"
     });
-    const questions = buildProductionClarificationQuestions({ spec });
+    const clarificationSpec = {
+        ...spec,
+        readiness: {
+            status: "partial",
+            reasons: ["Synthetischer Rueckfragenanker fuer Demo."]
+        }
+    };
+    const questions = buildProductionClarificationQuestions({ spec: clarificationSpec });
     const [question] = questions;
     return {
-        spec,
+        spec: clarificationSpec,
         clarificationAnswers: question
             ? [
                 createSubmittedProductionClarificationAnswer({

@@ -237,7 +237,13 @@ export function buildProductionClarificationQuestions(input) {
   });
 
   const readiness = input.spec?.readiness;
-  const readinessReasons = typeof readiness === "object" && readiness !== null && Array.isArray(readiness.reasons)
+  const readinessStatus = typeof readiness === "object" && readiness !== null
+    ? String(readiness.status ?? "").trim()
+    : "";
+  const readinessReasons = readinessStatus !== "complete" &&
+    typeof readiness === "object" &&
+    readiness !== null &&
+    Array.isArray(readiness.reasons)
     ? readiness.reasons.filter((reason) => typeof reason === "string" && reason.trim().length > 0)
     : [];
 

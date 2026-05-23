@@ -54,6 +54,22 @@ describe("PA16 production clarification model slice 1", () => {
     ]);
   });
 
+  it("keeps complete readiness confirmation quiet after structured production answers", () => {
+    const questions = buildProductionClarificationQuestions({
+      spec: {
+        specId: "spec-pa16-complete-confirmation",
+        readiness: {
+          status: "complete",
+          reasons: ["Alle Pflichtangaben für die Produktionsplanung sind vorhanden."]
+        },
+        missingFields: []
+      },
+      sourceInputs: []
+    });
+
+    expect(questions).toEqual([]);
+  });
+
   it("creates typed clarification questions from fallback or warning document ingestion markers without raw text", () => {
     const context = {
       specId: "spec-pa16-ingestion",
