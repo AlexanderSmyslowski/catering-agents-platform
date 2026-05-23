@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.196
+version: 5.197
 date: 2026-05-23
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1026,3 +1026,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.196 - 2026-05-23
 - R2 synthetischer Beta-Rehearsal-Microfix ist umgesetzt: Nach strukturierten Antworten im `/produktion`-Korridor erzeugt `buildProductionClarificationQuestions` aus `readiness.status === "complete"` mit positivem Readiness-Hinweis keine scheinbar offene Rueckfrage mehr.
 - `tests/pa16-production-clarification-model.test.ts` schuetzt die Regression. Ergebnisobjekte, Produktionsblatt-/Einkaufslisten-Exportanker und Audit-/Herkunftsanker bleiben im lokalen Rehearsal sichtbar. Offen bleibt die nicht beantwortbare Zeitfenster-Rueckfrage aus bestehender `event.schedule`-Uncertainty; deren Loesung benoetigt eine bewusste Produkt-/Datenmodellentscheidung.
+
+### 5.197 - 2026-05-23
+- R3 Schedule-/Zeitfenster-Entscheidungsvorlage ist Doku-/Vertragstest-only umgesetzt: `docs/product/R3_SCHEDULE_ZEITFENSTER_ENTSCHEIDUNGSVORLAGE.md` beschreibt fuer die Rueckfrage `Wie lautet das verbindliche Zeitfenster?` aus bestehender `event.schedule`-Uncertainty die Optionen A Copy-/Anleitung ohne Datenmodelländerung, B strukturierte Rueckfrage mit bestehender Spec-Patch-Bindung und C spaeteres eigenes Schedule-/Zeitfenster-Modell.
+- `tests/r3-schedule-decision-brief-contract.test.ts` schuetzt Existenz, Empfehlung und Grenzen der Vorlage. Empfohlen ist fuer den internen Beta-MVP konservativ Option A; Option B bleibt naechstes bewusstes Gate, Option C wird zurueckgestellt. Keine Runtime-Logik, API, Persistenz, Migration, UI-Feature-Umsetzung, automatische Spec-Korrektur, echte Datenverarbeitung, OAuth/Login/OIDC oder Deployment.
