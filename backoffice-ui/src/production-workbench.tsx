@@ -26,6 +26,17 @@ function formatQuestionStatus(questionCount: number): string {
   return `${questionCount} offene Rückfragen`;
 }
 
+function countOpenVisibleQuestions(
+  questionCount: number,
+  answeredQuestionCount: number,
+  fallbackUnansweredQuestionCount: number
+): number {
+  if (questionCount > 0) {
+    return Math.max(0, questionCount - answeredQuestionCount);
+  }
+  return Math.max(0, fallbackUnansweredQuestionCount);
+}
+
 export function ProductionConversationalWorkbench({
   activeSpecLabel,
   readinessLabel,
@@ -42,6 +53,11 @@ export function ProductionConversationalWorkbench({
   children
 }: ProductionConversationalWorkbenchProps) {
   const [inputPanel, questionsPanel, productionObjectsPanel, purchasePanel, lowerPanels] = Children.toArray(children);
+  const openVisibleQuestionCount = countOpenVisibleQuestions(
+    questionCount,
+    answeredQuestionCount,
+    unansweredQuestionCount
+  );
 
   return (
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
@@ -69,7 +85,7 @@ export function ProductionConversationalWorkbench({
           Klarheit: {readinessLabel} · Rückfragen: {formatQuestionStatus(questionCount)}
         </p>
         <p className="helper-text">
-          Rückfragenstatus: offen {unansweredQuestionCount} · beantwortet {answeredQuestionCount}
+          Rückfragenstatus: offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}
         </p>
         <p className="helper-text">
           Interner Beta-Schritt: Produktion, Einkaufsliste, Exporte, Herkunft und offene Rückfragen bleiben nachvollziehbar.
@@ -97,7 +113,7 @@ export function ProductionConversationalWorkbench({
         <details className="progressive-panel" open={questionCount > 0}>
           <summary>
             <span>Rückfragen und Antworten</span>
-            <strong>offen {unansweredQuestionCount} · beantwortet {answeredQuestionCount}</strong>
+            <strong>offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}</strong>
           </summary>
           <div className="progressive-panel__body">{questionsPanel}</div>
         </details>

@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
+import { ProductionConversationalWorkbench } from "../backoffice-ui/src/production-workbench.js";
 import {
   buildProductionClarificationQuestions,
   createSubmittedProductionClarificationAnswer
@@ -504,6 +505,52 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Antwort auf Rückfrage");
     expect(content).toContain("Glutenfreies Baguette wird separat ersetzt.");
     expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
+  });
+
+  it("keeps the compact clarification status aligned with the visible open question count", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ProductionConversationalWorkbench,
+          {
+            activeSpecLabel: "internes Probe-Catering · 42 Teilnehmer · 2099-10-15",
+            readinessLabel: "vollständig",
+            planStatusLabel: "offen",
+            purchaseStatusLabel: "noch keine Liste",
+            nextStepTitle: "Rückfragen klären",
+            nextStepDescription: "Offene Rückfragen prüfen.",
+            questionCount: 7,
+            answeredQuestionCount: 0,
+            unansweredQuestionCount: 1,
+            productionObjectCount: 0,
+            productionObjectStatusLabel: "noch kein Plan",
+            purchaseListCount: 0,
+            children: [
+              createElement("div", { key: "input" }, "input"),
+              createElement("div", { key: "fragen" }, "fragen"),
+              createElement("div", { key: "objekte" }, "objekte"),
+              createElement("div", { key: "einkauf" }, "einkauf"),
+              createElement("div", { key: "unten" }, "unten")
+            ]
+          }
+        )
+      );
+    });
+
+    const content = document.body.textContent ?? "";
+
+    expect(content).toContain("Rückfragen: 7 offene Rückfragen");
+    expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
+    expect(content).toContain("offen 7 · beantwortet 0");
+    expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
+
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it("summarizes recipe review status as a quiet production blocker zone", async () => {
