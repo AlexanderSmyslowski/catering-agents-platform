@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.210
+version: 5.211
 date: 2026-05-24
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1095,3 +1095,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.210 - 2026-05-24
 - P11-N3 Interner Nutzerkreis und Zugriffskontext ist Doku-/Vertragstest-only umgesetzt: `docs/product/P11_N3_INTERNER_PILOT_PREFLIGHT_RUNBOOK.md` leitet aus B24, PA7/PA8/PA9 und B8/B9 nicht-sensitive Entscheidungspunkte fuer Nutzerkreis, Betreiber, Trusted-Actor-Kontext und Zugriffskontrolle ab.
 - `tests/p11-n3-internal-pilot-preflight-runbook-contract.test.ts` schuetzt die Grenzen: lokales Rehearsal-Go ist kein Pilot-/Auth-/Deployment-Go; Login/OIDC/Session/Auth, Proxy/IAP-Code, Deployment, Secrets, neue Rollenplattform, neue API/Persistenz, echte Daten und Compliance-Freigabe bleiben Stop-Gates.
+
+### 5.211 - 2026-05-24
+- P11-N4 UI-/Smoke-Lesbarkeit ist als kleiner Startseiten-Copy-/Smoke-Fix umgesetzt: `/` nennt im bestehenden Beta-Kontrollzentrum nun explizit `Pilot-Preflight: lokal mit Demo-/synthetischen oder nachweisbar anonymisierten Daten pruefen; kein Pilot-Go, kein Deployment und keine echten Daten.`
+- `tests/backoffice-route-smoke.test.ts` schuetzt den Marker. Der Fix adressiert die beobachtete Reibung, dass die bestehende UI zwar Beta-/Rehearsal-Grenzen zeigte, den neuen Plan-11-Pilot-Preflight aber nicht sichtbar von Pilot-Go/Deployment/echten Daten trennte. Keine neue Produktflaeche, kein Workflow, keine Fachlogik, API, Persistenz/Migration, Auth/OIDC, Deployment oder echte Daten.

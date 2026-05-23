@@ -2090,6 +2090,9 @@ export function App() {
               <strong>Rehearsal-Go:</strong> erst nach grünem Status, lokalem Check, manueller UI-Evidenz und Reibungslog.
             </p>
             <p className="helper-text">
+              <strong>Pilot-Preflight:</strong> lokal mit Demo-/synthetischen oder nachweisbar anonymisierten Daten prüfen; kein Pilot-Go, kein Deployment und keine echten Daten.
+            </p>
+            <p className="helper-text">
               <strong>Nächster Einstieg:</strong> zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.
             </p>
           </>

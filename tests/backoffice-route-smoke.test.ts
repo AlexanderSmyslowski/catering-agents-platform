@@ -202,6 +202,9 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("Grenze: nur synthetischer interner Beta-Durchlauf; keine echten Daten, keine Produktionsfreigabe.");
     expect(home).toContain("Reviewer-Hinweis: P7-Szenariokarte nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
     expect(home).toContain("Rehearsal-Go: erst nach grünem Status, lokalem Check, manueller UI-Evidenz und Reibungslog.");
+    expect(home).toContain(
+      "Pilot-Preflight: lokal mit Demo-/synthetischen oder nachweisbar anonymisierten Daten prüfen; kein Pilot-Go, kein Deployment und keine echten Daten."
+    );
     expect(home).toContain("Nächster Einstieg: zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.");
     expect(home).toContain("Demo, Erfassung, Angebot, Produktion, Export und Audit aus bestehenden Daten prüfen.");
 
