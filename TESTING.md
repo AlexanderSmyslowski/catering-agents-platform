@@ -147,6 +147,8 @@ P6-B61 Beta-Durchlauf als Management-Entscheidungsvorlage ist als Doku-/Vertrags
 
 P7-B63 Reviewer-Rehearsal-Startkarte ist als Doku-/Vertragstestanker codiert: `docs/product/P7_B63_REVIEWER_REHEARSAL_STARTKARTE.md` buendelt fiktive Testrolle, synthetisches Ziel, erlaubte Daten, Stop-Gates und den fuehrenden Pfad Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit fuer den ersten manuellen internen Beta-Rehearsal-Start. `tests/p7-b63-reviewer-rehearsal-start-card-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING, P5-B54 und P6-B61 sowie die Grenze: keine echten Daten, kein Deployment, keine SSH-Verbindung, keine Secrets, keine neue Persistenz, kein OAuth/Login/OIDC, keine automatische Spec-Korrektur, keine Rezept-/Allergenautomatik und keine Produktionsfreigabe.
 
+P7-B64 Synthetische Szenario- und Datenkarte ist als Doku-/Vertragstestanker codiert: `docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md` gibt dem manuellen Beta-Rehearsal ein klar fiktives Szenario mit Beispielkunde, Kontaktperson, Ort, Termin, Anlass, fiktiver Gaestezahl und synthetischem Testdokument. `tests/p7-b64-synthetic-scenario-data-card-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING, P7-B63 und P6-B58 sowie die Grenze: keine echten Kunden-, Personen- oder Einsatzdaten, keine neue Seed-Daten-Quelle, keine Persistenz- oder Datenmodell-Aenderung, keine Produktlogik und keine UI-Aenderung.
+
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
 Relevante bestehende Tests:

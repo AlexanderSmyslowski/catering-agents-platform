@@ -98,8 +98,9 @@ Sofort Stop statt Freigabe, wenn fuer den naechsten Schritt eines davon noetig w
 3. Betriebs-/Seed-/Export-/Auditbeleg pruefen: `npm run local:check`.
 4. UI-Pfad oeffnen: Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit.
 5. Reibung mit `docs/product/P6_B58_BETA_REIBUNGSLOG_VORLAGE.md` notieren.
-6. Ergebnis nur fuer den internen synthetischen Korridor einordnen: `go`, `blocked` oder `not assessed`.
-7. Lokal kontrolliert stoppen: `npm run local:stop`.
+6. Fuer eigene Eingaben nur die synthetische Szenario- und Datenkarte `docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md` verwenden.
+7. Ergebnis nur fuer den internen synthetischen Korridor einordnen: `go`, `blocked` oder `not assessed`.
+8. Lokal kontrolliert stoppen: `npm run local:stop`.
 
 ## 8. Ergebnis von P7-B63
 

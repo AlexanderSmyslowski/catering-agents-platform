@@ -17,6 +17,7 @@ Sie dient Alexander oder einer internen Testperson dazu, Beobachtungen einheitli
 Verbindlich gilt:
 
 - nur mit Demo-/Seed-/synthetischen Daten arbeiten,
+- fuer eigene P7-Rehearsal-Eingaben die Szenario- und Datenkarte `docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md` verwenden,
 - keine echten Daten verwenden: keine Kunden-, Mitarbeiter-, Einsatz-, Schicht-, Abrechnungs- oder produktionsnahen Pilotdaten,
 - keine personenbezogenen Daten in Textnotizen oder Screenshots uebernehmen,
 - Screenshots nur ohne Namen, Kontaktdaten, Adressen, echte Termine oder echte Dokumentinhalte,
