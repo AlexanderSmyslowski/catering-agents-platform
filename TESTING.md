@@ -149,6 +149,8 @@ P7-B63 Reviewer-Rehearsal-Startkarte ist als Doku-/Vertragstestanker codiert: `d
 
 P7-B64 Synthetische Szenario- und Datenkarte ist als Doku-/Vertragstestanker codiert: `docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md` gibt dem manuellen Beta-Rehearsal ein klar fiktives Szenario mit Beispielkunde, Kontaktperson, Ort, Termin, Anlass, fiktiver Gaestezahl und synthetischem Testdokument. `tests/p7-b64-synthetic-scenario-data-card-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING, P7-B63 und P6-B58 sowie die Grenze: keine echten Kunden-, Personen- oder Einsatzdaten, keine neue Seed-Daten-Quelle, keine Persistenz- oder Datenmodell-Aenderung, keine Produktlogik und keine UI-Aenderung.
 
+P7-B65 Evidenzpaket fuer Export/Audit/Route ist als Doku-/Vertragstestanker codiert: `docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md` strukturiert den manuellen Beta-Rehearsal-Abschluss mit Route, Erwartung, Beobachtung, Beleg, Reibung, Export-/Auditbeleg, Screenshot-Hinweis ohne PII und naechster Entscheidung. `tests/p7-b65-export-audit-route-evidence-pack-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING, P7-B63 und P6-B58 sowie die Grenze: read-only Export/Audit, keine externe Ablage, kein Upload, keine echten Dateien mit personenbezogenen Daten und keine neue Betriebsintegration.
+
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
 Relevante bestehende Tests:

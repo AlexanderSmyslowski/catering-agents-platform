@@ -18,6 +18,7 @@ Verbindlich gilt:
 
 - nur mit Demo-/Seed-/synthetischen Daten arbeiten,
 - fuer eigene P7-Rehearsal-Eingaben die Szenario- und Datenkarte `docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md` verwenden,
+- fuer Export-/Audit-/Route-Evidenz das P7-Evidenzpaket `docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md` verwenden,
 - keine echten Daten verwenden: keine Kunden-, Mitarbeiter-, Einsatz-, Schicht-, Abrechnungs- oder produktionsnahen Pilotdaten,
 - keine personenbezogenen Daten in Textnotizen oder Screenshots uebernehmen,
 - Screenshots nur ohne Namen, Kontaktdaten, Adressen, echte Termine oder echte Dokumentinhalte,
