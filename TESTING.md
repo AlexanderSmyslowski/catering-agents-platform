@@ -145,6 +145,8 @@ P6-B58 Reibungslog fuer manuellen Beta-Durchlauf ist als Doku-/Vertragstestanker
 
 P6-B61 Beta-Durchlauf als Management-Entscheidungsvorlage ist als Doku-/Vertragstestanker codiert: `docs/product/P6_B61_BETA_MANAGEMENT_ENTSCHEIDUNGSVORLAGE.md` verdichtet Plan-6-Ergebnisse aus P6-B56 bis P6-B60 in sofort testbar, Stop-Gates, No-go, Entscheidung fuer Alexander und naechster enger Produktwertblock nach Feedback. `tests/p6-b61-beta-management-decision-brief-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING, C8, P5-B54, P6-B56, P6-B57 und P6-B58 sowie die Grenze: kein weiterer Mikroausbau ohne beobachtete Reibung, keine Produktlogik, keine UI-Aenderung, keine neue API/Persistenz, kein Deployment, keine echten Daten, keine Auth/OIDC, keine automatische Spec-Korrektur und keine Rezept-/Allergenautomatik.
 
+P7-B63 Reviewer-Rehearsal-Startkarte ist als Doku-/Vertragstestanker codiert: `docs/product/P7_B63_REVIEWER_REHEARSAL_STARTKARTE.md` buendelt fiktive Testrolle, synthetisches Ziel, erlaubte Daten, Stop-Gates und den fuehrenden Pfad Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit fuer den ersten manuellen internen Beta-Rehearsal-Start. `tests/p7-b63-reviewer-rehearsal-start-card-contract.test.ts` schuetzt Auffindbarkeit aus README, TESTING, P5-B54 und P6-B61 sowie die Grenze: keine echten Daten, kein Deployment, keine SSH-Verbindung, keine Secrets, keine neue Persistenz, kein OAuth/Login/OIDC, keine automatische Spec-Korrektur, keine Rezept-/Allergenautomatik und keine Produktionsfreigabe.
+
 ### 3.2 API-, Rollen- und Audit-Regressionen
 
 Relevante bestehende Tests:

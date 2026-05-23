@@ -106,6 +106,8 @@ Arbeitsregel nach Alexanders Test:
 
 Wenn keine echte Reibung beobachtet wird: stoppen und P6-B62 Full Gates/Lage vorbereiten, statt weiteren Mikroausbau zu erfinden.
 
+Fuer Plan 7 konkretisiert `docs/product/P7_B63_REVIEWER_REHEARSAL_STARTKARTE.md` den ersten Rehearsal-Start: interner Reviewer, fiktive Testrolle, synthetisches Ziel, erlaubte Daten, Stop-Gates und der fuehrende Pfad `Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit` werden vor dem manuellen Durchlauf auffindbar gebuendelt.
+
 ## 8. P6-B61-Ergebnis
 
 P6-B61 fuehrt keine Produktlogik ein. Der vorhandene lokale synthetische Beta-Korridor ist als Management-Entscheidungsvorlage verdichtet: sofort testbar ist der lokale Demo-/Seed-/synthetische Durchlauf; Stop-Gates und No-go-Grenzen bleiben sichtbar; der naechste Produktwertblock soll erst aus real beobachteter Reibung entstehen.
