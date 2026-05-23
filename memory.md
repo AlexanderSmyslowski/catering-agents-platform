@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.214
+version: 5.215
 date: 2026-05-24
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1114,3 +1114,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.214 - 2026-05-24
 - P12-N2 Management-Go/No-Go-Entscheidungspaket ist Doku-/Vertragstest-only umgesetzt: `docs/product/P12_N2_MANAGEMENT_GO_NO_GO_ENTSCHEIDUNGSPAKET.md` verdichtet die offenen Plan-11-Pilotentscheidungen in nicht-sensitive Pflichtfelder fuer Nutzerkreis, fachlichen Betreiber, technischen Betreiber, Zugriffskontext, Datenrahmen, Anonymisierungs-/Synthetiknachweis, Nachweis, Stop-Verantwortung und finale Bewertung.
 - `tests/p12-n2-management-go-no-go-decision-packet-contract.test.ts` schuetzt die Status-Trennung: lokaler Preflight `go`, echter begrenzter interner Pilot bis zur bewussten Managemententscheidung `not assessed`, echte/produktive Daten und produktionsnahe Nutzung `blocked`. Keine Runtime-, UI-, API-, Persistenz-, Deployment-, Auth-, Secret-, Daten-, Schedule- oder Compliance-Aenderung und kein Pilotstart.
+
+### 5.215 - 2026-05-24
+- P12-N3 Preflight-Scheingruenheitsgrenze ist als schmaler Vertragstest geschaerft: `tests/p12-n3-preflight-false-green-boundary-contract.test.ts` prueft ueber P11-N1, P11-N3 und P12-N2 hinweg, dass lokale Gruensignale aus Status, Check, UI, Export oder Audit kein Pilot-Go und kein Management-Go ersetzen.
+- Der echte begrenzte interne Pilot bleibt ohne Alexanders bewusste Managemententscheidung `not assessed`; echte Daten, produktionsnahe Nutzung, Deployment/Auth/Secrets, neue API/Persistenz/Migration, Runtime-Schedule und automatische Spec-Korrektur bleiben `blocked` bzw. ausser Scope. Keine Produktflaeche, UI-, API-, Persistenz-, Deployment-, Auth-, Daten-, Schedule- oder Compliance-Aenderung.
