@@ -12,8 +12,14 @@ Es baut keinen neuen Workflow und fuehrt kein neuer Workflow ein. Es verweist au
 
 Fuehrende Repo-Anker:
 
+- `docs/product/B24_PILOT_KORRIDOR_ENTSCHEIDUNGSANKER.md`
 - `docs/product/P11_N1_LIMITED_INTERNAL_PILOT_PREFLIGHT_INDEX.md`
 - `docs/product/P11_N2_PILOT_DATENKORRIDOR_ANONYMISIERT_SYNTHETISCH.md`
+- `docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md`
+- PA8 Read-path Auth Hardening Slice 1 in `docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md` Abschnitt 11
+- `docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md`
+- `docs/architecture/B8_AUTH_GATE_DECISION_BOUNDARY.md`
+- `docs/architecture/B9_PROXY_IAP_AUTHN_PREFLIGHT_CONTRACT.md`
 - `docs/product/P6_B57_LOKALER_START_STATUS_KORRIDOR.md`
 - `docs/product/P6_B58_BETA_REIBUNGSLOG_VORLAGE.md`
 - `docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md`
@@ -143,8 +149,44 @@ Sofort stoppen und nicht weiterbauen bei Bedarf fuer:
 - Runtime-Schedule-/Zeitfenster-Modell oder automatische Spec-Korrektur,
 - Rezept-/Allergenautomatik oder LLM-/Tool-/Parser-/OCR-Ausweitung.
 
-## 5. Ergebnis von P11-N3
+## 5. Entscheidungspunkte fuer Nutzerkreis und Zugriffskontext
+
+Diese Punkte duerfen nur nicht-sensitiv beantwortet werden: Rollen/Funktionen und Kontrollprinzipien, aber keine echten personenbezogenen Daten, privaten Kontakte, Secrets, Hostnamen, IPs, produktiven ENV-Werte oder Proxy-/Deployment-Konfiguration.
+
+| Entscheidungspunkt | Nicht-sensitive Frage | Default |
+| --- | --- | --- |
+| Interner Nutzerkreis | Welche internen Funktionen sollen den Preflight sichten: Angebotsverantwortung, Produktionsplanung, Operations/Audit oder technische Begleitung? | `not assessed` |
+| Betreiber fachlich | Welche interne Verantwortungsrolle entscheidet fachlich ueber Weiterfuehrung oder Stop? | `not assessed` |
+| Betreiber technisch | Welche interne Verantwortungsrolle prueft lokale Gates und Berichte, ohne Deployment oder Serverzugriff zu starten? | `not assessed` |
+| Zugriffskontext | Bleibt die Nutzung lokal/kontrolliert intern und nicht oeffentlich? | `not assessed` |
+| Trusted-Actor-Kontext | Ist verstanden, dass `x-actor-name` nur Dev-/Test-Kompatibilitaet ist und produktionsnah nur Trusted-Proxy-Kontext mit `x-catering-actor-name` plus serverseitigem Secret zaehlen duerfte? | `not assessed` |
+| Minimalrollen | Welche vorhandenen MVP-Rollen/Funktionen werden benoetigt: Intake, Angebot, Produktion, Operations/Audit? Keine neue Rollenplattform anlegen. | `not assessed` |
+| Read-only Arbeitsbelege | Werden Angebots-HTML, Produktionsplan-/Produktionsblatt-HTML, Einkaufslisten-CSV und Audit-/Herkunftsanker nur als interne read-only Arbeits-/Kontrollbelege gelesen? | `not assessed` |
+| Stop-Verantwortung | Wer stoppt bei echten Daten, Auth/Proxy/Deployment, Secrets, neuer API/Persistenz oder Compliance-Bedarf? Nur Verantwortungsrolle nennen. | `not assessed` |
+
+Aus PA7/PA8/PA9/B8/B9 gilt fuer P11-N3:
+
+- Trusted-Actor-Kontext ist nur technischer Mindestschutz und keine echte Nutzer-Authentifizierung.
+- Frei gesetztes `x-actor-name` ist nur lokaler Dev-/Test-Kompatibilitaetsheader.
+- Bei gesetztem `CATERING_TRUSTED_ACTOR_SECRET` zaehlen Rollen nur aus `x-catering-actor-name` plus passendem `x-catering-trusted-secret`.
+- Ein produktionsnaher Trusted-Actor-Kontext braucht eine spaeter bewusst entschiedene Zugriffsschicht; P11-N3 implementiert sie nicht.
+- Health muss nicht-sensitiv bleiben und darf nicht als Auth-, Pilot- oder Betriebsfreigabe gelesen werden.
+
+## 6. Stop-Markierung fuer Umsetzungsideen
+
+P11-N3 stoppt sofort bei jeder Idee, jetzt eines der folgenden Dinge zu bauen oder zu konfigurieren:
+
+- Login, OAuth, OIDC, SSO, Session, Cookie-/CSRF-Mechanik oder Nutzerverwaltung,
+- neue Rollenplattform, externe RBAC-Engine, Multi-Tenancy oder White-Label-Struktur,
+- Proxy/IAP/Caddy-/nginx-/Cloudflare-/Hetzner-Konfiguration,
+- Deployment, SSH, Domains, TLS, Secrets, produktive `.env`, Token oder Serverzugriff,
+- neue API, API-Vertragsaenderung, neue Persistenz, Prisma, Migration oder User-Tabellen,
+- produktionsnahe Freigabe, externe Freigabe, echte Daten oder rechtssichere Compliance-/DSGVO-/Audit-Aussage.
+
+## 7. Ergebnis von P11-N3
 
 Der begrenzte interne Pilot-Preflight ist als knappe lokale Checkliste nutzbar: Starten, Status pruefen, UI-Routen sichten, Reibung triagieren, Export-/Auditbelege read-only pruefen, Option-A-Zeitfenstergrenze beachten und kontrolliert stoppen.
 
-P11-N3 fuehrt keine Runtime-, UI-, API-, Persistenz-, Deployment-, Auth-, Daten-, Schedule- oder Compliance-Aenderung ein.
+Zusaetzlich sind Nutzerkreis, fachlicher/technischer Betreiber, Trusted-Actor-Kontext und Zugriffskontrollfragen als nicht-sensitive Entscheidungspunkte sichtbar. Lokales Rehearsal-Go bleibt kein Pilot-/Auth-/Deployment-Go.
+
+P11-N3 fuehrt keine Runtime-, UI-, API-, Persistenz-, Deployment-, Auth-, Secret-, Rollenplattform-, Daten-, Schedule- oder Compliance-Aenderung ein.

@@ -5,11 +5,22 @@ const runbookPath = "docs/product/P11_N3_INTERNER_PILOT_PREFLIGHT_RUNBOOK.md";
 const runbookDoc = existsSync(runbookPath) ? readFileSync(runbookPath, "utf8") : "";
 const n1Doc = readFileSync("docs/product/P11_N1_LIMITED_INTERNAL_PILOT_PREFLIGHT_INDEX.md", "utf8");
 const n2Doc = readFileSync("docs/product/P11_N2_PILOT_DATENKORRIDOR_ANONYMISIERT_SYNTHETISCH.md", "utf8");
+const b24Doc = readFileSync("docs/product/B24_PILOT_KORRIDOR_ENTSCHEIDUNGSANKER.md", "utf8");
+const pa7Doc = readFileSync("docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md", "utf8");
+const pa9Doc = readFileSync("docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md", "utf8");
+const b8Doc = readFileSync("docs/architecture/B8_AUTH_GATE_DECISION_BOUNDARY.md", "utf8");
+const b9Doc = readFileSync("docs/architecture/B9_PROXY_IAP_AUTHN_PREFLIGHT_CONTRACT.md", "utf8");
 const readmeDoc = readFileSync("README.md", "utf8");
 
 const requiredReferenceAnchors = [
+  "docs/product/B24_PILOT_KORRIDOR_ENTSCHEIDUNGSANKER.md",
   "docs/product/P11_N1_LIMITED_INTERNAL_PILOT_PREFLIGHT_INDEX.md",
   "docs/product/P11_N2_PILOT_DATENKORRIDOR_ANONYMISIERT_SYNTHETISCH.md",
+  "docs/architecture/PA7_AUTH_READ_PATH_DECISION_ADR.md",
+  "PA8 Read-path Auth Hardening Slice 1",
+  "docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md",
+  "docs/architecture/B8_AUTH_GATE_DECISION_BOUNDARY.md",
+  "docs/architecture/B9_PROXY_IAP_AUTHN_PREFLIGHT_CONTRACT.md",
   "docs/product/P6_B57_LOKALER_START_STATUS_KORRIDOR.md",
   "docs/product/P6_B58_BETA_REIBUNGSLOG_VORLAGE.md",
   "docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md",
