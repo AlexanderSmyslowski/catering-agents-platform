@@ -58,6 +58,16 @@ export function ProductionConversationalWorkbench({
     answeredQuestionCount,
     unansweredQuestionCount
   );
+  const productionOutputAnchorTitle =
+    productionObjectCount > 0 ? "Produktionsobjekte und Downloads prüfen" : "Produktionsplan berechnen";
+  const productionOutputAnchorDescription =
+    productionObjectCount > 0
+      ? "Nach den strukturierten Antworten liegen oder entstehen hier Produktionsplan, Rezepte/Objektübersicht, Einkaufsliste und Downloads. Der Bereich nutzt nur vorhandene Pläne, Einkaufslisten und Exportlinks."
+      : "Noch keine Produktionsobjekte bereit: Zuerst Berechnung starten; Einkaufsliste und Exportlinks bleiben bis dahin offen.";
+  const productionOutputAnchorGrouping =
+    productionObjectCount > 0
+      ? "Vorhandene Pläne, Einkaufslisten und Exportlinks sind getrennt gruppiert und bleiben read-only prüfbar."
+      : "Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.";
 
   return (
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
@@ -126,14 +136,9 @@ export function ProductionConversationalWorkbench({
         <span className="visually-hidden">production-objects-zone</span>
         <article className="production-output-anchor" aria-label="Nächster Agent-Schritt zu Produktionsobjekten">
           <p className="eyebrow">Nächster Agent-Schritt</p>
-          <h3>Produktionsobjekte und Downloads prüfen</h3>
-          <p className="helper-text">
-            Nach den strukturierten Antworten liegen oder entstehen hier Produktionsplan, Rezepte/Objektübersicht,
-            Einkaufsliste und Downloads. Der Bereich nutzt nur vorhandene Pläne, Einkaufslisten und Exportlinks.
-          </p>
-          <p className="helper-text">
-            Vorhandene Pläne, Einkaufslisten und Exportlinks sind getrennt gruppiert und bleiben read-only prüfbar.
-          </p>
+          <h3>{productionOutputAnchorTitle}</h3>
+          <p className="helper-text">{productionOutputAnchorDescription}</p>
+          <p className="helper-text">{productionOutputAnchorGrouping}</p>
         </article>
         <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
           <summary>

@@ -471,6 +471,11 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Noch kein Produktionsplan für den aktuellen Vorgang. Nächster Schritt: Berechnung starten.");
     expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
     expect(content).toContain("Exportlinks erscheinen erst, wenn Produktionsplan und Einkaufsliste vorhanden sind.");
+    expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");
+    expect(content).not.toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
+    expect(content).not.toContain("Produktionsblatt exportieren");
+    expect(content).not.toContain("Einkaufsliste exportieren");
+    expect(content).not.toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
   });
 
   it("shows the purchase-list gap when a production plan exists but the purchase list is still missing", async () => {
