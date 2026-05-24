@@ -179,6 +179,23 @@ function findButtonByText(text: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
+function findAnchorByText(document: Document, text: string): HTMLAnchorElement {
+  const anchor = Array.from(document.querySelectorAll("a")).find((el) => (el.textContent ?? "").includes(text));
+  if (!anchor) {
+    throw new Error(`Anchor not found: ${text}`);
+  }
+  return anchor as HTMLAnchorElement;
+}
+
+function findRouteCardAnchor(document: Document, cardMarker: string): HTMLAnchorElement {
+  const card = Array.from(document.querySelectorAll("article")).find((el) => (el.textContent ?? "").includes(cardMarker));
+  const anchor = card?.querySelector("a");
+  if (!anchor) {
+    throw new Error(`Route card anchor not found: ${cardMarker}`);
+  }
+  return anchor as HTMLAnchorElement;
+}
+
 async function flush(times = 4) {
   for (let i = 0; i < times; i += 1) {
     await Promise.resolve();
@@ -223,6 +240,35 @@ describe("backoffice route smoke", () => {
     expect(production).toContain("Auftrag einfügen oder Datei ablegen");
     expect(production).toContain("production-calm-summary");
     expect(production).toContain("Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.");
+  });
+
+  it("keeps the home navigation entries wired to route-stable offer and production markers", async () => {
+    installBackofficeEnvironmentMocks();
+
+    const home = await renderRoute("/");
+    const homeDocument = new DOMParser().parseFromString(home.html, "text/html");
+
+    const offerNav = findAnchorByText(homeDocument, "Angebotsagent");
+    const productionNav = findAnchorByText(homeDocument, "Produktionsagent");
+    const offerShortcut = findAnchorByText(homeDocument, "Angebotsagent öffnen");
+    const productionShortcut = findAnchorByText(homeDocument, "Produktionsagent öffnen");
+    const offerCard = findRouteCardAnchor(homeDocument, "Kundenanfrage zu einem belastbaren Angebot verdichten");
+    const productionCard = findRouteCardAnchor(homeDocument, "Küchenvorbereitung mit Rezepten und Einkaufslisten steuern");
+
+    expect(offerNav.getAttribute("href")).toBe("/angebot");
+    expect(offerShortcut.getAttribute("href")).toBe("/angebot");
+    expect(offerCard.getAttribute("href")).toBe("/angebot");
+    expect(productionNav.getAttribute("href")).toBe("/produktion");
+    expect(productionShortcut.getAttribute("href")).toBe("/produktion");
+    expect(productionCard.getAttribute("href")).toBe("/produktion");
+
+    const offer = (await renderRoute(offerNav.getAttribute("href") ?? "")).text;
+    expect(offer).toContain("Angebotsagent");
+    expect(offer).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+
+    const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
+    expect(production).toContain("Produktionsagent");
+    expect(production).toContain("Was braucht die Produktion als Nächstes?");
   });
 
   it("keeps the intake status summary anchored on safe source and ingestion warning markers", async () => {
