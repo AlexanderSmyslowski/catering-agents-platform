@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.223
+version: 5.224
 date: 2026-05-24
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -33,6 +33,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P7 Betriebsfreigabe / MVP-Freigabekriterien ist als schmale Mini-Spezifikation dokumentiert; sie fasst den kleinen repo-gebundenen Go/No-Go-Rahmen fuer interne MVP-/Beta-Nutzung zusammen, ohne neue Release- oder Monitoring-Plattform.
 - P2 Browser-/Smoke-Absicherung ist jetzt real belegt: der lokale Smoke-Korridor prueft die drei UI-Routen, die vier Health-Endpunkte und die drei read-only Exportpfade; ergaenzend existiert ein minimaler repo-verankerter UI-Route-Smoke-Test fuer `/`, `/angebot` und `/produktion`, dessen Angebots- und Produktions-Assertions auf route-eindeutige Marker geschaerft sind
 - P4 Frontend-Smoke-Navigation ist testseitig erweitert: `tests/backoffice-route-smoke.test.ts` prueft sichtbare Startseiten-Einstiege/Nav-Links und Route-Cards auf `/angebot` und `/produktion` und rendert anschliessend die Zielrouten mit stabilen Markern. Keine App-Logik, API, Persistenz, UI-Neugestaltung oder neue Browser-Test-Infrastruktur.
+- P4 Produktions-Export-/Audit-Abschlussanker ist minimal umgesetzt: `/produktion` zeigt in der bestehenden Herkunft-und-Uebergabe-Zone einen read-only `Abschluss-Kontext` mit vorhandener `planId`, `specId` und `purchaseListId`; `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt denselben Plan-/Einkaufslisten-/Audit-Kontext. Keine neue API, Persistenz, Exportlogik, Compliance-Behauptung oder neue Produktflaeche.
 - C6 Upload-/Import-Pfade im Workbench-Kontext ist umgesetzt: `tests/backoffice-route-smoke.test.ts` schuetzt jetzt, dass `/produktion` kontrollierte Servermeldungen aus dem vorhandenen Intake-Dokumentupload sichtbar macht und dass sichere DocumentIngestion-Warnungen plus gekuerzte Quellenmetadaten im Workbench-Kontext angezeigt werden.
 - Minimaler UI-/API-Fix: `backoffice-ui/src/api.ts` uebernimmt vorhandene JSON-`message`-Fehler aus Fetch-Antworten fuer JSON- und Multipart-Pfade, damit Limit-/MIME-Abweisungen nicht auf generische HTTP-Statuszeilen reduziert werden. Keine neue API, Persistenz, Parser-/OCR-/LLM-Engine oder Upload-Framework-Erweiterung.
 - C7 Leer-/Fehlerzustaende fuer interne Nutzung ist umgesetzt: `/produktion` erklaert beim klaren Spec-ohne-Plan-/Einkaufsliste-Zustand den naechsten Schritt und die noch fehlenden Exportlinks explizit; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Recovery-Plattform, API, Persistenz oder Produktlogik.
@@ -1155,3 +1156,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.223 - 2026-05-24
 - P4 Frontend-Smoke-Navigation ist als echter Testcode-Slice umgesetzt: `tests/backoffice-route-smoke.test.ts` prueft sichtbare Startseiten-Einstiege/Nav-Links und Route-Cards auf die erwarteten Ziele `/angebot` und `/produktion`.
 - Der Smoke rendert danach die Zielrouten und prueft stabile Angebots- und Produktionsmarker; keine App-Code-Aenderung war noetig, keine neue Produktlogik, API, Persistenz, UI-Neugestaltung oder neue Browser-Test-Infrastruktur.
+
+### 5.224 - 2026-05-24
+- P4 Produktions-Export-/Audit-Abschlussanker ist als kleiner UI-/Smoke-Slice umgesetzt: `/produktion` zeigt in der bestehenden Herkunft-und-Uebergabe-Zone einen read-only `Abschluss-Kontext` aus vorhandener `planId`, `specId` und `purchaseListId`.
+- `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt mit vorhandenem Produktionsplan, Einkaufsliste und Audit-Ereignis, dass Export-/Downloadanker, Audit-Spur und Abschluss-Kontext aus demselben sichtbaren Plan-/Einkaufskontext nachvollziehbar bleiben. Keine neue API, Persistenz, Exportlogik, Compliance-Behauptung oder Produktflaeche.

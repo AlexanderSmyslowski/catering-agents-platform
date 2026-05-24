@@ -1372,6 +1372,18 @@ export function App() {
     currentSpecPurchaseLists.length > 0 ? "Einkaufsliste vorhanden" : "Einkaufsliste offen"
   ].join(" · ");
 
+  const productionHandoffContextLabel = selectedPlan
+    ? [
+        `planId ${String(selectedPlan.planId ?? "-")}`,
+        `specId ${String(selectedPlan.eventSpecId ?? selectedPlanSpec?.specId ?? "-")}`,
+        currentSpecPurchaseLists[0]
+          ? `purchaseListId ${String(currentSpecPurchaseLists[0].purchaseListId ?? "-")}`
+          : undefined
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
+
   const latestProductionAuditEvent = filteredAuditEvents[0];
   const productionAuditTrailLabel = latestProductionAuditEvent
     ? formatAuditEventHandoffLabel(latestProductionAuditEvent)
@@ -3269,6 +3281,12 @@ export function App() {
                 <span>Übergabe-/Exportartefakte</span>
                 <strong>{productionHandoffExportLabel}</strong>
               </div>
+              {productionHandoffContextLabel ? (
+                <div className="handoff-fact">
+                  <span>Abschluss-Kontext</span>
+                  <strong>Abschluss-Kontext: {productionHandoffContextLabel}</strong>
+                </div>
+              ) : null}
             </div>
             <p className="helper-text">
               Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.

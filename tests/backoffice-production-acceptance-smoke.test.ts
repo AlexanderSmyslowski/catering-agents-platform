@@ -496,6 +496,23 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Ergebnisobjekte: 1 Plan(e) · vollständig");
   });
 
+  it("anchors the production export and audit closure to the same visible plan and purchase context", async () => {
+    installProductionAcceptanceMocks({ completeSpec: true, withCurrentPurchaseList: true, withAuditEvent: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Plan-Kontext: planId plan-production-fallback-1 · specId spec-production-fallback-1");
+    expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-fallback-1");
+    expect(content).toContain("Produktionsblatt exportieren");
+    expect(content).toContain("Einkaufsliste exportieren");
+    expect(content).toContain("Audit-Spur");
+    expect(content).toContain("Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T09:15:00.000Z");
+    expect(content).toContain("Abschluss-Kontext: planId plan-production-fallback-1 · specId spec-production-fallback-1 · purchaseListId purchase-production-current-1");
+    expect(content).toContain("Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.");
+    expect(content).toContain("keine externe Freigabe, Signatur- oder Compliance-Behauptung");
+    expect(content).toContain("Keine rechtssichere Audit-Behauptung");
+  });
+
   it("shows answered clarification questions as read-only status anchors", async () => {
     installProductionAcceptanceMocks({ withSubmittedClarificationAnswer: true });
 
