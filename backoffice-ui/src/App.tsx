@@ -2256,6 +2256,10 @@ export function App() {
                     )}`
                   : "Noch keine Änderungen geladen."}
               </p>
+              <p className="helper-text">
+                Audit-/Handoff-Hinweis: interne Arbeitsbelege für Demo-/Beta-Prüfung; keine externe Freigabe,
+                keine Produktionsfreigabe, keine echte-Daten-Freigabe und kein rechtssicherer Compliance-Nachweis.
+              </p>
             </header>
             <ul className="item-list compact">
               {filteredAuditEvents.map((entry) => (

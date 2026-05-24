@@ -763,4 +763,29 @@ describe("backoffice route smoke", () => {
       "1 Änderungen geladen · neueste: Demo-Daten geladen · Actor: Mia · Action: seed_demo · 2026-07-01T10:05:00.000Z"
     );
   });
+
+  it("keeps home audit and handoff markers framed as internal working evidence", async () => {
+    installBackofficeEnvironmentMocks({
+      auditEvents: [
+        {
+          auditId: "home-audit-handoff-boundary",
+          summary: "Demo-Startweg belegt",
+          action: "production.seed_demo",
+          at: "2026-07-02T08:15:00.000Z",
+          actor: { name: "Betriebs-/Audit-Operator" }
+        }
+      ]
+    });
+
+    const home = (await renderRoute("/")).text;
+
+    expect(home).toContain("Änderungsprotokoll");
+    expect(home).toContain("Demo-Startweg belegt · Actor: Betriebs-/Audit-Operator · Action: production.seed_demo");
+    expect(home).toContain(
+      "Audit-/Handoff-Hinweis: interne Arbeitsbelege für Demo-/Beta-Prüfung; keine externe Freigabe, keine Produktionsfreigabe, keine echte-Daten-Freigabe und kein rechtssicherer Compliance-Nachweis."
+    );
+    expect(home).not.toContain("Produktionsfreigabe erteilt");
+    expect(home).not.toContain("Compliance-Nachweis erbracht");
+    expect(home).not.toContain("echte Daten freigegeben");
+  });
 });

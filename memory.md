@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.226
+version: 5.227
 date: 2026-05-24
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -36,6 +36,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - P4 Produktions-Export-/Audit-Abschlussanker ist minimal umgesetzt: `/produktion` zeigt in der bestehenden Herkunft-und-Uebergabe-Zone einen read-only `Abschluss-Kontext` mit vorhandener `planId`, `specId` und `purchaseListId`; `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt denselben Plan-/Einkaufslisten-/Audit-Kontext. Keine neue API, Persistenz, Exportlogik, Compliance-Behauptung oder neue Produktflaeche.
 - P4 Produktions-Empty-State-Klarheit ist minimal umgesetzt: Die `ProductionConversationalWorkbench` unterscheidet ohne vorhandene Produktionsobjekte klar `Produktionsplan berechnen` von `Produktionsobjekte und Downloads pruefen`; Einkaufsliste und Exportlinks bleiben offen markiert und der Smoke schuetzt gegen Scheingruenheit. Keine automatische Produktionsplan-Erzeugung, Exportlogik, API, Persistenz oder Freigabe-Behauptung.
 - P4 Angebots-Empty-State-Klarheit ist minimal umgesetzt: Die `OfferConversationalWorkbench` zeigt ohne fokussierten Entwurf `Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden` und schaerft die Beta-Grenze gegen externe, Produktions- oder Compliance-Freigabe; `tests/backoffice-route-smoke.test.ts` schuetzt den leeren `/angebot`-Zustand gegen Scheingruenheit.
+- P4 Startseiten-Audit-/Handoff-Grenze ist minimal umgesetzt: Die bestehende Startseiten-Änderungsprotokoll-Zone nennt Audit-/Handoff-Hinweise ausdrücklich als interne Arbeitsbelege fuer Demo-/Beta-Pruefung und grenzt externe Freigabe, Produktionsfreigabe, echte-Daten-Freigabe und rechtssicheren Compliance-Nachweis ab; `tests/backoffice-route-smoke.test.ts` schuetzt diesen Marker gegen Scheingruenheit.
 - C6 Upload-/Import-Pfade im Workbench-Kontext ist umgesetzt: `tests/backoffice-route-smoke.test.ts` schuetzt jetzt, dass `/produktion` kontrollierte Servermeldungen aus dem vorhandenen Intake-Dokumentupload sichtbar macht und dass sichere DocumentIngestion-Warnungen plus gekuerzte Quellenmetadaten im Workbench-Kontext angezeigt werden.
 - Minimaler UI-/API-Fix: `backoffice-ui/src/api.ts` uebernimmt vorhandene JSON-`message`-Fehler aus Fetch-Antworten fuer JSON- und Multipart-Pfade, damit Limit-/MIME-Abweisungen nicht auf generische HTTP-Statuszeilen reduziert werden. Keine neue API, Persistenz, Parser-/OCR-/LLM-Engine oder Upload-Framework-Erweiterung.
 - C7 Leer-/Fehlerzustaende fuer interne Nutzung ist umgesetzt: `/produktion` erklaert beim klaren Spec-ohne-Plan-/Einkaufsliste-Zustand den naechsten Schritt und die noch fehlenden Exportlinks explizit; abgesichert in `tests/backoffice-production-acceptance-smoke.test.ts`. Keine neue Recovery-Plattform, API, Persistenz oder Produktlogik.
@@ -1170,3 +1171,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.226 - 2026-05-24
 - P4 Angebots-Empty-State-Klarheit ist als kleiner UI-/Smoke-Slice umgesetzt: Ohne fokussierten Entwurf zeigt die `OfferConversationalWorkbench` `Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden`.
 - `tests/backoffice-route-smoke.test.ts` schuetzt den leeren `/angebot`-Zustand: Anfrage einfuegen/Entwurf erzeugen bleibt naechster Schritt, keine Angebots-HTML-/Export-/Freigabe-Behauptung, Beta-Grenze gegen echte Kundendaten sowie externe, Produktions- und Compliance-Freigabe bleibt sichtbar. Keine neue Angebots-/Exportlogik, API, Persistenz oder Freigabe.
+
+### 5.227 - 2026-05-24
+- P4 Startseiten-Audit-/Handoff-Grenze ist als kleiner UI-/Smoke-Slice umgesetzt: Die bestehende Startseiten-Änderungsprotokoll-Zone nennt Audit-/Handoff-Hinweise nun als interne Arbeitsbelege fuer Demo-/Beta-Pruefung.
+- `tests/backoffice-route-smoke.test.ts` schuetzt den Marker mit einem vorhandenen Audit-Fixture gegen Scheingruenheit: keine externe Freigabe, keine Produktionsfreigabe, keine echte-Daten-Freigabe und kein rechtssicherer Compliance-Nachweis. Keine neue Auditlogik, API, Persistenz, Exportlogik, UI-Neugestaltung oder Compliance-Behauptung.
