@@ -207,7 +207,8 @@ export function OfferConversationalWorkbench({
         <p className="helper-text">Quelle: {latestSourceLabel}</p>
         <p className="helper-text">Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.</p>
         <p className="helper-text">
-          Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten freigeben.
+          Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten,
+          keine externe Freigabe, keine Produktions- oder Compliance-Freigabe.
         </p>
         <p className="helper-text">
           Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.
@@ -218,7 +219,9 @@ export function OfferConversationalWorkbench({
           {activeSpec ? `${String(activeSpec.specId ?? "-")} (${getReadinessLabel(activeSpec)})` : "keine"}
         </p>
         <p className="helper-text">
-          Export: {focusedDraft ? `Angebots-HTML für ${focusedDraftId} bereit` : "noch kein Angebotsentwurf"}
+          {focusedDraft
+            ? `Export: Angebots-HTML für ${focusedDraftId} bereit`
+            : "Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden."}
         </p>
       </aside>
 

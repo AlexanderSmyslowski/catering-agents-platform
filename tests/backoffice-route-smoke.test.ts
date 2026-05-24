@@ -340,7 +340,9 @@ describe("backoffice route smoke", () => {
 
     expect(offer).toContain("Zusammenfassung");
     expect(offer).toContain("Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.");
-    expect(offer).toContain("Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten freigeben.");
+    expect(offer).toContain(
+      "Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten, keine externe Freigabe, keine Produktions- oder Compliance-Freigabe."
+    );
     expect(offer).toContain("Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
     expect(offer).toContain("Nächster Angebotsschritt: Entwurf offer-draft-buffet prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.");
     expect(offer).toContain("Sommerfest mit Buffet · 1 Varianten · 1 offene Punkte");
@@ -357,6 +359,26 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("Status: teilweise vollständig");
     expect(offer).not.toContain("1 Entwürfe mit Varianten und Export stehen bereit.");
     expect(offer).not.toContain("Angebotsdienst");
+  });
+
+  it("keeps the empty offer route clear about next step and missing export approval artifacts", async () => {
+    installBackofficeEnvironmentMocks();
+
+    const offer = await renderRoute("/angebot");
+
+    expect(offer.text).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(offer.text).toContain("Nächster Schritt: Anfrage einfügen");
+    expect(offer.text).toContain("Nächster Angebotsschritt: Anfrage einfügen oder Demo über Start nutzen, dann Entwurf prüfen.");
+    expect(offer.text).toContain("Noch kein Angebotsentwurf vorhanden.");
+    expect(offer.text).toContain("Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden.");
+    expect(offer.text).toContain(
+      "Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten, keine externe Freigabe, keine Produktions- oder Compliance-Freigabe."
+    );
+    expect(offer.text).not.toContain("Angebots-HTML für");
+    expect(offer.text).not.toContain("Angebot exportieren");
+    expect(offer.text).not.toContain("Produktionsfreigabe erteilt");
+    expect(offer.text).not.toContain("Compliance-Freigabe erteilt");
+    expect(offer.text).not.toContain("externe Freigabe erteilt");
   });
 
   it("walks the offer happy path from central request input to focused draft and handoff anchors", async () => {
