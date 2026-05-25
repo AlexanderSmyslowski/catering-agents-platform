@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWorkbenchSpecFacts,
   canClearProductionWorkspace,
+  countClarificationAnswerStatuses,
   countPurchaseListItems,
   formatActiveProductionContextLabel,
   formatProductionHandoffContextLabel,
@@ -322,5 +323,18 @@ describe("production route state", () => {
       { label: "Service", value: "Buffet" },
       { label: "Menü", value: "2 Komponenten" }
     ]);
+  });
+
+  it("counts clarification answer statuses from conversation messages", () => {
+    expect(
+      countClarificationAnswerStatuses([
+        { clarificationAnswerStatus: "answered" },
+        { clarificationAnswerStatus: "unanswered" },
+        { clarificationAnswerStatus: "unanswered" },
+        { clarificationAnswerStatus: "ignored" },
+        {}
+      ])
+    ).toEqual({ answered: 1, unanswered: 2 });
+    expect(countClarificationAnswerStatuses([])).toEqual({ answered: 0, unanswered: 0 });
   });
 });
