@@ -39,6 +39,34 @@ describe("product goal anchor contract", () => {
     }
   });
 
+  it("allows more autonomous local build slices while preserving gate decisions", () => {
+    for (const allowed of [
+      "Autonomer Umsetzungskorridor",
+      "nicht fuer jeden kleinen planfolgenden Schritt stoppen",
+      "kleine, lokale, testbare und reversible Slices",
+      "synthetische Produktionskern-Smokes",
+      "enge Rezept-Matching-, Import-, Einkaufslisten-, Export- und UI-Haertungen",
+      "verhaltensgleiche UI-Wartbarkeitsschnitte",
+      "lokale Browser-/Rehearsal-Evidenz"
+    ]) {
+      expect(productGoalDoc).toContain(allowed);
+    }
+
+    for (const gate of [
+      "echte Daten oder echte Google-Drive-Angebote",
+      "Auth/OIDC/IAP/Proxy",
+      "PII/Retention/Backup/Restore",
+      "Sandbox/Worker/AV",
+      "neue API-Endpunkte",
+      "neue Persistenz",
+      "echte `ConversationSession`-Runtime",
+      "LLM-Provider",
+      "Tool-Orchestrierung mit Schreibwirkung"
+    ]) {
+      expect(productGoalDoc).toContain(gate);
+    }
+  });
+
   it("keeps the maturity status honest and separated", () => {
     for (const status of [
       "Lokaler interner Demo-/Rehearsal-Korridor: nutzbar/pruefbar",

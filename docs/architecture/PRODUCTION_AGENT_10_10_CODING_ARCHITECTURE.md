@@ -65,6 +65,33 @@ Der spaetere LLM-Orchestrator darf nicht:
 - neue Persistenz/API/Migration implizit einfuehren
 - Rezept-/Allergen-/Kostenwahrheit allein behaupten
 
+### 2.1 Autonomie-Korridor fuer Codex/Hans
+
+Der fruehere Entscheidungsmodus war bewusst konservativ, ist fuer den aktuellen Baupfad aber zu eng, wenn er jeden kleinen planfolgenden Code-Slice stoppt.
+
+Codex/Hans darf deshalb autonom entscheiden und umsetzen, wenn alle Bedingungen gleichzeitig erfuellt sind:
+
+- der Schritt staerkt den bestehenden internen MVP-/Rehearsal-Korridor;
+- der Schritt folgt direkt aus diesem Architekturplan, dem Produktziel, `AGENTS.md`, `memory.md` oder bestehenden Plan-/P-Dokumenten;
+- der Schritt ist klein, lokal, reviewbar, testbar und reversibel;
+- der Schritt bleibt in vorhandenen Modulen, APIs, Datenmodellen und Persistenzgrenzen;
+- der Schritt nutzt nur synthetische, Demo- oder lokale Testdaten;
+- der Schritt kann mit vorhandenen Tests, Smokes, Build oder Doku-/Contract-Tests belegt werden;
+- der Schritt erzeugt keine neue Freigabe-, Compliance-, Betriebs- oder echte-Daten-Behauptung.
+
+Autonom bevorzugte Arbeit:
+
+- Produktionskern-Smokes fuer synthetische Lunch-, Buffet-, Empfang-, Flying-Bites- und Kaffeepausenfaelle;
+- enge Rezept-Matching- und Importqualitaets-Haertungen fuer belegte Catering-Gerichte;
+- UI-Wartbarkeit, Stale-Fokus-, Empty-/Loading-State- und Export-/Audit-Lesbarkeit ohne neue Produktflaeche;
+- Einkaufslistenqualitaet, Einheiten-/Gruppen-Checks und Schutz gegen Zubereitungsschritte als Einkaufspositionen;
+- Doku-/Contract-Klaerungen, die vorhandene Gates schaerfer operationalisieren;
+- lokale Rehearsal- und Browser-Smoke-Evidenz mit synthetischen Daten.
+
+Alexander-Entscheidung ist erst noetig, wenn der Schritt eine harte Gate-Grenze beruehrt: echte Daten, echte Google-Drive-Angebote, produktionsnahe Uploads, Auth/OIDC/IAP/Proxy, PII/Retention/Backup/Restore, Sandbox/Worker/AV, Deployment, neue API, neue Persistenz/Migration, neue Runtime-ConversationSession, LLM-Provider/Secrets/Kosten/Logging/Datenuebertragung oder Write-Tools mit produktionsrelevanter Wirkung.
+
+Sicherer Default: Wenn unklar ist, ob ein Schritt autonom erlaubt ist, wird er auf die naechste kleinere Variante reduziert. Wenn auch diese Variante noch eine Gate-Grenze beruehrt, wird eine Entscheidungsvorlage erstellt statt Runtime-Code gebaut.
+
 ## 3. Zielarchitektur in Schichten
 
 ### 3.1 Backoffice UI
@@ -362,6 +389,8 @@ Merkmale:
 - produktionsnahe echte Datennutzung
 - Allergen-/Rezept-/Kostenfreigabe durch LLM
 
+Diese Liste blockiert nicht kleine planfolgende Slices innerhalb des Autonomie-Korridors aus Abschnitt 2.1. Sie blockiert nur Runtime-, Betriebs-, Daten-, Sicherheits-, Freigabe- oder LLM-Schritte mit echter Gate-Wirkung.
+
 ## 7. Sicherer Default
 
 Wenn keine Entscheidung kommt:
@@ -465,3 +494,5 @@ Level 10: kontrollierter interner Produktionsagent
 - PII, Retention, Backup und Restore
 - Sandbox, Worker und AV fuer Dateien
 - Deployment, produktionsnahe Nutzung oder externe Freigabe
+
+Nicht entscheidungspflichtig sind enge lokale Slices, die ausschliesslich vorhandene interne MVP-Faehigkeiten haerten und keine dieser Gate-Grenzen beruehren.

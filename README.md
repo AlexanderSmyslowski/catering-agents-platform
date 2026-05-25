@@ -86,6 +86,7 @@ Fuehrender Produktzielanker fuer weitere Arbeit:
 
 - [docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md](docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md) beschreibt die interne Catering-Arbeitsplattform, den aktuellen kontrollierten MVP-/Beta-Korridor und die Grenzen gegen externe Nutzung, echte Multi-Tenant-Plattform, produktionsnahe echte Daten, Auth/OIDC, neue Persistenz/API und Deployment ohne gesonderte Gates.
 - [docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md](docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md) beschreibt die Coding-Architektur bis zum internen 10/10-ProductionAgent: deterministischer Kern zuerst, LLM-Readiness ohne Provider, danach LLM nur hinter Gates, Schemas, Tool-Allowlist, Kostenlimit, Audit und Human Approval.
+- Die aktualisierte Autonomiegrenze erlaubt kleine lokale, testbare und reversible Slices fuer synthetische Smokes, Rezept-/Import-/Einkaufslisten-/UI-Haertung und Doku-/Contract-Klaerungen autonom; echte Daten, Auth/OIDC/IAP, Deployment, neue API/Persistenz/Migration, echte ConversationSession-Runtime und LLM-Provider bleiben Gates.
 - [docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md](docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md) sortiert den aktuellen uncommitted Arbeitsbaum in reviewbare Slices; es ist kein Commit-, PR-, LLM-, Deployment-, API-, Persistenz- oder Echtdaten-Go.
 
 Fuehrendes Architektur-Gate vor weiterem Produktionsagent-v1-Featurebau:
