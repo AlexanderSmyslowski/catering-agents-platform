@@ -75,6 +75,33 @@ describe("production language helpers", () => {
     ]);
   });
 
+  it("calls out Focaccia as a hybrid sourcing clarification", () => {
+    const questions = buildProductionQuestions({
+      readiness: { status: "insufficient" },
+      event: {
+        type: "lunch",
+        date: "2026-03-04"
+      },
+      attendees: {
+        expected: 80
+      },
+      servicePlan: {
+        serviceForm: "buffet"
+      },
+      menuPlan: [
+        {
+          componentId: "focaccia",
+          label: "Focaccia",
+          menuCategory: "classic"
+        }
+      ]
+    });
+
+    expect(questions).toEqual([
+      "Focaccia: Hybridfall. Bitte bewusst entscheiden, ob Eigenproduktion, Bäcker-Zukauf, Convenience-Zukauf oder Fertigprodukt gilt."
+    ]);
+  });
+
   it("translates inferred assumptions into German", () => {
     const assumptions = buildProductionAssumptions({
       event: {

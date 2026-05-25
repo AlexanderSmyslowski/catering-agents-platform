@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.267
+version: 5.268
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1335,3 +1335,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.267 - 2026-05-26
 - Produktionsplanung schuetzt Focaccia ohne Herstellungsentscheidung als Human-in-the-loop-Hybridfall: Der Plan bleibt blockierend, erzeugt keine Einkaufsposition, startet keine Rezeptsuche und nennt explizit, dass Eigenproduktion, Baecker-Zukauf, Convenience-Zukauf oder Fertigprodukt bewusst entschieden werden muessen.
 - `tests/production-plan-fallbacks.test.ts` ergaenzt den Focaccia-Regressionsfall neben Brot/Baguette und gluten_free. Keine Aenderung an UI, Rezept-Matching allgemein, API, Persistenz, Datenmodell, echten Daten, Deployment, Auth/OIDC, LLM oder Compliance-Gates.
+
+### 5.268 - 2026-05-26
+- Produktions-Workbench-Sprache ist an den Focaccia-HITL-Guard angeglichen: Focaccia ohne Herstellungsentscheidung erzeugt eine spezifische Hybridfall-Rueckfrage statt der generischen Herstellungsentscheidung.
+- `tests/production-language.test.ts` schuetzt diese UI-Sprachregel. Keine Backend-Planungs-, Rezept-, API-, Persistenz-, Datenmodell-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.

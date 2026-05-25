@@ -108,6 +108,14 @@ function isImplicitBakerPurchaseComponent(
   return isBakerPurchaseLabel(label);
 }
 
+function hybridSourcingQuestion(label: string): string | undefined {
+  if (!/\bfocaccia\b/i.test(label)) {
+    return undefined;
+  }
+
+  return `${label}: Hybridfall. Bitte bewusst entscheiden, ob Eigenproduktion, Bäcker-Zukauf, Convenience-Zukauf oder Fertigprodukt gilt.`;
+}
+
 function translateUncertaintyMessage(field?: string, message?: string): string | undefined {
   if (field === "attendees.expected") {
     return "Die Teilnehmerzahl konnte nicht zuverlässig aus dem Dokument abgeleitet werden.";
@@ -238,7 +246,10 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
       }
 
       const label = String(component?.label ?? component?.componentId ?? "Position");
-      return `${label}: Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.`;
+      return (
+        hybridSourcingQuestion(label) ??
+        `${label}: Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.`
+      );
     })
     .filter((item): item is string => Boolean(item));
   questions.push(...unresolvedSourcingQuestions);
