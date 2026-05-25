@@ -142,6 +142,29 @@ export function selectProductionWorkbenchPlan<T extends Record<string, unknown>>
   );
 }
 
+export function selectProductionPlanSpec<T extends Record<string, unknown>>(input: {
+  selectedPlan?: Record<string, unknown>;
+  specsById: Map<string, T>;
+}): T | undefined {
+  if (!input.selectedPlan) {
+    return undefined;
+  }
+
+  return input.specsById.get(String(input.selectedPlan.eventSpecId ?? ""));
+}
+
+export function buildProductionPlanComponentMap(
+  selectedPlanSpec?: Record<string, unknown>
+): Map<string, Record<string, unknown>> {
+  const menuPlan = Array.isArray(selectedPlanSpec?.menuPlan) ? selectedPlanSpec.menuPlan : [];
+  return new Map(
+    menuPlan.map((entry) => {
+      const component = entry as Record<string, unknown>;
+      return [String(component.componentId ?? ""), component] as const;
+    })
+  );
+}
+
 export function selectProductionNextStep(input: {
   hasFocusedProductionSpec: boolean;
   questionCount: number;
