@@ -18,7 +18,12 @@ import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import {
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
+  countPurchaseListItems,
   formatActiveProductionContextLabel,
+  formatProductionHandoffContextLabel,
+  formatProductionHandoffExportLabel,
+  formatProductionIntakeOriginLabel,
+  formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
@@ -902,50 +907,30 @@ export function App() {
   }, [focusedProductionSpecAttendees, focusedProductionSpecMenuPlan, focusedProductionSpecRecord, focusedProductionSpecServicePlan]);
 
   const currentPurchaseListItemCount = useMemo(
-    () =>
-      currentSpecPurchaseLists.reduce((sum, purchaseList) => {
-        const totals = purchaseList.totals as Record<string, unknown> | undefined;
-        const itemCount = Number(totals?.itemCount);
-        if (Number.isFinite(itemCount)) {
-          return sum + itemCount;
-        }
-        if (Array.isArray(purchaseList.items)) {
-          return sum + purchaseList.items.length;
-        }
-        return sum;
-      }, 0),
+    () => countPurchaseListItems(currentSpecPurchaseLists),
     [currentSpecPurchaseLists]
   );
 
-  const purchaseZoneStatusLabel =
-    currentSpecPurchaseLists.length > 0
-      ? `${currentSpecPurchaseLists.length} Liste${currentSpecPurchaseLists.length === 1 ? "" : "n"} · ${currentPurchaseListItemCount} Positionen`
-      : "noch keine Liste";
+  const purchaseZoneStatusLabel = formatPurchaseZoneStatusLabel({
+    purchaseListCount: currentSpecPurchaseLists.length,
+    itemCount: currentPurchaseListItemCount
+  });
 
-  const productionIntakeOriginLabel = intakeRequestDetail
-    ? `${String((intakeRequestDetail.source as Record<string, unknown> | undefined)?.channel ?? "-")} · ${String(
-        (intakeRequestDetail.source as Record<string, unknown> | undefined)?.receivedAt ?? "-"
-      )} · ${String(intakeRequestDetail.requestId ?? "-")}`
-    : currentIntakeRequestId
-      ? `Intake-Anfrage ${currentIntakeRequestId}`
-      : "kein Intake-Ursprung verknüpft";
+  const productionIntakeOriginLabel = formatProductionIntakeOriginLabel({
+    intakeRequestDetail,
+    currentIntakeRequestId
+  });
 
-  const productionHandoffExportLabel = [
-    selectedPlan ? "Produktionsblatt vorhanden" : "Produktionsblatt offen",
-    currentSpecPurchaseLists.length > 0 ? "Einkaufsliste vorhanden" : "Einkaufsliste offen"
-  ].join(" · ");
+  const productionHandoffExportLabel = formatProductionHandoffExportLabel({
+    hasSelectedPlan: Boolean(selectedPlan),
+    purchaseListCount: currentSpecPurchaseLists.length
+  });
 
-  const productionHandoffContextLabel = selectedPlan
-    ? [
-        `planId ${String(selectedPlan.planId ?? "-")}`,
-        `specId ${String(selectedPlan.eventSpecId ?? selectedPlanSpec?.specId ?? "-")}`,
-        currentSpecPurchaseLists[0]
-          ? `purchaseListId ${String(currentSpecPurchaseLists[0].purchaseListId ?? "-")}`
-          : undefined
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : undefined;
+  const productionHandoffContextLabel = formatProductionHandoffContextLabel({
+    selectedPlan,
+    selectedPlanSpec,
+    purchaseLists: currentSpecPurchaseLists
+  });
 
   const latestProductionAuditEvent = filteredAuditEvents[0];
   const productionAuditTrailLabel = latestProductionAuditEvent
