@@ -741,8 +741,11 @@ describe("backoffice production acceptance smoke", () => {
         "Fehlupload request-production-fallback-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
       );
       expect(content).toContain("Kein aktiver Vorgang");
+      expect(content).toContain("Rückfragen: keine offenen Rückfragen");
+      expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
       expect(content).toContain("Auftrag einfügen oder Datei ablegen");
       expect(content).not.toContain("requestId: request-production-fallback-1");
+      expect(content).not.toContain("Rückfragen: 1 offene Rückfrage");
       expect(content).not.toContain("Löschen");
     } finally {
       await act(async () => {
@@ -858,6 +861,8 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(route.text).toContain("Arbeitsbereich leeren");
     expect(route.text).toContain("Fehlupload archivieren");
+    expect(route.text).toContain("Rückfragen: keine offenen Rückfragen");
+    expect(route.text).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
     expect(route.html).toContain("Arbeitsbereich leeren</button>");
     expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Arbeitsbereich leeren\s*<\/button>/);
     expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlupload archivieren\s*<\/button>/);
