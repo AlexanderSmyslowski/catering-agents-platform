@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.266
+version: 5.267
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1331,3 +1331,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.266 - 2026-05-26
 - Produktions-Empty-Focus ist als kleiner UI-Konsistenzfix gehaertet: Wenn `/produktion` keinen fokussierten Produktionsvorgang hat, werden keine scheinbar offenen Rueckfragen mehr an die Workbench gegeben.
 - `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den leeren Zustand nach Soft-Archiv und den Zustand ohne Upload/Produktionskontext mit `Rueckfragen: keine offenen Rueckfragen` und `offen 0 · beantwortet 0`. Keine Aenderung an Fragegenerierung fuer echte Spezifikationen, API, Persistenz, Planung, Rezeptlogik, echte Daten, Deployment, Auth/OIDC oder Compliance.
+
+### 5.267 - 2026-05-26
+- Produktionsplanung schuetzt Focaccia ohne Herstellungsentscheidung als Human-in-the-loop-Hybridfall: Der Plan bleibt blockierend, erzeugt keine Einkaufsposition, startet keine Rezeptsuche und nennt explizit, dass Eigenproduktion, Baecker-Zukauf, Convenience-Zukauf oder Fertigprodukt bewusst entschieden werden muessen.
+- `tests/production-plan-fallbacks.test.ts` ergaenzt den Focaccia-Regressionsfall neben Brot/Baguette und gluten_free. Keine Aenderung an UI, Rezept-Matching allgemein, API, Persistenz, Datenmodell, echten Daten, Deployment, Auth/OIDC, LLM oder Compliance-Gates.

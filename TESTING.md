@@ -316,6 +316,7 @@ Bei zukuenftigen Testluecken gilt:
 Der Repo-Iststand enthaelt bereits eine belastbare minimale Basis fuer Phase 4:
 
 - fachliche Vitest-Abdeckung fuer Intake, AcceptedEventSpec, Produktion, Rezept-/Kitchen-Sheet-Logik, Purchase-Coverage, Normalisierungsrobustheit und Shared-Core-Konfliktregeln
+- Produktions-Fallbacks schuetzen Brot/Baguette als klaren Baecker-Zukauf, glutenfreie Brot-/Baguette-Konflikte als Blocker und Focaccia ohne Herstellungsentscheidung als Human-in-the-loop-Hybridfall ohne automatische Rezeptsuche.
 - schmale jsdom-basierte Frontend-Smoke-Absicherung fuer die Kernrouten, den internen Produktionsnutzpfad, Detail-Read-Pfade und die React-Testumgebung
 - dokumentierten lokalen Stack- und Smoke-Korridor
 

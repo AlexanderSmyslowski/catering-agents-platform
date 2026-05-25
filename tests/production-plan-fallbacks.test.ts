@@ -242,6 +242,46 @@ describe("production planning fallbacks", () => {
     expect(artifacts.purchaseList.items).toHaveLength(0);
   });
 
+  it("keeps Focaccia as a human clarification case instead of auto-buying or recipe-searching it", async () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "plan-focaccia-hybrid-clarification-1",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-10T10:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          content: "Lunch am 2026-06-01 fuer 40 Teilnehmer. Buffet mit Focaccia."
+        }
+      ]
+    });
+    spec.menuPlan = spec.menuPlan.map((item) => ({
+      ...item,
+      menuCategory: "classic",
+      productionDecision: undefined
+    }));
+    const discovery = {
+      async resolveRecipe(): Promise<never> {
+        throw new Error("Focaccia without production decision should not trigger recipe discovery");
+      },
+      async resolveRecipeOverride(): Promise<never> {
+        throw new Error("Focaccia without production decision should not trigger recipe discovery");
+      }
+    } as unknown as RecipeDiscoveryService;
+
+    const artifacts = await buildProductionArtifacts(spec, discovery);
+
+    expect(artifacts.productionPlan.isFallback).toBe(true);
+    expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
+    expect(artifacts.productionPlan.recipeSelections[0].selectionReason).toContain("Hybridfall Focaccia");
+    expect(artifacts.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
+    expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Hybridfall Focaccia");
+    expect(artifacts.productionPlan.productionBatches).toHaveLength(0);
+    expect(artifacts.purchaseList.items).toHaveLength(0);
+  });
+
   it("marks hard intake restriction conflicts as blocking fallback", async () => {
     const spec = baseSpec("Konferenz am 2026-06-01 fuer 40 Teilnehmer. Buffet mit BROT & BAGUETTE.");
     spec.productionConstraints = ["gluten_free"];

@@ -148,6 +148,14 @@ function bakerPurchaseComponent(
   };
 }
 
+function hybridClarificationReason(component: AcceptedEventSpec["menuPlan"][number]): string | undefined {
+  if (!/\bfocaccia\b/i.test(component.label)) {
+    return undefined;
+  }
+
+  return `Hybridfall ${component.label}: Bitte bewusst klären, ob Eigenproduktion, Bäcker-Zukauf, Convenience-Zukauf oder Fertigprodukt gilt.`;
+}
+
 function bakerPurchaseConstraintConflictReason(
   component: AcceptedEventSpec["menuPlan"][number],
   productionConstraints?: string[]
@@ -448,17 +456,24 @@ export async function buildProductionArtifacts(
       }
 
       if (!productionMode) {
+        const hybridReason = hybridClarificationReason(component);
         const reason =
+          hybridReason ??
           "Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.";
         recipeSelections.push({
           componentId: component.componentId,
           selectionReason: reason,
           autoUsedInternetRecipe: false
         });
-        noteIssue(`Herstellungsentscheidung für ${component.label} fehlt.`, true);
+        noteIssue(
+          hybridReason
+            ? `Herstellungsentscheidung für ${component.label} fehlt (Hybridfall Focaccia).`
+            : `Herstellungsentscheidung für ${component.label} fehlt.`,
+          true
+        );
         kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
         timeline.push({
-          label: `${component.label} Herstellungsart klären`,
+          label: hybridReason ? `${component.label} Hybridfall klären` : `${component.label} Herstellungsart klären`,
           at: prepWindowFor(eventSpec)
         });
         continue;
