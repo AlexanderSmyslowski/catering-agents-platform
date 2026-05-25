@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.272
+version: 5.273
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1355,3 +1355,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.272 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Label-Refactor verbessert: Einkaufslistenpositionszaehlung, Einkaufslistenstatus, Intake-Ursprung, Handoff-Exportstatus und Handoff-Kontext werden als pure Helper in `production-route-state.ts` berechnet.
 - `tests/production-route-state.test.ts` schuetzt Totals-/Items-Zaehllogik, Singular/Plural-Labels, Intake-Fallbacks und Plan-/Spec-/Purchase-Kontextanker. Keine Rendering-, Text-, API-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.273 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Workbench-Fakten-Refactor verbessert: Status-, Zeitfenster-, Gaeste-, Serviceform- und Menueumfang-Fakten werden ueber `buildWorkbenchSpecFacts` in `production-route-state.ts` berechnet statt direkt in `App.tsx`.
+- `tests/production-route-state.test.ts` schuetzt Readiness-Uebersetzung, Terminfensterformatierung und die Facts fuer einen fokussierten Produktions-Spec. Keine Rendering-, Text-, API-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.

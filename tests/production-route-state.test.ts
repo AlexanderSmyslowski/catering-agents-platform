@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWorkbenchSpecFacts,
   canClearProductionWorkspace,
   countPurchaseListItems,
   formatActiveProductionContextLabel,
   formatProductionHandoffContextLabel,
   formatProductionHandoffExportLabel,
   formatProductionIntakeOriginLabel,
+  formatProductionTimingWindow,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
-  selectProductionNextStep
+  selectProductionNextStep,
+  translateReadiness
 } from "../backoffice-ui/src/production-route-state.js";
 
 describe("production route state", () => {
@@ -267,5 +270,57 @@ describe("production route state", () => {
       })
     ).toBe("planId plan-2 · specId spec-fallback");
     expect(formatProductionHandoffContextLabel({ purchaseLists: [] })).toBeUndefined();
+  });
+
+  it("formats production timing and readiness labels", () => {
+    expect(translateReadiness("complete")).toBe("vollständig");
+    expect(translateReadiness("partial")).toBe("teilweise vollständig");
+    expect(translateReadiness("insufficient")).toBe("unzureichend");
+    expect(translateReadiness("custom")).toBe("custom");
+    expect(translateReadiness()).toBe("-");
+
+    expect(formatProductionTimingWindow()).toBe("Terminfenster: noch zu bestätigen");
+    expect(formatProductionTimingWindow({ event: { date: "2026-03-04" } })).toBe("Datum: 2026-03-04");
+    expect(
+      formatProductionTimingWindow({
+        event: {
+          schedule: [{ label: "Service", start: "12:00", end: "13:00" }]
+        }
+      })
+    ).toBe("Terminfenster: Service 12:00–13:00");
+    expect(
+      formatProductionTimingWindow({
+        event: {
+          date: "2026-03-04",
+          schedule: [{ label: "Aufbau", start: "09:00", end: "11:30" }]
+        }
+      })
+    ).toBe("Datum: 2026-03-04 · Terminfenster: Aufbau 09:00–11:30");
+  });
+
+  it("builds workbench spec facts from the focused production spec", () => {
+    expect(buildWorkbenchSpecFacts()).toEqual([]);
+    expect(
+      buildWorkbenchSpecFacts({
+        readiness: { status: "complete" },
+        event: {
+          date: "2026-03-04",
+          schedule: [{ label: "Service", start: "12:00", end: "13:00" }]
+        },
+        attendees: {
+          expected: 120
+        },
+        servicePlan: {
+          serviceForm: "buffet"
+        },
+        menuPlan: [{ componentId: "a" }, { componentId: "b" }]
+      })
+    ).toEqual([
+      { label: "Status", value: "vollständig" },
+      { label: "Zeit", value: "Datum: 2026-03-04 · Terminfenster: Service 12:00–13:00" },
+      { label: "Gäste", value: "120 Personen" },
+      { label: "Service", value: "Buffet" },
+      { label: "Menü", value: "2 Komponenten" }
+    ]);
   });
 });

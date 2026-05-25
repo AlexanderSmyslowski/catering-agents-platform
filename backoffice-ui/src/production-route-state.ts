@@ -1,9 +1,70 @@
+import { translateServiceForm } from "./production-language.js";
+
 export type ProductionRouteFocusSpec = Record<string, unknown>;
 
 export type ProductionNextStep = {
   title: string;
   description: string;
 };
+
+export type WorkbenchSpecFact = {
+  label: string;
+  value: string;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+}
+
+function readStringOrNumber(record: Record<string, unknown> | undefined, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" || typeof value === "number") {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+export function translateReadiness(value?: string): string {
+  const labels: Record<string, string> = {
+    complete: "vollständig",
+    partial: "teilweise vollständig",
+    insufficient: "unzureichend"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+export function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
+  const event = asRecord(spec?.event);
+  const date = readStringOrNumber(event, ["date"]);
+  const schedule = Array.isArray(event?.schedule)
+    ? event.schedule
+        .map((item) => {
+          const slot = asRecord(item);
+          const label = readStringOrNumber(slot, ["label"]);
+          const start = readStringOrNumber(slot, ["start"]);
+          const end = readStringOrNumber(slot, ["end"]);
+          if (!start && !end) {
+            return "";
+          }
+          const timing = start && end ? `${start}–${end}` : start ?? end;
+          return [label, timing].filter(Boolean).join(" ").trim();
+        })
+        .filter(Boolean)
+    : [];
+
+  if (date && schedule.length > 0) {
+    return `Datum: ${date} · Terminfenster: ${schedule.join(", ")}`;
+  }
+  if (date) {
+    return `Datum: ${date}`;
+  }
+  if (schedule.length > 0) {
+    return `Terminfenster: ${schedule.join(", ")}`;
+  }
+  return "Terminfenster: noch zu bestätigen";
+}
 
 export function selectFocusedProductionSpec(input: {
   acceptedSpecs: ProductionRouteFocusSpec[];
@@ -196,4 +257,37 @@ export function formatProductionHandoffContextLabel(input: {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+export function buildWorkbenchSpecFacts(spec?: Record<string, unknown>): WorkbenchSpecFact[] {
+  if (!spec) {
+    return [];
+  }
+
+  const attendees = asRecord(spec.attendees);
+  const servicePlan = asRecord(spec.servicePlan);
+  const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
+
+  return [
+    {
+      label: "Status",
+      value: translateReadiness(String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "-"))
+    },
+    {
+      label: "Zeit",
+      value: formatProductionTimingWindow(spec)
+    },
+    {
+      label: "Gäste",
+      value: `${String(attendees?.expected ?? "-")} Personen`
+    },
+    {
+      label: "Service",
+      value: translateServiceForm(String(servicePlan?.serviceForm ?? ""))
+    },
+    {
+      label: "Menü",
+      value: `${menuPlan.length} Komponenten`
+    }
+  ];
 }
