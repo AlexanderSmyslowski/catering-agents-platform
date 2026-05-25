@@ -1925,6 +1925,63 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("matches Auberginenröllchen offer wording to an internal Eggplant Ricotta Rolls recipe", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Eggplant Ricotta Rolls",
+        filename: "Eggplant Ricotta Rolls.pdf",
+        sourceRef: "test:eggplant-ricotta-rolls",
+        text: [
+          "Eggplant Ricotta Rolls",
+          "Ingredients",
+          "1 kg eggplant",
+          "500 g ricotta",
+          "300 g tomatoes",
+          "100 g parmesan",
+          "Preparation",
+          "1. Grill eggplant slices.",
+          "2. Fill with ricotta and roll tightly."
+        ].join("\n")
+      })
+    );
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Auberginenröllchen mit Ricotta.")
+      ),
+      "vegetarian"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
+    const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
+    const storedRecipe = await repository.get(recipeId);
+    expect(storedRecipe?.name).toContain("Eggplant Ricotta Rolls");
+    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    expect(body.productionPlan.productionBatches).toHaveLength(1);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("rejects non-vegan internet recipes for vegan components even when the title looks close", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
