@@ -123,6 +123,25 @@ export function selectArchivedProductionItems<T extends Record<string, unknown>>
   return input.items.filter((item) => String(item.eventSpecId ?? "") !== input.currentProductionSpecId);
 }
 
+export function selectProductionWorkbenchPlan<T extends Record<string, unknown>>(input: {
+  currentProductionSpecId: string;
+  currentSpecPlans: T[];
+  orderedPlans: T[];
+  productionWorkspaceCleared: boolean;
+  selectedPlanId?: string;
+}): T | undefined {
+  if (input.productionWorkspaceCleared) {
+    return undefined;
+  }
+
+  return (
+    input.currentSpecPlans.find((plan) => String(plan.planId) === input.selectedPlanId) ??
+    input.orderedPlans.find((plan) => String(plan.planId) === input.selectedPlanId) ??
+    input.currentSpecPlans[0] ??
+    (input.currentProductionSpecId ? undefined : input.orderedPlans[0])
+  );
+}
+
 export function selectProductionNextStep(input: {
   hasFocusedProductionSpec: boolean;
   questionCount: number;
