@@ -14,6 +14,7 @@ import {
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
   selectProductionNextStep,
+  selectProductionWorkbenchPlan,
   translateReadiness
 } from "../backoffice-ui/src/production-route-state.js";
 
@@ -126,6 +127,70 @@ describe("production route state", () => {
         productionWorkspaceCleared: false
       })
     ).toEqual([]);
+  });
+
+  it("selects the existing production workbench plan priority", () => {
+    const currentSpecPlans = [
+      { planId: "plan-current-selected", eventSpecId: "spec-current" },
+      { planId: "plan-current-first", eventSpecId: "spec-current" }
+    ];
+    const orderedPlans = [
+      { planId: "plan-other-selected", eventSpecId: "spec-other" },
+      ...currentSpecPlans,
+      { planId: "plan-unscoped", eventSpecId: "spec-archived" }
+    ];
+
+    expect(
+      selectProductionWorkbenchPlan({
+        currentProductionSpecId: "spec-current",
+        currentSpecPlans,
+        orderedPlans,
+        productionWorkspaceCleared: true,
+        selectedPlanId: "plan-current-selected"
+      })
+    ).toBeUndefined();
+    expect(
+      selectProductionWorkbenchPlan({
+        currentProductionSpecId: "spec-current",
+        currentSpecPlans,
+        orderedPlans,
+        productionWorkspaceCleared: false,
+        selectedPlanId: "plan-current-selected"
+      })
+    ).toBe(currentSpecPlans[0]);
+    expect(
+      selectProductionWorkbenchPlan({
+        currentProductionSpecId: "spec-current",
+        currentSpecPlans,
+        orderedPlans,
+        productionWorkspaceCleared: false,
+        selectedPlanId: "plan-other-selected"
+      })
+    ).toBe(orderedPlans[0]);
+    expect(
+      selectProductionWorkbenchPlan({
+        currentProductionSpecId: "spec-current",
+        currentSpecPlans,
+        orderedPlans,
+        productionWorkspaceCleared: false
+      })
+    ).toBe(currentSpecPlans[0]);
+    expect(
+      selectProductionWorkbenchPlan({
+        currentProductionSpecId: "spec-current",
+        currentSpecPlans: [],
+        orderedPlans,
+        productionWorkspaceCleared: false
+      })
+    ).toBeUndefined();
+    expect(
+      selectProductionWorkbenchPlan({
+        currentProductionSpecId: "",
+        currentSpecPlans: [],
+        orderedPlans,
+        productionWorkspaceCleared: false
+      })
+    ).toBe(orderedPlans[0]);
   });
 
   it("selects the existing production next-step sequence", () => {

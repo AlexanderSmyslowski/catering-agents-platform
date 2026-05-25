@@ -30,6 +30,7 @@ import {
   selectArchivedProductionItems,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
+  selectProductionWorkbenchPlan,
   selectProductionNextStep,
   translateReadiness
 } from "./production-route-state.js";
@@ -745,12 +746,13 @@ export function App() {
 
   const selectedPlan = useMemo(
     () =>
-      productionWorkspaceCleared
-        ? undefined
-        : currentSpecPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
-          orderedPlans.find((plan) => String(plan.planId) === selectedPlanId) ??
-          currentSpecPlans[0] ??
-          (currentProductionSpecId ? undefined : orderedPlans[0]),
+      selectProductionWorkbenchPlan({
+        currentProductionSpecId,
+        currentSpecPlans,
+        orderedPlans,
+        productionWorkspaceCleared,
+        selectedPlanId
+      }),
     [currentProductionSpecId, currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId]
   );
 
