@@ -223,6 +223,7 @@ Der Frontend-Smoke bleibt bewusst schmal:
 - Einkaufslistenpositionszaehlung sowie Intake-/Handoff-/Exportlabels der Produktionsroute sind als pure Helper-Logik abgesichert.
 - Workbench-Spezifikationsfakten der Produktionsroute bleiben als pure Helper-Logik abgesichert: Status, Zeitfenster, Gaeste, Serviceform und Menueumfang werden aus dem fokussierten Spec-Kontext gebaut.
 - Rueckfragenstatus-Zaehlung der Produktionsroute bleibt als pure Helper-Logik abgesichert: beantwortete und offene Conversation-Messages werden ohne App-interne Reduktionslogik gezaehlt.
+- Readiness- und Ergebnisobjektlabels der Produktionsroute bleiben als pure Helper-Logik abgesichert: Spec-/Planstatus und Plananzahl-Fallbacks werden ohne App-interne Labelverkettung gebaut.
 - der geleerte Produktionsfokus bleibt in der Workbench wirklich leer: keine aktive Spezifikation bedeutet keine scheinbar offene Rueckfrage.
 - Focaccia ohne Herstellungsentscheidung erscheint in der Workbench als spezifischer Hybridfall statt als generische Rezept-/Beschaffungsentscheidung.
 - C7 schuetzt den Empty-State klare Spezifikation ohne Produktionsplan/Einkaufsliste: Der naechste Schritt `Berechnung starten`, die fehlende Einkaufsliste und noch fehlende Exportlinks muessen im bestehenden `/produktion`-Kontext verstaendlich sichtbar bleiben.
