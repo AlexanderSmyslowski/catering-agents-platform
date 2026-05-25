@@ -27,6 +27,7 @@ export const acceptedEventSpecSchema = {
                 }
             }
         },
+        operationalArchive: { $ref: "https://schemas.catering.local/common.json#/$defs/operationalArchive" },
         readiness: {
             $ref: "https://schemas.catering.local/common.json#/$defs/readiness"
         },

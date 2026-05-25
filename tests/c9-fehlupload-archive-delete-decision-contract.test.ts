@@ -17,11 +17,9 @@ const leadingInputs = [
 ];
 
 const hardBoundaries = [
-  "keine Runtime-Implementierung",
-  "keine neue API",
-  "keine neue Persistenz",
+  "kein Hard-Delete",
+  "keine neue Persistenzwelt",
   "keine Migration",
-  "keine Backend-Archivierung",
   "keine Datenloeschung",
   "keine automatische Bereinigung",
   "keine echten Daten",
@@ -33,12 +31,12 @@ const hardBoundaries = [
 ];
 
 describe("C9 Fehlupload archive/delete decision contract", () => {
-  it("creates a decision-only anchor for backend Fehlupload handling", () => {
+  it("anchors the backend soft-archive path for Fehlupload handling", () => {
     expect(existsSync(docPath)).toBe(true);
     expect(doc).toContain("C9 Fehlupload-Archiv-/Loeschentscheidung");
-    expect(doc).toContain("Status: Doku-/Vertragstest-only Entscheidungsvorlage");
+    expect(doc).toContain("Status: Option B nach explizitem Alexander-Go");
     expect(doc).toContain("Backend-Pfad fuer Fehluploads im internen MVP-Korridor");
-    expect(doc).toContain("Ziel ist eine entscheidbare Grenze fuer spaeteren Code");
+    expect(doc).toContain("kleinster Backend-Pfad");
   });
 
   it("uses the existing product, retention, upload and local rehearsal gates as inputs", () => {
@@ -53,7 +51,7 @@ describe("C9 Fehlupload archive/delete decision contract", () => {
     expect(doc).toContain("Option C: Hard-Delete");
     expect(doc).toContain("Empfehlung: Option B, Soft-Archiv aus aktivem Arbeitsfokus");
     expect(doc).toContain("Option A als sicherer Default");
-    expect(doc).toContain("erst nach explizitem Alexander-Go");
+    expect(doc).toContain("umgesetzt nach Alexander-Go");
   });
 
   it("keeps the decision bounded away from implementation and real data gates", () => {
@@ -66,10 +64,15 @@ describe("C9 Fehlupload archive/delete decision contract", () => {
     expect(doc).toContain("keine Hard-Delete-Kaskade");
   });
 
-  it("defines the smallest allowed follow-up block without granting it", () => {
-    expect(doc).toContain("Minimaler technischer Folgeblock nach Go");
+  it("defines the implemented smallest soft-archive block", () => {
+    expect(doc).toContain("Umgesetzter technischer Minimalblock");
+    expect(doc).toContain("POST /v1/intake/requests/:requestId/archive");
+    expect(doc).toContain("GET /v1/intake/requests");
+    expect(doc).toContain("includeArchived=true");
+    expect(doc).toContain("intake.request_soft_archived");
     expect(doc).toContain("nur Soft-Archiv, kein Hard-Delete");
     expect(doc).toContain("archivierter Fehlupload erscheint nicht mehr als aktiver Vorgang");
+    expect(doc).toContain("tests/intake-soft-archive.test.ts");
     expect(doc).toContain("Abbruchkriterien");
     expect(doc).toContain("neue Persistenzwelt oder Migration wird noetig");
   });

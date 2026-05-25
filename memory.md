@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.262
-date: 2026-05-25
+version: 5.263
+date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1210,7 +1210,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 ### 5.236 - 2026-05-25
 - C9 Fehlupload-Archiv-/Loeschentscheidung ist als Doku-/Vertragstest-only Entscheidungsvorlage umgesetzt: `docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md` trennt UI-Fokus leeren von backend-seitiger Archivierung/Loeschung und bereitet die Alexander-Entscheidung fuer Option B Soft-Archiv aus aktivem Arbeitsfokus vor.
-- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts` schuetzt Option A Status quo als sicheren Default, Option B Soft-Archiv als empfohlene naechste Implementierungsentscheidung nach explizitem Go und Option C Hard-Delete als nicht naechsten MVP-Slice. Keine Runtime-Implementierung, keine neue API, Persistenz, Migration, Backend-Archivierung, Datenloeschung, echten Daten, echten Uploads, Retention-/Backup-/Restore-, Sandbox-/Worker-/AV-, Deployment- oder Auth-Freigabe.
+- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts` schuetzte zunaechst Option A Status quo als sicheren Default, Option B Soft-Archiv als empfohlene naechste Implementierungsentscheidung nach explizitem Go und Option C Hard-Delete als nicht naechsten MVP-Slice. Dieser Stand ist durch 5.263 als umgesetzt fortgeschrieben.
 
 ### 5.237 - 2026-05-25
 - Rezept-Matching fuer haeufige Buffet-Sprache ist als kleiner Kernfluss-Fix gehaertet: `NUDELSALAT | FRISCHGEDÖNS` kann jetzt ein internes `Pasta-Salat`-Rezept als denselben Catering-Rezeptanker finden, ohne in Web-/Fallback-Rezeptsuche zu fallen.
@@ -1315,3 +1315,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.262 - 2026-05-25
 - Dritter synthetischer Produktionskern-Durchlauf ist als Kaffeepausen-Smoke ergaenzt: `tests/platform.test.ts` prueft Meeting/Kaffeepause fuer 48 Personen mit Filterkaffee Station, Mini-Muffins Blaubeere, Obstspiesse vegan und Croissants.
 - Der Test schuetzt `coffee_break`, interne Rezeptanker fuer Kaffee/Muffins/Obstspiesse, Fertigprodukt-Zukauf fuer Croissants, keine Internet-Fallbacks, keine offenen Produktionspunkte, drei Produktionsbatches plus vier Kitchen-Sheets und Einkaufslisten ohne durchgerutschte Zubereitungsschritte. Rezept-Matching wurde nur um enge Blaubeere/Blueberry- und Obstspiesse/Fruit-Skewers-Aliase gehaertet, inklusive Shared-Core-JS-Paritaet. Keine neue Matching-Engine, keine API/Persistenz/Migration, kein LLM, keine echten Daten, kein Deployment/Auth/Compliance-Go.
+
+### 5.263 - 2026-05-26
+- C9 Option B ist nach explizitem Go als enger Soft-Archiv-Slice umgesetzt: `POST /v1/intake/requests/:requestId/archive` markiert falsche interne/synthetische Intake-Kontexte als `operationalArchive`, nimmt sie aus aktiven `requests`-/`specs`-Listen und haelt Detailpfade plus `includeArchived=true` fuer interne Nachvollziehbarkeit offen.
+- Der Pfad markiert den `EventRequest` und die per `sourceLineage.reference` verbundenen `AcceptedEventSpec`, protokolliert `intake.request_soft_archived`, erlaubt nur kontrollierte Reason-Codes und gibt `hardDeleted: false` zurueck. `tests/intake-soft-archive.test.ts`, `tests/access-control.test.ts`, `tests/p1-role-guards.test.ts` und C9/README/TESTING sind aktualisiert. Kein Hard-Delete, keine neue Persistenzwelt/Migration, keine echten Daten/Uploads, keine Retention-/Backup-/Restore-, Sandbox-/AV-, Deployment-, Auth- oder Compliance-Freigabe.

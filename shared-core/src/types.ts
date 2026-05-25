@@ -16,6 +16,18 @@ export type RecipeApprovalState =
   | "review_required"
   | "rejected";
 export type RecipeReviewDecision = "approve" | "verify" | "reject";
+export type OperationalArchiveReasonCode =
+  | "wrong_upload"
+  | "duplicate_test_data"
+  | "operator_rehearsal_cleanup";
+
+export interface OperationalArchiveState {
+  status: "archived";
+  mode: "soft_archive";
+  reasonCode: OperationalArchiveReasonCode;
+  archivedAt: string;
+  archivedBy: string;
+}
 
 export interface AuditEntry {
   auditId: string;
@@ -154,6 +166,7 @@ export interface EventRequest {
   requestId: string;
   source: SourceDescriptor;
   rawInputs: RawInput[];
+  operationalArchive?: OperationalArchiveState;
   customer?: CustomerInfo;
   event?: EventInfo;
   attendees?: AttendeeInfo;
@@ -215,6 +228,7 @@ export interface AcceptedEventSpec {
   lifecycle: {
     commercialState: CommercialState;
   };
+  operationalArchive?: OperationalArchiveState;
   readiness: Readiness;
   sourceLineage: SourceLineage[];
   customer?: CustomerInfo;
