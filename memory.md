@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.268
+version: 5.269
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1339,3 +1339,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.268 - 2026-05-26
 - Produktions-Workbench-Sprache ist an den Focaccia-HITL-Guard angeglichen: Focaccia ohne Herstellungsentscheidung erzeugt eine spezifische Hybridfall-Rueckfrage statt der generischen Herstellungsentscheidung.
 - `tests/production-language.test.ts` schuetzt diese UI-Sprachregel. Keine Backend-Planungs-, Rezept-, API-, Persistenz-, Datenmodell-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.269 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem kleinen verhaltensgleichen Refactor verbessert: Die Fokuswahl der Produktionsroute wurde aus `App.tsx` in `backoffice-ui/src/production-route-state.ts` als pure Funktion extrahiert.
+- `tests/production-route-state.test.ts` schuetzt geloeschten Arbeitsbereich, suchgebundenen Fokus auf gefilterte Specs und den bisherigen Fallback ohne aktive Suche. Keine UI-Text-, Suchverhaltens-, Archivierungs-, API-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.

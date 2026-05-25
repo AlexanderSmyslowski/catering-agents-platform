@@ -16,6 +16,7 @@ import { OfferConversationalWorkbench } from "./offer-workbench.js";
 import { formatDocumentIngestionSummary } from "./production-question-panel.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
+import { selectFocusedProductionSpec } from "./production-route-state.js";
 import {
   archiveIntakeRequest,
   createAcceptedSpecFromDocument,
@@ -677,26 +678,18 @@ export function App() {
   const activeOfferSpec =
     filteredSpecs[filteredSpecs.length - 1] ?? dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1];
 
-  const focusedProductionSpec = useMemo(() => {
-    if (productionWorkspaceCleared) {
-      return undefined;
-    }
-
-    const productionSearchActive = route === "production" && deferredSearch.trim().length > 0;
-    const preferred = focusedProductionSpecId
-      ? filteredSpecs.find((spec) => String(spec.specId) === focusedProductionSpecId)
-      : undefined;
-
-    if (productionSearchActive) {
-      return preferred ?? filteredSpecs[filteredSpecs.length - 1];
-    }
-
-    return (
-      preferred ??
-      filteredSpecs[filteredSpecs.length - 1] ??
-      dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1]
-    );
-  }, [dashboard.acceptedSpecs, deferredSearch, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared, route]);
+  const focusedProductionSpec = useMemo(
+    () =>
+      selectFocusedProductionSpec({
+        acceptedSpecs: dashboard.acceptedSpecs,
+        filteredSpecs,
+        focusedProductionSpecId,
+        productionWorkspaceCleared,
+        route,
+        searchText: deferredSearch
+      }),
+    [dashboard.acceptedSpecs, deferredSearch, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared, route]
+  );
 
   const currentIntakeRequestId = useMemo(() => {
     if (route !== "production" || !focusedProductionSpec) {
