@@ -1072,6 +1072,163 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("builds a coffee-break production plan with internal recipe and purchase anchors", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
+    const recipeUploads = [
+      {
+        sourceRef: "test:coffee-break-blueberry-mini-muffins",
+        text: [
+          "Blueberry Mini Muffins",
+          "Zutaten",
+          "800 g Mehl",
+          "500 g Blaubeeren",
+          "350 g Zucker",
+          "300 g Butter",
+          "6 pcs Eier",
+          "Zubereitung",
+          "1. Muffin-Teig mischen.",
+          "2. Blaubeeren unterheben.",
+          "3. Mini-Muffins backen."
+        ].join("\n")
+      },
+      {
+        sourceRef: "test:coffee-break-fruit-skewers",
+        text: [
+          "Fruit Skewers vegan",
+          "Zutaten",
+          "3 kg Melone",
+          "2 kg Trauben",
+          "2 kg Beeren",
+          "1 kg Apfel",
+          "Zubereitung",
+          "1. Obst waschen und schneiden.",
+          "2. Obstspiesse stecken.",
+          "3. Gekuehlt bereitstellen."
+        ].join("\n")
+      }
+    ];
+
+    for (const upload of recipeUploads) {
+      await repository.save(parseUploadedRecipeText(upload));
+    }
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const normalizedSpec = normalizeEventRequestToSpec(
+      baseEventRequest(
+        "Meeting am 2026-09-22 fuer 48 Teilnehmer mit Kaffeepause: Filterkaffee Station, Mini-Muffins Blaubeere, Obstspiesse vegan und Croissants."
+      )
+    );
+    const spec: AcceptedEventSpec = {
+      ...normalizedSpec,
+      menuPlan: [
+        {
+          componentId: "filterkaffee-station-1",
+          label: "Filterkaffee Station",
+          course: "beverage",
+          menuCategory: "vegetarian",
+          serviceStyle: "coffee_break",
+          servings: 48,
+          dietaryTags: ["vegetarian"],
+          productionDecision: {
+            mode: "scratch"
+          }
+        },
+        {
+          componentId: "mini-muffins-blaubeere-2",
+          label: "Mini-Muffins Blaubeere",
+          course: "pastry",
+          menuCategory: "vegetarian",
+          serviceStyle: "coffee_break",
+          servings: 48,
+          dietaryTags: ["vegetarian"],
+          productionDecision: {
+            mode: "scratch"
+          }
+        },
+        {
+          componentId: "obstspiesse-vegan-3",
+          label: "Obstspiesse vegan",
+          course: "snack",
+          menuCategory: "vegan",
+          serviceStyle: "coffee_break",
+          servings: 48,
+          dietaryTags: ["vegan"],
+          productionDecision: {
+            mode: "scratch"
+          }
+        },
+        {
+          componentId: "croissants-4",
+          label: "Croissants",
+          course: "pastry",
+          menuCategory: "vegetarian",
+          serviceStyle: "coffee_break",
+          servings: 48,
+          dietaryTags: ["vegetarian"],
+          productionDecision: {
+            mode: "external_finished"
+          }
+        }
+      ]
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(spec.servicePlan.serviceForm).toBe("coffee_break");
+    expect(spec.attendees.expected).toBe(48);
+
+    const body = response.json();
+    const recipeSelections = body.productionPlan.recipeSelections as Array<{
+      componentId: string;
+      sourceTier?: string;
+      autoUsedInternetRecipe?: boolean;
+      selectionReason?: string;
+    }>;
+    const selectionByComponent = new Map(
+      recipeSelections.map((selection) => [selection.componentId, selection])
+    );
+    expect(selectionByComponent.get("filterkaffee-station-1")?.sourceTier).toBe("internal_verified");
+    expect(selectionByComponent.get("mini-muffins-blaubeere-2")?.sourceTier).toBe("internal_approved");
+    expect(selectionByComponent.get("obstspiesse-vegan-3")?.sourceTier).toBe("internal_approved");
+    expect(selectionByComponent.get("croissants-4")?.selectionReason).toContain("Fertigprodukt");
+    for (const componentId of [
+      "filterkaffee-station-1",
+      "mini-muffins-blaubeere-2",
+      "obstspiesse-vegan-3",
+      "croissants-4"
+    ]) {
+      expect(selectionByComponent.get(componentId)?.autoUsedInternetRecipe, componentId).toBe(false);
+    }
+
+    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    expect(body.productionPlan.productionBatches).toHaveLength(3);
+    expect(body.productionPlan.kitchenSheets).toHaveLength(4);
+    const purchaseDisplayNames = body.purchaseList.items.map((item: { displayName: string }) => item.displayName);
+    expect(purchaseDisplayNames.some((displayName: string) => displayName.includes("Croissants"))).toBe(true);
+    expect(purchaseDisplayNames).not.toEqual(
+      expect.arrayContaining([
+        "Muffin-Teig mischen.",
+        "Obst waschen und schneiden.",
+        "Obstspiesse stecken."
+      ])
+    );
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("creates clarification sheets when recipe resolution remains open", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });

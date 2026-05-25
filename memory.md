@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.227
-date: 2026-05-24
+version: 5.262
+date: 2026-05-25
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1311,3 +1311,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.261 - 2026-05-25
 - Die Autonomiegrenze ist im Produktziel und in der ProductionAgent-10/10-Coding-Architektur praezisiert: Codex/Hans darf kleine, lokale, reviewbare, testbare und reversible Slices autonom bauen, wenn sie den internen MVP-/Rehearsal-Korridor staerken und keine harte Gate-Grenze beruehren.
 - Weiter entscheidungspflichtig bleiben echte Daten/Google-Drive-Angebote, produktionsnahe Uploads, Auth/OIDC/IAP/Proxy, PII/Retention/Backup/Restore, Sandbox/Worker/AV, Deployment, neue API/Persistenz/Migration, echte ConversationSession-Runtime, LLM-Provider/Secrets/Kosten/Logging/Datenuebertragung und Write-Tools mit produktionsrelevanter Wirkung. Keine Runtime-Implementierung, kein LLM, keine echten Daten und keine Gate-Freigabe.
+
+### 5.262 - 2026-05-25
+- Dritter synthetischer Produktionskern-Durchlauf ist als Kaffeepausen-Smoke ergaenzt: `tests/platform.test.ts` prueft Meeting/Kaffeepause fuer 48 Personen mit Filterkaffee Station, Mini-Muffins Blaubeere, Obstspiesse vegan und Croissants.
+- Der Test schuetzt `coffee_break`, interne Rezeptanker fuer Kaffee/Muffins/Obstspiesse, Fertigprodukt-Zukauf fuer Croissants, keine Internet-Fallbacks, keine offenen Produktionspunkte, drei Produktionsbatches plus vier Kitchen-Sheets und Einkaufslisten ohne durchgerutschte Zubereitungsschritte. Rezept-Matching wurde nur um enge Blaubeere/Blueberry- und Obstspiesse/Fruit-Skewers-Aliase gehaertet, inklusive Shared-Core-JS-Paritaet. Keine neue Matching-Engine, keine API/Persistenz/Migration, kein LLM, keine echten Daten, kein Deployment/Auth/Compliance-Go.
