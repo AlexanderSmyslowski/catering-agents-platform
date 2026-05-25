@@ -47,6 +47,8 @@ function installProductionAcceptanceMocks(
   const specId = "spec-production-fallback-1";
   const previousSpecId = "spec-production-previous-1";
   const planSpecId = options.stalePlanOnly ? previousSpecId : specId;
+  const archivedRequestIds = new Set<string>();
+  const archivedSpecIds = new Set<string>();
   const quickLunchMenuPlan = [
     {
       componentId: "quick-lunch-kalbsbuletten",
@@ -213,28 +215,30 @@ function installProductionAcceptanceMocks(
 
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
       if (url.endsWith("/api/intake/v1/intake/requests")) {
         return new Response(
           JSON.stringify({
-            items: [
-              {
-                requestId,
-                source: {
-                  channel: "manual_form",
-                  receivedAt: "2026-04-18T10:30:00.000Z"
-                },
-                rawInputs: [
+            items: archivedRequestIds.has(requestId)
+              ? []
+              : [
                   {
-                    kind: "form",
-                    content:
-                      "Konferenz am 2026-07-13 fuer 36 Teilnehmer. Bitte glutenfrei. Buffet mit Brot-Baguette."
+                    requestId,
+                    source: {
+                      channel: "manual_form",
+                      receivedAt: "2026-04-18T10:30:00.000Z"
+                    },
+                    rawInputs: [
+                      {
+                        kind: "form",
+                        content:
+                          "Konferenz am 2026-07-13 fuer 36 Teilnehmer. Bitte glutenfrei. Buffet mit Brot-Baguette."
+                      }
+                    ]
                   }
                 ]
-              }
-            ]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
@@ -261,8 +265,35 @@ function installProductionAcceptanceMocks(
                     }
                   ]
                 : []),
-              ...(options.withoutSpecs ? [] : [focusedSpec])
+              ...(options.withoutSpecs || archivedSpecIds.has(specId) ? [] : [focusedSpec])
             ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith(`/api/intake/v1/intake/requests/${requestId}/archive`)) {
+        if (init?.method !== "POST") {
+          return new Response(JSON.stringify({ message: "Method not allowed" }), {
+            status: 405,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        archivedRequestIds.add(requestId);
+        archivedSpecIds.add(specId);
+
+        return new Response(
+          JSON.stringify({
+            eventRequest: {
+              requestId,
+              operationalArchive: {
+                reasonCode: "wrong_upload",
+                archivedAt: "2026-05-26T10:00:00.000Z"
+              }
+            },
+            archivedSpecIds: [specId],
+            hardDeleted: false
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
@@ -522,6 +553,32 @@ async function renderProductionRouteMarkup(): Promise<{ text: string; html: stri
   return result;
 }
 
+async function renderProductionRouteInteractive() {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  window.history.pushState({}, "", "/produktion");
+
+  await act(async () => {
+    root.render(createElement(App));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  return {
+    container,
+    root
+  };
+}
+
+async function flushProductionRouteUpdates(cycles = 8) {
+  for (let index = 0; index < cycles; index += 1) {
+    await Promise.resolve();
+  }
+}
+
 async function renderProductionRoute(): Promise<string> {
   return (await renderProductionRouteMarkup()).text;
 }
@@ -542,6 +599,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Was braucht die Produktion als Nächstes?");
     expect(content).toContain("+ Angebot hinzufügen");
     expect(content).toContain("Arbeitsbereich leeren");
+    expect(content).toContain("Fehlupload archivieren");
     expect(content).toContain("Angebot hier ablegen");
     expect(content).toContain("Downloadbereich");
     expect(content).toContain("production-calm-summary");
@@ -585,6 +643,50 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
     expect(content).not.toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
     expect(content).not.toContain("Offene Punkte: keine");
+  });
+
+  it("archives the focused intake context from the production route without hard delete", async () => {
+    installProductionAcceptanceMocks();
+
+    const { container, root } = await renderProductionRouteInteractive();
+
+    try {
+      const archiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+        (button.textContent ?? "").includes("Fehlupload archivieren")
+      ) as HTMLButtonElement | undefined;
+
+      expect(archiveButton).toBeTruthy();
+      expect(archiveButton?.disabled).toBe(false);
+
+      await act(async () => {
+        archiveButton?.click();
+        await flushProductionRouteUpdates();
+      });
+
+      const content = document.body.textContent ?? "";
+      const fetchMock = vi.mocked(fetch);
+      const archiveCall = fetchMock.mock.calls.find(([input]) =>
+        String(input).endsWith("/api/intake/v1/intake/requests/request-production-fallback-1/archive")
+      );
+
+      expect(archiveCall).toBeTruthy();
+      expect(archiveCall?.[1]).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({ reasonCode: "wrong_upload" })
+      });
+      expect(content).toContain(
+        "Fehlupload request-production-fallback-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+      );
+      expect(content).toContain("Kein aktiver Vorgang");
+      expect(content).toContain("Auftrag einfügen oder Datei ablegen");
+      expect(content).not.toContain("requestId: request-production-fallback-1");
+      expect(content).not.toContain("Löschen");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
   });
 
   it("does not offer reopening answers while the focused answer editor is already open", async () => {
@@ -645,8 +747,10 @@ describe("backoffice production acceptance smoke", () => {
     const route = await renderProductionRouteMarkup();
 
     expect(route.text).toContain("Arbeitsbereich leeren");
+    expect(route.text).toContain("Fehlupload archivieren");
     expect(route.html).toContain("Arbeitsbereich leeren</button>");
     expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Arbeitsbereich leeren\s*<\/button>/);
+    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlupload archivieren\s*<\/button>/);
     expect(route.text).not.toContain("Löschen");
   });
 

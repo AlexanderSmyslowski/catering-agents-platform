@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.263
+version: 5.264
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1319,3 +1319,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.263 - 2026-05-26
 - C9 Option B ist nach explizitem Go als enger Soft-Archiv-Slice umgesetzt: `POST /v1/intake/requests/:requestId/archive` markiert falsche interne/synthetische Intake-Kontexte als `operationalArchive`, nimmt sie aus aktiven `requests`-/`specs`-Listen und haelt Detailpfade plus `includeArchived=true` fuer interne Nachvollziehbarkeit offen.
 - Der Pfad markiert den `EventRequest` und die per `sourceLineage.reference` verbundenen `AcceptedEventSpec`, protokolliert `intake.request_soft_archived`, erlaubt nur kontrollierte Reason-Codes und gibt `hardDeleted: false` zurueck. `tests/intake-soft-archive.test.ts`, `tests/access-control.test.ts`, `tests/p1-role-guards.test.ts` und C9/README/TESTING sind aktualisiert. Kein Hard-Delete, keine neue Persistenzwelt/Migration, keine echten Daten/Uploads, keine Retention-/Backup-/Restore-, Sandbox-/AV-, Deployment-, Auth- oder Compliance-Freigabe.
+
+### 5.264 - 2026-05-26
+- C9 Soft-Archiv ist in `/produktion` als enger UI-Pfad bedienbar: Der fokussierte verknuepfte Intake-Kontext kann ueber `Fehlupload archivieren` an den bestehenden `POST /v1/intake/requests/:requestId/archive`-Endpunkt uebergeben und aus dem aktiven Arbeitsfokus genommen werden.
+- `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt die aktive Archiv-Aktion, den deaktivierten Zustand ohne verknuepften Intake-Kontext, den `wrong_upload`-Reason-Code, das sichtbare Soft-Archiv-Feedback und die Grenze gegen `Loeschen`. C9/README/TESTING sind fortgeschrieben. Keine neue API, keine neue Persistenz/Migration, kein Hard-Delete, keine echten Daten/Uploads, kein Deployment, kein Auth/OIDC und keine Retention-/Compliance-Freigabe.

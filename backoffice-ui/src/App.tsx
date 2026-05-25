@@ -17,6 +17,7 @@ import { formatDocumentIngestionSummary } from "./production-question-panel.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import {
+  archiveIntakeRequest,
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
   createAcceptedSpecFromText,
@@ -999,6 +1000,7 @@ export function App() {
     planPhase !== "idle" ||
     Boolean(focusedProductionSpecId) ||
     Boolean(selectedPlanId);
+  const canArchiveCurrentIntake = Boolean(currentIntakeRequestId) && !productionWorkspaceCleared;
   const hasFocusedSpecEditChanges = useMemo(() => {
     if (!focusedProductionSpec || editingSpecId !== String(focusedProductionSpec.specId ?? "")) {
       return false;
@@ -1067,7 +1069,7 @@ export function App() {
     setNotice(undefined);
   }
 
-  function clearProductionWorkspace() {
+  function resetProductionWorkspaceState() {
     setProductionWorkspaceCleared(true);
     setIntakeFile(null);
     setDragActive(false);
@@ -1085,12 +1087,43 @@ export function App() {
     setPlanEstimatedDurationMs(0);
     setPlanStartedAt(undefined);
     setPlanningSpecLabel(undefined);
+    setIntakeRequestDetail(null);
+    setIntakeRequestDetailError(undefined);
     resetSpecEdit(false);
     if (productionUploadInputRef.current) {
       productionUploadInputRef.current.value = "";
     }
+  }
+
+  function clearProductionWorkspace() {
+    resetProductionWorkspaceState();
     clearMessages();
     setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+  }
+
+  async function handleArchiveCurrentIntake() {
+    if (!currentIntakeRequestId) {
+      setError("Kein verknüpfter Intake-Kontext zum Archivieren vorhanden.");
+      return;
+    }
+
+    const archivedRequestId = currentIntakeRequestId;
+    setSubmitting(true);
+    clearMessages();
+    try {
+      await archiveIntakeRequest(archivedRequestId, "wrong_upload");
+      resetProductionWorkspaceState();
+      await refreshDashboard();
+      setNotice(
+        `Fehlupload ${archivedRequestId} wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.`
+      );
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Fehlupload konnte nicht archiviert werden."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleIntakeSubmit() {
@@ -1973,12 +2006,14 @@ export function App() {
           documentEtaSeconds={documentEtaSeconds}
           intakeText={intakeText}
           canClearProductionWorkspace={canClearProductionWorkspace}
+          canArchiveCurrentIntake={canArchiveCurrentIntake}
           productionUploadInputRef={productionUploadInputRef}
           setDragActive={setDragActive}
           setIntakeChannel={setIntakeChannel}
           setIntakeText={setIntakeText}
           openProductionFilePicker={openProductionFilePicker}
           clearProductionWorkspace={clearProductionWorkspace}
+          archiveCurrentIntake={handleArchiveCurrentIntake}
           handleProductionDrop={handleProductionDrop}
           handleProductionFileSelection={handleProductionFileSelection}
           handleIntakeDocumentSubmit={handleIntakeDocumentSubmit}
