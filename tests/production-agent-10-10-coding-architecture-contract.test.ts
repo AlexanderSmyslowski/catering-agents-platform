@@ -84,6 +84,36 @@ describe("ProductionAgent 10/10 coding architecture contract", () => {
     }
   });
 
+  it("defines a broader autonomous coding corridor without weakening hard gates", () => {
+    for (const allowed of [
+      "Autonomie-Korridor fuer Codex/Hans",
+      "klein, lokal, reviewbar, testbar und reversibel",
+      "bleibt in vorhandenen Modulen, APIs, Datenmodellen und Persistenzgrenzen",
+      "nutzt nur synthetische, Demo- oder lokale Testdaten",
+      "Produktionskern-Smokes fuer synthetische Lunch-, Buffet-, Empfang-, Flying-Bites- und Kaffeepausenfaelle",
+      "enge Rezept-Matching- und Importqualitaets-Haertungen",
+      "UI-Wartbarkeit, Stale-Fokus-, Empty-/Loading-State- und Export-/Audit-Lesbarkeit",
+      "Doku-/Contract-Klaerungen",
+      "Nicht entscheidungspflichtig sind enge lokale Slices"
+    ]) {
+      expect(architecture).toContain(allowed);
+    }
+
+    for (const hardGate of [
+      "echte Daten",
+      "echte Google-Drive-Angebote",
+      "Auth/OIDC/IAP/Proxy",
+      "PII/Retention/Backup/Restore",
+      "Sandbox/Worker/AV",
+      "Deployment",
+      "neue API",
+      "neue Persistenz/Migration",
+      "LLM-Provider/Secrets/Kosten/Logging/Datenuebertragung"
+    ]) {
+      expect(architecture).toContain(hardGate);
+    }
+  });
+
   it("keeps the current uncommitted worktree sorted into reviewable slices without granting release work", () => {
     expect(existsSync(c10Path)).toBe(true);
     expect(c10).toContain("Status: Arbeitsbaum-Sortierung, keine Commits, keine PR-Erstellung");

@@ -152,6 +152,29 @@ Jede neue Code-, Doku-, Review-, Deploy- oder Produktaufgabe soll gegen diese Fr
 
 Wenn Punkt 3 zutrifft oder Punkt 4 fehlt, ist die Aufgabe zunaechst zu stoppen oder ausdruecklich neu freizugeben.
 
+### Autonomer Umsetzungskorridor
+
+Codex/Hans soll nicht fuer jeden kleinen planfolgenden Schritt stoppen. Autonom erlaubt sind kleine, lokale, testbare und reversible Slices, wenn sie den bestehenden internen MVP-/Rehearsal-Korridor direkt staerken und keine neue Gate-Grenze beruehren.
+
+Autonom erlaubt:
+
+- synthetische Produktionskern-Smokes fuer haeufige Catering-Faelle;
+- enge Rezept-Matching-, Import-, Einkaufslisten-, Export- und UI-Haertungen anhand belegter Reibung;
+- verhaltensgleiche UI-Wartbarkeitsschnitte;
+- Doku-/Contract-Tests, die bestehende Ziele, Gates oder Runbooks operationalisieren;
+- lokale Browser-/Rehearsal-Evidenz mit synthetischen oder Demo-Daten.
+
+Weiter entscheidungspflichtig:
+
+- echte Daten oder echte Google-Drive-Angebote;
+- Auth/OIDC/IAP/Proxy, Deployment, Secrets, produktive ENV oder Serveraenderungen;
+- PII/Retention/Backup/Restore, Sandbox/Worker/AV oder produktionsnahe Uploads;
+- neue API-Endpunkte, neue Persistenz, Migrationen oder Datenmodell-Grossschnitte;
+- echte `ConversationSession`-Runtime, LLM-Provider, Providerkosten, Logging, Secrets, Datenuebertragung oder Tool-Orchestrierung mit Schreibwirkung;
+- externe Freigabe-, Compliance-, Audit-, DSGVO-, AVV-, SLA- oder Kunden-Nutzungsbehauptungen.
+
+Sicherer Default: Wenn ein Schritt fachlich sinnvoll ist, aber eine Gate-Grenze beruehrt, wird er nicht stillschweigend gebaut. Dann entsteht eine knappe Entscheidungsvorlage oder eine kleinere gate-freie Variante.
+
 ---
 
 ## Praktischer Zielzustand vor dem naechsten groesseren Reifeschritt

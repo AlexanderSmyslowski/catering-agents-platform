@@ -1307,3 +1307,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.260 - 2026-05-25
 - Rezept-Matching ist um einen engen Catering-Anker gehaertet: `Auberginenröllchen mit Ricotta` findet ein internes englisches `Eggplant Ricotta Rolls`-Rezept ueber schmale Aubergine/Eggplant- und Röllchen/Rolls-Synonyme.
 - `tests/platform.test.ts` schuetzt den vegetarischen Einzelspeisenfall ohne Internet-Fallback und ohne offene Produktionspunkte. Keine neue Matching-Engine, keine API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.261 - 2026-05-25
+- Die Autonomiegrenze ist im Produktziel und in der ProductionAgent-10/10-Coding-Architektur praezisiert: Codex/Hans darf kleine, lokale, reviewbare, testbare und reversible Slices autonom bauen, wenn sie den internen MVP-/Rehearsal-Korridor staerken und keine harte Gate-Grenze beruehren.
+- Weiter entscheidungspflichtig bleiben echte Daten/Google-Drive-Angebote, produktionsnahe Uploads, Auth/OIDC/IAP/Proxy, PII/Retention/Backup/Restore, Sandbox/Worker/AV, Deployment, neue API/Persistenz/Migration, echte ConversationSession-Runtime, LLM-Provider/Secrets/Kosten/Logging/Datenuebertragung und Write-Tools mit produktionsrelevanter Wirkung. Keine Runtime-Implementierung, kein LLM, keine echten Daten und keine Gate-Freigabe.
