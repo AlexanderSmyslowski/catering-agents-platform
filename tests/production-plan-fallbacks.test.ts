@@ -172,6 +172,76 @@ describe("production planning fallbacks", () => {
     expect(artifacts.productionPlan.fallbackReason).toContain("Herstellungsentscheidung");
   });
 
+  it("treats Brot-Baguette without a production decision as a baker purchase", async () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "plan-baker-purchase-1",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-10T10:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          content: "Lunch am 2026-06-01 fuer 40 Teilnehmer. Buffet mit Brot-Baguette."
+        }
+      ]
+    });
+    const discovery = {
+      async resolveRecipe(): Promise<never> {
+        throw new Error("Brot-Baguette should not trigger recipe discovery");
+      },
+      async resolveRecipeOverride(): Promise<never> {
+        throw new Error("Brot-Baguette should not trigger recipe discovery");
+      }
+    } as unknown as RecipeDiscoveryService;
+
+    const artifacts = await buildProductionArtifacts(spec, discovery);
+
+    expect(artifacts.productionPlan.isFallback).toBeFalsy();
+    expect(artifacts.productionPlan.recipeSelections[0].selectionReason).toContain("Bäcker-Zukauf");
+    expect(artifacts.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
+    expect(artifacts.productionPlan.productionBatches).toHaveLength(0);
+    expect(artifacts.productionPlan.kitchenSheets[0].procurementNotes?.join(" ")).toContain("Baguette, Brot");
+    expect(artifacts.purchaseList.items.some((item) => item.displayName.includes("Baguette"))).toBe(true);
+    expect(artifacts.purchaseList.items.some((item) => item.displayName.includes("Brot"))).toBe(true);
+  });
+
+  it("keeps gluten-free Brot-Baguette as a blocking clarification instead of auto-buying it", async () => {
+    const spec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "plan-baker-purchase-gluten-free-1",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-10T10:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          content: "Lunch am 2026-06-01 fuer 40 Teilnehmer. Bitte glutenfrei. Buffet mit Brot-Baguette."
+        }
+      ]
+    });
+    const discovery = {
+      async resolveRecipe(): Promise<never> {
+        throw new Error("Gluten-free Brot-Baguette should not trigger recipe discovery");
+      },
+      async resolveRecipeOverride(): Promise<never> {
+        throw new Error("Gluten-free Brot-Baguette should not trigger recipe discovery");
+      }
+    } as unknown as RecipeDiscoveryService;
+
+    const artifacts = await buildProductionArtifacts(spec, discovery);
+
+    expect(artifacts.productionPlan.isFallback).toBe(true);
+    expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
+    expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("gluten_free");
+    expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Bäcker-Zukauf");
+    expect(artifacts.productionPlan.recipeSelections[0].selectionReason).toContain("Bäcker-Zukauf");
+    expect(artifacts.productionPlan.productionBatches).toHaveLength(0);
+    expect(artifacts.purchaseList.items).toHaveLength(0);
+  });
+
   it("marks hard intake restriction conflicts as blocking fallback", async () => {
     const spec = baseSpec("Konferenz am 2026-06-01 fuer 40 Teilnehmer. Buffet mit BROT & BAGUETTE.");
     spec.productionConstraints = ["gluten_free"];

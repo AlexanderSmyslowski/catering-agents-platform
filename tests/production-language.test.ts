@@ -42,6 +42,39 @@ describe("production language helpers", () => {
     expect(questions.join(" ")).not.toContain("Bitte je Gericht kennzeichnen");
   });
 
+  it("keeps clear Brot/Baguette quiet as an implicit baker purchase unless gluten-free blocks it", () => {
+    const baseSpec = {
+      readiness: { status: "complete" },
+      event: {
+        type: "lunch",
+        date: "2026-03-04"
+      },
+      attendees: {
+        expected: 120
+      },
+      servicePlan: {
+        serviceForm: "buffet"
+      },
+      menuPlan: [
+        {
+          componentId: "brot-baguette",
+          label: "BROT & BAGUETTE"
+        }
+      ]
+    };
+
+    expect(buildProductionQuestions(baseSpec)).toEqual([]);
+    expect(
+      buildProductionQuestions({
+        ...baseSpec,
+        productionConstraints: ["gluten_free"]
+      })
+    ).toEqual([
+      "BROT & BAGUETTE: Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.",
+      "BROT & BAGUETTE: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen."
+    ]);
+  });
+
   it("translates inferred assumptions into German", () => {
     const assumptions = buildProductionAssumptions({
       event: {

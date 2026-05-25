@@ -18,6 +18,8 @@ function installProductionAcceptanceMocks(
     withRecipeReviewStates?: boolean;
     withAuditEvent?: boolean;
     withSubmittedClarificationAnswer?: boolean;
+    withoutSpecs?: boolean;
+    withQuickLunchMixedPlan?: boolean;
   } = {}
 ) {
   const storage = new Map<string, string>();
@@ -44,6 +46,60 @@ function installProductionAcceptanceMocks(
   const specId = "spec-production-fallback-1";
   const previousSpecId = "spec-production-previous-1";
   const planSpecId = options.stalePlanOnly ? previousSpecId : specId;
+  const quickLunchMenuPlan = [
+    {
+      componentId: "quick-lunch-kalbsbuletten",
+      label: "KALBSBULETTEN | SCHMORZWIEBELN",
+      menuCategory: "classic",
+      productionDecision: { mode: "scratch" }
+    },
+    {
+      componentId: "quick-lunch-kartoffelsalat",
+      label: "KARTOFFELSALAT | DE LUX",
+      menuCategory: "classic",
+      productionDecision: { mode: "scratch" }
+    },
+    {
+      componentId: "quick-lunch-nudelsalat",
+      label: "NUDELSALAT | FRISCHGEDÖNS",
+      menuCategory: "classic",
+      productionDecision: { mode: "scratch" }
+    },
+    {
+      componentId: "quick-lunch-kraut-karottensalat",
+      label: "KRAUT-KAROTTENSALAT | NUSS-TOPPING",
+      menuCategory: "classic",
+      productionDecision: { mode: "scratch" }
+    },
+    {
+      componentId: "quick-lunch-mandel-curry",
+      label: "MANDEL-CURRY | BASMATIREIS & KORIANDER-TOPPING",
+      menuCategory: "vegan",
+      productionDecision: { mode: "scratch" }
+    },
+    {
+      componentId: "quick-lunch-gemuesepfanne",
+      label: "ZUCCHINI | PILZE | ZUCKERSCHOTEN | BABY-PAK-CHOI",
+      menuCategory: "vegan",
+      productionDecision: { mode: "scratch" }
+    },
+    {
+      componentId: "quick-lunch-wildkraeutersalat",
+      label: "WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE",
+      menuCategory: "vegan",
+      productionDecision: { mode: "scratch" }
+    },
+    {
+      componentId: "quick-lunch-brot-baguette",
+      label: "BROT & BAGUETTE"
+    },
+    {
+      componentId: "quick-lunch-schokoladenkuchen",
+      label: "SCHOKOLADENKUCHEN | vegan",
+      menuCategory: "vegan",
+      productionDecision: { mode: "scratch" }
+    }
+  ];
   const focusedSpec: Record<string, unknown> = {
     schemaVersion: 1,
     specId,
@@ -64,26 +120,71 @@ function installProductionAcceptanceMocks(
           reasons: ["Glutenfrei-Konflikt mit Brot-Baguette und fehlender Ersatzklassifikation."]
         },
     event: {
-      type: "conference",
-      date: "2026-07-13"
+      type: options.withQuickLunchMixedPlan ? "lunch" : "conference",
+      date: options.withQuickLunchMixedPlan ? "2026-03-04" : "2026-07-13"
     },
     servicePlan: {
-      eventType: "conference",
+      eventType: options.withQuickLunchMixedPlan ? "lunch" : "conference",
       serviceForm: "buffet"
     },
     attendees: {
-      expected: 36
+      expected: options.withQuickLunchMixedPlan ? 120 : 36
     },
-    menuPlan: [
-      {
-        componentId: "component-bread-baguette",
-        label: "Brot-Baguette",
-        menuCategory: "classic",
-        productionDecision: {
-          mode: "scratch"
-        }
-      }
-    ]
+    menuPlan: options.withQuickLunchMixedPlan
+      ? quickLunchMenuPlan
+      : [
+          {
+            componentId: "component-bread-baguette",
+            label: "Brot-Baguette",
+            menuCategory: "classic",
+            productionDecision: {
+              mode: "scratch"
+            }
+          }
+        ]
+  };
+  const quickLunchPlan = {
+    planId: "plan-quick-lunch-mixed-1",
+    eventSpecId: specId,
+    readiness: {
+      status: "complete",
+      reasons: []
+    },
+    isFallback: false,
+    unresolvedItems: [],
+    productionBatches: quickLunchMenuPlan
+      .filter((component) => component.componentId !== "quick-lunch-brot-baguette")
+      .map((component) => ({
+        batchId: `batch-${component.componentId}`,
+        title: `Rezeptblatt ${component.label}`
+      })),
+    kitchenSheets: quickLunchMenuPlan.map((component) => ({
+      title: component.componentId === "quick-lunch-brot-baguette"
+        ? "Bäcker-Zukauf BROT & BAGUETTE"
+        : `Küchenblatt ${component.label}`,
+      instructions: component.componentId === "quick-lunch-brot-baguette"
+        ? ["Baguette und Brot beim Bäcker beschaffen.", "Als Einkaufsposition führen, nicht als Rezeptblatt."]
+        : [`120 Portionen vorbereiten: ${component.label}.`]
+    })),
+    recipeSelections: quickLunchMenuPlan.map((component) =>
+      component.componentId === "quick-lunch-brot-baguette"
+        ? {
+            componentId: component.componentId,
+            selectionReason:
+              "Brot/Baguette ist als klarer Bäcker-Zukauf markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen.",
+            autoUsedInternetRecipe: false
+          }
+        : {
+            componentId: component.componentId,
+            recipeId: `recipe-${component.componentId}`,
+            selectionReason: "Passendes Rezept in der internen Bibliothek gefunden.",
+            autoUsedInternetRecipe: false,
+            sourceTier: "internal_approved",
+            qualityScore: 0.9,
+            fitScore: 0.95,
+            searchTrace: ["Interner Rezeptanker", "kein Internet-Fallback"]
+          }
+    )
   };
 
   if (options.withSubmittedClarificationAnswer) {
@@ -142,7 +243,9 @@ function installProductionAcceptanceMocks(
         return new Response(
           JSON.stringify({
             items: [
-              ...(options.stalePlanOnly
+              ...(options.withoutSpecs
+                ? []
+                : options.stalePlanOnly
                 ? [
                     {
                       schemaVersion: 1,
@@ -157,7 +260,7 @@ function installProductionAcceptanceMocks(
                     }
                   ]
                 : []),
-              focusedSpec
+              ...(options.withoutSpecs ? [] : [focusedSpec])
             ]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -177,27 +280,29 @@ function installProductionAcceptanceMocks(
             items: options.withoutPlans
               ? []
               : [
-                  {
-                    planId: "plan-production-fallback-1",
-                    eventSpecId: planSpecId,
-                    readiness: options.completeSpec
-                      ? {
-                          status: "complete",
-                          reasons: []
-                        }
-                      : {
-                          status: "insufficient",
-                          reasons: ["Glutenfrei-Konflikt bleibt ungelöst."]
-                        },
-                    isFallback: !options.completeSpec,
-                    fallbackReason: options.completeSpec ? undefined : "Glutenfrei-Konflikt bleibt ungelöst.",
-                    unresolvedItems: options.completeSpec
-                      ? []
-                      : ["Glutenfrei-Konflikt bleibt ungelöst.", "Klassifikation für Brot-Baguette fehlt."],
-                    productionBatches: [],
-                    kitchenSheets: [],
-                    recipeSelections: []
-                  }
+                  options.withQuickLunchMixedPlan
+                    ? quickLunchPlan
+                    : {
+                        planId: "plan-production-fallback-1",
+                        eventSpecId: planSpecId,
+                        readiness: options.completeSpec
+                          ? {
+                              status: "complete",
+                              reasons: []
+                            }
+                          : {
+                              status: "insufficient",
+                              reasons: ["Glutenfrei-Konflikt bleibt ungelöst."]
+                            },
+                        isFallback: !options.completeSpec,
+                        fallbackReason: options.completeSpec ? undefined : "Glutenfrei-Konflikt bleibt ungelöst.",
+                        unresolvedItems: options.completeSpec
+                          ? []
+                          : ["Glutenfrei-Konflikt bleibt ungelöst.", "Klassifikation für Brot-Baguette fehlt."],
+                        productionBatches: [],
+                        kitchenSheets: [],
+                        recipeSelections: []
+                      }
                 ]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -207,7 +312,32 @@ function installProductionAcceptanceMocks(
       if (url.endsWith("/api/production/v1/production/purchase-lists")) {
         return new Response(
           JSON.stringify({
-            items: options.withCurrentPurchaseList
+            items: options.withQuickLunchMixedPlan
+              ? [
+                  {
+                    purchaseListId: "purchase-quick-lunch-mixed-1",
+                    eventSpecId: specId,
+                    totals: { itemCount: 3 },
+                    items: [
+                      {
+                        displayName: "Baguette",
+                        purchaseQty: 120,
+                        purchaseUnit: "Stück"
+                      },
+                      {
+                        displayName: "Brot",
+                        purchaseQty: 120,
+                        purchaseUnit: "Stück"
+                      },
+                      {
+                        displayName: "Petersilie",
+                        purchaseQty: 2,
+                        purchaseUnit: "kg"
+                      }
+                    ]
+                  }
+                ]
+              : options.withCurrentPurchaseList
               ? [
                   {
                     purchaseListId: "purchase-production-current-1",
@@ -331,7 +461,7 @@ function installProductionAcceptanceMocks(
   );
 }
 
-async function renderProductionRoute(): Promise<string> {
+async function renderProductionRouteMarkup(): Promise<{ text: string; html: string }> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -345,14 +475,21 @@ async function renderProductionRoute(): Promise<string> {
     await Promise.resolve();
   });
 
-  const content = document.body.textContent ?? "";
+  const result = {
+    text: document.body.textContent ?? "",
+    html: document.body.innerHTML
+  };
 
   await act(async () => {
     root.unmount();
   });
   container.remove();
 
-  return content;
+  return result;
+}
+
+async function renderProductionRoute(): Promise<string> {
+  return (await renderProductionRouteMarkup()).text;
 }
 
 afterEach(() => {
@@ -370,6 +507,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsagent-Chat");
     expect(content).toContain("Was braucht die Produktion als Nächstes?");
     expect(content).toContain("+ Angebot hinzufügen");
+    expect(content).toContain("Arbeitsbereich leeren");
     expect(content).toContain("Angebot hier ablegen");
     expect(content).toContain("Downloadbereich");
     expect(content).toContain("production-calm-summary");
@@ -415,6 +553,17 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Offene Punkte: keine");
   });
 
+  it("does not offer reopening answers while the focused answer editor is already open", async () => {
+    installProductionAcceptanceMocks();
+
+    const route = await renderProductionRouteMarkup();
+
+    expect(route.text).toContain("Antwort direkt zur Agentenfrage");
+    expect(route.text).toContain("Antworten speichern");
+    expect(route.html).toMatch(/<button[^>]*disabled=""[^>]*>\s*Antworten bearbeiten\s*<\/button>/);
+    expect(route.html).toMatch(/<button[^>]*disabled=""[^>]*>\s*Antworten speichern\s*<\/button>/);
+  });
+
   it("shows handoff provenance without claiming legal audit certainty", async () => {
     installProductionAcceptanceMocks({ withCurrentPurchaseList: true, withAuditEvent: true });
 
@@ -444,6 +593,27 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Einkauf: offen");
     expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
     expect(content).not.toContain("Produktionsblatt exportieren");
+  });
+
+  it("labels loaded production plans honestly when no spec is focused yet", async () => {
+    installProductionAcceptanceMocks({ withoutSpecs: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation noch nicht im Fokus");
+    expect(content).toContain("Produktionsblatt exportieren");
+    expect(content).not.toContain("Noch kein aktiver Vorgang");
+  });
+
+  it("keeps the clear action inactive when no upload or production context exists", async () => {
+    installProductionAcceptanceMocks({ withoutSpecs: true, withoutPlans: true });
+
+    const route = await renderProductionRouteMarkup();
+
+    expect(route.text).toContain("Arbeitsbereich leeren");
+    expect(route.html).toContain("Arbeitsbereich leeren</button>");
+    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Arbeitsbereich leeren\s*<\/button>/);
+    expect(route.text).not.toContain("Löschen");
   });
 
   it("keeps purchase lists reachable through a quiet progressive workbench zone", async () => {
@@ -499,6 +669,33 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
     expect(content).toContain("Ergebnisobjekte: 1 Plan(e) · vollständig");
+  });
+
+  it("shows a synthetic Quick Lunch plan with internal recipe hits and baker purchase as one current result", async () => {
+    installProductionAcceptanceMocks({ completeSpec: true, withQuickLunchMixedPlan: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Produktionsobjekte und Downloads prüfen");
+    expect(content).toContain("Plan-Kontext: planId plan-quick-lunch-mixed-1 · specId spec-production-fallback-1");
+    expect(content).toContain("Status: vollständig · Serviceform: Buffet · Arbeitsblätter: 9 · Rezeptblätter: 8 · Rezeptauswahl: 9");
+    expect(content).toContain("Offene Punkte: keine");
+    expect(content).toContain("KALBSBULETTEN | SCHMORZWIEBELN");
+    expect(content).toContain("KARTOFFELSALAT | DE LUX");
+    expect(content).toContain("NUDELSALAT | FRISCHGEDÖNS");
+    expect(content).toContain("BROT & BAGUETTE");
+    expect(content).toContain("Passendes Rezept in der internen Bibliothek gefunden.");
+    expect(content).toContain("Brot/Baguette ist als klarer Bäcker-Zukauf markiert");
+    expect(content).toContain("Bäcker-Zukauf BROT & BAGUETTE");
+    expect(content).toContain("purchaseListId: purchase-quick-lunch-mixed-1 · specId: spec-production-fallback-1");
+    expect(content).toContain("Baguette");
+    expect(content).toContain("Menge: 120");
+    expect(content).toContain("Einkaufsliste exportieren");
+    expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
+    expect(content).toContain("kein Internet-Fallback");
+    expect(content).not.toContain("BROT & BAGUETTE: Herstellungsentscheidung fehlt");
+    expect(content).not.toContain("BROT & BAGUETTE: Kategorie fehlt");
+    expect(content).not.toContain("Einkaufsliste noch offen");
   });
 
   it("anchors the production export and audit closure to the same visible plan and purchase context", async () => {

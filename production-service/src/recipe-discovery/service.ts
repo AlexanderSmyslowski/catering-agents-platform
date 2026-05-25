@@ -71,7 +71,9 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   brot: ["bread"],
   baguette: ["baguette"],
   kalbsbuletten: ["veal", "meatballs"],
+  kalbsfrikadellen: ["veal", "meatballs"],
   buletten: ["meatballs"],
+  frikadellen: ["meatballs"],
   curry: ["curry"],
   reis: ["rice"],
   schmorzwiebeln: ["braised", "onions"],
@@ -116,6 +118,18 @@ const genericPrimaryTokens = new Set([
   "frischgedons",
   "frischgedoens"
 ]);
+
+const specificTokenAliases: Record<string, string[]> = {
+  nudelsalat: ["pastasalat"],
+  pastasalat: ["nudelsalat"],
+  kartoffelsalat: ["potatosalad"],
+  potatosalad: ["kartoffelsalat"],
+  kalbsbuletten: ["veal", "meatballs", "buletten"],
+  kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
+  buletten: ["meatballs"],
+  frikadellen: ["meatballs"],
+  meatballs: ["buletten", "frikadellen"]
+};
 
 function normalizeTokens(value: string): string[] {
   const baseTokens = value
@@ -166,12 +180,16 @@ function searchableSpecificTokens(value: string): string[] {
   const tokens = rawComparableTokens(value);
   const expanded = new Set<string>();
 
-  for (const token of tokens) {
+  tokens.forEach((token, index) => {
     expanded.add(token);
     for (const stem of deriveCompoundStemTokens(token)) {
       expanded.add(stem);
     }
-  }
+    const nextToken = tokens[index + 1];
+    if (nextToken) {
+      expanded.add(`${token}${nextToken}`);
+    }
+  });
 
   return [...expanded];
 }
@@ -199,6 +217,13 @@ function tokensRoughlyMatch(left: string, right: string): boolean {
 
 function tokensSpecificallyMatch(left: string, right: string): boolean {
   if (left === right) {
+    return true;
+  }
+
+  if (
+    (specificTokenAliases[left] ?? []).includes(right) ||
+    (specificTokenAliases[right] ?? []).includes(left)
+  ) {
     return true;
   }
 
@@ -315,6 +340,9 @@ function translateLabelForLocale(label: string, locale: "de" | "en"): string {
     [/\bbrot\b/g, "bread"],
     [/\bbaguette\b/g, "baguette"],
     [/\bkalbsbuletten\b/g, "veal meatballs"],
+    [/\bkalbsfrikadellen\b/g, "veal meatballs"],
+    [/\bbuletten\b/g, "meatballs"],
+    [/\bfrikadellen\b/g, "meatballs"],
     [/\bschmorzwiebeln\b/g, "braised onions"],
     [/\bbasmatireis\b/g, "basmati rice"],
     [/\bwildkräutersalat\b/g, "wild herb salad"],

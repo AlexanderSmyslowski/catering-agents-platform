@@ -28,6 +28,24 @@ screen_session_exists() {
   (screen -ls 2>/dev/null || true) | grep -q "\\.${session_name}[[:space:]]"
 }
 
+json_item_count() {
+  node -e '
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  input += chunk;
+});
+process.stdin.on("end", () => {
+  const payload = JSON.parse(input);
+  if (!Array.isArray(payload.items)) {
+    process.stdout.write("0");
+    return;
+  }
+  process.stdout.write(String(payload.items.length));
+});
+'
+}
+
 for session_name in "${required_sessions[@]}"; do
   if ! screen_session_exists "${session_name}"; then
     echo "Lokaler Stack nicht vollstaendig gestartet. Bitte zuerst: ${START_COMMAND}" >&2
@@ -86,6 +104,17 @@ if [[ "${production_plans_body}" != *"plan-spec-demo-production-coffee"* ]]; the
   exit 1
 fi
 printf '  Produktions-Check: erreichbar (%s, enthält plan-spec-demo-production-coffee)\n' "${production_plans_url}"
+
+intake_spec_count="$(printf '%s' "${intake_specs_body}" | json_item_count)"
+offer_draft_count="$(printf '%s' "${offer_drafts_body}" | json_item_count)"
+production_plan_count="$(printf '%s' "${production_plans_body}" | json_item_count)"
+
+if (( intake_spec_count > 8 || offer_draft_count > 4 || production_plan_count > 8 )); then
+  echo ""
+  echo "Rehearsal-Datenhinweis: lokaler Datenbestand wirkt aufgefuellt (${intake_spec_count} Specs, ${offer_draft_count} Entwuerfe, ${production_plan_count} Plaene)."
+  echo "Das ist kein rotes Gate, aber kein sauberer Frischlauf; UI-Evidenz und Reibungslog muessen Altlasten/Stale-Fokus beruecksichtigen."
+  echo "local:check loescht oder archiviert keine lokalen Daten automatisch."
+fi
 
 echo ""
 echo "Exportpruefung:"

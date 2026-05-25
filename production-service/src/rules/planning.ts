@@ -106,6 +106,59 @@ function procurementItemsForComponent(
   return [];
 }
 
+function isBakerPurchaseLabel(label: string): boolean {
+  const normalized = label.replace(/\s+/g, " ").trim();
+  return /^(?:klassisch\s+)?(?:brot\s*(?:&|und|-)?\s*baguette|baguette|br[öo]tchen|broetchen|brotkorb|brot)$/i.test(
+    normalized
+  );
+}
+
+function bakerPurchasedElements(label: string): string[] {
+  const normalized = label.toLowerCase();
+  if (/baguette/.test(normalized) && /brot/.test(normalized)) {
+    return ["Baguette", "Brot"];
+  }
+  if (/baguette/.test(normalized)) {
+    return ["Baguette"];
+  }
+  if (/br[öo]tchen|broetchen/.test(normalized)) {
+    return ["Brötchen"];
+  }
+  if (/brotkorb/.test(normalized)) {
+    return ["Brotkorb"];
+  }
+  return ["Brot"];
+}
+
+function bakerPurchaseComponent(
+  component: AcceptedEventSpec["menuPlan"][number]
+): AcceptedEventSpec["menuPlan"][number] | undefined {
+  if (!isBakerPurchaseLabel(component.label)) {
+    return undefined;
+  }
+
+  return {
+    ...component,
+    menuCategory: component.menuCategory ?? "classic",
+    productionDecision: {
+      mode: "convenience_purchase",
+      purchasedElements: bakerPurchasedElements(component.label),
+      notes: component.productionDecision?.notes
+    }
+  };
+}
+
+function bakerPurchaseConstraintConflictReason(
+  component: AcceptedEventSpec["menuPlan"][number],
+  productionConstraints?: string[]
+): string | undefined {
+  if (!Array.isArray(productionConstraints) || !productionConstraints.includes("gluten_free")) {
+    return undefined;
+  }
+
+  return `Harte Intake-Restriktion gluten_free blockiert den Bäcker-Zukauf für ${component.label}.`;
+}
+
 function purchasedElementsSummary(component: AcceptedEventSpec["menuPlan"][number]): string {
   const purchasedElements = component.productionDecision?.purchasedElements ?? [];
   return purchasedElements.length > 0 ? purchasedElements.join(", ") : "noch offen";
@@ -340,8 +393,44 @@ export async function buildProductionArtifacts(
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
     const productionMode = component.productionDecision?.mode;
     const purchasedElements = component.productionDecision?.purchasedElements ?? [];
+    const implicitBakerPurchase = productionMode ? undefined : bakerPurchaseComponent(component);
 
     try {
+      if (implicitBakerPurchase) {
+        const constraintConflict = bakerPurchaseConstraintConflictReason(
+          implicitBakerPurchase,
+          eventSpec.productionConstraints
+        );
+        if (constraintConflict) {
+          recipeSelections.push({
+            componentId: component.componentId,
+            selectionReason: constraintConflict,
+            autoUsedInternetRecipe: false
+          });
+          noteIssue(constraintConflict, true);
+          kitchenSheets.push(unresolvedKitchenSheet(component, servings, constraintConflict, eventSpec));
+          timeline.push({
+            label: `${component.label} Bäcker-Zukauf klären`,
+            at: prepWindowFor(eventSpec)
+          });
+          continue;
+        }
+
+        procurementItems.push(...procurementItemsForComponent(implicitBakerPurchase, servings));
+        recipeSelections.push({
+          componentId: component.componentId,
+          selectionReason:
+            "Brot/Baguette ist als klarer Bäcker-Zukauf markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen.",
+          autoUsedInternetRecipe: false
+        });
+        kitchenSheets.push(procurementKitchenSheet(implicitBakerPurchase, servings, eventSpec));
+        timeline.push({
+          label: `${component.label} beim Bäcker beschaffen`,
+          at: prepWindowFor(eventSpec)
+        });
+        continue;
+      }
+
       if (!component.menuCategory) {
         const reason = "Gerichtsklassifikation fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.";
         recipeSelections.push({

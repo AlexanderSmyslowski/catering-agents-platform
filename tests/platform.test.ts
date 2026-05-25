@@ -226,6 +226,271 @@ describe("catering agents platform", () => {
     expect(spec.menuPlan.find((item) => item.label.includes("SCHOKOLADENKUCHEN"))?.dietaryTags).toContain("vegan");
   });
 
+  it("keeps preparation steps out of imported recipe ingredients", () => {
+    const recipe = parseUploadedRecipeText({
+      recipeName: "Veal Meatballs with Braised Onions",
+      filename: "Veal Meatballs with Braised Onions.pdf",
+      sourceRef: "test:recipe-parser-preparation-heading",
+      text: [
+        "Veal Meatballs with Braised Onions",
+        "Ingredients",
+        "1 kg minced veal",
+        "250 g onions",
+        "120 g breadcrumbs",
+        "2 eggs",
+        "Preparation",
+        "1. Mix veal, breadcrumbs and eggs.",
+        "2. Shape meatballs and fry with braised onions."
+      ].join("\n")
+    });
+
+    expect(recipe.ingredients.map((ingredient) => ingredient.name)).toEqual([
+      "minced veal",
+      "onions",
+      "breadcrumbs",
+      "eggs"
+    ]);
+    expect(recipe.steps.map((step) => step.instruction)).toEqual([
+      "Mix veal, breadcrumbs and eggs.",
+      "Shape meatballs and fry with braised onions."
+    ]);
+  });
+
+  it("builds a synthetic Quick Lunch production plan across the core buffet anchors", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const recipeUploads = [
+      {
+        recipeName: "Veal Meatballs with Braised Onions",
+        filename: "Veal Meatballs with Braised Onions.pdf",
+        sourceRef: "test:quick-lunch-veal-meatballs",
+        text: [
+          "Veal Meatballs with Braised Onions",
+          "Ingredients",
+          "1 kg minced veal",
+          "250 g onions",
+          "120 g breadcrumbs",
+          "2 eggs",
+          "Preparation",
+          "1. Mix veal, breadcrumbs and eggs.",
+          "2. Shape meatballs and fry with braised onions."
+        ].join("\n")
+      },
+      {
+        recipeName: "Potato Salad with Herbs",
+        filename: "Potato Salad with Herbs.pdf",
+        sourceRef: "test:quick-lunch-potato-salad",
+        text: [
+          "Potato Salad with Herbs",
+          "Ingredients",
+          "1 kg potatoes",
+          "250 g cucumber",
+          "100 g herbs",
+          "80 ml vinaigrette",
+          "Preparation",
+          "1. Boil potatoes.",
+          "2. Mix with herbs and vinaigrette."
+        ].join("\n")
+      },
+      {
+        recipeName: "Pasta-Salat mit frischem Gemüse",
+        filename: "Pasta-Salat mit frischem Gemuese.pages",
+        sourceRef: "test:quick-lunch-pasta-salat",
+        text: [
+          "Pasta-Salat mit frischem Gemüse",
+          "Zutaten",
+          "1 kg Pasta",
+          "600 g Gurken",
+          "500 g Paprika",
+          "300 g Tomaten",
+          "Zubereitung",
+          "1. Pasta kochen.",
+          "2. Mit Gemüse und Dressing mischen."
+        ].join("\n")
+      },
+      {
+        recipeName: "Krautsalat mit Apfel",
+        filename: "Krautsalat mit Apfel.pdf",
+        sourceRef: "test:quick-lunch-krautsalat",
+        text: [
+          "Krautsalat mit Apfel",
+          "Zutaten",
+          "1 kg Weißkohl",
+          "400 g Karotten",
+          "300 g Apfel",
+          "80 ml Vinaigrette",
+          "Zubereitung",
+          "1. Gemüse fein schneiden.",
+          "2. Mit Apfel und Vinaigrette mischen."
+        ].join("\n")
+      },
+      {
+        recipeName: "Mandel-Curry mit Basmatireis vegan",
+        filename: "Mandel-Curry mit Basmatireis vegan.pdf",
+        sourceRef: "test:quick-lunch-mandel-curry",
+        text: [
+          "Mandel-Curry mit Basmatireis vegan",
+          "Zutaten",
+          "1 kg Gemüse",
+          "400 g Mandeln",
+          "1 l Kokosmilch",
+          "800 g Basmatireis",
+          "Zubereitung",
+          "1. Curry vegan kochen.",
+          "2. Mit Basmatireis und Koriander servieren."
+        ].join("\n")
+      },
+      {
+        recipeName: "Zucchini Pilze Zuckerschoten Baby-Pak-Choi vegan",
+        filename: "Zucchini Pilze Zuckerschoten Baby-Pak-Choi vegan.pdf",
+        sourceRef: "test:quick-lunch-gemuesepfanne",
+        text: [
+          "Zucchini Pilze Zuckerschoten Baby-Pak-Choi vegan",
+          "Zutaten",
+          "700 g Zucchini",
+          "500 g Pilze",
+          "400 g Zuckerschoten",
+          "300 g Baby-Pak-Choi",
+          "Zubereitung",
+          "1. Gemüse schneiden.",
+          "2. Alles vegan in der Pfanne braten."
+        ].join("\n")
+      },
+      {
+        recipeName: "Wildkräutersalat mit Petersilien-Vinaigrette vegan",
+        filename: "Wildkraeutersalat mit Petersilien-Vinaigrette vegan.pdf",
+        sourceRef: "test:quick-lunch-wildkraeutersalat",
+        text: [
+          "Wildkräutersalat mit Petersilien-Vinaigrette vegan",
+          "Zutaten",
+          "600 g Wildkräuter",
+          "120 g Petersilie",
+          "100 ml Vinaigrette",
+          "Zubereitung",
+          "1. Kräuter waschen.",
+          "2. Mit Petersilien-Vinaigrette vegan marinieren."
+        ].join("\n")
+      },
+      {
+        recipeName: "Veganer Schokoladenkuchen",
+        filename: "Veganer Schokoladenkuchen.pdf",
+        sourceRef: "test:quick-lunch-schokoladenkuchen",
+        text: [
+          "Veganer Schokoladenkuchen",
+          "Zutaten",
+          "500 g Mehl",
+          "300 g Zucker",
+          "120 g Kakao",
+          "300 ml Pflanzenmilch",
+          "Zubereitung",
+          "1. Teig vegan mischen.",
+          "2. Kuchen backen."
+        ].join("\n")
+      }
+    ];
+
+    for (const upload of recipeUploads) {
+      await repository.save(parseUploadedRecipeText(upload));
+    }
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const normalizedSpec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-lunch-pdf",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-03-11T10:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          content: lunchOfferPdfText(),
+          mimeType: "application/pdf",
+          documentId: "document-1"
+        }
+      ]
+    });
+    const spec: AcceptedEventSpec = {
+      ...normalizedSpec,
+      menuPlan: normalizedSpec.menuPlan.map((item) =>
+        item.label === "BROT & BAGUETTE"
+          ? item
+          : {
+              ...item,
+              productionDecision: {
+                mode: "scratch"
+              }
+            }
+      )
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const recipeSelections = body.productionPlan.recipeSelections as Array<{
+      componentId: string;
+      sourceTier?: string;
+      autoUsedInternetRecipe?: boolean;
+      selectionReason?: string;
+    }>;
+    const selectionByComponent = new Map(
+      recipeSelections.map((selection) => [selection.componentId, selection])
+    );
+    const componentByLabel = new Map(spec.menuPlan.map((component) => [component.label, component]));
+    const labelsExpectedFromInternalLibrary = [
+      "KALBSBULETTEN | SCHMORZWIEBELN",
+      "KARTOFFELSALAT | DE LUX",
+      "NUDELSALAT | FRISCHGEDÖNS",
+      "KRAUT-KAROTTENSALAT | NUSS-TOPPING",
+      "MANDEL-CURRY | BASMATIREIS & KORIANDER-TOPPING",
+      "ZUCCHINI | PILZE | ZUCKERSCHOTEN | BABY-PAK-CHOI",
+      "WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE",
+      "SCHOKOLADENKUCHEN | vegan"
+    ];
+
+    for (const label of labelsExpectedFromInternalLibrary) {
+      const component = componentByLabel.get(label);
+      expect(component, label).toBeDefined();
+      const selection = selectionByComponent.get(component?.componentId ?? "");
+      expect(selection?.sourceTier, label).toBe("internal_approved");
+      expect(selection?.autoUsedInternetRecipe, label).toBe(false);
+      expect(selection?.selectionReason, label).toContain("internen Bibliothek");
+    }
+
+    const breadComponent = componentByLabel.get("BROT & BAGUETTE");
+    const breadSelection = selectionByComponent.get(breadComponent?.componentId ?? "");
+    expect(breadSelection?.sourceTier).toBeUndefined();
+    expect(breadSelection?.selectionReason).toContain("Bäcker-Zukauf");
+    expect(
+      body.purchaseList.items.some((item: { displayName: string }) => item.displayName.includes("Baguette"))
+    ).toBe(true);
+    const purchaseDisplayNames = body.purchaseList.items.map((item: { displayName: string }) => item.displayName);
+    expect(purchaseDisplayNames).not.toEqual(
+      expect.arrayContaining([
+        "Preparation",
+        "Mix veal, breadcrumbs and eggs.",
+        "Boil potatoes."
+      ])
+    );
+    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    expect(body.productionPlan.productionBatches.length).toBeGreaterThanOrEqual(8);
+    expect(body.productionPlan.kitchenSheets.length).toBeGreaterThanOrEqual(9);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("accepts larger uploaded intake documents without failing on body size limits", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
@@ -1317,6 +1582,174 @@ describe("catering agents platform", () => {
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
     const storedRecipe = await repository.get(recipeId);
     expect(storedRecipe?.name).toContain("Krautsalat mit Apfel");
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("matches Nudelsalat offer wording to an internal Pasta-Salat recipe", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Pasta-Salat mit frischem Gemüse",
+        filename: "Pasta-Salat mit frischem Gemuese.pages",
+        sourceRef: "test:pasta-salat-frisch",
+        text: [
+          "Pasta-Salat mit frischem Gemüse",
+          "Zutaten",
+          "1 kg Pasta",
+          "600 g Gurken",
+          "500 g Paprika",
+          "300 g Tomaten",
+          "Zubereitung",
+          "1. Pasta kochen.",
+          "2. Mit Gemüse und Dressing mischen."
+        ].join("\n")
+      })
+    );
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit NUDELSALAT | FRISCHGEDÖNS.")
+      ),
+      "vegetarian"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
+    const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
+    const storedRecipe = await repository.get(recipeId);
+    expect(storedRecipe?.name).toContain("Pasta-Salat");
+    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("matches Kartoffelsalat offer wording to an internal Potato Salad recipe", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Potato Salad with Herbs",
+        filename: "Potato Salad with Herbs.pdf",
+        sourceRef: "test:potato-salad-herbs",
+        text: [
+          "Potato Salad with Herbs",
+          "Ingredients",
+          "1 kg potatoes",
+          "200 g cucumber",
+          "100 g herbs",
+          "80 ml vinaigrette",
+          "Preparation",
+          "1. Boil potatoes.",
+          "2. Mix with herbs and vinaigrette."
+        ].join("\n")
+      })
+    );
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = withProductionDecision(
+      normalizeEventRequestToSpec(
+        baseEventRequest("Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit KARTOFFELSALAT | DE LUX.")
+      ),
+      "vegetarian"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
+    const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
+    const storedRecipe = await repository.get(recipeId);
+    expect(storedRecipe?.name).toContain("Potato Salad");
+    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("matches Kalbsbuletten and Kalbsfrikadellen offer wording to an internal Meatballs recipe", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Veal Meatballs with Braised Onions",
+        filename: "Veal Meatballs with Braised Onions.pdf",
+        sourceRef: "test:veal-meatballs-braised-onions",
+        text: [
+          "Veal Meatballs with Braised Onions",
+          "Ingredients",
+          "1 kg minced veal",
+          "200 g onions",
+          "100 g breadcrumbs",
+          "2 eggs",
+          "Preparation",
+          "1. Mix veal with breadcrumbs and eggs.",
+          "2. Shape meatballs and fry with onions."
+        ].join("\n")
+      })
+    );
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+
+    for (const label of ["KALBSBULETTEN | SCHMORZWIEBELN", "KALBSFRIKADELLEN | SCHMORZWIEBELN"]) {
+      const spec = withProductionDecision(
+        normalizeEventRequestToSpec(
+          baseEventRequest(`Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit ${label}.`)
+        )
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/production/plans",
+        payload: {
+          eventSpec: spec
+        }
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
+      expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
+      const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
+      const storedRecipe = await repository.get(recipeId);
+      expect(storedRecipe?.name).toContain("Veal Meatballs");
+      expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    }
+
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });

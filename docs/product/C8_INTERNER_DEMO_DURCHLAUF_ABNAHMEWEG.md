@@ -58,6 +58,7 @@ npm run local:check
 ```
 
 `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack. Der Check prueft den schmalen MVP-Betriebsweg mit UI-Routen, Health-Endpunkten, read-only Exportpfaden und Demo-Start-/Auditbeleg.
+Wenn der Check einen aufgefuellten lokalen Datenbestand meldet, ist das kein rotes Gate, aber auch kein sauberer Frischlauf. Die UI-Sichtung und das Reibungslog muessen dann Altlasten oder Stale-Fokus benennen; `local:check` loescht oder archiviert lokale Daten nicht automatisch.
 
 P9-N2 Gate-Bindung gegen Scheingruenheit: `npm run local:status` allein ist kein Rehearsal-Go. `npm run local:check` allein ist kein Rehearsal-Go. UI-/Smoke-Anker allein sind kein Rehearsal-Go. Rehearsal-Go darf nur vergeben werden, wenn Status, Check, manuelle UI-Routen, Evidence-Paket und Reibungslog gemeinsam widerspruchsfrei sind. Rote lokale Gates, fehlende Export-/Auditanker oder offene Stop-Gates sind als `blocked` oder `decision needed` zu dokumentieren.
 

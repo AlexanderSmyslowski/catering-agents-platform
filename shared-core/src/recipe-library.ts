@@ -41,6 +41,15 @@ const searchTokenExpansions: Record<string, string[]> = {
   nuss: ["nuesse", "nuts"],
   nuesse: ["nuss", "nuts"],
   salat: ["salads"],
+  nudelsalat: ["pastasalat", "pasta", "salat"],
+  pastasalat: ["nudelsalat", "pasta", "salat"],
+  kartoffelsalat: ["potatosalad", "potato", "salat"],
+  potatosalad: ["kartoffelsalat", "potato", "salat"],
+  kalbsbuletten: ["veal", "meatballs", "buletten"],
+  kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
+  buletten: ["meatballs"],
+  frikadellen: ["meatballs"],
+  meatballs: ["buletten", "frikadellen"],
   krautsalat: ["coleslaw", "salat", "kraut", "karottensalat"],
   karottensalat: ["karotten", "salat", "krautsalat"],
   wildkrautersalat: ["wild", "herb", "salad"],
@@ -179,12 +188,16 @@ function searchableSpecificTokens(value: string): string[] {
   const tokens = rawSearchTokens(value);
   const expanded = new Set<string>();
 
-  for (const token of tokens) {
+  tokens.forEach((token, index) => {
     expanded.add(token);
     for (const stem of deriveCompoundStemTokens(token)) {
       expanded.add(stem);
     }
-  }
+    const nextToken = tokens[index + 1];
+    if (nextToken) {
+      expanded.add(`${token}${nextToken}`);
+    }
+  });
 
   return [...expanded];
 }
@@ -202,6 +215,11 @@ function specificPrimaryFocusTokens(label: string): string[] {
     focus.add(token);
     for (const stem of deriveCompoundStemTokens(token)) {
       focus.add(stem);
+    }
+    for (const variant of searchTokenExpansions[token] ?? []) {
+      if (!genericPrimarySearchTokens.has(variant) && !archetypes.has(variant)) {
+        focus.add(variant);
+      }
     }
   }
 
@@ -246,6 +264,13 @@ function tokensRoughlyMatch(left: string, right: string): boolean {
 
 function tokensSpecificallyMatch(left: string, right: string): boolean {
   if (left === right) {
+    return true;
+  }
+
+  if (
+    (searchTokenExpansions[left] ?? []).includes(right) ||
+    (searchTokenExpansions[right] ?? []).includes(left)
+  ) {
     return true;
   }
 
@@ -302,7 +327,7 @@ function parseIngredientLine(line: string, index: number) {
     .replace(/^[•*-\s]+/, "")
     .replace(/^\d+[.)]\s+/, "");
 
-  if (!cleaned) {
+  if (!cleaned || isRecipeSectionHeading(cleaned) || isInstructionLine(cleaned)) {
     return undefined;
   }
 
@@ -342,11 +367,27 @@ function parseIngredientLine(line: string, index: number) {
 }
 
 function isIngredientLine(line: string): boolean {
-  return /^[•*-\s]*[\d.,/]+\s*(kg|g|ml|l|pcs|stück|stueck|el|tl)?\s+\S+/i.test(line.trim());
+  const cleaned = line.trim();
+  return !isInstructionLine(cleaned) &&
+    /^[•*-\s]*[\d.,/]+\s*(kg|g|ml|l|pcs|stück|stueck|el|tl)?\s+\S+/i.test(cleaned);
 }
 
 function isInstructionLine(line: string): boolean {
   return /^\d+[.)]\s+/.test(line.trim()) || /^(mix|cook|bake|serve|prepare|wash|cut|add|stir|boil|roast|mischen|kochen|backen|servieren|vorbereiten|schneiden|zugeben|ruehren|rühren)/i.test(line.trim());
+}
+
+function isIngredientSectionHeading(line: string): boolean {
+  return /^(zutaten|ingredients?)[:]?$/i.test(line.trim());
+}
+
+function isStepSectionHeading(line: string): boolean {
+  return /^(zubereitung|anleitung|methode|preparation|directions?|steps?|instructions?|method)[:]?$/i.test(line.trim());
+}
+
+function isRecipeSectionHeading(line: string): boolean {
+  return isIngredientSectionHeading(line) ||
+    isStepSectionHeading(line) ||
+    /^(allergene?|allergens?|diet|diettags?|ernaehrung|ernährung|diät|diets?)[:]?$/i.test(line.trim());
 }
 
 function splitSections(text: string) {
@@ -367,11 +408,11 @@ function splitSections(text: string) {
   let mode: "title" | "ingredients" | "steps" | "allergens" | "diets" | "notes" = "title";
 
   for (const line of lines) {
-    if (/^(zutaten|ingredients?)[:]?$/i.test(line)) {
+    if (isIngredientSectionHeading(line)) {
       mode = "ingredients";
       continue;
     }
-    if (/^(zubereitung|anleitung|methode|steps?|instructions?|method)[:]?$/i.test(line)) {
+    if (isStepSectionHeading(line)) {
       mode = "steps";
       continue;
     }
@@ -441,9 +482,7 @@ function recipeNameFromText(
 
   const firstLine = lines.find(
     (line) =>
-      !/^(zutaten|ingredients?|zubereitung|anleitung|methode|steps?|instructions?|method|allergene?|allergens?|diet|diets?)[:]?$/i.test(
-        line
-      )
+      !isRecipeSectionHeading(line)
   );
   if (firstLine) {
     return firstLine;
@@ -613,7 +652,7 @@ export class RecipeLibrary {
       rawLeftTokens.filter(
         (token) =>
           !requiredArchetypes.includes(token) &&
-          !["vegan", "vegetarian", "vegetarisch", "classic", "klassisch", "topping", "mit", "und"].includes(token)
+          !genericPrimarySearchTokens.has(token)
       )
     );
     const normalizedLabel = normalizeSearchText(label.label);

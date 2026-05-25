@@ -30,6 +30,15 @@ const searchTokenExpansions = {
     nuss: ["nuesse", "nuts"],
     nuesse: ["nuss", "nuts"],
     salat: ["salads"],
+    nudelsalat: ["pastasalat", "pasta", "salat"],
+    pastasalat: ["nudelsalat", "pasta", "salat"],
+    kartoffelsalat: ["potatosalad", "potato", "salat"],
+    potatosalad: ["kartoffelsalat", "potato", "salat"],
+    kalbsbuletten: ["veal", "meatballs", "buletten"],
+    kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
+    buletten: ["meatballs"],
+    frikadellen: ["meatballs"],
+    meatballs: ["buletten", "frikadellen"],
     krautsalat: ["coleslaw", "salat", "kraut", "karottensalat"],
     karottensalat: ["karotten", "salat", "krautsalat"],
     wildkrautersalat: ["wild", "herb", "salad"],
@@ -150,12 +159,16 @@ function deriveCompoundStemTokens(token) {
 function searchableSpecificTokens(value) {
     const tokens = rawSearchTokens(value);
     const expanded = new Set();
-    for (const token of tokens) {
+    tokens.forEach((token, index) => {
         expanded.add(token);
         for (const stem of deriveCompoundStemTokens(token)) {
             expanded.add(stem);
         }
-    }
+        const nextToken = tokens[index + 1];
+        if (nextToken) {
+            expanded.add(`${token}${nextToken}`);
+        }
+    });
     return [...expanded];
 }
 function specificPrimaryFocusTokens(label) {
@@ -169,6 +182,11 @@ function specificPrimaryFocusTokens(label) {
         focus.add(token);
         for (const stem of deriveCompoundStemTokens(token)) {
             focus.add(stem);
+        }
+        for (const variant of searchTokenExpansions[token] ?? []) {
+            if (!genericPrimarySearchTokens.has(variant) && !archetypes.has(variant)) {
+                focus.add(variant);
+            }
         }
     }
     return [...focus];
@@ -205,6 +223,10 @@ function tokensRoughlyMatch(left, right) {
 }
 function tokensSpecificallyMatch(left, right) {
     if (left === right) {
+        return true;
+    }
+    if ((searchTokenExpansions[left] ?? []).includes(right) ||
+        (searchTokenExpansions[right] ?? []).includes(left)) {
         return true;
     }
     return commonPrefixLength(left, right) >= 5;
@@ -247,7 +269,7 @@ function parseIngredientLine(line, index) {
         .trim()
         .replace(/^[•*-\s]+/, "")
         .replace(/^\d+[.)]\s+/, "");
-    if (!cleaned) {
+    if (!cleaned || isRecipeSectionHeading(cleaned) || isInstructionLine(cleaned)) {
         return undefined;
     }
     const match = cleaned.match(/^([\d.,/]+)?\s*(kg|g|ml|l|pcs|stück|stueck|el|tl)?\s+(.+)$/i);
@@ -280,10 +302,23 @@ function parseIngredientLine(line, index) {
     };
 }
 function isIngredientLine(line) {
-    return /^[•*-\s]*[\d.,/]+\s*(kg|g|ml|l|pcs|stück|stueck|el|tl)?\s+\S+/i.test(line.trim());
+    const cleaned = line.trim();
+    return !isInstructionLine(cleaned) &&
+        /^[•*-\s]*[\d.,/]+\s*(kg|g|ml|l|pcs|stück|stueck|el|tl)?\s+\S+/i.test(cleaned);
 }
 function isInstructionLine(line) {
     return /^\d+[.)]\s+/.test(line.trim()) || /^(mix|cook|bake|serve|prepare|wash|cut|add|stir|boil|roast|mischen|kochen|backen|servieren|vorbereiten|schneiden|zugeben|ruehren|rühren)/i.test(line.trim());
+}
+function isIngredientSectionHeading(line) {
+    return /^(zutaten|ingredients?)[:]?$/i.test(line.trim());
+}
+function isStepSectionHeading(line) {
+    return /^(zubereitung|anleitung|methode|preparation|directions?|steps?|instructions?|method)[:]?$/i.test(line.trim());
+}
+function isRecipeSectionHeading(line) {
+    return isIngredientSectionHeading(line) ||
+        isStepSectionHeading(line) ||
+        /^(allergene?|allergens?|diet|diettags?|ernaehrung|ernährung|diät|diets?)[:]?$/i.test(line.trim());
 }
 function splitSections(text) {
     const lines = text
@@ -300,11 +335,11 @@ function splitSections(text) {
     };
     let mode = "title";
     for (const line of lines) {
-        if (/^(zutaten|ingredients?)[:]?$/i.test(line)) {
+        if (isIngredientSectionHeading(line)) {
             mode = "ingredients";
             continue;
         }
-        if (/^(zubereitung|anleitung|methode|steps?|instructions?|method)[:]?$/i.test(line)) {
+        if (isStepSectionHeading(line)) {
             mode = "steps";
             continue;
         }
@@ -369,7 +404,7 @@ function recipeNameFromText(text, filename, override) {
     if (explicitName) {
         return explicitName.replace(/^(rezept|recipe)\s*[:\-]\s*/i, "").trim();
     }
-    const firstLine = lines.find((line) => !/^(zutaten|ingredients?|zubereitung|anleitung|methode|steps?|instructions?|method|allergene?|allergens?|diet|diets?)[:]?$/i.test(line));
+    const firstLine = lines.find((line) => !isRecipeSectionHeading(line));
     if (firstLine) {
         return firstLine;
     }
@@ -502,7 +537,7 @@ export class RecipeLibrary {
         const primaryTokens = expandQuerySpecificTokens(rawLeftTokens.slice(0, 2));
         const requiredArchetypes = deriveArchetypeTokens(label.label);
         const specificTokens = expandQuerySpecificTokens(rawLeftTokens.filter((token) => !requiredArchetypes.includes(token) &&
-            !["vegan", "vegetarian", "vegetarisch", "classic", "klassisch", "topping", "mit", "und"].includes(token)));
+            !genericPrimarySearchTokens.has(token)));
         const normalizedLabel = normalizeSearchText(label.label);
         return (await this.recipes.list())
             .filter((recipe) => recipe.source.approvalState === "approved_internal" ||
