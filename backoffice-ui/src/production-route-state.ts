@@ -23,3 +23,31 @@ export function selectFocusedProductionSpec(input: {
 
   return preferred ?? input.filteredSpecs[input.filteredSpecs.length - 1] ?? input.acceptedSpecs[input.acceptedSpecs.length - 1];
 }
+
+export function selectCurrentProductionItems<T extends Record<string, unknown>>(input: {
+  currentProductionSpecId: string;
+  items: T[];
+  productionWorkspaceCleared: boolean;
+}): T[] {
+  if (input.productionWorkspaceCleared) {
+    return [];
+  }
+
+  if (!input.currentProductionSpecId) {
+    return input.items;
+  }
+
+  return input.items.filter((item) => String(item.eventSpecId ?? "") === input.currentProductionSpecId);
+}
+
+export function selectArchivedProductionItems<T extends Record<string, unknown>>(input: {
+  currentProductionSpecId: string;
+  items: T[];
+  productionWorkspaceCleared: boolean;
+}): T[] {
+  if (!input.currentProductionSpecId || input.productionWorkspaceCleared) {
+    return [];
+  }
+
+  return input.items.filter((item) => String(item.eventSpecId ?? "") !== input.currentProductionSpecId);
+}

@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.269
+version: 5.270
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1343,3 +1343,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.269 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem kleinen verhaltensgleichen Refactor verbessert: Die Fokuswahl der Produktionsroute wurde aus `App.tsx` in `backoffice-ui/src/production-route-state.ts` als pure Funktion extrahiert.
 - `tests/production-route-state.test.ts` schuetzt geloeschten Arbeitsbereich, suchgebundenen Fokus auf gefilterte Specs und den bisherigen Fallback ohne aktive Suche. Keine UI-Text-, Suchverhaltens-, Archivierungs-, API-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.270 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Selector-Refactor verbessert: aktuelle und archivierte Produktionsplaene/Einkaufslisten werden ueber `selectCurrentProductionItems` und `selectArchivedProductionItems` getrennt statt direkt in `App.tsx`.
+- `tests/production-route-state.test.ts` schuetzt fokussierte Spec-Splits, geleerten Arbeitsbereich und den bisherigen unscoped Fallback ohne fokussierte Spezifikation. Keine Rendering-, Text-, Such-, Archivierungs-, API-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
