@@ -1299,3 +1299,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.258 - 2026-05-25
 - Produktions-UI-Stale-Fokus ist als kleiner Rehearsal-Friction-Fix gehaertet: Aktueller Vorgang, sekundäre ältere Produktionsläufe und ältere Einkaufslisten sagen nun explizit, dass ältere geladene Läufe getrennt bleiben und nicht als aktueller Vorgang gelesen werden dürfen.
 - `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Fall mit aktuellem Plan plus älterem Plan/Einkaufsliste gegen stille Kontextvermischung. Keine API-, Persistenz-/Migrations-, Upload-Loesch-/Archivierungs-, Rezept-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.259 - 2026-05-25
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Layout-Schnitt verbessert: Die verschachtelte Produktions-Workbench-Komposition liegt nun in `backoffice-ui/src/production-route-main-layout.tsx`.
+- `backoffice-ui/src/App.tsx` stellt weiterhin alle vorhandenen Panel-Props und Handler bereit; die neue Komponente ordnet nur die bestehenden Produktionsspalten in derselben Reihenfolge. Keine UI-Text-, Fachlogik-, API-, Persistenz-/Migrations-, Upload-, Rezept-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.

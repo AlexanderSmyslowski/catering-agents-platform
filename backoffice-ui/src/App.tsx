@@ -13,17 +13,9 @@ import { buildProductionConversationProjection } from "../../shared-core/src/con
 import { DashboardShell } from "../components/dashboard-shell.js";
 import { StatusCard } from "../components/status-card.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
-import { ProductionHandoffPanel } from "./production-handoff-panel.js";
-import { ProductionInputPanel } from "./production-input-panel.js";
-import { ProductionObjectsPanel } from "./production-objects-panel.js";
-import { ProductionPurchaseListPanel } from "./production-purchase-list-panel.js";
-import {
-  formatDocumentIngestionSummary,
-  ProductionQuestionPanel
-} from "./production-question-panel.js";
-import { ProductionRecipeLibraryPanel } from "./production-recipe-library-panel.js";
+import { formatDocumentIngestionSummary } from "./production-question-panel.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
-import { ProductionConversationalWorkbench } from "./production-workbench.js";
+import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import {
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
@@ -1944,7 +1936,7 @@ export function App() {
         />
       ) : null}
       {route === "production" ? (
-        <ProductionConversationalWorkbench
+        <ProductionRouteMainLayout
           activeSpecLabel={activeProductionContextLabel}
           readinessLabel={translateReadiness(
             String((focusedProductionSpec?.readiness as Record<string, unknown> | undefined)?.status ?? "-")
@@ -1971,157 +1963,113 @@ export function App() {
                 : "noch kein Plan"
           }
           purchaseListCount={currentSpecPurchaseLists.length}
-        >
-          <div className="production-column">
-          <ProductionInputPanel
-            submitting={submitting}
-            sourceInput={{
-              dragActive,
-              intakeFile,
-              intakeChannel,
-              documentPhase,
-              activeDocumentName,
-              documentProgress,
-              documentEtaSeconds,
-              intakeText,
-              canClearWorkspace: canClearProductionWorkspace
-            }}
-            sourceInputActions={{
-              uploadInputRef: productionUploadInputRef,
-              setDragActive,
-              setIntakeChannel,
-              setIntakeText,
-              openFilePicker: openProductionFilePicker,
-              clearWorkspace: clearProductionWorkspace,
-              handleDrop: handleProductionDrop,
-              handleFileSelection: handleProductionFileSelection,
-              submitDocument: handleIntakeDocumentSubmit,
-              submitText: handleIntakeSubmit
-            }}
-            manualInput={{
-              eventType: manualEventType,
-              eventDate: manualEventDate,
-              attendeeCount: manualAttendeeCount,
-              serviceForm: manualServiceForm,
-              menuItems: manualMenuItems,
-              customerName: manualCustomerName,
-              venueName: manualVenueName,
-              notes: manualNotes
-            }}
-            manualInputActions={{
-              setEventType: setManualEventType,
-              setEventDate: setManualEventDate,
-              setAttendeeCount: setManualAttendeeCount,
-              setServiceForm: setManualServiceForm,
-              setMenuItems: setManualMenuItems,
-              setCustomerName: setManualCustomerName,
-              setVenueName: setManualVenueName,
-              setNotes: setManualNotes,
-              submitManualSpec: handleManualSpecSubmit
-            }}
-          />
-          </div>
-          <div className="production-column">
-          <ProductionQuestionPanel
-            focusedProductionSpec={focusedProductionSpec}
-            focusedSpecReadinessLabel={translateReadiness(
-              String((focusedProductionSpec?.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-            )}
-            selectedPlan={selectedPlan}
-            selectedPlanReadinessLabel={
-              selectedPlan
-                ? translateReadiness(
-                    String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                  )
-                : undefined
-            }
-            currentSpecPurchaseLists={currentSpecPurchaseLists}
-            productionQuestions={productionQuestions}
-            productionAssumptions={productionAssumptions}
-            productionConversationProjection={productionConversationProjection}
-            workbenchSpecFacts={workbenchSpecFacts}
-            intakeRequestDetailError={intakeRequestDetailError}
-            intakeRequestDetail={intakeRequestDetail}
-            submitting={submitting}
-            editingSpecId={editingSpecId}
-            editingEventType={editingEventType}
-            editingEventDate={editingEventDate}
-            editingAttendeeCount={editingAttendeeCount}
-            editingServiceForm={editingServiceForm}
-            editingMenuItems={editingMenuItems}
-            editingComponentStates={editingComponentStates}
-            hasFocusedSpecEditChanges={hasFocusedSpecEditChanges}
-            recipes={dashboard.recipes}
-            filteredSpecs={filteredSpecs}
-            documentPhase={documentPhase}
-            productionWorkspaceCleared={productionWorkspaceCleared}
-            setEditingEventType={setEditingEventType}
-            setEditingEventDate={setEditingEventDate}
-            setEditingAttendeeCount={setEditingAttendeeCount}
-            setEditingServiceForm={setEditingServiceForm}
-            setEditingMenuItems={setEditingMenuItems}
-            updateEditingComponentState={updateEditingComponentState}
-            beginSpecEdit={beginSpecEdit}
-            saveSpecEdit={handleSaveSpecEdit}
-            createPlan={handleCreatePlan}
-            resetSpecEdit={resetSpecEdit}
-            openSpecForQuestions={(specId) => {
-              setProductionWorkspaceCleared(false);
-              setFocusedProductionSpecId(specId);
-            }}
-          />
-          </div>
-          <div className="production-column">
-          <ProductionObjectsPanel
-            planPhase={planPhase}
-            planningSpecLabel={planningSpecLabel}
-            planProgress={planProgress}
-            planEtaSeconds={planEtaSeconds}
-            focusedProductionSpec={focusedProductionSpec}
-            productionWorkspaceCleared={productionWorkspaceCleared}
-            currentSpecPlans={currentSpecPlans}
-            selectedPlan={selectedPlan}
-            selectedPlanSpec={selectedPlanSpec}
-            selectedPlanComponentsById={selectedPlanComponentsById}
-            archivedPlans={archivedPlans}
-            specById={specById}
-            submitting={submitting}
-            setSelectedPlanId={setSelectedPlanId}
-          />
-          </div>
-          <div className="production-column">
-          <ProductionPurchaseListPanel
-            currentPurchaseLists={currentSpecPurchaseLists}
-            archivedPurchaseLists={archivedPurchaseLists}
-            specById={specById}
-            statusLabel={purchaseZoneStatusLabel}
-          />
-          </div>
-          <div className="production-column">
-          <ProductionHandoffPanel
-            intakeOriginLabel={productionIntakeOriginLabel}
-            auditTrailLabel={productionAuditTrailLabel}
-            exportLabel={productionHandoffExportLabel}
-            contextLabel={productionHandoffContextLabel}
-          />
-
-          <ProductionRecipeLibraryPanel
-            recipeReviewStatusLabel={recipeReviewStatusLabel}
-            recipeUsageStatusLabel={recipeUsageStatusLabel}
-            recipeReviewCounts={recipeReviewCounts}
-            recipeCount={dashboard.recipes.length}
-            recipeName={recipeName}
-            recipeFile={recipeFile}
-            filteredRecipes={filteredRecipes}
-            submitting={submitting}
-            setRecipeName={setRecipeName}
-            setRecipeFile={setRecipeFile}
-            uploadRecipe={handleRecipeUpload}
-            reviewRecipe={handleRecipeReview}
-          />
-
-          </div>
-        </ProductionConversationalWorkbench>
+          submitting={submitting}
+          dragActive={dragActive}
+          intakeFile={intakeFile}
+          intakeChannel={intakeChannel}
+          documentPhase={documentPhase}
+          activeDocumentName={activeDocumentName}
+          documentProgress={documentProgress}
+          documentEtaSeconds={documentEtaSeconds}
+          intakeText={intakeText}
+          canClearProductionWorkspace={canClearProductionWorkspace}
+          productionUploadInputRef={productionUploadInputRef}
+          setDragActive={setDragActive}
+          setIntakeChannel={setIntakeChannel}
+          setIntakeText={setIntakeText}
+          openProductionFilePicker={openProductionFilePicker}
+          clearProductionWorkspace={clearProductionWorkspace}
+          handleProductionDrop={handleProductionDrop}
+          handleProductionFileSelection={handleProductionFileSelection}
+          handleIntakeDocumentSubmit={handleIntakeDocumentSubmit}
+          handleIntakeSubmit={handleIntakeSubmit}
+          manualEventType={manualEventType}
+          manualEventDate={manualEventDate}
+          manualAttendeeCount={manualAttendeeCount}
+          manualServiceForm={manualServiceForm}
+          manualMenuItems={manualMenuItems}
+          manualCustomerName={manualCustomerName}
+          manualVenueName={manualVenueName}
+          manualNotes={manualNotes}
+          setManualEventType={setManualEventType}
+          setManualEventDate={setManualEventDate}
+          setManualAttendeeCount={setManualAttendeeCount}
+          setManualServiceForm={setManualServiceForm}
+          setManualMenuItems={setManualMenuItems}
+          setManualCustomerName={setManualCustomerName}
+          setManualVenueName={setManualVenueName}
+          setManualNotes={setManualNotes}
+          handleManualSpecSubmit={handleManualSpecSubmit}
+          focusedProductionSpec={focusedProductionSpec}
+          focusedSpecReadinessLabel={translateReadiness(
+            String((focusedProductionSpec?.readiness as Record<string, unknown> | undefined)?.status ?? "-")
+          )}
+          selectedPlan={selectedPlan}
+          selectedPlanReadinessLabel={
+            selectedPlan
+              ? translateReadiness(String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-"))
+              : undefined
+          }
+          currentSpecPurchaseLists={currentSpecPurchaseLists}
+          productionQuestions={productionQuestions}
+          productionAssumptions={productionAssumptions}
+          productionConversationProjection={productionConversationProjection}
+          workbenchSpecFacts={workbenchSpecFacts}
+          intakeRequestDetailError={intakeRequestDetailError}
+          intakeRequestDetail={intakeRequestDetail}
+          editingSpecId={editingSpecId}
+          editingEventType={editingEventType}
+          editingEventDate={editingEventDate}
+          editingAttendeeCount={editingAttendeeCount}
+          editingServiceForm={editingServiceForm}
+          editingMenuItems={editingMenuItems}
+          editingComponentStates={editingComponentStates}
+          hasFocusedSpecEditChanges={hasFocusedSpecEditChanges}
+          recipes={dashboard.recipes}
+          filteredSpecs={filteredSpecs}
+          productionWorkspaceCleared={productionWorkspaceCleared}
+          setEditingEventType={setEditingEventType}
+          setEditingEventDate={setEditingEventDate}
+          setEditingAttendeeCount={setEditingAttendeeCount}
+          setEditingServiceForm={setEditingServiceForm}
+          setEditingMenuItems={setEditingMenuItems}
+          updateEditingComponentState={updateEditingComponentState}
+          beginSpecEdit={beginSpecEdit}
+          handleSaveSpecEdit={handleSaveSpecEdit}
+          handleCreatePlan={handleCreatePlan}
+          resetSpecEdit={resetSpecEdit}
+          openSpecForQuestions={(specId) => {
+            setProductionWorkspaceCleared(false);
+            setFocusedProductionSpecId(specId);
+          }}
+          planPhase={planPhase}
+          planningSpecLabel={planningSpecLabel}
+          planProgress={planProgress}
+          planEtaSeconds={planEtaSeconds}
+          currentSpecPlans={currentSpecPlans}
+          selectedPlanSpec={selectedPlanSpec}
+          selectedPlanComponentsById={selectedPlanComponentsById}
+          archivedPlans={archivedPlans}
+          specById={specById}
+          setSelectedPlanId={setSelectedPlanId}
+          archivedPurchaseLists={archivedPurchaseLists}
+          purchaseZoneStatusLabel={purchaseZoneStatusLabel}
+          productionIntakeOriginLabel={productionIntakeOriginLabel}
+          productionAuditTrailLabel={productionAuditTrailLabel}
+          productionHandoffExportLabel={productionHandoffExportLabel}
+          productionHandoffContextLabel={productionHandoffContextLabel}
+          recipeReviewStatusLabel={recipeReviewStatusLabel}
+          recipeUsageStatusLabel={recipeUsageStatusLabel}
+          recipeReviewCounts={recipeReviewCounts}
+          recipeCount={dashboard.recipes.length}
+          recipeName={recipeName}
+          recipeFile={recipeFile}
+          filteredRecipes={filteredRecipes}
+          setRecipeName={setRecipeName}
+          setRecipeFile={setRecipeFile}
+          handleRecipeUpload={handleRecipeUpload}
+          handleRecipeReview={handleRecipeReview}
+        />
       ) : null}
 
       <footer className="footer-note">
