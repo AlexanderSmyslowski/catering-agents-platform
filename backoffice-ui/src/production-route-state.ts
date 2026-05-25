@@ -40,6 +40,25 @@ export function translateReadiness(value?: string): string {
   return value ? labels[value] ?? value : "-";
 }
 
+export function formatProductionReadinessLabel(source?: Record<string, unknown>): string {
+  return translateReadiness(String(asRecord(source?.readiness)?.status ?? "-"));
+}
+
+export function formatProductionPlanStatusLabel(selectedPlan?: Record<string, unknown>): string {
+  return selectedPlan ? formatProductionReadinessLabel(selectedPlan) : "offen";
+}
+
+export function formatProductionObjectStatusLabel(input: {
+  currentSpecPlanCount: number;
+  selectedPlan?: Record<string, unknown>;
+}): string {
+  if (input.selectedPlan) {
+    return `${input.currentSpecPlanCount} Plan(e) · ${formatProductionReadinessLabel(input.selectedPlan)}`;
+  }
+
+  return input.currentSpecPlanCount > 0 ? `${input.currentSpecPlanCount} Plan(e)` : "noch kein Plan";
+}
+
 export function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
   const event = asRecord(spec?.event);
   const date = readStringOrNumber(event, ["date"]);

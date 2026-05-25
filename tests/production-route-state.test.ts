@@ -9,6 +9,9 @@ import {
   formatProductionHandoffContextLabel,
   formatProductionHandoffExportLabel,
   formatProductionIntakeOriginLabel,
+  formatProductionObjectStatusLabel,
+  formatProductionPlanStatusLabel,
+  formatProductionReadinessLabel,
   formatProductionTimingWindow,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
@@ -379,6 +382,21 @@ describe("production route state", () => {
     expect(translateReadiness("insufficient")).toBe("unzureichend");
     expect(translateReadiness("custom")).toBe("custom");
     expect(translateReadiness()).toBe("-");
+
+    expect(formatProductionReadinessLabel({ readiness: { status: "complete" } })).toBe("vollständig");
+    expect(formatProductionReadinessLabel({ readiness: { status: "partial" } })).toBe("teilweise vollständig");
+    expect(formatProductionReadinessLabel({})).toBe("-");
+    expect(formatProductionReadinessLabel()).toBe("-");
+    expect(formatProductionPlanStatusLabel({ readiness: { status: "complete" } })).toBe("vollständig");
+    expect(formatProductionPlanStatusLabel()).toBe("offen");
+    expect(
+      formatProductionObjectStatusLabel({
+        currentSpecPlanCount: 2,
+        selectedPlan: { readiness: { status: "complete" } }
+      })
+    ).toBe("2 Plan(e) · vollständig");
+    expect(formatProductionObjectStatusLabel({ currentSpecPlanCount: 2 })).toBe("2 Plan(e)");
+    expect(formatProductionObjectStatusLabel({ currentSpecPlanCount: 0 })).toBe("noch kein Plan");
 
     expect(formatProductionTimingWindow()).toBe("Terminfenster: noch zu bestätigen");
     expect(formatProductionTimingWindow({ event: { date: "2026-03-04" } })).toBe("Datum: 2026-03-04");

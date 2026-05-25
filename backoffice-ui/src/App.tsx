@@ -23,9 +23,12 @@ import {
   countClarificationAnswerStatuses,
   countPurchaseListItems,
   formatActiveProductionContextLabel,
+  formatProductionObjectStatusLabel,
   formatProductionHandoffContextLabel,
   formatProductionHandoffExportLabel,
   formatProductionIntakeOriginLabel,
+  formatProductionPlanStatusLabel,
+  formatProductionReadinessLabel,
   formatProductionTimingWindow,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
@@ -33,8 +36,7 @@ import {
   selectFocusedProductionSpec,
   selectProductionPlanSpec,
   selectProductionWorkbenchPlan,
-  selectProductionNextStep,
-  translateReadiness
+  selectProductionNextStep
 } from "./production-route-state.js";
 import {
   archiveIntakeRequest,
@@ -818,6 +820,14 @@ export function App() {
     () => buildWorkbenchSpecFacts(focusedProductionSpecRecord),
     [focusedProductionSpecRecord]
   );
+
+  const focusedSpecReadinessLabel = formatProductionReadinessLabel(focusedProductionSpecRecord);
+  const selectedPlanReadinessLabel = selectedPlan ? formatProductionReadinessLabel(selectedPlan) : undefined;
+  const productionPlanStatusLabel = formatProductionPlanStatusLabel(selectedPlan);
+  const productionObjectStatusLabel = formatProductionObjectStatusLabel({
+    currentSpecPlanCount: currentSpecPlans.length,
+    selectedPlan
+  });
 
   const currentPurchaseListItemCount = useMemo(
     () => countPurchaseListItems(currentSpecPurchaseLists),
@@ -1846,14 +1856,8 @@ export function App() {
       {route === "production" ? (
         <ProductionRouteMainLayout
           activeSpecLabel={activeProductionContextLabel}
-          readinessLabel={translateReadiness(
-            String((focusedProductionSpec?.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-          )}
-          planStatusLabel={
-            selectedPlan
-              ? translateReadiness(String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-"))
-              : "offen"
-          }
+          readinessLabel={focusedSpecReadinessLabel}
+          planStatusLabel={productionPlanStatusLabel}
           purchaseStatusLabel={purchaseZoneStatusLabel}
           nextStepTitle={productionNextStep.title}
           nextStepDescription={productionNextStep.description}
@@ -1861,15 +1865,7 @@ export function App() {
           answeredQuestionCount={clarificationStatusCounts.answered}
           unansweredQuestionCount={clarificationStatusCounts.unanswered}
           productionObjectCount={currentSpecPlans.length}
-          productionObjectStatusLabel={
-            selectedPlan
-              ? `${currentSpecPlans.length} Plan(e) · ${translateReadiness(
-                  String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                )}`
-              : currentSpecPlans.length > 0
-                ? `${currentSpecPlans.length} Plan(e)`
-                : "noch kein Plan"
-          }
+          productionObjectStatusLabel={productionObjectStatusLabel}
           purchaseListCount={currentSpecPurchaseLists.length}
           submitting={submitting}
           dragActive={dragActive}
@@ -1911,15 +1907,9 @@ export function App() {
           setManualNotes={setManualNotes}
           handleManualSpecSubmit={handleManualSpecSubmit}
           focusedProductionSpec={focusedProductionSpec}
-          focusedSpecReadinessLabel={translateReadiness(
-            String((focusedProductionSpec?.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-          )}
+          focusedSpecReadinessLabel={focusedSpecReadinessLabel}
           selectedPlan={selectedPlan}
-          selectedPlanReadinessLabel={
-            selectedPlan
-              ? translateReadiness(String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-"))
-              : undefined
-          }
+          selectedPlanReadinessLabel={selectedPlanReadinessLabel}
           currentSpecPurchaseLists={currentSpecPurchaseLists}
           productionQuestions={productionQuestions}
           productionAssumptions={productionAssumptions}
