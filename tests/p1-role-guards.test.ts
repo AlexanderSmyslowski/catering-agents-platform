@@ -20,6 +20,7 @@ describe("P1 minimal role guards", () => {
       { method: "POST", url: "/v1/intake/normalize", message: "Intake-Operator erforderlich." },
       { method: "POST", url: "/v1/intake/documents", message: "Intake-Operator erforderlich." },
       { method: "POST", url: "/v1/intake/documents/upload", message: "Intake-Operator erforderlich." },
+      { method: "POST", url: "/v1/intake/requests/request-123/archive", message: "Intake-Operator erforderlich." },
       { method: "POST", url: "/v1/intake/specs/manual", message: "Intake-Operator erforderlich." },
       { method: "PATCH", url: "/v1/intake/specs/spec-123", message: "Intake-Operator erforderlich." },
       { method: "POST", url: "/v1/intake/seed-demo", message: "Betriebs-/Audit-Operator erforderlich." }

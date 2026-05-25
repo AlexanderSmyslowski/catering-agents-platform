@@ -21,7 +21,8 @@ import {
   type AcceptedEventSpec,
   type DocumentIngestionResult,
   type DocumentInput,
-  type EventRequest
+  type EventRequest,
+  type OperationalArchiveReasonCode
 } from "@catering/shared-core";
 import { buildEventRequestFromText } from "./extraction.js";
 import { IntakeStore } from "./store.js";
@@ -67,6 +68,10 @@ interface FinalizeSpecGovernanceBody {
   specId?: string;
   changeSetId?: string;
   confirmCriticalFinalize?: boolean;
+}
+
+interface ArchiveIntakeRequestBody {
+  reasonCode?: OperationalArchiveReasonCode;
 }
 
 interface MultipartDocumentUpload {
@@ -120,6 +125,32 @@ function dietaryTagsForCategory(category?: "classic" | "vegetarian" | "vegan"): 
     return ["vegetarian"];
   }
   return [];
+}
+
+const archiveReasonCodes = new Set<OperationalArchiveReasonCode>([
+  "wrong_upload",
+  "duplicate_test_data",
+  "operator_rehearsal_cleanup"
+]);
+
+function parseArchiveReasonCode(
+  value: unknown
+): OperationalArchiveReasonCode | undefined {
+  if (value === undefined || value === null || value === "") {
+    return "wrong_upload";
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  return archiveReasonCodes.has(value as OperationalArchiveReasonCode)
+    ? (value as OperationalArchiveReasonCode)
+    : undefined;
+}
+
+function includeArchivedFromQuery(query: unknown): boolean {
+  const value = (query as { includeArchived?: unknown } | undefined)?.includeArchived;
+  return value === true || value === "true" || value === "1";
 }
 
 function applySpecUpdates(
@@ -681,9 +712,63 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     }
 
     return reply.send({
-      items: await store.listRequests()
+      items: await store.listRequests({
+        includeArchived: includeArchivedFromQuery(request.query)
+      })
     });
   });
+
+  app.post<{ Params: { requestId: string }; Body: ArchiveIntakeRequestBody }>(
+    "/v1/intake/requests/:requestId/archive",
+    async (request, reply) => {
+      if (!isIntakeOperator(request, trustedActorSecret)) {
+        return reply.code(403).send({
+          message: "Intake-Operator erforderlich."
+        });
+      }
+
+      const reasonCode = parseArchiveReasonCode(request.body?.reasonCode);
+      if (!reasonCode) {
+        return reply.code(400).send({
+          message:
+            "reasonCode muss wrong_upload, duplicate_test_data oder operator_rehearsal_cleanup sein."
+        });
+      }
+
+      const actor = actorForRequest(request, trustedActorSecret);
+      const archived = await store.archiveRequestContext({
+        requestId: request.params.requestId,
+        reasonCode,
+        archivedAt: new Date().toISOString(),
+        archivedBy: actor.name
+      });
+      if (!archived.request) {
+        return reply.code(404).send({ message: "EventRequest nicht gefunden." });
+      }
+
+      await auditLog.log({
+        action: "intake.request_soft_archived",
+        entityType: "EventRequest",
+        entityId: archived.request.requestId,
+        actor,
+        summary: "Intake-Kontext per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.",
+        details: {
+          requestId: archived.request.requestId,
+          reasonCode,
+          archivedSpecCount: archived.specs.length,
+          alreadyArchived: archived.alreadyArchived,
+          hardDeleted: false
+        }
+      });
+
+      return reply.send({
+        eventRequest: archived.request,
+        archivedSpecIds: archived.specs.map((spec) => spec.specId),
+        alreadyArchived: archived.alreadyArchived,
+        hardDeleted: false
+      });
+    }
+  );
 
   app.get<{ Params: { requestId: string } }>("/v1/intake/requests/:requestId", async (request, reply) => {
     const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
@@ -706,7 +791,9 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     }
 
     return reply.send({
-      items: await store.listSpecs()
+      items: await store.listSpecs({
+        includeArchived: includeArchivedFromQuery(request.query)
+      })
     });
   });
 
@@ -799,4 +886,3 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
   return app;
 }
-

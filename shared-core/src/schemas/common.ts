@@ -65,6 +65,20 @@ export const commonSchema = {
         }
       }
     },
+    operationalArchive: {
+      type: "object",
+      additionalProperties: false,
+      required: ["status", "mode", "reasonCode", "archivedAt", "archivedBy"],
+      properties: {
+        status: { enum: ["archived"] },
+        mode: { enum: ["soft_archive"] },
+        reasonCode: {
+          enum: ["wrong_upload", "duplicate_test_data", "operator_rehearsal_cleanup"]
+        },
+        archivedAt: { type: "string" },
+        archivedBy: { type: "string" }
+      }
+    },
     customer: {
       type: "object",
       additionalProperties: false,

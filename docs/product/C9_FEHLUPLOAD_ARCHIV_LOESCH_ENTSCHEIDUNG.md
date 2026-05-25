@@ -1,12 +1,12 @@
 # C9 Fehlupload-Archiv-/Loeschentscheidung
 
-Status: Doku-/Vertragstest-only Entscheidungsvorlage; keine Runtime-Implementierung, keine neue API, keine Persistenz-/Migrationsaenderung, keine echte Datenbereinigung und keine Retention-/Compliance-Freigabe
-Stand: 2026-05-25
-Scope: Entscheidungsreife fuer den spaeteren kleinsten Backend-Pfad zum Entfernen eines falschen Uploads aus dem aktiven Arbeitsfokus; keine technische Umsetzung in C9
+Status: Option B nach explizitem Alexander-Go als enger Soft-Archiv-Runtime-Slice umgesetzt; kein Hard-Delete, keine neue Persistenzwelt, keine Migration, keine echte Datenfreigabe und keine Retention-/Compliance-Freigabe
+Stand: 2026-05-26
+Scope: kleinster Backend-Pfad, um falsche interne/synthetische Intake-Upload-Kontexte aus aktiven Listen/Fokuslogiken zu nehmen und intern nachvollziehbar zu halten
 
 ## 1. Zweck
 
-C9 bereitet die naechste Entscheidung vor, weil der Produktionskern zwar lokal pruefbar ist, falsche Uploads aber noch nicht sauber backend-seitig aus dem aktiven Arbeitsfokus genommen werden koennen.
+C9 hat die Entscheidung fuer den naechsten Backend-Pfad vorbereitet. Nach Alexanders Go ist Option B als kleinster Soft-Archiv-Slice umgesetzt.
 
 Das betrifft den internen MVP-/Beta-Korridor:
 
@@ -14,7 +14,7 @@ Das betrifft den internen MVP-/Beta-Korridor:
 Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit
 ```
 
-Ziel ist eine entscheidbare Grenze fuer spaeteren Code, nicht der Code selbst.
+Ziel ist keine Loesch-/Retention-Plattform, sondern nur: ein falscher interner/synthetischer Intake-Kontext verschwindet aus dem aktiven Arbeitsfokus, bleibt aber fuer interne Nachvollziehbarkeit lesbar.
 
 ## 2. Fuehrende Eingaben
 
@@ -26,7 +26,7 @@ Ziel ist eine entscheidbare Grenze fuer spaeteren Code, nicht der Code selbst.
 - `docs/architecture/B14_SANDBOX_WORKER_AV_GATE.md`: echte Uploads bleiben ohne Sandbox/Worker/AV-Gate blockiert.
 - `scripts/check-local-ops.sh`: lokaler Rehearsal-Datenhinweis ist kein Loesch- oder Archivierungsmechanismus.
 
-## 3. Entscheidung noetig
+## 3. Entscheidung erfolgt
 
 Kurzer Titel: Backend-Pfad fuer Fehluploads im internen MVP-Korridor.
 
@@ -34,7 +34,13 @@ Warum jetzt?
 
 Der UI-Arbeitsbereich kann lokal geleert werden, aber das ist nur ein Frontend-Fokuswechsel. Falsche oder testweise erzeugte Upload-/Spec-Kontexte bleiben backend-seitig im Datenbestand und koennen spaeter wieder als Altlast oder falscher aktueller Vorgang sichtbar werden.
 
-Eine Implementierung beruehrt API, Persistenzzustand, Audit-/Handoff-Nachvollziehbarkeit und spaeter echte Daten. Darum braucht der Pfad vor Code eine bewusste Alexander-Entscheidung.
+Eine Implementierung beruehrt API, Persistenzzustand, Audit-/Handoff-Nachvollziehbarkeit und spaeter echte Daten. Darum brauchte der Pfad vor Code eine bewusste Alexander-Entscheidung.
+
+Entscheidung:
+
+- Option B, Soft-Archiv aus aktivem Arbeitsfokus.
+- Kein Hard-Delete.
+- Keine Retention-/Backup-/Compliance- oder echte-Daten-Freigabe.
 
 ## 4. Optionen
 
@@ -68,7 +74,7 @@ Empfehlung ja/nein:
 
 Beschreibung:
 
-Ein spaeterer enger Backend-Slice markiert einen fehlerhaften Upload-/Spezifikationskontext als archiviert oder verworfen und nimmt ihn aus aktiven Listen/Fokuslogiken heraus. Die Daten bleiben fuer interne Nachvollziehbarkeit und Audit-/Review-Kontext erhalten.
+Ein enger Backend-Slice markiert einen fehlerhaften Upload-/Spezifikationskontext als archiviert und nimmt ihn aus aktiven Listen/Fokuslogiken heraus. Die Daten bleiben fuer interne Nachvollziehbarkeit und Audit-/Review-Kontext erhalten.
 
 Vorteile:
 
@@ -79,9 +85,9 @@ Vorteile:
 
 Nachteile / Risiken:
 
-- braucht trotzdem eine neue API-/Persistenzentscheidung;
-- muss definieren, welche Objekte betroffen sind: IntakeRequest, AcceptedEventSpec, OfferDraft, ProductionPlan, PurchaseList, AuditEvent;
-- muss UI-Filter und Export-/Audit-Einordnung sauber begrenzen;
+- fuehrt einen neuen, engen API-Pfad ein;
+- markiert nur `EventRequest` und zugehoerige `AcceptedEventSpec` ueber vorhandene Store-Grenzen;
+- filtert aktive Intake-Listen, ohne Detail-/Audit-Lesbarkeit zu entfernen;
 - ist noch keine echte Retention-/Compliance-Loesung.
 
 Aufwand:
@@ -90,13 +96,13 @@ Aufwand:
 
 Empfehlung ja/nein:
 
-- Ja, empfohlen fuer den naechsten Implementierungsslice nach Alexander-Go.
+- Ja, umgesetzt nach Alexander-Go.
 
 ### Option C: Hard-Delete
 
 Beschreibung:
 
-Ein spaeterer Backend-Pfad entfernt fehlerhafte Upload-/Spezifikations- und Folgeobjekte dauerhaft aus dem Datenbestand.
+Ein Backend-Pfad wuerde fehlerhafte Upload-/Spezifikations- und Folgeobjekte dauerhaft aus dem Datenbestand entfernen.
 
 Vorteile:
 
@@ -120,7 +126,7 @@ Empfehlung ja/nein:
 
 ## 5. Empfehlung
 
-Empfehlung: Option B, Soft-Archiv aus aktivem Arbeitsfokus, aber erst nach explizitem Alexander-Go.
+Empfehlung: Option B, Soft-Archiv aus aktivem Arbeitsfokus.
 
 Begruendung:
 
@@ -131,14 +137,15 @@ Begruendung:
 
 ## 6. Konsequenz nach Auswahl
 
-Nach Auswahl von Option B darf der naechste technische Minimalblock vorbereitet werden:
+Nach Auswahl von Option B wurde der technische Minimalblock so umgesetzt:
 
-- bestehende aktive Listen/Fokuslogik identifizieren;
-- kleinsten Archivstatus im vorhandenen Modell-/Store-Korridor bestimmen;
-- genau einen Operatorpfad fuer synthetische/interne Fehluploads bauen;
-- UI nur so weit anpassen, dass archivierte Vorgange nicht mehr als aktuell erscheinen;
-- Audit-/Handoff-Anker intern sichtbar halten;
-- fokussierte Tests plus Full Gates ausfuehren.
+- `POST /v1/intake/requests/:requestId/archive` markiert den Intake-Kontext per Soft-Archiv;
+- `EventRequest` und die per `sourceLineage.reference` verbundenen `AcceptedEventSpec` erhalten `operationalArchive`;
+- `GET /v1/intake/requests` und `GET /v1/intake/specs` listen standardmaessig nur aktive Eintraege;
+- `includeArchived=true` erlaubt interne Rueckschau;
+- Detailpfade bleiben lesbar;
+- Audit-Aktion `intake.request_soft_archived` dokumentiert den Operatorpfad;
+- `hardDeleted` bleibt explizit `false`.
 
 Nicht automatisch freigegeben:
 
@@ -152,7 +159,7 @@ Nicht automatisch freigegeben:
 
 ## 7. Sicherer Default
 
-Wenn Alexander nicht entscheidet, bleibt Option A aktiv:
+Vor Alexanders Go blieb Option A aktiv:
 
 - UI-Arbeitsbereich kann lokal geleert werden;
 - `local:check` darf weiter nur warnen, wenn der lokale Rehearsal-Datenbestand aufgefuellt wirkt;
@@ -164,15 +171,13 @@ Wenn Alexander nicht entscheidet, bleibt Option A aktiv:
 
 ## 8. Harte Grenzen fuer C9
 
-C9 ist nur Entscheidungsvorbereitung.
+C9 ist nach Go ein enger Soft-Archiv-Slice.
 
 Nicht Teil von C9:
 
-- keine Runtime-Implementierung;
-- keine neue API;
-- keine neue Persistenz;
+- kein Hard-Delete;
+- keine neue Persistenzwelt;
 - keine Migration;
-- keine Backend-Archivierung;
 - keine Datenloeschung;
 - keine automatische Bereinigung;
 - keine echten Daten;
@@ -183,18 +188,19 @@ Nicht Teil von C9:
 - keine Auth-/OIDC-/IAP-Aenderung;
 - keine rechtssichere Compliance-/DSGVO-/AVV-Freigabe.
 
-## 9. Minimaler technischer Folgeblock nach Go
+## 9. Umgesetzter technischer Minimalblock
 
 Ziel:
 
-- Ein falscher interner/synthetischer Upload-Kontext kann backend-seitig aus dem aktiven Produktionsarbeitsfokus genommen werden.
+- Ein falscher interner/synthetischer Upload-Kontext kann backend-seitig aus dem aktiven Arbeitsfokus genommen werden.
 
 Umfang:
 
 - nur bestehender MVP-Datenkorridor;
 - nur ein enger Operatorpfad;
 - nur aktive Listen/Fokuslogik und sichtbare Einordnung;
-- nur Soft-Archiv, kein Hard-Delete.
+- nur Soft-Archiv, kein Hard-Delete;
+- nur `wrong_upload`, `duplicate_test_data` oder `operator_rehearsal_cleanup` als kontrollierte Reason-Codes, keine freie Bereinigungsnotiz.
 
 Nicht-Ziele:
 
@@ -207,18 +213,23 @@ Nicht-Ziele:
 Dateien/Quellen:
 
 - `intake-service/src/app.ts`
-- `backoffice-ui/src/App.tsx`
-- `shared-core/src/types.ts` nur wenn absolut zwingend und klein;
-- bestehende Repository-/File-Store-Grenzen;
-- `tests/backoffice-production-acceptance-smoke.test.ts`
-- ein fokussierter Service-/Integrationstest.
+- `intake-service/src/store.ts`
+- `intake-service/src/app.js`
+- `intake-service/src/store.js`
+- `shared-core/src/types.ts`
+- `shared-core/src/schemas/*`
+- `shared-core/src/access-control.*`
+- bestehende Repository-/File-Store-/Postgres-Collection-Grenzen;
+- `tests/intake-soft-archive.test.ts`
+- `tests/access-control.test.ts`
+- `tests/p1-role-guards.test.ts`
 
 Tests:
 
 - archivierter Fehlupload erscheint nicht mehr als aktiver Vorgang;
-- archivierter Kontext bleibt intern nachvollziehbar;
+- archivierter Kontext bleibt intern ueber Detailpfade und `includeArchived=true` nachvollziehbar;
 - kein Hard-Delete;
-- keine Export-/Audit-Scheingruenheit;
+- Audit-Aktion ist vorhanden;
 - `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check`.
 
 Abbruchkriterien:
@@ -229,10 +240,10 @@ Abbruchkriterien:
 - Retention-/Backup-/Compliance-Fragen muessen in Code beantwortet werden;
 - Auth-/Deployment-/Serverfragen werden beruehrt.
 
-Erwartetes Ergebnis:
+Ergebnis:
 
-- Nach Alexander-Go kann ein kleiner, reversibler Soft-Archiv-Slice gebaut werden.
-- Ohne Go bleibt der Status quo sicher und ehrlich dokumentiert.
+- Der kleine, reversible Soft-Archiv-Slice ist gebaut.
+- Ohne Hard-Delete, ohne neue Persistenzwelt und ohne echte-Daten-Go.
 
 ## 10. Definition of Done
 
@@ -241,7 +252,7 @@ C9 ist erfuellt, wenn:
 - diese Entscheidungsvorlage im Repo auffindbar ist;
 - Option A, Option B und Option C entscheidungsreif verglichen sind;
 - Option B als Empfehlung und Option A als sicherer Default festgehalten sind;
-- C9 nicht als Implementierungs-, API-, Persistenz-, Retention-, echte-Daten-, Sandbox-/AV- oder Deployment-Go gelesen werden kann;
-- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts` gruen ist;
+- C9 nicht als Hard-Delete-, Retention-, echte-Daten-, Sandbox-/AV- oder Deployment-Go gelesen werden kann;
+- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts` und `tests/intake-soft-archive.test.ts` gruen sind;
 - README, TESTING und memory fortgeschrieben sind;
 - Full Gates weiterhin gruen bleiben.

@@ -54,6 +54,7 @@ export const eventRequestSchema = {
         }
       }
     },
+    operationalArchive: { $ref: "https://schemas.catering.local/common.json#/$defs/operationalArchive" },
     customer: { $ref: "https://schemas.catering.local/common.json#/$defs/customer" },
     event: { $ref: "https://schemas.catering.local/common.json#/$defs/eventInfo" },
     attendees: { $ref: "https://schemas.catering.local/common.json#/$defs/attendees" },
@@ -86,4 +87,3 @@ export const eventRequestSchema = {
     }
   }
 } as const;
-

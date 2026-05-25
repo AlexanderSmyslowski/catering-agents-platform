@@ -41,6 +41,24 @@ function dietaryTagsForCategory(category) {
     }
     return [];
 }
+const archiveReasonCodes = new Set([
+    "wrong_upload",
+    "duplicate_test_data",
+    "operator_rehearsal_cleanup"
+]);
+function parseArchiveReasonCode(value) {
+    if (value === undefined || value === null || value === "") {
+        return "wrong_upload";
+    }
+    if (typeof value !== "string") {
+        return undefined;
+    }
+    return archiveReasonCodes.has(value) ? value : undefined;
+}
+function includeArchivedFromQuery(query) {
+    const value = query?.includeArchived;
+    return value === true || value === "true" || value === "1";
+}
 function applySpecUpdates(spec, body) {
     const nextEventType = body.eventType?.trim() || spec.event.type || spec.servicePlan.eventType;
     const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
@@ -487,7 +505,52 @@ export function buildIntakeApp(input = {}) {
             return forbidden;
         }
         return reply.send({
-            items: await store.listRequests()
+            items: await store.listRequests({
+                includeArchived: includeArchivedFromQuery(request.query)
+            })
+        });
+    });
+    app.post("/v1/intake/requests/:requestId/archive", async (request, reply) => {
+        if (!isIntakeOperator(request, trustedActorSecret)) {
+            return reply.code(403).send({
+                message: "Intake-Operator erforderlich."
+            });
+        }
+        const reasonCode = parseArchiveReasonCode(request.body?.reasonCode);
+        if (!reasonCode) {
+            return reply.code(400).send({
+                message: "reasonCode muss wrong_upload, duplicate_test_data oder operator_rehearsal_cleanup sein."
+            });
+        }
+        const actor = actorForRequest(request, trustedActorSecret);
+        const archived = await store.archiveRequestContext({
+            requestId: request.params.requestId,
+            reasonCode,
+            archivedAt: new Date().toISOString(),
+            archivedBy: actor.name
+        });
+        if (!archived.request) {
+            return reply.code(404).send({ message: "EventRequest nicht gefunden." });
+        }
+        await auditLog.log({
+            action: "intake.request_soft_archived",
+            entityType: "EventRequest",
+            entityId: archived.request.requestId,
+            actor,
+            summary: "Intake-Kontext per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.",
+            details: {
+                requestId: archived.request.requestId,
+                reasonCode,
+                archivedSpecCount: archived.specs.length,
+                alreadyArchived: archived.alreadyArchived,
+                hardDeleted: false
+            }
+        });
+        return reply.send({
+            eventRequest: archived.request,
+            archivedSpecIds: archived.specs.map((spec) => spec.specId),
+            alreadyArchived: archived.alreadyArchived,
+            hardDeleted: false
         });
     });
     app.get("/v1/intake/requests/:requestId", async (request, reply) => {
@@ -507,7 +570,9 @@ export function buildIntakeApp(input = {}) {
             return forbidden;
         }
         return reply.send({
-            items: await store.listSpecs()
+            items: await store.listSpecs({
+                includeArchived: includeArchivedFromQuery(request.query)
+            })
         });
     });
     app.get("/v1/intake/specs/:specId", async (request, reply) => {
