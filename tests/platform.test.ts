@@ -82,8 +82,8 @@ function receptionOfferText(): string {
   return [
     "Empfang am 2026-06-18 fuer 75 Teilnehmer mit Flying Bites:",
     "Mini-Quiche Spinat Feta;",
-    "Hummus-Gemuese-Cups;",
-    "Tomaten-Mozzarella-Spiesse;",
+    "Hummus-Gemuese-Cups vegan;",
+    "Tomaten-Mozzarella-Spiesse vegetarisch;",
     "Brownie-Bites."
   ].join(" ");
 }
@@ -234,6 +234,7 @@ describe("catering agents platform", () => {
     expect(spec.menuPlan.find((item) => item.label.includes("KALBSBULETTEN"))?.menuCategory).toBe("classic");
     expect(spec.menuPlan.find((item) => item.label.includes("MANDEL-CURRY"))?.menuCategory).toBe("vegan");
     expect(spec.menuPlan.find((item) => item.label.includes("SCHOKOLADENKUCHEN"))?.dietaryTags).toContain("vegan");
+    expect(spec.productionConstraints ?? []).not.toContain("vegan");
   });
 
   it("keeps preparation steps out of imported recipe ingredients", () => {
@@ -622,6 +623,7 @@ describe("catering agents platform", () => {
     expect(spec.servicePlan.serviceForm).toBe("standing_reception");
     expect(spec.attendees.expected).toBe(75);
     expect(spec.productionConstraints ?? []).not.toContain("vegan");
+    expect(spec.productionConstraints ?? []).not.toContain("vegetarian");
     expect(spec.menuPlan.find((item) => /hummus/i.test(item.label))?.menuCategory).toBe("vegan");
     expect(spec.menuPlan.find((item) => /tomaten|mozzarella/i.test(item.label))?.menuCategory).toBe("vegetarian");
 
