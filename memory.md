@@ -1303,3 +1303,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.259 - 2026-05-25
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Layout-Schnitt verbessert: Die verschachtelte Produktions-Workbench-Komposition liegt nun in `backoffice-ui/src/production-route-main-layout.tsx`.
 - `backoffice-ui/src/App.tsx` stellt weiterhin alle vorhandenen Panel-Props und Handler bereit; die neue Komponente ordnet nur die bestehenden Produktionsspalten in derselben Reihenfolge. Keine UI-Text-, Fachlogik-, API-, Persistenz-/Migrations-, Upload-, Rezept-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.260 - 2026-05-25
+- Rezept-Matching ist um einen engen Catering-Anker gehaertet: `Auberginenröllchen mit Ricotta` findet ein internes englisches `Eggplant Ricotta Rolls`-Rezept ueber schmale Aubergine/Eggplant- und Röllchen/Rolls-Synonyme.
+- `tests/platform.test.ts` schuetzt den vegetarischen Einzelspeisenfall ohne Internet-Fallback und ohne offene Produktionspunkte. Keine neue Matching-Engine, keine API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.

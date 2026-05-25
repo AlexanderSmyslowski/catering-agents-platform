@@ -74,6 +74,16 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   kalbsfrikadellen: ["veal", "meatballs"],
   buletten: ["meatballs"],
   frikadellen: ["meatballs"],
+  aubergine: ["eggplant"],
+  auberginen: ["eggplant"],
+  auberginenröllchen: ["eggplant", "rolls", "auberginen"],
+  auberginenroellchen: ["eggplant", "rolls", "auberginen"],
+  auberginenrollchen: ["eggplant", "rolls", "auberginen"],
+  rollchen: ["rolls"],
+  röllchen: ["rolls"],
+  roellchen: ["rolls"],
+  eggplant: ["aubergine", "auberginen"],
+  rolls: ["rollchen", "röllchen", "roellchen"],
   curry: ["curry"],
   reis: ["rice"],
   schmorzwiebeln: ["braised", "onions"],
@@ -128,7 +138,11 @@ const specificTokenAliases: Record<string, string[]> = {
   kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
   buletten: ["meatballs"],
   frikadellen: ["meatballs"],
-  meatballs: ["buletten", "frikadellen"]
+  meatballs: ["buletten", "frikadellen"],
+  auberginenrollchen: ["eggplant", "rolls"],
+  auberginenroellchen: ["eggplant", "rolls"],
+  eggplant: ["auberginenrollchen", "auberginenroellchen"],
+  rolls: ["auberginenrollchen", "auberginenroellchen"]
 };
 
 function normalizeTokens(value: string): string[] {
