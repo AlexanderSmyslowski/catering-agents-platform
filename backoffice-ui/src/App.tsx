@@ -16,7 +16,11 @@ import { OfferConversationalWorkbench } from "./offer-workbench.js";
 import { formatDocumentIngestionSummary } from "./production-question-panel.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
-import { selectFocusedProductionSpec } from "./production-route-state.js";
+import {
+  selectArchivedProductionItems,
+  selectCurrentProductionItems,
+  selectFocusedProductionSpec
+} from "./production-route-state.js";
 import {
   archiveIntakeRequest,
   createAcceptedSpecFromDocument,
@@ -747,43 +751,35 @@ export function App() {
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
 
   const currentSpecPlans = useMemo(() => {
-    if (productionWorkspaceCleared) {
-      return [];
-    }
-
-    if (!currentProductionSpecId) {
-      return orderedPlans;
-    }
-    return orderedPlans.filter((plan) => String(plan.eventSpecId ?? "") === currentProductionSpecId);
+    return selectCurrentProductionItems({
+      currentProductionSpecId,
+      items: orderedPlans,
+      productionWorkspaceCleared
+    });
   }, [currentProductionSpecId, orderedPlans, productionWorkspaceCleared]);
 
   const archivedPlans = useMemo(() => {
-    if (!currentProductionSpecId || productionWorkspaceCleared) {
-      return [];
-    }
-    return orderedPlans.filter((plan) => String(plan.eventSpecId ?? "") !== currentProductionSpecId);
+    return selectArchivedProductionItems({
+      currentProductionSpecId,
+      items: orderedPlans,
+      productionWorkspaceCleared
+    });
   }, [currentProductionSpecId, orderedPlans, productionWorkspaceCleared]);
 
   const currentSpecPurchaseLists = useMemo(() => {
-    if (productionWorkspaceCleared) {
-      return [];
-    }
-
-    if (!currentProductionSpecId) {
-      return orderedPurchaseLists;
-    }
-    return orderedPurchaseLists.filter(
-      (purchaseList) => String(purchaseList.eventSpecId ?? "") === currentProductionSpecId
-    );
+    return selectCurrentProductionItems({
+      currentProductionSpecId,
+      items: orderedPurchaseLists,
+      productionWorkspaceCleared
+    });
   }, [currentProductionSpecId, orderedPurchaseLists, productionWorkspaceCleared]);
 
   const archivedPurchaseLists = useMemo(() => {
-    if (!currentProductionSpecId || productionWorkspaceCleared) {
-      return [];
-    }
-    return orderedPurchaseLists.filter(
-      (purchaseList) => String(purchaseList.eventSpecId ?? "") !== currentProductionSpecId
-    );
+    return selectArchivedProductionItems({
+      currentProductionSpecId,
+      items: orderedPurchaseLists,
+      productionWorkspaceCleared
+    });
   }, [currentProductionSpecId, orderedPurchaseLists, productionWorkspaceCleared]);
 
   const selectedPlan = useMemo(

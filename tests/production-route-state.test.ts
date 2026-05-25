@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { selectFocusedProductionSpec } from "../backoffice-ui/src/production-route-state.js";
+import {
+  selectArchivedProductionItems,
+  selectCurrentProductionItems,
+  selectFocusedProductionSpec
+} from "../backoffice-ui/src/production-route-state.js";
 
 describe("production route state", () => {
   const acceptedSpecs = [
@@ -46,5 +50,69 @@ describe("production route state", () => {
         searchText: ""
       })
     ).toBe(acceptedSpecs[2]);
+  });
+
+  it("splits current and archived production items by focused spec", () => {
+    const items = [
+      { id: "plan-a", eventSpecId: "spec-current" },
+      { id: "plan-b", eventSpecId: "spec-other" },
+      { id: "plan-c", eventSpecId: "spec-current" }
+    ];
+
+    expect(
+      selectCurrentProductionItems({
+        currentProductionSpecId: "spec-current",
+        items,
+        productionWorkspaceCleared: false
+      }).map((item) => item.id)
+    ).toEqual(["plan-a", "plan-c"]);
+    expect(
+      selectArchivedProductionItems({
+        currentProductionSpecId: "spec-current",
+        items,
+        productionWorkspaceCleared: false
+      }).map((item) => item.id)
+    ).toEqual(["plan-b"]);
+  });
+
+  it("keeps production item selectors empty when the workspace is cleared", () => {
+    const items = [{ id: "plan-a", eventSpecId: "spec-current" }];
+
+    expect(
+      selectCurrentProductionItems({
+        currentProductionSpecId: "spec-current",
+        items,
+        productionWorkspaceCleared: true
+      })
+    ).toEqual([]);
+    expect(
+      selectArchivedProductionItems({
+        currentProductionSpecId: "spec-current",
+        items,
+        productionWorkspaceCleared: true
+      })
+    ).toEqual([]);
+  });
+
+  it("keeps the previous unscoped production item fallback when no spec is focused", () => {
+    const items = [
+      { id: "plan-a", eventSpecId: "spec-current" },
+      { id: "plan-b", eventSpecId: "spec-other" }
+    ];
+
+    expect(
+      selectCurrentProductionItems({
+        currentProductionSpecId: "",
+        items,
+        productionWorkspaceCleared: false
+      })
+    ).toBe(items);
+    expect(
+      selectArchivedProductionItems({
+        currentProductionSpecId: "",
+        items,
+        productionWorkspaceCleared: false
+      })
+    ).toEqual([]);
   });
 });
