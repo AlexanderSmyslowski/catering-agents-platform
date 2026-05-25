@@ -21,6 +21,7 @@ function installProductionAcceptanceMocks(
     withoutSpecs?: boolean;
     withQuickLunchMixedPlan?: boolean;
     withArchivedProductionContext?: boolean;
+    withSearchTargetSpec?: boolean;
   } = {}
 ) {
   const storage = new Map<string, string>();
@@ -46,6 +47,8 @@ function installProductionAcceptanceMocks(
   const requestId = "request-production-fallback-1";
   const specId = "spec-production-fallback-1";
   const previousSpecId = "spec-production-previous-1";
+  const searchRequestId = "request-production-search-target-1";
+  const searchSpecId = "spec-production-search-target-1";
   const planSpecId = options.stalePlanOnly ? previousSpecId : specId;
   const archivedRequestIds = new Set<string>();
   const archivedSpecIds = new Set<string>();
@@ -145,6 +148,38 @@ function installProductionAcceptanceMocks(
             }
           }
         ]
+  };
+  const searchTargetSpec: Record<string, unknown> = {
+    schemaVersion: 1,
+    specId: searchSpecId,
+    requestId: searchRequestId,
+    sourceLineage: [
+      {
+        sourceType: "manual_input",
+        reference: searchRequestId
+      }
+    ],
+    readiness: {
+      status: "complete",
+      reasons: []
+    },
+    event: {
+      type: "Archivsuche Ziel",
+      date: "2099-05-26"
+    },
+    servicePlan: {
+      eventType: "Archivsuche Ziel",
+      serviceForm: "buffet"
+    },
+    attendees: {
+      expected: 12
+    },
+    menuPlan: [
+      {
+        componentId: "component-search-target",
+        label: "Test-Baguette"
+      }
+    ]
   };
   const quickLunchPlan = {
     planId: "plan-quick-lunch-mixed-1",
@@ -265,6 +300,7 @@ function installProductionAcceptanceMocks(
                     }
                   ]
                 : []),
+              ...(options.withoutSpecs || !options.withSearchTargetSpec ? [] : [searchTargetSpec]),
               ...(options.withoutSpecs || archivedSpecIds.has(specId) ? [] : [focusedSpec])
             ]
           }),
@@ -521,6 +557,25 @@ function installProductionAcceptanceMocks(
         );
       }
 
+      if (url.endsWith(`/api/intake/v1/intake/requests/${searchRequestId}`)) {
+        return new Response(
+          JSON.stringify({
+            requestId: searchRequestId,
+            source: {
+              channel: "manual_form",
+              receivedAt: "2026-05-26T08:30:00.000Z"
+            },
+            rawInputs: [
+              {
+                kind: "form",
+                content: "Archivsuche Ziel fuer 12 Teilnehmer. Nur synthetischer UI-Fokustest."
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
       throw new Error(`Unexpected fetch: ${url}`);
     })
   );
@@ -577,6 +632,14 @@ async function flushProductionRouteUpdates(cycles = 8) {
   for (let index = 0; index < cycles; index += 1) {
     await Promise.resolve();
   }
+}
+
+function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(element);
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  setter?.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 async function renderProductionRoute(): Promise<string> {
@@ -681,6 +744,53 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Auftrag einfügen oder Datei ablegen");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Löschen");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("moves the active production context to a narrowed search result before archive", async () => {
+    installProductionAcceptanceMocks({ withSearchTargetSpec: true });
+
+    const { container, root } = await renderProductionRouteInteractive();
+
+    try {
+      const currentSpecItem = Array.from(container.querySelectorAll("li")).find((item) =>
+        (item.textContent ?? "").includes("Konferenz · 36 Teilnehmer · 2026-07-13")
+      );
+      const currentSpecButton = currentSpecItem?.querySelector("button") as HTMLButtonElement | undefined;
+
+      expect(currentSpecButton).toBeTruthy();
+
+      await act(async () => {
+        currentSpecButton?.click();
+        await flushProductionRouteUpdates();
+      });
+
+      expect(document.body.textContent ?? "").toContain("requestId: request-production-fallback-1");
+
+      const filterDetails = container.querySelector(".production-filter-details") as HTMLDetailsElement | null;
+      if (filterDetails) {
+        filterDetails.open = true;
+      }
+      const searchInput = container.querySelector(
+        "input[placeholder='Produktion ruhig filtern']"
+      ) as HTMLInputElement | null;
+
+      expect(searchInput).toBeTruthy();
+
+      await act(async () => {
+        setNativeValue(searchInput!, "Archivsuche Ziel");
+        await flushProductionRouteUpdates();
+      });
+
+      const content = document.body.textContent ?? "";
+      expect(content).toContain("Archivsuche Ziel · 12 Teilnehmer · 2099-05-26");
+      expect(content).toContain("requestId: request-production-search-target-1");
+      expect(content).not.toContain("requestId: request-production-fallback-1");
     } finally {
       await act(async () => {
         root.unmount();

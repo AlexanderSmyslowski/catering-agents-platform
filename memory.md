@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.264
+version: 5.265
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1323,3 +1323,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.264 - 2026-05-26
 - C9 Soft-Archiv ist in `/produktion` als enger UI-Pfad bedienbar: Der fokussierte verknuepfte Intake-Kontext kann ueber `Fehlupload archivieren` an den bestehenden `POST /v1/intake/requests/:requestId/archive`-Endpunkt uebergeben und aus dem aktiven Arbeitsfokus genommen werden.
 - `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt die aktive Archiv-Aktion, den deaktivierten Zustand ohne verknuepften Intake-Kontext, den `wrong_upload`-Reason-Code, das sichtbare Soft-Archiv-Feedback und die Grenze gegen `Loeschen`. C9/README/TESTING sind fortgeschrieben. Keine neue API, keine neue Persistenz/Migration, kein Hard-Delete, keine echten Daten/Uploads, kein Deployment, kein Auth/OIDC und keine Retention-/Compliance-Freigabe.
+
+### 5.265 - 2026-05-26
+- Produktionssuche und aktiver Vorgang sind als kleiner UI-Fokusfix gehaertet: In `/produktion` bevorzugt der aktive Produktionskontext bei aktiver Suche nur noch Spezifikationen aus dem gefilterten Trefferraum, statt einen zuvor fokussierten, nicht mehr passenden Vorgang weiter vorzuziehen.
+- Der echte lokale Browser-Rehearsal bestaetigte nach Stack-Neustart: gefilterter synthetischer Fehlupload wird aktiv, `Fehlupload archivieren` ruft den C9-Soft-Archiv-Endpunkt mit HTTP 200 auf, der Vorgang verschwindet aus aktiven Listen/Fokus und bleibt ueber Detailpfad/`includeArchived=true` nachvollziehbar. `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Fokuswechsel vor Archivierung. Keine API-/Persistenz-/Migrations-, Fachlogik-, Hard-Delete-, Echtdaten-, Deployment-, Auth/OIDC- oder Compliance-Aenderung.
