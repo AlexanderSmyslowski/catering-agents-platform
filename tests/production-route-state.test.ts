@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildProductionPlanComponentMap,
   buildWorkbenchSpecFacts,
   canClearProductionWorkspace,
   countClarificationAnswerStatuses,
@@ -14,6 +15,7 @@ import {
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
   selectProductionNextStep,
+  selectProductionPlanSpec,
   selectProductionWorkbenchPlan,
   translateReadiness
 } from "../backoffice-ui/src/production-route-state.js";
@@ -191,6 +193,39 @@ describe("production route state", () => {
         productionWorkspaceCleared: false
       })
     ).toBe(orderedPlans[0]);
+  });
+
+  it("selects a production plan spec and maps its menu components", () => {
+    const spec = {
+      specId: "spec-current",
+      menuPlan: [
+        { componentId: "starter", title: "Vorspeise" },
+        { componentId: 42, title: "Dessert" },
+        { title: "ohne ID" }
+      ]
+    };
+    const specsById = new Map([[String(spec.specId), spec]]);
+
+    expect(selectProductionPlanSpec({ specsById })).toBeUndefined();
+    expect(
+      selectProductionPlanSpec({
+        selectedPlan: { planId: "plan-1", eventSpecId: "spec-current" },
+        specsById
+      })
+    ).toBe(spec);
+    expect(
+      selectProductionPlanSpec({
+        selectedPlan: { planId: "plan-2", eventSpecId: "missing" },
+        specsById
+      })
+    ).toBeUndefined();
+
+    const components = buildProductionPlanComponentMap(spec);
+    expect(components.get("starter")).toBe(spec.menuPlan[0]);
+    expect(components.get("42")).toBe(spec.menuPlan[1]);
+    expect(components.get("")).toBe(spec.menuPlan[2]);
+    expect(buildProductionPlanComponentMap({ menuPlan: "invalid" }).size).toBe(0);
+    expect(buildProductionPlanComponentMap().size).toBe(0);
   });
 
   it("selects the existing production next-step sequence", () => {

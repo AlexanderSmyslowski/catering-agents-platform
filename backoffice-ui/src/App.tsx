@@ -18,6 +18,7 @@ import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import {
   buildWorkbenchSpecFacts,
+  buildProductionPlanComponentMap,
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
   countClarificationAnswerStatuses,
   countPurchaseListItems,
@@ -30,6 +31,7 @@ import {
   selectArchivedProductionItems,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
+  selectProductionPlanSpec,
   selectProductionWorkbenchPlan,
   selectProductionNextStep,
   translateReadiness
@@ -756,22 +758,15 @@ export function App() {
     [currentProductionSpecId, currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId]
   );
 
-  const selectedPlanSpec = useMemo(() => {
-    if (!selectedPlan) {
-      return undefined;
-    }
-    return specById.get(String(selectedPlan.eventSpecId ?? ""));
-  }, [selectedPlan, specById]);
+  const selectedPlanSpec = useMemo(
+    () => selectProductionPlanSpec({ selectedPlan, specsById: specById }),
+    [selectedPlan, specById]
+  );
 
-  const selectedPlanComponentsById = useMemo(() => {
-    const menuPlan = Array.isArray(selectedPlanSpec?.menuPlan) ? selectedPlanSpec.menuPlan : [];
-    return new Map(
-      menuPlan.map((entry) => {
-        const component = entry as Record<string, unknown>;
-        return [String(component.componentId ?? ""), component] as const;
-      })
-    );
-  }, [selectedPlanSpec]);
+  const selectedPlanComponentsById = useMemo(
+    () => buildProductionPlanComponentMap(selectedPlanSpec),
+    [selectedPlanSpec]
+  );
 
   const productionQuestions = useMemo(
     () => (focusedProductionSpec ? buildProductionQuestions(focusedProductionSpec) : []),

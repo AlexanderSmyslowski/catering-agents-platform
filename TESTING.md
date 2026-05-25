@@ -218,6 +218,7 @@ Der Frontend-Smoke bleibt bewusst schmal:
 - die Fokuswahl der Produktionsroute ist als pure Helper-Logik abgesichert: geloeschter Arbeitsbereich bleibt leer, aktive Suche bleibt auf gefilterte Specs begrenzt, ohne aktive Suche bleibt der bisherige Fallback erhalten.
 - aktuelle und archivierte Produktionsobjekte bleiben als pure Helper-Logik nach fokussierter Spezifikation getrennt; ein geleerter Arbeitsbereich zeigt keine alten Plaene oder Einkaufslisten.
 - die aktive Produktionsplan-Auswahl bleibt als pure Helper-Logik abgesichert: geleerter Arbeitsbereich, explizite Planwahl, aktueller Spec-Fallback und unscoped Fallback behalten ihre bestehende Prioritaet.
+- Produktionsplan-Kontextableitungen bleiben als pure Helper-Logik abgesichert: Plan-zu-Spec-Lookup und Komponenten-Map aus dem Menuplan behalten ihre bestehende Fallback- und ID-Stringifizierung.
 - naechster Produktionsschritt, aktives Kontextlabel und `Arbeitsbereich leeren`-Aktivierbarkeit bleiben als pure Helper-Logik abgesichert, damit `App.tsx` weniger Zustandsorchestrierung direkt enthaelt.
 - Einkaufslistenpositionszaehlung sowie Intake-/Handoff-/Exportlabels der Produktionsroute sind als pure Helper-Logik abgesichert.
 - Workbench-Spezifikationsfakten der Produktionsroute bleiben als pure Helper-Logik abgesichert: Status, Zeitfenster, Gaeste, Serviceform und Menueumfang werden aus dem fokussierten Spec-Kontext gebaut.
