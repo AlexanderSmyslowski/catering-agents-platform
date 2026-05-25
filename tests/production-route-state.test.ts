@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  canClearProductionWorkspace,
+  formatActiveProductionContextLabel,
   selectArchivedProductionItems,
   selectCurrentProductionItems,
-  selectFocusedProductionSpec
+  selectFocusedProductionSpec,
+  selectProductionNextStep
 } from "../backoffice-ui/src/production-route-state.js";
 
 describe("production route state", () => {
@@ -114,5 +117,96 @@ describe("production route state", () => {
         productionWorkspaceCleared: false
       })
     ).toEqual([]);
+  });
+
+  it("selects the existing production next-step sequence", () => {
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: false,
+        questionCount: 0,
+        hasSelectedPlan: false,
+        purchaseListCount: 0
+      }).title
+    ).toBe("Auftrag einfügen oder Datei ablegen");
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 2,
+        hasSelectedPlan: false,
+        purchaseListCount: 0
+      }).title
+    ).toBe("Rückfragen beantworten");
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: false,
+        purchaseListCount: 0
+      }).title
+    ).toBe("Produktionsplan berechnen");
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        purchaseListCount: 0
+      }).title
+    ).toBe("Einkaufsliste noch offen");
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        purchaseListCount: 1
+      }).title
+    ).toBe("Produktionsobjekte und Downloads prüfen");
+  });
+
+  it("formats the existing active production context labels", () => {
+    expect(
+      formatActiveProductionContextLabel({
+        focusedProductionSpecLabel: "Lunch · 80 Teilnehmer · 2026-03-04",
+        productionWorkspaceCleared: false
+      })
+    ).toBe("Lunch · 80 Teilnehmer · 2026-03-04");
+    expect(
+      formatActiveProductionContextLabel({
+        selectedPlan: { planId: "plan-123" },
+        productionWorkspaceCleared: false
+      })
+    ).toBe("Plan-Kontext geladen: plan-123 · Spezifikation noch nicht im Fokus");
+    expect(
+      formatActiveProductionContextLabel({
+        productionWorkspaceCleared: true
+      })
+    ).toBe("Kein aktiver Vorgang");
+    expect(
+      formatActiveProductionContextLabel({
+        productionWorkspaceCleared: false
+      })
+    ).toBe("Noch kein aktiver Vorgang");
+  });
+
+  it("keeps the existing clear-workspace affordance conditions", () => {
+    const idleInput = {
+      hasFocusedProductionSpec: false,
+      hasSelectedPlan: false,
+      hasIntakeFile: false,
+      hasActiveDocumentName: false,
+      documentPhase: "idle",
+      planPhase: "idle",
+      hasFocusedProductionSpecId: false,
+      hasSelectedPlanId: false
+    };
+
+    expect(canClearProductionWorkspace(idleInput)).toBe(false);
+    expect(canClearProductionWorkspace({ ...idleInput, hasFocusedProductionSpec: true })).toBe(true);
+    expect(canClearProductionWorkspace({ ...idleInput, hasSelectedPlan: true })).toBe(true);
+    expect(canClearProductionWorkspace({ ...idleInput, hasIntakeFile: true })).toBe(true);
+    expect(canClearProductionWorkspace({ ...idleInput, hasActiveDocumentName: true })).toBe(true);
+    expect(canClearProductionWorkspace({ ...idleInput, documentPhase: "analysing" })).toBe(true);
+    expect(canClearProductionWorkspace({ ...idleInput, planPhase: "planning" })).toBe(true);
+    expect(canClearProductionWorkspace({ ...idleInput, hasFocusedProductionSpecId: true })).toBe(true);
+    expect(canClearProductionWorkspace({ ...idleInput, hasSelectedPlanId: true })).toBe(true);
   });
 });

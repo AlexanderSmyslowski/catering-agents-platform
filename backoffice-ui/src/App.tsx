@@ -17,9 +17,12 @@ import { formatDocumentIngestionSummary } from "./production-question-panel.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import {
+  canClearProductionWorkspace as canClearProductionWorkspaceFromState,
+  formatActiveProductionContextLabel,
   selectArchivedProductionItems,
   selectCurrentProductionItems,
-  selectFocusedProductionSpec
+  selectFocusedProductionSpec,
+  selectProductionNextStep
 } from "./production-route-state.js";
 import {
   archiveIntakeRequest,
@@ -949,52 +952,31 @@ export function App() {
     ? formatAuditEventHandoffLabel(latestProductionAuditEvent)
     : "keine Audit-Ereignisse geladen";
 
-  const productionNextStep = useMemo(() => {
-    if (!focusedProductionSpec) {
-      return {
-        title: "Auftrag einfügen oder Datei ablegen",
-        description: "Starte mit Angebot, E-Mail, Text oder manuellen Veranstaltungsdaten."
-      };
-    }
-    if (productionQuestions.length > 0) {
-      return {
-        title: "Rückfragen beantworten",
-        description: "Die Produktion braucht noch strukturierte Antworten, bevor Ergebnisse belastbar sind."
-      };
-    }
-    if (!selectedPlan) {
-      return {
-        title: "Produktionsplan berechnen",
-        description: "Die vorhandene Spezifikation kann nun in vorhandene Produktionsobjekte überführt werden."
-      };
-    }
-    if (currentSpecPurchaseLists.length === 0) {
-      return {
-        title: "Einkaufsliste noch offen",
-        description: "Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch."
-      };
-    }
-    return {
-      title: "Produktionsobjekte und Downloads prüfen",
-      description: "Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar."
-    };
-  }, [currentSpecPurchaseLists.length, focusedProductionSpec, productionQuestions.length, selectedPlan]);
-  const activeProductionContextLabel = focusedProductionSpec
-    ? getSpecLabel(focusedProductionSpec)
-    : selectedPlan
-      ? `Plan-Kontext geladen: ${String(selectedPlan.planId ?? "-")} · Spezifikation noch nicht im Fokus`
-      : productionWorkspaceCleared
-        ? "Kein aktiver Vorgang"
-        : "Noch kein aktiver Vorgang";
-  const canClearProductionWorkspace =
-    Boolean(focusedProductionSpec) ||
-    Boolean(selectedPlan) ||
-    Boolean(intakeFile) ||
-    Boolean(activeDocumentName) ||
-    documentPhase !== "idle" ||
-    planPhase !== "idle" ||
-    Boolean(focusedProductionSpecId) ||
-    Boolean(selectedPlanId);
+  const productionNextStep = useMemo(
+    () =>
+      selectProductionNextStep({
+        hasFocusedProductionSpec: Boolean(focusedProductionSpec),
+        questionCount: productionQuestions.length,
+        hasSelectedPlan: Boolean(selectedPlan),
+        purchaseListCount: currentSpecPurchaseLists.length
+      }),
+    [currentSpecPurchaseLists.length, focusedProductionSpec, productionQuestions.length, selectedPlan]
+  );
+  const activeProductionContextLabel = formatActiveProductionContextLabel({
+    focusedProductionSpecLabel: focusedProductionSpec ? getSpecLabel(focusedProductionSpec) : undefined,
+    selectedPlan,
+    productionWorkspaceCleared
+  });
+  const canClearProductionWorkspace = canClearProductionWorkspaceFromState({
+    hasFocusedProductionSpec: Boolean(focusedProductionSpec),
+    hasSelectedPlan: Boolean(selectedPlan),
+    hasIntakeFile: Boolean(intakeFile),
+    hasActiveDocumentName: Boolean(activeDocumentName),
+    documentPhase,
+    planPhase,
+    hasFocusedProductionSpecId: Boolean(focusedProductionSpecId),
+    hasSelectedPlanId: Boolean(selectedPlanId)
+  });
   const canArchiveCurrentIntake = Boolean(currentIntakeRequestId) && !productionWorkspaceCleared;
   const hasFocusedSpecEditChanges = useMemo(() => {
     if (!focusedProductionSpec || editingSpecId !== String(focusedProductionSpec.specId ?? "")) {
