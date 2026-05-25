@@ -1,8 +1,8 @@
 # C9 Fehlupload-Archiv-/Loeschentscheidung
 
-Status: Option B nach explizitem Alexander-Go als enger Soft-Archiv-Runtime-Slice umgesetzt; kein Hard-Delete, keine neue Persistenzwelt, keine Migration, keine echte Datenfreigabe und keine Retention-/Compliance-Freigabe
+Status: Option B nach explizitem Alexander-Go als enger Soft-Archiv-Runtime-Slice inklusive `/produktion`-UI-Aktion umgesetzt; kein Hard-Delete, keine neue Persistenzwelt, keine Migration, keine echte Datenfreigabe und keine Retention-/Compliance-Freigabe
 Stand: 2026-05-26
-Scope: kleinster Backend-Pfad, um falsche interne/synthetische Intake-Upload-Kontexte aus aktiven Listen/Fokuslogiken zu nehmen und intern nachvollziehbar zu halten
+Scope: kleinster Backend-Pfad mit enger `/produktion`-UI-Anbindung, um falsche interne/synthetische Intake-Upload-Kontexte aus aktiven Listen/Fokuslogiken zu nehmen und intern nachvollziehbar zu halten
 
 ## 1. Zweck
 
@@ -145,6 +145,7 @@ Nach Auswahl von Option B wurde der technische Minimalblock so umgesetzt:
 - `includeArchived=true` erlaubt interne Rueckschau;
 - Detailpfade bleiben lesbar;
 - Audit-Aktion `intake.request_soft_archived` dokumentiert den Operatorpfad;
+- `/produktion` bietet fuer den fokussierten Intake-Kontext die Aktion `Fehlupload archivieren`;
 - `hardDeleted` bleibt explizit `false`.
 
 Nicht automatisch freigegeben:
@@ -221,12 +222,14 @@ Dateien/Quellen:
 - `shared-core/src/access-control.*`
 - bestehende Repository-/File-Store-/Postgres-Collection-Grenzen;
 - `tests/intake-soft-archive.test.ts`
+- `tests/backoffice-production-acceptance-smoke.test.ts`
 - `tests/access-control.test.ts`
 - `tests/p1-role-guards.test.ts`
 
 Tests:
 
 - archivierter Fehlupload erscheint nicht mehr als aktiver Vorgang;
+- `/produktion` kann den fokussierten Intake-Kontext per Soft-Archiv aus dem aktiven Arbeitsfokus nehmen;
 - archivierter Kontext bleibt intern ueber Detailpfade und `includeArchived=true` nachvollziehbar;
 - kein Hard-Delete;
 - Audit-Aktion ist vorhanden;
@@ -242,7 +245,7 @@ Abbruchkriterien:
 
 Ergebnis:
 
-- Der kleine, reversible Soft-Archiv-Slice ist gebaut.
+- Der kleine, reversible Soft-Archiv-Slice ist backend-seitig und in `/produktion` bedienbar gebaut.
 - Ohne Hard-Delete, ohne neue Persistenzwelt und ohne echte-Daten-Go.
 
 ## 10. Definition of Done
@@ -253,6 +256,6 @@ C9 ist erfuellt, wenn:
 - Option A, Option B und Option C entscheidungsreif verglichen sind;
 - Option B als Empfehlung und Option A als sicherer Default festgehalten sind;
 - C9 nicht als Hard-Delete-, Retention-, echte-Daten-, Sandbox-/AV- oder Deployment-Go gelesen werden kann;
-- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts` und `tests/intake-soft-archive.test.ts` gruen sind;
+- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts`, `tests/intake-soft-archive.test.ts` und `tests/backoffice-production-acceptance-smoke.test.ts` gruen sind;
 - README, TESTING und memory fortgeschrieben sind;
 - Full Gates weiterhin gruen bleiben.

@@ -38,6 +38,7 @@ type ProductionSourceInputValues = {
   documentEtaSeconds?: number;
   intakeText: string;
   canClearWorkspace: boolean;
+  canArchiveCurrentIntake: boolean;
 };
 
 type ProductionSourceInputActions = {
@@ -47,6 +48,7 @@ type ProductionSourceInputActions = {
   setIntakeText: (value: string) => void;
   openFilePicker: () => void;
   clearWorkspace: () => void;
+  archiveCurrentIntake: () => Promise<void>;
   handleDrop: (event: DragEvent<HTMLLabelElement>) => void;
   handleFileSelection: (event: ChangeEvent<HTMLInputElement>) => void;
   submitDocument: () => Promise<void>;
@@ -76,6 +78,7 @@ export function ProductionInputPanel({
   manualInputActions
 }: ProductionInputPanelProps) {
   const clearWorkspaceDisabled = submitting || !sourceInput.canClearWorkspace;
+  const archiveCurrentIntakeDisabled = submitting || !sourceInput.canArchiveCurrentIntake;
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
@@ -98,6 +101,14 @@ export function ProductionInputPanel({
             onClick={sourceInputActions.clearWorkspace}
           >
             Arbeitsbereich leeren
+          </button>
+          <button
+            type="button"
+            className="secondary-button destructive-button"
+            disabled={archiveCurrentIntakeDisabled}
+            onClick={() => void sourceInputActions.archiveCurrentIntake()}
+          >
+            Fehlupload archivieren
           </button>
         </div>
       </div>

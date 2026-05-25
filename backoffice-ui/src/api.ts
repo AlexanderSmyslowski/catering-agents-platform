@@ -37,6 +37,10 @@ export interface IntakeRequestDetail extends Record<string, unknown> {
 export type RecipeUploadTarget = "offer" | "production";
 export type RecipeReviewDecision = "approve" | "verify" | "reject";
 export type IntakeDocumentChannel = "pdf_upload" | "email" | "text";
+export type IntakeArchiveReasonCode =
+  | "wrong_upload"
+  | "duplicate_test_data"
+  | "operator_rehearsal_cleanup";
 
 export interface ServiceHealth {
   service: string;
@@ -176,6 +180,20 @@ export async function loadIntakeRequestDetail(requestId: string): Promise<Intake
   return fetchJson<IntakeRequestDetail>(
     `/api/intake/v1/intake/requests/${requestId}`,
     undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.intake
+  );
+}
+
+export async function archiveIntakeRequest(
+  requestId: string,
+  reasonCode: IntakeArchiveReasonCode = "wrong_upload"
+) {
+  return fetchJson<Record<string, unknown>>(
+    `/api/intake/v1/intake/requests/${encodeURIComponent(requestId)}/archive`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reasonCode })
+    },
     DEFAULT_MUTATION_ACTOR_NAMES.intake
   );
 }

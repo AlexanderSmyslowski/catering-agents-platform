@@ -51,12 +51,14 @@ type ProductionRouteMainLayoutProps = {
   documentEtaSeconds?: number;
   intakeText: string;
   canClearProductionWorkspace: boolean;
+  canArchiveCurrentIntake: boolean;
   productionUploadInputRef: { current: HTMLInputElement | null };
   setDragActive: (active: boolean) => void;
   setIntakeChannel: (channel: IntakeDocumentChannel) => void;
   setIntakeText: (value: string) => void;
   openProductionFilePicker: () => void;
   clearProductionWorkspace: () => void;
+  archiveCurrentIntake: () => Promise<void>;
   handleProductionDrop: (event: DragEvent<HTMLLabelElement>) => void;
   handleProductionFileSelection: (event: ChangeEvent<HTMLInputElement>) => void;
   handleIntakeDocumentSubmit: () => Promise<void>;
@@ -167,12 +169,14 @@ export function ProductionRouteMainLayout({
   documentEtaSeconds,
   intakeText,
   canClearProductionWorkspace,
+  canArchiveCurrentIntake,
   productionUploadInputRef,
   setDragActive,
   setIntakeChannel,
   setIntakeText,
   openProductionFilePicker,
   clearProductionWorkspace,
+  archiveCurrentIntake,
   handleProductionDrop,
   handleProductionFileSelection,
   handleIntakeDocumentSubmit,
@@ -282,7 +286,8 @@ export function ProductionRouteMainLayout({
             documentProgress,
             documentEtaSeconds,
             intakeText,
-            canClearWorkspace: canClearProductionWorkspace
+            canClearWorkspace: canClearProductionWorkspace,
+            canArchiveCurrentIntake
           }}
           sourceInputActions={{
             uploadInputRef: productionUploadInputRef,
@@ -291,6 +296,7 @@ export function ProductionRouteMainLayout({
             setIntakeText,
             openFilePicker: openProductionFilePicker,
             clearWorkspace: clearProductionWorkspace,
+            archiveCurrentIntake,
             handleDrop: handleProductionDrop,
             handleFileSelection: handleProductionFileSelection,
             submitDocument: handleIntakeDocumentSubmit,
