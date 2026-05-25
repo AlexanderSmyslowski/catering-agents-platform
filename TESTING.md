@@ -215,6 +215,7 @@ Der Frontend-Smoke bleibt bewusst schmal:
 - der Produktionsbereich zeigt fuer vorhandene Daten sowohl nutzbare Plaene als auch blockierte/Fallback-Zustaende ehrlich an.
 - die Production Workbench zeigt Rueckfragenstatus, naechsten sinnvollen Schritt, interne Produktionsobjekte/Downloads, Rezeptpruefstatus sowie Herkunft/Uebergabe als ruhige read-only Zonen aus bestehenden Daten.
 - die Produktionssuche haelt den aktiven Produktionskontext konsistent mit dem gefilterten Spezifikationstreffer, damit ein gezielt gesuchter Vorgang nicht von einem zuvor fokussierten Vorgang ueberlagert wird.
+- die Fokuswahl der Produktionsroute ist als pure Helper-Logik abgesichert: geloeschter Arbeitsbereich bleibt leer, aktive Suche bleibt auf gefilterte Specs begrenzt, ohne aktive Suche bleibt der bisherige Fallback erhalten.
 - der geleerte Produktionsfokus bleibt in der Workbench wirklich leer: keine aktive Spezifikation bedeutet keine scheinbar offene Rueckfrage.
 - Focaccia ohne Herstellungsentscheidung erscheint in der Workbench als spezifischer Hybridfall statt als generische Rezept-/Beschaffungsentscheidung.
 - C7 schuetzt den Empty-State klare Spezifikation ohne Produktionsplan/Einkaufsliste: Der naechste Schritt `Berechnung starten`, die fehlende Einkaufsliste und noch fehlende Exportlinks muessen im bestehenden `/produktion`-Kontext verstaendlich sichtbar bleiben.
