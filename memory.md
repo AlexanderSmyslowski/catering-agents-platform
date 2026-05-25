@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.265
+version: 5.266
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1327,3 +1327,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.265 - 2026-05-26
 - Produktionssuche und aktiver Vorgang sind als kleiner UI-Fokusfix gehaertet: In `/produktion` bevorzugt der aktive Produktionskontext bei aktiver Suche nur noch Spezifikationen aus dem gefilterten Trefferraum, statt einen zuvor fokussierten, nicht mehr passenden Vorgang weiter vorzuziehen.
 - Der echte lokale Browser-Rehearsal bestaetigte nach Stack-Neustart: gefilterter synthetischer Fehlupload wird aktiv, `Fehlupload archivieren` ruft den C9-Soft-Archiv-Endpunkt mit HTTP 200 auf, der Vorgang verschwindet aus aktiven Listen/Fokus und bleibt ueber Detailpfad/`includeArchived=true` nachvollziehbar. `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Fokuswechsel vor Archivierung. Keine API-/Persistenz-/Migrations-, Fachlogik-, Hard-Delete-, Echtdaten-, Deployment-, Auth/OIDC- oder Compliance-Aenderung.
+
+### 5.266 - 2026-05-26
+- Produktions-Empty-Focus ist als kleiner UI-Konsistenzfix gehaertet: Wenn `/produktion` keinen fokussierten Produktionsvorgang hat, werden keine scheinbar offenen Rueckfragen mehr an die Workbench gegeben.
+- `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den leeren Zustand nach Soft-Archiv und den Zustand ohne Upload/Produktionskontext mit `Rueckfragen: keine offenen Rueckfragen` und `offen 0 · beantwortet 0`. Keine Aenderung an Fragegenerierung fuer echte Spezifikationen, API, Persistenz, Planung, Rezeptlogik, echte Daten, Deployment, Auth/OIDC oder Compliance.

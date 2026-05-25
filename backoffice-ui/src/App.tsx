@@ -822,7 +822,7 @@ export function App() {
   }, [selectedPlanSpec]);
 
   const productionQuestions = useMemo(
-    () => buildProductionQuestions(focusedProductionSpec),
+    () => (focusedProductionSpec ? buildProductionQuestions(focusedProductionSpec) : []),
     [focusedProductionSpec]
   );
 
