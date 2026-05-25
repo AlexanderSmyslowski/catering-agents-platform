@@ -78,6 +78,16 @@ KOSTENÜBERSICHT | DETAILS |
 8 Gesamtkosten: 4.191,25 €`;
 }
 
+function receptionOfferText(): string {
+  return [
+    "Empfang am 2026-06-18 fuer 75 Teilnehmer mit Flying Bites:",
+    "Mini-Quiche Spinat Feta;",
+    "Hummus-Gemuese-Cups;",
+    "Tomaten-Mozzarella-Spiesse;",
+    "Brownie-Bites."
+  ].join(" ");
+}
+
 function specWithComponent(label: string): AcceptedEventSpec {
   const spec = normalizeEventRequestToSpec(
     baseEventRequest(`Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit ${label}.`)
@@ -486,6 +496,165 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.unresolvedItems).toHaveLength(0);
     expect(body.productionPlan.productionBatches.length).toBeGreaterThanOrEqual(8);
     expect(body.productionPlan.kitchenSheets.length).toBeGreaterThanOrEqual(9);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("builds a synthetic reception flying-bites production plan across internal recipe anchors", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const recipeUploads = [
+      {
+        recipeName: "Flying Bites Mini-Quiche Spinat Feta",
+        filename: "Flying Bites Mini-Quiche Spinat Feta.pdf",
+        sourceRef: "test:reception-mini-quiche-spinat-feta",
+        text: [
+          "Flying Bites Mini-Quiche Spinat Feta",
+          "Zutaten",
+          "1 kg Spinat",
+          "500 g Feta",
+          "12 Eier",
+          "1 kg Quiche-Teig",
+          "Zubereitung",
+          "1. Spinat und Feta vorbereiten.",
+          "2. Mini-Quiches backen."
+        ].join("\n")
+      },
+      {
+        recipeName: "Hummus Gemüse Cups vegan",
+        filename: "Hummus Gemuese Cups vegan.pdf",
+        sourceRef: "test:reception-hummus-gemuese-cups",
+        text: [
+          "Hummus Gemüse Cups vegan",
+          "Zutaten",
+          "1 kg Kichererbsen",
+          "250 g Tahini",
+          "500 g Gemuese-Sticks",
+          "80 ml Zitronensaft",
+          "Zubereitung",
+          "1. Hummus vegan mixen.",
+          "2. In Cups mit Gemuese-Sticks anrichten."
+        ].join("\n")
+      },
+      {
+        recipeName: "Tomaten Mozzarella Spiesse vegetarisch",
+        filename: "Tomaten Mozzarella Spiesse vegetarisch.pdf",
+        sourceRef: "test:reception-tomaten-mozzarella-spiesse",
+        text: [
+          "Tomaten Mozzarella Spiesse vegetarisch",
+          "Zutaten",
+          "1 kg Tomaten",
+          "800 g Mozzarella",
+          "150 g Basilikum",
+          "120 ml Pesto",
+          "Zubereitung",
+          "1. Tomaten und Mozzarella vorbereiten.",
+          "2. Spiesse vegetarisch stecken."
+        ].join("\n")
+      },
+      {
+        recipeName: "Brownie Bites",
+        filename: "Brownie Bites.pdf",
+        sourceRef: "test:reception-brownie-bites",
+        text: [
+          "Brownie Bites",
+          "Zutaten",
+          "500 g Mehl",
+          "400 g Schokolade",
+          "300 g Zucker",
+          "250 g Butter",
+          "Zubereitung",
+          "1. Brownie-Teig mischen.",
+          "2. Als kleine Bites backen."
+        ].join("\n")
+      }
+    ];
+
+    for (const upload of recipeUploads) {
+      await repository.save(parseUploadedRecipeText(upload));
+    }
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const normalizedSpec = normalizeEventRequestToSpec({
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "request-reception-flying",
+      source: {
+        channel: "text",
+        receivedAt: "2026-03-11T11:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "text",
+          content: receptionOfferText()
+        }
+      ]
+    });
+    const spec: AcceptedEventSpec = {
+      ...normalizedSpec,
+      menuPlan: normalizedSpec.menuPlan.map((item) => ({
+        ...item,
+        menuCategory: /hummus/i.test(item.label)
+          ? "vegan"
+          : /tomaten|mozzarella/i.test(item.label)
+            ? "vegetarian"
+            : "classic",
+        productionDecision: {
+          mode: "scratch"
+        }
+      }))
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(spec.event.type).toBe("reception");
+    expect(spec.servicePlan.serviceForm).toBe("standing_reception");
+    expect(spec.attendees.expected).toBe(75);
+    expect(spec.productionConstraints ?? []).not.toContain("vegan");
+    expect(spec.menuPlan.find((item) => /hummus/i.test(item.label))?.menuCategory).toBe("vegan");
+    expect(spec.menuPlan.find((item) => /tomaten|mozzarella/i.test(item.label))?.menuCategory).toBe("vegetarian");
+
+    const body = response.json();
+    const recipeSelections = body.productionPlan.recipeSelections as Array<{
+      componentId: string;
+      sourceTier?: string;
+      autoUsedInternetRecipe?: boolean;
+      selectionReason?: string;
+    }>;
+    const selectionByComponent = new Map(
+      recipeSelections.map((selection) => [selection.componentId, selection])
+    );
+
+    for (const component of spec.menuPlan) {
+      const selection = selectionByComponent.get(component.componentId);
+      expect(selection?.sourceTier, component.label).toBe("internal_approved");
+      expect(selection?.autoUsedInternetRecipe, component.label).toBe(false);
+      expect(selection?.selectionReason, component.label).toContain("internen Bibliothek");
+    }
+
+    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    expect(body.productionPlan.productionBatches).toHaveLength(spec.menuPlan.length);
+    expect(body.productionPlan.kitchenSheets).toHaveLength(spec.menuPlan.length);
+    const purchaseDisplayNames = body.purchaseList.items.map((item: { displayName: string }) => item.displayName);
+    expect(purchaseDisplayNames).not.toEqual(
+      expect.arrayContaining([
+        "Zubereitung",
+        "Spinat und Feta vorbereiten.",
+        "Hummus vegan mixen.",
+        "Brownie-Teig mischen."
+      ])
+    );
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
