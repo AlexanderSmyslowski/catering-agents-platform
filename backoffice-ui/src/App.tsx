@@ -682,15 +682,21 @@ export function App() {
       return undefined;
     }
 
+    const productionSearchActive = route === "production" && deferredSearch.trim().length > 0;
     const preferred = focusedProductionSpecId
-      ? dashboard.acceptedSpecs.find((spec) => String(spec.specId) === focusedProductionSpecId)
+      ? filteredSpecs.find((spec) => String(spec.specId) === focusedProductionSpecId)
       : undefined;
+
+    if (productionSearchActive) {
+      return preferred ?? filteredSpecs[filteredSpecs.length - 1];
+    }
+
     return (
       preferred ??
       filteredSpecs[filteredSpecs.length - 1] ??
       dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1]
     );
-  }, [dashboard.acceptedSpecs, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared]);
+  }, [dashboard.acceptedSpecs, deferredSearch, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared, route]);
 
   const currentIntakeRequestId = useMemo(() => {
     if (route !== "production" || !focusedProductionSpec) {
