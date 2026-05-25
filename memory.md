@@ -1295,3 +1295,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.257 - 2026-05-25
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Refactor-Schnitt verbessert: Der Produktionsroute-Filter-/Bestandsblock `Suche und Bestand` liegt nun in `backoffice-ui/src/production-route-filter-panel.tsx`.
 - `backoffice-ui/src/App.tsx` behaelt Suchzustand, Statusberechnung und Datenquellen; die neue Komponente rendert nur vorhandene Texte, Counts, Statuskarten und Suchfeld. `App.tsx` liegt danach bei 2134 Zeilen. Keine Suchlogik-, Daten-, API-, Persistenz-/Migrations-, Rezept-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.258 - 2026-05-25
+- Produktions-UI-Stale-Fokus ist als kleiner Rehearsal-Friction-Fix gehaertet: Aktueller Vorgang, sekundäre ältere Produktionsläufe und ältere Einkaufslisten sagen nun explizit, dass ältere geladene Läufe getrennt bleiben und nicht als aktueller Vorgang gelesen werden dürfen.
+- `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Fall mit aktuellem Plan plus älterem Plan/Einkaufsliste gegen stille Kontextvermischung. Keine API-, Persistenz-/Migrations-, Upload-Loesch-/Archivierungs-, Rezept-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.

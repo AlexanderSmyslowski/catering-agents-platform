@@ -20,6 +20,7 @@ function installProductionAcceptanceMocks(
     withSubmittedClarificationAnswer?: boolean;
     withoutSpecs?: boolean;
     withQuickLunchMixedPlan?: boolean;
+    withArchivedProductionContext?: boolean;
   } = {}
 ) {
   const storage = new Map<string, string>();
@@ -245,7 +246,7 @@ function installProductionAcceptanceMocks(
             items: [
               ...(options.withoutSpecs
                 ? []
-                : options.stalePlanOnly
+                : options.stalePlanOnly || options.withArchivedProductionContext
                 ? [
                     {
                       schemaVersion: 1,
@@ -302,7 +303,24 @@ function installProductionAcceptanceMocks(
                         productionBatches: [],
                         kitchenSheets: [],
                         recipeSelections: []
-                      }
+                      },
+                  ...(options.withArchivedProductionContext
+                    ? [
+                        {
+                          planId: "plan-production-previous-1",
+                          eventSpecId: previousSpecId,
+                          readiness: {
+                            status: "complete",
+                            reasons: []
+                          },
+                          isFallback: false,
+                          unresolvedItems: [],
+                          productionBatches: [],
+                          kitchenSheets: [],
+                          recipeSelections: []
+                        }
+                      ]
+                    : [])
                 ]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -355,7 +373,23 @@ function installProductionAcceptanceMocks(
                         purchaseUnit: "l"
                       }
                     ]
-                  }
+                  },
+                  ...(options.withArchivedProductionContext
+                    ? [
+                        {
+                          purchaseListId: "purchase-production-previous-1",
+                          eventSpecId: previousSpecId,
+                          totals: { itemCount: 1 },
+                          items: [
+                            {
+                              articleName: "Alte Testposition",
+                              purchaseQty: 1,
+                              purchaseUnit: "kg"
+                            }
+                          ]
+                        }
+                      ]
+                    : [])
                 ]
               : []
           }),
@@ -623,12 +657,38 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("production-purchase-zone");
     expect(content).toContain("Einkaufsliste");
+    expect(content).toContain(
+      "Die sichtbare Liste gehört zum aktuellen Vorgang; ältere Einkaufslisten bleiben getrennt darunter."
+    );
     expect(content).toContain("1 Liste · 2 Positionen");
     expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-fallback-1");
     expect(content).toContain("Einkaufsliste herunterladen");
     expect(content).toContain("Glutenfreies Baguette");
     expect(content).toContain("Olivenöl");
     expect(content).not.toContain("Aktueller Vorgang zuerst");
+  });
+
+  it("marks older production objects and purchase lists as non-current context", async () => {
+    installProductionAcceptanceMocks({
+      completeSpec: true,
+      withCurrentPurchaseList: true,
+      withArchivedProductionContext: true
+    });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain(
+      "Hier erscheinen die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere geladene Läufe bleiben eingeklappt getrennt und sind kein aktueller Vorgang."
+    );
+    expect(content).toContain("Nur bei Bedarf aufklappen; ältere Läufe sind nicht der aktuelle Vorgang.");
+    expect(content).toContain("Ältere Produktionsläufe");
+    expect(content).toContain(
+      "Diese früheren Produktionsläufe sind Kontext aus anderen Vorgängen, nicht das aktuelle Ergebnis."
+    );
+    expect(content).toContain("Ältere Einkaufslisten");
+    expect(content).toContain("Nur bei Bedarf aufklappen; ältere Listen sind kein aktueller Vorgang.");
+    expect(content).toContain("Ältere Einkaufsliste aus anderem Vorgang - nicht aktueller Vorgang.");
+    expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-fallback-1");
   });
 
   it("shows the next step to calculate a production plan when the spec is clear but no plan exists", async () => {

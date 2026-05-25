@@ -114,7 +114,7 @@ export function ProductionObjectsPanel({
       <p className="helper-text">
         {productionWorkspaceCleared
           ? "Die Ergebnisfelder wurden geleert. Ein neuer Upload oder eine neue Erfassung füllt diesen Bereich wieder."
-          : "Hier erscheinen die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere Läufe bleiben in den Details abrufbar."}
+          : "Hier erscheinen die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere geladene Läufe bleiben eingeklappt getrennt und sind kein aktueller Vorgang."}
       </p>
       {!productionWorkspaceCleared ? (
         <ProductionPlanList
