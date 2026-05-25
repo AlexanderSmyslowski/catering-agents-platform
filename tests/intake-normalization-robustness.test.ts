@@ -148,4 +148,29 @@ describe("intake normalization robustness", () => {
       }
     }
   );
+
+  it("keeps dish-level vegan and vegetarian labels out of global production constraints", () => {
+    const request = createEventRequestFromText({
+      requestId: "mixed-diet-menu-1",
+      channel: "text",
+      rawText: [
+        "Empfang am 2026-06-18 fuer 75 Teilnehmer.",
+        "Mini-Quiche Spinat Feta;",
+        "Hummus-Gemuese-Cups vegan;",
+        "Tomaten-Mozzarella-Spiesse vegetarisch;",
+        "Brownie-Bites."
+      ].join(" ")
+    });
+    const spec = normalizeEventRequestToSpec(request);
+
+    expect(request.extractedFacts ?? []).not.toEqual(
+      expect.arrayContaining(["constraint=vegan", "constraint=vegetarian"])
+    );
+    expect(request.constraints ?? []).not.toEqual(
+      expect.arrayContaining(["vegan", "vegetarian"])
+    );
+    expect(spec.productionConstraints ?? []).not.toEqual(
+      expect.arrayContaining(["vegan", "vegetarian"])
+    );
+  });
 });

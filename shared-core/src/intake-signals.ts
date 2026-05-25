@@ -160,6 +160,42 @@ const DIETARY_PATTERNS = [
   }
 ] as const;
 
+const requestLevelDietaryIntentPattern =
+  /\b(?:bitte|muss|müssen|muessen|soll|sollen|sollte|sollten|alle|für alle|fuer alle|durchgehend|komplett|vollständig|vollstaendig|ausschließlich|ausschliesslich|restriktion|anforderung|allergie|intoleranz|ohne|kein|keine|keinen|frei|free)\b/i;
+
+const globalMenuDietaryScopePattern =
+  /\b(?:buffet|menü|menu|catering|event|veranstaltung|essen|lunch|dinner|angebot)\b/i;
+
+const dietaryShareHeadingPattern =
+  /^(?:vegan(?:e|er|en|es)?|vegetarisch(?:e|er|en|es)?|vegetarian)\s*(?:\|\s*)?\d{1,3}\s*%?$/i;
+
+const dishContextPattern =
+  /(?:quiche|hummus|gem(?:ü|ue)se|cups?|spie(?:ss|ß)e|brownie|bites?|tomaten|mozzarella|feta|kuchen|curry|reis|salat|suppe|bowl|tarte|pasta|nudel|kartoffel|kraut|zucchini|pilze|zuckerschoten|pak-choi|wildkr(?:ä|ae)uter|bulette|frikadelle|dessert|baguette|brot)/i;
+
+function isComponentScopedDietarySegment(segment: string, canonical: string): boolean {
+  if (canonical !== "vegan" && canonical !== "vegetarian") {
+    return false;
+  }
+
+  if (dietaryShareHeadingPattern.test(segment)) {
+    return true;
+  }
+
+  return dishContextPattern.test(segment) && !globalMenuDietaryScopePattern.test(segment);
+}
+
+function shouldPromoteDietarySignalToConstraint(segment: string, canonical: string): boolean {
+  if (requestLevelDietaryIntentPattern.test(segment)) {
+    return true;
+  }
+
+  if (globalMenuDietaryScopePattern.test(segment)) {
+    return true;
+  }
+
+  return !isComponentScopedDietarySegment(segment, canonical);
+}
+
 function extractDietarySignals(segment: string): {
   confirmed: string[];
   tentative: string[];
@@ -176,7 +212,7 @@ function extractDietarySignals(segment: string): {
 
     if (hedge) {
       tentative.push(pattern.canonical);
-    } else {
+    } else if (shouldPromoteDietarySignalToConstraint(normalized, pattern.canonical)) {
       confirmed.push(pattern.canonical);
     }
   }
