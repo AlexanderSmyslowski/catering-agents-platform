@@ -17,17 +17,20 @@ import { formatDocumentIngestionSummary } from "./production-question-panel.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import {
+  buildWorkbenchSpecFacts,
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
   countPurchaseListItems,
   formatActiveProductionContextLabel,
   formatProductionHandoffContextLabel,
   formatProductionHandoffExportLabel,
   formatProductionIntakeOriginLabel,
+  formatProductionTimingWindow,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
-  selectProductionNextStep
+  selectProductionNextStep,
+  translateReadiness
 } from "./production-route-state.js";
 import {
   archiveIntakeRequest,
@@ -192,46 +195,6 @@ function getBaseUrl(): string {
     return "";
   }
   return window.location.origin;
-}
-
-function translateReadiness(value?: string): string {
-  const labels: Record<string, string> = {
-    complete: "vollständig",
-    partial: "teilweise vollständig",
-    insufficient: "unzureichend"
-  };
-  return value ? labels[value] ?? value : "-";
-}
-
-function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
-  const event = asRecord(spec?.event);
-  const date = readStringOrNumber(event, ["date"]);
-  const schedule = Array.isArray(event?.schedule)
-    ? event.schedule
-        .map((item) => {
-          const slot = asRecord(item);
-          const label = readStringOrNumber(slot, ["label"]);
-          const start = readStringOrNumber(slot, ["start"]);
-          const end = readStringOrNumber(slot, ["end"]);
-          if (!start && !end) {
-            return "";
-          }
-          const timing = start && end ? `${start}–${end}` : start ?? end;
-          return [label, timing].filter(Boolean).join(" ").trim();
-        })
-        .filter(Boolean)
-    : [];
-
-  if (date && schedule.length > 0) {
-    return `Datum: ${date} · Terminfenster: ${schedule.join(", ")}`;
-  }
-  if (date) {
-    return `Datum: ${date}`;
-  }
-  if (schedule.length > 0) {
-    return `Terminfenster: ${schedule.join(", ")}`;
-  }
-  return "Terminfenster: noch zu bestätigen";
 }
 
 function formatStructuredProductionAnswerSummary(spec?: Record<string, unknown>): string | undefined {
@@ -744,17 +707,6 @@ export function App() {
   }, [currentIntakeRequestId]);
 
   const focusedProductionSpecRecord = focusedProductionSpec as Record<string, unknown> | undefined;
-  const focusedProductionSpecServicePlan =
-    focusedProductionSpecRecord?.servicePlan && typeof focusedProductionSpecRecord.servicePlan === "object"
-      ? (focusedProductionSpecRecord.servicePlan as Record<string, unknown>)
-      : undefined;
-  const focusedProductionSpecAttendees =
-    focusedProductionSpecRecord?.attendees && typeof focusedProductionSpecRecord.attendees === "object"
-      ? (focusedProductionSpecRecord.attendees as Record<string, unknown>)
-      : undefined;
-  const focusedProductionSpecMenuPlan = Array.isArray(focusedProductionSpecRecord?.menuPlan)
-    ? focusedProductionSpecRecord.menuPlan
-    : undefined;
 
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
 
@@ -875,36 +827,10 @@ export function App() {
     [productionConversationProjection.messages]
   );
 
-  const workbenchSpecFacts = useMemo(() => {
-    if (!focusedProductionSpecRecord) {
-      return [];
-    }
-
-    return [
-      {
-        label: "Status",
-        value: translateReadiness(
-          String((focusedProductionSpecRecord.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-        )
-      },
-      {
-        label: "Zeit",
-        value: formatProductionTimingWindow(focusedProductionSpecRecord)
-      },
-      {
-        label: "Gäste",
-        value: `${String(focusedProductionSpecAttendees?.expected ?? "-")} Personen`
-      },
-      {
-        label: "Service",
-        value: translateServiceForm(String(focusedProductionSpecServicePlan?.serviceForm ?? ""))
-      },
-      {
-        label: "Menü",
-        value: `${focusedProductionSpecMenuPlan?.length ?? 0} Komponenten`
-      }
-    ];
-  }, [focusedProductionSpecAttendees, focusedProductionSpecMenuPlan, focusedProductionSpecRecord, focusedProductionSpecServicePlan]);
+  const workbenchSpecFacts = useMemo(
+    () => buildWorkbenchSpecFacts(focusedProductionSpecRecord),
+    [focusedProductionSpecRecord]
+  );
 
   const currentPurchaseListItemCount = useMemo(
     () => countPurchaseListItems(currentSpecPurchaseLists),
