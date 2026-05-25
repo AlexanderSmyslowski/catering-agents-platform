@@ -22,6 +22,7 @@ import {
   ProductionQuestionPanel
 } from "./production-question-panel.js";
 import { ProductionRecipeLibraryPanel } from "./production-recipe-library-panel.js";
+import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionConversationalWorkbench } from "./production-workbench.js";
 import {
   createAcceptedSpecFromDocument,
@@ -1779,47 +1780,17 @@ export function App() {
       ) : null}
 
       {route === "production" ? (
-        <details className="panel secondary-workspace production-filter-details">
-          <summary>
-            <span className="eyebrow">Suche und Bestand</span>
-            <span className="subsection-title">Produktionsobjekte leise filtern</span>
-            <span className="helper-text">
-              {dashboard.productionPlans.length} Pläne · {dashboard.purchaseLists.length} Einkaufslisten ·{" "}
-              {dashboard.recipes.length} Rezepte · Produktionsdienst {translateHealthStatus(serviceHealth.production.status)}
-            </span>
-          </summary>
-          <div className="secondary-workspace__content">
-            <section className="toolbar toolbar--production">
-              <input
-                className="search"
-                placeholder="Produktion ruhig filtern"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-              <p className="helper-text toolbar-note">
-                Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.
-              </p>
-            </section>
-            <section className="metrics-grid metrics-grid--compact-route">
-              <StatusCard
-                title="Produktionspläne"
-                body={`${dashboard.productionPlans.length} Küchenpläne mit Zeit- und Rezeptbezug sind vorhanden.`}
-              />
-              <StatusCard
-                title="Einkaufslisten"
-                body={`${dashboard.purchaseLists.length} Listen sind für Großmarkt und Beschaffung verfügbar.`}
-              />
-              <StatusCard
-                title="Rezeptbibliothek"
-                body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
-              />
-              <StatusCard
-                title="Produktionsdienst"
-                body={`${translateHealthStatus(serviceHealth.production.status)} · ${formatCounts(serviceHealth.production.counts)}`}
-              />
-            </section>
-          </div>
-        </details>
+        <ProductionRouteFilterPanel
+          productionPlanCount={dashboard.productionPlans.length}
+          purchaseListCount={dashboard.purchaseLists.length}
+          recipeCount={dashboard.recipes.length}
+          approvedRecipeCount={recipeReviewCounts.approved}
+          reviewRequiredRecipeCount={recipeReviewCounts.reviewRequired}
+          productionServiceStatusLabel={translateHealthStatus(serviceHealth.production.status)}
+          productionServiceCountsLabel={formatCounts(serviceHealth.production.counts)}
+          search={search}
+          setSearch={setSearch}
+        />
       ) : null}
 
       {error || notice ? (
