@@ -1,6 +1,5 @@
 import {
   startTransition,
-  type CSSProperties,
   type ChangeEvent,
   type DragEvent,
   useDeferredValue,
@@ -14,6 +13,15 @@ import { buildProductionConversationProjection } from "../../shared-core/src/con
 import { DashboardShell } from "../components/dashboard-shell.js";
 import { StatusCard } from "../components/status-card.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
+import { ProductionHandoffPanel } from "./production-handoff-panel.js";
+import { ProductionInputPanel } from "./production-input-panel.js";
+import { ProductionObjectsPanel } from "./production-objects-panel.js";
+import { ProductionPurchaseListPanel } from "./production-purchase-list-panel.js";
+import {
+  formatDocumentIngestionSummary,
+  ProductionQuestionPanel
+} from "./production-question-panel.js";
+import { ProductionRecipeLibraryPanel } from "./production-recipe-library-panel.js";
 import { ProductionConversationalWorkbench } from "./production-workbench.js";
 import {
   createAcceptedSpecFromDocument,
@@ -26,8 +34,6 @@ import {
   loadServiceHealth,
   persistOperatorName,
   promoteOfferDraft,
-  productionExportUrl,
-  purchaseListExportUrl,
   readOperatorName,
   reviewRecipe,
   seedDemoData,
@@ -43,8 +49,6 @@ import {
   buildProductionAssumptions,
   buildProductionQuestions,
   getSpecLabel,
-  translateMenuCategory,
-  translateProductionMode,
   translateServiceForm
 } from "./production-language.js";
 
@@ -57,6 +61,70 @@ type ComponentEditState = {
   recipeOverrideId: string;
   notes: string;
 };
+
+type SpecEditSnapshot = {
+  eventType: string;
+  eventDate: string;
+  attendeeCount: string;
+  serviceForm: string;
+  menuItems: string;
+  components: Array<[string, ComponentEditState]>;
+};
+
+function componentEditStateFromMenuItem(item: Record<string, unknown>): ComponentEditState {
+  const productionDecision =
+    item.productionDecision && typeof item.productionDecision === "object"
+      ? (item.productionDecision as Record<string, unknown>)
+      : undefined;
+
+  return {
+    menuCategory: String(item.menuCategory ?? ""),
+    productionMode: String(productionDecision?.mode ?? ""),
+    purchasedElements: Array.isArray(productionDecision?.purchasedElements)
+      ? productionDecision.purchasedElements.map((entry) => String(entry)).join(", ")
+      : "",
+    recipeOverrideId: String(item.recipeOverrideId ?? ""),
+    notes: String(productionDecision?.notes ?? "")
+  };
+}
+
+function specEditSnapshotFromSpec(spec: Record<string, unknown>): SpecEditSnapshot {
+  const event = spec.event as Record<string, unknown> | undefined;
+  const attendees = spec.attendees as Record<string, unknown> | undefined;
+  const menuPlan = Array.isArray(spec.menuPlan) ? (spec.menuPlan as Array<Record<string, unknown>>) : [];
+
+  return {
+    eventType: String(event?.type ?? ""),
+    eventDate: String(event?.date ?? ""),
+    attendeeCount: String(attendees?.expected ?? ""),
+    serviceForm: String(event?.serviceForm ?? ""),
+    menuItems: menuPlan.map((item) => String(item.label ?? "")).filter(Boolean).join(", "),
+    components: menuPlan.map((item) => [String(item.componentId), componentEditStateFromMenuItem(item)])
+  };
+}
+
+function normalizedSpecEditSnapshot(snapshot: SpecEditSnapshot): string {
+  return JSON.stringify({
+    ...snapshot,
+    eventType: snapshot.eventType.trim(),
+    eventDate: snapshot.eventDate.trim(),
+    attendeeCount: snapshot.attendeeCount.trim(),
+    serviceForm: snapshot.serviceForm.trim(),
+    menuItems: snapshot.menuItems.trim(),
+    components: snapshot.components
+      .map(([componentId, state]) => [
+        componentId,
+        {
+          menuCategory: state.menuCategory.trim(),
+          productionMode: state.productionMode.trim(),
+          purchasedElements: state.purchasedElements.trim(),
+          recipeOverrideId: state.recipeOverrideId.trim(),
+          notes: state.notes.trim()
+        }
+      ])
+      .sort(([leftId], [rightId]) => String(leftId).localeCompare(String(rightId)))
+  });
+}
 
 const emptyState: DashboardState = {
   intakeRequests: [],
@@ -191,26 +259,6 @@ function translateHealthStatus(value?: string): string {
   return value ? labels[value] ?? value : "-";
 }
 
-function translateRecipeTier(value?: string): string {
-  const labels: Record<string, string> = {
-    internal_verified: "intern verifiziert",
-    digitized_cookbook: "digitalisiertes Kochbuch",
-    internal_approved: "intern freigegeben",
-    internet_fallback: "Internet-Ausweichquelle"
-  };
-  return value ? labels[value] ?? value : "-";
-}
-
-function translateApprovalState(value?: string): string {
-  const labels: Record<string, string> = {
-    approved_internal: "intern freigegeben",
-    auto_usable: "automatisch nutzbar",
-    review_required: "Prüfung nötig",
-    rejected: "abgelehnt"
-  };
-  return value ? labels[value] ?? value : "-";
-}
-
 function formatCounts(counts: Record<string, number>): string {
   const entries = Object.entries(counts);
   if (entries.length === 0) {
@@ -326,40 +374,6 @@ function formatLatestAuditOverviewLabel(event: Record<string, unknown>): string 
   return parts.join(" · ");
 }
 
-function getPurchaseListPreviewItems(
-  purchaseList: Record<string, unknown>
-): Array<{ articleName: string; quantity: string; unit: string }> {
-  const rawItems = Array.isArray(purchaseList.items)
-    ? purchaseList.items
-    : Array.isArray(purchaseList.positions)
-      ? purchaseList.positions
-      : Array.isArray(purchaseList.entries)
-        ? purchaseList.entries
-        : [];
-
-  return rawItems.slice(0, 5).flatMap((item) => {
-    const itemRecord = asRecord(item);
-    if (!itemRecord) {
-      return [];
-    }
-
-    const quantityRecord = asRecord(itemRecord.quantity);
-    const articleName =
-      readStringOrNumber(itemRecord, ["displayName", "articleName", "name", "label", "ingredientName"]) ??
-      "Artikel";
-    const quantity =
-      readStringOrNumber(itemRecord, ["purchaseQty", "normalizedQty", "qty", "amount"]) ??
-      readStringOrNumber(quantityRecord, ["amount"]) ??
-      "-";
-    const unit =
-      readStringOrNumber(itemRecord, ["purchaseUnit", "normalizedUnit", "unit"]) ??
-      readStringOrNumber(quantityRecord, ["unit"]) ??
-      "-";
-
-    return [{ articleName, quantity, unit }];
-  });
-}
-
 function getRouteTitle(route: AppRoute): string {
   if (route === "offer") {
     return "Angebotsagent";
@@ -401,53 +415,6 @@ function getIntakeRequestIdForSpec(spec: Record<string, unknown> | undefined): s
   return typeof reference === "string" && reference.trim() ? reference.trim() : undefined;
 }
 
-function formatBytes(sizeBytes: number): string {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`;
-  }
-
-  return `${(sizeBytes / 1024).toFixed(1)} KB`;
-}
-
-function formatSourceMetadataSummary(input: Record<string, unknown>): string | undefined {
-  const sourceMetadata = asRecord(input.sourceMetadata);
-  const filename = readStringOrNumber(sourceMetadata, ["filename"]);
-  const mimeType = readStringOrNumber(sourceMetadata, ["mimeType"]);
-  const sizeBytes = sourceMetadata?.sizeBytes;
-  const sha256 = readStringOrNumber(sourceMetadata, ["sha256"]);
-  const uploadContext = readStringOrNumber(sourceMetadata, ["uploadContext"]);
-  const ingestedAt = readStringOrNumber(sourceMetadata, ["ingestedAt"]);
-
-  if (!filename || !mimeType || typeof sizeBytes !== "number" || !Number.isFinite(sizeBytes) || !sha256 || !uploadContext) {
-    return undefined;
-  }
-
-  return [
-    filename,
-    mimeType,
-    formatBytes(sizeBytes),
-    `sha256:${sha256.slice(0, 12)}`,
-    uploadContext,
-    ingestedAt
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
-function formatDocumentIngestionSummary(input: Record<string, unknown>): string | undefined {
-  const marker = asRecord(input.documentIngestion);
-  const status = readStringOrNumber(marker, ["status"]);
-  const warnings = Array.isArray(marker?.warnings)
-    ? marker.warnings.map((warning) => String(warning).trim()).filter(Boolean)
-    : [];
-
-  if (!status || (status === "extracted" && warnings.length === 0)) {
-    return undefined;
-  }
-
-  return [`Status ${status}`, warnings.length > 0 ? `Warnkey ${warnings.join(",")}` : undefined].filter(Boolean).join(" · ");
-}
-
 function extractProductionPlanId(payload: Record<string, unknown>): string | undefined {
   const plan = payload.productionPlan as Record<string, unknown> | undefined;
   const planId = plan?.planId;
@@ -465,68 +432,10 @@ function channelForFile(file: File): IntakeDocumentChannel {
   return "text";
 }
 
-function normalizeRecipeSuggestionText(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ß/g, "ss")
-    .toLowerCase();
-}
-
-function recipeSuggestionsForComponent(
-  label: string,
-  recipes: Array<Record<string, unknown>>
-): Array<{ recipeId: string; name: string }> {
-  const tokens = normalizeRecipeSuggestionText(label)
-    .split(/[^a-z0-9]+/i)
-    .filter((token) => token.length >= 4)
-    .filter((token) => !["vegan", "classic", "klassisch", "vegetarian", "vegetarisch", "topping"].includes(token));
-
-  return recipes
-    .map((recipe) => {
-      const recipeId = String(recipe.recipeId ?? "");
-      const name = String(recipe.name ?? recipeId);
-      const haystack = normalizeRecipeSuggestionText(
-        `${name} ${String((recipe.source as Record<string, unknown> | undefined)?.reference ?? "")}`
-      );
-      const score = tokens.filter((token) => haystack.includes(token)).length;
-      return {
-        recipeId,
-        name,
-        score
-      };
-    })
-    .filter((item) => item.recipeId && item.score > 0)
-    .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name, "de"))
-    .slice(0, 6)
-    .map(({ recipeId, name }) => ({ recipeId, name }));
-}
-
-function resolveRecipeNameById(
-  recipeId: string,
-  recipes: Array<Record<string, unknown>>
-): string | undefined {
-  const match = recipes.find((recipe) => String(recipe.recipeId ?? "") === recipeId);
-  if (!match) {
-    return undefined;
-  }
-
-  const recipeName = String(match.name ?? "").trim();
-  return recipeName || recipeId;
-}
-
-
 function estimateProcessingDurationMs(file: File): number {
   const fileSizeMb = file.size / (1024 * 1024);
   const estimated = 3500 + fileSizeMb * 1800;
   return Math.max(4000, Math.min(18000, Math.round(estimated)));
-}
-
-function formatEta(seconds: number): string {
-  if (seconds <= 1) {
-    return "weniger als 1 Sekunde";
-  }
-  return `${seconds} Sekunden`;
 }
 
 function trailingNumericRank(value: unknown): number {
@@ -544,350 +453,6 @@ function estimatePlanningDurationMs(spec: Record<string, unknown>): number {
   const baseDuration = 4500;
   const perComponent = menuPlan.length * 2200;
   return Math.max(6000, Math.min(30000, baseDuration + perComponent));
-}
-
-function formatPercent(value?: unknown): string | undefined {
-  const numeric = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(numeric)) {
-    return undefined;
-  }
-  return `${Math.round(numeric * 100)} %`;
-}
-
-type WorkbenchSpecFact = {
-  label: string;
-  value: string;
-};
-
-type ReadOnlyWorkbenchProjectionProps = {
-  specLabel: string;
-  facts: WorkbenchSpecFact[];
-  questionCount: number;
-  readinessLabel: string;
-};
-
-function ReadOnlyWorkbenchProjection({
-  specLabel,
-  facts,
-  questionCount,
-  readinessLabel
-}: ReadOnlyWorkbenchProjectionProps) {
-  return (
-    <div className="workbench-projection" aria-label="Read-only Workbench-Projektion">
-      <div>
-        <p className="eyebrow">Workbench-Projektion</p>
-        <p className="question-window__spec">{specLabel}</p>
-        <p className="helper-text">
-          Strukturierte Veranstaltungsdaten bleiben führend; dieser Bereich ist nur eine ruhige read-only Sicht.
-        </p>
-      </div>
-      <dl className="spec-fact-grid">
-        {facts.map((fact) => (
-          <div key={fact.label} className="spec-fact">
-            <dt>{fact.label}</dt>
-            <dd>{fact.value}</dd>
-          </div>
-        ))}
-      </dl>
-      <div className="clarification-strip">
-        <span>Klärbereich</span>
-        <strong>{questionCount === 1 ? "1 offene Rückfrage" : `${questionCount} offene Rückfragen`}</strong>
-      </div>
-      <p className="helper-text">Status: {readinessLabel}</p>
-    </div>
-  );
-}
-
-type ProductionManualInputValues = {
-  eventType: string;
-  eventDate: string;
-  attendeeCount: string;
-  serviceForm: string;
-  menuItems: string;
-  customerName: string;
-  venueName: string;
-  notes: string;
-};
-
-type ProductionManualInputActions = {
-  setEventType: (value: string) => void;
-  setEventDate: (value: string) => void;
-  setAttendeeCount: (value: string) => void;
-  setServiceForm: (value: string) => void;
-  setMenuItems: (value: string) => void;
-  setCustomerName: (value: string) => void;
-  setVenueName: (value: string) => void;
-  setNotes: (value: string) => void;
-  submitManualSpec: () => Promise<void>;
-};
-
-type ProductionSourceInputValues = {
-  dragActive: boolean;
-  intakeFile: File | null;
-  intakeChannel: IntakeDocumentChannel;
-  documentPhase: "idle" | "analysing" | "done";
-  activeDocumentName?: string;
-  documentProgress: number;
-  documentEtaSeconds?: number;
-  intakeText: string;
-};
-
-type ProductionSourceInputActions = {
-  uploadInputRef: { current: HTMLInputElement | null };
-  setDragActive: (active: boolean) => void;
-  setIntakeChannel: (channel: IntakeDocumentChannel) => void;
-  setIntakeText: (value: string) => void;
-  openFilePicker: () => void;
-  clearWorkspace: () => void;
-  handleDrop: (event: DragEvent<HTMLLabelElement>) => void;
-  handleFileSelection: (event: ChangeEvent<HTMLInputElement>) => void;
-  submitDocument: () => Promise<void>;
-  submitText: () => Promise<void>;
-};
-
-type ProductionInputPanelProps = {
-  submitting: boolean;
-  sourceInput: ProductionSourceInputValues;
-  sourceInputActions: ProductionSourceInputActions;
-  manualInput: ProductionManualInputValues;
-  manualInputActions: ProductionManualInputActions;
-};
-
-function ProductionInputPanel({
-  submitting,
-  sourceInput,
-  sourceInputActions,
-  manualInput,
-  manualInputActions
-}: ProductionInputPanelProps) {
-  return (
-    <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
-      <div className="upload-shortcut-bar">
-        <div>
-          <p className="eyebrow">Chat-Eingang</p>
-          <strong>+ Angebot hinzufügen</strong>
-          <p className="helper-text">
-            Ronak-Angebot per Datei, Drag & Drop oder Text in den Produktionsagenten geben. Bestehende Spezifikationspfade bleiben führend.
-          </p>
-        </div>
-        <div className="action-row">
-          <button type="button" disabled={submitting} onClick={sourceInputActions.openFilePicker}>
-            + Angebot hinzufügen
-          </button>
-          <button
-            type="button"
-            className="secondary-button destructive-button"
-            disabled={submitting}
-            onClick={sourceInputActions.clearWorkspace}
-          >
-            Löschen
-          </button>
-        </div>
-      </div>
-      <header>
-        <p className="eyebrow">Eingabequelle</p>
-        <h3>Angebot als Datei übernehmen</h3>
-      </header>
-      <label
-        className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
-        onDragOver={(event) => {
-          event.preventDefault();
-          sourceInputActions.setDragActive(true);
-        }}
-        onDragLeave={() => sourceInputActions.setDragActive(false)}
-        onDrop={sourceInputActions.handleDrop}
-      >
-        <input
-          ref={sourceInputActions.uploadInputRef}
-          className="visually-hidden"
-          type="file"
-          accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
-          onChange={sourceInputActions.handleFileSelection}
-        />
-        <span className="eyebrow">Drag & Drop</span>
-        <strong>Angebot hier ablegen oder über + auswählen</strong>
-        <p className="helper-text">
-          Sichtbarer Import-Anker für PDF, E-Mail und Textdateien; Verarbeitung erfolgt über die bestehenden Intake- und Spezifikationspfade.
-        </p>
-        <span className="drag-drop-zone__cta">+ Angebot auswählen</span>
-      </label>
-      <div className="activity-slot">
-        {sourceInput.intakeFile ? <p className="helper-text">Ausgewählt: {sourceInput.intakeFile.name}</p> : null}
-        {sourceInput.documentPhase === "analysing" && sourceInput.activeDocumentName ? (
-          <div className="progress-panel">
-            <div
-              className="progress-ring"
-              style={
-                {
-                  "--progress-angle": `${Math.max(0, Math.min(sourceInput.documentProgress, 100)) * 3.6}deg`
-                } as CSSProperties
-              }
-            >
-              <span>{sourceInput.documentProgress}%</span>
-            </div>
-            <div className="progress-panel__content">
-              <p className="processing-note">Analyse läuft für {sourceInput.activeDocumentName} ...</p>
-              <div className="progress-bar">
-                <div
-                  className="progress-bar__fill"
-                  style={{ width: `${Math.max(0, Math.min(sourceInput.documentProgress, 100))}%` }}
-                />
-              </div>
-              <p className="helper-text">
-                Geschätzte Restzeit: {formatEta(sourceInput.documentEtaSeconds ?? 1)}
-              </p>
-            </div>
-          </div>
-        ) : null}
-        {sourceInput.documentPhase === "done" && sourceInput.activeDocumentName ? (
-          <div className="progress-panel">
-            <div
-              className="progress-ring progress-ring--done"
-              style={{ "--progress-angle": "360deg" } as CSSProperties}
-            >
-              <span>100%</span>
-            </div>
-            <div className="progress-panel__content">
-              <p className="processing-note processing-note--success">
-                Analyse abgeschlossen für {sourceInput.activeDocumentName}.
-              </p>
-              <div className="progress-bar">
-                <div className="progress-bar__fill" style={{ width: "100%" }} />
-              </div>
-              <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
-            </div>
-          </div>
-        ) : null}
-      </div>
-      <div className="action-row">
-        <select
-          className="operator-input"
-          value={sourceInput.intakeChannel}
-          onChange={(event) => sourceInputActions.setIntakeChannel(event.target.value as IntakeDocumentChannel)}
-        >
-          <option value="pdf_upload">PDF / Angebot</option>
-          <option value="email">E-Mail</option>
-          <option value="text">Textdatei</option>
-        </select>
-        <button disabled={submitting} onClick={() => void sourceInputActions.submitDocument()}>
-          Erneut mit ausgewähltem Typ verarbeiten
-        </button>
-      </div>
-      <div className="divider" />
-      <header>
-        <p className="eyebrow">Texteingabe</p>
-        <h3>Angebot oder Produktionskontext direkt einfügen</h3>
-      </header>
-      <textarea value={sourceInput.intakeText} onChange={(event) => sourceInputActions.setIntakeText(event.target.value)} />
-      <div className="action-row">
-        <button disabled={submitting} onClick={() => void sourceInputActions.submitText()}>
-          Erfassungstext normalisieren
-        </button>
-      </div>
-      <div className="divider" />
-      <header>
-        <p className="eyebrow">Strukturierte Eingabe</p>
-        <h3>Arbeitsauftrag manuell anlegen</h3>
-      </header>
-      <input
-        value={manualInput.eventType}
-        onChange={(event) => manualInputActions.setEventType(event.target.value)}
-        placeholder="Veranstaltungstyp, z. B. Konferenz"
-      />
-      <input
-        value={manualInput.eventDate}
-        onChange={(event) => manualInputActions.setEventDate(event.target.value)}
-        placeholder="Datum, z. B. 2026-10-10"
-      />
-      <input
-        value={manualInput.attendeeCount}
-        onChange={(event) => manualInputActions.setAttendeeCount(event.target.value)}
-        placeholder="Teilnehmerzahl"
-      />
-      <input
-        value={manualInput.serviceForm}
-        onChange={(event) => manualInputActions.setServiceForm(event.target.value)}
-        placeholder="Serviceform, z. B. Buffet"
-      />
-      <input
-        value={manualInput.menuItems}
-        onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
-        placeholder="Menüpunkte, durch Komma getrennt"
-      />
-      <input
-        value={manualInput.customerName}
-        onChange={(event) => manualInputActions.setCustomerName(event.target.value)}
-        placeholder="Kundenname"
-      />
-      <input
-        value={manualInput.venueName}
-        onChange={(event) => manualInputActions.setVenueName(event.target.value)}
-        placeholder="Ort oder Veranstaltungsort"
-      />
-      <textarea
-        value={manualInput.notes}
-        onChange={(event) => manualInputActions.setNotes(event.target.value)}
-        placeholder="Interne Notizen oder Einschränkungen"
-      />
-      <button disabled={submitting} onClick={() => void manualInputActions.submitManualSpec()}>
-        Spezifikation anlegen
-      </button>
-    </article>
-  );
-}
-
-function renderPlanList(
-  plans: Array<Record<string, unknown>>,
-  specById: Map<string, Record<string, unknown>>,
-  submitting: boolean,
-  setSelectedPlanId: (planId: string) => void
-) {
-  return (
-    <ul className="item-list compact">
-      {plans.map((plan) => {
-        const relatedSpec = specById.get(String(plan.eventSpecId ?? ""));
-        const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
-        const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
-        const sheetCount = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets.length : 0;
-        const selectionCount = Array.isArray(plan.recipeSelections) ? plan.recipeSelections.length : 0;
-        return (
-          <li key={String(plan.planId)}>
-            <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Produktionsplan"}</strong>
-            <p>
-              Status: {translateReadiness(String((plan.readiness as Record<string, unknown>)?.status ?? "-"))}
-              {" · "}Arbeitsblätter: {sheetCount}
-              {" · "}Rezeptblätter: {batchCount}
-              {" · "}Rezeptauswahl: {selectionCount}
-              {" · "}Offene Punkte: {unresolvedCount}
-            </p>
-            <div className="action-row">
-              <button
-                className="secondary-button"
-                disabled={submitting}
-                onClick={() => setSelectedPlanId(String(plan.planId))}
-              >
-                Einzelheiten
-              </button>
-            </div>
-            <a
-              className="ghost-link"
-              href={productionExportUrl(String(plan.planId))}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Produktionsblatt exportieren
-            </a>
-          </li>
-        );
-      })}
-      {plans.length === 0 ? (
-        <li>
-          Noch keine Produktionspläne vorhanden. Noch kein Produktionsplan für den aktuellen Vorgang. Nächster Schritt:
-          Berechnung starten.
-        </li>
-      ) : null}
-    </ul>
-  );
 }
 
 export function App() {
@@ -1070,6 +635,16 @@ export function App() {
     () => formatLatestIntakeRequest(dashboard.intakeRequests),
     [dashboard.intakeRequests]
   );
+  const isInitialHomeLoading =
+    route === "home" &&
+    loading &&
+    dashboard.intakeRequests.length === 0 &&
+    dashboard.acceptedSpecs.length === 0 &&
+    dashboard.offerDrafts.length === 0 &&
+    dashboard.productionPlans.length === 0 &&
+    dashboard.purchaseLists.length === 0 &&
+    dashboard.recipes.length === 0 &&
+    dashboard.auditEvents.length === 0;
 
   const filteredPurchaseLists = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
@@ -1164,10 +739,6 @@ export function App() {
   }, [currentIntakeRequestId]);
 
   const focusedProductionSpecRecord = focusedProductionSpec as Record<string, unknown> | undefined;
-  const focusedProductionSpecEvent =
-    focusedProductionSpecRecord?.event && typeof focusedProductionSpecRecord.event === "object"
-      ? (focusedProductionSpecRecord.event as Record<string, unknown>)
-      : undefined;
   const focusedProductionSpecServicePlan =
     focusedProductionSpecRecord?.servicePlan && typeof focusedProductionSpecRecord.servicePlan === "object"
       ? (focusedProductionSpecRecord.servicePlan as Record<string, unknown>)
@@ -1419,6 +990,48 @@ export function App() {
       description: "Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar."
     };
   }, [currentSpecPurchaseLists.length, focusedProductionSpec, productionQuestions.length, selectedPlan]);
+  const activeProductionContextLabel = focusedProductionSpec
+    ? getSpecLabel(focusedProductionSpec)
+    : selectedPlan
+      ? `Plan-Kontext geladen: ${String(selectedPlan.planId ?? "-")} · Spezifikation noch nicht im Fokus`
+      : productionWorkspaceCleared
+        ? "Kein aktiver Vorgang"
+        : "Noch kein aktiver Vorgang";
+  const canClearProductionWorkspace =
+    Boolean(focusedProductionSpec) ||
+    Boolean(selectedPlan) ||
+    Boolean(intakeFile) ||
+    Boolean(activeDocumentName) ||
+    documentPhase !== "idle" ||
+    planPhase !== "idle" ||
+    Boolean(focusedProductionSpecId) ||
+    Boolean(selectedPlanId);
+  const hasFocusedSpecEditChanges = useMemo(() => {
+    if (!focusedProductionSpec || editingSpecId !== String(focusedProductionSpec.specId ?? "")) {
+      return false;
+    }
+
+    const baseline = specEditSnapshotFromSpec(focusedProductionSpec as Record<string, unknown>);
+    const current: SpecEditSnapshot = {
+      eventType: editingEventType,
+      eventDate: editingEventDate,
+      attendeeCount: editingAttendeeCount,
+      serviceForm: editingServiceForm,
+      menuItems: editingMenuItems,
+      components: Object.entries(editingComponentStates)
+    };
+
+    return normalizedSpecEditSnapshot(baseline) !== normalizedSpecEditSnapshot(current);
+  }, [
+    editingAttendeeCount,
+    editingComponentStates,
+    editingEventDate,
+    editingEventType,
+    editingMenuItems,
+    editingServiceForm,
+    editingSpecId,
+    focusedProductionSpec
+  ]);
 
   useEffect(() => {
     if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {
@@ -1672,40 +1285,18 @@ export function App() {
   }
 
   function loadSpecIntoEditor(spec: Record<string, unknown>) {
-    const event = spec.event as Record<string, unknown> | undefined;
-    const attendees = spec.attendees as Record<string, unknown> | undefined;
-    const menuPlan = Array.isArray(spec.menuPlan) ? (spec.menuPlan as Array<Record<string, unknown>>) : [];
-    const nextComponentStates = Object.fromEntries(
-      menuPlan.map((item) => {
-        const productionDecision =
-          item.productionDecision && typeof item.productionDecision === "object"
-            ? (item.productionDecision as Record<string, unknown>)
-            : undefined;
-
-        return [
-          String(item.componentId),
-          {
-            menuCategory: String(item.menuCategory ?? ""),
-            productionMode: String(productionDecision?.mode ?? ""),
-            purchasedElements: Array.isArray(productionDecision?.purchasedElements)
-              ? productionDecision?.purchasedElements.map((entry) => String(entry)).join(", ")
-              : "",
-            recipeOverrideId: String(item.recipeOverrideId ?? ""),
-            notes: String(productionDecision?.notes ?? "")
-          } satisfies ComponentEditState
-        ];
-      })
-    );
+    const snapshot = specEditSnapshotFromSpec(spec);
+    const nextComponentStates = Object.fromEntries(snapshot.components);
 
     setEditingSpecId(String(spec.specId));
     setProductionWorkspaceCleared(false);
     setDismissedProductionAnswerSpecId(undefined);
     setFocusedProductionSpecId(String(spec.specId));
-    setEditingEventType(String(event?.type ?? ""));
-    setEditingEventDate(String(event?.date ?? ""));
-    setEditingAttendeeCount(String(attendees?.expected ?? ""));
-    setEditingServiceForm(String(event?.serviceForm ?? ""));
-    setEditingMenuItems(menuPlan.map((item) => String(item.label ?? "")).filter(Boolean).join(", "));
+    setEditingEventType(snapshot.eventType);
+    setEditingEventDate(snapshot.eventDate);
+    setEditingAttendeeCount(snapshot.attendeeCount);
+    setEditingServiceForm(snapshot.serviceForm);
+    setEditingMenuItems(snapshot.menuItems);
     setEditingComponentStates(nextComponentStates);
   }
 
@@ -2146,23 +1737,43 @@ export function App() {
         <section className="metrics-grid">
           <StatusCard
             title="Operative Spezifikationen"
-            body={`${dashboard.acceptedSpecs.length} operative Datensätze stehen dienstübergreifend bereit.`}
+            body={
+              isInitialHomeLoading
+                ? "Plattformdaten werden geladen; noch kein Datenbestand bewertet."
+                : `${dashboard.acceptedSpecs.length} operative Datensätze stehen dienstübergreifend bereit.`
+            }
           />
           <StatusCard
             title="Übergabe an Produktion"
-            body={`${offerHandoffCounts.complete} vollständig · ${offerHandoffCounts.partial} teilweise vollständig`}
+            body={
+              isInitialHomeLoading
+                ? "Übergabe wird geladen; noch keine Übergabe-Bewertung."
+                : `${offerHandoffCounts.complete} vollständig · ${offerHandoffCounts.partial} teilweise vollständig`
+            }
           />
           <StatusCard
             title="Angebotsentwürfe"
-            body={`${dashboard.offerDrafts.length} kaufmännische Entwürfe können direkt übernommen werden.`}
+            body={
+              isInitialHomeLoading
+                ? "Angebotsdaten werden geladen; noch keine Entwurfsbewertung."
+                : `${dashboard.offerDrafts.length} kaufmännische Entwürfe können direkt übernommen werden.`
+            }
           />
           <StatusCard
             title="Produktionspläne"
-            body={`${dashboard.productionPlans.length} Küchenpläne · ${dashboard.purchaseLists.length} Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.`}
+            body={
+              isInitialHomeLoading
+                ? "Produktionsdaten werden geladen; noch keine Plan-/Einkaufslistenbewertung."
+                : `${dashboard.productionPlans.length} Küchenpläne · ${dashboard.purchaseLists.length} Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.`
+            }
           />
           <StatusCard
             title="Rezeptbibliothek"
-            body={`${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`}
+            body={
+              isInitialHomeLoading
+                ? "Rezeptbestand wird geladen; noch keine Review-Bewertung."
+                : `${dashboard.recipes.length} Rezepte · ${recipeReviewCounts.approved} intern freigegeben · ${recipeReviewCounts.reviewRequired} Prüfung nötig`
+            }
           />
         </section>
       ) : null}
@@ -2228,19 +1839,35 @@ export function App() {
             <div className="metrics-grid compact-metrics">
               <StatusCard
                 title="Erfassung"
-                body={`${translateHealthStatus(serviceHealth.intake.status)} · ${formatCounts(serviceHealth.intake.counts)} · ${latestIntakeRequestSummary}`}
+                body={
+                  isInitialHomeLoading
+                    ? "Healthcheck läuft · Zähler werden geladen · letzte Erfassung wird geladen"
+                    : `${translateHealthStatus(serviceHealth.intake.status)} · ${formatCounts(serviceHealth.intake.counts)} · ${latestIntakeRequestSummary}`
+                }
               />
               <StatusCard
                 title="Angebot"
-                body={`${translateHealthStatus(serviceHealth.offers.status)} · ${formatCounts(serviceHealth.offers.counts)}`}
+                body={
+                  isInitialHomeLoading
+                    ? "Healthcheck läuft · Zähler werden geladen"
+                    : `${translateHealthStatus(serviceHealth.offers.status)} · ${formatCounts(serviceHealth.offers.counts)}`
+                }
               />
               <StatusCard
                 title="Produktion"
-                body={`${translateHealthStatus(serviceHealth.production.status)} · ${formatCounts(serviceHealth.production.counts)}`}
+                body={
+                  isInitialHomeLoading
+                    ? "Healthcheck läuft · Zähler werden geladen"
+                    : `${translateHealthStatus(serviceHealth.production.status)} · ${formatCounts(serviceHealth.production.counts)}`
+                }
               />
               <StatusCard
                 title="Export"
-                body={`${translateHealthStatus(serviceHealth.exports.status)} · ${formatCounts(serviceHealth.exports.counts)}`}
+                body={
+                  isInitialHomeLoading
+                    ? "Healthcheck läuft · Zähler werden geladen"
+                    : `${translateHealthStatus(serviceHealth.exports.status)} · ${formatCounts(serviceHealth.exports.counts)}`
+                }
               />
             </div>
           </article>
@@ -2250,7 +1877,9 @@ export function App() {
               <p className="eyebrow">Änderungsprotokoll</p>
               <h3>Letzte Bearbeitungsschritte über alle Dienste</h3>
               <p className="helper-text">
-                {filteredAuditEvents.length > 0
+                {isInitialHomeLoading
+                  ? "Änderungen werden geladen; noch kein Audit-/Handoff-Befund."
+                  : filteredAuditEvents.length > 0
                   ? `${filteredAuditEvents.length} Änderungen geladen · neueste: ${formatLatestAuditOverviewLabel(
                       filteredAuditEvents[0] as Record<string, unknown>
                     )}`
@@ -2271,7 +1900,8 @@ export function App() {
                   </p>
                 </li>
               ))}
-              {filteredAuditEvents.length === 0 ? <li>Noch keine Änderungen vorhanden.</li> : null}
+              {isInitialHomeLoading ? <li>Änderungen werden geladen.</li> : null}
+              {!isInitialHomeLoading && filteredAuditEvents.length === 0 ? <li>Noch keine Änderungen vorhanden.</li> : null}
             </ul>
           </article>
         </section>
@@ -2344,13 +1974,7 @@ export function App() {
       ) : null}
       {route === "production" ? (
         <ProductionConversationalWorkbench
-          activeSpecLabel={
-            focusedProductionSpec
-              ? getSpecLabel(focusedProductionSpec)
-              : productionWorkspaceCleared
-                ? "Kein aktiver Vorgang"
-                : "Noch kein aktiver Vorgang"
-          }
+          activeSpecLabel={activeProductionContextLabel}
           readinessLabel={translateReadiness(
             String((focusedProductionSpec?.readiness as Record<string, unknown> | undefined)?.status ?? "-")
           )}
@@ -2388,7 +2012,8 @@ export function App() {
               activeDocumentName,
               documentProgress,
               documentEtaSeconds,
-              intakeText
+              intakeText,
+              canClearWorkspace: canClearProductionWorkspace
             }}
             sourceInputActions={{
               uploadInputRef: productionUploadInputRef,
@@ -2426,968 +2051,103 @@ export function App() {
           />
           </div>
           <div className="production-column">
-          <article className="panel form-panel question-panel production-step-card">
-            <header>
-              <p className="eyebrow">Strukturierte Rückfragen im Chatfluss</p>
-              <h3>Rückfragen des Agenten</h3>
-              <p className="helper-text">
-                Assistant-Fragen aus den vorhandenen Produktionsdaten; strukturierte Antwortfelder statt freier LLM-Chat.
-              </p>
-            </header>
-            {focusedProductionSpec ? (
-              <>
-                <div className="question-window">
-                  <ReadOnlyWorkbenchProjection
-                    specLabel={getSpecLabel(focusedProductionSpec)}
-                    facts={workbenchSpecFacts}
-                    questionCount={productionQuestions.length}
-                    readinessLabel={translateReadiness(
-                      String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                    )}
-                  />
-                  <div className="component-answer-card" aria-label="ConversationSession-Projektion">
-                    <p className="eyebrow">ConversationSession-Projektion</p>
-                    <strong>{productionConversationProjection.sessionId}</strong>
-                    <p className="helper-text">
-                      Read-only Session-Verlauf aus vorhandenen Spezifikations-, Rückfrage- und Output-Daten.
-                    </p>
-                  </div>
-                  <div className="result-status-strip" aria-label="Ergebnisstatus aktueller Vorgang">
-                    <span>
-                      <strong>Ergebnisstatus</strong>
-                    </span>
-                    <span>
-                      Plan:{" "}
-                      {selectedPlan
-                        ? translateReadiness(
-                            String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                          )
-                        : "noch nicht berechnet"}
-                    </span>
-                    <span>Produktionsblatt: {selectedPlan ? "vorhanden" : "offen"}</span>
-                    <span>
-                      Einkauf: {currentSpecPurchaseLists.length > 0 ? `${currentSpecPurchaseLists.length} Liste(n)` : "offen"}
-                    </span>
-                  </div>
-                  <div className="structured-chat-thread" aria-label="Strukturierte Rückfragen als Chatfluss">
-                    {productionConversationProjection.messages.map((message) => {
-                      if (message.type === "production_output_anchor") {
-                        return null;
-                      }
-                      if (message.type === "user_structured_answer" && !message.clarificationAnswer) {
-                        return null;
-                      }
-
-                      const isClarificationAnswer = message.type === "user_structured_answer";
-
-                      return (
-                        <article
-                          className={
-                            isClarificationAnswer
-                              ? "structured-chat-message structured-chat-message--user"
-                              : "structured-chat-message"
-                          }
-                          key={message.messageId}
-                        >
-                          <div
-                            className={
-                              isClarificationAnswer
-                                ? "structured-chat-avatar structured-chat-avatar--user"
-                                : "structured-chat-avatar"
-                            }
-                            aria-hidden="true"
-                          >
-                            {isClarificationAnswer ? "Du" : message.role === "system" ? "S" : "A"}
-                          </div>
-                          <div
-                            className={
-                              isClarificationAnswer
-                                ? "structured-chat-bubble structured-chat-bubble--user"
-                                : "structured-chat-bubble"
-                            }
-                          >
-                            <div className="structured-chat-bubble__meta">
-                              <p className="eyebrow">{message.title}</p>
-                              {message.clarificationAnswerStatus ? (
-                                <span
-                                  className={`clarification-status-badge clarification-status-badge--${message.clarificationAnswerStatus}`}
-                                >
-                                  {message.clarificationAnswerStatus === "answered" ? "Rückfrage beantwortet" : "Rückfrage offen"}
-                                </span>
-                              ) : null}
-                            </div>
-                            <p>{message.text}</p>
-                          </div>
-                        </article>
-                      );
-                    })}
-                    {productionConversationProjection.messages
-                      .filter((message) => message.type === "production_output_anchor")
-                      .map((message) => (
-                        <article className="structured-chat-message" key={message.messageId}>
-                          <div className="structured-chat-avatar" aria-hidden="true">
-                            A
-                          </div>
-                          <div className="structured-chat-bubble">
-                            <p className="eyebrow">{message.title}</p>
-                            <p>{message.text}</p>
-                          </div>
-                        </article>
-                      ))}
-                    {editingSpecId === String(focusedProductionSpec.specId) ? (
-                      <article className="structured-chat-message structured-chat-message--user">
-                        <div className="structured-chat-avatar structured-chat-avatar--user" aria-hidden="true">
-                          Du
-                        </div>
-                        <div className="structured-chat-bubble structured-chat-bubble--user">
-                          <header className="structured-answer-anchor">
-                            <p className="eyebrow">Deine strukturierte Antwort im Chatfluss</p>
-                            <h4 className="subsection-title">Antwort direkt zur Agentenfrage</h4>
-                            <p className="helper-text">
-                              Diese Felder beantworten die Rückfragen strukturiert im bestehenden Spezifikationspfad; kein freier LLM-Chat.
-                            </p>
-                          </header>
-                      <div className="answer-grid">
-                        <label className="field-block">
-                          <span>Veranstaltungstyp</span>
-                          <select
-                            value={editingEventType}
-                            onChange={(event) => setEditingEventType(event.target.value)}
-                          >
-                            <option value="">Bitte wählen</option>
-                            <option value="meeting">Besprechung</option>
-                            <option value="conference">Konferenz</option>
-                            <option value="lunch">Lunch</option>
-                            <option value="reception">Empfang</option>
-                            <option value="dinner">Abendessen</option>
-                            <option value="trade_fair">Messe</option>
-                          </select>
-                        </label>
-                        <label className="field-block">
-                          <span>Datum</span>
-                          <input
-                            value={editingEventDate}
-                            onChange={(event) => setEditingEventDate(event.target.value)}
-                            placeholder="2026-06-18"
-                          />
-                        </label>
-                        <label className="field-block">
-                          <span>Teilnehmerzahl</span>
-                          <input
-                            value={editingAttendeeCount}
-                            onChange={(event) => setEditingAttendeeCount(event.target.value)}
-                            inputMode="numeric"
-                            placeholder="120"
-                          />
-                        </label>
-                        <label className="field-block">
-                          <span>Serviceform</span>
-                          <select
-                            value={editingServiceForm}
-                            onChange={(event) => setEditingServiceForm(event.target.value)}
-                          >
-                            <option value="">Bitte wählen</option>
-                            <option value="buffet">Buffet</option>
-                            <option value="plated">Menü am Platz</option>
-                            <option value="standing_reception">Empfang / Flying</option>
-                            <option value="grab_and_go">Ausgabe / Grab-and-go</option>
-                            <option value="coffee_break">Kaffeepause</option>
-                          </select>
-                        </label>
-                      </div>
-                      <label className="field-block">
-                        <span>Gerichte und Komponenten</span>
-                        <textarea
-                          value={editingMenuItems}
-                          onChange={(event) => setEditingMenuItems(event.target.value)}
-                          placeholder="Kalbsbuletten, Kartoffelsalat, Nudelsalat, Mandel-Curry, Schokoladenkuchen"
-                        />
-                      </label>
-                      <p className="helper-text">
-                        Mehrere Gerichte bitte durch Komma trennen. Diese Angaben aktualisieren direkt die operative Spezifikation.
-                      </p>
-                      {Array.isArray(focusedProductionSpec.menuPlan) && focusedProductionSpec.menuPlan.length > 0 ? (
-                        <>
-                          <div className="divider" />
-                          <header>
-                            <p className="eyebrow">Gericht für Gericht</p>
-                            <h4 className="subsection-title">Klassifikation und Herstellungsart festlegen</h4>
-                          </header>
-                          <div className="component-answer-list">
-                            {focusedProductionSpec.menuPlan.map((entry) => {
-                              const component = entry as Record<string, unknown>;
-                              const componentId = String(component.componentId ?? "");
-                              const state = editingComponentStates[componentId] ?? {
-                                menuCategory: "",
-                                productionMode: "",
-                                purchasedElements: "",
-                                recipeOverrideId: "",
-                                notes: ""
-                              };
-                              const componentLabel = String(component.label ?? componentId);
-                              const recipeSuggestions = recipeSuggestionsForComponent(
-                                componentLabel,
-                                dashboard.recipes
-                              );
-                              const selectedRecipeName = state.recipeOverrideId
-                                ? resolveRecipeNameById(state.recipeOverrideId, dashboard.recipes)
-                                : undefined;
-                              const recipeOptions = [...recipeSuggestions];
-                              if (
-                                state.recipeOverrideId &&
-                                !recipeOptions.some((item) => item.recipeId === state.recipeOverrideId)
-                              ) {
-                                recipeOptions.unshift({
-                                  recipeId: state.recipeOverrideId,
-                                  name: selectedRecipeName ?? `Rezept ${state.recipeOverrideId}`
-                                });
-                              }
-
-                              return (
-                                <article key={componentId} className="component-answer-card">
-                                  <strong>{componentLabel}</strong>
-                                  <div className="answer-grid">
-                                    <label className="field-block">
-                                      <span>Kategorie im Angebot</span>
-                                      <select
-                                        value={state.menuCategory}
-                                        onChange={(event) =>
-                                          updateEditingComponentState(componentId, {
-                                            menuCategory: event.target.value
-                                          })
-                                        }
-                                      >
-                                        <option value="">Bitte wählen</option>
-                                        <option value="classic">klassisch</option>
-                                        <option value="vegetarian">vegetarisch</option>
-                                        <option value="vegan">vegan</option>
-                                      </select>
-                                    </label>
-                                    <label className="field-block">
-                                      <span>Herstellungsart</span>
-                                      <select
-                                        value={state.productionMode}
-                                        onChange={(event) =>
-                                          updateEditingComponentState(componentId, {
-                                            productionMode: event.target.value
-                                          })
-                                        }
-                                      >
-                                        <option value="">Bitte wählen</option>
-                                        <option value="scratch">Eigenproduktion</option>
-                                        <option value="hybrid">Hybrid</option>
-                                        <option value="convenience_purchase">Convenience-Zukauf</option>
-                                        <option value="external_finished">Fertigprodukt / extern</option>
-                                      </select>
-                                    </label>
-                                  </div>
-                                  <label className="field-block">
-                                    <span>Rezept gezielt aus Bibliothek zuweisen</span>
-                                    <select
-                                      value={state.recipeOverrideId}
-                                      onChange={(event) =>
-                                        updateEditingComponentState(componentId, {
-                                          recipeOverrideId: event.target.value
-                                        })
-                                      }
-                                    >
-                                      <option value="">Automatisch suchen</option>
-                                      {recipeOptions.map((option) => (
-                                        <option key={option.recipeId} value={option.recipeId}>
-                                          {option.name} ({option.recipeId})
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  {recipeOptions.length > 0 ? (
-                                    <p className="helper-text">
-                                      Vorgeschlagene Bibliotheksrezepte:{" "}
-                                      {recipeOptions.map((option) => option.name).join(", ")}
-                                    </p>
-                                  ) : (
-                                    <p className="helper-text">
-                                      Für diese Bezeichnung wurden noch keine naheliegenden Bibliotheksrezepte gefunden.
-                                    </p>
-                                  )}
-                                  <label className="field-block">
-                                    <span>Zugekaufte Bestandteile</span>
-                                    <input
-                                      value={state.purchasedElements}
-                                      onChange={(event) =>
-                                        updateEditingComponentState(componentId, {
-                                          purchasedElements: event.target.value
-                                        })
-                                      }
-                                      placeholder="z. B. Teig, Blätterteig, fertiger Boden, Saucenbasis"
-                                    />
-                                  </label>
-                                  <label className="field-block">
-                                    <span>Interne Notiz</span>
-                                    <input
-                                      value={state.notes}
-                                      onChange={(event) =>
-                                        updateEditingComponentState(componentId, {
-                                          notes: event.target.value
-                                        })
-                                      }
-                                      placeholder="optional"
-                                    />
-                                  </label>
-                                </article>
-                              );
-                            })}
-                          </div>
-                        </>
-                      ) : null}
-                        </div>
-                      </article>
-                    ) : null}
-                  </div>
-                  {productionAssumptions.length > 0 ? (
-                    <>
-                      <p className="eyebrow">Annahmen des Agenten</p>
-                      <ul className="item-list compact">
-                        {productionAssumptions.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : null}
-                  {focusedProductionSpec ? (
-                    <div className="component-answer-card">
-                      <p className="eyebrow">Spezifikationsdetails</p>
-                      <p className="helper-text">specId: {String(focusedProductionSpec.specId ?? "-")}</p>
-                      <p className="helper-text">
-                        {`Eventtyp: ${String(
-                          focusedProductionSpecEvent?.type ?? focusedProductionSpecServicePlan?.eventType ?? "-"
-                        )} · ${formatProductionTimingWindow(focusedProductionSpecRecord)}`}
-                      </p>
-                      <p className="helper-text">
-                        {`Teilnehmerzahl: ${String(focusedProductionSpecAttendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
-                          String(focusedProductionSpecServicePlan?.serviceForm ?? "")
-                        )} · Readiness: ${translateReadiness(
-                          String((focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                        )}`}
-                      </p>
-                      <p className="helper-text">Menüpunkte / Komponenten:</p>
-                      <ul className="item-list compact">
-                        {focusedProductionSpecMenuPlan
-                          ? focusedProductionSpecMenuPlan.map((entry) => {
-                              const component = entry as Record<string, unknown>;
-                              return (
-                                <li key={String(component.componentId ?? component.label)}>
-                                  <strong>{String(component.label ?? component.componentId ?? "-")}</strong>
-                                  <p className="helper-text">
-                                    {`${translateMenuCategory(String(component.menuCategory ?? ""))} · ${translateProductionMode(
-                                      String((component.productionDecision as Record<string, unknown> | undefined)?.mode ?? "")
-                                    )}`}
-                                  </p>
-                                </li>
-                              );
-                            })
-                          : null}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {intakeRequestDetailError ? (
-                    <p className="helper-text" role="status">
-                      {intakeRequestDetailError}
-                    </p>
-                  ) : null}
-                  {intakeRequestDetail ? (
-                    <div className="component-answer-card">
-                      <p className="eyebrow">Ursprüngliche Intake-Anfrage</p>
-                      <p className="helper-text">
-                        {`requestId: ${String(intakeRequestDetail.requestId ?? "-")} · channel: ${String(
-                          (intakeRequestDetail.source as Record<string, unknown> | undefined)?.channel ?? "-"
-                        )} · receivedAt: ${String(
-                          (intakeRequestDetail.source as Record<string, unknown> | undefined)?.receivedAt ?? "-"
-                        )}`}
-                      </p>
-                      <ul className="item-list compact">
-                        {Array.isArray(intakeRequestDetail.rawInputs)
-                          ? intakeRequestDetail.rawInputs.map((rawInput, index) => {
-                              const rawInputRecord = rawInput as Record<string, unknown>;
-                              const sourceMetadataSummary = formatSourceMetadataSummary(rawInputRecord);
-                              const documentIngestionSummary = formatDocumentIngestionSummary(rawInputRecord);
-                              return (
-                                <li key={`${String(rawInputRecord.documentId ?? rawInputRecord.kind ?? index)}-${index}`}>
-                                  <strong>{String(rawInputRecord.kind ?? "-")}</strong>
-                                  <p className="helper-text">
-                                    {`${String(rawInputRecord.mimeType ? ` · ${rawInputRecord.mimeType}` : "")}`}
-                                  </p>
-                                  {documentIngestionSummary ? (
-                                    <p className="helper-text">Ingestion-Warnung: {documentIngestionSummary}</p>
-                                  ) : null}
-                                  {sourceMetadataSummary ? (
-                                    <p className="helper-text">Quellenmetadaten (gekürzt): {sourceMetadataSummary}</p>
-                                  ) : null}
-                                </li>
-                              );
-                            })
-                          : null}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="action-row">
-                  <button
-                    className="secondary-button"
-                    disabled={submitting}
-                    onClick={() => beginSpecEdit(focusedProductionSpec)}
-                  >
-                    Antworten bearbeiten
-                  </button>
-                  {editingSpecId === String(focusedProductionSpec.specId) ? (
-                    <button className="secondary-button" disabled={submitting} onClick={() => void handleSaveSpecEdit()}>
-                      Antworten speichern
-                    </button>
-                  ) : null}
-                  <button disabled={submitting} onClick={() => void handleCreatePlan(focusedProductionSpec)}>
-                    {editingSpecId === String(focusedProductionSpec.specId)
-                      ? "Speichern und Berechnung starten"
-                      : "Berechnung starten"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p className="helper-text">
-                {documentPhase === "analysing"
-                  ? "Der Agent wertet das hochgeladene Dokument gerade aus und erzeugt daraus operative Veranstaltungsdaten."
-                  : productionWorkspaceCleared
-                    ? "Der aktuelle Vorgang wurde geleert. Nach einem neuen Upload erscheinen hier wieder die Rückfragen des Agenten."
-                  : "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten."}
-              </p>
+          <ProductionQuestionPanel
+            focusedProductionSpec={focusedProductionSpec}
+            focusedSpecReadinessLabel={translateReadiness(
+              String((focusedProductionSpec?.readiness as Record<string, unknown> | undefined)?.status ?? "-")
             )}
-            {!productionWorkspaceCleared && filteredSpecs.length > 1 ? (
-              <>
-                <div className="divider" />
-                <header>
-                  <p className="eyebrow">Erkannte Eingänge</p>
-                  <h3>Zwischen mehreren Vorgängen wechseln</h3>
-                </header>
-                <ul className="item-list compact">
-                  {filteredSpecs.slice(0, 6).map((spec) => (
-                    <li key={String(spec.specId)}>
-                      <strong>{getSpecLabel(spec)}</strong>
-                      <div className="action-row">
-                        <button
-                          className="secondary-button"
-                          disabled={submitting}
-                          onClick={() => {
-                            setProductionWorkspaceCleared(false);
-                            setFocusedProductionSpecId(String(spec.specId));
-                          }}
-                        >
-                          Für Rückfragen öffnen
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-            {editingSpecId && editingSpecId !== String(focusedProductionSpec?.specId ?? "") ? (
-              <>
-                <div className="divider" />
-                <div className="form-panel">
-                  <header>
-                    <p className="eyebrow">Antwortfenster</p>
-                    <h3>{editingSpecId}</h3>
-                  </header>
-                  <input
-                    value={editingEventType}
-                    onChange={(event) => setEditingEventType(event.target.value)}
-                    placeholder="Veranstaltungstyp, z. B. Konferenz"
-                  />
-                  <input
-                    value={editingEventDate}
-                    onChange={(event) => setEditingEventDate(event.target.value)}
-                    placeholder="Datum, z. B. 2026-06-18"
-                  />
-                  <input
-                    value={editingAttendeeCount}
-                    onChange={(event) => setEditingAttendeeCount(event.target.value)}
-                    placeholder="Teilnehmerzahl"
-                  />
-                  <input
-                    value={editingServiceForm}
-                    onChange={(event) => setEditingServiceForm(event.target.value)}
-                    placeholder="Serviceform, z. B. Buffet"
-                  />
-                  <textarea
-                    value={editingMenuItems}
-                    onChange={(event) => setEditingMenuItems(event.target.value)}
-                    placeholder="Menüpunkte, durch Komma getrennt"
-                  />
-                  <div className="action-row">
-                    <button disabled={submitting} onClick={() => void handleSaveSpecEdit()}>
-                      Antworten speichern
-                    </button>
-                    <button className="secondary-button" disabled={submitting} onClick={() => resetSpecEdit()}>
-                      Fenster schließen
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : null}
-          </article>
-          </div>
-          <div className="production-column">
-          <article className="panel production-step-card">
-            <header>
-              <p className="eyebrow">Produktionsobjekte</p>
-              <h3>Plan und Ergebnis leise prüfen</h3>
-            </header>
-            <div className="activity-slot">
-              {planPhase === "planning" && planningSpecLabel ? (
-                <div className="progress-panel">
-                  <div
-                    className="progress-ring"
-                    style={
-                      {
-                        "--progress-angle": `${Math.max(0, Math.min(planProgress, 100)) * 3.6}deg`
-                      } as CSSProperties
-                    }
-                  >
-                    <span>{planProgress}%</span>
-                  </div>
-                  <div className="progress-panel__content">
-                    <p className="processing-note">
-                      Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen für {planningSpecLabel} ...
-                    </p>
-                    <div className="progress-bar">
-                      <div
-                        className="progress-bar__fill"
-                        style={{ width: `${Math.max(0, Math.min(planProgress, 100))}%` }}
-                      />
-                    </div>
-                    <p className="helper-text">
-                      Geschätzte Restzeit: {formatEta(planEtaSeconds ?? 1)}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-              {planPhase === "done" && planningSpecLabel ? (
-                <div className="progress-panel">
-                  <div
-                    className="progress-ring progress-ring--done"
-                    style={{ "--progress-angle": "360deg" } as CSSProperties}
-                  >
-                    <span>100%</span>
-                  </div>
-                  <div className="progress-panel__content">
-                    <p className="processing-note processing-note--success">
-                      Produktionsplan wurde für {planningSpecLabel} erzeugt.
-                    </p>
-                    <div className="progress-bar">
-                      <div className="progress-bar__fill" style={{ width: "100%" }} />
-                    </div>
-                    <p className="helper-text">
-                      Die Rezepte, Produktionsschritte und Einkaufspositionen wurden aktualisiert.
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <header>
-              <p className="eyebrow">Aktueller Vorgang</p>
-              <h4 className="subsection-title">
-                {focusedProductionSpec
-                  ? getSpecLabel(focusedProductionSpec)
-                  : productionWorkspaceCleared
-                    ? "Kein aktiver Vorgang"
-                    : "Neuester Produktionslauf"}
-              </h4>
-            </header>
-            <p className="helper-text">
-              {productionWorkspaceCleared
-                ? "Die Ergebnisfelder wurden geleert. Ein neuer Upload oder eine neue Erfassung füllt diesen Bereich wieder."
-                : "Hier erscheinen die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere Läufe bleiben in den Details abrufbar."}
-            </p>
-            {!productionWorkspaceCleared ? renderPlanList(currentSpecPlans, specById, submitting, setSelectedPlanId) : null}
-            {selectedPlan ? (
-              <>
-                <div className="divider" />
-                <header>
-                  <p className="eyebrow">Downloadbereich</p>
-                  <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
-                </header>
-                <p className="helper-text">
-                  {`Plan-Kontext: planId ${String(selectedPlan.planId ?? "-")} · specId ${String(
-                    selectedPlan.eventSpecId ?? selectedPlanSpec?.specId ?? "-"
-                  )}`}
-                </p>
-                <p className="helper-text">
-                  Status:{" "}
-                  {translateReadiness(
+            selectedPlan={selectedPlan}
+            selectedPlanReadinessLabel={
+              selectedPlan
+                ? translateReadiness(
                     String((selectedPlan.readiness as Record<string, unknown> | undefined)?.status ?? "-")
-                  )}
-                  {selectedPlanSpec
-                    ? ` · Serviceform: ${translateServiceForm(
-                        String(
-                          (
-                            selectedPlanSpec.servicePlan as Record<string, unknown> | undefined
-                          )?.serviceForm ?? "offen"
-                        )
-                      )}`
-                    : ""}
-                  {" · "}Arbeitsblätter: {Array.isArray(selectedPlan.kitchenSheets) ? selectedPlan.kitchenSheets.length : 0}
-                  {" · "}Rezeptblätter: {Array.isArray(selectedPlan.productionBatches) ? selectedPlan.productionBatches.length : 0}
-                  {" · "}Rezeptauswahl: {Array.isArray(selectedPlan.recipeSelections) ? selectedPlan.recipeSelections.length : 0}
-                </p>
-                <div className="production-output-summary" aria-label="Produktionsplan-Export">
-                  <div>
-                    <p className="eyebrow">Plan</p>
-                    <strong>Produktionsblatt</strong>
-                    <p className="helper-text">Druckbares Ergebnis aus dem bestehenden Exportpfad.</p>
-                  </div>
-                  <a
-                    className="ghost-link"
-                    href={productionExportUrl(String(selectedPlan.planId))}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Produktionsblatt exportieren
-                  </a>
-                </div>
-                {Array.isArray(selectedPlan.unresolvedItems) && selectedPlan.unresolvedItems.length > 0 ? (
-                  <>
-                    <p>Offene Punkte:</p>
-                    <ul className="item-list compact">
-                      {selectedPlan.unresolvedItems.map((entry) => (
-                        <li key={String(entry)}>{String(entry)}</li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <p>Offene Punkte: keine</p>
-                )}
-                {Array.isArray(selectedPlan.productionBatches) &&
-                selectedPlan.productionBatches.length === 0 &&
-                Array.isArray(selectedPlan.kitchenSheets) &&
-                selectedPlan.kitchenSheets.length > 0 ? (
-                  <p className="helper-text">
-                    Es liegen bereits operative Arbeitsblätter vor. Rezeptblätter entstehen zusätzlich, sobald für die
-                    offenen Komponenten ein belastbares Rezept oder eine eindeutige Beschaffungsentscheidung vorliegt.
-                  </p>
-                ) : null}
-
-                <details className="secondary-workspace">
-                  <summary>
-                    <span className="eyebrow">Sekundäre Details</span>
-                    <span className="subsection-title">Ältere Läufe, Rezeptauswahl und Arbeitsblätter</span>
-                    <span className="helper-text">Nur bei Bedarf aufklappen.</span>
-                  </summary>
-                  <div className="secondary-workspace__content">
-                    {!productionWorkspaceCleared && archivedPlans.length > 0 ? (
-                      <>
-                        <header>
-                          <p className="eyebrow">Ältere Produktionsläufe</p>
-                          <h4 className="subsection-title">Frühere Ergebnisse aus anderen Vorgängen</h4>
-                        </header>
-                        {renderPlanList(archivedPlans, specById, submitting, setSelectedPlanId)}
-                      </>
-                    ) : null}
-
-                    <ul className="item-list compact">
-                      {Array.isArray(selectedPlan.recipeSelections)
-                        ? selectedPlan.recipeSelections.map((selection) => {
-                            const selectionRecord = selection as Record<string, unknown>;
-                            const componentId = String(selectionRecord.componentId ?? "");
-                            const component = selectedPlanComponentsById.get(componentId);
-                            const componentLabel = String(component?.label ?? componentId);
-                            const qualityScore = formatPercent(selectionRecord.qualityScore);
-                            const fitScore = formatPercent(selectionRecord.fitScore);
-                            const searchTrace = Array.isArray(selectionRecord.searchTrace)
-                              ? selectionRecord.searchTrace.map((entry) => String(entry))
-                              : [];
-                            return (
-                              <li key={componentId}>
-                                <strong>{componentLabel}</strong>
-                                <p>{String(selectionRecord.selectionReason ?? "-")}</p>
-                                {component ? (
-                                  <p className="helper-text">
-                                    Kategorie: {translateMenuCategory(String(component.menuCategory ?? ""))}
-                                    {" · "}Herstellungsart:{" "}
-                                    {translateProductionMode(
-                                      String(
-                                        (
-                                          component.productionDecision as Record<string, unknown> | undefined
-                                        )?.mode ?? ""
-                                      )
-                                    )}
-                                  </p>
-                                ) : null}
-                                {qualityScore || fitScore ? (
-                                  <p className="helper-text">
-                                    {qualityScore ? `Qualität ${qualityScore}` : "Qualität offen"}
-                                    {fitScore ? ` · Passung ${fitScore}` : ""}
-                                  </p>
-                                ) : null}
-                                {searchTrace.length > 0 ? (
-                                  <div className="search-trace">
-                                    <p className="helper-text">Suchspur:</p>
-                                    <ul className="item-list compact trace-list">
-                                      {searchTrace.map((entry) => (
-                                        <li key={`${componentId}-${entry}`}>{entry}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ) : null}
-                              </li>
-                            );
-                          })
-                        : null}
-                    </ul>
-
-                    {Array.isArray(selectedPlan.kitchenSheets) && selectedPlan.kitchenSheets.length > 0 ? (
-                      <>
-                        <div className="divider" />
-                        <header>
-                          <p className="eyebrow">Arbeitsblätter</p>
-                          <h4 className="subsection-title">Küche, Beschaffung und Klärungen</h4>
-                        </header>
-                        <ul className="item-list compact">
-                          {selectedPlan.kitchenSheets.map((sheet, sheetIndex) => {
-                            const sheetRecord = sheet as Record<string, unknown>;
-                            const instructions = Array.isArray(sheetRecord.instructions)
-                              ? sheetRecord.instructions.map((entry) => String(entry))
-                              : [];
-                            return (
-                              <li key={`${String(sheetRecord.title ?? "Arbeitsblatt")}-${sheetIndex}`}>
-                                <strong>{String(sheetRecord.title ?? "Arbeitsblatt")}</strong>
-                                <ul className="item-list compact trace-list">
-                                  {instructions.map((instruction) => (
-                                    <li key={`${String(sheetRecord.title ?? "Arbeitsblatt")}-${instruction}`}>
-                                      {instruction}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </>
-                    ) : null}
-                  </div>
-                </details>
-              </>
-            ) : null}
-          </article>
+                  )
+                : undefined
+            }
+            currentSpecPurchaseLists={currentSpecPurchaseLists}
+            productionQuestions={productionQuestions}
+            productionAssumptions={productionAssumptions}
+            productionConversationProjection={productionConversationProjection}
+            workbenchSpecFacts={workbenchSpecFacts}
+            intakeRequestDetailError={intakeRequestDetailError}
+            intakeRequestDetail={intakeRequestDetail}
+            submitting={submitting}
+            editingSpecId={editingSpecId}
+            editingEventType={editingEventType}
+            editingEventDate={editingEventDate}
+            editingAttendeeCount={editingAttendeeCount}
+            editingServiceForm={editingServiceForm}
+            editingMenuItems={editingMenuItems}
+            editingComponentStates={editingComponentStates}
+            hasFocusedSpecEditChanges={hasFocusedSpecEditChanges}
+            recipes={dashboard.recipes}
+            filteredSpecs={filteredSpecs}
+            documentPhase={documentPhase}
+            productionWorkspaceCleared={productionWorkspaceCleared}
+            setEditingEventType={setEditingEventType}
+            setEditingEventDate={setEditingEventDate}
+            setEditingAttendeeCount={setEditingAttendeeCount}
+            setEditingServiceForm={setEditingServiceForm}
+            setEditingMenuItems={setEditingMenuItems}
+            updateEditingComponentState={updateEditingComponentState}
+            beginSpecEdit={beginSpecEdit}
+            saveSpecEdit={handleSaveSpecEdit}
+            createPlan={handleCreatePlan}
+            resetSpecEdit={resetSpecEdit}
+            openSpecForQuestions={(specId) => {
+              setProductionWorkspaceCleared(false);
+              setFocusedProductionSpecId(specId);
+            }}
+          />
           </div>
           <div className="production-column">
-          <article className="panel secondary-panel">
-            <header>
-              <p className="eyebrow">Downloadbereich</p>
-              <h3>{purchaseZoneStatusLabel}</h3>
-            </header>
-            <p className="helper-text">
-              Erreichbar und exportierbar, aber nur mit kompakter Vorschau im Workbench-Fluss.
-            </p>
-            <ul className="item-list compact">
-              {currentSpecPurchaseLists.map((purchaseList) => {
-                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                const purchaseListPreviewItems = getPurchaseListPreviewItems(purchaseList);
-                return (
-                  <li key={String(purchaseList.purchaseListId)}>
-                    <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                    <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                    <p className="helper-text">
-                      purchaseListId: {String(purchaseList.purchaseListId)} · specId: {String(purchaseList.eventSpecId ?? "-")}
-                    </p>
-                    <a
-                      className="ghost-link"
-                      href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Einkaufsliste exportieren
-                      <span className="visually-hidden"> Einkaufsliste herunterladen</span>
-                    </a>
-                    {purchaseListPreviewItems.length > 0 ? (
-                      <>
-                        <p className="helper-text">Kurzübersicht der ersten Positionen:</p>
-                        <ul className="item-list compact">
-                          {purchaseListPreviewItems.map((item, itemIndex) => (
-                            <li key={`${String(purchaseList.purchaseListId)}-${itemIndex}`}>
-                              <strong>{item.articleName}</strong>
-                              <p>Menge: {item.quantity}</p>
-                              <p>Einheit: {item.unit}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    ) : null}
-                  </li>
-                );
-              })}
-              {currentSpecPurchaseLists.length === 0 ? (
-                <li>
-                  Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan. Exportlinks
-                  erscheinen erst, wenn Produktionsplan und Einkaufsliste vorhanden sind.
-                </li>
-              ) : null}
-            </ul>
-            {archivedPurchaseLists.length > 0 ? (
-              <details className="secondary-workspace">
-                <summary>
-                  <span className="eyebrow">Ältere Einkaufslisten</span>
-                  <span className="subsection-title">{archivedPurchaseLists.length} frühere Listen</span>
-                  <span className="helper-text">Nur bei Bedarf aufklappen.</span>
-                </summary>
-                <div className="secondary-workspace__content">
-                  <ul className="item-list compact">
-                    {archivedPurchaseLists.map((purchaseList) => {
-                      const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
-                      return (
-                        <li key={String(purchaseList.purchaseListId)}>
-                          <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
-                          <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
-                          <a
-                            className="ghost-link"
-                            href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Einkaufsliste exportieren
-                            <span className="visually-hidden"> Einkaufsliste herunterladen</span>
-                          </a>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              </details>
-            ) : null}
-          </article>
+          <ProductionObjectsPanel
+            planPhase={planPhase}
+            planningSpecLabel={planningSpecLabel}
+            planProgress={planProgress}
+            planEtaSeconds={planEtaSeconds}
+            focusedProductionSpec={focusedProductionSpec}
+            productionWorkspaceCleared={productionWorkspaceCleared}
+            currentSpecPlans={currentSpecPlans}
+            selectedPlan={selectedPlan}
+            selectedPlanSpec={selectedPlanSpec}
+            selectedPlanComponentsById={selectedPlanComponentsById}
+            archivedPlans={archivedPlans}
+            specById={specById}
+            submitting={submitting}
+            setSelectedPlanId={setSelectedPlanId}
+          />
           </div>
           <div className="production-column">
+          <ProductionPurchaseListPanel
+            currentPurchaseLists={currentSpecPurchaseLists}
+            archivedPurchaseLists={archivedPurchaseLists}
+            specById={specById}
+            statusLabel={purchaseZoneStatusLabel}
+          />
+          </div>
+          <div className="production-column">
+          <ProductionHandoffPanel
+            intakeOriginLabel={productionIntakeOriginLabel}
+            auditTrailLabel={productionAuditTrailLabel}
+            exportLabel={productionHandoffExportLabel}
+            contextLabel={productionHandoffContextLabel}
+          />
 
-          <article className="production-handoff-zone" aria-label="Herkunft und Übergabe">
-            <header>
-              <p className="eyebrow">Abschlusszone</p>
-              <h3>Herkunft und Übergabe</h3>
-              <p className="helper-text">
-                Ruhige Bündelung vorhandener Herkunfts-, Audit- und Exporthinweise. Keine rechtssichere Audit-Behauptung.
-              </p>
-            </header>
-            <div className="handoff-fact-grid">
-              <div className="handoff-fact">
-                <span>Intake-Ursprung</span>
-                <strong>{productionIntakeOriginLabel}</strong>
-              </div>
-              <div className="handoff-fact">
-                <span>Audit-Spur</span>
-                <strong>{productionAuditTrailLabel}</strong>
-              </div>
-              <div className="handoff-fact">
-                <span>Übergabe-/Exportartefakte</span>
-                <strong>{productionHandoffExportLabel}</strong>
-              </div>
-              {productionHandoffContextLabel ? (
-                <div className="handoff-fact">
-                  <span>Abschluss-Kontext</span>
-                  <strong>Abschluss-Kontext: {productionHandoffContextLabel}</strong>
-                </div>
-              ) : null}
-            </div>
-            <p className="helper-text">
-              Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.
-              Fehlende Artefakte bleiben offen markiert; keine externe Freigabe, Signatur- oder Compliance-Behauptung.
-            </p>
-            <p className="helper-text">
-              Es werden nur bestehende Metadaten und Artefaktzustände gezeigt; Rohtexte oder PDF-Extrakte werden hier nicht gespiegelt.
-            </p>
-          </article>
-
-          <article className="recipe-review-status-zone" aria-label="Rezeptprüfung">
-            <div>
-              <p className="eyebrow">Rezeptprüfung</p>
-              <h3>{recipeReviewStatusLabel}</h3>
-              <p className="helper-text">{recipeUsageStatusLabel}</p>
-            </div>
-            <p className="helper-text">
-              {recipeReviewCounts.rejected} abgelehnt · {dashboard.recipes.length} Rezepte insgesamt · Review-Actions bleiben in der
-              Bibliothek unverändert.
-            </p>
-          </article>
-
-          <details className="panel secondary-panel secondary-rail-details">
-            <summary>
-              <span className="eyebrow">Rezeptbibliothek</span>
-              <span className="subsection-title">Rezepte verwalten</span>
-              <span className="helper-text">
-                {dashboard.recipes.length} Rezepte · {recipeReviewCounts.approved} freigegeben · {recipeReviewCounts.reviewRequired} Prüfung nötig
-              </span>
-            </summary>
-            <div className="secondary-rail-details__content form-panel">
-              <header>
-                <p className="eyebrow">Rezeptupload</p>
-                <h3>Zusätzliche Rezepte in die Küchenbibliothek übernehmen</h3>
-              </header>
-              <input
-                value={recipeName}
-                onChange={(event) => setRecipeName(event.target.value)}
-                placeholder="Optionaler Rezeptname"
-              />
-              <input
-                className="file-input"
-                type="file"
-                accept=".pdf,.txt,.md,text/plain,application/pdf"
-                onChange={(event) => setRecipeFile(event.target.files?.[0] ?? null)}
-              />
-              <div className="action-row">
-                <button disabled={submitting} onClick={() => void handleRecipeUpload("offer")}>
-                  Über Angebotsagent speichern
-                </button>
-                <button disabled={submitting} onClick={() => void handleRecipeUpload("production")}>
-                  Über Produktionsagent speichern
-                </button>
-              </div>
-              {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
-              <div className="divider" />
-              <header>
-                <p className="eyebrow">Rezeptbestand</p>
-                <h3>Freigaben, Herkunft und Internet-Ausweichquellen</h3>
-              </header>
-              <ul className="item-list compact">
-                {filteredRecipes.slice(0, 12).map((recipe) => (
-                  <li key={String(recipe.recipeId)}>
-                    <strong>{String(recipe.name)}</strong>
-                    <p>
-                      {translateRecipeTier(String((recipe.source as Record<string, unknown>)?.tier ?? "-"))} ·{" "}
-                      {translateApprovalState(String((recipe.source as Record<string, unknown>)?.approvalState ?? "-"))}
-                    </p>
-                    <div className="action-row">
-                      <button
-                        className="secondary-button"
-                        disabled={submitting}
-                        onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "approve")}
-                      >
-                        Freigeben
-                      </button>
-                      <button
-                        className="secondary-button"
-                        disabled={submitting}
-                        onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "verify")}
-                      >
-                        Verifizieren
-                      </button>
-                      <button
-                        className="secondary-button destructive-button"
-                        disabled={submitting}
-                        onClick={() => void handleRecipeReview("production", String(recipe.recipeId), "reject")}
-                      >
-                        Ablehnen
-                      </button>
-                    </div>
-                  </li>
-                ))}
-                {filteredRecipes.length === 0 ? <li>Noch keine Rezepte vorhanden.</li> : null}
-              </ul>
-            </div>
-          </details>
+          <ProductionRecipeLibraryPanel
+            recipeReviewStatusLabel={recipeReviewStatusLabel}
+            recipeUsageStatusLabel={recipeUsageStatusLabel}
+            recipeReviewCounts={recipeReviewCounts}
+            recipeCount={dashboard.recipes.length}
+            recipeName={recipeName}
+            recipeFile={recipeFile}
+            filteredRecipes={filteredRecipes}
+            submitting={submitting}
+            setRecipeName={setRecipeName}
+            setRecipeFile={setRecipeFile}
+            uploadRecipe={handleRecipeUpload}
+            reviewRecipe={handleRecipeReview}
+          />
 
           </div>
         </ProductionConversationalWorkbench>

@@ -84,6 +84,30 @@ function questionForMissingField(field: string): string | undefined {
   return questions[field];
 }
 
+function isBakerPurchaseLabel(label: string): boolean {
+  const normalized = label.replace(/\s+/g, " ").trim();
+  return /^(?:klassisch\s+)?(?:brot\s*(?:&|und|-)?\s*baguette|baguette|br[öo]tchen|broetchen|brotkorb|brot)$/i.test(
+    normalized
+  );
+}
+
+function isImplicitBakerPurchaseComponent(
+  component: Record<string, unknown> | undefined,
+  productionConstraints: string[]
+): boolean {
+  const productionDecision = asRecord(component?.productionDecision);
+  if (productionDecision?.mode) {
+    return false;
+  }
+
+  if (productionConstraints.includes("gluten_free")) {
+    return false;
+  }
+
+  const label = String(component?.label ?? component?.componentId ?? "");
+  return isBakerPurchaseLabel(label);
+}
+
 function translateUncertaintyMessage(field?: string, message?: string): string | undefined {
   if (field === "attendees.expected") {
     return "Die Teilnehmerzahl konnte nicht zuverlässig aus dem Dokument abgeleitet werden.";
@@ -173,6 +197,7 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
   const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
   const missingFields = stringListFromUnknown(spec.missingFields);
   const uncertainties = Array.isArray(spec.uncertainties) ? spec.uncertainties : [];
+  const productionConstraints = stringListFromUnknown(spec.productionConstraints);
   const readiness = String(asRecord(spec.readiness)?.status ?? "");
   const questions: string[] = [];
   const coveredFields = new Set<string>();
@@ -203,6 +228,10 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
   const unresolvedSourcingQuestions = menuPlan
     .map((item) => {
       const component = asRecord(item);
+      if (isImplicitBakerPurchaseComponent(component, productionConstraints)) {
+        return undefined;
+      }
+
       const productionDecision = asRecord(component?.productionDecision);
       if (productionDecision?.mode) {
         return undefined;
@@ -239,6 +268,10 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
   const unresolvedCategoriesQuestions = menuPlan
     .map((item) => {
       const component = asRecord(item);
+      if (isImplicitBakerPurchaseComponent(component, productionConstraints)) {
+        return undefined;
+      }
+
       if (component?.menuCategory) {
         return undefined;
       }

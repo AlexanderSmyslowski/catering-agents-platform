@@ -202,6 +202,29 @@ async function flush(times = 4) {
   }
 }
 
+function installPendingBackofficeEnvironmentMocks() {
+  const storage = new Map<string, string>();
+  const localStorageMock = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      storage.set(key, String(value));
+    },
+    removeItem: (key: string) => {
+      storage.delete(key);
+    },
+    clear: () => {
+      storage.clear();
+    }
+  };
+
+  Object.defineProperty(window, "localStorage", {
+    value: localStorageMock,
+    configurable: true
+  });
+  vi.stubGlobal("localStorage", localStorageMock);
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
@@ -240,6 +263,22 @@ describe("backoffice route smoke", () => {
     expect(production).toContain("Auftrag einfügen oder Datei ablegen");
     expect(production).toContain("production-calm-summary");
     expect(production).toContain("Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.");
+  });
+
+  it("keeps the home initial loading state from looking like an empty data set", async () => {
+    installPendingBackofficeEnvironmentMocks();
+
+    const home = (await renderRoute("/")).text;
+
+    expect(home).toContain("Plattformdaten werden geladen; noch kein Datenbestand bewertet.");
+    expect(home).toContain("Übergabe wird geladen; noch keine Übergabe-Bewertung.");
+    expect(home).toContain("Angebotsdaten werden geladen; noch keine Entwurfsbewertung.");
+    expect(home).toContain("Produktionsdaten werden geladen; noch keine Plan-/Einkaufslistenbewertung.");
+    expect(home).toContain("Rezeptbestand wird geladen; noch keine Review-Bewertung.");
+    expect(home).toContain("Healthcheck läuft · Zähler werden geladen · letzte Erfassung wird geladen");
+    expect(home).toContain("Änderungen werden geladen; noch kein Audit-/Handoff-Befund.");
+    expect(home).not.toContain("0 operative Datensätze stehen dienstübergreifend bereit.");
+    expect(home).not.toContain("Noch keine Änderungen geladen.");
   });
 
   it("keeps the home navigation entries wired to route-stable offer and production markers", async () => {
