@@ -19,6 +19,17 @@ describe("local ops check contract", () => {
     expect(checkScript).toContain("production.seed_demo-Beleg hat eine unerwartete entityId.");
   });
 
+  it("warns when the local rehearsal data set looks accumulated without deleting anything", () => {
+    expect(checkScript).toContain("json_item_count()");
+    expect(checkScript).toContain("intake_spec_count");
+    expect(checkScript).toContain("offer_draft_count");
+    expect(checkScript).toContain("production_plan_count");
+    expect(checkScript).toContain("Rehearsal-Datenhinweis: lokaler Datenbestand wirkt aufgefuellt");
+    expect(checkScript).toContain("kein sauberer Frischlauf");
+    expect(checkScript).toContain("UI-Evidenz und Reibungslog muessen Altlasten/Stale-Fokus beruecksichtigen");
+    expect(checkScript).toContain("local:check loescht oder archiviert keine lokalen Daten automatisch");
+  });
+
   it("documents the compact local demo runbook commands and their bounded roles", () => {
     expect(testingDoc).toContain("`npm run local:start` startet den lokalen Stack mit Demo-Seeding");
     expect(testingDoc).toContain("`npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht");
@@ -27,6 +38,9 @@ describe("local ops check contract", () => {
     expect(testingDoc).toContain("keine CI-Pflicht");
     expect(testingDoc).toContain("keine Produktionsfreigabe");
     expect(testingDoc).toContain("keine rechtssichere Audit-Aussage");
+    expect(testingDoc).toContain("Rehearsal-Datenhinweis");
+    expect(testingDoc).toContain("kein sauberer Frischlauf");
+    expect(testingDoc).toContain("keine automatische Loeschung oder Archivierung");
   });
 
   it("keeps Demo-Seed, local checks, and audit evidence narratively bounded across docs", () => {
@@ -39,6 +53,7 @@ describe("local ops check contract", () => {
       expect(doc).toContain("keine rechtssichere Audit-/Compliance-Aussage");
       expect(doc).toContain("interner Demo-/Abnahmeweg");
       expect(doc).toContain("keine externe Freigabe");
+      expect(doc).toContain("aufgefuellt");
     }
   });
 
