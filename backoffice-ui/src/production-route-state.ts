@@ -12,6 +12,11 @@ export type WorkbenchSpecFact = {
   value: string;
 };
 
+export type ClarificationAnswerStatusCounts = {
+  answered: number;
+  unanswered: number;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
 }
@@ -290,4 +295,20 @@ export function buildWorkbenchSpecFacts(spec?: Record<string, unknown>): Workben
       value: `${menuPlan.length} Komponenten`
     }
   ];
+}
+
+export function countClarificationAnswerStatuses(
+  messages: Array<{ clarificationAnswerStatus?: unknown }>
+): ClarificationAnswerStatusCounts {
+  return messages.reduce<ClarificationAnswerStatusCounts>(
+    (counts, message) => {
+      if (message.clarificationAnswerStatus === "answered") {
+        counts.answered += 1;
+      } else if (message.clarificationAnswerStatus === "unanswered") {
+        counts.unanswered += 1;
+      }
+      return counts;
+    },
+    { answered: 0, unanswered: 0 }
+  );
 }

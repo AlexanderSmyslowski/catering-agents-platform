@@ -19,6 +19,7 @@ import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import {
   buildWorkbenchSpecFacts,
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
+  countClarificationAnswerStatuses,
   countPurchaseListItems,
   formatActiveProductionContextLabel,
   formatProductionHandoffContextLabel,
@@ -812,18 +813,7 @@ export function App() {
   );
 
   const clarificationStatusCounts = useMemo(
-    () =>
-      productionConversationProjection.messages.reduce(
-        (counts, message) => {
-          if (message.clarificationAnswerStatus === "answered") {
-            counts.answered += 1;
-          } else if (message.clarificationAnswerStatus === "unanswered") {
-            counts.unanswered += 1;
-          }
-          return counts;
-        },
-        { answered: 0, unanswered: 0 }
-      ),
+    () => countClarificationAnswerStatuses(productionConversationProjection.messages),
     [productionConversationProjection.messages]
   );
 
