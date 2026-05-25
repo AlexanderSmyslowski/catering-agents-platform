@@ -74,6 +74,7 @@ Relevante bestehende Tests:
 - `tests/pa23-clarification-answer-runtime-minimal.test.ts`
 - `tests/pa24-clarification-answer-session-spec-binding.test.ts`
 - `tests/pa25-clarification-answered-status-anchor.test.ts`
+- `tests/product-goal-anchor-contract.test.ts`
 - `tests/p5-b49-beta-flow-map-contract.test.ts`
 - `tests/p5-b54-manual-beta-checklist-contract.test.ts`
 - `tests/p6-b61-beta-management-decision-brief-contract.test.ts`
@@ -149,6 +150,10 @@ PA23 Clarification Answer Runtime Minimal Slice ist als enger Runtime-Test codie
 PA24 Clarification Answer Session/Spec Binding Anchor ist als enger shared-core-/Runtime-Grenztest codiert: Rueckfragen und Antworten tragen eine explizite Kontextbindung aus bestehender `specId` und bestehender `ProductionConversationProjection.sessionId`; Antworterzeugung, Store-Grenze und Projection akzeptieren nur eindeutig passende Spec-/Session-Kontexte. Fehlende oder falsche Bindungen werden abgelehnt beziehungsweise nicht angezeigt. Der Slice fuehrt keine neue ID-Welt, keine neue API, UI, Migration, Persistenzwelt, Antwortbearbeitung, automatische Spec-Korrektur oder fachliche Antwortinterpretation ein.
 
 PA25 Clarification Answered Status Anchor ist als enger Projection-Test codiert: strukturierte Clarification-Fragen tragen read-only `clarificationAnswerStatus: answered | unanswered`. Als `answered` zaehlt nur eine passende `submitted`-`shortText`-Antwort mit gleicher `questionId`, passendem stabilem Question-Key und gleicher Spec-/Session-Bindung. Falscher Kontext, falscher Typ, `draft`, `reviewed` und malformed Answers bleiben `unanswered`; Antworttext bleibt escaped und der Status loest keine Spec-Korrektur, Fachableitung, Frage-Schliessung, neue API, UI-Welt oder Persistenz aus.
+
+Produktziel-Anker ist als Doku-/Vertragstestanker codiert: `docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md` beschreibt die interne Catering-Arbeitsplattform, den Zielpfad `Intake -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit`, den kontrollierten internen MVP-/Beta-Korridor und die Grenzen gegen externe Kundennutzung, echte Multi-Tenant-Plattform, produktionsnahe echte Daten, Auth/OIDC, neue Persistenz/API und Deployment ohne Gates. `tests/product-goal-anchor-contract.test.ts` schuetzt Zielanker, Arbeitsmodus, Reifegrade und Auffindbarkeit aus README, TESTING und memory.md. Keine Produktlogik, UI, API, Persistenz, Deployment, Auth/OIDC oder echte Daten werden dadurch eingefuehrt.
+
+ProductionAgent 10/10 Coding Architecture ist als Doku-/Vertragstestanker codiert: `docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md` beschreibt den Coding-Pfad von deterministischem Produktionskern ueber LLM-Readiness ohne LLM bis zu einem spaeteren kontrollierten internen LLM-ProductionAgent. `docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md` sortiert den aktuellen uncommitted Arbeitsbaum in reviewbare Slices. `tests/production-agent-10-10-coding-architecture-contract.test.ts` schuetzt Auffindbarkeit, Level 7/8/8.5/9/9.5/10, Modulgrenzen, Tool-/Provider-/Eval-Grenzen und die No-go-Linie: kein LLM-Provider-Call ohne Alexander-Go, keine echten Daten, keine neue API/Persistenz/Migration und kein Deployment.
 
 P5-B49 Beta-Durchlauf Ist-Karte ist als Doku-/Vertragstestanker codiert: `docs/product/P5_BETA_DURCHLAUF_IST_KARTE.md` kartiert den vorhandenen internen Nutzerweg `Start -> Angebot -> Produktion -> Exporte/Audit` und trennt intern nutzbar, nur dokumentiert / nur intern abnahmefaehig, blockiert und schon testbar. `tests/p5-b49-beta-flow-map-contract.test.ts` schuetzt die Auffindbarkeit aus README, TESTING und C8 sowie die Grenzen: kein Deployment, keine SSH-Verbindung, keine echten Daten, keine neue Persistenz, kein OAuth/Login/OIDC, keine automatische Spec-Korrektur und keine Rezept-/Allergenautomatik.
 
@@ -246,6 +251,7 @@ Abgrenzung der lokalen Befehle:
 - `npm run local:start` startet den lokalen Stack mit Demo-Seeding in den bestehenden `screen`-Sitzungen. Der Befehl nutzt die vorhandenen Services und Demo-Fixtures; er ist kein Deployment und keine Produktionsfreigabe.
 - `npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht fuer die erwarteten `screen`-Sitzungen und Service-Ports. Der Befehl zeigt, ob der lokale Stack gerade plausibel laeuft; er belegt noch keinen vollstaendigen Betriebsweg.
 - `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack. Der Check prueft Startweg, Status, UI-Routen, Health-Endpunkte, read-only Exportpfade und einen vorhandenen Demo-Start-/Auditbeleg.
+- Wenn `npm run local:check` einen Rehearsal-Datenhinweis fuer einen aufgefuellten lokalen Datenbestand ausgibt, ist das kein rotes Gate, aber auch kein sauberer Frischlauf. UI-Evidenz und Reibungslog muessen Altlasten/Stale-Fokus beruecksichtigen; der Check macht keine automatische Loeschung oder Archivierung.
 - `npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse wieder. Der Befehl ist der Abschluss des lokalen Demo-Durchlaufs und kein Server- oder Deployment-Eingriff.
 
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
@@ -273,6 +279,8 @@ Der P9-N1-Rehearsal-Nachweisrahmen ist unter `docs/product/P9_N1_LOKALER_REHEARS
 B6 ordnet diese Exportlinks ausdruecklich als interne read-only Arbeitsbelege unter Trusted-Actor-Kontext ein: Angebots-HTML, Produktionsblatt-/Produktionsplan-HTML und Einkaufslisten-CSV. Der Korridor bleibt ohne externe Freigabe, ohne Produktionsfreigabe, ohne rechtssichere Audit-/Compliance-Behauptung und ohne OIDC/Login.
 
 Der C8-Weg ist Doku-only und bleibt ein interner MVP-/Demo-Korridor. Er ist ein interner Demo-/Abnahmeweg, keine Produktionsfreigabe, keine externe Freigabe, keine externe Compliance-Abnahme und keine rechtssichere Auditbehauptung.
+
+C9 Fehlupload-Archiv-/Loeschentscheidung ist als Doku-/Vertragstestanker codiert: `docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md` trennt den bereits vorhandenen UI-Fokuswechsel `Arbeitsbereich leeren` von einer noch nicht freigegebenen backend-seitigen Archivierung oder Loeschung. `tests/c9-fehlupload-archive-delete-decision-contract.test.ts` schuetzt Option A Status quo als sicheren Default, Option B Soft-Archiv als empfohlene naechste Implementierungsentscheidung nach Alexander-Go und Option C Hard-Delete als nicht naechsten MVP-Slice; keine Runtime-Implementierung, keine neue API/Persistenz/Migration, keine Backend-Archivierung, keine Datenloeschung, keine echten Daten, keine echten Uploads, keine Retention-/Backup-/Restore-, Sandbox-/Worker-/AV-, Deployment- oder Auth-Freigabe.
 
 ## 5. Was Phase 4 bewusst nicht tut
 

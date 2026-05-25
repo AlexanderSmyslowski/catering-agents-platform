@@ -1175,3 +1175,111 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.227 - 2026-05-24
 - P4 Startseiten-Audit-/Handoff-Grenze ist als kleiner UI-/Smoke-Slice umgesetzt: Die bestehende Startseiten-Änderungsprotokoll-Zone nennt Audit-/Handoff-Hinweise nun als interne Arbeitsbelege fuer Demo-/Beta-Pruefung.
 - `tests/backoffice-route-smoke.test.ts` schuetzt den Marker mit einem vorhandenen Audit-Fixture gegen Scheingruenheit: keine externe Freigabe, keine Produktionsfreigabe, keine echte-Daten-Freigabe und kein rechtssicherer Compliance-Nachweis. Keine neue Auditlogik, API, Persistenz, Exportlogik, UI-Neugestaltung oder Compliance-Behauptung.
+
+### 5.228 - 2026-05-25
+- Produktziel-Anker ist als Repo-Vertrag nachgezogen: `docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md` ist in README und TESTING auffindbar und benennt die interne Catering-Arbeitsplattform, den Zielpfad `Intake -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit`, den kontrollierten MVP-/Beta-Korridor und die Blockaden fuer externe Nutzung, echte Multi-Tenant-Plattform, produktionsnahe echte Daten, Auth/OIDC, neue Persistenz/API und Deployment ohne gesonderte Gates.
+- `tests/product-goal-anchor-contract.test.ts` schuetzt Zielanker, Arbeitsmodus, Reifegrade und Auffindbarkeit aus README, TESTING und memory.md. Keine Produktlogik, UI, API, Persistenz, Deployment, Auth/OIDC, echte Daten, LLM-/Tool-Use-Ausbau, automatische Spec-Korrektur oder Rezept-/Allergenautomatik.
+
+### 5.229 - 2026-05-25
+- Browser-Rehearsal gegen den lokalen Stack hat den Pfad Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit mit Demo-/synthetischen Daten sichtbar bestaetigt; belegte Reibung war ein aufgefuellter lokaler Datenbestand durch wiederholte Rehearsal-/Demo-Nutzung, nicht ein fehlender UI-Kernanker.
+- `scripts/check-local-ops.sh` gibt nun einen nicht-destruktiven Rehearsal-Datenhinweis aus, wenn Specs/Entwuerfe/Plaene deutlich ueber dem kleinen Demo-Korridor liegen; `tests/local-ops-check-contract.test.ts`, README, TESTING und C8 schuetzen, dass dies kein rotes Gate, kein sauberer Frischlauf und keine automatische Loeschung/Archivierung ist. Keine Produktlogik, API, Persistenz, Migration, UI-Neubau, Deployment, Auth/OIDC, echte Daten oder Datenbereinigung.
+
+### 5.230 - 2026-05-25
+- Startseiten-Ladezustand ist als kleiner UI-/Smoke-Fix gegen Scheingruenheit gehaertet: Die Home-Kennzahlen zeigen beim initial leeren Laden nun Lade-/Noch-nicht-bewertet-Texte statt `0`/`unbekannt` als scheinbaren Datenbefund.
+- `tests/backoffice-route-smoke.test.ts` schuetzt den initialen Pending-Fetch-Zustand und den geladenen Home-Ueberblick getrennt. Keine Datenlogik, API, Persistenz, Seed-/Loeschpfad, neue Produktflaeche, Deployment, Auth/OIDC oder echte Daten.
+
+### 5.231 - 2026-05-25
+- Produktions-Zusammenfassung ist als kleiner UI-/Smoke-Fix gegen widerspruechlichen Vorgangskontext gehaertet: Wenn Produktionsplaene sichtbar sind, aber noch keine Spezifikation aktiv fokussiert ist, zeigt `/produktion` nun `Plan-Kontext geladen: ... · Spezifikation noch nicht im Fokus` statt `Noch kein aktiver Vorgang`.
+- `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt diesen Plan-ohne-Spec-Fokus-Fallback. Keine Planungslogik, Antwortverarbeitung, API, Persistenz, Datenmodell-, Rezept-/Allergenlogik, Deployment, Auth/OIDC oder echte Daten.
+
+### 5.232 - 2026-05-25
+- Produktions-Eingangsaktion ist als kleiner UI-/Smoke-Fix entschaerft: Der bisher generische `Löschen`-Button heisst nun `Arbeitsbereich leeren` und ist nur aktiv, wenn ein lokaler Upload-/Analyse-, Spezifikations- oder Plan-Kontext im Produktionsarbeitsbereich vorhanden ist.
+- `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt, dass der Button im leeren Produktionskontext deaktiviert bleibt. Keine Backend-Loeschung, keine Archivierung, keine Upload-Verarbeitung, API, Persistenz, Migration, Datenmodell-, Rezept-/Allergenlogik, Deployment, Auth/OIDC oder echte Daten.
+
+### 5.233 - 2026-05-25
+- Produktions-Rueckfragenaktion ist als kleiner UI-/Smoke-Fix entschaerft: Wenn der Antworteditor fuer den fokussierten Produktionsvorgang bereits automatisch offen ist, bleibt `Antworten bearbeiten` sichtbar, wird aber deaktiviert, statt denselben Editor erneut zu oeffnen.
+- `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den Auto-Open-Zustand mit sichtbarer strukturierter Antwort und deaktivierter Reopen-Aktion. Keine Aenderung an Readiness, Rueckfragenlogik, Planerzeugung, API, Persistenz, Datenmodell-, Rezept-/Allergenlogik, Deployment, Auth/OIDC oder echte Daten.
+
+### 5.234 - 2026-05-25
+- Produktions-Antwortspeichern ist als kleiner UI-/Smoke-Fix gegen Scheinspeichern gehaertet: Der fokussierte Antworteditor vergleicht seine Felder mit der geladenen Spezifikation und deaktiviert `Antworten speichern`, solange keine echte Aenderung vorliegt.
+- `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt den unveraenderten Auto-Open-Zustand mit deaktivierter Reopen- und Speichern-Aktion; `Speichern und Berechnung starten` bleibt als Produktionsnaechstschritt unveraendert. Keine Aenderung an Auto-Open, Readiness, Rueckfragenmodell, Planerzeugung, API, Persistenz, Datenmodell-, Rezept-/Allergenlogik, Deployment, Auth/OIDC oder echte Daten.
+
+### 5.235 - 2026-05-25
+- Produktionsplanung behandelt eindeutig Brot/Baguette/Brot/Baguette-/Brotkorb-/Broetchen-Komponenten ohne manuelle Herstellungsentscheidung nun als klaren Baecker-Zukauf und fuehrt sie direkt als Beschaffung statt als Rezeptsuche oder Herstellungs-Klaerung.
+- `tests/production-plan-fallbacks.test.ts` schuetzt den engen Pfad gegen Rezeptsuche und gegen falsches Gruen bei `gluten_free`: Glutenfrei+Brot-Baguette bleibt blockierend und erzeugt keine Einkaufsposition. Keine Aenderung an Focaccia/Hybridfaellen, kreativem Rezept-Matching, Normalisierung, API, Persistenz, Datenmodell, Deployment, Auth/OIDC oder echten Daten.
+
+### 5.236 - 2026-05-25
+- C9 Fehlupload-Archiv-/Loeschentscheidung ist als Doku-/Vertragstest-only Entscheidungsvorlage umgesetzt: `docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md` trennt UI-Fokus leeren von backend-seitiger Archivierung/Loeschung und bereitet die Alexander-Entscheidung fuer Option B Soft-Archiv aus aktivem Arbeitsfokus vor.
+- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts` schuetzt Option A Status quo als sicheren Default, Option B Soft-Archiv als empfohlene naechste Implementierungsentscheidung nach explizitem Go und Option C Hard-Delete als nicht naechsten MVP-Slice. Keine Runtime-Implementierung, keine neue API, Persistenz, Migration, Backend-Archivierung, Datenloeschung, echten Daten, echten Uploads, Retention-/Backup-/Restore-, Sandbox-/Worker-/AV-, Deployment- oder Auth-Freigabe.
+
+### 5.237 - 2026-05-25
+- Rezept-Matching fuer haeufige Buffet-Sprache ist als kleiner Kernfluss-Fix gehaertet: `NUDELSALAT | FRISCHGEDÖNS` kann jetzt ein internes `Pasta-Salat`-Rezept als denselben Catering-Rezeptanker finden, ohne in Web-/Fallback-Rezeptsuche zu fallen.
+- `tests/platform.test.ts` schuetzt den Fall mit intern hochgeladenem `Pasta-Salat mit frischem Gemuese`; `shared-core/src/recipe-library.*` und `production-service/src/recipe-discovery/service.ts` ergaenzen nur enge Nudelsalat/Pasta-Salat- und Kartoffelsalat/Potato-Salad-Synonym-/Compound-Tokens. Keine neue Rezeptengine, keine LLM-/Tool-Orchestrierung, keine API, Persistenz, Migration, Allergenautomatik, Deployment, Auth/OIDC oder echte Daten.
+
+### 5.238 - 2026-05-25
+- Der Quick-Lunch-Rezeptanker fuer `KARTOFFELSALAT | DE LUX` ist als weiterer kleiner Matching-Smoke abgesichert: Ein internes `Potato Salad with Herbs`-Rezept wird als passender interner Rezeptanker gefunden und bleibt ohne Web-/Fallback-Rezeptsuche.
+- `tests/platform.test.ts` schuetzt diesen zweiten haeufigen Buffetfall auf derselben engen Synonym-/Compound-Grenze. Keine neue Rezeptengine, keine LLM-/Tool-Orchestrierung, keine API, Persistenz, Migration, Allergenautomatik, Deployment, Auth/OIDC, Google-Drive-Echtdaten oder echte Daten.
+
+### 5.239 - 2026-05-25
+- Der Quick-Lunch-Rezeptanker fuer `KALBSBULETTEN | SCHMORZWIEBELN` und `KALBSFRIKADELLEN | SCHMORZWIEBELN` ist als weiterer kleiner Matching-Smoke abgesichert: Ein internes `Veal Meatballs with Braised Onions`-Rezept wird als passender interner Rezeptanker gefunden und bleibt ohne Web-/Fallback-Rezeptsuche.
+- `tests/platform.test.ts` schuetzt beide deutschen Angebotsformulierungen gegen ein englisches internes Meatballs-Rezept; `shared-core/src/recipe-library.*` und `production-service/src/recipe-discovery/service.ts` ergaenzen nur enge Kalbsbuletten/Kalbsfrikadellen/Buletten/Frikadellen/Meatballs-Synonym-Tokens. Keine neue Rezeptengine, keine LLM-/Tool-Orchestrierung, keine API, Persistenz, Migration, Allergenautomatik, Deployment, Auth/OIDC, Google-Drive-Echtdaten oder echte Daten.
+
+### 5.240 - 2026-05-25
+- Der synthetische Quick-Lunch-Gesamt-Smoke ist ergaenzt: Das vorhandene strukturierte Lunch-Angebot laeuft mit internen Rezeptankern fuer Kalbsbuletten, Kartoffelsalat, Nudelsalat, Kraut-Karottensalat, Mandel-Curry, Zucchini/Pilze/Zuckerschoten/Baby-Pak-Choi, Wildkraeutersalat und veganen Schokoladenkuchen sowie implizitem Baecker-Zukauf fuer `BROT & BAGUETTE` durch den Produktionsplan.
+- `tests/platform.test.ts` schuetzt damit erstmals die zuvor einzeln gehaerteten Quick-Lunch-Anker als zusammenhaengenden synthetischen Buffet-Durchlauf. Der Test wurde ohne weitere Runtime-Logikänderung gruen. Keine echten Angebote, kein Google Drive, keine neue Rezeptengine, keine LLM-/Tool-Orchestrierung, keine API, Persistenz, Migration, Allergenautomatik, Deployment, Auth/OIDC oder echte Daten.
+
+### 5.241 - 2026-05-25
+- Die Produktions-UI ist gegen den synthetischen Quick-Lunch-Mischplan abgesichert: `tests/backoffice-production-acceptance-smoke.test.ts` zeigt interne Rezepttreffer, `BROT & BAGUETTE` als Baecker-Zukauf, Einkaufsliste, Exportanker und Abschlusskontext als einen aktuellen Vorgang.
+- Beim UI-Smoke wurde eine falsche Rueckfrage-Reibung gefunden und klein behoben: `backoffice-ui/src/production-language.ts` behandelt klare Brot/Baguette/Brotkorb/Broetchen-Faelle ohne `gluten_free` wie die Planung als impliziten Baecker-Zukauf; `tests/production-language.test.ts` schuetzt, dass `gluten_free` weiterhin klaerungspflichtig bleibt. Keine API, Persistenz, Migration, Backend-Planungslogik, neue Rezeptengine, LLM-/Tool-Orchestrierung, Deployment, Auth/OIDC, Google-Drive-Echtdaten oder echte Daten.
+
+### 5.242 - 2026-05-25
+- Browser-Rehearsal gegen den lokalen Quick-Lunch-Mischplan bestaetigt: `/produktion` fokussiert den synthetischen Vorgang `spec-zzzz-browser-rehearsal-quick-lunch-1779713127572`, zeigt Plan-/Einkaufskontext, interne Rezeptanker, `BROT & BAGUETTE` ohne Herstellungs-/Kategorie-Fehlfrage, `Offene Punkte: keine` im Plan und sichtbare Exportanker.
+- Exportpfade sind fuer diesen Vorgang erreichbar: Produktionsplan-HTML und Einkaufsliste-CSV liefern HTTP 200. Reibungen bleiben bewusst offen: `local:check` meldet aufgefuellten lokalen Datenbestand statt Frischlauf, und die CSV enthaelt aus synthetischen Rezeptimporten faelschlich Arbeitsschritt-Zeilen wie `Mix veal, breadcrumbs and eggs.` als Einkaufspositionen. Keine echte Kundendatenprobe, keine Google-Drive-Nutzung, keine neue API/Persistenz, keine Schedule-Runtime, keine Deployment-/Auth-/Compliance-Freigabe.
+
+### 5.243 - 2026-05-25
+- Rezeptimport-/Einkaufslistenqualitaet ist als kleiner Shared-Core-Fix gehaertet: `Preparation`/`Directions` werden als Zubereitungsabschnitt erkannt, Rezeptabschnitts-Ueberschriften und offensichtlich durchgerutschte Schrittzeilen werden nicht mehr als Zutaten geparst.
+- `tests/platform.test.ts` schuetzt direkt, dass ein Quick-Lunch-artiger englischer Rezeptimport nur echte Zutaten enthaelt, und im synthetischen Quick-Lunch-Gesamt-Smoke, dass Einkaufslisten keine Schrittpositionen wie `Mix veal, breadcrumbs and eggs.` oder `Boil potatoes.` enthalten. Keine neue Rezeptengine, keine LLM-/Tool-Orchestrierung, keine API/Persistenz/Migration, keine echten Daten, keine Schedule-Runtime, kein Deployment/Auth/Compliance-Go.
+
+### 5.244 - 2026-05-25
+- Produktions-UI-Wartbarkeit ist mit einem verhaltensgleichen Mini-Refactor verbessert: Die read-only Karte `Spezifikationsdetails` wurde aus `backoffice-ui/src/App.tsx` in `backoffice-ui/src/production-spec-details.tsx` extrahiert.
+- `tests/backoffice-production-acceptance-smoke.test.ts` und `npm run build` bleiben gruen; Texte, DOM-Marker, Datenfluss und vorhandene Smoke-Erwartungen bleiben unveraendert. Keine UI-Neugestaltung, keine Produktlogik, keine API/Persistenz/Migration, keine Rezeptlogik, keine echten Daten, kein Deployment/Auth/Compliance-Go.
+
+### 5.245 - 2026-05-25
+- Guardrail-Check fuer etwas groessere autonome Codebloecke bestaetigt: Mehr zusammenhaengender Code ist innerhalb des vorhandenen internen MVP-Korridors vertretbar, wenn er UI-/Kernfluss-Stabilitaet, Wartbarkeit oder Testbarkeit direkt staerkt und ohne neue API, Persistenz, echte Daten, Deployment, Auth, Compliance-Behauptung, LLM-/Tool-Orchestrierung oder automatische Spec-/Schedule-Korrektur bleibt.
+- Produktions-UI-Wartbarkeit ist mit einem zweiten verhaltensgleichen Refactor-Schnitt verbessert: Die aktuelle Plan-Download-/Offene-Punkte-Zusammenfassung wurde aus `backoffice-ui/src/App.tsx` in `backoffice-ui/src/production-plan-download-card.tsx` extrahiert; sekundäre Details und Auswahlzustand bleiben bewusst noch in `App.tsx`. `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts` und `npm run build` bleiben gruen.
+
+### 5.246 - 2026-05-25
+- Produktions-UI-Wartbarkeit ist mit einem dritten verhaltensgleichen Refactor-Schnitt verbessert: Die Einkaufslisten-/Downloadzone inklusive kompakter Positionsvorschau und älterer Einkaufslisten wurde aus `backoffice-ui/src/App.tsx` in `backoffice-ui/src/production-purchase-list-panel.tsx` extrahiert.
+- `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts` und `npm run build` bleiben gruen; Exportlinks, `purchaseListId`-/`specId`-Marker, Leerzustand und Preview-Texte bleiben unveraendert. Keine Einkaufslistenlogik, Exportlogik, API/Persistenz/Migration, UI-Neugestaltung, echten Daten oder Deployment/Auth/Compliance-Aenderung.
+
+### 5.247 - 2026-05-25
+- Produktions-UI-Wartbarkeit ist mit einem vierten verhaltensgleichen Refactor-Schnitt verbessert: Die wiederverwendbare Produktionsplanliste liegt in `backoffice-ui/src/production-plan-list.tsx`, und die sekundären Plan-Details `Ältere Läufe, Rezeptauswahl und Arbeitsblätter` liegen in `backoffice-ui/src/production-plan-secondary-details.tsx`.
+- `backoffice-ui/src/App.tsx` behält nur Auswahlzustand und Datenübergabe; aktuelle Planliste, ältere Läufe, Suchspur, Qualitäts-/Passungsanzeige und Arbeitsblattliste bleiben textlich und strukturell unverändert. `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts` und `npm run build` bleiben gruen. Keine neue UI, keine Exportlogik, keine API/Persistenz/Migration, keine Planungs-/Rezeptlogik, keine echten Daten oder Deployment/Auth/Compliance-Aenderung.
+
+### 5.248 - 2026-05-25
+- Produktions-UI-Wartbarkeit ist mit einem fünften verhaltensgleichen Refactor-Schnitt verbessert: Der Produktions-Eingabe-/Upload-/Text-/Manuellbereich wurde aus `backoffice-ui/src/App.tsx` in `backoffice-ui/src/production-input-panel.tsx` extrahiert.
+- `App.tsx` behält Upload-, Drag-and-drop-, Submit- und State-Handler; die neue Komponente rendert nur bestehende Controls, Fortschrittsanzeige und Texte. `App.tsx` liegt danach bei ca. 2940 Zeilen. `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts` und `npm run build` bleiben gruen. Keine Upload-/Backend-Logik, keine API/Persistenz/Migration, keine echte Datenverarbeitung, keine neue UI-Flaeche und kein Deployment/Auth/Compliance-Go.
+
+### 5.249 - 2026-05-25
+- Nach den Quick-Lunch-Fixes und Produktions-UI-Refactor-Schnitten ist die komplette Testmatrix erneut gruen: `npm test` meldet 96 Testdateien und 445 Tests bestanden.
+- Relevante laengere Tests liefen mit: `tests/platform.test.ts`, `tests/document-text.test.ts`, `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts`, `tests/backoffice-internal-usage-smoke.test.ts` und alle Architektur-/Gate-Vertragstests. Kein Commit, kein Deploy, keine echten Daten und keine Gate-Entscheidung dadurch ersetzt.
+
+### 5.250 - 2026-05-25
+- C10 Current Worktree PR Slices und ProductionAgent 10/10 Coding Architecture sind als Fokusanker fuer den weiteren Baupfad ergaenzt: `docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md` sortiert den uncommitted Arbeitsbaum in vier reviewbare Slices, und `docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md` beschreibt den Pfad von deterministischem Produktionskern ueber LLM-Readiness ohne LLM bis zu spaeterem kontrollierten internen LLM-Einsatz.
+- `tests/production-agent-10-10-coding-architecture-contract.test.ts` schuetzt Auffindbarkeit, Level 7/8/8.5/9/9.5/10, Modulgrenzen, ProviderAdapter, Prompt-/Schema-Registry, Tool-Registry, Eval-Harness, ConversationSession-Gate und sichere Defaults. Keine Runtime-Implementierung, kein LLM-Provider-Call, keine echten Daten, keine neue API, keine Persistenz/Migration, kein Deployment und keine Gate-Entscheidung dadurch ersetzt.
+
+### 5.251 - 2026-05-25
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Refactor-Schnitt verbessert: Der Rueckfragen-/Antwortbereich inklusive read-only ConversationSession-Projektion, strukturiertem Antworteditor, Intake-Quellenanker und Vorgangswechsel liegt nun in `backoffice-ui/src/production-question-panel.tsx`.
+- `backoffice-ui/src/App.tsx` behaelt weiterhin Auswahlzustand, Editor-State und bestehende Handler; die neue Komponente rendert nur vorhandene Controls, Texte und Marker. `App.tsx` liegt danach bei 2374 Zeilen. `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts` und `npm run build` bleiben gruen. Keine Rueckfragenmodell-, Antwortspeicher-, Planungs-, Rezept-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.252 - 2026-05-25
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Refactor-Schnitt verbessert: Die Produktionsobjekte-/Planungszone mit Planfortschritt, aktuellem Vorgang, Planliste, Downloadkarte und sekundären Plan-Details liegt nun in `backoffice-ui/src/production-objects-panel.tsx`.
+- `backoffice-ui/src/App.tsx` behaelt weiterhin Planerzeugung, Auswahlzustand, Fortschritts-State und bestehende Handler; die neue Komponente rendert nur vorhandene Controls, Texte und Marker. `App.tsx` liegt danach bei 2292 Zeilen. `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts` und `npm run build` bleiben gruen. Keine Planungs-, Rezept-, Einkaufslisten-, Export-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.253 - 2026-05-25
+- Produktions-UI-Wartbarkeit ist mit zwei weiteren verhaltensgleichen Refactor-Schnitten verbessert: Die Abschluss-/Handoff-Zone liegt nun in `backoffice-ui/src/production-handoff-panel.tsx`, und Rezeptpruefung/Rezeptbibliothek liegen nun in `backoffice-ui/src/production-recipe-library-panel.tsx`.
+- `backoffice-ui/src/App.tsx` behaelt weiterhin Handoff-Label-Berechnung, Rezeptupload-/Review-Handler, Auswahl- und Eingabe-State; die neuen Komponenten rendern nur vorhandene Controls, Texte und Marker. `App.tsx` liegt danach bei 2163 Zeilen. `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts` und `npm run build` bleiben gruen. Keine Rezeptimport-, Rezeptmatching-, Review-, Export-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.254 - 2026-05-25
+- C10 Worktree-Sortierung ist fuer den aktuellen uncommitted Stand reviewfaehiger gemacht: `docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md` enthaelt nun den Git-Status-Snapshot, Cross-Slice-Dateien, Nicht-stagen-Grenze fuer `tmp/`, Staging-Hinweise fuer `README.md`/`TESTING.md`/`memory.md` und `App.tsx`, aktuelle Testzahlen 97/453 sowie die `App.tsx`-Wartbarkeitsmarke 2163 Zeilen.
+- `tests/production-agent-10-10-coding-architecture-contract.test.ts` schuetzt die aktualisierte C10-Sortierung inklusive vollstaendigem Produktions-UI-Refactor-Slice und sicherer Nicht-Freigabe. Kein Commit, kein PR, kein Deploy, keine neue Runtime, keine API/Persistenz/Migration, kein LLM und keine echten Daten.

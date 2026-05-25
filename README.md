@@ -45,6 +45,7 @@ npm run local:stop
 
 `npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht fuer die erwarteten `screen`-Sitzungen und Service-Ports. `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack: UI-Routen, Health-Endpunkte, read-only Exportpfade und Demo-Start-/Auditbeleg.
 `npm run local:start` startet diesen lokalen Stack mit Demo-Seeding; `npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse wieder. Dieser lokale Runbook-Weg bleibt interne Demo-/Abnahmeverifikation und ist kein Deployment, keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Aussage.
+Wenn `local:check` einen aufgefuellten lokalen Datenbestand erkennt, meldet der Check nur einen Rehearsal-Datenhinweis: kein rotes Gate, aber auch kein sauberer Frischlauf. Der Check loescht oder archiviert lokale Daten nicht automatisch.
 
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage. Der C8-Rahmen bleibt ein interner Demo-/Abnahmeweg, keine Produktionsfreigabe und keine externe Freigabe.
 
@@ -81,6 +82,12 @@ Die Oberflaeche hat jetzt drei Einstiege:
 - `http://localhost:3200/angebot` fuer den Angebotsagenten
 - `http://localhost:3200/produktion` fuer den Produktionsagenten
 
+Fuehrender Produktzielanker fuer weitere Arbeit:
+
+- [docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md](docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md) beschreibt die interne Catering-Arbeitsplattform, den aktuellen kontrollierten MVP-/Beta-Korridor und die Grenzen gegen externe Nutzung, echte Multi-Tenant-Plattform, produktionsnahe echte Daten, Auth/OIDC, neue Persistenz/API und Deployment ohne gesonderte Gates.
+- [docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md](docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md) beschreibt die Coding-Architektur bis zum internen 10/10-ProductionAgent: deterministischer Kern zuerst, LLM-Readiness ohne Provider, danach LLM nur hinter Gates, Schemas, Tool-Allowlist, Kostenlimit, Audit und Human Approval.
+- [docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md](docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md) sortiert den aktuellen uncommitted Arbeitsbaum in reviewbare Slices; es ist kein Commit-, PR-, LLM-, Deployment-, API-, Persistenz- oder Echtdaten-Go.
+
 Fuehrendes Architektur-Gate vor weiterem Produktionsagent-v1-Featurebau:
 
 - [docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md](docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md)
@@ -100,6 +107,7 @@ Fuehrendes Architektur-Gate vor weiterem Produktionsagent-v1-Featurebau:
 - [docs/product/P11_N3_INTERNER_PILOT_PREFLIGHT_RUNBOOK.md](docs/product/P11_N3_INTERNER_PILOT_PREFLIGHT_RUNBOOK.md) ordnet Starten -> Status pruefen -> UI-Routen -> Reibungslog -> Export-/Auditbelege -> kontrolliert stoppen und konkretisiert fuer Plan 11 die Entscheidungspunkte fuer Nutzerkreis, Betreiber, Trusted-Actor-Kontext und Zugriffskontrollfragen; Auth-/Proxy-/Deployment-/Secret-Umsetzungsideen bleiben Stop-Gates und lokales Rehearsal-Go bleibt kein Pilot-/Auth-Go.
 - [docs/product/P12_N2_MANAGEMENT_GO_NO_GO_ENTSCHEIDUNGSPAKET.md](docs/product/P12_N2_MANAGEMENT_GO_NO_GO_ENTSCHEIDUNGSPAKET.md) verdichtet Plan-11-Preflight, B24, PA7/PA8/PA9, B8/B9, P6/P7/P9/C8 und R4 in ein nicht-sensitives Management-Go/No-Go-Paket fuer Nutzerkreis, Betreiber, Zugriffskontext, Datenrahmen, Nachweis, Stop-Verantwortung und finale Bewertung; lokaler Preflight bleibt `go`, echter begrenzter Pilot bleibt bis zur bewussten Entscheidung `not assessed`, echte/produktive Daten bleiben `blocked`.
 - [docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md](docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md) beschreibt den reproduzierbaren internen Demo-/Abnahmeweg ueber bestehende lokale Scripts, UI-Routen, Angebot-zu-Produktion-Handoff, Upload-/Warnanker, Exporte und Full Gates; er ist keine Produktionsfreigabe und keine rechtssichere Audit- oder Compliance-Aussage.
+- [docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md](docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md) bereitet die Alexander-Entscheidung fuer einen spaeteren backend-seitigen Fehlupload-Pfad vor: empfohlen ist Soft-Archiv aus aktivem Arbeitsfokus nach explizitem Go; Status quo bleibt sicherer Default, Hard-Delete ist nicht der naechste MVP-Slice.
 
 Die Web-App bietet Exportlinks fuer:
 
