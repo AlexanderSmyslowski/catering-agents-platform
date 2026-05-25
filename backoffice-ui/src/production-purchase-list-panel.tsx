@@ -71,7 +71,7 @@ export function ProductionPurchaseListPanel({
         <h3>{statusLabel}</h3>
       </header>
       <p className="helper-text">
-        Erreichbar und exportierbar, aber nur mit kompakter Vorschau im Workbench-Fluss.
+        Die sichtbare Liste gehört zum aktuellen Vorgang; ältere Einkaufslisten bleiben getrennt darunter.
       </p>
       <ul className="item-list compact">
         {currentPurchaseLists.map((purchaseList) => {
@@ -122,7 +122,7 @@ export function ProductionPurchaseListPanel({
           <summary>
             <span className="eyebrow">Ältere Einkaufslisten</span>
             <span className="subsection-title">{archivedPurchaseLists.length} frühere Listen</span>
-            <span className="helper-text">Nur bei Bedarf aufklappen.</span>
+            <span className="helper-text">Nur bei Bedarf aufklappen; ältere Listen sind kein aktueller Vorgang.</span>
           </summary>
           <div className="secondary-workspace__content">
             <ul className="item-list compact">
@@ -131,6 +131,9 @@ export function ProductionPurchaseListPanel({
                 return (
                   <li key={String(purchaseList.purchaseListId)}>
                     <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
+                    <p className="helper-text">
+                      Ältere Einkaufsliste aus anderem Vorgang - nicht aktueller Vorgang.
+                    </p>
                     <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
                     <a
                       className="ghost-link"
