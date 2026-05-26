@@ -1552,3 +1552,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.320 - 2026-05-26
 - Herkunfts-, Audit-, Export- und Abschlusskontext-Labels der Produktions-Handoff-Zone sind als `handoffState` gebuendelt und werden von `App.tsx` ueber `ProductionRouteMainLayout` an `ProductionHandoffPanel` weitergereicht.
 - Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Exportartefakten, Audit-Aussagen, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.321 - 2026-05-26
+- Kopf-/Zusammenfassungsdaten des Produktions-Workbench-Layouts sind als `workbenchSummary` und `workbenchNextStep` gebuendelt und ersetzen die lange Einzelprop-Liste von `ProductionConversationalWorkbench`.
+- Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, naechster-Schritt-Berechnung, Statuslogik, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

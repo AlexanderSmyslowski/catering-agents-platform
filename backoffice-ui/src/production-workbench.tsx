@@ -1,18 +1,26 @@
 import { Children, type ReactNode } from "react";
 
-type ProductionConversationalWorkbenchProps = {
+export type ProductionWorkbenchSummary = {
   activeSpecLabel: string;
   readinessLabel: string;
   planStatusLabel: string;
   purchaseStatusLabel: string;
-  nextStepTitle: string;
-  nextStepDescription: string;
   questionCount: number;
   answeredQuestionCount: number;
   unansweredQuestionCount: number;
   productionObjectCount: number;
   productionObjectStatusLabel: string;
   purchaseListCount: number;
+};
+
+export type ProductionWorkbenchNextStep = {
+  title: string;
+  description: string;
+};
+
+type ProductionConversationalWorkbenchProps = {
+  summary: ProductionWorkbenchSummary;
+  nextStep: ProductionWorkbenchNextStep;
   children: ReactNode;
 };
 
@@ -38,20 +46,22 @@ function countOpenVisibleQuestions(
 }
 
 export function ProductionConversationalWorkbench({
-  activeSpecLabel,
-  readinessLabel,
-  planStatusLabel,
-  purchaseStatusLabel,
-  nextStepTitle,
-  nextStepDescription,
-  questionCount,
-  answeredQuestionCount,
-  unansweredQuestionCount,
-  productionObjectCount,
-  productionObjectStatusLabel,
-  purchaseListCount,
+  summary,
+  nextStep,
   children
 }: ProductionConversationalWorkbenchProps) {
+  const {
+    activeSpecLabel,
+    readinessLabel,
+    planStatusLabel,
+    purchaseStatusLabel,
+    questionCount,
+    answeredQuestionCount,
+    unansweredQuestionCount,
+    productionObjectCount,
+    productionObjectStatusLabel,
+    purchaseListCount
+  } = summary;
   const [inputPanel, questionsPanel, productionObjectsPanel, purchasePanel, lowerPanels] = Children.toArray(children);
   const openVisibleQuestionCount = countOpenVisibleQuestions(
     questionCount,
@@ -80,8 +90,8 @@ export function ProductionConversationalWorkbench({
           </p>
           <div className="production-next-step" aria-label="Nächster Produktionsschritt">
             <p className="eyebrow">Nächster Schritt</p>
-            <strong>{nextStepTitle}</strong>
-            <p className="helper-text">{nextStepDescription}</p>
+            <strong>{nextStep.title}</strong>
+            <p className="helper-text">{nextStep.description}</p>
           </div>
         </header>
         {inputPanel}

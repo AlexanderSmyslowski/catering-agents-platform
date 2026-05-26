@@ -33,7 +33,11 @@ import {
   type ProductionRecipeStatusState,
   type ProductionRecipeUploadState
 } from "./production-recipe-library-panel.js";
-import { ProductionConversationalWorkbench } from "./production-workbench.js";
+import {
+  ProductionConversationalWorkbench,
+  type ProductionWorkbenchNextStep,
+  type ProductionWorkbenchSummary
+} from "./production-workbench.js";
 
 type WorkbenchSpecFact = {
   label: string;
@@ -41,18 +45,8 @@ type WorkbenchSpecFact = {
 };
 
 type ProductionRouteMainLayoutProps = {
-  activeSpecLabel: string;
-  readinessLabel: string;
-  planStatusLabel: string;
-  purchaseStatusLabel: string;
-  nextStepTitle: string;
-  nextStepDescription: string;
-  questionCount: number;
-  answeredQuestionCount: number;
-  unansweredQuestionCount: number;
-  productionObjectCount: number;
-  productionObjectStatusLabel: string;
-  purchaseListCount: number;
+  workbenchSummary: ProductionWorkbenchSummary;
+  workbenchNextStep: ProductionWorkbenchNextStep;
   submitting: boolean;
   sourceInput: ProductionSourceInputValues;
   sourceInputActions: ProductionSourceInputActions;
@@ -86,18 +80,8 @@ type ProductionRouteMainLayoutProps = {
 };
 
 export function ProductionRouteMainLayout({
-  activeSpecLabel,
-  readinessLabel,
-  planStatusLabel,
-  purchaseStatusLabel,
-  nextStepTitle,
-  nextStepDescription,
-  questionCount,
-  answeredQuestionCount,
-  unansweredQuestionCount,
-  productionObjectCount,
-  productionObjectStatusLabel,
-  purchaseListCount,
+  workbenchSummary,
+  workbenchNextStep,
   submitting,
   sourceInput,
   sourceInputActions,
@@ -131,18 +115,8 @@ export function ProductionRouteMainLayout({
 }: ProductionRouteMainLayoutProps) {
   return (
     <ProductionConversationalWorkbench
-      activeSpecLabel={activeSpecLabel}
-      readinessLabel={readinessLabel}
-      planStatusLabel={planStatusLabel}
-      purchaseStatusLabel={purchaseStatusLabel}
-      nextStepTitle={nextStepTitle}
-      nextStepDescription={nextStepDescription}
-      questionCount={questionCount}
-      answeredQuestionCount={answeredQuestionCount}
-      unansweredQuestionCount={unansweredQuestionCount}
-      productionObjectCount={productionObjectCount}
-      productionObjectStatusLabel={productionObjectStatusLabel}
-      purchaseListCount={purchaseListCount}
+      summary={workbenchSummary}
+      nextStep={workbenchNextStep}
     >
       <div className="production-column">
         <ProductionInputPanel

@@ -1036,18 +1036,22 @@ describe("backoffice production acceptance smoke", () => {
         createElement(
           ProductionConversationalWorkbench,
           {
-            activeSpecLabel: "internes Probe-Catering · 42 Teilnehmer · 2099-10-15",
-            readinessLabel: "vollständig",
-            planStatusLabel: "offen",
-            purchaseStatusLabel: "noch keine Liste",
-            nextStepTitle: "Rückfragen klären",
-            nextStepDescription: "Offene Rückfragen prüfen.",
-            questionCount: 7,
-            answeredQuestionCount: 0,
-            unansweredQuestionCount: 1,
-            productionObjectCount: 0,
-            productionObjectStatusLabel: "noch kein Plan",
-            purchaseListCount: 0,
+            summary: {
+              activeSpecLabel: "internes Probe-Catering · 42 Teilnehmer · 2099-10-15",
+              readinessLabel: "vollständig",
+              planStatusLabel: "offen",
+              purchaseStatusLabel: "noch keine Liste",
+              questionCount: 7,
+              answeredQuestionCount: 0,
+              unansweredQuestionCount: 1,
+              productionObjectCount: 0,
+              productionObjectStatusLabel: "noch kein Plan",
+              purchaseListCount: 0
+            },
+            nextStep: {
+              title: "Rückfragen klären",
+              description: "Offene Rückfragen prüfen."
+            },
             children: [
               createElement("div", { key: "input" }, "input"),
               createElement("div", { key: "fragen" }, "fragen"),
