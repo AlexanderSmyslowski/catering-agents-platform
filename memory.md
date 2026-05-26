@@ -1476,3 +1476,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.301 - 2026-05-26
 - Produktions-Rezeptmatching ist fuer den konkreten Umlaut-/ASCII-Fall `Gemuesepfanne`/`Gemüsepfanne` gehaertet: `tests/platform.test.ts` prueft, dass ein Angebotsbaustein `Gemuesepfanne` ein internes Rezept `Gemüsepfanne Zucchini Pilze Pak Choi vegan` waehlt.
 - Der Slice ergaenzt nur den bestehenden Alias-Korridor fuer diesen Compound-Dish in Repository-Kandidatensuche und Recipe-Discovery. Keine Aenderung an allgemeiner Gemueselogik, Planung, Rezeptdatenmodellen, API, Persistenz/Migration, UI, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.302 - 2026-05-26
+- Produktions-Rezeptalias-Paritaet ist als Drift-Guard verankert: `tests/production-recipe-alias-parity.test.ts` prueft fuer `Hummus`/`Humus` und `Gemuesepfanne`/`Gemüsepfanne`, dass Backend-Discovery und UI-Rezeptvorschlaege denselben internen Rezeptanker liefern.
+- Der Test hat den fehlenden UI-Vorschlagsalias fuer `Gemuesepfanne`/`Gemüsepfanne` sichtbar gemacht; `production-recipe-suggestions.ts` kennt nun denselben engen Compound-Dish-Korridor. Keine Aenderung an Backend-Matchinglogik, UI-Struktur, Planung, Rezeptdatenmodellen, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
