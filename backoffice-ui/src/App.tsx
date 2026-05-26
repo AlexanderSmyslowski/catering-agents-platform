@@ -74,6 +74,7 @@ import {
   specEditSnapshotFromSpec,
   type SpecEditSnapshot
 } from "./production-spec-edit-snapshot.js";
+import { buildSpecEditUpdateInput } from "./production-spec-edit-update.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import type { ComponentEditState } from "./production-answer-types.js";
@@ -1083,41 +1084,14 @@ export function App() {
   }
 
   function buildCurrentSpecUpdateInput() {
-    const componentUpdates: Parameters<typeof updateAcceptedSpec>[1]["componentUpdates"] =
-      Object.entries(editingComponentStates).map(([componentId, state]) => ({
-        componentId,
-        menuCategory:
-          state.menuCategory === "classic" ||
-          state.menuCategory === "vegetarian" ||
-          state.menuCategory === "vegan"
-            ? state.menuCategory
-            : undefined,
-        productionMode:
-          state.productionMode === "scratch" ||
-          state.productionMode === "hybrid" ||
-          state.productionMode === "convenience_purchase" ||
-          state.productionMode === "external_finished"
-            ? state.productionMode
-            : undefined,
-        purchasedElements: state.purchasedElements
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        recipeOverrideId: state.recipeOverrideId.trim() || "",
-        notes: state.notes.trim() || undefined
-      }));
-
-    return {
-      eventType: editingEventType.trim() || undefined,
-      eventDate: editingEventDate.trim() || undefined,
-      serviceForm: editingServiceForm.trim() || undefined,
-      attendeeCount: editingAttendeeCount.trim() ? Number(editingAttendeeCount) : undefined,
-      menuItems: editingMenuItems
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-      componentUpdates
-    };
+    return buildSpecEditUpdateInput({
+      eventType: editingEventType,
+      eventDate: editingEventDate,
+      attendeeCount: editingAttendeeCount,
+      serviceForm: editingServiceForm,
+      menuItems: editingMenuItems,
+      componentStates: editingComponentStates
+    });
   }
 
   async function persistCurrentSpecEdit(options?: { quiet?: boolean }) {
