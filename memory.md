@@ -1468,3 +1468,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.299 - 2026-05-26
 - Produktions-Rezeptmatching ist fuer die haeufige Schreibvariante `Hummus`/`Humus` gehaertet: `tests/platform.test.ts` prueft, dass ein Angebotsbaustein `Hummus` ein internes Rezept `Humus Tahini Dip vegan` statt eines ungeklaerten oder externen Treffers waehlt.
 - Der Slice ergaenzt nur den bestehenden Alias-Korridor in Repository-Kandidatensuche und Recipe-Discovery und aendert keine Planungslogik, Rezeptdatenmodelle, API, Persistenz/Migration, UI, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.300 - 2026-05-26
+- Produktions-UI-Rezeptvorschlaege sind konsistent zum Backend fuer `Hummus`/`Humus`: `tests/production-recipe-suggestions.test.ts` prueft, dass ein Angebotslabel `Hummus vegan` ein internes Rezept `Humus Tahini Dip vegan` im manuellen Override anbietet.
+- Der Slice ergaenzt nur die vorhandene Vorschlags-Aliasliste und aendert keine UI-Struktur, Antwortspeicherung, Backend-Planung, Rezeptdatenmodelle, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

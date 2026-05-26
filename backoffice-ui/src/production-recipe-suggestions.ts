@@ -16,6 +16,8 @@ const NON_RECIPE_SUGGESTION_TOKENS = new Set([
 const RECIPE_SUGGESTION_TOKEN_EXPANSIONS: Record<string, string[]> = {
   kartoffelsalat: ["potato"],
   nudelsalat: ["pasta"],
+  hummus: ["humus"],
+  humus: ["hummus"],
   kalbsbuletten: ["veal", "meatballs", "buletten"],
   kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
   buletten: ["meatballs"],
