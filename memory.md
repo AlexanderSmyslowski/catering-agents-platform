@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.283
+version: 5.284
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1399,3 +1399,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.283 - 2026-05-26
 - Angebotsroute ist im sauberen Browser-Rehearsal konsistenter: Wenn ein fokussierter Angebotsentwurf eine `proposedEventSpec` enthaelt, zeigt die kompakte Angebotszusammenfassung diese Entwurfs-Quelle und Entwurfs-Spec statt einer unverknuepften neuesten Intake-Spezifikation.
 - `tests/backoffice-route-smoke.test.ts` schuetzt Quelle und aktive Spezifikation fuer einen Entwurf mit eigener proposed Spec. Keine Angebotslogik-, API-, Persistenz-, Produktions-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.284 - 2026-05-26
+- Backoffice-Browser-Smokes sind konsolenruhiger: `backoffice-ui/index.html` verweist auf ein statisches `favicon.svg`, damit der Browser nicht mehr mit `favicon.ico` 404 rauscht.
+- `tests/backoffice-static-shell.test.ts` schuetzt den statischen Shell-Anker. Keine Route-, Produktlogik-, API-, Persistenz-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
