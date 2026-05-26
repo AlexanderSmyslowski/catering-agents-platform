@@ -1484,3 +1484,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.303 - 2026-05-26
 - Der interne Produktions-UI-Smoke geht nun vom Start-Entry `Produktionsagent öffnen` in die Produktionsroute und prueft danach weiter den synthetischen Kernfluss: manuelle Spezifikation, Klassifikation/Rezeptzuordnung, Planerzeugung, Einkaufsliste und Exportanker.
 - Der Slice erweitert nur `tests/backoffice-internal-usage-smoke.test.ts` als Browser-/UI-Pfadschutz. Keine Aenderung an UI-Texten, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.304 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem verhaltensgleichen Fortschritts-Hook verbessert: `backoffice-ui/src/use-production-plan-progress.ts` kapselt Planphase, Prozent-/ETA-Timer, Start-, Done-, Fail- und Reset-Zustand fuer die Planerzeugung.
+- `App.tsx` orchestriert weiter Speichern, Planung und Dashboard-Refresh, enthaelt aber nicht mehr die interne Plan-Fortschritts-Timerlogik. Keine Aenderung an UI-Texten, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
