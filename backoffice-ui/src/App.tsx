@@ -1611,17 +1611,28 @@ export function App() {
             setNotes: setManualNotes,
             submitManualSpec: handleManualSpecSubmit
           }}
-          focusedProductionSpec={focusedProductionSpec}
-          focusedSpecReadinessLabel={focusedSpecReadinessLabel}
-          selectedPlan={selectedPlan}
-          selectedPlanReadinessLabel={selectedPlanReadinessLabel}
-          currentSpecPurchaseLists={currentSpecPurchaseLists}
-          productionQuestions={productionQuestions}
-          productionAssumptions={productionAssumptions}
-          productionConversationProjection={productionConversationProjection}
-          workbenchSpecFacts={workbenchSpecFacts}
-          intakeRequestDetailError={intakeRequestDetailError}
-          intakeRequestDetail={intakeRequestDetail}
+          questionState={{
+            focusedProductionSpec,
+            focusedSpecReadinessLabel,
+            selectedPlan,
+            selectedPlanReadinessLabel,
+            currentSpecPurchaseLists,
+            productionQuestions,
+            productionAssumptions,
+            productionConversationProjection,
+            workbenchSpecFacts,
+            intakeRequestDetailError,
+            intakeRequestDetail,
+            filteredSpecs,
+            documentPhase,
+            productionWorkspaceCleared
+          }}
+          questionActions={{
+            openSpecForQuestions: (specId) => {
+              setProductionWorkspaceCleared(false);
+              setFocusedProductionSpecId(specId);
+            }
+          }}
           editorState={{
             editingSpecId,
             editingEventType,
@@ -1633,8 +1644,6 @@ export function App() {
             hasFocusedSpecEditChanges,
             recipes: dashboard.recipes
           }}
-          filteredSpecs={filteredSpecs}
-          productionWorkspaceCleared={productionWorkspaceCleared}
           editorActions={{
             setEditingEventType,
             setEditingEventDate,
@@ -1646,10 +1655,6 @@ export function App() {
             saveSpecEdit: handleSaveSpecEdit,
             createPlan: handleCreatePlan,
             resetSpecEdit
-          }}
-          openSpecForQuestions={(specId) => {
-            setProductionWorkspaceCleared(false);
-            setFocusedProductionSpecId(specId);
           }}
           objectPanelProgress={{
             planPhase,

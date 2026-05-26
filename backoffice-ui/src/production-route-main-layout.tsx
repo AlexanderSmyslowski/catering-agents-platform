@@ -1,5 +1,3 @@
-import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
-import type { IntakeRequestDetail } from "./api.js";
 import {
   ProductionHandoffPanel,
   type ProductionHandoffState
@@ -23,6 +21,8 @@ import {
 } from "./production-purchase-list-panel.js";
 import { ProductionQuestionPanel } from "./production-question-panel.js";
 import type {
+  ProductionQuestionPanelActions,
+  ProductionQuestionPanelState,
   ProductionQuestionEditorActions,
   ProductionQuestionEditorState
 } from "./production-question-panel.js";
@@ -39,11 +39,6 @@ import {
   type ProductionWorkbenchSummary
 } from "./production-workbench.js";
 
-type WorkbenchSpecFact = {
-  label: string;
-  value: string;
-};
-
 type ProductionRouteMainLayoutProps = {
   workbenchSummary: ProductionWorkbenchSummary;
   workbenchNextStep: ProductionWorkbenchNextStep;
@@ -52,22 +47,10 @@ type ProductionRouteMainLayoutProps = {
   sourceInputActions: ProductionSourceInputActions;
   manualInput: ProductionManualInputValues;
   manualInputActions: ProductionManualInputActions;
-  focusedProductionSpec?: Record<string, unknown>;
-  focusedSpecReadinessLabel: string;
-  selectedPlan?: Record<string, unknown>;
-  selectedPlanReadinessLabel?: string;
-  currentSpecPurchaseLists: Array<Record<string, unknown>>;
-  productionQuestions: string[];
-  productionAssumptions: string[];
-  productionConversationProjection: ProductionConversationProjection;
-  workbenchSpecFacts: WorkbenchSpecFact[];
-  intakeRequestDetailError?: string;
-  intakeRequestDetail: IntakeRequestDetail | null;
+  questionState: ProductionQuestionPanelState;
+  questionActions: ProductionQuestionPanelActions;
   editorState: ProductionQuestionEditorState;
   editorActions: ProductionQuestionEditorActions;
-  filteredSpecs: Array<Record<string, unknown>>;
-  productionWorkspaceCleared: boolean;
-  openSpecForQuestions: (specId: string) => void;
   objectPanelProgress: ProductionPlanProgressState;
   objectPanelState: ProductionObjectsState;
   objectPanelActions: ProductionObjectsActions;
@@ -87,22 +70,10 @@ export function ProductionRouteMainLayout({
   sourceInputActions,
   manualInput,
   manualInputActions,
-  focusedProductionSpec,
-  focusedSpecReadinessLabel,
-  selectedPlan,
-  selectedPlanReadinessLabel,
-  currentSpecPurchaseLists,
-  productionQuestions,
-  productionAssumptions,
-  productionConversationProjection,
-  workbenchSpecFacts,
-  intakeRequestDetailError,
-  intakeRequestDetail,
+  questionState,
+  questionActions,
   editorState,
   editorActions,
-  filteredSpecs,
-  productionWorkspaceCleared,
-  openSpecForQuestions,
   objectPanelProgress,
   objectPanelState,
   objectPanelActions,
@@ -129,24 +100,11 @@ export function ProductionRouteMainLayout({
       </div>
       <div className="production-column">
         <ProductionQuestionPanel
-          focusedProductionSpec={focusedProductionSpec}
-          focusedSpecReadinessLabel={focusedSpecReadinessLabel}
-          selectedPlan={selectedPlan}
-          selectedPlanReadinessLabel={selectedPlanReadinessLabel}
-          currentSpecPurchaseLists={currentSpecPurchaseLists}
-          productionQuestions={productionQuestions}
-          productionAssumptions={productionAssumptions}
-          productionConversationProjection={productionConversationProjection}
-          workbenchSpecFacts={workbenchSpecFacts}
-          intakeRequestDetailError={intakeRequestDetailError}
-          intakeRequestDetail={intakeRequestDetail}
+          questionState={questionState}
+          questionActions={questionActions}
           submitting={submitting}
           editorState={editorState}
           editorActions={editorActions}
-          filteredSpecs={filteredSpecs}
-          documentPhase={sourceInput.documentPhase}
-          productionWorkspaceCleared={productionWorkspaceCleared}
-          openSpecForQuestions={openSpecForQuestions}
         />
       </div>
       <div className="production-column">

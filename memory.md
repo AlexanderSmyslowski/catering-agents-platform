@@ -1556,3 +1556,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.321 - 2026-05-26
 - Kopf-/Zusammenfassungsdaten des Produktions-Workbench-Layouts sind als `workbenchSummary` und `workbenchNextStep` gebuendelt und ersetzen die lange Einzelprop-Liste von `ProductionConversationalWorkbench`.
 - Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, naechster-Schritt-Berechnung, Statuslogik, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.322 - 2026-05-26
+- Rueckfragenpanel-Kontext und Vorgangswechsel-Aktion sind als `questionState` und `questionActions` gebuendelt; Editor-State und Editor-Aktionen bleiben separat.
+- Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Rueckfragenlogik, Antwortspeicherung, Finalitaets-/Readiness-Bewertung, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
