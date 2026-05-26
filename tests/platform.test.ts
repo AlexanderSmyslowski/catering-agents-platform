@@ -1102,6 +1102,12 @@ describe("catering agents platform", () => {
     expect(
       body.purchaseList.items.some((item: { displayName: string }) => item.displayName.includes("Baguette"))
     ).toBe(true);
+    const purchaseItemByName = new Map(
+      body.purchaseList.items.map((item: { displayName: string; group: string }) => [item.displayName, item.group])
+    );
+    expect(purchaseItemByName.get("Kaffeefilter für Filterkaffee Station")).toBe("beverages");
+    expect(purchaseItemByName.get("Baguette für BROT & BAGUETTE")).toBe("bakery");
+    expect(purchaseItemByName.get("Brot für BROT & BAGUETTE")).toBe("bakery");
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1252,6 +1258,9 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.kitchenSheets).toHaveLength(4);
     const purchaseDisplayNames = body.purchaseList.items.map((item: { displayName: string }) => item.displayName);
     expect(purchaseDisplayNames.some((displayName: string) => displayName.includes("Croissants"))).toBe(true);
+    expect(
+      body.purchaseList.items.find((item: { displayName: string }) => item.displayName === "Croissants")?.group
+    ).toBe("bakery");
     expect(purchaseDisplayNames).not.toEqual(
       expect.arrayContaining([
         "Muffin-Teig mischen.",
