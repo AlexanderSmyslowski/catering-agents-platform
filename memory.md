@@ -1520,3 +1520,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.312 - 2026-05-26
 - Produktions-Intake-Request-Detail-Laden ist in `backoffice-ui/src/use-production-intake-request-detail.ts` gekapselt; der Hook liefert Detail und Fehlerzustand fuer die aktive Intake-Request-ID.
 - `tests/use-production-intake-request-detail.test.ts` prueft erfolgreichen Read, Fehleranzeige und Reset bei fehlender aktiver Request-ID. Keine Aenderung an UI-Texten, API-Endpunkten, Detailformat, Upload, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.313 - 2026-05-26
+- Produktions-Intake-Draft-State fuer Text, Datei, Dokumentkanal und Drag-Zustand ist in `backoffice-ui/src/use-production-intake-draft.ts` gekapselt.
+- `tests/use-production-intake-draft.test.ts` prueft bestehende Defaults, Datei-Start/Complete/Fail und Reset-Grenze. `App.tsx` behaelt Submit-Flows, Dokumentanalyse und API-Aufrufe. Keine Aenderung an UI-Texten, Upload-API, Normalisierung, Fehlupload-Archivierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
