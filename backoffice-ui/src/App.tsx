@@ -1621,27 +1621,31 @@ export function App() {
           workbenchSpecFacts={workbenchSpecFacts}
           intakeRequestDetailError={intakeRequestDetailError}
           intakeRequestDetail={intakeRequestDetail}
-          editingSpecId={editingSpecId}
-          editingEventType={editingEventType}
-          editingEventDate={editingEventDate}
-          editingAttendeeCount={editingAttendeeCount}
-          editingServiceForm={editingServiceForm}
-          editingMenuItems={editingMenuItems}
-          editingComponentStates={editingComponentStates}
-          hasFocusedSpecEditChanges={hasFocusedSpecEditChanges}
-          recipes={dashboard.recipes}
+          editorState={{
+            editingSpecId,
+            editingEventType,
+            editingEventDate,
+            editingAttendeeCount,
+            editingServiceForm,
+            editingMenuItems,
+            editingComponentStates,
+            hasFocusedSpecEditChanges,
+            recipes: dashboard.recipes
+          }}
           filteredSpecs={filteredSpecs}
           productionWorkspaceCleared={productionWorkspaceCleared}
-          setEditingEventType={setEditingEventType}
-          setEditingEventDate={setEditingEventDate}
-          setEditingAttendeeCount={setEditingAttendeeCount}
-          setEditingServiceForm={setEditingServiceForm}
-          setEditingMenuItems={setEditingMenuItems}
-          updateEditingComponentState={updateEditingComponentState}
-          beginSpecEdit={beginSpecEdit}
-          handleSaveSpecEdit={handleSaveSpecEdit}
-          handleCreatePlan={handleCreatePlan}
-          resetSpecEdit={resetSpecEdit}
+          editorActions={{
+            setEditingEventType,
+            setEditingEventDate,
+            setEditingAttendeeCount,
+            setEditingServiceForm,
+            setEditingMenuItems,
+            updateEditingComponentState,
+            beginSpecEdit,
+            saveSpecEdit: handleSaveSpecEdit,
+            createPlan: handleCreatePlan,
+            resetSpecEdit
+          }}
           openSpecForQuestions={(specId) => {
             setProductionWorkspaceCleared(false);
             setFocusedProductionSpecId(specId);
