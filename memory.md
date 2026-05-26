@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.280
+version: 5.281
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1387,3 +1387,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.280 - 2026-05-26
 - Produktionsroute ist im sauberen lokalen Frischlauf fokussicherer: Wenn geladene Produktionsplaene/Einkaufslisten zu keiner sichtbaren Intake-Spezifikation gehoeren, zeigt `/produktion` den vorhandenen Plan-Kontext statt einen fachlich unverknuepften Intake-Vorgang als aktuellen Produktionsfall zu markieren.
 - `tests/production-route-state.test.ts` und `tests/backoffice-production-acceptance-smoke.test.ts` schuetzen diese plan-only-Artefaktgrenze sowie den naechsten Schritt fuer vorhandene Plan-/Einkaufslistenartefakte ohne fokussierte Spec. Keine API-, Persistenz-, Planungs-, Rezept-, Archivierungs-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.281 - 2026-05-26
+- Lokale Stack-Scripts sind fuer isolierte Frischlaeufe konsistenter: `local:start` zeichnet die wirksame `CATERING_DATA_ROOT` auf, `local:status` zeigt sie, `local:check` nutzt sie fuer Artefaktdiagnosen und blockiert abweichende Check-Env gegen einen laufenden Stack.
+- Damit bewertet `local:check` einen temp-Datenwurzel-Frischlauf nicht versehentlich gegen ignorierte Repo-Altlasten. `local:stop` entfernt die Aufzeichnung. Keine Service-API-, Persistenzmodell-, Datenmigrations-, Produktlogik-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.

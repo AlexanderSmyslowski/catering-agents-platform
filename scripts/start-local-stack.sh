@@ -6,6 +6,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
 LOG_DIR="${RUNTIME_DIR}/logs"
 DATA_ROOT="${CATERING_DATA_ROOT:-${ROOT_DIR}/data}"
+DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
+
+required_sessions=(
+  "catering-ui"
+  "catering-intake"
+  "catering-offer"
+  "catering-production"
+  "catering-exports"
+)
 
 mkdir -p "${LOG_DIR}"
 
@@ -46,6 +55,27 @@ screen_session_exists() {
   local session_name="$1"
   (screen -ls 2>/dev/null || true) | grep -q "\\.${session_name}[[:space:]]"
 }
+
+stack_session_exists() {
+  local session_name
+  for session_name in "${required_sessions[@]}"; do
+    if screen_session_exists "${session_name}"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+recorded_data_root="$(cat "${DATA_ROOT_FILE}" 2>/dev/null || true)"
+if stack_session_exists && [[ -n "${recorded_data_root}" && "${recorded_data_root}" != "${DATA_ROOT}" ]]; then
+  echo "Lokaler Stack laeuft bereits mit Datenwurzel: ${recorded_data_root}"
+  echo "Angefragte Datenwurzel wird fuer diesen laufenden Stack nicht uebernommen: ${DATA_ROOT}"
+  echo "Bitte npm run local:stop ausfuehren, bevor die lokale Datenwurzel gewechselt wird."
+  DATA_ROOT="${recorded_data_root}"
+fi
+
+printf '%s\n' "${DATA_ROOT}" >"${DATA_ROOT_FILE}"
+echo "Lokale Datenwurzel: ${DATA_ROOT}"
 
 start_service() {
   local name="$1"

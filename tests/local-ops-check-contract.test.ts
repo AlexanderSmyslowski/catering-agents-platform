@@ -41,6 +41,22 @@ describe("local ops check contract", () => {
     expect(checkScript).toContain("kontrollierten Frischlauf oder Soft-Archiv nur bewusst ausloesen");
   });
 
+  it("keeps local checks tied to the data root of the running local stack", () => {
+    const startScript = readFileSync("scripts/start-local-stack.sh", "utf8");
+    const statusScript = readFileSync("scripts/status-local-stack.sh", "utf8");
+    const stopScript = readFileSync("scripts/stop-local-stack.sh", "utf8");
+
+    expect(startScript).toContain("DATA_ROOT_FILE");
+    expect(startScript).toContain("Lokale Datenwurzel");
+    expect(startScript).toContain("Bitte npm run local:stop ausfuehren, bevor die lokale Datenwurzel gewechselt wird");
+    expect(checkScript).toContain("recorded_data_root");
+    expect(checkScript).toContain("requested_data_root");
+    expect(checkScript).toContain("Lokaler Stack wurde mit anderer Datenwurzel gestartet");
+    expect(checkScript).toContain("Bitte dieselbe Datenwurzel nutzen oder den Stack mit npm run local:stop kontrolliert neu starten");
+    expect(statusScript).toContain("Datenwurzel:");
+    expect(stopScript).toContain("rm -f \"${DATA_ROOT_FILE}\"");
+  });
+
   it("documents the compact local demo runbook commands and their bounded roles", () => {
     expect(testingDoc).toContain("`npm run local:start` startet den lokalen Stack mit Demo-Seeding");
     expect(testingDoc).toContain("`npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht");
@@ -54,6 +70,8 @@ describe("local ops check contract", () => {
     expect(testingDoc).toContain("keine automatische Loeschung oder Archivierung");
     expect(testingDoc).toContain("moegliche Rezept-Arbeitsschritte als Einkaufspositionen");
     expect(testingDoc).toContain("lokaler Stale-Datenbefund");
+    expect(testingDoc).toContain("Lokale Datenwurzel");
+    expect(testingDoc).toContain("CATERING_DATA_ROOT");
   });
 
   it("keeps Demo-Seed, local checks, and audit evidence narratively bounded across docs", () => {
