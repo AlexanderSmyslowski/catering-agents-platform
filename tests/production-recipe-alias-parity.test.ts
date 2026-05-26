@@ -103,6 +103,25 @@ describe("production recipe alias parity", () => {
         "1. Gemüse schneiden.",
         "2. Gemüsepfanne vegan braten."
       ].join("\n")
+    },
+    {
+      componentLabel: "Obstspiesse vegan",
+      category: "vegan" as const,
+      recipeName: "Fruit Skewers vegan",
+      filename: "internes-rezept-483.pdf",
+      sourceRef: "test:coffee-break-fruit-skewers",
+      text: [
+        "Fruit Skewers vegan",
+        "Zutaten",
+        "3 kg Melone",
+        "2 kg Trauben",
+        "2 kg Beeren",
+        "1 kg Apfel",
+        "Zubereitung",
+        "1. Obst waschen und schneiden.",
+        "2. Obstspiesse stecken.",
+        "3. Gekuehlt bereitstellen."
+      ].join("\n")
     }
   ];
 

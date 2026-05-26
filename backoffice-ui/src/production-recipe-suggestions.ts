@@ -23,7 +23,18 @@ const RECIPE_SUGGESTION_TOKEN_EXPANSIONS: Record<string, string[]> = {
   kalbsbuletten: ["veal", "meatballs", "buletten"],
   kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
   buletten: ["meatballs"],
-  frikadellen: ["meatballs"]
+  frikadellen: ["meatballs"],
+  blaubeere: ["blueberry"],
+  blaubeeren: ["blueberry"],
+  blueberry: ["blaubeere", "blaubeeren"],
+  obst: ["fruit"],
+  obstspiess: ["fruit", "skewers"],
+  obstspiesse: ["fruit", "skewers"],
+  fruit: ["obst"],
+  spiess: ["skewer"],
+  spiesse: ["skewers"],
+  skewer: ["spiess"],
+  skewers: ["spiesse"]
 };
 
 function normalizeRecipeSuggestionText(value: string): string {
