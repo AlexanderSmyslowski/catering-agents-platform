@@ -70,9 +70,9 @@ import {
   getSpecLabel
 } from "./production-language.js";
 import { channelForFile } from "./production-document-channel.js";
-import { buildManualSpecInput } from "./production-manual-spec-input.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
+import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 
 type AppRoute = "home" | "offer" | "production";
@@ -318,14 +318,6 @@ export function App() {
   const [intakeText, setIntakeText] = useState(
     "Konferenz am 2026-06-18 für 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
   );
-  const [manualEventType, setManualEventType] = useState("conference");
-  const [manualEventDate, setManualEventDate] = useState("");
-  const [manualAttendeeCount, setManualAttendeeCount] = useState("");
-  const [manualServiceForm, setManualServiceForm] = useState("buffet");
-  const [manualMenuItems, setManualMenuItems] = useState("");
-  const [manualCustomerName, setManualCustomerName] = useState("");
-  const [manualVenueName, setManualVenueName] = useState("");
-  const [manualNotes, setManualNotes] = useState("");
   const [intakeFile, setIntakeFile] = useState<File | null>(null);
   const [intakeChannel, setIntakeChannel] = useState<IntakeDocumentChannel>("pdf_upload");
   const [offerText, setOfferText] = useState(
@@ -359,6 +351,26 @@ export function App() {
     completePlanProgress,
     failPlanProgress
   } = useProductionPlanProgress();
+  const {
+    manualEventType,
+    manualEventDate,
+    manualAttendeeCount,
+    manualServiceForm,
+    manualMenuItems,
+    manualCustomerName,
+    manualVenueName,
+    manualNotes,
+    setManualEventType,
+    setManualEventDate,
+    setManualAttendeeCount,
+    setManualServiceForm,
+    setManualMenuItems,
+    setManualCustomerName,
+    setManualVenueName,
+    setManualNotes,
+    buildCurrentManualSpecInput,
+    resetManualSpecDraft
+  } = useProductionManualSpecForm();
   const deferredSearch = useDeferredValue(search);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -933,28 +945,12 @@ export function App() {
     setProductionWorkspaceCleared(false);
     clearMessages();
     try {
-      const response = await createAcceptedSpecFromManualForm(
-        buildManualSpecInput({
-          eventType: manualEventType,
-          eventDate: manualEventDate,
-          attendeeCount: manualAttendeeCount,
-          serviceForm: manualServiceForm,
-          menuItems: manualMenuItems,
-          customerName: manualCustomerName,
-          venueName: manualVenueName,
-          notes: manualNotes
-        })
-      );
+      const response = await createAcceptedSpecFromManualForm(buildCurrentManualSpecInput());
       const specId = extractAcceptedSpecId(response);
       if (specId) {
         setFocusedProductionSpecId(specId);
       }
-      setManualEventDate("");
-      setManualAttendeeCount("");
-      setManualMenuItems("");
-      setManualCustomerName("");
-      setManualVenueName("");
-      setManualNotes("");
+      resetManualSpecDraft();
       await refreshDashboard();
       setNotice("Manuelle Spezifikation wurde angelegt.");
     } catch (submitError) {
