@@ -13,10 +13,12 @@ import {
   formatProductionPlanStatusLabel,
   formatProductionReadinessLabel,
   formatProductionTimingWindow,
+  formatStructuredProductionAnswerSummary,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
+  selectProductionIntakeRequestId,
   selectProductionNextStep,
   selectProductionPlanSpec,
   selectProductionWorkbenchPlan,
@@ -415,6 +417,34 @@ describe("production route state", () => {
         }
       })
     ).toBe("Datum: 2026-03-04 · Terminfenster: Aufbau 09:00–11:30");
+  });
+
+  it("formats production answer summaries and selects intake request ids", () => {
+    expect(formatStructuredProductionAnswerSummary()).toBeUndefined();
+    expect(
+      formatStructuredProductionAnswerSummary({
+        event: { type: "business_lunch", date: "2026-03-04" },
+        attendees: { expected: 120 },
+        servicePlan: { serviceForm: "buffet" }
+      })
+    ).toBe("Veranstaltung: business_lunch · Datum: 2026-03-04 · Teilnehmerzahl: 120 Personen · Serviceform: Buffet");
+    expect(formatStructuredProductionAnswerSummary({ event: {} })).toBeUndefined();
+
+    expect(selectProductionIntakeRequestId({ requestId: " request-1 " })).toBe("request-1");
+    expect(
+      selectProductionIntakeRequestId({
+        sourceLineage: [
+          { sourceType: "recipe", reference: "ignored" },
+          { sourceType: "pdf", reference: "request-from-pdf" }
+        ]
+      })
+    ).toBe("request-from-pdf");
+    expect(
+      selectProductionIntakeRequestId({
+        sourceLineage: [{ sourceType: "recipe", reference: "ignored" }]
+      })
+    ).toBeUndefined();
+    expect(selectProductionIntakeRequestId(undefined)).toBeUndefined();
   });
 
   it("builds workbench spec facts from the focused production spec", () => {

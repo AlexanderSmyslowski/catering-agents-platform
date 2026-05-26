@@ -59,6 +59,45 @@ export function formatProductionObjectStatusLabel(input: {
   return input.currentSpecPlanCount > 0 ? `${input.currentSpecPlanCount} Plan(e)` : "noch kein Plan";
 }
 
+export function formatStructuredProductionAnswerSummary(spec?: Record<string, unknown>): string | undefined {
+  if (!spec) {
+    return undefined;
+  }
+
+  const event = asRecord(spec.event);
+  const attendees = asRecord(spec.attendees);
+  const servicePlan = asRecord(spec.servicePlan);
+  const parts = [
+    readStringOrNumber(event, ["type"])
+      ? `Veranstaltung: ${String(readStringOrNumber(event, ["type"]))}`
+      : undefined,
+    readStringOrNumber(event, ["date"]) ? `Datum: ${String(readStringOrNumber(event, ["date"]))}` : undefined,
+    readStringOrNumber(attendees, ["expected"])
+      ? `Teilnehmerzahl: ${String(readStringOrNumber(attendees, ["expected"]))} Personen`
+      : undefined,
+    readStringOrNumber(servicePlan, ["serviceForm"])
+      ? `Serviceform: ${translateServiceForm(String(readStringOrNumber(servicePlan, ["serviceForm"])))}`
+      : undefined
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+export function selectProductionIntakeRequestId(spec: Record<string, unknown> | undefined): string | undefined {
+  const requestId = spec?.requestId;
+  if (typeof requestId === "string" && requestId.trim()) {
+    return requestId.trim();
+  }
+
+  const sourceLineage = Array.isArray(spec?.sourceLineage) ? spec?.sourceLineage : [];
+  const intakeSource = sourceLineage.find((lineage) => {
+    const sourceType = String((lineage as Record<string, unknown>)?.sourceType ?? "");
+    return sourceType === "manual_input" || sourceType === "pdf" || sourceType === "email";
+  }) as Record<string, unknown> | undefined;
+  const reference = intakeSource?.reference;
+  return typeof reference === "string" && reference.trim() ? reference.trim() : undefined;
+}
+
 export function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
   const event = asRecord(spec?.event);
   const date = readStringOrNumber(event, ["date"]);

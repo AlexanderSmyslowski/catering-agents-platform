@@ -29,11 +29,13 @@ import {
   formatProductionIntakeOriginLabel,
   formatProductionPlanStatusLabel,
   formatProductionReadinessLabel,
+  formatStructuredProductionAnswerSummary,
   formatProductionTimingWindow,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
+  selectProductionIntakeRequestId,
   selectProductionPlanSpec,
   selectProductionWorkbenchPlan,
   selectProductionNextStep
@@ -64,8 +66,7 @@ import {
 import {
   buildProductionAssumptions,
   buildProductionQuestions,
-  getSpecLabel,
-  translateServiceForm
+  getSpecLabel
 } from "./production-language.js";
 
 type AppRoute = "home" | "offer" | "production";
@@ -201,30 +202,6 @@ function getBaseUrl(): string {
     return "";
   }
   return window.location.origin;
-}
-
-function formatStructuredProductionAnswerSummary(spec?: Record<string, unknown>): string | undefined {
-  if (!spec) {
-    return undefined;
-  }
-
-  const event = asRecord(spec.event);
-  const attendees = asRecord(spec.attendees);
-  const servicePlan = asRecord(spec.servicePlan);
-  const parts = [
-    readStringOrNumber(event, ["type"])
-      ? `Veranstaltung: ${String(readStringOrNumber(event, ["type"]))}`
-      : undefined,
-    readStringOrNumber(event, ["date"]) ? `Datum: ${String(readStringOrNumber(event, ["date"]))}` : undefined,
-    readStringOrNumber(attendees, ["expected"])
-      ? `Teilnehmerzahl: ${String(readStringOrNumber(attendees, ["expected"]))} Personen`
-      : undefined,
-    readStringOrNumber(servicePlan, ["serviceForm"])
-      ? `Serviceform: ${translateServiceForm(String(readStringOrNumber(servicePlan, ["serviceForm"])))}`
-      : undefined
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 function translateHealthStatus(value?: string): string {
@@ -374,21 +351,6 @@ function extractAcceptedSpecId(payload: Record<string, unknown>): string | undef
   const spec = payload.acceptedEventSpec as Record<string, unknown> | undefined;
   const specId = spec?.specId;
   return typeof specId === "string" ? specId : undefined;
-}
-
-function getIntakeRequestIdForSpec(spec: Record<string, unknown> | undefined): string | undefined {
-  const requestId = spec?.requestId;
-  if (typeof requestId === "string" && requestId.trim()) {
-    return requestId.trim();
-  }
-
-  const sourceLineage = Array.isArray(spec?.sourceLineage) ? spec?.sourceLineage : [];
-  const intakeSource = sourceLineage.find((lineage) => {
-    const sourceType = String((lineage as Record<string, unknown>)?.sourceType ?? "");
-    return sourceType === "manual_input" || sourceType === "pdf" || sourceType === "email";
-  }) as Record<string, unknown> | undefined;
-  const reference = intakeSource?.reference;
-  return typeof reference === "string" && reference.trim() ? reference.trim() : undefined;
 }
 
 function extractProductionPlanId(payload: Record<string, unknown>): string | undefined {
@@ -677,7 +639,7 @@ export function App() {
       return undefined;
     }
 
-    return getIntakeRequestIdForSpec(focusedProductionSpec as Record<string, unknown>);
+    return selectProductionIntakeRequestId(focusedProductionSpec as Record<string, unknown>);
   }, [focusedProductionSpec, route]);
 
   useEffect(() => {
