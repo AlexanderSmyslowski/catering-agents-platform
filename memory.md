@@ -1508,3 +1508,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.309 - 2026-05-26
 - Produktions-Dokumentkanal-Erkennung ist aus `App.tsx` nach `backoffice-ui/src/production-document-channel.ts` extrahiert und mit `tests/production-document-channel.test.ts` fuer PDF, E-Mail und Text-Fallback abgesichert.
 - Der Upload-Flow selbst bleibt unveraendert. Keine Aenderung an Normalisierung, Fehlupload-Archivierung, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.310 - 2026-05-26
+- Produktions-Spec-Editor-State ist in `backoffice-ui/src/use-production-spec-editor.ts` gekapselt: Laden, Reset/Dismissal, Feldsetter, Komponentenpatches, Change-Erkennung und Update-Payload-Bau liegen nicht mehr direkt in `App.tsx`.
+- `tests/use-production-spec-editor.test.ts` prueft Laden unveraenderter Spezifikationen, Change-Erkennung, Payload-Bau und Dismissal-Reset. `App.tsx` behaelt Fokuswechsel, Speichern, Refresh und Nutzerfeedback. Keine Aenderung an UI-Texten, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

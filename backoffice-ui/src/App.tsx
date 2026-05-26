@@ -71,15 +71,9 @@ import {
 } from "./production-language.js";
 import { channelForFile } from "./production-document-channel.js";
 import { buildManualSpecInput } from "./production-manual-spec-input.js";
-import {
-  normalizedSpecEditSnapshot,
-  specEditSnapshotFromSpec,
-  type SpecEditSnapshot
-} from "./production-spec-edit-snapshot.js";
-import { buildSpecEditUpdateInput } from "./production-spec-edit-update.js";
+import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
-import type { ComponentEditState } from "./production-answer-types.js";
 
 type AppRoute = "home" | "offer" | "production";
 
@@ -340,8 +334,6 @@ export function App() {
   const [recipeName, setRecipeName] = useState("");
   const [recipeFile, setRecipeFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
-  const [editingSpecId, setEditingSpecId] = useState<string>();
-  const [dismissedProductionAnswerSpecId, setDismissedProductionAnswerSpecId] = useState<string>();
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string>();
@@ -367,12 +359,6 @@ export function App() {
     completePlanProgress,
     failPlanProgress
   } = useProductionPlanProgress();
-  const [editingEventType, setEditingEventType] = useState("");
-  const [editingEventDate, setEditingEventDate] = useState("");
-  const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
-  const [editingServiceForm, setEditingServiceForm] = useState("");
-  const [editingMenuItems, setEditingMenuItems] = useState("");
-  const [editingComponentStates, setEditingComponentStates] = useState<Record<string, ComponentEditState>>({});
   const deferredSearch = useDeferredValue(search);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -613,6 +599,26 @@ export function App() {
   }, [currentIntakeRequestId]);
 
   const focusedProductionSpecRecord = focusedProductionSpec as Record<string, unknown> | undefined;
+  const {
+    editingSpecId,
+    dismissedProductionAnswerSpecId,
+    editingEventType,
+    editingEventDate,
+    editingAttendeeCount,
+    editingServiceForm,
+    editingMenuItems,
+    editingComponentStates,
+    hasFocusedSpecEditChanges,
+    setEditingEventType,
+    setEditingEventDate,
+    setEditingAttendeeCount,
+    setEditingServiceForm,
+    setEditingMenuItems,
+    loadSpecIntoEditor: loadSpecIntoEditorState,
+    resetSpecEdit,
+    updateEditingComponentState,
+    buildCurrentSpecUpdateInput
+  } = useProductionSpecEditor({ focusedProductionSpec: focusedProductionSpecRecord });
 
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
 
@@ -786,32 +792,6 @@ export function App() {
     hasSelectedPlanId: Boolean(selectedPlanId)
   });
   const canArchiveCurrentIntake = Boolean(currentIntakeRequestId) && !productionWorkspaceCleared;
-  const hasFocusedSpecEditChanges = useMemo(() => {
-    if (!focusedProductionSpec || editingSpecId !== String(focusedProductionSpec.specId ?? "")) {
-      return false;
-    }
-
-    const baseline = specEditSnapshotFromSpec(focusedProductionSpec as Record<string, unknown>);
-    const current: SpecEditSnapshot = {
-      eventType: editingEventType,
-      eventDate: editingEventDate,
-      attendeeCount: editingAttendeeCount,
-      serviceForm: editingServiceForm,
-      menuItems: editingMenuItems,
-      components: Object.entries(editingComponentStates)
-    };
-
-    return normalizedSpecEditSnapshot(baseline) !== normalizedSpecEditSnapshot(current);
-  }, [
-    editingAttendeeCount,
-    editingComponentStates,
-    editingEventDate,
-    editingEventType,
-    editingMenuItems,
-    editingServiceForm,
-    editingSpecId,
-    focusedProductionSpec
-  ]);
 
   function clearMessages() {
     setError(undefined);
@@ -1025,63 +1005,13 @@ export function App() {
   }
 
   function loadSpecIntoEditor(spec: Record<string, unknown>) {
-    const snapshot = specEditSnapshotFromSpec(spec);
-    const nextComponentStates = Object.fromEntries(snapshot.components);
-
-    setEditingSpecId(String(spec.specId));
+    const specId = loadSpecIntoEditorState(spec);
     setProductionWorkspaceCleared(false);
-    setDismissedProductionAnswerSpecId(undefined);
-    setFocusedProductionSpecId(String(spec.specId));
-    setEditingEventType(snapshot.eventType);
-    setEditingEventDate(snapshot.eventDate);
-    setEditingAttendeeCount(snapshot.attendeeCount);
-    setEditingServiceForm(snapshot.serviceForm);
-    setEditingMenuItems(snapshot.menuItems);
-    setEditingComponentStates(nextComponentStates);
+    setFocusedProductionSpecId(specId);
   }
 
   function beginSpecEdit(spec: Record<string, unknown>) {
     loadSpecIntoEditor(spec);
-  }
-
-  function resetSpecEdit(markDismissed = true) {
-    if (markDismissed) {
-      setDismissedProductionAnswerSpecId(editingSpecId);
-    } else {
-      setDismissedProductionAnswerSpecId(undefined);
-    }
-    setEditingSpecId(undefined);
-    setEditingEventType("");
-    setEditingEventDate("");
-    setEditingAttendeeCount("");
-    setEditingServiceForm("");
-    setEditingMenuItems("");
-    setEditingComponentStates({});
-  }
-
-  function updateEditingComponentState(componentId: string, patch: Partial<ComponentEditState>) {
-    setEditingComponentStates((current) => ({
-      ...current,
-      [componentId]: {
-        menuCategory: current[componentId]?.menuCategory ?? "",
-        productionMode: current[componentId]?.productionMode ?? "",
-        purchasedElements: current[componentId]?.purchasedElements ?? "",
-        recipeOverrideId: current[componentId]?.recipeOverrideId ?? "",
-        notes: current[componentId]?.notes ?? "",
-        ...patch
-      }
-    }));
-  }
-
-  function buildCurrentSpecUpdateInput() {
-    return buildSpecEditUpdateInput({
-      eventType: editingEventType,
-      eventDate: editingEventDate,
-      attendeeCount: editingAttendeeCount,
-      serviceForm: editingServiceForm,
-      menuItems: editingMenuItems,
-      componentStates: editingComponentStates
-    });
   }
 
   async function persistCurrentSpecEdit(options?: { quiet?: boolean }) {
