@@ -2184,6 +2184,56 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("matches Hummus offer wording to an internal Humus recipe spelling variant", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+
+    await repository.save(
+      parseUploadedRecipeText({
+        recipeName: "Humus Tahini Dip vegan",
+        filename: "Humus Tahini Dip vegan.pdf",
+        sourceRef: "test:humus-tahini-dip-vegan",
+        text: [
+          "Humus Tahini Dip vegan",
+          "Zutaten",
+          "1 kg Kichererbsen",
+          "250 g Tahini",
+          "80 ml Zitronensaft",
+          "Zubereitung",
+          "1. Humus vegan mixen.",
+          "2. Mit Tahini und Zitronensaft abschmecken."
+        ].join("\n")
+      })
+    );
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const spec = singleComponentSpec("Hummus", "vegan");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
+    expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
+    const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
+    const storedRecipe = await repository.get(recipeId);
+    expect(storedRecipe?.name).toContain("Humus Tahini Dip");
+    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("rejects non-vegan internet recipes for vegan components even when the title looks close", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });

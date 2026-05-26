@@ -45,6 +45,8 @@ const searchTokenExpansions: Record<string, string[]> = {
   pastasalat: ["nudelsalat", "pasta", "salat"],
   kartoffelsalat: ["potatosalad", "potato", "salat"],
   potatosalad: ["kartoffelsalat", "potato", "salat"],
+  hummus: ["humus"],
+  humus: ["hummus"],
   kalbsbuletten: ["veal", "meatballs", "buletten"],
   kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
   buletten: ["meatballs"],
