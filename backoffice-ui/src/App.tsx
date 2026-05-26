@@ -1551,18 +1551,19 @@ export function App() {
       ) : null}
       {route === "production" ? (
         <ProductionRouteMainLayout
-          activeSpecLabel={activeProductionContextLabel}
-          readinessLabel={focusedSpecReadinessLabel}
-          planStatusLabel={productionPlanStatusLabel}
-          purchaseStatusLabel={purchaseZoneStatusLabel}
-          nextStepTitle={productionNextStep.title}
-          nextStepDescription={productionNextStep.description}
-          questionCount={productionQuestions.length}
-          answeredQuestionCount={clarificationStatusCounts.answered}
-          unansweredQuestionCount={clarificationStatusCounts.unanswered}
-          productionObjectCount={currentSpecPlans.length}
-          productionObjectStatusLabel={productionObjectStatusLabel}
-          purchaseListCount={currentSpecPurchaseLists.length}
+          workbenchSummary={{
+            activeSpecLabel: activeProductionContextLabel,
+            readinessLabel: focusedSpecReadinessLabel,
+            planStatusLabel: productionPlanStatusLabel,
+            purchaseStatusLabel: purchaseZoneStatusLabel,
+            questionCount: productionQuestions.length,
+            answeredQuestionCount: clarificationStatusCounts.answered,
+            unansweredQuestionCount: clarificationStatusCounts.unanswered,
+            productionObjectCount: currentSpecPlans.length,
+            productionObjectStatusLabel,
+            purchaseListCount: currentSpecPurchaseLists.length
+          }}
+          workbenchNextStep={productionNextStep}
           submitting={submitting}
           sourceInput={{
             dragActive,
