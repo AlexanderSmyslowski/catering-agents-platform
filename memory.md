@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.292
+version: 5.293
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1440,3 +1440,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.292 - 2026-05-26
 - Produktions-UI-Rezeptauswahl ist mit einem kleinen Alias-Korridor konsistenter zum bestehenden Backend-Matching: Die UI-Vorschlagsliste fuer manuelle Rezeptzuweisung kennt nun konservative Catering-Aliase fuer `Kartoffelsalat -> Potato`, `Nudelsalat -> Pasta` sowie `Kalbsbuletten`/`Kalbsfrikadellen -> Veal Meatballs`.
 - `tests/production-recipe-suggestions.test.ts` schuetzt diese German-English-Aliasfaelle und verhindert, dass ein reines `Salad`-Signal als generischer Treffer reicht. Keine Aenderung an Backend-Planung, Rezeptbibliothek, Datenmodell, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.293 - 2026-05-26
+- Produktions-UI-Rezeptauswahl ist im Komponenten-Kontext abgesichert: `tests/production-component-answer-card.test.ts` rendert `ProductionComponentAnswerCard` mit `KARTOFFELSALAT | DE LUX` und prueft, dass der Alias-Vorschlag `Potato Salad with Herbs` als gezielte Rezeptoption sichtbar und auswaehlbar ist.
+- Der Test schuetzt zugleich, dass ein generischer `Caesar Salad`-Treffer aus dem reinen `Salad`-Signal nicht in den Override-Select rutscht und die Auswahl als `recipeOverrideId` an den bestehenden Editor-State weitergegeben wird. Keine Produktcode-, Backend-Planungs-, Rezeptbibliotheks-, Datenmodell-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
