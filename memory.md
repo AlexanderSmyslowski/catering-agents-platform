@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.285
+version: 5.286
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -79,6 +79,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Das read-only Workbench-Zonenmapping `docs/product/UI_WORKBENCH_ZONE_MAPPING_READONLY.md` ordnet eine spaetere cleane Conversational Workbench den vorhandenen Zonen Quellen/Eingabe, verstandene Daten/Spec, Rueckfragen/Klaerung, Ergebnisobjekte, Export/Drive-Output und Audit/Herkunft/Freigabe zu; Ergebnisobjekte bleiben pruefbar und Drive folgt weiterhin der read-only-Import- bzw. explizit freigegebenen Output-Linie.
 - Die `/angebot`-Ansicht ist von der ueberladenen Dashboard-/Card-Projektion auf eine ultra-clean, Apple-like Conversational Workbench reduziert: zentrale Anfrage-/Angebots-Eingabeflaeche, ruhige Zusammenfassung und einklappbare Detailzonen fuer Entwurf, weitere Eingaben sowie operative Uebergabe/Audit; keine neue API, keine Persistenz, kein OAuth/Google/Chat.
 - Produktions-UI-Wartbarkeit ist weiter verbessert: Der zuvor grosse `production-question-panel.tsx` ist in kleinere Komponenten fuer strukturierten Antworteditor und Intake-Herkunftskarte aufgeteilt; Texte, Datenfluss und Rueckfragenverhalten bleiben unveraendert.
+- Produktions-UI-Wartbarkeit ist mit einem weiteren kleinen Schnitt verbessert: Die read-only Rueckfragen-/ConversationSession-/Ergebnisstatus-Komposition liegt nun in `production-question-thread.tsx`; das Panel bleibt fuer Aktionen und Kontextkarten zustaendig.
 - Backoffice-Browser-Smokes sind konsolenruhiger: Die statische Shell verweist auf `favicon.svg`, damit lokale Browser-Pruefungen nicht mehr durch einen `favicon.ico`-404 rauschen.
 - Fuer `/produktion` liegt der enge Strukturplan `docs/plans/production-workbench-structure.md` vor: empfohlen ist Option B, eine eigene `ProductionConversationalWorkbench` nach Angebotsmuster mit dominanter Leitfrage `Was braucht die Produktion als Naechstes?`, ruhiger Kontextzeile und progressiven Zonen fuer Rueckfragen, Produktionsplan, Einkauf, Rezept-/Mengenlogik sowie Audit/Uebergabe; keine neue Fachlogik, API, Persistenz, OAuth/Google oder Chat.
 - Die bestehende Rueckfragezone in `/produktion` ist als kleiner Step-3-Slice chataehnlicher: vorhandene `productionQuestions` erscheinen als Assistant-/Agent-Fragen im strukturierten Chatfluss, die bestehenden Antwortfelder erscheinen als Nutzerantwort-Bubble direkt im Chatfluss, und die UI markiert ausdruecklich, dass es kein freier LLM-Chat ist.
@@ -1409,3 +1410,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.285 - 2026-05-26
 - Backoffice-Browser-Smokes sind konsolenruhiger: `backoffice-ui/index.html` verweist auf ein statisches `favicon.svg`, damit der Browser nicht mehr mit `favicon.ico` 404 rauscht.
 - `tests/backoffice-static-shell.test.ts` schuetzt den statischen Shell-Anker. Keine Route-, Produktlogik-, API-, Persistenz-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.286 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Rueckfragen-Panel-Schnitt verbessert: Die read-only Workbench-Projektion, ConversationSession-Karte, Ergebnisstatusleiste und strukturierte Chat-Message-Liste liegen nun in `backoffice-ui/src/production-question-thread.tsx`.
+- `backoffice-ui/src/production-question-panel.tsx` bleibt fuer Panel-Rahmen, Aktionen, Annahmen, Spezifikationsdetails, Intake-Herkunft und Vorgangswechsel zustaendig und ist weiter reduziert. Keine Text-, Verhalten-, Rueckfragenmodell-, Antwortspeicher-, Planungs-, Rezept-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
