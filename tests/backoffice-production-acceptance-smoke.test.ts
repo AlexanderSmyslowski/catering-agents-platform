@@ -22,6 +22,7 @@ function installProductionAcceptanceMocks(
     withQuickLunchMixedPlan?: boolean;
     withArchivedProductionContext?: boolean;
     withSearchTargetSpec?: boolean;
+    withPlanOnlyArtifacts?: boolean;
   } = {}
 ) {
   const storage = new Map<string, string>();
@@ -49,7 +50,12 @@ function installProductionAcceptanceMocks(
   const previousSpecId = "spec-production-previous-1";
   const searchRequestId = "request-production-search-target-1";
   const searchSpecId = "spec-production-search-target-1";
-  const planSpecId = options.stalePlanOnly ? previousSpecId : specId;
+  const planSpecId = options.stalePlanOnly
+    ? previousSpecId
+    : options.withPlanOnlyArtifacts
+    ? "spec-production-plan-only-1"
+    : specId;
+  const purchaseListSpecId = options.withPlanOnlyArtifacts ? planSpecId : specId;
   const archivedRequestIds = new Set<string>();
   const archivedSpecIds = new Set<string>();
   const quickLunchMenuPlan = [
@@ -426,7 +432,7 @@ function installProductionAcceptanceMocks(
               ? [
                   {
                     purchaseListId: "purchase-production-current-1",
-                    eventSpecId: specId,
+                    eventSpecId: purchaseListSpecId,
                     totals: { itemCount: 2 },
                     items: [
                       {
@@ -852,6 +858,20 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation noch nicht im Fokus");
     expect(content).toContain("Produktionsblatt exportieren");
     expect(content).not.toContain("Noch kein aktiver Vorgang");
+  });
+
+  it("surfaces plan-only production artifacts instead of focusing an unrelated accepted spec", async () => {
+    installProductionAcceptanceMocks({ withCurrentPurchaseList: true, withPlanOnlyArtifacts: true });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation noch nicht im Fokus");
+    expect(content).toContain("Produktionsobjekte und Downloads prüfen");
+    expect(content).toContain("Produktionsblatt exportieren");
+    expect(content).toContain("Einkaufsliste exportieren");
+    expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
+    expect(content).not.toContain("Rückfragen beantworten");
+    expect(content).not.toContain("requestId: request-production-fallback-1");
   });
 
   it("keeps the clear action inactive when no upload or production context exists", async () => {

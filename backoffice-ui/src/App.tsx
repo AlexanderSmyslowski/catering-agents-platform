@@ -621,17 +621,38 @@ export function App() {
   const activeOfferSpec =
     filteredSpecs[filteredSpecs.length - 1] ?? dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1];
 
+  const productionArtifactSpecIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [...orderedPlans, ...orderedPurchaseLists]
+            .map((item) => String(item.eventSpecId ?? ""))
+            .filter(Boolean)
+        )
+      ),
+    [orderedPlans, orderedPurchaseLists]
+  );
+
   const focusedProductionSpec = useMemo(
     () =>
       selectFocusedProductionSpec({
         acceptedSpecs: dashboard.acceptedSpecs,
         filteredSpecs,
         focusedProductionSpecId,
+        productionArtifactSpecIds,
         productionWorkspaceCleared,
         route,
         searchText: deferredSearch
       }),
-    [dashboard.acceptedSpecs, deferredSearch, filteredSpecs, focusedProductionSpecId, productionWorkspaceCleared, route]
+    [
+      dashboard.acceptedSpecs,
+      deferredSearch,
+      filteredSpecs,
+      focusedProductionSpecId,
+      productionArtifactSpecIds,
+      productionWorkspaceCleared,
+      route
+    ]
   );
 
   const currentIntakeRequestId = useMemo(() => {
