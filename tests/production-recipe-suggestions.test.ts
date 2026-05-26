@@ -83,6 +83,23 @@ describe("production recipe suggestions", () => {
     ).toEqual([{ recipeId: "recipe-veal-meatballs", name: "Veal Meatballs with Braised Onions" }]);
   });
 
+  it("suggests Hummus offer wording for internal Humus recipe spelling variants", () => {
+    expect(
+      recipeSuggestionsForComponent("Hummus vegan", [
+        {
+          recipeId: "recipe-humus-tahini",
+          name: "Humus Tahini Dip vegan",
+          source: { reference: "internal/humus-tahini.md" }
+        },
+        {
+          recipeId: "recipe-generic-vegan",
+          name: "Vegan Basisrezept",
+          source: { reference: "internal/vegan.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-humus-tahini", name: "Humus Tahini Dip vegan" }]);
+  });
+
   it("resolves selected recipe names while preserving recipe ids as fallback labels", () => {
     expect(resolveRecipeNameById("recipe-kalbsbuletten", recipes)).toBe("Kalbsbuletten mit Schmorzweibeln");
     expect(resolveRecipeNameById("missing", recipes)).toBeUndefined();
