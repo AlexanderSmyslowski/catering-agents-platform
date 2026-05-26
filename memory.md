@@ -1492,3 +1492,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.305 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist analog fuer Dokumentanalyse verbessert: `backoffice-ui/src/use-production-document-progress.ts` kapselt aktiven Dokumentnamen, Analysephase, Prozent-/ETA-Timer, Start-, Done-, Fail- und Reset-Zustand.
 - `App.tsx` verarbeitet Uploads und Spezifikationsanlage weiter selbst, enthaelt aber nicht mehr die interne Dokument-Fortschritts-Timerlogik. Keine Aenderung an UI-Texten, APIs, Dokumentnormalisierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.306 - 2026-05-26
+- Produktions-Spec-Edit-Snapshots sind aus `App.tsx` nach `backoffice-ui/src/production-spec-edit-snapshot.ts` extrahiert und gezielt mit `tests/production-spec-edit-snapshot.test.ts` abgesichert.
+- Der Schnitt bleibt verhaltensgleich: keine Aenderung an UI-Texten, Speichern, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
