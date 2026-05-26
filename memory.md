@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.296
+version: 5.297
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1456,3 +1456,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.296 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Karten-Schnitt verbessert: `backoffice-ui/src/production-component-detail-fields.tsx` rendert die Zukauf- und Notiz-Eingaben getrennt von der Komponentenkarte.
 - `tests/production-component-detail-fields.test.ts` schuetzt, dass `purchasedElements` und `notes` weiterhin als getrennte Editor-State-Patches weitergegeben werden. Keine Aenderung an Rezeptvorschlaegen, Antwortspeicherung, Backend-Planung, Rezeptbibliothek, Datenmodell, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.297 - 2026-05-26
+- Produktionskern-Smokes sind gegen Einkaufslisten-Scheingruenheit gehaertet: `tests/platform.test.ts` prueft fuer Quick Lunch, Flying-Bites-Empfang und Kaffeepause, dass Einkaufslistenpositionen positive Mengen, Einheiten, Gruppen, Quellenanker und Mapping-Confidence tragen.
+- Der neue Test-Helfer schuetzt zugleich, dass typische Rezeptschritt-/Zubereitungswoerter nicht als Einkaufspositionen in die operativen Listen rutschen. Keine Aenderung an Planungslogik, Rezeptmatching, API, Persistenz/Migration, Datenmodell, UI, LLM, Echtdaten, Deployment, Auth oder Compliance.

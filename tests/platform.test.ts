@@ -142,6 +142,39 @@ function singleComponentSpec(
   };
 }
 
+type PurchaseListItemSnapshot = {
+  displayName: string;
+  normalizedQty: number;
+  normalizedUnit: string;
+  purchaseQty: number;
+  purchaseUnit: string;
+  group: string;
+  sourceRecipes: string[];
+  mappingConfidence: number;
+};
+
+function expectOperationalPurchaseListQuality(items: PurchaseListItemSnapshot[]) {
+  const recipeStepLikePattern = /^(?:preparation|zubereitung|instructions?|anleitung)$/i;
+  const preparationVerbPattern =
+    /\b(?:mischen|kochen|backen|waschen|schneiden|stecken|vorbereiten|unterheben|bereitstellen|servieren|anrichten|braten|mix|boil|bake|wash|cut|shape|prepare|chill)\b/i;
+
+  expect(items.length).toBeGreaterThan(0);
+  for (const item of items) {
+    expect(item.displayName.trim(), item.displayName).not.toBe("");
+    expect(item.normalizedQty, item.displayName).toBeGreaterThan(0);
+    expect(item.purchaseQty, item.displayName).toBeGreaterThan(0);
+    expect(item.normalizedUnit.trim(), item.displayName).not.toBe("");
+    expect(item.purchaseUnit.trim(), item.displayName).not.toBe("");
+    expect(item.group.trim(), item.displayName).not.toBe("");
+    expect(item.sourceRecipes.length, item.displayName).toBeGreaterThan(0);
+    expect(item.sourceRecipes.every((sourceRecipe) => sourceRecipe.trim().length > 0), item.displayName).toBe(true);
+    expect(item.mappingConfidence, item.displayName).toBeGreaterThan(0);
+    expect(item.mappingConfidence, item.displayName).toBeLessThanOrEqual(1);
+    expect(item.displayName, item.displayName).not.toMatch(recipeStepLikePattern);
+    expect(item.displayName, item.displayName).not.toMatch(preparationVerbPattern);
+  }
+}
+
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-"));
 }
@@ -494,6 +527,7 @@ describe("catering agents platform", () => {
         "Boil potatoes."
       ])
     );
+    expectOperationalPurchaseListQuality(body.purchaseList.items);
     expect(body.productionPlan.unresolvedItems).toHaveLength(0);
     expect(body.productionPlan.productionBatches.length).toBeGreaterThanOrEqual(8);
     expect(body.productionPlan.kitchenSheets.length).toBeGreaterThanOrEqual(9);
@@ -657,6 +691,7 @@ describe("catering agents platform", () => {
         "Brownie-Teig mischen."
       ])
     );
+    expectOperationalPurchaseListQuality(body.purchaseList.items);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1224,6 +1259,7 @@ describe("catering agents platform", () => {
         "Obstspiesse stecken."
       ])
     );
+    expectOperationalPurchaseListQuality(body.purchaseList.items);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
