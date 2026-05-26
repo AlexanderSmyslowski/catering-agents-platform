@@ -1512,3 +1512,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.310 - 2026-05-26
 - Produktions-Spec-Editor-State ist in `backoffice-ui/src/use-production-spec-editor.ts` gekapselt: Laden, Reset/Dismissal, Feldsetter, Komponentenpatches, Change-Erkennung und Update-Payload-Bau liegen nicht mehr direkt in `App.tsx`.
 - `tests/use-production-spec-editor.test.ts` prueft Laden unveraenderter Spezifikationen, Change-Erkennung, Payload-Bau und Dismissal-Reset. `App.tsx` behaelt Fokuswechsel, Speichern, Refresh und Nutzerfeedback. Keine Aenderung an UI-Texten, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.311 - 2026-05-26
+- Manueller Produktionsspezifikations-Formularzustand ist in `backoffice-ui/src/use-production-manual-spec-form.ts` gekapselt: Defaults, Setter, Payload-Bau und Erfolgs-Reset liegen nicht mehr direkt in `App.tsx`.
+- `tests/use-production-manual-spec-form.test.ts` prueft Defaults, normalisierten Payload-Bau und Reset-Verhalten. `App.tsx` behaelt Submit, Fokusauswahl, Refresh und Nutzerfeedback. Keine Aenderung an UI-Texten, Formularfeldern, API-Endpunkten, Backend-Validierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
