@@ -98,6 +98,16 @@ export function selectProductionIntakeRequestId(spec: Record<string, unknown> | 
   return typeof reference === "string" && reference.trim() ? reference.trim() : undefined;
 }
 
+export function selectProductionArtifactSpecIds(items: Array<Record<string, unknown>>): string[] {
+  return Array.from(
+    new Set(
+      items
+        .map((item) => String(item.eventSpecId ?? ""))
+        .filter(Boolean)
+    )
+  );
+}
+
 export function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
   const event = asRecord(spec?.event);
   const date = readStringOrNumber(event, ["date"]);
