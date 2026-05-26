@@ -1544,3 +1544,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.318 - 2026-05-26
 - Status, Upload-Formular, Rezeptbestand und Aktionen des Produktions-Rezeptbibliothek-Panels sind als `recipeStatus`, `recipeUpload`, `recipeLibrary` und `recipeActions` gebuendelt.
 - Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Rezeptupload, Review-Entscheidungen, Rezeptmatching, API-Endpunkten, Planung, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.319 - 2026-05-26
+- Einkaufslisten-Zustand des Produktions-Downloadbereichs ist als `purchaseListState` gebuendelt und wird von `App.tsx` ueber `ProductionRouteMainLayout` an `ProductionPurchaseListPanel` weitergereicht.
+- Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Einkaufslistenberechnung, Exportlinks, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

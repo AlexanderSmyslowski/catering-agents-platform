@@ -1667,9 +1667,12 @@ export function App() {
             specById
           }}
           objectPanelActions={{ setSelectedPlanId }}
-          specById={specById}
-          archivedPurchaseLists={archivedPurchaseLists}
-          purchaseZoneStatusLabel={purchaseZoneStatusLabel}
+          purchaseListState={{
+            currentPurchaseLists: currentSpecPurchaseLists,
+            archivedPurchaseLists,
+            specById,
+            statusLabel: purchaseZoneStatusLabel
+          }}
           productionIntakeOriginLabel={productionIntakeOriginLabel}
           productionAuditTrailLabel={productionAuditTrailLabel}
           productionHandoffExportLabel={productionHandoffExportLabel}
