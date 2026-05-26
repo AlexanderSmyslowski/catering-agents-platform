@@ -133,6 +133,7 @@ export function selectFocusedProductionSpec(input: {
   acceptedSpecs: ProductionRouteFocusSpec[];
   filteredSpecs: ProductionRouteFocusSpec[];
   focusedProductionSpecId?: string;
+  productionArtifactSpecIds?: string[];
   productionWorkspaceCleared: boolean;
   route: string;
   searchText: string;
@@ -150,7 +151,17 @@ export function selectFocusedProductionSpec(input: {
     return preferred ?? input.filteredSpecs[input.filteredSpecs.length - 1];
   }
 
-  return preferred ?? input.filteredSpecs[input.filteredSpecs.length - 1] ?? input.acceptedSpecs[input.acceptedSpecs.length - 1];
+  const fallback = preferred ?? input.filteredSpecs[input.filteredSpecs.length - 1] ?? input.acceptedSpecs[input.acceptedSpecs.length - 1];
+  const artifactSpecIds = new Set((input.productionArtifactSpecIds ?? []).filter(Boolean).map(String));
+  if (input.route === "production" && !preferred && artifactSpecIds.size > 0) {
+    const visibleSpecs = input.filteredSpecs.length > 0 ? input.filteredSpecs : input.acceptedSpecs;
+    const hasVisibleArtifactSpec = visibleSpecs.some((spec) => artifactSpecIds.has(String(spec.specId ?? "")));
+    if (!hasVisibleArtifactSpec) {
+      return undefined;
+    }
+  }
+
+  return fallback;
 }
 
 export function selectCurrentProductionItems<T extends Record<string, unknown>>(input: {
@@ -229,7 +240,7 @@ export function selectProductionNextStep(input: {
   hasSelectedPlan: boolean;
   purchaseListCount: number;
 }): ProductionNextStep {
-  if (!input.hasFocusedProductionSpec) {
+  if (!input.hasFocusedProductionSpec && !input.hasSelectedPlan) {
     return {
       title: "Auftrag einfügen oder Datei ablegen",
       description: "Starte mit Angebot, E-Mail, Text oder manuellen Veranstaltungsdaten."

@@ -72,6 +72,32 @@ describe("production route state", () => {
     ).toBe(acceptedSpecs[2]);
   });
 
+  it("does not focus an unrelated accepted spec when production artifacts have no visible spec", () => {
+    expect(
+      selectFocusedProductionSpec({
+        acceptedSpecs,
+        filteredSpecs: acceptedSpecs,
+        productionArtifactSpecIds: ["spec-plan-only"],
+        productionWorkspaceCleared: false,
+        route: "production",
+        searchText: ""
+      })
+    ).toBeUndefined();
+  });
+
+  it("keeps the latest accepted spec when any visible spec matches production artifacts", () => {
+    expect(
+      selectFocusedProductionSpec({
+        acceptedSpecs,
+        filteredSpecs: acceptedSpecs,
+        productionArtifactSpecIds: ["spec-current"],
+        productionWorkspaceCleared: false,
+        route: "production",
+        searchText: ""
+      })
+    ).toBe(acceptedSpecs[2]);
+  });
+
   it("splits current and archived production items by focused spec", () => {
     const items = [
       { id: "plan-a", eventSpecId: "spec-current" },
@@ -234,6 +260,14 @@ describe("production route state", () => {
   });
 
   it("selects the existing production next-step sequence", () => {
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: false,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        purchaseListCount: 1
+      }).title
+    ).toBe("Produktionsobjekte und Downloads prüfen");
     expect(
       selectProductionNextStep({
         hasFocusedProductionSpec: false,

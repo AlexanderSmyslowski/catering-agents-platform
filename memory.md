@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.279
+version: 5.280
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1383,3 +1383,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.279 - 2026-05-26
 - Lokaler Rehearsal-Check ist nicht-destruktiv gegen Stale-Daten klarer: `npm run local:check` warnt nun, wenn ignorierte lokale Einkaufslisten moegliche Rezept-Arbeitsschritte als Einkaufspositionen enthalten.
 - Der Hinweis ist bewusst kein rotes Gate und keine automatische Bereinigung; UI-Evidenz und Reibungslog muessen den lokalen Stale-Datenbefund markieren oder einen kontrollierten Frischlauf/Soft-Archiv-Pfad bewusst dokumentieren. Keine Parser-, Planungs-, Rezeptmatching-, API-, Persistenz-, Loesch-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.280 - 2026-05-26
+- Produktionsroute ist im sauberen lokalen Frischlauf fokussicherer: Wenn geladene Produktionsplaene/Einkaufslisten zu keiner sichtbaren Intake-Spezifikation gehoeren, zeigt `/produktion` den vorhandenen Plan-Kontext statt einen fachlich unverknuepften Intake-Vorgang als aktuellen Produktionsfall zu markieren.
+- `tests/production-route-state.test.ts` und `tests/backoffice-production-acceptance-smoke.test.ts` schuetzen diese plan-only-Artefaktgrenze sowie den naechsten Schritt fuer vorhandene Plan-/Einkaufslistenartefakte ohne fokussierte Spec. Keine API-, Persistenz-, Planungs-, Rezept-, Archivierungs-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
