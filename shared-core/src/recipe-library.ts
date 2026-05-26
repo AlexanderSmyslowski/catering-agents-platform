@@ -74,6 +74,8 @@ const searchTokenExpansions: Record<string, string[]> = {
   wildkrautersalat: ["wild", "herb", "salad"],
   wildkrauter: ["wild", "herbs"],
   petersilien: ["parsley"],
+  gemuesepfanne: ["gemusepfanne", "vegetable", "stir", "fry"],
+  gemusepfanne: ["gemuesepfanne", "vegetable", "stir", "fry"],
   cake: ["kuchen"],
   kuchen: ["cake"]
 };

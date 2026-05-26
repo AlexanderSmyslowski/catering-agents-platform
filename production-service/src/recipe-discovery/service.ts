@@ -171,7 +171,9 @@ const specificTokenAliases: Record<string, string[]> = {
   skewer: ["spiess"],
   skewers: ["spiesse", "obstspiess", "obstspiesse"],
   spiess: ["skewer"],
-  spiesse: ["skewers"]
+  spiesse: ["skewers"],
+  gemuesepfanne: ["gemusepfanne"],
+  gemusepfanne: ["gemuesepfanne"]
 };
 
 function normalizeTokens(value: string): string[] {
