@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.277
+version: 5.278
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1375,3 +1375,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.277 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Readiness-Label-Refactor verbessert: Spec-/Planstatus und Ergebnisobjektstatus werden ueber `formatProductionReadinessLabel`, `formatProductionPlanStatusLabel` und `formatProductionObjectStatusLabel` in `production-route-state.ts` gebaut statt direkt in `App.tsx`.
 - `tests/production-route-state.test.ts` schuetzt Readiness-Fallbacks, offenen Planstatus, Plananzahl mit ausgewaehltem Plan, Plananzahl ohne ausgewaehlten Plan und den leeren Ergebnisobjekt-Fallback. Keine Rendering-, Text-, Datenmodell-, API-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.278 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Summary-/Intake-ID-Refactor verbessert: `formatStructuredProductionAnswerSummary` und `selectProductionIntakeRequestId` liegen in `production-route-state.ts` statt direkt in `App.tsx`.
+- `tests/production-route-state.test.ts` schuetzt strukturierte Antwortsummary, direkte `requestId`, PDF-/Mail-/Manual-Source-Lineage und leere Fallbacks. Keine Rendering-, Textaenderung, ConversationProjection-, API-, Archivierungs-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
