@@ -72,6 +72,7 @@ import {
   extractProductionPlanId
 } from "./production-api-response-ids.js";
 import { channelForFile } from "./production-document-channel.js";
+import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
@@ -764,6 +765,50 @@ export function App() {
     focusedProductionSpecLabel: focusedProductionSpec ? getSpecLabel(focusedProductionSpec) : undefined,
     selectedPlan,
     productionWorkspaceCleared
+  });
+
+  const productionRouteViewState = buildProductionRouteViewState({
+    activeProductionContextLabel,
+    focusedSpecReadinessLabel,
+    productionPlanStatusLabel,
+    purchaseZoneStatusLabel,
+    productionQuestions,
+    clarificationStatusCounts,
+    currentSpecPlans,
+    productionObjectStatusLabel,
+    currentSpecPurchaseLists,
+    productionNextStep,
+    focusedProductionSpec,
+    selectedPlan,
+    selectedPlanReadinessLabel,
+    productionAssumptions,
+    productionConversationProjection,
+    workbenchSpecFacts,
+    intakeRequestDetailError,
+    intakeRequestDetail,
+    filteredSpecs,
+    documentPhase,
+    productionWorkspaceCleared,
+    planPhase,
+    planningSpecLabel,
+    planProgress,
+    planEtaSeconds,
+    selectedPlanSpec,
+    selectedPlanComponentsById,
+    archivedPlans,
+    specById,
+    archivedPurchaseLists,
+    productionIntakeOriginLabel,
+    productionAuditTrailLabel,
+    productionHandoffExportLabel,
+    productionHandoffContextLabel,
+    recipeReviewStatusLabel,
+    recipeUsageStatusLabel,
+    recipeReviewCounts,
+    recipeCount: dashboard.recipes.length,
+    recipeName,
+    recipeFile,
+    filteredRecipes
   });
   const canClearProductionWorkspace = canClearProductionWorkspaceFromState({
     hasFocusedProductionSpec: Boolean(focusedProductionSpec),
@@ -1551,19 +1596,7 @@ export function App() {
       ) : null}
       {route === "production" ? (
         <ProductionRouteMainLayout
-          workbenchSummary={{
-            activeSpecLabel: activeProductionContextLabel,
-            readinessLabel: focusedSpecReadinessLabel,
-            planStatusLabel: productionPlanStatusLabel,
-            purchaseStatusLabel: purchaseZoneStatusLabel,
-            questionCount: productionQuestions.length,
-            answeredQuestionCount: clarificationStatusCounts.answered,
-            unansweredQuestionCount: clarificationStatusCounts.unanswered,
-            productionObjectCount: currentSpecPlans.length,
-            productionObjectStatusLabel,
-            purchaseListCount: currentSpecPurchaseLists.length
-          }}
-          workbenchNextStep={productionNextStep}
+          {...productionRouteViewState}
           submitting={submitting}
           sourceInput={{
             dragActive,
@@ -1611,22 +1644,6 @@ export function App() {
             setNotes: setManualNotes,
             submitManualSpec: handleManualSpecSubmit
           }}
-          questionState={{
-            focusedProductionSpec,
-            focusedSpecReadinessLabel,
-            selectedPlan,
-            selectedPlanReadinessLabel,
-            currentSpecPurchaseLists,
-            productionQuestions,
-            productionAssumptions,
-            productionConversationProjection,
-            workbenchSpecFacts,
-            intakeRequestDetailError,
-            intakeRequestDetail,
-            filteredSpecs,
-            documentPhase,
-            productionWorkspaceCleared
-          }}
           questionActions={{
             openSpecForQuestions: (specId) => {
               setProductionWorkspaceCleared(false);
@@ -1656,46 +1673,7 @@ export function App() {
             createPlan: handleCreatePlan,
             resetSpecEdit
           }}
-          objectPanelProgress={{
-            planPhase,
-            planningSpecLabel,
-            planProgress,
-            planEtaSeconds
-          }}
-          objectPanelState={{
-            focusedProductionSpec,
-            productionWorkspaceCleared,
-            currentSpecPlans,
-            selectedPlan,
-            selectedPlanSpec,
-            selectedPlanComponentsById,
-            archivedPlans,
-            specById
-          }}
           objectPanelActions={{ setSelectedPlanId }}
-          purchaseListState={{
-            currentPurchaseLists: currentSpecPurchaseLists,
-            archivedPurchaseLists,
-            specById,
-            statusLabel: purchaseZoneStatusLabel
-          }}
-          handoffState={{
-            intakeOriginLabel: productionIntakeOriginLabel,
-            auditTrailLabel: productionAuditTrailLabel,
-            exportLabel: productionHandoffExportLabel,
-            contextLabel: productionHandoffContextLabel
-          }}
-          recipeStatus={{
-            recipeReviewStatusLabel,
-            recipeUsageStatusLabel,
-            recipeReviewCounts,
-            recipeCount: dashboard.recipes.length
-          }}
-          recipeUpload={{
-            recipeName,
-            recipeFile
-          }}
-          recipeLibrary={{ filteredRecipes }}
           recipeActions={{
             setRecipeName,
             setRecipeFile,
