@@ -49,7 +49,6 @@ import {
   createOfferFromText,
   createProductionPlan,
   loadDashboardState,
-  loadIntakeRequestDetail,
   loadServiceHealth,
   persistOperatorName,
   promoteOfferDraft,
@@ -60,7 +59,6 @@ import {
   uploadRecipeFile,
   type DashboardState,
   type IntakeDocumentChannel,
-  type IntakeRequestDetail,
   type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
@@ -72,6 +70,7 @@ import {
 import { channelForFile } from "./production-document-channel.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
+import { useProductionIntakeRequestDetail } from "./use-production-intake-request-detail.js";
 import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 
@@ -312,8 +311,6 @@ export function App() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  const [intakeRequestDetail, setIntakeRequestDetail] = useState<IntakeRequestDetail | null>(null);
-  const [intakeRequestDetailError, setIntakeRequestDetailError] = useState<string>();
   const [operatorName, setOperatorName] = useState(() => readOperatorName());
   const [intakeText, setIntakeText] = useState(
     "Konferenz am 2026-06-18 für 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
@@ -578,37 +575,11 @@ export function App() {
     return selectProductionIntakeRequestId(focusedProductionSpec as Record<string, unknown>);
   }, [focusedProductionSpec, route]);
 
-  useEffect(() => {
-    if (!currentIntakeRequestId) {
-      setIntakeRequestDetail(null);
-      setIntakeRequestDetailError(undefined);
-      return;
-    }
-
-    let cancelled = false;
-    setIntakeRequestDetail(null);
-    setIntakeRequestDetailError(undefined);
-
-    void loadIntakeRequestDetail(currentIntakeRequestId)
-      .then((detail) => {
-        if (!cancelled) {
-          setIntakeRequestDetail(detail);
-        }
-      })
-      .catch((fetchError) => {
-        if (!cancelled) {
-          setIntakeRequestDetailError(
-            `Die ursprüngliche Intake-Anfrage konnte nicht geladen werden: ${String(
-              (fetchError as Error).message ?? fetchError
-            )}`
-          );
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentIntakeRequestId]);
+  const {
+    intakeRequestDetail,
+    intakeRequestDetailError,
+    resetIntakeRequestDetail
+  } = useProductionIntakeRequestDetail({ currentIntakeRequestId });
 
   const focusedProductionSpecRecord = focusedProductionSpec as Record<string, unknown> | undefined;
   const {
@@ -818,8 +789,7 @@ export function App() {
     setFocusedProductionSpecId(undefined);
     setSelectedPlanId(undefined);
     resetPlanProgress();
-    setIntakeRequestDetail(null);
-    setIntakeRequestDetailError(undefined);
+    resetIntakeRequestDetail();
     resetSpecEdit(false);
     if (productionUploadInputRef.current) {
       productionUploadInputRef.current.value = "";

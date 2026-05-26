@@ -1516,3 +1516,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.311 - 2026-05-26
 - Manueller Produktionsspezifikations-Formularzustand ist in `backoffice-ui/src/use-production-manual-spec-form.ts` gekapselt: Defaults, Setter, Payload-Bau und Erfolgs-Reset liegen nicht mehr direkt in `App.tsx`.
 - `tests/use-production-manual-spec-form.test.ts` prueft Defaults, normalisierten Payload-Bau und Reset-Verhalten. `App.tsx` behaelt Submit, Fokusauswahl, Refresh und Nutzerfeedback. Keine Aenderung an UI-Texten, Formularfeldern, API-Endpunkten, Backend-Validierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.312 - 2026-05-26
+- Produktions-Intake-Request-Detail-Laden ist in `backoffice-ui/src/use-production-intake-request-detail.ts` gekapselt; der Hook liefert Detail und Fehlerzustand fuer die aktive Intake-Request-ID.
+- `tests/use-production-intake-request-detail.test.ts` prueft erfolgreichen Read, Fehleranzeige und Reset bei fehlender aktiver Request-ID. Keine Aenderung an UI-Texten, API-Endpunkten, Detailformat, Upload, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
