@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.289
+version: 5.290
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1428,3 +1428,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.289 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem verhaltensgleichen Komponenten-Karten-Schnitt verbessert: `backoffice-ui/src/production-component-answer-card.tsx` rendert die einzelne Gericht-/Komponenten-Antwortkarte, waehrend `production-structured-answer-editor.tsx` nur noch den strukturierten Antwortfluss orchestriert.
 - `ComponentEditState` liegt als UI-Typ in `backoffice-ui/src/production-answer-types.ts` und wird von App, Route-Layout, Rueckfragen-Panel, strukturiertem Editor und Komponentenkarte gemeinsam genutzt. Keine Text-, Verhalten-, Antwortspeicher-, Planungs-, Rezeptfachlogik-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.290 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Editor-Schnitt verbessert: `backoffice-ui/src/production-event-answer-fields.tsx` rendert die Basisdatenfelder fuer Veranstaltung, Datum, Pax, Serviceform und Komponenten-Textarea.
+- `backoffice-ui/src/production-structured-answer-editor.tsx` bleibt fuer Chat-Bubble, Komponentenlisten-Orchestrierung und Zusammensetzung der Antwortteile zustaendig. Keine Text-, Verhalten-, Antwortspeicher-, Planungs-, Rezeptlogik-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
