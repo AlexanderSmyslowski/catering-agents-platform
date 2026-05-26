@@ -18,6 +18,8 @@ const RECIPE_SUGGESTION_TOKEN_EXPANSIONS: Record<string, string[]> = {
   nudelsalat: ["pasta"],
   hummus: ["humus"],
   humus: ["hummus"],
+  gemuesepfanne: ["gemusepfanne"],
+  gemusepfanne: ["gemuesepfanne"],
   kalbsbuletten: ["veal", "meatballs", "buletten"],
   kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
   buletten: ["meatballs"],
