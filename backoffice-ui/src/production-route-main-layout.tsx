@@ -14,7 +14,10 @@ import {
   type ProductionObjectsState,
   type ProductionPlanProgressState
 } from "./production-objects-panel.js";
-import { ProductionPurchaseListPanel } from "./production-purchase-list-panel.js";
+import {
+  ProductionPurchaseListPanel,
+  type ProductionPurchaseListState
+} from "./production-purchase-list-panel.js";
 import { ProductionQuestionPanel } from "./production-question-panel.js";
 import type {
   ProductionQuestionEditorActions,
@@ -71,9 +74,7 @@ type ProductionRouteMainLayoutProps = {
   objectPanelProgress: ProductionPlanProgressState;
   objectPanelState: ProductionObjectsState;
   objectPanelActions: ProductionObjectsActions;
-  specById: Map<string, Record<string, unknown>>;
-  archivedPurchaseLists: Array<Record<string, unknown>>;
-  purchaseZoneStatusLabel: string;
+  purchaseListState: ProductionPurchaseListState;
   productionIntakeOriginLabel: string;
   productionAuditTrailLabel: string;
   productionHandoffExportLabel: string;
@@ -121,9 +122,7 @@ export function ProductionRouteMainLayout({
   objectPanelProgress,
   objectPanelState,
   objectPanelActions,
-  specById,
-  archivedPurchaseLists,
-  purchaseZoneStatusLabel,
+  purchaseListState,
   productionIntakeOriginLabel,
   productionAuditTrailLabel,
   productionHandoffExportLabel,
@@ -188,12 +187,7 @@ export function ProductionRouteMainLayout({
         />
       </div>
       <div className="production-column">
-        <ProductionPurchaseListPanel
-          currentPurchaseLists={currentSpecPurchaseLists}
-          archivedPurchaseLists={archivedPurchaseLists}
-          specById={specById}
-          statusLabel={purchaseZoneStatusLabel}
-        />
+        <ProductionPurchaseListPanel purchaseListState={purchaseListState} />
       </div>
       <div className="production-column">
         <ProductionHandoffPanel

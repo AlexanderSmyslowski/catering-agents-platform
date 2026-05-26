@@ -1,11 +1,15 @@
 import { purchaseListExportUrl } from "./api.js";
 import { getSpecLabel } from "./production-language.js";
 
-type ProductionPurchaseListPanelProps = {
+export type ProductionPurchaseListState = {
   currentPurchaseLists: Array<Record<string, unknown>>;
   archivedPurchaseLists: Array<Record<string, unknown>>;
   specById: Map<string, Record<string, unknown>>;
   statusLabel: string;
+};
+
+type ProductionPurchaseListPanelProps = {
+  purchaseListState: ProductionPurchaseListState;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -59,11 +63,10 @@ function getPurchaseListPreviewItems(
 }
 
 export function ProductionPurchaseListPanel({
-  currentPurchaseLists,
-  archivedPurchaseLists,
-  specById,
-  statusLabel
+  purchaseListState
 }: ProductionPurchaseListPanelProps) {
+  const { currentPurchaseLists, archivedPurchaseLists, specById, statusLabel } = purchaseListState;
+
   return (
     <article className="panel secondary-panel">
       <header>
