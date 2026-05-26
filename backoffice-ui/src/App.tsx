@@ -70,6 +70,7 @@ import {
 import { channelForFile } from "./production-document-channel.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
+import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
 import { useProductionIntakeRequestDetail } from "./use-production-intake-request-detail.js";
 import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
@@ -312,11 +313,6 @@ export function App() {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [operatorName, setOperatorName] = useState(() => readOperatorName());
-  const [intakeText, setIntakeText] = useState(
-    "Konferenz am 2026-06-18 für 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation."
-  );
-  const [intakeFile, setIntakeFile] = useState<File | null>(null);
-  const [intakeChannel, setIntakeChannel] = useState<IntakeDocumentChannel>("pdf_upload");
   const [offerText, setOfferText] = useState(
     "Besprechung am 2026-06-25 für 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
   );
@@ -327,7 +323,20 @@ export function App() {
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string>();
   const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
+  const {
+    intakeText,
+    setIntakeText,
+    intakeFile,
+    setIntakeFile,
+    intakeChannel,
+    setIntakeChannel,
+    dragActive,
+    setDragActive,
+    resetIntakeDraft,
+    startIncomingProductionFile,
+    completeIncomingProductionFile,
+    failIncomingProductionFile
+  } = useProductionIntakeDraft();
   const {
     activeDocumentName,
     documentPhase,
@@ -783,8 +792,7 @@ export function App() {
 
   function resetProductionWorkspaceState() {
     setProductionWorkspaceCleared(true);
-    setIntakeFile(null);
-    setDragActive(false);
+    resetIntakeDraft();
     resetDocumentProgress();
     setFocusedProductionSpecId(undefined);
     setSelectedPlanId(undefined);
@@ -883,8 +891,7 @@ export function App() {
     setSubmitting(true);
     setProductionWorkspaceCleared(false);
     clearMessages();
-    setIntakeFile(file);
-    setIntakeChannel(channel);
+    startIncomingProductionFile(file, channel);
     startDocumentProgress(file);
     setNotice(`Dokument ${file.name} wird analysiert...`);
 
@@ -894,13 +901,12 @@ export function App() {
       if (specId) {
         setFocusedProductionSpecId(specId);
       }
-      setIntakeFile(null);
-      setDragActive(false);
+      completeIncomingProductionFile();
       completeDocumentProgress();
       await refreshDashboard();
       setNotice(`Dokument ${file.name} wurde übernommen und analysiert.`);
     } catch (submitError) {
-      setIntakeFile(file);
+      failIncomingProductionFile(file);
       failDocumentProgress();
       setError(
         submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
