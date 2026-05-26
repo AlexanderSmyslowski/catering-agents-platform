@@ -1650,16 +1650,24 @@ export function App() {
             setProductionWorkspaceCleared(false);
             setFocusedProductionSpecId(specId);
           }}
-          planPhase={planPhase}
-          planningSpecLabel={planningSpecLabel}
-          planProgress={planProgress}
-          planEtaSeconds={planEtaSeconds}
-          currentSpecPlans={currentSpecPlans}
-          selectedPlanSpec={selectedPlanSpec}
-          selectedPlanComponentsById={selectedPlanComponentsById}
-          archivedPlans={archivedPlans}
+          objectPanelProgress={{
+            planPhase,
+            planningSpecLabel,
+            planProgress,
+            planEtaSeconds
+          }}
+          objectPanelState={{
+            focusedProductionSpec,
+            productionWorkspaceCleared,
+            currentSpecPlans,
+            selectedPlan,
+            selectedPlanSpec,
+            selectedPlanComponentsById,
+            archivedPlans,
+            specById
+          }}
+          objectPanelActions={{ setSelectedPlanId }}
           specById={specById}
-          setSelectedPlanId={setSelectedPlanId}
           archivedPurchaseLists={archivedPurchaseLists}
           purchaseZoneStatusLabel={purchaseZoneStatusLabel}
           productionIntakeOriginLabel={productionIntakeOriginLabel}

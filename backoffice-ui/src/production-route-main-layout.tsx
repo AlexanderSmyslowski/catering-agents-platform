@@ -8,7 +8,12 @@ import {
   type ProductionSourceInputActions,
   type ProductionSourceInputValues
 } from "./production-input-panel.js";
-import { ProductionObjectsPanel } from "./production-objects-panel.js";
+import {
+  ProductionObjectsPanel,
+  type ProductionObjectsActions,
+  type ProductionObjectsState,
+  type ProductionPlanProgressState
+} from "./production-objects-panel.js";
 import { ProductionPurchaseListPanel } from "./production-purchase-list-panel.js";
 import { ProductionQuestionPanel } from "./production-question-panel.js";
 import type {
@@ -63,16 +68,10 @@ type ProductionRouteMainLayoutProps = {
   filteredSpecs: Array<Record<string, unknown>>;
   productionWorkspaceCleared: boolean;
   openSpecForQuestions: (specId: string) => void;
-  planPhase: "idle" | "planning" | "done";
-  planningSpecLabel?: string;
-  planProgress: number;
-  planEtaSeconds?: number;
-  currentSpecPlans: Array<Record<string, unknown>>;
-  selectedPlanSpec?: Record<string, unknown>;
-  selectedPlanComponentsById: Map<string, Record<string, unknown>>;
-  archivedPlans: Array<Record<string, unknown>>;
+  objectPanelProgress: ProductionPlanProgressState;
+  objectPanelState: ProductionObjectsState;
+  objectPanelActions: ProductionObjectsActions;
   specById: Map<string, Record<string, unknown>>;
-  setSelectedPlanId: (planId: string) => void;
   archivedPurchaseLists: Array<Record<string, unknown>>;
   purchaseZoneStatusLabel: string;
   productionIntakeOriginLabel: string;
@@ -130,16 +129,10 @@ export function ProductionRouteMainLayout({
   filteredSpecs,
   productionWorkspaceCleared,
   openSpecForQuestions,
-  planPhase,
-  planningSpecLabel,
-  planProgress,
-  planEtaSeconds,
-  currentSpecPlans,
-  selectedPlanSpec,
-  selectedPlanComponentsById,
-  archivedPlans,
+  objectPanelProgress,
+  objectPanelState,
+  objectPanelActions,
   specById,
-  setSelectedPlanId,
   archivedPurchaseLists,
   purchaseZoneStatusLabel,
   productionIntakeOriginLabel,
@@ -206,20 +199,10 @@ export function ProductionRouteMainLayout({
       </div>
       <div className="production-column">
         <ProductionObjectsPanel
-          planPhase={planPhase}
-          planningSpecLabel={planningSpecLabel}
-          planProgress={planProgress}
-          planEtaSeconds={planEtaSeconds}
-          focusedProductionSpec={focusedProductionSpec}
-          productionWorkspaceCleared={productionWorkspaceCleared}
-          currentSpecPlans={currentSpecPlans}
-          selectedPlan={selectedPlan}
-          selectedPlanSpec={selectedPlanSpec}
-          selectedPlanComponentsById={selectedPlanComponentsById}
-          archivedPlans={archivedPlans}
-          specById={specById}
+          progressState={objectPanelProgress}
+          objectsState={objectPanelState}
+          objectsActions={objectPanelActions}
           submitting={submitting}
-          setSelectedPlanId={setSelectedPlanId}
         />
       </div>
       <div className="production-column">

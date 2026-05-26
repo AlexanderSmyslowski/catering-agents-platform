@@ -1536,3 +1536,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.316 - 2026-05-26
 - Editor-State und Editor-Aktionen des Produktions-Rueckfragenpanels sind als `editorState` und `editorActions` gebuendelt und werden von `App.tsx` ueber `ProductionRouteMainLayout` an `ProductionQuestionPanel` weitergereicht.
 - Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Antwortbearbeitung, Speichern, Berechnung, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.317 - 2026-05-26
+- Fortschritt, Zustand und Aktionen des Produktionsobjekte-Panels sind als `objectPanelProgress`, `objectPanelState` und `objectPanelActions` gebuendelt und werden von `App.tsx` ueber `ProductionRouteMainLayout` an `ProductionObjectsPanel` weitergereicht.
+- Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Planerzeugung, Ergebnisanzeige, Einkaufslisten, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
