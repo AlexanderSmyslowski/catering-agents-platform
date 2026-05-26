@@ -172,6 +172,8 @@ export function OfferConversationalWorkbench({
   const focusedDraftId = getDraftId(focusedDraft);
   const focusedDraftSpec = getDraftProposedSpec(focusedDraft);
   const focusedDraftSource = formatDraftSourceLineage(focusedDraftSpec);
+  const summarySourceLabel = focusedDraftSource ?? latestSourceLabel;
+  const summaryActiveSpec = focusedDraftSpec ?? activeSpec;
   const focusedVariants = getDraftVariants(focusedDraft);
   const focusedOpenQuestions = Array.isArray(focusedDraft?.openQuestions)
     ? (focusedDraft.openQuestions as string[])
@@ -204,7 +206,7 @@ export function OfferConversationalWorkbench({
       <aside className="offer-calm-summary" aria-label="Kompakte Ergebniszusammenfassung">
         <p className="eyebrow">Zusammenfassung</p>
         <strong>{renderDraftSummary(focusedDraft)}</strong>
-        <p className="helper-text">Quelle: {latestSourceLabel}</p>
+        <p className="helper-text">Quelle: {summarySourceLabel}</p>
         <p className="helper-text">Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.</p>
         <p className="helper-text">
           Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten,
@@ -216,7 +218,7 @@ export function OfferConversationalWorkbench({
         <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
         <p className="helper-text">
           Übergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktive Spezifikation:{" "}
-          {activeSpec ? `${String(activeSpec.specId ?? "-")} (${getReadinessLabel(activeSpec)})` : "keine"}
+          {summaryActiveSpec ? `${String(summaryActiveSpec.specId ?? "-")} (${getReadinessLabel(summaryActiveSpec)})` : "keine"}
         </p>
         <p className="helper-text">
           {focusedDraft

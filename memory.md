@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.282
+version: 5.283
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1395,3 +1395,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.282 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Route-State-Refactor verbessert: `selectProductionArtifactSpecIds` sammelt die Spec-IDs vorhandener Produktionsartefakte aus Plaenen/Einkaufslisten statt diese Logik direkt in `App.tsx` zu halten.
 - `tests/production-route-state.test.ts` schuetzt Deduplizierung und leere Fallbacks. Keine Rendering-, Text-, Fokusverhaltens-, API-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.283 - 2026-05-26
+- Angebotsroute ist im sauberen Browser-Rehearsal konsistenter: Wenn ein fokussierter Angebotsentwurf eine `proposedEventSpec` enthaelt, zeigt die kompakte Angebotszusammenfassung diese Entwurfs-Quelle und Entwurfs-Spec statt einer unverknuepften neuesten Intake-Spezifikation.
+- `tests/backoffice-route-smoke.test.ts` schuetzt Quelle und aktive Spezifikation fuer einen Entwurf mit eigener proposed Spec. Keine Angebotslogik-, API-, Persistenz-, Produktions-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
