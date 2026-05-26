@@ -1480,3 +1480,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.302 - 2026-05-26
 - Produktions-Rezeptalias-Paritaet ist als Drift-Guard verankert: `tests/production-recipe-alias-parity.test.ts` prueft fuer `Hummus`/`Humus` und `Gemuesepfanne`/`Gemüsepfanne`, dass Backend-Discovery und UI-Rezeptvorschlaege denselben internen Rezeptanker liefern.
 - Der Test hat den fehlenden UI-Vorschlagsalias fuer `Gemuesepfanne`/`Gemüsepfanne` sichtbar gemacht; `production-recipe-suggestions.ts` kennt nun denselben engen Compound-Dish-Korridor. Keine Aenderung an Backend-Matchinglogik, UI-Struktur, Planung, Rezeptdatenmodellen, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.303 - 2026-05-26
+- Der interne Produktions-UI-Smoke geht nun vom Start-Entry `Produktionsagent öffnen` in die Produktionsroute und prueft danach weiter den synthetischen Kernfluss: manuelle Spezifikation, Klassifikation/Rezeptzuordnung, Planerzeugung, Einkaufsliste und Exportanker.
+- Der Slice erweitert nur `tests/backoffice-internal-usage-smoke.test.ts` als Browser-/UI-Pfadschutz. Keine Aenderung an UI-Texten, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

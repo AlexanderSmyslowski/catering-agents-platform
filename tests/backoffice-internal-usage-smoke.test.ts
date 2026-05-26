@@ -181,12 +181,12 @@ async function buildArtifactsForFixture(plannedSpec: ReturnType<typeof buildUsag
   return buildProductionArtifacts(plannedSpec, discovery);
 }
 
-async function renderProductionRoute() {
+async function renderAppRoute(pathname: string) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
-  window.history.pushState({}, "", "/produktion");
+  window.history.pushState({}, "", pathname);
 
   await act(async () => {
     root.render(createElement(App));
@@ -198,6 +198,10 @@ async function renderProductionRoute() {
   });
 
   return { root, container };
+}
+
+async function renderProductionRoute() {
+  return renderAppRoute("/produktion");
 }
 
 afterEach(() => {
@@ -362,7 +366,19 @@ describe("backoffice internal usage smoke", () => {
       })
     );
 
-    await renderProductionRoute();
+    const homeRoute = await renderAppRoute("/");
+
+    expect(document.body.textContent ?? "").toContain("Internes Beta-Kontrollzentrum");
+    expect(document.body.textContent ?? "").toContain("Produktionsagent öffnen");
+    const productionStartLink = findAnchorByText("Produktionsagent öffnen");
+    expect(productionStartLink.getAttribute("href")).toBe("/produktion");
+
+    await act(async () => {
+      homeRoute.root.unmount();
+    });
+    homeRoute.container.remove();
+
+    const productionRoute = await renderProductionRoute();
 
     expect(document.body.textContent ?? "").toContain("Was braucht die Produktion als Nächstes?");
     expect(document.body.textContent ?? "").toContain("Aktiver Vorgang");
@@ -444,6 +460,10 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").not.toContain("fallback");
     expect(document.body.textContent ?? "").not.toContain("blockiert");
 
+    await act(async () => {
+      productionRoute.root.unmount();
+    });
+    productionRoute.container.remove();
     rmSync(fixture.dataRoot, { recursive: true, force: true });
   });
 });
