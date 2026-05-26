@@ -1,5 +1,5 @@
 import type { ComponentEditState } from "./production-answer-types.js";
-import { buildRecipeOptionsForComponent } from "./production-recipe-suggestions.js";
+import { ProductionRecipeOverrideSelect } from "./production-recipe-override-select.js";
 
 type ProductionComponentAnswerCardProps = {
   componentId: string;
@@ -16,12 +16,6 @@ export function ProductionComponentAnswerCard({
   state,
   updateEditingComponentState
 }: ProductionComponentAnswerCardProps) {
-  const recipeOptions = buildRecipeOptionsForComponent({
-    componentLabel,
-    recipes,
-    selectedRecipeId: state.recipeOverrideId
-  });
-
   return (
     <article className="component-answer-card">
       <strong>{componentLabel}</strong>
@@ -60,31 +54,16 @@ export function ProductionComponentAnswerCard({
           </select>
         </label>
       </div>
-      <label className="field-block">
-        <span>Rezept gezielt aus Bibliothek zuweisen</span>
-        <select
-          value={state.recipeOverrideId}
-          onChange={(event) =>
-            updateEditingComponentState(componentId, {
-              recipeOverrideId: event.target.value
-            })
-          }
-        >
-          <option value="">Automatisch suchen</option>
-          {recipeOptions.map((option) => (
-            <option key={option.recipeId} value={option.recipeId}>
-              {option.name} ({option.recipeId})
-            </option>
-          ))}
-        </select>
-      </label>
-      {recipeOptions.length > 0 ? (
-        <p className="helper-text">
-          Vorgeschlagene Bibliotheksrezepte: {recipeOptions.map((option) => option.name).join(", ")}
-        </p>
-      ) : (
-        <p className="helper-text">Für diese Bezeichnung wurden noch keine naheliegenden Bibliotheksrezepte gefunden.</p>
-      )}
+      <ProductionRecipeOverrideSelect
+        componentLabel={componentLabel}
+        recipes={recipes}
+        selectedRecipeId={state.recipeOverrideId}
+        onRecipeOverrideChange={(recipeOverrideId) =>
+          updateEditingComponentState(componentId, {
+            recipeOverrideId
+          })
+        }
+      />
       <label className="field-block">
         <span>Zugekaufte Bestandteile</span>
         <input

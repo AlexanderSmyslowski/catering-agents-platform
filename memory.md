@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.293
+version: 5.294
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1444,3 +1444,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.293 - 2026-05-26
 - Produktions-UI-Rezeptauswahl ist im Komponenten-Kontext abgesichert: `tests/production-component-answer-card.test.ts` rendert `ProductionComponentAnswerCard` mit `KARTOFFELSALAT | DE LUX` und prueft, dass der Alias-Vorschlag `Potato Salad with Herbs` als gezielte Rezeptoption sichtbar und auswaehlbar ist.
 - Der Test schuetzt zugleich, dass ein generischer `Caesar Salad`-Treffer aus dem reinen `Salad`-Signal nicht in den Override-Select rutscht und die Auswahl als `recipeOverrideId` an den bestehenden Editor-State weitergegeben wird. Keine Produktcode-, Backend-Planungs-, Rezeptbibliotheks-, Datenmodell-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.294 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Karten-Schnitt verbessert: `backoffice-ui/src/production-recipe-override-select.tsx` rendert den gezielten Rezept-Override-Select inklusive vorhandener Vorschlags-/Fallback-Hilfetexte.
+- `ProductionComponentAnswerCard` delegiert die Rezeptauswahl nun an diese Komponente und bleibt fuer Kategorie, Herstellungsart, Zukauf und Notiz zustaendig. Keine Aenderung an Vorschlagslogik, Antwortspeicherung, Backend-Planung, Rezeptbibliothek, Datenmodell, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
