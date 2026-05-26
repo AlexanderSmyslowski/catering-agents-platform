@@ -1,4 +1,4 @@
-import { recipeSuggestionsForComponent, resolveRecipeNameById } from "./production-recipe-suggestions.js";
+import { buildRecipeOptionsForComponent } from "./production-recipe-suggestions.js";
 
 export type ComponentEditState = {
   menuCategory: string;
@@ -126,17 +126,11 @@ export function ProductionStructuredAnswerEditor({
                   notes: ""
                 };
                 const componentLabel = String(component.label ?? componentId);
-                const recipeSuggestions = recipeSuggestionsForComponent(componentLabel, recipes);
-                const selectedRecipeName = state.recipeOverrideId
-                  ? resolveRecipeNameById(state.recipeOverrideId, recipes)
-                  : undefined;
-                const recipeOptions = [...recipeSuggestions];
-                if (state.recipeOverrideId && !recipeOptions.some((item) => item.recipeId === state.recipeOverrideId)) {
-                  recipeOptions.unshift({
-                    recipeId: state.recipeOverrideId,
-                    name: selectedRecipeName ?? `Rezept ${state.recipeOverrideId}`
-                  });
-                }
+                const recipeOptions = buildRecipeOptionsForComponent({
+                  componentLabel,
+                  recipes,
+                  selectedRecipeId: state.recipeOverrideId
+                });
 
                 return (
                   <article key={componentId} className="component-answer-card">

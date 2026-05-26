@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRecipeOptionsForComponent,
   recipeSuggestionsForComponent,
   resolveRecipeNameById
 } from "../backoffice-ui/src/production-recipe-suggestions.js";
@@ -51,5 +52,33 @@ describe("production recipe suggestions", () => {
     expect(resolveRecipeNameById("recipe-without-name", [{ recipeId: "recipe-without-name", name: "" }])).toBe(
       "recipe-without-name"
     );
+  });
+
+  it("keeps a selected recipe override visible when it is not part of the current suggestions", () => {
+    expect(
+      buildRecipeOptionsForComponent({
+        componentLabel: "Kartoffelsalat",
+        recipes,
+        selectedRecipeId: "recipe-kalbsbuletten"
+      })
+    ).toEqual([{ recipeId: "recipe-kalbsbuletten", name: "Kalbsbuletten mit Schmorzweibeln" }]);
+
+    expect(
+      buildRecipeOptionsForComponent({
+        componentLabel: "Kartoffelsalat",
+        recipes,
+        selectedRecipeId: "external-recipe"
+      })
+    ).toEqual([{ recipeId: "external-recipe", name: "Rezept external-recipe" }]);
+  });
+
+  it("does not duplicate a selected recipe override that already matches the suggestions", () => {
+    expect(
+      buildRecipeOptionsForComponent({
+        componentLabel: "Schokoladenkuchen",
+        recipes,
+        selectedRecipeId: "recipe-schokoladenkuchen"
+      })
+    ).toEqual([{ recipeId: "recipe-schokoladenkuchen", name: "Veganer Schokoladenkuchen" }]);
   });
 });
