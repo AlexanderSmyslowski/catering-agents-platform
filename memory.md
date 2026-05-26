@@ -1472,3 +1472,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.300 - 2026-05-26
 - Produktions-UI-Rezeptvorschlaege sind konsistent zum Backend fuer `Hummus`/`Humus`: `tests/production-recipe-suggestions.test.ts` prueft, dass ein Angebotslabel `Hummus vegan` ein internes Rezept `Humus Tahini Dip vegan` im manuellen Override anbietet.
 - Der Slice ergaenzt nur die vorhandene Vorschlags-Aliasliste und aendert keine UI-Struktur, Antwortspeicherung, Backend-Planung, Rezeptdatenmodelle, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.301 - 2026-05-26
+- Produktions-Rezeptmatching ist fuer den konkreten Umlaut-/ASCII-Fall `Gemuesepfanne`/`Gemüsepfanne` gehaertet: `tests/platform.test.ts` prueft, dass ein Angebotsbaustein `Gemuesepfanne` ein internes Rezept `Gemüsepfanne Zucchini Pilze Pak Choi vegan` waehlt.
+- Der Slice ergaenzt nur den bestehenden Alias-Korridor fuer diesen Compound-Dish in Repository-Kandidatensuche und Recipe-Discovery. Keine Aenderung an allgemeiner Gemueselogik, Planung, Rezeptdatenmodellen, API, Persistenz/Migration, UI, LLM, Echtdaten, Deployment, Auth oder Compliance.
