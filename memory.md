@@ -1532,3 +1532,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.315 - 2026-05-26
 - `ProductionRouteMainLayout` reicht Source- und Manual-Input jetzt als gebuendelte `ProductionInputPanel`-Objektprops durch, statt einzelne Eingabefelder und Setter erneut aufzusplitten.
 - Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Upload, Normalisierung, manueller Anlage, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.316 - 2026-05-26
+- Editor-State und Editor-Aktionen des Produktions-Rueckfragenpanels sind als `editorState` und `editorActions` gebuendelt und werden von `App.tsx` ueber `ProductionRouteMainLayout` an `ProductionQuestionPanel` weitergereicht.
+- Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Antwortbearbeitung, Speichern, Berechnung, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

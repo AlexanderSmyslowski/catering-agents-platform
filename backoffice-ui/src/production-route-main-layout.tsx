@@ -1,6 +1,5 @@
 import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
 import type { IntakeRequestDetail } from "./api.js";
-import type { ComponentEditState } from "./production-answer-types.js";
 import { ProductionHandoffPanel } from "./production-handoff-panel.js";
 import {
   ProductionInputPanel,
@@ -12,6 +11,10 @@ import {
 import { ProductionObjectsPanel } from "./production-objects-panel.js";
 import { ProductionPurchaseListPanel } from "./production-purchase-list-panel.js";
 import { ProductionQuestionPanel } from "./production-question-panel.js";
+import type {
+  ProductionQuestionEditorActions,
+  ProductionQuestionEditorState
+} from "./production-question-panel.js";
 import { ProductionRecipeLibraryPanel } from "./production-recipe-library-panel.js";
 import { ProductionConversationalWorkbench } from "./production-workbench.js";
 
@@ -55,27 +58,10 @@ type ProductionRouteMainLayoutProps = {
   workbenchSpecFacts: WorkbenchSpecFact[];
   intakeRequestDetailError?: string;
   intakeRequestDetail: IntakeRequestDetail | null;
-  editingSpecId?: string;
-  editingEventType: string;
-  editingEventDate: string;
-  editingAttendeeCount: string;
-  editingServiceForm: string;
-  editingMenuItems: string;
-  editingComponentStates: Record<string, ComponentEditState>;
-  hasFocusedSpecEditChanges: boolean;
-  recipes: Array<Record<string, unknown>>;
+  editorState: ProductionQuestionEditorState;
+  editorActions: ProductionQuestionEditorActions;
   filteredSpecs: Array<Record<string, unknown>>;
   productionWorkspaceCleared: boolean;
-  setEditingEventType: (value: string) => void;
-  setEditingEventDate: (value: string) => void;
-  setEditingAttendeeCount: (value: string) => void;
-  setEditingServiceForm: (value: string) => void;
-  setEditingMenuItems: (value: string) => void;
-  updateEditingComponentState: (componentId: string, patch: Partial<ComponentEditState>) => void;
-  beginSpecEdit: (spec: Record<string, unknown>) => void;
-  handleSaveSpecEdit: () => Promise<void>;
-  handleCreatePlan: (spec: Record<string, unknown>) => Promise<void>;
-  resetSpecEdit: (markDismissed?: boolean) => void;
   openSpecForQuestions: (specId: string) => void;
   planPhase: "idle" | "planning" | "done";
   planningSpecLabel?: string;
@@ -139,27 +125,10 @@ export function ProductionRouteMainLayout({
   workbenchSpecFacts,
   intakeRequestDetailError,
   intakeRequestDetail,
-  editingSpecId,
-  editingEventType,
-  editingEventDate,
-  editingAttendeeCount,
-  editingServiceForm,
-  editingMenuItems,
-  editingComponentStates,
-  hasFocusedSpecEditChanges,
-  recipes,
+  editorState,
+  editorActions,
   filteredSpecs,
   productionWorkspaceCleared,
-  setEditingEventType,
-  setEditingEventDate,
-  setEditingAttendeeCount,
-  setEditingServiceForm,
-  setEditingMenuItems,
-  updateEditingComponentState,
-  beginSpecEdit,
-  handleSaveSpecEdit,
-  handleCreatePlan,
-  resetSpecEdit,
   openSpecForQuestions,
   planPhase,
   planningSpecLabel,
@@ -227,28 +196,11 @@ export function ProductionRouteMainLayout({
           intakeRequestDetailError={intakeRequestDetailError}
           intakeRequestDetail={intakeRequestDetail}
           submitting={submitting}
-          editingSpecId={editingSpecId}
-          editingEventType={editingEventType}
-          editingEventDate={editingEventDate}
-          editingAttendeeCount={editingAttendeeCount}
-          editingServiceForm={editingServiceForm}
-          editingMenuItems={editingMenuItems}
-          editingComponentStates={editingComponentStates}
-          hasFocusedSpecEditChanges={hasFocusedSpecEditChanges}
-          recipes={recipes}
+          editorState={editorState}
+          editorActions={editorActions}
           filteredSpecs={filteredSpecs}
           documentPhase={sourceInput.documentPhase}
           productionWorkspaceCleared={productionWorkspaceCleared}
-          setEditingEventType={setEditingEventType}
-          setEditingEventDate={setEditingEventDate}
-          setEditingAttendeeCount={setEditingAttendeeCount}
-          setEditingServiceForm={setEditingServiceForm}
-          setEditingMenuItems={setEditingMenuItems}
-          updateEditingComponentState={updateEditingComponentState}
-          beginSpecEdit={beginSpecEdit}
-          saveSpecEdit={handleSaveSpecEdit}
-          createPlan={handleCreatePlan}
-          resetSpecEdit={resetSpecEdit}
           openSpecForQuestions={openSpecForQuestions}
         />
       </div>

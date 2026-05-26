@@ -10,6 +10,31 @@ import type { ComponentEditState } from "./production-answer-types.js";
 
 export { formatDocumentIngestionSummary } from "./production-intake-origin-card.js";
 
+export type ProductionQuestionEditorState = {
+  editingSpecId?: string;
+  editingEventType: string;
+  editingEventDate: string;
+  editingAttendeeCount: string;
+  editingServiceForm: string;
+  editingMenuItems: string;
+  editingComponentStates: Record<string, ComponentEditState>;
+  hasFocusedSpecEditChanges: boolean;
+  recipes: Array<Record<string, unknown>>;
+};
+
+export type ProductionQuestionEditorActions = {
+  setEditingEventType: (value: string) => void;
+  setEditingEventDate: (value: string) => void;
+  setEditingAttendeeCount: (value: string) => void;
+  setEditingServiceForm: (value: string) => void;
+  setEditingMenuItems: (value: string) => void;
+  updateEditingComponentState: (componentId: string, patch: Partial<ComponentEditState>) => void;
+  beginSpecEdit: (spec: Record<string, unknown>) => void;
+  saveSpecEdit: () => Promise<void>;
+  createPlan: (spec: Record<string, unknown>) => Promise<void>;
+  resetSpecEdit: (markDismissed?: boolean) => void;
+};
+
 type ProductionQuestionPanelProps = {
   focusedProductionSpec?: Record<string, unknown>;
   focusedSpecReadinessLabel: string;
@@ -23,28 +48,11 @@ type ProductionQuestionPanelProps = {
   intakeRequestDetailError?: string;
   intakeRequestDetail: IntakeRequestDetail | null;
   submitting: boolean;
-  editingSpecId?: string;
-  editingEventType: string;
-  editingEventDate: string;
-  editingAttendeeCount: string;
-  editingServiceForm: string;
-  editingMenuItems: string;
-  editingComponentStates: Record<string, ComponentEditState>;
-  hasFocusedSpecEditChanges: boolean;
-  recipes: Array<Record<string, unknown>>;
+  editorState: ProductionQuestionEditorState;
+  editorActions: ProductionQuestionEditorActions;
   filteredSpecs: Array<Record<string, unknown>>;
   documentPhase: "idle" | "analysing" | "done";
   productionWorkspaceCleared: boolean;
-  setEditingEventType: (value: string) => void;
-  setEditingEventDate: (value: string) => void;
-  setEditingAttendeeCount: (value: string) => void;
-  setEditingServiceForm: (value: string) => void;
-  setEditingMenuItems: (value: string) => void;
-  updateEditingComponentState: (componentId: string, patch: Partial<ComponentEditState>) => void;
-  beginSpecEdit: (spec: Record<string, unknown>) => void;
-  saveSpecEdit: () => Promise<void>;
-  createPlan: (spec: Record<string, unknown>) => Promise<void>;
-  resetSpecEdit: (markDismissed?: boolean) => void;
   openSpecForQuestions: (specId: string) => void;
 };
 
@@ -61,30 +69,37 @@ export function ProductionQuestionPanel({
   intakeRequestDetailError,
   intakeRequestDetail,
   submitting,
-  editingSpecId,
-  editingEventType,
-  editingEventDate,
-  editingAttendeeCount,
-  editingServiceForm,
-  editingMenuItems,
-  editingComponentStates,
-  hasFocusedSpecEditChanges,
-  recipes,
+  editorState,
+  editorActions,
   filteredSpecs,
   documentPhase,
   productionWorkspaceCleared,
-  setEditingEventType,
-  setEditingEventDate,
-  setEditingAttendeeCount,
-  setEditingServiceForm,
-  setEditingMenuItems,
-  updateEditingComponentState,
-  beginSpecEdit,
-  saveSpecEdit,
-  createPlan,
-  resetSpecEdit,
   openSpecForQuestions
 }: ProductionQuestionPanelProps) {
+  const {
+    editingSpecId,
+    editingEventType,
+    editingEventDate,
+    editingAttendeeCount,
+    editingServiceForm,
+    editingMenuItems,
+    editingComponentStates,
+    hasFocusedSpecEditChanges,
+    recipes
+  } = editorState;
+  const {
+    setEditingEventType,
+    setEditingEventDate,
+    setEditingAttendeeCount,
+    setEditingServiceForm,
+    setEditingMenuItems,
+    updateEditingComponentState,
+    beginSpecEdit,
+    saveSpecEdit,
+    createPlan,
+    resetSpecEdit
+  } = editorActions;
+
   return (
     <article className="panel form-panel question-panel production-step-card">
       <header>
