@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DATA_ROOT_FILE="${ROOT_DIR}/.runtime/local-stack/data-root.txt"
 
 stop_screen_session() {
   local session_name="$1"
@@ -56,5 +57,7 @@ stop_repo_processes "Intake" "${ROOT_DIR}/node_modules/.*intake-service/src/serv
 stop_repo_processes "Angebot" "${ROOT_DIR}/node_modules/.*offer-service/src/server.ts"
 stop_repo_processes "Produktion" "${ROOT_DIR}/node_modules/.*production-service/src/server.ts"
 stop_repo_processes "Export" "${ROOT_DIR}/node_modules/.*print-export/src/server.ts"
+
+rm -f "${DATA_ROOT_FILE}"
 
 echo "Lokaler Stack gestoppt."

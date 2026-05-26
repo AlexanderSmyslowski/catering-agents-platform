@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
+DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
 START_COMMAND="npm run local:start --seed-demo"
 
 required_sessions=(
@@ -102,7 +104,20 @@ for session_name in "${required_sessions[@]}"; do
   fi
 done
 
+recorded_data_root="$(cat "${DATA_ROOT_FILE}" 2>/dev/null || true)"
+requested_data_root="${CATERING_DATA_ROOT:-}"
+
+if [[ -n "${recorded_data_root}" && -n "${requested_data_root}" && "${recorded_data_root}" != "${requested_data_root}" ]]; then
+  echo "Lokaler Stack wurde mit anderer Datenwurzel gestartet: ${recorded_data_root}" >&2
+  echo "local:check bekam CATERING_DATA_ROOT=${requested_data_root}." >&2
+  echo "Bitte dieselbe Datenwurzel nutzen oder den Stack mit npm run local:stop kontrolliert neu starten." >&2
+  exit 1
+fi
+
+data_root="${requested_data_root:-${recorded_data_root:-${ROOT_DIR}/data}}"
+
 echo "Startweg vorhanden: ${START_COMMAND}"
+echo "Lokale Datenwurzel: ${data_root}"
 echo ""
 echo "Statuspruefung:"
 bash "${ROOT_DIR}/scripts/status-local-stack.sh"
@@ -165,7 +180,6 @@ if (( intake_spec_count > 8 || offer_draft_count > 4 || production_plan_count > 
   echo "local:check loescht oder archiviert keine lokalen Daten automatisch."
 fi
 
-data_root="${CATERING_DATA_ROOT:-${ROOT_DIR}/data}"
 instruction_like_report="$(instruction_like_purchase_item_report "${data_root}")"
 instruction_like_count="${instruction_like_report%%$'\n'*}"
 if [[ ! "${instruction_like_count}" =~ ^[0-9]+$ ]]; then
