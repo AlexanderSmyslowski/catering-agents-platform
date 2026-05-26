@@ -69,6 +69,7 @@ import {
   buildProductionQuestions,
   getSpecLabel
 } from "./production-language.js";
+import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import type { ComponentEditState } from "./production-answer-types.js";
 
 type AppRoute = "home" | "offer" | "production";
@@ -380,13 +381,6 @@ function compareNewestRecordsBy(key: string) {
     trailingNumericRank(right[key]) - trailingNumericRank(left[key]);
 }
 
-function estimatePlanningDurationMs(spec: Record<string, unknown>): number {
-  const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
-  const baseDuration = 4500;
-  const perComponent = menuPlan.length * 2200;
-  return Math.max(6000, Math.min(30000, baseDuration + perComponent));
-}
-
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
   const baseUrl = useMemo(() => getBaseUrl(), []);
@@ -431,12 +425,16 @@ export function App() {
   const [documentEtaSeconds, setDocumentEtaSeconds] = useState<number | undefined>();
   const [documentEstimatedDurationMs, setDocumentEstimatedDurationMs] = useState(0);
   const [documentStartedAt, setDocumentStartedAt] = useState<number | undefined>();
-  const [planPhase, setPlanPhase] = useState<"idle" | "planning" | "done">("idle");
-  const [planProgress, setPlanProgress] = useState(0);
-  const [planEtaSeconds, setPlanEtaSeconds] = useState<number | undefined>();
-  const [planEstimatedDurationMs, setPlanEstimatedDurationMs] = useState(0);
-  const [planStartedAt, setPlanStartedAt] = useState<number | undefined>();
-  const [planningSpecLabel, setPlanningSpecLabel] = useState<string>();
+  const {
+    planPhase,
+    planningSpecLabel,
+    planProgress,
+    planEtaSeconds,
+    resetPlanProgress,
+    startPlanProgress,
+    completePlanProgress,
+    failPlanProgress
+  } = useProductionPlanProgress();
   const [editingEventType, setEditingEventType] = useState("");
   const [editingEventDate, setEditingEventDate] = useState("");
   const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
@@ -901,24 +899,6 @@ export function App() {
     };
   }, [documentEstimatedDurationMs, documentPhase, documentStartedAt]);
 
-  useEffect(() => {
-    if (planPhase !== "planning" || !planStartedAt || planEstimatedDurationMs <= 0) {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      const elapsed = Date.now() - planStartedAt;
-      const ratio = Math.min(elapsed / planEstimatedDurationMs, 0.92);
-      const remainingMs = Math.max(planEstimatedDurationMs - elapsed, 700);
-      setPlanProgress(Math.max(12, Math.round(ratio * 100)));
-      setPlanEtaSeconds(Math.max(1, Math.ceil(remainingMs / 1000)));
-    }, 180);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [planEstimatedDurationMs, planPhase, planStartedAt]);
-
   function clearMessages() {
     setError(undefined);
     setNotice(undefined);
@@ -936,12 +916,7 @@ export function App() {
     setDocumentStartedAt(undefined);
     setFocusedProductionSpecId(undefined);
     setSelectedPlanId(undefined);
-    setPlanPhase("idle");
-    setPlanProgress(0);
-    setPlanEtaSeconds(undefined);
-    setPlanEstimatedDurationMs(0);
-    setPlanStartedAt(undefined);
-    setPlanningSpecLabel(undefined);
+    resetPlanProgress();
     setIntakeRequestDetail(null);
     setIntakeRequestDetailError(undefined);
     resetSpecEdit(false);
@@ -1132,13 +1107,7 @@ export function App() {
       }
 
       const specLabel = getSpecLabel(specForPlanning);
-      const estimatedDurationMs = estimatePlanningDurationMs(specForPlanning);
-      setPlanningSpecLabel(specLabel);
-      setPlanPhase("planning");
-      setPlanProgress(12);
-      setPlanEtaSeconds(Math.max(1, Math.ceil(estimatedDurationMs / 1000)));
-      setPlanEstimatedDurationMs(estimatedDurationMs);
-      setPlanStartedAt(Date.now());
+      startPlanProgress(specForPlanning, specLabel);
       setSelectedPlanId(undefined);
       setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
       const response = await createProductionPlan(specForPlanning);
@@ -1147,16 +1116,10 @@ export function App() {
         setSelectedPlanId(planId);
       }
       await refreshDashboard();
-      setPlanPhase("done");
-      setPlanProgress(100);
-      setPlanEtaSeconds(0);
+      completePlanProgress();
       setNotice("Produktionsplan wurde erzeugt.");
     } catch (submitError) {
-      setPlanPhase("idle");
-      setPlanProgress(0);
-      setPlanEtaSeconds(undefined);
-      setPlanEstimatedDurationMs(0);
-      setPlanStartedAt(undefined);
+      failPlanProgress();
       setError(
         submitError instanceof Error ? submitError.message : "Produktionsplan konnte nicht erstellt werden."
       );
