@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.297
+version: 5.298
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1460,3 +1460,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.297 - 2026-05-26
 - Produktionskern-Smokes sind gegen Einkaufslisten-Scheingruenheit gehaertet: `tests/platform.test.ts` prueft fuer Quick Lunch, Flying-Bites-Empfang und Kaffeepause, dass Einkaufslistenpositionen positive Mengen, Einheiten, Gruppen, Quellenanker und Mapping-Confidence tragen.
 - Der neue Test-Helfer schuetzt zugleich, dass typische Rezeptschritt-/Zubereitungswoerter nicht als Einkaufspositionen in die operativen Listen rutschen. Keine Aenderung an Planungslogik, Rezeptmatching, API, Persistenz/Migration, Datenmodell, UI, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.298 - 2026-05-26
+- Einkaufslisten-Smokes sind um fachliche Gruppierungsanker fuer klare Beschaffungsteile ergaenzt: `tests/platform.test.ts` prueft, dass `Kaffeefilter` als `beverages` und klare Baeckerei-/Fertigproduktpositionen wie `Baguette`, `Brot` und `Croissants` als `bakery` laufen.
+- Der Slice aendert keine Gruppierungslogik, sondern macht vorhandenes Verhalten fuer operative Einkaufslisten reproduzierbarer. Keine Aenderung an Planung, Rezeptmatching, API, Persistenz/Migration, Datenmodell, UI, LLM, Echtdaten, Deployment, Auth oder Compliance.
