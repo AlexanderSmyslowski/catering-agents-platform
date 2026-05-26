@@ -35,7 +35,7 @@ export type ProductionQuestionEditorActions = {
   resetSpecEdit: (markDismissed?: boolean) => void;
 };
 
-type ProductionQuestionPanelProps = {
+export type ProductionQuestionPanelState = {
   focusedProductionSpec?: Record<string, unknown>;
   focusedSpecReadinessLabel: string;
   selectedPlan?: Record<string, unknown>;
@@ -47,35 +47,47 @@ type ProductionQuestionPanelProps = {
   workbenchSpecFacts: WorkbenchSpecFact[];
   intakeRequestDetailError?: string;
   intakeRequestDetail: IntakeRequestDetail | null;
-  submitting: boolean;
-  editorState: ProductionQuestionEditorState;
-  editorActions: ProductionQuestionEditorActions;
   filteredSpecs: Array<Record<string, unknown>>;
   documentPhase: "idle" | "analysing" | "done";
   productionWorkspaceCleared: boolean;
+};
+
+export type ProductionQuestionPanelActions = {
   openSpecForQuestions: (specId: string) => void;
 };
 
+type ProductionQuestionPanelProps = {
+  questionState: ProductionQuestionPanelState;
+  questionActions: ProductionQuestionPanelActions;
+  submitting: boolean;
+  editorState: ProductionQuestionEditorState;
+  editorActions: ProductionQuestionEditorActions;
+};
+
 export function ProductionQuestionPanel({
-  focusedProductionSpec,
-  focusedSpecReadinessLabel,
-  selectedPlan,
-  selectedPlanReadinessLabel,
-  currentSpecPurchaseLists,
-  productionQuestions,
-  productionAssumptions,
-  productionConversationProjection,
-  workbenchSpecFacts,
-  intakeRequestDetailError,
-  intakeRequestDetail,
+  questionState,
+  questionActions,
   submitting,
   editorState,
-  editorActions,
-  filteredSpecs,
-  documentPhase,
-  productionWorkspaceCleared,
-  openSpecForQuestions
+  editorActions
 }: ProductionQuestionPanelProps) {
+  const {
+    focusedProductionSpec,
+    focusedSpecReadinessLabel,
+    selectedPlan,
+    selectedPlanReadinessLabel,
+    currentSpecPurchaseLists,
+    productionQuestions,
+    productionAssumptions,
+    productionConversationProjection,
+    workbenchSpecFacts,
+    intakeRequestDetailError,
+    intakeRequestDetail,
+    filteredSpecs,
+    documentPhase,
+    productionWorkspaceCleared
+  } = questionState;
+  const { openSpecForQuestions } = questionActions;
   const {
     editingSpecId,
     editingEventType,
