@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.284
+version: 5.285
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -78,6 +78,8 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Die vorhandenen UI-Flows `/`, `/angebot` und `/produktion` sind als Ist-Flow-Karte in `docs/product/UI_IST_FLOW_KARTE_CONVERSATIONAL_WORKBENCH.md` dokumentiert; die Karte ordnet Eingaben, Systemantworten, Klaerbedarf, Produktobjekte, Export-/Audit-Bezuege sowie spaetere Workbench- und Drive-Beruehrungen ein, ohne Implementierung oder neue API.
 - Das read-only Workbench-Zonenmapping `docs/product/UI_WORKBENCH_ZONE_MAPPING_READONLY.md` ordnet eine spaetere cleane Conversational Workbench den vorhandenen Zonen Quellen/Eingabe, verstandene Daten/Spec, Rueckfragen/Klaerung, Ergebnisobjekte, Export/Drive-Output und Audit/Herkunft/Freigabe zu; Ergebnisobjekte bleiben pruefbar und Drive folgt weiterhin der read-only-Import- bzw. explizit freigegebenen Output-Linie.
 - Die `/angebot`-Ansicht ist von der ueberladenen Dashboard-/Card-Projektion auf eine ultra-clean, Apple-like Conversational Workbench reduziert: zentrale Anfrage-/Angebots-Eingabeflaeche, ruhige Zusammenfassung und einklappbare Detailzonen fuer Entwurf, weitere Eingaben sowie operative Uebergabe/Audit; keine neue API, keine Persistenz, kein OAuth/Google/Chat.
+- Produktions-UI-Wartbarkeit ist weiter verbessert: Der zuvor grosse `production-question-panel.tsx` ist in kleinere Komponenten fuer strukturierten Antworteditor und Intake-Herkunftskarte aufgeteilt; Texte, Datenfluss und Rueckfragenverhalten bleiben unveraendert.
+- Backoffice-Browser-Smokes sind konsolenruhiger: Die statische Shell verweist auf `favicon.svg`, damit lokale Browser-Pruefungen nicht mehr durch einen `favicon.ico`-404 rauschen.
 - Fuer `/produktion` liegt der enge Strukturplan `docs/plans/production-workbench-structure.md` vor: empfohlen ist Option B, eine eigene `ProductionConversationalWorkbench` nach Angebotsmuster mit dominanter Leitfrage `Was braucht die Produktion als Naechstes?`, ruhiger Kontextzeile und progressiven Zonen fuer Rueckfragen, Produktionsplan, Einkauf, Rezept-/Mengenlogik sowie Audit/Uebergabe; keine neue Fachlogik, API, Persistenz, OAuth/Google oder Chat.
 - Die bestehende Rueckfragezone in `/produktion` ist als kleiner Step-3-Slice chataehnlicher: vorhandene `productionQuestions` erscheinen als Assistant-/Agent-Fragen im strukturierten Chatfluss, die bestehenden Antwortfelder erscheinen als Nutzerantwort-Bubble direkt im Chatfluss, und die UI markiert ausdruecklich, dass es kein freier LLM-Chat ist.
 - Als Step-4-Slice benennt `/produktion` nach den strukturierten Antworten nun einen klaren naechsten Agent-Schritt fuer Produktionsobjekte und Downloads: Produktionsplan, Rezepte/Objektuebersicht, Einkaufsliste und Downloads werden als vorhandene bzw. entstehende pruefbare Ergebniszone eingeordnet, ohne neue Generierungslogik, API oder Persistenz.
@@ -1401,5 +1403,9 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - `tests/backoffice-route-smoke.test.ts` schuetzt Quelle und aktive Spezifikation fuer einen Entwurf mit eigener proposed Spec. Keine Angebotslogik-, API-, Persistenz-, Produktions-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
 
 ### 5.284 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem verhaltensgleichen Rueckfragen-Panel-Schnitt verbessert: Der strukturierte Antworteditor liegt nun in `backoffice-ui/src/production-structured-answer-editor.tsx`, die Intake-Herkunftskarte mit gekuerzten Quellen-/Ingestion-Ankern in `backoffice-ui/src/production-intake-origin-card.tsx`.
+- `backoffice-ui/src/production-question-panel.tsx` bleibt als Komposition fuer Rueckfragen, ConversationSession-Projektion, Spezifikationsdetails und Vorgangswechsel bestehen und ist von 715 auf 369 Zeilen reduziert. `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/backoffice-route-smoke.test.ts` und `npm run build` bleiben gruen. Keine Text-, Verhalten-, Rueckfragenmodell-, Antwortspeicher-, Planungs-, Rezept-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.285 - 2026-05-26
 - Backoffice-Browser-Smokes sind konsolenruhiger: `backoffice-ui/index.html` verweist auf ein statisches `favicon.svg`, damit der Browser nicht mehr mit `favicon.ico` 404 rauscht.
 - `tests/backoffice-static-shell.test.ts` schuetzt den statischen Shell-Anker. Keine Route-, Produktlogik-, API-, Persistenz-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
