@@ -46,6 +46,43 @@ describe("production recipe suggestions", () => {
     ]);
   });
 
+  it("suggests internal recipes across common German-English catering aliases", () => {
+    expect(
+      recipeSuggestionsForComponent("KARTOFFELSALAT | DE LUX", [
+        {
+          recipeId: "recipe-potato-salad",
+          name: "Potato Salad with Herbs",
+          source: { reference: "internal/potato-salad.md" }
+        },
+        {
+          recipeId: "recipe-caesar-salad",
+          name: "Caesar Salad Buffet",
+          source: { reference: "internal/caesar-salad.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-potato-salad", name: "Potato Salad with Herbs" }]);
+
+    expect(
+      recipeSuggestionsForComponent("NUDELSALAT | FRISCHGEDOENS", [
+        {
+          recipeId: "recipe-pasta-salat",
+          name: "Pasta-Salat mit frischem Gemüse",
+          source: { reference: "internal/pasta-salat.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-pasta-salat", name: "Pasta-Salat mit frischem Gemüse" }]);
+
+    expect(
+      recipeSuggestionsForComponent("KALBSFRIKADELLEN | SCHMORZWIEBELN", [
+        {
+          recipeId: "recipe-veal-meatballs",
+          name: "Veal Meatballs with Braised Onions",
+          source: { reference: "internal/veal-meatballs.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-veal-meatballs", name: "Veal Meatballs with Braised Onions" }]);
+  });
+
   it("resolves selected recipe names while preserving recipe ids as fallback labels", () => {
     expect(resolveRecipeNameById("recipe-kalbsbuletten", recipes)).toBe("Kalbsbuletten mit Schmorzweibeln");
     expect(resolveRecipeNameById("missing", recipes)).toBeUndefined();

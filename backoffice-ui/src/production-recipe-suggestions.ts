@@ -3,7 +3,24 @@ export type RecipeSuggestion = {
   name: string;
 };
 
-const NON_RECIPE_SUGGESTION_TOKENS = new Set(["vegan", "classic", "klassisch", "vegetarian", "vegetarisch", "topping"]);
+const NON_RECIPE_SUGGESTION_TOKENS = new Set([
+  "vegan",
+  "classic",
+  "klassisch",
+  "vegetarian",
+  "vegetarisch",
+  "topping",
+  "salad"
+]);
+
+const RECIPE_SUGGESTION_TOKEN_EXPANSIONS: Record<string, string[]> = {
+  kartoffelsalat: ["potato"],
+  nudelsalat: ["pasta"],
+  kalbsbuletten: ["veal", "meatballs", "buletten"],
+  kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
+  buletten: ["meatballs"],
+  frikadellen: ["meatballs"]
+};
 
 function normalizeRecipeSuggestionText(value: string): string {
   return value
@@ -17,10 +34,20 @@ export function recipeSuggestionsForComponent(
   label: string,
   recipes: Array<Record<string, unknown>>
 ): RecipeSuggestion[] {
-  const tokens = normalizeRecipeSuggestionText(label)
+  const labelTokens = normalizeRecipeSuggestionText(label)
     .split(/[^a-z0-9]+/i)
     .filter((token) => token.length >= 4)
     .filter((token) => !NON_RECIPE_SUGGESTION_TOKENS.has(token));
+  const tokens = [
+    ...new Set(
+      labelTokens.flatMap((token) => [
+        token,
+        ...(RECIPE_SUGGESTION_TOKEN_EXPANSIONS[token] ?? []).filter(
+          (expandedToken) => !NON_RECIPE_SUGGESTION_TOKENS.has(expandedToken)
+        )
+      ])
+    )
+  ];
 
   return recipes
     .map((recipe) => {

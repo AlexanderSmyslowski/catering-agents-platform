@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.291
+version: 5.292
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1436,3 +1436,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.291 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Editor-Schnitt verbessert: `backoffice-ui/src/production-component-answer-list.tsx` rendert die Komponentenliste inklusive vorhandenem `menuPlan`-Guard und delegiert jede Karte weiter an `ProductionComponentAnswerCard`.
 - `backoffice-ui/src/production-structured-answer-editor.tsx` ist damit auf die Chat-Bubble und die Zusammensetzung von Basisdaten- und Komponenten-Antwortteilen reduziert. Keine Text-, Verhalten-, Antwortspeicher-, Planungs-, Rezeptlogik-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.292 - 2026-05-26
+- Produktions-UI-Rezeptauswahl ist mit einem kleinen Alias-Korridor konsistenter zum bestehenden Backend-Matching: Die UI-Vorschlagsliste fuer manuelle Rezeptzuweisung kennt nun konservative Catering-Aliase fuer `Kartoffelsalat -> Potato`, `Nudelsalat -> Pasta` sowie `Kalbsbuletten`/`Kalbsfrikadellen -> Veal Meatballs`.
+- `tests/production-recipe-suggestions.test.ts` schuetzt diese German-English-Aliasfaelle und verhindert, dass ein reines `Salad`-Signal als generischer Treffer reicht. Keine Aenderung an Backend-Planung, Rezeptbibliothek, Datenmodell, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
