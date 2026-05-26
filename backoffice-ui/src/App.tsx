@@ -69,6 +69,7 @@ import {
   buildProductionQuestions,
   getSpecLabel
 } from "./production-language.js";
+import { channelForFile } from "./production-document-channel.js";
 import { buildManualSpecInput } from "./production-manual-spec-input.js";
 import {
   normalizedSpecEditSnapshot,
@@ -296,17 +297,6 @@ function extractProductionPlanId(payload: Record<string, unknown>): string | und
   const plan = payload.productionPlan as Record<string, unknown> | undefined;
   const planId = plan?.planId;
   return typeof planId === "string" ? planId : undefined;
-}
-
-function channelForFile(file: File): IntakeDocumentChannel {
-  const lowerName = file.name.toLowerCase();
-  if (lowerName.endsWith(".eml")) {
-    return "email";
-  }
-  if (lowerName.endsWith(".pdf")) {
-    return "pdf_upload";
-  }
-  return "text";
 }
 
 function trailingNumericRank(value: unknown): number {
