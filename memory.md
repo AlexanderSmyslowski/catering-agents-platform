@@ -1560,3 +1560,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.322 - 2026-05-26
 - Rueckfragenpanel-Kontext und Vorgangswechsel-Aktion sind als `questionState` und `questionActions` gebuendelt; Editor-State und Editor-Aktionen bleiben separat.
 - Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Rueckfragenlogik, Antwortspeicherung, Finalitaets-/Readiness-Bewertung, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.323 - 2026-05-27
+- Produktionsroute-View-State wird in `backoffice-ui/src/production-route-view-state.ts` als reine Assembly-Funktion gebaut; `App.tsx` uebergibt die gebuendelten View-State-Objekte per Spread an `ProductionRouteMainLayout`.
+- `tests/production-route-view-state.test.ts` schuetzt die reine Feldzuordnung fuer Workbench, Rueckfragen, Objekte, Einkauf, Handoff und Rezeptbibliothek. Keine Aenderung an UI-Texten, Rueckfragenlogik, Antwortspeicherung, Planung, Rezeptmatching, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
