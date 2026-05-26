@@ -67,6 +67,10 @@ import {
   buildProductionQuestions,
   getSpecLabel
 } from "./production-language.js";
+import {
+  extractAcceptedSpecId,
+  extractProductionPlanId
+} from "./production-api-response-ids.js";
 import { channelForFile } from "./production-document-channel.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
@@ -279,18 +283,6 @@ function getRouteSubtitle(route: AppRoute): string {
     return "Ruhige Arbeitsfläche für Rezepte, Produktionspläne und Einkaufslisten.";
   }
   return "Zwei spezialisierte Arbeitsflächen mit gemeinsamem Regelkern und klar getrennten Zuständigkeiten.";
-}
-
-function extractAcceptedSpecId(payload: Record<string, unknown>): string | undefined {
-  const spec = payload.acceptedEventSpec as Record<string, unknown> | undefined;
-  const specId = spec?.specId;
-  return typeof specId === "string" ? specId : undefined;
-}
-
-function extractProductionPlanId(payload: Record<string, unknown>): string | undefined {
-  const plan = payload.productionPlan as Record<string, unknown> | undefined;
-  const planId = plan?.planId;
-  return typeof planId === "string" ? planId : undefined;
 }
 
 function trailingNumericRank(value: unknown): number {

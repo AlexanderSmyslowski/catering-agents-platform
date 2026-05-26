@@ -1524,3 +1524,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.313 - 2026-05-26
 - Produktions-Intake-Draft-State fuer Text, Datei, Dokumentkanal und Drag-Zustand ist in `backoffice-ui/src/use-production-intake-draft.ts` gekapselt.
 - `tests/use-production-intake-draft.test.ts` prueft bestehende Defaults, Datei-Start/Complete/Fail und Reset-Grenze. `App.tsx` behaelt Submit-Flows, Dokumentanalyse und API-Aufrufe. Keine Aenderung an UI-Texten, Upload-API, Normalisierung, Fehlupload-Archivierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.314 - 2026-05-26
+- ID-Extraktion aus Intake- und Produktionsplan-Antworten ist in `backoffice-ui/src/production-api-response-ids.ts` gekapselt und mit `tests/production-api-response-ids.test.ts` abgesichert.
+- `App.tsx` nutzt die Helfer weiter nur fuer Fokus-/Auswahlwechsel nach bestehenden API-Antworten. Keine Aenderung an UI-Texten, API-Endpunkten, Speichern, Upload, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
