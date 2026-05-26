@@ -79,6 +79,7 @@ export function ProductionInputPanel({
 }: ProductionInputPanelProps) {
   const clearWorkspaceDisabled = submitting || !sourceInput.canClearWorkspace;
   const archiveCurrentIntakeDisabled = submitting || !sourceInput.canArchiveCurrentIntake;
+  const submitDocumentDisabled = submitting || !sourceInput.intakeFile;
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
@@ -197,7 +198,7 @@ export function ProductionInputPanel({
           <option value="email">E-Mail</option>
           <option value="text">Textdatei</option>
         </select>
-        <button disabled={submitting} onClick={() => void sourceInputActions.submitDocument()}>
+        <button disabled={submitDocumentDisabled} onClick={() => void sourceInputActions.submitDocument()}>
           Erneut mit ausgewähltem Typ verarbeiten
         </button>
       </div>
