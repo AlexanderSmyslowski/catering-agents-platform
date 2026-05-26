@@ -1,5 +1,6 @@
 import type { ComponentEditState } from "./production-answer-types.js";
 import { ProductionComponentAnswerCard } from "./production-component-answer-card.js";
+import { ProductionEventAnswerFields } from "./production-event-answer-fields.js";
 
 type ProductionStructuredAnswerEditorProps = {
   focusedProductionSpec: Record<string, unknown>;
@@ -47,59 +48,18 @@ export function ProductionStructuredAnswerEditor({
             Diese Felder beantworten die Rückfragen strukturiert im bestehenden Spezifikationspfad; kein freier LLM-Chat.
           </p>
         </header>
-        <div className="answer-grid">
-          <label className="field-block">
-            <span>Veranstaltungstyp</span>
-            <select value={editingEventType} onChange={(event) => setEditingEventType(event.target.value)}>
-              <option value="">Bitte wählen</option>
-              <option value="meeting">Besprechung</option>
-              <option value="conference">Konferenz</option>
-              <option value="lunch">Lunch</option>
-              <option value="reception">Empfang</option>
-              <option value="dinner">Abendessen</option>
-              <option value="trade_fair">Messe</option>
-            </select>
-          </label>
-          <label className="field-block">
-            <span>Datum</span>
-            <input
-              value={editingEventDate}
-              onChange={(event) => setEditingEventDate(event.target.value)}
-              placeholder="2026-06-18"
-            />
-          </label>
-          <label className="field-block">
-            <span>Teilnehmerzahl</span>
-            <input
-              value={editingAttendeeCount}
-              onChange={(event) => setEditingAttendeeCount(event.target.value)}
-              inputMode="numeric"
-              placeholder="120"
-            />
-          </label>
-          <label className="field-block">
-            <span>Serviceform</span>
-            <select value={editingServiceForm} onChange={(event) => setEditingServiceForm(event.target.value)}>
-              <option value="">Bitte wählen</option>
-              <option value="buffet">Buffet</option>
-              <option value="plated">Menü am Platz</option>
-              <option value="standing_reception">Empfang / Flying</option>
-              <option value="grab_and_go">Ausgabe / Grab-and-go</option>
-              <option value="coffee_break">Kaffeepause</option>
-            </select>
-          </label>
-        </div>
-        <label className="field-block">
-          <span>Gerichte und Komponenten</span>
-          <textarea
-            value={editingMenuItems}
-            onChange={(event) => setEditingMenuItems(event.target.value)}
-            placeholder="Kalbsbuletten, Kartoffelsalat, Nudelsalat, Mandel-Curry, Schokoladenkuchen"
-          />
-        </label>
-        <p className="helper-text">
-          Mehrere Gerichte bitte durch Komma trennen. Diese Angaben aktualisieren direkt die operative Spezifikation.
-        </p>
+        <ProductionEventAnswerFields
+          editingEventType={editingEventType}
+          editingEventDate={editingEventDate}
+          editingAttendeeCount={editingAttendeeCount}
+          editingServiceForm={editingServiceForm}
+          editingMenuItems={editingMenuItems}
+          setEditingEventType={setEditingEventType}
+          setEditingEventDate={setEditingEventDate}
+          setEditingAttendeeCount={setEditingAttendeeCount}
+          setEditingServiceForm={setEditingServiceForm}
+          setEditingMenuItems={setEditingMenuItems}
+        />
         {Array.isArray(focusedProductionSpec.menuPlan) && focusedProductionSpec.menuPlan.length > 0 ? (
           <>
             <div className="divider" />
