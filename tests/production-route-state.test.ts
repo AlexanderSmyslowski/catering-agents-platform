@@ -16,6 +16,7 @@ import {
   formatStructuredProductionAnswerSummary,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
+  selectProductionArtifactSpecIds,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
   selectProductionIntakeRequestId,
@@ -479,6 +480,19 @@ describe("production route state", () => {
       })
     ).toBeUndefined();
     expect(selectProductionIntakeRequestId(undefined)).toBeUndefined();
+  });
+
+  it("selects unique production artifact spec ids from plans and purchase lists", () => {
+    expect(
+      selectProductionArtifactSpecIds([
+        { eventSpecId: "spec-a" },
+        { eventSpecId: "spec-b" },
+        { eventSpecId: "spec-a" },
+        { eventSpecId: "" },
+        { eventSpecId: undefined },
+        { other: "ignored" }
+      ])
+    ).toEqual(["spec-a", "spec-b"]);
   });
 
   it("builds workbench spec facts from the focused production spec", () => {

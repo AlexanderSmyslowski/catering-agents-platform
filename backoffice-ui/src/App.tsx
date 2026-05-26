@@ -33,6 +33,7 @@ import {
   formatProductionTimingWindow,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
+  selectProductionArtifactSpecIds,
   selectCurrentProductionItems,
   selectFocusedProductionSpec,
   selectProductionIntakeRequestId,
@@ -622,14 +623,7 @@ export function App() {
     filteredSpecs[filteredSpecs.length - 1] ?? dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1];
 
   const productionArtifactSpecIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          [...orderedPlans, ...orderedPurchaseLists]
-            .map((item) => String(item.eventSpecId ?? ""))
-            .filter(Boolean)
-        )
-      ),
+    () => selectProductionArtifactSpecIds([...orderedPlans, ...orderedPurchaseLists]),
     [orderedPlans, orderedPurchaseLists]
   );
 

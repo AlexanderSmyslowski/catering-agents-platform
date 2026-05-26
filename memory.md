@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.281
+version: 5.282
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1391,3 +1391,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.281 - 2026-05-26
 - Lokale Stack-Scripts sind fuer isolierte Frischlaeufe konsistenter: `local:start` zeichnet die wirksame `CATERING_DATA_ROOT` auf, `local:status` zeigt sie, `local:check` nutzt sie fuer Artefaktdiagnosen und blockiert abweichende Check-Env gegen einen laufenden Stack.
 - Damit bewertet `local:check` einen temp-Datenwurzel-Frischlauf nicht versehentlich gegen ignorierte Repo-Altlasten. `local:stop` entfernt die Aufzeichnung. Keine Service-API-, Persistenzmodell-, Datenmigrations-, Produktlogik-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.282 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Route-State-Refactor verbessert: `selectProductionArtifactSpecIds` sammelt die Spec-IDs vorhandener Produktionsartefakte aus Plaenen/Einkaufslisten statt diese Logik direkt in `App.tsx` zu halten.
+- `tests/production-route-state.test.ts` schuetzt Deduplizierung und leere Fallbacks. Keine Rendering-, Text-, Fokusverhaltens-, API-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
