@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.290
+version: 5.291
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1432,3 +1432,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.290 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Editor-Schnitt verbessert: `backoffice-ui/src/production-event-answer-fields.tsx` rendert die Basisdatenfelder fuer Veranstaltung, Datum, Pax, Serviceform und Komponenten-Textarea.
 - `backoffice-ui/src/production-structured-answer-editor.tsx` bleibt fuer Chat-Bubble, Komponentenlisten-Orchestrierung und Zusammensetzung der Antwortteile zustaendig. Keine Text-, Verhalten-, Antwortspeicher-, Planungs-, Rezeptlogik-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
+
+### 5.291 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Editor-Schnitt verbessert: `backoffice-ui/src/production-component-answer-list.tsx` rendert die Komponentenliste inklusive vorhandenem `menuPlan`-Guard und delegiert jede Karte weiter an `ProductionComponentAnswerCard`.
+- `backoffice-ui/src/production-structured-answer-editor.tsx` ist damit auf die Chat-Bubble und die Zusammensetzung von Basisdaten- und Komponenten-Antwortteilen reduziert. Keine Text-, Verhalten-, Antwortspeicher-, Planungs-, Rezeptlogik-, API-, Persistenz-/Migrations-, LLM-, Echtdaten-, Deployment-, Auth- oder Compliance-Aenderung.
