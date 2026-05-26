@@ -1488,3 +1488,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.304 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem verhaltensgleichen Fortschritts-Hook verbessert: `backoffice-ui/src/use-production-plan-progress.ts` kapselt Planphase, Prozent-/ETA-Timer, Start-, Done-, Fail- und Reset-Zustand fuer die Planerzeugung.
 - `App.tsx` orchestriert weiter Speichern, Planung und Dashboard-Refresh, enthaelt aber nicht mehr die interne Plan-Fortschritts-Timerlogik. Keine Aenderung an UI-Texten, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.305 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist analog fuer Dokumentanalyse verbessert: `backoffice-ui/src/use-production-document-progress.ts` kapselt aktiven Dokumentnamen, Analysephase, Prozent-/ETA-Timer, Start-, Done-, Fail- und Reset-Zustand.
+- `App.tsx` verarbeitet Uploads und Spezifikationsanlage weiter selbst, enthaelt aber nicht mehr die interne Dokument-Fortschritts-Timerlogik. Keine Aenderung an UI-Texten, APIs, Dokumentnormalisierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

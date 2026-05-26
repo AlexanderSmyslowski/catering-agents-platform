@@ -69,6 +69,7 @@ import {
   buildProductionQuestions,
   getSpecLabel
 } from "./production-language.js";
+import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import type { ComponentEditState } from "./production-answer-types.js";
 
@@ -365,12 +366,6 @@ function channelForFile(file: File): IntakeDocumentChannel {
   return "text";
 }
 
-function estimateProcessingDurationMs(file: File): number {
-  const fileSizeMb = file.size / (1024 * 1024);
-  const estimated = 3500 + fileSizeMb * 1800;
-  return Math.max(4000, Math.min(18000, Math.round(estimated)));
-}
-
 function trailingNumericRank(value: unknown): number {
   const match = String(value ?? "").match(/(\d{6,})$/);
   return match ? Number(match[1]) : 0;
@@ -419,12 +414,16 @@ export function App() {
   const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string>();
   const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [activeDocumentName, setActiveDocumentName] = useState<string>();
-  const [documentPhase, setDocumentPhase] = useState<"idle" | "analysing" | "done">("idle");
-  const [documentProgress, setDocumentProgress] = useState(0);
-  const [documentEtaSeconds, setDocumentEtaSeconds] = useState<number | undefined>();
-  const [documentEstimatedDurationMs, setDocumentEstimatedDurationMs] = useState(0);
-  const [documentStartedAt, setDocumentStartedAt] = useState<number | undefined>();
+  const {
+    activeDocumentName,
+    documentPhase,
+    documentProgress,
+    documentEtaSeconds,
+    resetDocumentProgress,
+    startDocumentProgress,
+    completeDocumentProgress,
+    failDocumentProgress
+  } = useProductionDocumentProgress();
   const {
     planPhase,
     planningSpecLabel,
@@ -881,24 +880,6 @@ export function App() {
     focusedProductionSpec
   ]);
 
-  useEffect(() => {
-    if (documentPhase !== "analysing" || !documentStartedAt || documentEstimatedDurationMs <= 0) {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      const elapsed = Date.now() - documentStartedAt;
-      const ratio = Math.min(elapsed / documentEstimatedDurationMs, 0.92);
-      const remainingMs = Math.max(documentEstimatedDurationMs - elapsed, 500);
-      setDocumentProgress(Math.max(8, Math.round(ratio * 100)));
-      setDocumentEtaSeconds(Math.max(1, Math.ceil(remainingMs / 1000)));
-    }, 180);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [documentEstimatedDurationMs, documentPhase, documentStartedAt]);
-
   function clearMessages() {
     setError(undefined);
     setNotice(undefined);
@@ -908,12 +889,7 @@ export function App() {
     setProductionWorkspaceCleared(true);
     setIntakeFile(null);
     setDragActive(false);
-    setActiveDocumentName(undefined);
-    setDocumentPhase("idle");
-    setDocumentProgress(0);
-    setDocumentEtaSeconds(undefined);
-    setDocumentEstimatedDurationMs(0);
-    setDocumentStartedAt(undefined);
+    resetDocumentProgress();
     setFocusedProductionSpecId(undefined);
     setSelectedPlanId(undefined);
     resetPlanProgress();
@@ -1009,18 +985,12 @@ export function App() {
   }
 
   async function processIncomingProductionFile(file: File, channel: IntakeDocumentChannel) {
-    const estimatedDurationMs = estimateProcessingDurationMs(file);
     setSubmitting(true);
     setProductionWorkspaceCleared(false);
     clearMessages();
     setIntakeFile(file);
     setIntakeChannel(channel);
-    setActiveDocumentName(file.name);
-    setDocumentPhase("analysing");
-    setDocumentProgress(8);
-    setDocumentEtaSeconds(Math.max(1, Math.ceil(estimatedDurationMs / 1000)));
-    setDocumentEstimatedDurationMs(estimatedDurationMs);
-    setDocumentStartedAt(Date.now());
+    startDocumentProgress(file);
     setNotice(`Dokument ${file.name} wird analysiert...`);
 
     try {
@@ -1031,18 +1001,12 @@ export function App() {
       }
       setIntakeFile(null);
       setDragActive(false);
-      setDocumentPhase("done");
-      setDocumentProgress(100);
-      setDocumentEtaSeconds(0);
+      completeDocumentProgress();
       await refreshDashboard();
       setNotice(`Dokument ${file.name} wurde übernommen und analysiert.`);
     } catch (submitError) {
       setIntakeFile(file);
-      setDocumentPhase("idle");
-      setDocumentProgress(0);
-      setDocumentEtaSeconds(undefined);
-      setDocumentEstimatedDurationMs(0);
-      setDocumentStartedAt(undefined);
+      failDocumentProgress();
       setError(
         submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
       );
