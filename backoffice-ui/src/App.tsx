@@ -1674,17 +1674,23 @@ export function App() {
           productionAuditTrailLabel={productionAuditTrailLabel}
           productionHandoffExportLabel={productionHandoffExportLabel}
           productionHandoffContextLabel={productionHandoffContextLabel}
-          recipeReviewStatusLabel={recipeReviewStatusLabel}
-          recipeUsageStatusLabel={recipeUsageStatusLabel}
-          recipeReviewCounts={recipeReviewCounts}
-          recipeCount={dashboard.recipes.length}
-          recipeName={recipeName}
-          recipeFile={recipeFile}
-          filteredRecipes={filteredRecipes}
-          setRecipeName={setRecipeName}
-          setRecipeFile={setRecipeFile}
-          handleRecipeUpload={handleRecipeUpload}
-          handleRecipeReview={handleRecipeReview}
+          recipeStatus={{
+            recipeReviewStatusLabel,
+            recipeUsageStatusLabel,
+            recipeReviewCounts,
+            recipeCount: dashboard.recipes.length
+          }}
+          recipeUpload={{
+            recipeName,
+            recipeFile
+          }}
+          recipeLibrary={{ filteredRecipes }}
+          recipeActions={{
+            setRecipeName,
+            setRecipeFile,
+            uploadRecipe: handleRecipeUpload,
+            reviewRecipe: handleRecipeReview
+          }}
         />
       ) : null}
 

@@ -20,14 +20,14 @@ import type {
   ProductionQuestionEditorActions,
   ProductionQuestionEditorState
 } from "./production-question-panel.js";
-import { ProductionRecipeLibraryPanel } from "./production-recipe-library-panel.js";
+import {
+  ProductionRecipeLibraryPanel,
+  type ProductionRecipeActions,
+  type ProductionRecipeLibraryState,
+  type ProductionRecipeStatusState,
+  type ProductionRecipeUploadState
+} from "./production-recipe-library-panel.js";
 import { ProductionConversationalWorkbench } from "./production-workbench.js";
-
-type RecipeReviewCounts = {
-  approved: number;
-  reviewRequired: number;
-  rejected: number;
-};
 
 type WorkbenchSpecFact = {
   label: string;
@@ -78,21 +78,10 @@ type ProductionRouteMainLayoutProps = {
   productionAuditTrailLabel: string;
   productionHandoffExportLabel: string;
   productionHandoffContextLabel?: string;
-  recipeReviewStatusLabel: string;
-  recipeUsageStatusLabel: string;
-  recipeReviewCounts: RecipeReviewCounts;
-  recipeCount: number;
-  recipeName: string;
-  recipeFile: File | null;
-  filteredRecipes: Array<Record<string, unknown>>;
-  setRecipeName: (value: string) => void;
-  setRecipeFile: (file: File | null) => void;
-  handleRecipeUpload: (target: "offer" | "production") => Promise<void>;
-  handleRecipeReview: (
-    target: "offer" | "production",
-    recipeId: string,
-    decision: "approve" | "verify" | "reject"
-  ) => Promise<void>;
+  recipeStatus: ProductionRecipeStatusState;
+  recipeUpload: ProductionRecipeUploadState;
+  recipeLibrary: ProductionRecipeLibraryState;
+  recipeActions: ProductionRecipeActions;
 };
 
 export function ProductionRouteMainLayout({
@@ -139,17 +128,10 @@ export function ProductionRouteMainLayout({
   productionAuditTrailLabel,
   productionHandoffExportLabel,
   productionHandoffContextLabel,
-  recipeReviewStatusLabel,
-  recipeUsageStatusLabel,
-  recipeReviewCounts,
-  recipeCount,
-  recipeName,
-  recipeFile,
-  filteredRecipes,
-  setRecipeName,
-  setRecipeFile,
-  handleRecipeUpload,
-  handleRecipeReview
+  recipeStatus,
+  recipeUpload,
+  recipeLibrary,
+  recipeActions
 }: ProductionRouteMainLayoutProps) {
   return (
     <ProductionConversationalWorkbench
@@ -222,18 +204,11 @@ export function ProductionRouteMainLayout({
         />
 
         <ProductionRecipeLibraryPanel
-          recipeReviewStatusLabel={recipeReviewStatusLabel}
-          recipeUsageStatusLabel={recipeUsageStatusLabel}
-          recipeReviewCounts={recipeReviewCounts}
-          recipeCount={recipeCount}
-          recipeName={recipeName}
-          recipeFile={recipeFile}
-          filteredRecipes={filteredRecipes}
+          statusState={recipeStatus}
+          uploadState={recipeUpload}
+          libraryState={recipeLibrary}
+          recipeActions={recipeActions}
           submitting={submitting}
-          setRecipeName={setRecipeName}
-          setRecipeFile={setRecipeFile}
-          uploadRecipe={handleRecipeUpload}
-          reviewRecipe={handleRecipeReview}
         />
       </div>
     </ProductionConversationalWorkbench>
