@@ -1673,10 +1673,12 @@ export function App() {
             specById,
             statusLabel: purchaseZoneStatusLabel
           }}
-          productionIntakeOriginLabel={productionIntakeOriginLabel}
-          productionAuditTrailLabel={productionAuditTrailLabel}
-          productionHandoffExportLabel={productionHandoffExportLabel}
-          productionHandoffContextLabel={productionHandoffContextLabel}
+          handoffState={{
+            intakeOriginLabel: productionIntakeOriginLabel,
+            auditTrailLabel: productionAuditTrailLabel,
+            exportLabel: productionHandoffExportLabel,
+            contextLabel: productionHandoffContextLabel
+          }}
           recipeStatus={{
             recipeReviewStatusLabel,
             recipeUsageStatusLabel,

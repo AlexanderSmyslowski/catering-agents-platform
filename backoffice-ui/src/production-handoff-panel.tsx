@@ -1,16 +1,19 @@
-type ProductionHandoffPanelProps = {
+export type ProductionHandoffState = {
   intakeOriginLabel: string;
   auditTrailLabel: string;
   exportLabel: string;
   contextLabel?: string;
 };
 
+type ProductionHandoffPanelProps = {
+  handoffState: ProductionHandoffState;
+};
+
 export function ProductionHandoffPanel({
-  intakeOriginLabel,
-  auditTrailLabel,
-  exportLabel,
-  contextLabel
+  handoffState
 }: ProductionHandoffPanelProps) {
+  const { intakeOriginLabel, auditTrailLabel, exportLabel, contextLabel } = handoffState;
+
   return (
     <article className="production-handoff-zone" aria-label="Herkunft und Übergabe">
       <header>

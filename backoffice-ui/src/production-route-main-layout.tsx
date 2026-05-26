@@ -1,6 +1,9 @@
 import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
 import type { IntakeRequestDetail } from "./api.js";
-import { ProductionHandoffPanel } from "./production-handoff-panel.js";
+import {
+  ProductionHandoffPanel,
+  type ProductionHandoffState
+} from "./production-handoff-panel.js";
 import {
   ProductionInputPanel,
   type ProductionManualInputActions,
@@ -75,10 +78,7 @@ type ProductionRouteMainLayoutProps = {
   objectPanelState: ProductionObjectsState;
   objectPanelActions: ProductionObjectsActions;
   purchaseListState: ProductionPurchaseListState;
-  productionIntakeOriginLabel: string;
-  productionAuditTrailLabel: string;
-  productionHandoffExportLabel: string;
-  productionHandoffContextLabel?: string;
+  handoffState: ProductionHandoffState;
   recipeStatus: ProductionRecipeStatusState;
   recipeUpload: ProductionRecipeUploadState;
   recipeLibrary: ProductionRecipeLibraryState;
@@ -123,10 +123,7 @@ export function ProductionRouteMainLayout({
   objectPanelState,
   objectPanelActions,
   purchaseListState,
-  productionIntakeOriginLabel,
-  productionAuditTrailLabel,
-  productionHandoffExportLabel,
-  productionHandoffContextLabel,
+  handoffState,
   recipeStatus,
   recipeUpload,
   recipeLibrary,
@@ -190,12 +187,7 @@ export function ProductionRouteMainLayout({
         <ProductionPurchaseListPanel purchaseListState={purchaseListState} />
       </div>
       <div className="production-column">
-        <ProductionHandoffPanel
-          intakeOriginLabel={productionIntakeOriginLabel}
-          auditTrailLabel={productionAuditTrailLabel}
-          exportLabel={productionHandoffExportLabel}
-          contextLabel={productionHandoffContextLabel}
-        />
+        <ProductionHandoffPanel handoffState={handoffState} />
 
         <ProductionRecipeLibraryPanel
           statusState={recipeStatus}
