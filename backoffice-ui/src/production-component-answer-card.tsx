@@ -1,5 +1,6 @@
 import type { ComponentEditState } from "./production-answer-types.js";
 import { ProductionComponentClassificationFields } from "./production-component-classification-fields.js";
+import { ProductionComponentDetailFields } from "./production-component-detail-fields.js";
 import { ProductionRecipeOverrideSelect } from "./production-recipe-override-select.js";
 
 type ProductionComponentAnswerCardProps = {
@@ -44,30 +45,20 @@ export function ProductionComponentAnswerCard({
           })
         }
       />
-      <label className="field-block">
-        <span>Zugekaufte Bestandteile</span>
-        <input
-          value={state.purchasedElements}
-          onChange={(event) =>
-            updateEditingComponentState(componentId, {
-              purchasedElements: event.target.value
-            })
-          }
-          placeholder="z. B. Teig, Blätterteig, fertiger Boden, Saucenbasis"
-        />
-      </label>
-      <label className="field-block">
-        <span>Interne Notiz</span>
-        <input
-          value={state.notes}
-          onChange={(event) =>
-            updateEditingComponentState(componentId, {
-              notes: event.target.value
-            })
-          }
-          placeholder="optional"
-        />
-      </label>
+      <ProductionComponentDetailFields
+        purchasedElements={state.purchasedElements}
+        notes={state.notes}
+        onPurchasedElementsChange={(purchasedElements) =>
+          updateEditingComponentState(componentId, {
+            purchasedElements
+          })
+        }
+        onNotesChange={(notes) =>
+          updateEditingComponentState(componentId, {
+            notes
+          })
+        }
+      />
     </article>
   );
 }
