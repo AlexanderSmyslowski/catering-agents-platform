@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.294
+version: 5.295
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1448,3 +1448,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.294 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Karten-Schnitt verbessert: `backoffice-ui/src/production-recipe-override-select.tsx` rendert den gezielten Rezept-Override-Select inklusive vorhandener Vorschlags-/Fallback-Hilfetexte.
 - `ProductionComponentAnswerCard` delegiert die Rezeptauswahl nun an diese Komponente und bleibt fuer Kategorie, Herstellungsart, Zukauf und Notiz zustaendig. Keine Aenderung an Vorschlagslogik, Antwortspeicherung, Backend-Planung, Rezeptbibliothek, Datenmodell, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.295 - 2026-05-26
+- Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Karten-Schnitt verbessert: `backoffice-ui/src/production-component-classification-fields.tsx` rendert Kategorie- und Herstellungsart-Selects getrennt von der Komponentenkarte.
+- `tests/production-component-classification-fields.test.ts` schuetzt, dass Kategorie und Herstellungsart weiterhin als getrennte Editor-State-Patches weitergegeben werden. Keine Aenderung an Rezeptvorschlaegen, Antwortspeicherung, Backend-Planung, Rezeptbibliothek, Datenmodell, API, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
