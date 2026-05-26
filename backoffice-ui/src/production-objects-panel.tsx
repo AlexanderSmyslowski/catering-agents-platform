@@ -4,11 +4,14 @@ import { ProductionPlanDownloadCard } from "./production-plan-download-card.js";
 import { ProductionPlanList } from "./production-plan-list.js";
 import { ProductionPlanSecondaryDetails } from "./production-plan-secondary-details.js";
 
-type ProductionObjectsPanelProps = {
+export type ProductionPlanProgressState = {
   planPhase: "idle" | "planning" | "done";
   planningSpecLabel?: string;
   planProgress: number;
   planEtaSeconds?: number;
+};
+
+export type ProductionObjectsState = {
   focusedProductionSpec?: Record<string, unknown>;
   productionWorkspaceCleared: boolean;
   currentSpecPlans: Array<Record<string, unknown>>;
@@ -17,8 +20,17 @@ type ProductionObjectsPanelProps = {
   selectedPlanComponentsById: Map<string, Record<string, unknown>>;
   archivedPlans: Array<Record<string, unknown>>;
   specById: Map<string, Record<string, unknown>>;
-  submitting: boolean;
+};
+
+export type ProductionObjectsActions = {
   setSelectedPlanId: (planId: string) => void;
+};
+
+type ProductionObjectsPanelProps = {
+  progressState: ProductionPlanProgressState;
+  objectsState: ProductionObjectsState;
+  objectsActions: ProductionObjectsActions;
+  submitting: boolean;
 };
 
 function formatEta(seconds: number): string {
@@ -29,21 +41,24 @@ function formatEta(seconds: number): string {
 }
 
 export function ProductionObjectsPanel({
-  planPhase,
-  planningSpecLabel,
-  planProgress,
-  planEtaSeconds,
-  focusedProductionSpec,
-  productionWorkspaceCleared,
-  currentSpecPlans,
-  selectedPlan,
-  selectedPlanSpec,
-  selectedPlanComponentsById,
-  archivedPlans,
-  specById,
-  submitting,
-  setSelectedPlanId
+  progressState,
+  objectsState,
+  objectsActions,
+  submitting
 }: ProductionObjectsPanelProps) {
+  const { planPhase, planningSpecLabel, planProgress, planEtaSeconds } = progressState;
+  const {
+    focusedProductionSpec,
+    productionWorkspaceCleared,
+    currentSpecPlans,
+    selectedPlan,
+    selectedPlanSpec,
+    selectedPlanComponentsById,
+    archivedPlans,
+    specById
+  } = objectsState;
+  const { setSelectedPlanId } = objectsActions;
+
   return (
     <article className="panel production-step-card">
       <header>
