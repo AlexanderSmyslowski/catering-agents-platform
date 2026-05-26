@@ -83,6 +83,28 @@ describe("production recipe suggestions", () => {
     ).toEqual([{ recipeId: "recipe-veal-meatballs", name: "Veal Meatballs with Braised Onions" }]);
   });
 
+  it("suggests internal coffee-break recipes across common German-English catering aliases", () => {
+    expect(
+      recipeSuggestionsForComponent("Mini-Muffins Blaubeere", [
+        {
+          recipeId: "recipe-blueberry-mini-muffins",
+          name: "Blueberry Mini Muffins",
+          source: { reference: "internal/blueberry-mini-muffins.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-blueberry-mini-muffins", name: "Blueberry Mini Muffins" }]);
+
+    expect(
+      recipeSuggestionsForComponent("Obstspiesse vegan", [
+        {
+          recipeId: "recipe-fruit-skewers",
+          name: "Fruit Skewers vegan",
+          source: { reference: "internal/fruit-skewers.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-fruit-skewers", name: "Fruit Skewers vegan" }]);
+  });
+
   it("suggests Hummus offer wording for internal Humus recipe spelling variants", () => {
     expect(
       recipeSuggestionsForComponent("Hummus vegan", [
