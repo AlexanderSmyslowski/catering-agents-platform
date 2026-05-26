@@ -69,16 +69,9 @@ import {
   buildProductionQuestions,
   getSpecLabel
 } from "./production-language.js";
+import type { ComponentEditState } from "./production-answer-types.js";
 
 type AppRoute = "home" | "offer" | "production";
-
-type ComponentEditState = {
-  menuCategory: string;
-  productionMode: string;
-  purchasedElements: string;
-  recipeOverrideId: string;
-  notes: string;
-};
 
 type SpecEditSnapshot = {
   eventType: string;

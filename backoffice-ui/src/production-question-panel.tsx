@@ -6,7 +6,7 @@ import { ProductionSpecDetailsCard } from "./production-spec-details.js";
 import { ProductionQuestionThread } from "./production-question-thread.js";
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
-import type { ComponentEditState } from "./production-structured-answer-editor.js";
+import type { ComponentEditState } from "./production-answer-types.js";
 
 export { formatDocumentIngestionSummary } from "./production-intake-origin-card.js";
 

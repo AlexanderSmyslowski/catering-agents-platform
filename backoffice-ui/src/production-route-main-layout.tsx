@@ -1,6 +1,7 @@
 import type { ChangeEvent, DragEvent } from "react";
 import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
 import type { IntakeDocumentChannel, IntakeRequestDetail } from "./api.js";
+import type { ComponentEditState } from "./production-answer-types.js";
 import { ProductionHandoffPanel } from "./production-handoff-panel.js";
 import { ProductionInputPanel } from "./production-input-panel.js";
 import { ProductionObjectsPanel } from "./production-objects-panel.js";
@@ -8,14 +9,6 @@ import { ProductionPurchaseListPanel } from "./production-purchase-list-panel.js
 import { ProductionQuestionPanel } from "./production-question-panel.js";
 import { ProductionRecipeLibraryPanel } from "./production-recipe-library-panel.js";
 import { ProductionConversationalWorkbench } from "./production-workbench.js";
-
-type ComponentEditState = {
-  menuCategory: string;
-  productionMode: string;
-  purchasedElements: string;
-  recipeOverrideId: string;
-  notes: string;
-};
 
 type RecipeReviewCounts = {
   approved: number;
