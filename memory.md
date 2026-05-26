@@ -1528,3 +1528,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.314 - 2026-05-26
 - ID-Extraktion aus Intake- und Produktionsplan-Antworten ist in `backoffice-ui/src/production-api-response-ids.ts` gekapselt und mit `tests/production-api-response-ids.test.ts` abgesichert.
 - `App.tsx` nutzt die Helfer weiter nur fuer Fokus-/Auswahlwechsel nach bestehenden API-Antworten. Keine Aenderung an UI-Texten, API-Endpunkten, Speichern, Upload, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.315 - 2026-05-26
+- `ProductionRouteMainLayout` reicht Source- und Manual-Input jetzt als gebuendelte `ProductionInputPanel`-Objektprops durch, statt einzelne Eingabefelder und Setter erneut aufzusplitten.
+- Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Upload, Normalisierung, manueller Anlage, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

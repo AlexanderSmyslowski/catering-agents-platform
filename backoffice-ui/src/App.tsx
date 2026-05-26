@@ -1564,44 +1564,52 @@ export function App() {
           productionObjectStatusLabel={productionObjectStatusLabel}
           purchaseListCount={currentSpecPurchaseLists.length}
           submitting={submitting}
-          dragActive={dragActive}
-          intakeFile={intakeFile}
-          intakeChannel={intakeChannel}
-          documentPhase={documentPhase}
-          activeDocumentName={activeDocumentName}
-          documentProgress={documentProgress}
-          documentEtaSeconds={documentEtaSeconds}
-          intakeText={intakeText}
-          canClearProductionWorkspace={canClearProductionWorkspace}
-          canArchiveCurrentIntake={canArchiveCurrentIntake}
-          productionUploadInputRef={productionUploadInputRef}
-          setDragActive={setDragActive}
-          setIntakeChannel={setIntakeChannel}
-          setIntakeText={setIntakeText}
-          openProductionFilePicker={openProductionFilePicker}
-          clearProductionWorkspace={clearProductionWorkspace}
-          archiveCurrentIntake={handleArchiveCurrentIntake}
-          handleProductionDrop={handleProductionDrop}
-          handleProductionFileSelection={handleProductionFileSelection}
-          handleIntakeDocumentSubmit={handleIntakeDocumentSubmit}
-          handleIntakeSubmit={handleIntakeSubmit}
-          manualEventType={manualEventType}
-          manualEventDate={manualEventDate}
-          manualAttendeeCount={manualAttendeeCount}
-          manualServiceForm={manualServiceForm}
-          manualMenuItems={manualMenuItems}
-          manualCustomerName={manualCustomerName}
-          manualVenueName={manualVenueName}
-          manualNotes={manualNotes}
-          setManualEventType={setManualEventType}
-          setManualEventDate={setManualEventDate}
-          setManualAttendeeCount={setManualAttendeeCount}
-          setManualServiceForm={setManualServiceForm}
-          setManualMenuItems={setManualMenuItems}
-          setManualCustomerName={setManualCustomerName}
-          setManualVenueName={setManualVenueName}
-          setManualNotes={setManualNotes}
-          handleManualSpecSubmit={handleManualSpecSubmit}
+          sourceInput={{
+            dragActive,
+            intakeFile,
+            intakeChannel,
+            documentPhase,
+            activeDocumentName,
+            documentProgress,
+            documentEtaSeconds,
+            intakeText,
+            canClearWorkspace: canClearProductionWorkspace,
+            canArchiveCurrentIntake
+          }}
+          sourceInputActions={{
+            uploadInputRef: productionUploadInputRef,
+            setDragActive,
+            setIntakeChannel,
+            setIntakeText,
+            openFilePicker: openProductionFilePicker,
+            clearWorkspace: clearProductionWorkspace,
+            archiveCurrentIntake: handleArchiveCurrentIntake,
+            handleDrop: handleProductionDrop,
+            handleFileSelection: handleProductionFileSelection,
+            submitDocument: handleIntakeDocumentSubmit,
+            submitText: handleIntakeSubmit
+          }}
+          manualInput={{
+            eventType: manualEventType,
+            eventDate: manualEventDate,
+            attendeeCount: manualAttendeeCount,
+            serviceForm: manualServiceForm,
+            menuItems: manualMenuItems,
+            customerName: manualCustomerName,
+            venueName: manualVenueName,
+            notes: manualNotes
+          }}
+          manualInputActions={{
+            setEventType: setManualEventType,
+            setEventDate: setManualEventDate,
+            setAttendeeCount: setManualAttendeeCount,
+            setServiceForm: setManualServiceForm,
+            setMenuItems: setManualMenuItems,
+            setCustomerName: setManualCustomerName,
+            setVenueName: setManualVenueName,
+            setNotes: setManualNotes,
+            submitManualSpec: handleManualSpecSubmit
+          }}
           focusedProductionSpec={focusedProductionSpec}
           focusedSpecReadinessLabel={focusedSpecReadinessLabel}
           selectedPlan={selectedPlan}
