@@ -1504,3 +1504,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.308 - 2026-05-26
 - Manuelle Produktionsspezifikations-Payloads sind als reine Funktion in `backoffice-ui/src/production-manual-spec-input.ts` gekapselt und mit `tests/production-manual-spec-input.test.ts` gegen Trimming, Listenaufteilung und leere optionale Felder abgesichert.
 - `App.tsx` behaelt Formularzustand, Anlage, Fokusauswahl und Nutzerfeedback. Keine Aenderung an UI-Texten, Formularfeldern, API-Endpunkten, Backend-Validierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.309 - 2026-05-26
+- Produktions-Dokumentkanal-Erkennung ist aus `App.tsx` nach `backoffice-ui/src/production-document-channel.ts` extrahiert und mit `tests/production-document-channel.test.ts` fuer PDF, E-Mail und Text-Fallback abgesichert.
+- Der Upload-Flow selbst bleibt unveraendert. Keine Aenderung an Normalisierung, Fehlupload-Archivierung, APIs, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
