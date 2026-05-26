@@ -1548,3 +1548,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.319 - 2026-05-26
 - Einkaufslisten-Zustand des Produktions-Downloadbereichs ist als `purchaseListState` gebuendelt und wird von `App.tsx` ueber `ProductionRouteMainLayout` an `ProductionPurchaseListPanel` weitergereicht.
 - Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Einkaufslistenberechnung, Exportlinks, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.320 - 2026-05-26
+- Herkunfts-, Audit-, Export- und Abschlusskontext-Labels der Produktions-Handoff-Zone sind als `handoffState` gebuendelt und werden von `App.tsx` ueber `ProductionRouteMainLayout` an `ProductionHandoffPanel` weitergereicht.
+- Die Aenderung ist reine Prop-Struktur innerhalb der UI. Keine Aenderung an UI-Texten, Exportartefakten, Audit-Aussagen, API-Endpunkten, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
