@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.287
+version: 5.288
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -81,6 +81,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - Produktions-UI-Wartbarkeit ist weiter verbessert: Der zuvor grosse `production-question-panel.tsx` ist in kleinere Komponenten fuer strukturierten Antworteditor und Intake-Herkunftskarte aufgeteilt; Texte, Datenfluss und Rueckfragenverhalten bleiben unveraendert.
 - Produktions-UI-Wartbarkeit ist mit einem weiteren kleinen Schnitt verbessert: Die read-only Rueckfragen-/ConversationSession-/Ergebnisstatus-Komposition liegt nun in `production-question-thread.tsx`; das Panel bleibt fuer Aktionen und Kontextkarten zustaendig.
 - Produktions-UI-Testbarkeit ist weiter verbessert: Die Rezeptvorschlags-Heuristik des strukturierten Antworteditors liegt als pure Helper in `production-recipe-suggestions.ts`.
+- Die Rezeptauswahl-Optionen inklusive manuell gewaehltem Override werden ebenfalls im Helper gebaut und fokussiert getestet.
 - Backoffice-Browser-Smokes sind konsolenruhiger: Die statische Shell verweist auf `favicon.svg`, damit lokale Browser-Pruefungen nicht mehr durch einen `favicon.ico`-404 rauschen.
 - Fuer `/produktion` liegt der enge Strukturplan `docs/plans/production-workbench-structure.md` vor: empfohlen ist Option B, eine eigene `ProductionConversationalWorkbench` nach Angebotsmuster mit dominanter Leitfrage `Was braucht die Produktion als Naechstes?`, ruhiger Kontextzeile und progressiven Zonen fuer Rueckfragen, Produktionsplan, Einkauf, Rezept-/Mengenlogik sowie Audit/Uebergabe; keine neue Fachlogik, API, Persistenz, OAuth/Google oder Chat.
 - Die bestehende Rueckfragezone in `/produktion` ist als kleiner Step-3-Slice chataehnlicher: vorhandene `productionQuestions` erscheinen als Assistant-/Agent-Fragen im strukturierten Chatfluss, die bestehenden Antwortfelder erscheinen als Nutzerantwort-Bubble direkt im Chatfluss, und die UI markiert ausdruecklich, dass es kein freier LLM-Chat ist.
@@ -1419,3 +1420,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.287 - 2026-05-26
 - Produktions-UI-Testbarkeit ist mit einem verhaltensgleichen Helper-Schnitt verbessert: Die Rezeptvorschlagslogik aus dem strukturierten Antworteditor liegt nun in `backoffice-ui/src/production-recipe-suggestions.ts`.
 - `tests/production-recipe-suggestions.test.ts` schuetzt Tokenfilter, Score-Sortierung, Normalisierung und Rezeptnamen-Fallbacks. Keine Aenderung an Rezeptbibliothek, Rezeptmatching-Fachlogik, Planung, Einkaufsliste, API, Persistenz, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.288 - 2026-05-26
+- Produktions-UI-Testbarkeit ist mit einem zweiten verhaltensgleichen Rezeptauswahl-Helper-Schnitt verbessert: `buildRecipeOptionsForComponent` baut Vorschlaege plus manuell gewaehltes Rezept-Override ausserhalb des JSX.
+- `tests/production-recipe-suggestions.test.ts` schuetzt, dass ausgewaehlte Overrides sichtbar bleiben, unbekannte Overrides mit `Rezept ...` gelabelt werden und passende Overrides nicht doppelt erscheinen. Keine Aenderung an Rezeptbibliothek, Rezeptmatching-Fachlogik, Planung, Einkaufsliste, API, Persistenz, LLM, Echtdaten, Deployment, Auth oder Compliance.

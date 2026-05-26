@@ -51,3 +51,24 @@ export function resolveRecipeNameById(recipeId: string, recipes: Array<Record<st
   const recipeName = String(match.name ?? "").trim();
   return recipeName || recipeId;
 }
+
+export function buildRecipeOptionsForComponent({
+  componentLabel,
+  recipes,
+  selectedRecipeId
+}: {
+  componentLabel: string;
+  recipes: Array<Record<string, unknown>>;
+  selectedRecipeId?: string;
+}): RecipeSuggestion[] {
+  const recipeOptions = [...recipeSuggestionsForComponent(componentLabel, recipes)];
+
+  if (selectedRecipeId && !recipeOptions.some((item) => item.recipeId === selectedRecipeId)) {
+    recipeOptions.unshift({
+      recipeId: selectedRecipeId,
+      name: resolveRecipeNameById(selectedRecipeId, recipes) ?? `Rezept ${selectedRecipeId}`
+    });
+  }
+
+  return recipeOptions;
+}
