@@ -1464,3 +1464,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.298 - 2026-05-26
 - Einkaufslisten-Smokes sind um fachliche Gruppierungsanker fuer klare Beschaffungsteile ergaenzt: `tests/platform.test.ts` prueft, dass `Kaffeefilter` als `beverages` und klare Baeckerei-/Fertigproduktpositionen wie `Baguette`, `Brot` und `Croissants` als `bakery` laufen.
 - Der Slice aendert keine Gruppierungslogik, sondern macht vorhandenes Verhalten fuer operative Einkaufslisten reproduzierbarer. Keine Aenderung an Planung, Rezeptmatching, API, Persistenz/Migration, Datenmodell, UI, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.299 - 2026-05-26
+- Produktions-Rezeptmatching ist fuer die haeufige Schreibvariante `Hummus`/`Humus` gehaertet: `tests/platform.test.ts` prueft, dass ein Angebotsbaustein `Hummus` ein internes Rezept `Humus Tahini Dip vegan` statt eines ungeklaerten oder externen Treffers waehlt.
+- Der Slice ergaenzt nur den bestehenden Alias-Korridor in Repository-Kandidatensuche und Recipe-Discovery und aendert keine Planungslogik, Rezeptdatenmodelle, API, Persistenz/Migration, UI, LLM, Echtdaten, Deployment, Auth oder Compliance.
