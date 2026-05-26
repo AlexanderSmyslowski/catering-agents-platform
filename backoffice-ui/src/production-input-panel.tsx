@@ -5,7 +5,7 @@ import {
 } from "react";
 import type { IntakeDocumentChannel } from "./api.js";
 
-type ProductionManualInputValues = {
+export type ProductionManualInputValues = {
   eventType: string;
   eventDate: string;
   attendeeCount: string;
@@ -16,7 +16,7 @@ type ProductionManualInputValues = {
   notes: string;
 };
 
-type ProductionManualInputActions = {
+export type ProductionManualInputActions = {
   setEventType: (value: string) => void;
   setEventDate: (value: string) => void;
   setAttendeeCount: (value: string) => void;
@@ -28,7 +28,7 @@ type ProductionManualInputActions = {
   submitManualSpec: () => Promise<void>;
 };
 
-type ProductionSourceInputValues = {
+export type ProductionSourceInputValues = {
   dragActive: boolean;
   intakeFile: File | null;
   intakeChannel: IntakeDocumentChannel;
@@ -41,7 +41,7 @@ type ProductionSourceInputValues = {
   canArchiveCurrentIntake: boolean;
 };
 
-type ProductionSourceInputActions = {
+export type ProductionSourceInputActions = {
   uploadInputRef: { current: HTMLInputElement | null };
   setDragActive: (active: boolean) => void;
   setIntakeChannel: (channel: IntakeDocumentChannel) => void;

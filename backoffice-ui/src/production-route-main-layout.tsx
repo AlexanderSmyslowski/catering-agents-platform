@@ -1,9 +1,14 @@
-import type { ChangeEvent, DragEvent } from "react";
 import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
-import type { IntakeDocumentChannel, IntakeRequestDetail } from "./api.js";
+import type { IntakeRequestDetail } from "./api.js";
 import type { ComponentEditState } from "./production-answer-types.js";
 import { ProductionHandoffPanel } from "./production-handoff-panel.js";
-import { ProductionInputPanel } from "./production-input-panel.js";
+import {
+  ProductionInputPanel,
+  type ProductionManualInputActions,
+  type ProductionManualInputValues,
+  type ProductionSourceInputActions,
+  type ProductionSourceInputValues
+} from "./production-input-panel.js";
 import { ProductionObjectsPanel } from "./production-objects-panel.js";
 import { ProductionPurchaseListPanel } from "./production-purchase-list-panel.js";
 import { ProductionQuestionPanel } from "./production-question-panel.js";
@@ -35,44 +40,10 @@ type ProductionRouteMainLayoutProps = {
   productionObjectStatusLabel: string;
   purchaseListCount: number;
   submitting: boolean;
-  dragActive: boolean;
-  intakeFile: File | null;
-  intakeChannel: IntakeDocumentChannel;
-  documentPhase: "idle" | "analysing" | "done";
-  activeDocumentName?: string;
-  documentProgress: number;
-  documentEtaSeconds?: number;
-  intakeText: string;
-  canClearProductionWorkspace: boolean;
-  canArchiveCurrentIntake: boolean;
-  productionUploadInputRef: { current: HTMLInputElement | null };
-  setDragActive: (active: boolean) => void;
-  setIntakeChannel: (channel: IntakeDocumentChannel) => void;
-  setIntakeText: (value: string) => void;
-  openProductionFilePicker: () => void;
-  clearProductionWorkspace: () => void;
-  archiveCurrentIntake: () => Promise<void>;
-  handleProductionDrop: (event: DragEvent<HTMLLabelElement>) => void;
-  handleProductionFileSelection: (event: ChangeEvent<HTMLInputElement>) => void;
-  handleIntakeDocumentSubmit: () => Promise<void>;
-  handleIntakeSubmit: () => Promise<void>;
-  manualEventType: string;
-  manualEventDate: string;
-  manualAttendeeCount: string;
-  manualServiceForm: string;
-  manualMenuItems: string;
-  manualCustomerName: string;
-  manualVenueName: string;
-  manualNotes: string;
-  setManualEventType: (value: string) => void;
-  setManualEventDate: (value: string) => void;
-  setManualAttendeeCount: (value: string) => void;
-  setManualServiceForm: (value: string) => void;
-  setManualMenuItems: (value: string) => void;
-  setManualCustomerName: (value: string) => void;
-  setManualVenueName: (value: string) => void;
-  setManualNotes: (value: string) => void;
-  handleManualSpecSubmit: () => Promise<void>;
+  sourceInput: ProductionSourceInputValues;
+  sourceInputActions: ProductionSourceInputActions;
+  manualInput: ProductionManualInputValues;
+  manualInputActions: ProductionManualInputActions;
   focusedProductionSpec?: Record<string, unknown>;
   focusedSpecReadinessLabel: string;
   selectedPlan?: Record<string, unknown>;
@@ -153,44 +124,10 @@ export function ProductionRouteMainLayout({
   productionObjectStatusLabel,
   purchaseListCount,
   submitting,
-  dragActive,
-  intakeFile,
-  intakeChannel,
-  documentPhase,
-  activeDocumentName,
-  documentProgress,
-  documentEtaSeconds,
-  intakeText,
-  canClearProductionWorkspace,
-  canArchiveCurrentIntake,
-  productionUploadInputRef,
-  setDragActive,
-  setIntakeChannel,
-  setIntakeText,
-  openProductionFilePicker,
-  clearProductionWorkspace,
-  archiveCurrentIntake,
-  handleProductionDrop,
-  handleProductionFileSelection,
-  handleIntakeDocumentSubmit,
-  handleIntakeSubmit,
-  manualEventType,
-  manualEventDate,
-  manualAttendeeCount,
-  manualServiceForm,
-  manualMenuItems,
-  manualCustomerName,
-  manualVenueName,
-  manualNotes,
-  setManualEventType,
-  setManualEventDate,
-  setManualAttendeeCount,
-  setManualServiceForm,
-  setManualMenuItems,
-  setManualCustomerName,
-  setManualVenueName,
-  setManualNotes,
-  handleManualSpecSubmit,
+  sourceInput,
+  sourceInputActions,
+  manualInput,
+  manualInputActions,
   focusedProductionSpec,
   focusedSpecReadinessLabel,
   selectedPlan,
@@ -270,52 +207,10 @@ export function ProductionRouteMainLayout({
       <div className="production-column">
         <ProductionInputPanel
           submitting={submitting}
-          sourceInput={{
-            dragActive,
-            intakeFile,
-            intakeChannel,
-            documentPhase,
-            activeDocumentName,
-            documentProgress,
-            documentEtaSeconds,
-            intakeText,
-            canClearWorkspace: canClearProductionWorkspace,
-            canArchiveCurrentIntake
-          }}
-          sourceInputActions={{
-            uploadInputRef: productionUploadInputRef,
-            setDragActive,
-            setIntakeChannel,
-            setIntakeText,
-            openFilePicker: openProductionFilePicker,
-            clearWorkspace: clearProductionWorkspace,
-            archiveCurrentIntake,
-            handleDrop: handleProductionDrop,
-            handleFileSelection: handleProductionFileSelection,
-            submitDocument: handleIntakeDocumentSubmit,
-            submitText: handleIntakeSubmit
-          }}
-          manualInput={{
-            eventType: manualEventType,
-            eventDate: manualEventDate,
-            attendeeCount: manualAttendeeCount,
-            serviceForm: manualServiceForm,
-            menuItems: manualMenuItems,
-            customerName: manualCustomerName,
-            venueName: manualVenueName,
-            notes: manualNotes
-          }}
-          manualInputActions={{
-            setEventType: setManualEventType,
-            setEventDate: setManualEventDate,
-            setAttendeeCount: setManualAttendeeCount,
-            setServiceForm: setManualServiceForm,
-            setMenuItems: setManualMenuItems,
-            setCustomerName: setManualCustomerName,
-            setVenueName: setManualVenueName,
-            setNotes: setManualNotes,
-            submitManualSpec: handleManualSpecSubmit
-          }}
+          sourceInput={sourceInput}
+          sourceInputActions={sourceInputActions}
+          manualInput={manualInput}
+          manualInputActions={manualInputActions}
         />
       </div>
       <div className="production-column">
@@ -342,7 +237,7 @@ export function ProductionRouteMainLayout({
           hasFocusedSpecEditChanges={hasFocusedSpecEditChanges}
           recipes={recipes}
           filteredSpecs={filteredSpecs}
-          documentPhase={documentPhase}
+          documentPhase={sourceInput.documentPhase}
           productionWorkspaceCleared={productionWorkspaceCleared}
           setEditingEventType={setEditingEventType}
           setEditingEventDate={setEditingEventDate}
