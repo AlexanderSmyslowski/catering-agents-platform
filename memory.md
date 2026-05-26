@@ -1500,3 +1500,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.307 - 2026-05-26
 - Produktions-Spec-Edit-Update-Payloads sind als reine Funktion in `backoffice-ui/src/production-spec-edit-update.ts` gekapselt und mit `tests/production-spec-edit-update.test.ts` gegen Trimming, Listenaufteilung, erlaubte Select-Werte und leere Recipe-Overrides abgesichert.
 - `App.tsx` bleibt fuer Speichern, Refresh und Nutzerfeedback verantwortlich. Keine Aenderung an UI-Texten, API-Endpunkten, Backend-Validierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.308 - 2026-05-26
+- Manuelle Produktionsspezifikations-Payloads sind als reine Funktion in `backoffice-ui/src/production-manual-spec-input.ts` gekapselt und mit `tests/production-manual-spec-input.test.ts` gegen Trimming, Listenaufteilung und leere optionale Felder abgesichert.
+- `App.tsx` behaelt Formularzustand, Anlage, Fokusauswahl und Nutzerfeedback. Keine Aenderung an UI-Texten, Formularfeldern, API-Endpunkten, Backend-Validierung, Planung, Rezeptmatching, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.

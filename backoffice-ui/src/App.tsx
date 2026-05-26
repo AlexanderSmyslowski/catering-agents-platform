@@ -69,6 +69,7 @@ import {
   buildProductionQuestions,
   getSpecLabel
 } from "./production-language.js";
+import { buildManualSpecInput } from "./production-manual-spec-input.js";
 import {
   normalizedSpecEditSnapshot,
   specEditSnapshotFromSpec,
@@ -962,19 +963,18 @@ export function App() {
     setProductionWorkspaceCleared(false);
     clearMessages();
     try {
-      const response = await createAcceptedSpecFromManualForm({
-        eventType: manualEventType.trim() || undefined,
-        eventDate: manualEventDate.trim() || undefined,
-        attendeeCount: manualAttendeeCount.trim() ? Number(manualAttendeeCount) : undefined,
-        serviceForm: manualServiceForm.trim() || undefined,
-        menuItems: manualMenuItems
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        customerName: manualCustomerName.trim() || undefined,
-        venueName: manualVenueName.trim() || undefined,
-        notes: manualNotes.trim() || undefined
-      });
+      const response = await createAcceptedSpecFromManualForm(
+        buildManualSpecInput({
+          eventType: manualEventType,
+          eventDate: manualEventDate,
+          attendeeCount: manualAttendeeCount,
+          serviceForm: manualServiceForm,
+          menuItems: manualMenuItems,
+          customerName: manualCustomerName,
+          venueName: manualVenueName,
+          notes: manualNotes
+        })
+      );
       const specId = extractAcceptedSpecId(response);
       if (specId) {
         setFocusedProductionSpecId(specId);
