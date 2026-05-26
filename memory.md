@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.278
+version: 5.279
 date: 2026-05-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1379,3 +1379,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.278 - 2026-05-26
 - Produktions-UI-Wartbarkeit ist mit einem weiteren verhaltensgleichen Summary-/Intake-ID-Refactor verbessert: `formatStructuredProductionAnswerSummary` und `selectProductionIntakeRequestId` liegen in `production-route-state.ts` statt direkt in `App.tsx`.
 - `tests/production-route-state.test.ts` schuetzt strukturierte Antwortsummary, direkte `requestId`, PDF-/Mail-/Manual-Source-Lineage und leere Fallbacks. Keine Rendering-, Textaenderung, ConversationProjection-, API-, Archivierungs-, Persistenz-, Planungs-, Rezept-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.
+
+### 5.279 - 2026-05-26
+- Lokaler Rehearsal-Check ist nicht-destruktiv gegen Stale-Daten klarer: `npm run local:check` warnt nun, wenn ignorierte lokale Einkaufslisten moegliche Rezept-Arbeitsschritte als Einkaufspositionen enthalten.
+- Der Hinweis ist bewusst kein rotes Gate und keine automatische Bereinigung; UI-Evidenz und Reibungslog muessen den lokalen Stale-Datenbefund markieren oder einen kontrollierten Frischlauf/Soft-Archiv-Pfad bewusst dokumentieren. Keine Parser-, Planungs-, Rezeptmatching-, API-, Persistenz-, Loesch-, Echtdaten-, Deployment-, Auth/OIDC-, LLM- oder Compliance-Aenderung.

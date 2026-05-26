@@ -30,6 +30,17 @@ describe("local ops check contract", () => {
     expect(checkScript).toContain("local:check loescht oder archiviert keine lokalen Daten automatisch");
   });
 
+  it("warns when local purchase lists look polluted by recipe steps without deleting anything", () => {
+    expect(checkScript).toContain("instruction_like_purchase_item_report()");
+    expect(checkScript).toContain("production\", \"purchase-lists");
+    expect(checkScript).toContain("instructionStartPattern");
+    expect(checkScript).toContain("instructionPhrasePattern");
+    expect(checkScript).toContain("moegliche Rezept-Arbeitsschritte als Einkaufspositionen");
+    expect(checkScript).toContain("lokalen Stale-Datenbefund");
+    expect(checkScript).toContain("local:check bereinigt diese Einkaufslisten nicht automatisch");
+    expect(checkScript).toContain("kontrollierten Frischlauf oder Soft-Archiv nur bewusst ausloesen");
+  });
+
   it("documents the compact local demo runbook commands and their bounded roles", () => {
     expect(testingDoc).toContain("`npm run local:start` startet den lokalen Stack mit Demo-Seeding");
     expect(testingDoc).toContain("`npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht");
@@ -41,6 +52,8 @@ describe("local ops check contract", () => {
     expect(testingDoc).toContain("Rehearsal-Datenhinweis");
     expect(testingDoc).toContain("kein sauberer Frischlauf");
     expect(testingDoc).toContain("keine automatische Loeschung oder Archivierung");
+    expect(testingDoc).toContain("moegliche Rezept-Arbeitsschritte als Einkaufspositionen");
+    expect(testingDoc).toContain("lokaler Stale-Datenbefund");
   });
 
   it("keeps Demo-Seed, local checks, and audit evidence narratively bounded across docs", () => {

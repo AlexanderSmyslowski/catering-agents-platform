@@ -46,6 +46,55 @@ process.stdin.on("end", () => {
 '
 }
 
+instruction_like_purchase_item_report() {
+  local data_root="$1"
+  DATA_ROOT="${data_root}" node - <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const dataRoot = process.env.DATA_ROOT;
+const purchaseListDir = dataRoot ? path.join(dataRoot, "production", "purchase-lists") : "";
+const findings = [];
+const instructionStartPattern =
+  /^(?:\d+[.)]\s*)?(?:add|bake|boil|braise|chop|combine|cook|fry|garnish|grill|heat|knead|marinate|mix|prepare|roast|season|serve|shape|slice|simmer|stir|whisk)\b/i;
+const instructionPhrasePattern =
+  /\b(?:and|with)\b.*\b(?:bake|boil|braise|cook|fry|grill|mix|roast|serve|shape|simmer)\b/i;
+
+if (purchaseListDir && fs.existsSync(purchaseListDir)) {
+  for (const file of fs.readdirSync(purchaseListDir).filter((name) => name.endsWith(".json")).sort()) {
+    const filePath = path.join(purchaseListDir, file);
+    let payload;
+
+    try {
+      payload = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch {
+      continue;
+    }
+
+    if (!Array.isArray(payload.items)) {
+      continue;
+    }
+
+    for (const item of payload.items) {
+      const displayName = String(item?.displayName ?? item?.articleName ?? item?.name ?? "").trim();
+      if (
+        displayName &&
+        (instructionStartPattern.test(displayName) || instructionPhrasePattern.test(displayName))
+      ) {
+        findings.push({ file, displayName });
+      }
+    }
+  }
+}
+
+const examples = findings
+  .slice(0, 3)
+  .map((finding) => `${finding.file}: ${finding.displayName.replace(/\s+/g, " ").slice(0, 80)}`);
+
+process.stdout.write(`${findings.length}\n${examples.join("\n")}`);
+NODE
+}
+
 for session_name in "${required_sessions[@]}"; do
   if ! screen_session_exists "${session_name}"; then
     echo "Lokaler Stack nicht vollstaendig gestartet. Bitte zuerst: ${START_COMMAND}" >&2
@@ -114,6 +163,24 @@ if (( intake_spec_count > 8 || offer_draft_count > 4 || production_plan_count > 
   echo "Rehearsal-Datenhinweis: lokaler Datenbestand wirkt aufgefuellt (${intake_spec_count} Specs, ${offer_draft_count} Entwuerfe, ${production_plan_count} Plaene)."
   echo "Das ist kein rotes Gate, aber kein sauberer Frischlauf; UI-Evidenz und Reibungslog muessen Altlasten/Stale-Fokus beruecksichtigen."
   echo "local:check loescht oder archiviert keine lokalen Daten automatisch."
+fi
+
+data_root="${CATERING_DATA_ROOT:-${ROOT_DIR}/data}"
+instruction_like_report="$(instruction_like_purchase_item_report "${data_root}")"
+instruction_like_count="${instruction_like_report%%$'\n'*}"
+if [[ ! "${instruction_like_count}" =~ ^[0-9]+$ ]]; then
+  instruction_like_count=0
+fi
+
+if (( instruction_like_count > 0 )); then
+  echo ""
+  echo "Rehearsal-Datenhinweis: lokale Einkaufslisten enthalten moegliche Rezept-Arbeitsschritte als Einkaufspositionen (${instruction_like_count} Treffer)."
+  echo "Das ist kein rotes Gate, aber UI-Evidenz und Reibungslog muessen diese Altlasten ausdruecklich als lokalen Stale-Datenbefund markieren."
+  echo "local:check bereinigt diese Einkaufslisten nicht automatisch; kontrollierten Frischlauf oder Soft-Archiv nur bewusst ausloesen."
+  if [[ "${instruction_like_report}" == *$'\n'* ]]; then
+    echo "Beispiele:"
+    printf '%s\n' "${instruction_like_report#*$'\n'}" | sed 's/^/  - /'
+  fi
 fi
 
 echo ""
