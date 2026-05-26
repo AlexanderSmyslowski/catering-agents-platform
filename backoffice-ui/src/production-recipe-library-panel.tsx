@@ -1,20 +1,28 @@
 import type { ChangeEvent } from "react";
 
-type RecipeReviewCounts = {
+export type RecipeReviewCounts = {
   approved: number;
   reviewRequired: number;
   rejected: number;
 };
 
-type ProductionRecipeLibraryPanelProps = {
+export type ProductionRecipeStatusState = {
   recipeReviewStatusLabel: string;
   recipeUsageStatusLabel: string;
   recipeReviewCounts: RecipeReviewCounts;
   recipeCount: number;
+};
+
+export type ProductionRecipeUploadState = {
   recipeName: string;
   recipeFile: File | null;
+};
+
+export type ProductionRecipeLibraryState = {
   filteredRecipes: Array<Record<string, unknown>>;
-  submitting: boolean;
+};
+
+export type ProductionRecipeActions = {
   setRecipeName: (value: string) => void;
   setRecipeFile: (file: File | null) => void;
   uploadRecipe: (target: "offer" | "production") => Promise<void>;
@@ -23,6 +31,14 @@ type ProductionRecipeLibraryPanelProps = {
     recipeId: string,
     decision: "approve" | "verify" | "reject"
   ) => Promise<void>;
+};
+
+type ProductionRecipeLibraryPanelProps = {
+  statusState: ProductionRecipeStatusState;
+  uploadState: ProductionRecipeUploadState;
+  libraryState: ProductionRecipeLibraryState;
+  recipeActions: ProductionRecipeActions;
+  submitting: boolean;
 };
 
 function translateRecipeTier(value?: string): string {
@@ -46,19 +62,17 @@ function translateApprovalState(value?: string): string {
 }
 
 export function ProductionRecipeLibraryPanel({
-  recipeReviewStatusLabel,
-  recipeUsageStatusLabel,
-  recipeReviewCounts,
-  recipeCount,
-  recipeName,
-  recipeFile,
-  filteredRecipes,
-  submitting,
-  setRecipeName,
-  setRecipeFile,
-  uploadRecipe,
-  reviewRecipe
+  statusState,
+  uploadState,
+  libraryState,
+  recipeActions,
+  submitting
 }: ProductionRecipeLibraryPanelProps) {
+  const { recipeReviewStatusLabel, recipeUsageStatusLabel, recipeReviewCounts, recipeCount } = statusState;
+  const { recipeName, recipeFile } = uploadState;
+  const { filteredRecipes } = libraryState;
+  const { setRecipeName, setRecipeFile, uploadRecipe, reviewRecipe } = recipeActions;
+
   return (
     <>
       <article className="recipe-review-status-zone" aria-label="Rezeptprüfung">
