@@ -89,6 +89,7 @@ import {
 } from "./production-source-input-state.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
+import { resetProductionWorkspace } from "./production-workspace-reset.js";
 import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
@@ -463,17 +464,21 @@ export function App() {
   }
 
   function resetProductionWorkspaceState() {
-    setProductionWorkspaceCleared(true);
-    resetIntakeDraft();
-    resetDocumentProgress();
-    setFocusedProductionSpecId(undefined);
-    setSelectedPlanId(undefined);
-    resetPlanProgress();
-    resetIntakeRequestDetail();
-    resetSpecEdit(false);
-    if (productionUploadInputRef.current) {
-      productionUploadInputRef.current.value = "";
-    }
+    resetProductionWorkspace({
+      setProductionWorkspaceCleared,
+      resetIntakeDraft,
+      resetDocumentProgress,
+      clearFocusedProductionSpecId: () => setFocusedProductionSpecId(undefined),
+      clearSelectedPlanId: () => setSelectedPlanId(undefined),
+      resetPlanProgress,
+      resetIntakeRequestDetail,
+      resetSpecEdit,
+      clearUploadInput: () => {
+        if (productionUploadInputRef.current) {
+          productionUploadInputRef.current.value = "";
+        }
+      }
+    });
   }
 
   function clearProductionWorkspace() {
