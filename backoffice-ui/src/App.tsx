@@ -96,6 +96,7 @@ import {
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import {
+  clearProductionWorkspaceState,
   completeProductionIntakeArchiveSuccess,
   resetProductionWorkspace
 } from "./production-workspace-reset.js";
@@ -491,9 +492,11 @@ export function App() {
   }
 
   function clearProductionWorkspace() {
-    resetProductionWorkspaceState();
-    clearMessages();
-    setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+    clearProductionWorkspaceState({
+      resetProductionWorkspaceState,
+      clearMessages,
+      setNotice
+    });
   }
 
   async function handleArchiveCurrentIntake() {
