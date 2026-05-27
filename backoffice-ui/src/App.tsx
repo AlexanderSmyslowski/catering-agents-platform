@@ -72,6 +72,12 @@ import {
 } from "./production-api-response-ids.js";
 import { channelForFile } from "./production-document-channel.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
+import {
+  buildProductionObjectsActions,
+  buildProductionQuestionActions,
+  buildProductionQuestionEditorActions,
+  buildProductionRecipeActions
+} from "./production-route-actions.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import {
   buildProductionSourceInputActions,
@@ -867,6 +873,11 @@ export function App() {
     productionUploadInputRef.current?.click();
   }
 
+  function handleOpenSpecForQuestions(specId: string) {
+    setProductionWorkspaceCleared(false);
+    setFocusedProductionSpecId(specId);
+  }
+
   const manualSpecInput = buildProductionManualInputStateFromForm(manualSpecForm);
   const manualSpecActions = buildProductionManualInputActions({
     ...manualSpecForm,
@@ -907,6 +918,28 @@ export function App() {
     editingComponentStates,
     hasFocusedSpecEditChanges,
     recipes: dashboard.recipes
+  });
+  const productionQuestionActions = buildProductionQuestionActions({
+    openSpecForQuestions: handleOpenSpecForQuestions
+  });
+  const productionQuestionEditorActions = buildProductionQuestionEditorActions({
+    setEditingEventType,
+    setEditingEventDate,
+    setEditingAttendeeCount,
+    setEditingServiceForm,
+    setEditingMenuItems,
+    updateEditingComponentState,
+    beginSpecEdit,
+    saveSpecEdit: handleSaveSpecEdit,
+    createPlan: handleCreatePlan,
+    resetSpecEdit
+  });
+  const productionObjectsActions = buildProductionObjectsActions({ setSelectedPlanId });
+  const productionRecipeActions = buildProductionRecipeActions({
+    setRecipeName,
+    setRecipeFile,
+    uploadRecipe: handleRecipeUpload,
+    reviewRecipe: handleRecipeReview
   });
   const offerSpecEdit = buildOfferSpecEditState({
     editingSpecId,
@@ -1021,32 +1054,11 @@ export function App() {
           sourceInputActions={productionSourceInputActions}
           manualInput={manualSpecInput}
           manualInputActions={manualSpecActions}
-          questionActions={{
-            openSpecForQuestions: (specId) => {
-              setProductionWorkspaceCleared(false);
-              setFocusedProductionSpecId(specId);
-            }
-          }}
+          questionActions={productionQuestionActions}
           editorState={productionQuestionEditorState}
-          editorActions={{
-            setEditingEventType,
-            setEditingEventDate,
-            setEditingAttendeeCount,
-            setEditingServiceForm,
-            setEditingMenuItems,
-            updateEditingComponentState,
-            beginSpecEdit,
-            saveSpecEdit: handleSaveSpecEdit,
-            createPlan: handleCreatePlan,
-            resetSpecEdit
-          }}
-          objectPanelActions={{ setSelectedPlanId }}
-          recipeActions={{
-            setRecipeName,
-            setRecipeFile,
-            uploadRecipe: handleRecipeUpload,
-            reviewRecipe: handleRecipeReview
-          }}
+          editorActions={productionQuestionEditorActions}
+          objectPanelActions={productionObjectsActions}
+          recipeActions={productionRecipeActions}
         />
       ) : null}
 
