@@ -87,6 +87,11 @@ import {
 } from "./production-api-response-ids.js";
 import { channelForFile } from "./production-document-channel.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
+import {
+  countRecipeReviewStates,
+  formatRecipeReviewStatusLabel,
+  formatRecipeUsageStatusLabel
+} from "./production-recipe-review-state.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
@@ -246,32 +251,9 @@ export function App() {
     );
   }, [dashboard.recipes, deferredSearch]);
 
-  const recipeReviewCounts = useMemo(() => {
-    return dashboard.recipes.reduce(
-      (counts: { approved: number; reviewRequired: number; rejected: number }, recipe) => {
-        const approvalState = String((recipe.source as Record<string, unknown> | undefined)?.approvalState ?? "");
-        if (approvalState === "approved_internal") {
-          counts.approved += 1;
-        } else if (approvalState === "review_required") {
-          counts.reviewRequired += 1;
-        } else if (approvalState === "rejected") {
-          counts.rejected += 1;
-        }
-        return counts;
-      },
-      { approved: 0, reviewRequired: 0, rejected: 0 }
-    );
-  }, [dashboard.recipes]);
-
-  const recipeReviewStatusLabel =
-    recipeReviewCounts.reviewRequired > 0
-      ? `${recipeReviewCounts.reviewRequired} zu prüfen`
-      : "keine offene Prüfung";
-
-  const recipeUsageStatusLabel =
-    recipeReviewCounts.approved > 0
-      ? "Freigegebene Rezepte bleiben verwendbar"
-      : "Noch keine freigegebenen Rezepte im Bestand";
+  const recipeReviewCounts = useMemo(() => countRecipeReviewStates(dashboard.recipes), [dashboard.recipes]);
+  const recipeReviewStatusLabel = formatRecipeReviewStatusLabel(recipeReviewCounts);
+  const recipeUsageStatusLabel = formatRecipeUsageStatusLabel(recipeReviewCounts);
 
   const offerHandoffCounts = useMemo(() => {
     return dashboard.acceptedSpecs.reduce(
