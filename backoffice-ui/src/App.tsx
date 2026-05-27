@@ -69,13 +69,14 @@ import {
   buildProductionManualInputStateFromForm
 } from "./production-manual-input-state.js";
 import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
-import {
-  extractAcceptedSpecId,
-  extractProductionPlanId
-} from "./production-api-response-ids.js";
+import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { resetProductionStateAfterDocumentFailure } from "./production-document-failure-reset.js";
 import { completeProductionStateAfterDocumentSuccess } from "./production-document-success-state.js";
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
+import {
+  completeProductionStateAfterPlanSuccess,
+  resetProductionStateAfterPlanFailure
+} from "./production-plan-result-state.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import {
   buildProductionObjectsActions,
@@ -644,18 +645,17 @@ export function App() {
       setSelectedPlanId(undefined);
       setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
       const response = await createProductionPlan(specForPlanning);
-      const planId = extractProductionPlanId(response);
-      if (planId) {
-        setSelectedPlanId(planId);
-      }
-      await refreshDashboard();
-      completePlanProgress();
-      setNotice("Produktionsplan wurde erzeugt.");
+      await completeProductionStateAfterPlanSuccess(response, {
+        setSelectedPlanId,
+        refreshDashboard,
+        completePlanProgress,
+        setNotice
+      });
     } catch (submitError) {
-      failPlanProgress();
-      setError(
-        submitError instanceof Error ? submitError.message : "Produktionsplan konnte nicht erstellt werden."
-      );
+      resetProductionStateAfterPlanFailure(submitError, {
+        failPlanProgress,
+        setError
+      });
     } finally {
       setSubmitting(false);
     }
