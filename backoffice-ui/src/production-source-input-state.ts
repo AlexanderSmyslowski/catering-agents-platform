@@ -1,4 +1,7 @@
-import type { ProductionSourceInputValues } from "./production-input-panel.js";
+import type {
+  ProductionSourceInputActions,
+  ProductionSourceInputValues
+} from "./production-input-panel.js";
 
 export type ProductionSourceInputStateInput = {
   dragActive: boolean;
@@ -36,5 +39,25 @@ export function buildProductionSourceInputState({
     intakeText,
     canClearWorkspace,
     canArchiveCurrentIntake
+  };
+}
+
+export type ProductionSourceInputActionsInput = ProductionSourceInputActions;
+
+export function buildProductionSourceInputActions(
+  actions: ProductionSourceInputActionsInput
+): ProductionSourceInputActions {
+  return {
+    uploadInputRef: actions.uploadInputRef,
+    setDragActive: actions.setDragActive,
+    setIntakeChannel: actions.setIntakeChannel,
+    setIntakeText: actions.setIntakeText,
+    openFilePicker: actions.openFilePicker,
+    clearWorkspace: actions.clearWorkspace,
+    archiveCurrentIntake: actions.archiveCurrentIntake,
+    handleDrop: actions.handleDrop,
+    handleFileSelection: actions.handleFileSelection,
+    submitDocument: actions.submitDocument,
+    submitText: actions.submitText
   };
 }
