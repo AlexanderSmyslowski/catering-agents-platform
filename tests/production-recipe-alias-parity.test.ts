@@ -195,6 +195,23 @@ describe("production recipe alias parity", () => {
         "1. Auberginen grillen.",
         "2. Eggplant Rolls vegan fuellen und kalt stellen."
       ].join("\n")
+    },
+    {
+      componentLabel: "Schokokuchen vegan",
+      category: "vegan" as const,
+      recipeName: "Chocolate Cake vegan",
+      filename: "internes-rezept-488.pdf",
+      sourceRef: "test:dessert-chocolate-cake",
+      text: [
+        "Chocolate Cake vegan",
+        "Zutaten",
+        "2 kg Mehl",
+        "1 kg Zucker",
+        "800 g Kakao",
+        "Zubereitung",
+        "1. Teig ruehren.",
+        "2. Chocolate Cake vegan backen und portionieren."
+      ].join("\n")
     }
   ];
 
