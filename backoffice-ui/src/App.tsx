@@ -78,7 +78,10 @@ import {
   resetProductionStateAfterPlanFailure,
   startProductionPlanRunState
 } from "./production-plan-result-state.js";
-import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
+import {
+  buildProductionQuestionEditorState,
+  completeProductionQuestionEditSuccess
+} from "./production-question-editor-state.js";
 import {
   buildProductionObjectsActions,
   buildProductionQuestionActions,
@@ -681,14 +684,18 @@ export function App() {
 
     const response = await updateAcceptedSpec(editingSpecId, buildCurrentSpecUpdateInput());
     const updatedSpec = response.acceptedEventSpec;
-    const updatedSpecId = String(updatedSpec.specId ?? editingSpecId);
-    setProductionWorkspaceCleared(false);
-    setFocusedProductionSpecId(updatedSpecId);
-    resetSpecEdit(false);
-    await refreshDashboard();
-    if (!options?.quiet) {
-      setNotice("Spezifikation wurde gespeichert.");
-    }
+    await completeProductionQuestionEditSuccess(
+      updatedSpec,
+      editingSpecId,
+      {
+        setProductionWorkspaceCleared,
+        setFocusedProductionSpecId,
+        resetSpecEdit,
+        refreshDashboard,
+        setNotice
+      },
+      options
+    );
     return updatedSpec;
   }
 
