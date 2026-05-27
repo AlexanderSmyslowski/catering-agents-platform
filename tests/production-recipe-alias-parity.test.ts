@@ -105,6 +105,24 @@ describe("production recipe alias parity", () => {
       ].join("\n")
     },
     {
+      componentLabel: "Gemüsepfanne vegan",
+      category: "vegan" as const,
+      recipeName: "Vegetable Stir Fry with Pak Choi vegan",
+      filename: "internes-rezept-494.pdf",
+      sourceRef: "test:vegetable-stir-fry-vegan",
+      text: [
+        "Vegetable Stir Fry with Pak Choi vegan",
+        "Zutaten",
+        "2 kg Zucchini",
+        "1 kg mushrooms",
+        "800 g pak choi",
+        "500 g snow peas",
+        "Zubereitung",
+        "1. Vegetables schneiden.",
+        "2. Vegetable Stir Fry vegan braten und warmhalten."
+      ].join("\n")
+    },
+    {
       componentLabel: "Vegetarische Tomatensuppe",
       category: "vegetarian" as const,
       recipeName: "Tomato Soup vegetarian",

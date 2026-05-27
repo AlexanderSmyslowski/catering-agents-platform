@@ -213,6 +213,26 @@ describe("production recipe suggestions", () => {
     ).toEqual([{ recipeId: "recipe-humus-tahini", name: "Humus Tahini Dip vegan" }]);
   });
 
+  it("suggests vegetable stir fry recipes across German Gemüsepfanne aliases", () => {
+    const suggestions = recipeSuggestionsForComponent("Gemüsepfanne vegan", [
+      {
+        recipeId: "recipe-vegetable-curry",
+        name: "Vegetable Curry vegan",
+        source: { reference: "internal/vegetable-curry.md" }
+      },
+      {
+        recipeId: "recipe-vegetable-stir-fry",
+        name: "Vegetable Stir Fry with Pak Choi vegan",
+        source: { reference: "internal/vegetable-stir-fry.md" }
+      }
+    ]);
+
+    expect(suggestions[0]).toEqual({
+      recipeId: "recipe-vegetable-stir-fry",
+      name: "Vegetable Stir Fry with Pak Choi vegan"
+    });
+  });
+
   it("suggests eggplant roll recipes across German-English antipasti aliases", () => {
     expect(
       recipeSuggestionsForComponent("Auberginenröllchen vegan", [
