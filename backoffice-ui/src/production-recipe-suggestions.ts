@@ -74,7 +74,11 @@ const RECIPE_SUGGESTION_TOKEN_EXPANSIONS: Record<string, string[]> = {
   spiess: ["skewer"],
   spiesse: ["skewers"],
   skewer: ["spiess"],
-  skewers: ["spiesse"]
+  skewers: ["spiesse"],
+  wildkrautersalat: ["wild", "herb", "salad"],
+  wildkrauter: ["wild", "herbs"],
+  petersilie: ["parsley"],
+  petersilien: ["parsley"]
 };
 
 function normalizeRecipeSuggestionText(value: string): string {
