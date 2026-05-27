@@ -9,7 +9,6 @@ import {
   useRef,
   useState
 } from "react";
-import { buildProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
 import { DashboardShell } from "../components/dashboard-shell.js";
 import {
   detectRoute,
@@ -37,11 +36,8 @@ import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import { RouteMasthead } from "./route-masthead.js";
 import {
-  buildWorkbenchSpecFacts,
   canArchiveCurrentIntake as canArchiveCurrentIntakeFromState,
-  canClearProductionWorkspace as canClearProductionWorkspaceFromState,
-  countClarificationAnswerStatuses,
-  formatStructuredProductionAnswerSummary
+  canClearProductionWorkspace as canClearProductionWorkspaceFromState
 } from "./production-route-state.js";
 import {
   archiveIntakeRequest,
@@ -64,11 +60,8 @@ import {
   type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
-import {
-  buildProductionAssumptions,
-  buildProductionQuestions,
-  getSpecLabel
-} from "./production-language.js";
+import { getSpecLabel } from "./production-language.js";
+import { buildProductionConversationState } from "./production-conversation-state.js";
 import { buildProductionCurrentArtifactsState } from "./production-current-artifacts-state.js";
 import { buildProductionDashboardRecordsState } from "./production-dashboard-records-state.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
@@ -341,55 +334,28 @@ export function App() {
     [currentProductionSpecId, currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId, specById]
   );
 
-  const productionQuestions = useMemo(
-    () => (focusedProductionSpec ? buildProductionQuestions(focusedProductionSpec) : []),
-    [focusedProductionSpec]
-  );
-
-  const productionAssumptions = useMemo(
-    () => buildProductionAssumptions(focusedProductionSpec),
-    [focusedProductionSpec]
-  );
-
-  const focusedClarificationAnswers = useMemo(
+  const {
+    productionQuestions,
+    productionAssumptions,
+    productionConversationProjection,
+    clarificationStatusCounts,
+    workbenchSpecFacts
+  } = useMemo(
     () =>
-      Array.isArray(focusedProductionSpecRecord?.clarificationAnswers)
-        ? focusedProductionSpecRecord.clarificationAnswers
-        : [],
-    [focusedProductionSpecRecord]
-  );
-
-  const productionConversationProjection = useMemo(
-    () =>
-      buildProductionConversationProjection({
-        spec: focusedProductionSpec,
-        questions: productionQuestions,
-        assumptions: productionAssumptions,
-        answerSummary: formatStructuredProductionAnswerSummary(focusedProductionSpec),
-        clarificationAnswers: focusedClarificationAnswers as Parameters<typeof buildProductionConversationProjection>[0]["clarificationAnswers"],
-        sourceInputs: intakeRequestDetail?.rawInputs,
-        productionPlans: currentSpecPlans,
-        purchaseLists: currentSpecPurchaseLists
+      buildProductionConversationState({
+        focusedProductionSpec,
+        focusedProductionSpecRecord,
+        intakeRequestDetail,
+        currentSpecPlans,
+        currentSpecPurchaseLists
       }),
     [
       currentSpecPlans,
       currentSpecPurchaseLists,
-      focusedClarificationAnswers,
       focusedProductionSpec,
-      intakeRequestDetail?.rawInputs,
-      productionAssumptions,
-      productionQuestions
+      focusedProductionSpecRecord,
+      intakeRequestDetail
     ]
-  );
-
-  const clarificationStatusCounts = useMemo(
-    () => countClarificationAnswerStatuses(productionConversationProjection.messages),
-    [productionConversationProjection.messages]
-  );
-
-  const workbenchSpecFacts = useMemo(
-    () => buildWorkbenchSpecFacts(focusedProductionSpecRecord),
-    [focusedProductionSpecRecord]
   );
 
   const {
