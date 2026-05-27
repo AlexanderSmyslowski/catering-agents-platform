@@ -352,7 +352,38 @@ describe("backoffice internal usage smoke", () => {
         }
 
         if (method === "PATCH" && url.endsWith(`/api/intake/v1/intake/specs/${fixture.spec.specId}`)) {
-          currentSpec = fixture.plannedSpec;
+          const patchBody = body as
+            | {
+                componentUpdates?: Array<{
+                  componentId?: string;
+                  menuCategory?: "classic" | "vegetarian" | "vegan";
+                  productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
+                  recipeOverrideId?: string;
+                }>;
+              }
+            | undefined;
+          const componentUpdates = new Map(
+            (patchBody?.componentUpdates ?? [])
+              .filter((update) => typeof update.componentId === "string")
+              .map((update) => [String(update.componentId), update])
+          );
+          currentSpec = {
+            ...fixture.plannedSpec,
+            menuPlan: fixture.plannedSpec.menuPlan.map((item) => {
+              const update = componentUpdates.get(item.componentId);
+              if (!update) {
+                return item;
+              }
+              return {
+                ...item,
+                menuCategory: update.menuCategory ?? item.menuCategory,
+                productionDecision: update.productionMode
+                  ? { mode: update.productionMode }
+                  : item.productionDecision,
+                recipeOverrideId: update.recipeOverrideId ?? item.recipeOverrideId
+              };
+            })
+          };
           return new Response(JSON.stringify({ acceptedEventSpec: currentSpec }), {
             status: 200,
             headers: { "content-type": "application/json" }
@@ -462,11 +493,20 @@ describe("backoffice internal usage smoke", () => {
     const createPlanBody = fetchCalls[createPlanCallIndex]?.body as
       | { eventSpec?: { menuPlan?: Array<{ productionDecision?: { mode?: string } }> } }
       | undefined;
+    const plannedComponent = createPlanBody?.eventSpec?.menuPlan?.[0] as
+      | {
+          menuCategory?: string;
+          productionDecision?: { mode?: string };
+          recipeOverrideId?: string;
+        }
+      | undefined;
 
     expect(createdPlanViaPost).toBe(true);
     expect(saveAnswersCallIndex).toBeGreaterThanOrEqual(0);
     expect(createPlanCallIndex).toBeGreaterThan(saveAnswersCallIndex);
-    expect(createPlanBody?.eventSpec?.menuPlan?.[0]?.productionDecision?.mode).toBe("scratch");
+    expect(plannedComponent?.menuCategory).toBe("vegetarian");
+    expect(plannedComponent?.productionDecision?.mode).toBe("scratch");
+    expect(plannedComponent?.recipeOverrideId).toBe(fixture.recipe.recipeId);
 
     expect(document.body.textContent ?? "").toContain("Produktionsplan wurde erzeugt.");
     expect(document.body.textContent ?? "").toContain("Status: vollständig");
