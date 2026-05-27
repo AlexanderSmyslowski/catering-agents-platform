@@ -310,6 +310,121 @@ describe("backoffice route smoke", () => {
     expect(production).toContain("Was braucht die Produktion als Nächstes?");
   });
 
+  it("keeps the synthetic core corridor visible from start through offer handoff to production exports", async () => {
+    installBackofficeEnvironmentMocks({
+      intakeRequests: [
+        {
+          requestId: "corridor-request-1",
+          source: { channel: "pdf_upload", receivedAt: "2026-08-20T09:00:00.000Z" }
+        }
+      ],
+      acceptedSpecs: [
+        {
+          schemaVersion: 1,
+          specId: "corridor-spec-1",
+          requestId: "corridor-request-1",
+          sourceLineage: [{ sourceType: "offer_draft", reference: "corridor-draft-1" }],
+          readiness: { status: "partial", reasons: ["Lieferfenster fehlt."] },
+          event: { type: "lunch", date: "2026-09-15" },
+          servicePlan: { eventType: "lunch", serviceForm: "buffet" },
+          attendees: { expected: 64 },
+          menuPlan: [
+            {
+              componentId: "corridor-component-lentil-stew",
+              label: "Linseneintopf vegan",
+              menuCategory: "vegan",
+              productionDecision: { mode: "scratch" }
+            }
+          ]
+        }
+      ],
+      offerDrafts: [
+        {
+          draftId: "corridor-draft-1",
+          eventSummary: "Korridor Lunchangebot",
+          variantSet: [{ variantId: "balanced", label: "Ausgewogen" }],
+          openQuestions: ["Lieferfenster klären"]
+        }
+      ],
+      productionPlans: [
+        {
+          planId: "corridor-plan-1",
+          eventSpecId: "corridor-spec-1",
+          readiness: { status: "partial", reasons: ["Lieferfenster fehlt."] },
+          productionBatches: [],
+          kitchenSheets: [{ sheetId: "corridor-sheet-1" }],
+          recipeSelections: []
+        }
+      ],
+      purchaseLists: [
+        {
+          purchaseListId: "corridor-purchase-1",
+          eventSpecId: "corridor-spec-1",
+          totals: { itemCount: 2 },
+          items: [
+            { articleName: "Linsen", purchaseQty: 5, purchaseUnit: "kg" },
+            { articleName: "Karotten", purchaseQty: 3, purchaseUnit: "kg" }
+          ]
+        }
+      ],
+      auditEvents: [
+        {
+          auditId: "corridor-audit-1",
+          summary: "Korridor-Demo vorbereitet",
+          action: "production.seed_demo",
+          at: "2026-08-20T09:05:00.000Z",
+          actor: { name: "Betriebs-/Audit-Operator" }
+        }
+      ],
+      intakeRequestDetails: {
+        "corridor-request-1": {
+          requestId: "corridor-request-1",
+          source: { channel: "pdf_upload", receivedAt: "2026-08-20T09:00:00.000Z" },
+          rawInputs: [
+            {
+              kind: "pdf",
+              mimeType: "application/pdf",
+              documentId: "corridor-document-1",
+              sourceMetadata: {
+                filename: "corridor-angebot.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 3072,
+                sha256: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                ingestedAt: "2026-08-20T09:00:00.000Z",
+                uploadContext: "intake"
+              },
+              documentIngestion: { status: "ok", warnings: [] }
+            }
+          ]
+        }
+      }
+    });
+
+    const home = (await renderRoute("/")).text;
+    expect(home).toContain("Beta-Weg: Start → Angebot → Produktion → Rückfragen → Exporte/Audit.");
+    expect(home).toContain("1 operative Datensätze stehen dienstübergreifend bereit.");
+    expect(home).toContain("1 kaufmännische Entwürfe können direkt übernommen werden.");
+    expect(home).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
+    expect(home).toContain("Korridor-Demo vorbereitet · Actor: Betriebs-/Audit-Operator · Action: production.seed_demo");
+
+    const offer = await renderRoute("/angebot");
+    expect(offer.text).toContain("Aktueller Fokus: corridor-draft-1");
+    expect(offer.text).toContain("aktive Spezifikation: corridor-spec-1 (teilweise vollständig)");
+    expect(offer.text).toContain("Zur Produktion");
+
+    const production = await renderRoute("/produktion");
+    expect(production.text).toContain("Lunch · 64 Teilnehmer · 2026-09-15");
+    expect(production.text).toContain("Rückfragen beantworten");
+    expect(production.text).toContain("requestId: corridor-request-1");
+    expect(production.text).toContain("Produktionsblatt exportieren");
+    expect(production.html).toContain("/api/exports/v1/exports/production-plans/corridor-plan-1/html");
+    expect(production.text).toContain("Einkaufsliste herunterladen");
+    expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/corridor-purchase-1/csv");
+    expect(production.text).toContain("Audit-Spur");
+    expect(production.text).toContain("Korridor-Demo vorbereitet · Betriebs-/Audit-Operator · production.seed_demo");
+    expect(production.text).not.toContain("Produktionsfreigabe erteilt");
+  });
+
   it("keeps the intake status summary anchored on safe source and ingestion warning markers", async () => {
     installBackofficeEnvironmentMocks({
       intakeRequests: [
