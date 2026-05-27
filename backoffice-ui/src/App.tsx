@@ -73,7 +73,10 @@ import {
 import { channelForFile } from "./production-document-channel.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
-import { buildProductionSourceInputState } from "./production-source-input-state.js";
+import {
+  buildProductionSourceInputActions,
+  buildProductionSourceInputState
+} from "./production-source-input-state.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
@@ -881,6 +884,19 @@ export function App() {
     canClearWorkspace: canClearProductionWorkspace,
     canArchiveCurrentIntake
   });
+  const productionSourceInputActions = buildProductionSourceInputActions({
+    uploadInputRef: productionUploadInputRef,
+    setDragActive,
+    setIntakeChannel,
+    setIntakeText,
+    openFilePicker: openProductionFilePicker,
+    clearWorkspace: clearProductionWorkspace,
+    archiveCurrentIntake: handleArchiveCurrentIntake,
+    handleDrop: handleProductionDrop,
+    handleFileSelection: handleProductionFileSelection,
+    submitDocument: handleIntakeDocumentSubmit,
+    submitText: handleIntakeSubmit
+  });
   const productionQuestionEditorState = buildProductionQuestionEditorState({
     editingSpecId,
     editingEventType,
@@ -1002,19 +1018,7 @@ export function App() {
           {...productionRouteViewState}
           submitting={submitting}
           sourceInput={productionSourceInput}
-          sourceInputActions={{
-            uploadInputRef: productionUploadInputRef,
-            setDragActive,
-            setIntakeChannel,
-            setIntakeText,
-            openFilePicker: openProductionFilePicker,
-            clearWorkspace: clearProductionWorkspace,
-            archiveCurrentIntake: handleArchiveCurrentIntake,
-            handleDrop: handleProductionDrop,
-            handleFileSelection: handleProductionFileSelection,
-            submitDocument: handleIntakeDocumentSubmit,
-            submitText: handleIntakeSubmit
-          }}
+          sourceInputActions={productionSourceInputActions}
           manualInput={manualSpecInput}
           manualInputActions={manualSpecActions}
           questionActions={{
