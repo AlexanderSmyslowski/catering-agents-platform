@@ -412,10 +412,23 @@ describe("backoffice route smoke", () => {
     expect(offer.text).toContain("aktive Spezifikation: corridor-spec-1 (teilweise vollständig)");
     expect(offer.text).toContain("Zur Produktion");
 
-    const production = await renderRoute("/produktion");
+    const offerDocument = new DOMParser().parseFromString(offer.html, "text/html");
+    const offerExportLink = Array.from(offerDocument.querySelectorAll("a")).find((anchor) =>
+      (anchor.textContent ?? "").includes("Angebot exportieren")
+    ) as HTMLAnchorElement | undefined;
+    const productionHandoffLink = Array.from(offerDocument.querySelectorAll("a")).find((anchor) =>
+      (anchor.textContent ?? "").includes("Zur Produktion")
+    ) as HTMLAnchorElement | undefined;
+
+    expect(offerExportLink?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/corridor-draft-1/html");
+    expect(productionHandoffLink?.getAttribute("href")).toBe("/produktion");
+
+    const production = await renderRoute(productionHandoffLink?.getAttribute("href") ?? "");
     expect(production.text).toContain("Lunch · 64 Teilnehmer · 2026-09-15");
     expect(production.text).toContain("Rückfragen beantworten");
     expect(production.text).toContain("requestId: corridor-request-1");
+    expect(production.text).toContain("production-objects-zone");
+    expect(production.text).toContain("Produktionsobjekte");
     expect(production.text).toContain("Produktionsblatt exportieren");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/corridor-plan-1/html");
     expect(production.text).toContain("Einkaufsliste herunterladen");
