@@ -139,6 +139,26 @@ describe("production recipe suggestions", () => {
     ).toEqual([{ recipeId: "recipe-lentil-stew", name: "Lentil Stew vegan" }]);
   });
 
+  it("suggests almond curry recipes across German-English quick-lunch aliases", () => {
+    const suggestions = recipeSuggestionsForComponent("MANDEL-CURRY | BASMATIREIS & KORIANDER-TOPPING", [
+      {
+        recipeId: "recipe-vegetable-curry",
+        name: "Vegetable Curry vegan",
+        source: { reference: "internal/vegetable-curry.md" }
+      },
+      {
+        recipeId: "recipe-almond-curry",
+        name: "Almond Curry with Basmati Rice vegan",
+        source: { reference: "internal/almond-curry-basmati-rice.md" }
+      }
+    ]);
+
+    expect(suggestions[0]).toEqual({
+      recipeId: "recipe-almond-curry",
+      name: "Almond Curry with Basmati Rice vegan"
+    });
+  });
+
   it("suggests Hummus offer wording for internal Humus recipe spelling variants", () => {
     expect(
       recipeSuggestionsForComponent("Hummus vegan", [
