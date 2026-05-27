@@ -56,9 +56,7 @@ import {
   formatStructuredProductionAnswerSummary,
   formatProductionTimingWindow,
   formatPurchaseZoneStatusLabel,
-  selectArchivedProductionItems,
   selectProductionArtifactSpecIds,
-  selectCurrentProductionItems,
   selectFocusedProductionSpec,
   selectProductionIntakeRequestId,
   selectProductionPlanSpec,
@@ -91,6 +89,7 @@ import {
   buildProductionQuestions,
   getSpecLabel
 } from "./production-language.js";
+import { buildProductionCurrentArtifactsState } from "./production-current-artifacts-state.js";
 import { buildProductionManualInputState } from "./production-manual-input-state.js";
 import {
   extractAcceptedSpecId,
@@ -344,37 +343,21 @@ export function App() {
 
   const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
 
-  const currentSpecPlans = useMemo(() => {
-    return selectCurrentProductionItems({
-      currentProductionSpecId,
-      items: orderedPlans,
-      productionWorkspaceCleared
-    });
-  }, [currentProductionSpecId, orderedPlans, productionWorkspaceCleared]);
-
-  const archivedPlans = useMemo(() => {
-    return selectArchivedProductionItems({
-      currentProductionSpecId,
-      items: orderedPlans,
-      productionWorkspaceCleared
-    });
-  }, [currentProductionSpecId, orderedPlans, productionWorkspaceCleared]);
-
-  const currentSpecPurchaseLists = useMemo(() => {
-    return selectCurrentProductionItems({
-      currentProductionSpecId,
-      items: orderedPurchaseLists,
-      productionWorkspaceCleared
-    });
-  }, [currentProductionSpecId, orderedPurchaseLists, productionWorkspaceCleared]);
-
-  const archivedPurchaseLists = useMemo(() => {
-    return selectArchivedProductionItems({
-      currentProductionSpecId,
-      items: orderedPurchaseLists,
-      productionWorkspaceCleared
-    });
-  }, [currentProductionSpecId, orderedPurchaseLists, productionWorkspaceCleared]);
+  const {
+    currentSpecPlans,
+    archivedPlans,
+    currentSpecPurchaseLists,
+    archivedPurchaseLists
+  } = useMemo(
+    () =>
+      buildProductionCurrentArtifactsState({
+        currentProductionSpecId,
+        orderedPlans,
+        orderedPurchaseLists,
+        productionWorkspaceCleared
+      }),
+    [currentProductionSpecId, orderedPlans, orderedPurchaseLists, productionWorkspaceCleared]
+  );
 
   const selectedPlan = useMemo(
     () =>
