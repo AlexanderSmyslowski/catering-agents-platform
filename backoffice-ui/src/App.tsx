@@ -36,10 +36,6 @@ import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import { RouteMasthead } from "./route-masthead.js";
 import {
-  canArchiveCurrentIntake as canArchiveCurrentIntakeFromState,
-  canClearProductionWorkspace as canClearProductionWorkspaceFromState
-} from "./production-route-state.js";
-import {
   archiveIntakeRequest,
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
@@ -77,6 +73,7 @@ import { buildProductionRouteViewState } from "./production-route-view-state.js"
 import { buildProductionSourceInputState } from "./production-source-input-state.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
+import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
@@ -443,7 +440,10 @@ export function App() {
     recipeFile,
     filteredRecipes
   });
-  const canClearProductionWorkspace = canClearProductionWorkspaceFromState({
+  const {
+    canClearProductionWorkspace,
+    canArchiveCurrentIntake
+  } = buildProductionWorkspaceActionState({
     hasFocusedProductionSpec: Boolean(focusedProductionSpec),
     hasSelectedPlan: Boolean(selectedPlan),
     hasIntakeFile: Boolean(intakeFile),
@@ -451,9 +451,7 @@ export function App() {
     documentPhase,
     planPhase,
     hasFocusedProductionSpecId: Boolean(focusedProductionSpecId),
-    hasSelectedPlanId: Boolean(selectedPlanId)
-  });
-  const canArchiveCurrentIntake = canArchiveCurrentIntakeFromState({
+    hasSelectedPlanId: Boolean(selectedPlanId),
     currentIntakeRequestId,
     productionWorkspaceCleared
   });
