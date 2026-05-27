@@ -212,6 +212,24 @@ describe("production recipe alias parity", () => {
         "1. Teig ruehren.",
         "2. Chocolate Cake vegan backen und portionieren."
       ].join("\n")
+    },
+    {
+      componentLabel: "Wildkräutersalat mit Petersilien-Vinaigrette",
+      category: "vegan" as const,
+      recipeName: "Wild Herb Salad Parsley Vinaigrette vegan",
+      filename: "internes-rezept-489.pdf",
+      sourceRef: "test:buffet-wild-herb-salad",
+      text: [
+        "Wild Herb Salad Parsley Vinaigrette vegan",
+        "Zutaten",
+        "3 kg Wildkräuter",
+        "800 g Petersilie",
+        "1 l Vinaigrette",
+        "Zubereitung",
+        "1. Wildkraeuter waschen.",
+        "2. Parsley Vinaigrette anruehren.",
+        "3. Wild Herb Salad vegan kalt bereitstellen."
+      ].join("\n")
     }
   ];
 

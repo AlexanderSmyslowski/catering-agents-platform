@@ -210,6 +210,26 @@ describe("production recipe suggestions", () => {
     ).toEqual([{ recipeId: "recipe-eggplant-rolls", name: "Eggplant Rolls vegan" }]);
   });
 
+  it("suggests wild herb salad recipes across German-English buffet aliases", () => {
+    const suggestions = recipeSuggestionsForComponent("Wildkräutersalat mit Petersilien-Vinaigrette", [
+      {
+        recipeId: "recipe-mixed-salad",
+        name: "Mixed Salad with Vinaigrette",
+        source: { reference: "internal/mixed-salad.md" }
+      },
+      {
+        recipeId: "recipe-wild-herb-salad",
+        name: "Wild Herb Salad Parsley Vinaigrette",
+        source: { reference: "internal/wild-herb-salad.md" }
+      }
+    ]);
+
+    expect(suggestions[0]).toEqual({
+      recipeId: "recipe-wild-herb-salad",
+      name: "Wild Herb Salad Parsley Vinaigrette"
+    });
+  });
+
   it("resolves selected recipe names while preserving recipe ids as fallback labels", () => {
     expect(resolveRecipeNameById("recipe-kalbsbuletten", recipes)).toBe("Kalbsbuletten mit Schmorzweibeln");
     expect(resolveRecipeNameById("missing", recipes)).toBeUndefined();
