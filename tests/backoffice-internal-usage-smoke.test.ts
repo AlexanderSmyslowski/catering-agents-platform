@@ -219,6 +219,8 @@ describe("backoffice internal usage smoke", () => {
     let currentSpec: typeof fixture.spec | undefined;
     let currentPlan = undefined as typeof artifacts.productionPlan | undefined;
     let currentPurchaseList = undefined as typeof artifacts.purchaseList | undefined;
+    let createdPlanViaPost = false;
+    const fetchCalls: Array<{ method: string; url: string; body?: unknown }> = [];
 
     const storage = new Map<string, string>();
     const localStorageMock = {
@@ -241,31 +243,43 @@ describe("backoffice internal usage smoke", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        const method = (
+          input instanceof Request ? input.method : init?.method ?? "GET"
+        ).toUpperCase();
+        let body: unknown;
+        if (typeof init?.body === "string") {
+          try {
+            body = JSON.parse(init.body);
+          } catch {
+            body = init.body;
+          }
+        }
+        fetchCalls.push({ method, url, body });
 
-        if (url.endsWith("/api/intake/v1/intake/requests")) {
+        if (method === "GET" && url.endsWith("/api/intake/v1/intake/requests")) {
           return new Response(JSON.stringify({ items: currentRequest ? [currentRequest] : [] }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
         }
 
-        if (url.endsWith("/api/intake/v1/intake/specs")) {
+        if (method === "GET" && url.endsWith("/api/intake/v1/intake/specs")) {
           return new Response(JSON.stringify({ items: currentSpec ? [currentSpec] : [] }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
         }
 
-        if (url.endsWith("/api/offers/v1/offers/drafts")) {
+        if (method === "GET" && url.endsWith("/api/offers/v1/offers/drafts")) {
           return new Response(JSON.stringify({ items: [] }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
         }
 
-        if (url.endsWith("/api/production/v1/production/plans")) {
+        if (method === "GET" && url.endsWith("/api/production/v1/production/plans")) {
           if (currentPlan) {
             return new Response(JSON.stringify({ items: [currentPlan] }), {
               status: 200,
@@ -278,7 +292,7 @@ describe("backoffice internal usage smoke", () => {
           });
         }
 
-        if (url.endsWith("/api/production/v1/production/purchase-lists")) {
+        if (method === "GET" && url.endsWith("/api/production/v1/production/purchase-lists")) {
           if (currentPurchaseList) {
             return new Response(JSON.stringify({ items: [currentPurchaseList] }), {
               status: 200,
@@ -291,7 +305,7 @@ describe("backoffice internal usage smoke", () => {
           });
         }
 
-        if (url.endsWith("/api/production/v1/production/recipes")) {
+        if (method === "GET" && url.endsWith("/api/production/v1/production/recipes")) {
           return new Response(
             JSON.stringify({
               items: [
@@ -316,10 +330,11 @@ describe("backoffice internal usage smoke", () => {
         }
 
         if (
-          url.endsWith("/api/intake/health") ||
-          url.endsWith("/api/offers/health") ||
-          url.endsWith("/api/production/health") ||
-          url.endsWith("/api/exports/health")
+          method === "GET" &&
+          (url.endsWith("/api/intake/health") ||
+            url.endsWith("/api/offers/health") ||
+            url.endsWith("/api/production/health") ||
+            url.endsWith("/api/exports/health"))
         ) {
           return new Response(
             JSON.stringify({ service: "ok", status: "ok", timestamp: "2026-04-10T09:30:00.000Z", counts: {} }),
@@ -327,7 +342,7 @@ describe("backoffice internal usage smoke", () => {
           );
         }
 
-        if (url.endsWith("/api/intake/v1/intake/specs/manual")) {
+        if (method === "POST" && url.endsWith("/api/intake/v1/intake/specs/manual")) {
           currentRequest = fixture.request;
           currentSpec = fixture.spec;
           return new Response(JSON.stringify({ acceptedEventSpec: currentSpec }), {
@@ -336,27 +351,26 @@ describe("backoffice internal usage smoke", () => {
           });
         }
 
-        if (url.endsWith(`/api/intake/v1/intake/specs/${fixture.spec.specId}`)) {
+        if (method === "PATCH" && url.endsWith(`/api/intake/v1/intake/specs/${fixture.spec.specId}`)) {
           currentSpec = fixture.plannedSpec;
-          currentPlan = artifacts.productionPlan;
-          currentPurchaseList = artifacts.purchaseList;
           return new Response(JSON.stringify({ acceptedEventSpec: currentSpec }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
         }
 
-        if (url.endsWith(`/api/intake/v1/intake/requests/${currentRequestId}`)) {
+        if (method === "GET" && url.endsWith(`/api/intake/v1/intake/requests/${currentRequestId}`)) {
           return new Response(JSON.stringify(currentRequest ?? fixture.request), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
         }
 
-        if (url.endsWith("/api/production/v1/production/plans")) {
+        if (method === "POST" && url.endsWith("/api/production/v1/production/plans")) {
+          createdPlanViaPost = true;
           currentPlan = artifacts.productionPlan;
           currentPurchaseList = artifacts.purchaseList;
-          return new Response(JSON.stringify({ productionPlan: { planId: artifacts.productionPlan.planId } }), {
+          return new Response(JSON.stringify({ productionPlan: artifacts.productionPlan }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
@@ -436,6 +450,23 @@ describe("backoffice internal usage smoke", () => {
       findButtonByText("Speichern und Berechnung starten").click();
       await flush(8);
     });
+
+    const saveAnswersCallIndex = fetchCalls.findIndex(
+      (call) =>
+        call.method === "PATCH" &&
+        call.url.endsWith(`/api/intake/v1/intake/specs/${fixture.spec.specId}`)
+    );
+    const createPlanCallIndex = fetchCalls.findIndex(
+      (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/plans")
+    );
+    const createPlanBody = fetchCalls[createPlanCallIndex]?.body as
+      | { eventSpec?: { menuPlan?: Array<{ productionDecision?: { mode?: string } }> } }
+      | undefined;
+
+    expect(createdPlanViaPost).toBe(true);
+    expect(saveAnswersCallIndex).toBeGreaterThanOrEqual(0);
+    expect(createPlanCallIndex).toBeGreaterThan(saveAnswersCallIndex);
+    expect(createPlanBody?.eventSpec?.menuPlan?.[0]?.productionDecision?.mode).toBe("scratch");
 
     expect(document.body.textContent ?? "").toContain("Produktionsplan wurde erzeugt.");
     expect(document.body.textContent ?? "").toContain("Status: vollständig");
