@@ -979,6 +979,28 @@ export function App() {
     productionUploadInputRef.current?.click();
   }
 
+  const manualSpecInput = {
+    eventType: manualEventType,
+    eventDate: manualEventDate,
+    attendeeCount: manualAttendeeCount,
+    serviceForm: manualServiceForm,
+    menuItems: manualMenuItems,
+    customerName: manualCustomerName,
+    venueName: manualVenueName,
+    notes: manualNotes
+  };
+  const manualSpecActions = {
+    setEventType: setManualEventType,
+    setEventDate: setManualEventDate,
+    setAttendeeCount: setManualAttendeeCount,
+    setServiceForm: setManualServiceForm,
+    setMenuItems: setManualMenuItems,
+    setCustomerName: setManualCustomerName,
+    setVenueName: setManualVenueName,
+    setNotes: setManualNotes,
+    submitManualSpec: handleManualSpecSubmit
+  };
+
   return (
     <DashboardShell
       title={getRouteTitle(route)}
@@ -1051,27 +1073,8 @@ export function App() {
           intakeFile={intakeFile}
           setIntakeFile={setIntakeFile}
           submitIntakeDocument={handleIntakeDocumentSubmit}
-          manualInput={{
-            eventType: manualEventType,
-            eventDate: manualEventDate,
-            attendeeCount: manualAttendeeCount,
-            serviceForm: manualServiceForm,
-            menuItems: manualMenuItems,
-            customerName: manualCustomerName,
-            venueName: manualVenueName,
-            notes: manualNotes
-          }}
-          manualActions={{
-            setEventType: setManualEventType,
-            setEventDate: setManualEventDate,
-            setAttendeeCount: setManualAttendeeCount,
-            setServiceForm: setManualServiceForm,
-            setMenuItems: setManualMenuItems,
-            setCustomerName: setManualCustomerName,
-            setVenueName: setManualVenueName,
-            setNotes: setManualNotes,
-            submitManualSpec: handleManualSpecSubmit
-          }}
+          manualInput={manualSpecInput}
+          manualActions={manualSpecActions}
           filteredOfferDrafts={filteredOfferDrafts}
           activeDraft={activeOfferDraft}
           selectedDraft={selectedDraft}
@@ -1130,27 +1133,8 @@ export function App() {
             submitDocument: handleIntakeDocumentSubmit,
             submitText: handleIntakeSubmit
           }}
-          manualInput={{
-            eventType: manualEventType,
-            eventDate: manualEventDate,
-            attendeeCount: manualAttendeeCount,
-            serviceForm: manualServiceForm,
-            menuItems: manualMenuItems,
-            customerName: manualCustomerName,
-            venueName: manualVenueName,
-            notes: manualNotes
-          }}
-          manualInputActions={{
-            setEventType: setManualEventType,
-            setEventDate: setManualEventDate,
-            setAttendeeCount: setManualAttendeeCount,
-            setServiceForm: setManualServiceForm,
-            setMenuItems: setManualMenuItems,
-            setCustomerName: setManualCustomerName,
-            setVenueName: setManualVenueName,
-            setNotes: setManualNotes,
-            submitManualSpec: handleManualSpecSubmit
-          }}
+          manualInput={manualSpecInput}
+          manualInputActions={manualSpecActions}
           questionActions={{
             openSpecForQuestions: (specId) => {
               setProductionWorkspaceCleared(false);
