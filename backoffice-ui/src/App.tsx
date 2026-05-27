@@ -96,6 +96,7 @@ import {
 } from "./production-api-response-ids.js";
 import { channelForFile } from "./production-document-channel.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
+import { buildProductionSourceInputState } from "./production-source-input-state.js";
 import {
   countRecipeReviewStates,
   formatRecipeReviewStatusLabel,
@@ -1000,6 +1001,18 @@ export function App() {
     setNotes: setManualNotes,
     submitManualSpec: handleManualSpecSubmit
   };
+  const productionSourceInput = buildProductionSourceInputState({
+    dragActive,
+    intakeFile,
+    intakeChannel,
+    documentPhase,
+    activeDocumentName,
+    documentProgress,
+    documentEtaSeconds,
+    intakeText,
+    canClearWorkspace: canClearProductionWorkspace,
+    canArchiveCurrentIntake
+  });
 
   return (
     <DashboardShell
@@ -1108,18 +1121,7 @@ export function App() {
         <ProductionRouteMainLayout
           {...productionRouteViewState}
           submitting={submitting}
-          sourceInput={{
-            dragActive,
-            intakeFile,
-            intakeChannel,
-            documentPhase,
-            activeDocumentName,
-            documentProgress,
-            documentEtaSeconds,
-            intakeText,
-            canClearWorkspace: canClearProductionWorkspace,
-            canArchiveCurrentIntake
-          }}
+          sourceInput={productionSourceInput}
           sourceInputActions={{
             uploadInputRef: productionUploadInputRef,
             setDragActive,
