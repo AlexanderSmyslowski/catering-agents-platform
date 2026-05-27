@@ -76,11 +76,7 @@ import { buildProductionQuestionEditorState } from "./production-question-editor
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import { buildProductionSourceInputState } from "./production-source-input-state.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
-import {
-  countRecipeReviewStates,
-  formatRecipeReviewStatusLabel,
-  formatRecipeUsageStatusLabel
-} from "./production-recipe-review-state.js";
+import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
@@ -223,9 +219,15 @@ export function App() {
     ]
   );
 
-  const recipeReviewCounts = useMemo(() => countRecipeReviewStates(dashboard.recipes), [dashboard.recipes]);
-  const recipeReviewStatusLabel = formatRecipeReviewStatusLabel(recipeReviewCounts);
-  const recipeUsageStatusLabel = formatRecipeUsageStatusLabel(recipeReviewCounts);
+  const {
+    recipeReviewCounts,
+    recipeReviewStatusLabel,
+    recipeUsageStatusLabel,
+    recipeCount
+  } = useMemo(
+    () => buildProductionRecipeStatusSummaryState({ recipes: dashboard.recipes }),
+    [dashboard.recipes]
+  );
 
   const offerHandoffCounts = useMemo(
     () => countOfferHandoffReadiness(dashboard.acceptedSpecs),
@@ -436,7 +438,7 @@ export function App() {
     recipeReviewStatusLabel,
     recipeUsageStatusLabel,
     recipeReviewCounts,
-    recipeCount: dashboard.recipes.length,
+    recipeCount,
     recipeName,
     recipeFile,
     filteredRecipes
@@ -969,7 +971,7 @@ export function App() {
         <ProductionRouteFilterPanel
           productionPlanCount={dashboard.productionPlans.length}
           purchaseListCount={dashboard.purchaseLists.length}
-          recipeCount={dashboard.recipes.length}
+          recipeCount={recipeCount}
           approvedRecipeCount={recipeReviewCounts.approved}
           reviewRequiredRecipeCount={recipeReviewCounts.reviewRequired}
           productionServiceStatusLabel={translateHealthStatus(serviceHealth.production.status)}
