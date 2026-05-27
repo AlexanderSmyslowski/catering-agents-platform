@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
 DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
 START_COMMAND="npm run local:start --seed-demo"
+CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 
 required_sessions=(
   "catering-ui"
@@ -127,9 +128,9 @@ echo "Healthpruefung:"
 for entry in "${required_urls[@]}"; do
   label="${entry%%|*}"
   url="${entry#*|}"
-  code="$(curl -sS -o /dev/null -w '%{http_code}' "${url}")"
+  code="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -sS -o /dev/null -w '%{http_code}' "${url}" 2>/dev/null || true)"
   if [[ "${code}" != "200" ]]; then
-    echo "  ${label}: nicht erreichbar (${url}, HTTP ${code})" >&2
+    echo "  ${label}: nicht erreichbar (${url}, HTTP ${code:-timeout})" >&2
     exit 1
   fi
   echo "  ${label}: erreichbar (${url}, HTTP 200)"
@@ -138,7 +139,7 @@ done
 echo ""
 echo "Erwartungsankerpruefung:"
 intake_requests_url="http://127.0.0.1:3101/v1/intake/requests"
-intake_requests_body="$(curl -fsS -H "x-actor-name: Intake-Mitarbeiter" "${intake_requests_url}")"
+intake_requests_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS -H "x-actor-name: Intake-Mitarbeiter" "${intake_requests_url}")"
 if [[ "${intake_requests_body}" != *"demo-intake-conference-lunch"* ]]; then
   echo "  Intake-Request-Check: erwarteter Demo-Request demo-intake-conference-lunch fehlt (${intake_requests_url})" >&2
   exit 1
@@ -146,7 +147,7 @@ fi
 printf '  Intake-Request-Check: erreichbar (%s, enthält demo-intake-conference-lunch)\n' "${intake_requests_url}"
 
 intake_specs_url="http://127.0.0.1:3101/v1/intake/specs"
-intake_specs_body="$(curl -fsS -H "x-actor-name: Intake-Mitarbeiter" "${intake_specs_url}")"
+intake_specs_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS -H "x-actor-name: Intake-Mitarbeiter" "${intake_specs_url}")"
 if [[ "${intake_specs_body}" != *"spec-demo-intake-conference-lunch"* ]]; then
   echo "  Intake-Spec-Check: erwartete Demo-Spec spec-demo-intake-conference-lunch fehlt (${intake_specs_url})" >&2
   exit 1
@@ -154,7 +155,7 @@ fi
 printf '  Intake-Spec-Check: erreichbar (%s, enthält spec-demo-intake-conference-lunch)\n' "${intake_specs_url}"
 
 offer_drafts_url="http://127.0.0.1:3102/v1/offers/drafts"
-offer_drafts_body="$(curl -fsS -H "x-actor-name: Angebots-Mitarbeiter" "${offer_drafts_url}")"
+offer_drafts_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS -H "x-actor-name: Angebots-Mitarbeiter" "${offer_drafts_url}")"
 if [[ "${offer_drafts_body}" != *"draft-demo-offer-conference-buffet"* ]]; then
   echo "  Angebots-Check: erwarteter Demo-Entwurf draft-demo-offer-conference-buffet fehlt (${offer_drafts_url})" >&2
   exit 1
@@ -162,7 +163,7 @@ fi
 printf '  Angebots-Check: erreichbar (%s, enthält draft-demo-offer-conference-buffet)\n' "${offer_drafts_url}"
 
 production_plans_url="http://127.0.0.1:3103/v1/production/plans"
-production_plans_body="$(curl -fsS -H "x-actor-name: Produktions-Mitarbeiter" "${production_plans_url}")"
+production_plans_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS -H "x-actor-name: Produktions-Mitarbeiter" "${production_plans_url}")"
 if [[ "${production_plans_body}" != *"plan-spec-demo-production-coffee"* ]]; then
   echo "  Produktions-Check: erwarteter Demo-Plan plan-spec-demo-production-coffee fehlt (${production_plans_url})" >&2
   exit 1
@@ -201,7 +202,7 @@ echo ""
 echo "Exportpruefung:"
 export_url="http://127.0.0.1:3200/api/exports/v1/exports/production-plans/plan-spec-demo-production-coffee/html"
 export_anchor="Produktionsplan plan-spec-demo-production-coffee"
-export_body="$(curl -fsS "${export_url}")"
+export_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${export_url}")"
 if [[ "${export_body}" != *"${export_anchor}"* ]]; then
   echo "  Export-Check: unerwarteter Inhalt (${export_url})" >&2
   exit 1
@@ -209,7 +210,7 @@ fi
 printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${export_url}" "${export_anchor}"
 
 offer_export_url="http://127.0.0.1:3200/api/exports/v1/exports/offers/draft-demo-offer-conference-buffet/html"
-offer_export_body="$(curl -fsS "${offer_export_url}")"
+offer_export_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${offer_export_url}")"
 if [[ "${offer_export_body}" != *"Angebot draft-demo-offer-conference-buffet"* ]]; then
   echo "  Export-Check: unerwarteter Inhalt (${offer_export_url})" >&2
   exit 1
@@ -217,7 +218,7 @@ fi
 printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${offer_export_url}" "Angebot draft-demo-offer-conference-buffet"
 
 purchase_list_export_url="http://127.0.0.1:3200/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv"
-purchase_list_export_body="$(curl -fsS "${purchase_list_export_url}")"
+purchase_list_export_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${purchase_list_export_url}")"
 if [[ "${purchase_list_export_body}" != *'"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"'* ]]; then
   echo "  Export-Check: unerwarteter Inhalt (${purchase_list_export_url})" >&2
   exit 1
@@ -227,7 +228,7 @@ printf '  Export-Check: erreichbar (%s, enthält CSV-Header)\n' "${purchase_list
 echo ""
 echo "Bootstrapp-/Auditpruefung:"
 audit_url="http://127.0.0.1:3103/v1/production/audit/events?limit=200"
-audit_body="$(curl -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${audit_url}")"
+audit_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS -H "x-actor-name: Betriebs-/Audit-Operator" "${audit_url}")"
 if ! audit_entry="$(printf '%s' "${audit_body}" | node -e '
 let input = "";
 process.stdin.setEncoding("utf8");

@@ -51,6 +51,13 @@ describe("local ops check contract", () => {
     expect(startScript).toContain("Bitte npm run local:stop ausfuehren, bevor die lokale Datenwurzel gewechselt wird");
     expect(checkScript).toContain("recorded_data_root");
     expect(checkScript).toContain("requested_data_root");
+    expect(startScript).toContain("CURL_MAX_TIME_SECONDS");
+    expect(statusScript).toContain("CURL_MAX_TIME_SECONDS");
+    expect(checkScript).toContain("CURL_MAX_TIME_SECONDS");
+    expect(statusScript).toContain("curl --max-time \"${CURL_MAX_TIME_SECONDS}\"");
+    expect(checkScript).toContain("curl --max-time \"${CURL_MAX_TIME_SECONDS}\"");
+    expect(checkScript).toContain("2>/dev/null || true");
+    expect(checkScript).toContain("HTTP ${code:-timeout}");
     expect(checkScript).toContain("Lokaler Stack wurde mit anderer Datenwurzel gestartet");
     expect(checkScript).toContain("Bitte dieselbe Datenwurzel nutzen oder den Stack mit npm run local:stop kontrolliert neu starten");
     expect(statusScript).toContain("Datenwurzel:");

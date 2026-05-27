@@ -7,6 +7,7 @@ RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
 LOG_DIR="${RUNTIME_DIR}/logs"
 DATA_ROOT="${CATERING_DATA_ROOT:-${ROOT_DIR}/data}"
 DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
+CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 
 required_sessions=(
   "catering-ui"
@@ -29,7 +30,7 @@ wait_for_url() {
   local attempts=30
 
   for _ in $(seq 1 "${attempts}"); do
-    if curl -sf "${url}" >/dev/null 2>&1; then
+    if curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf "${url}" >/dev/null 2>&1; then
       echo "${label} bereit: ${url}"
       return 0
     fi
@@ -42,11 +43,11 @@ wait_for_url() {
 
 seed_demo_data() {
   local audit_actor_name="Betriebs-/Audit-Operator"
-  curl -sf -X POST http://127.0.0.1:3101/v1/intake/seed-demo \
+  curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3101/v1/intake/seed-demo \
     -H "x-actor-name: ${audit_actor_name}" >/dev/null
-  curl -sf -X POST http://127.0.0.1:3102/v1/offers/seed-demo \
+  curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3102/v1/offers/seed-demo \
     -H "x-actor-name: ${audit_actor_name}" >/dev/null
-  curl -sf -X POST http://127.0.0.1:3103/v1/production/seed-demo \
+  curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3103/v1/production/seed-demo \
     -H "x-actor-name: ${audit_actor_name}" >/dev/null
   echo "Demo-Daten geladen."
 }
