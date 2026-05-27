@@ -14,13 +14,11 @@ import {
   detectRoute,
   emptyDashboardState,
   emptyServiceHealthState,
-  formatCounts,
   formatLatestIntakeRequest,
   getBaseUrl,
   getPathname,
   getRouteSubtitle,
-  getRouteTitle,
-  translateHealthStatus
+  getRouteTitle
 } from "./app-shell-state.js";
 import {
   countOfferHandoffReadiness,
@@ -89,6 +87,7 @@ import {
   buildProductionQuestionEditorActions,
   buildProductionRecipeActions
 } from "./production-route-actions.js";
+import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import {
   buildProductionSourceInputActions,
@@ -987,6 +986,17 @@ export function App() {
     saveSpecEdit: handleSaveSpecEdit,
     resetSpecEdit
   });
+  const productionRouteFilterState = buildProductionRouteFilterState({
+    productionPlanCount: dashboard.productionPlans.length,
+    purchaseListCount: dashboard.purchaseLists.length,
+    recipeCount,
+    approvedRecipeCount: recipeReviewCounts.approved,
+    reviewRequiredRecipeCount: recipeReviewCounts.reviewRequired,
+    productionServiceStatus: serviceHealth.production.status,
+    productionServiceCounts: serviceHealth.production.counts,
+    search,
+    setSearch
+  });
 
   return (
     <DashboardShell
@@ -1025,17 +1035,7 @@ export function App() {
       ) : null}
 
       {route === "production" ? (
-        <ProductionRouteFilterPanel
-          productionPlanCount={dashboard.productionPlans.length}
-          purchaseListCount={dashboard.purchaseLists.length}
-          recipeCount={recipeCount}
-          approvedRecipeCount={recipeReviewCounts.approved}
-          reviewRequiredRecipeCount={recipeReviewCounts.reviewRequired}
-          productionServiceStatusLabel={translateHealthStatus(serviceHealth.production.status)}
-          productionServiceCountsLabel={formatCounts(serviceHealth.production.counts)}
-          search={search}
-          setSearch={setSearch}
-        />
+        <ProductionRouteFilterPanel {...productionRouteFilterState} />
       ) : null}
 
       {error || notice ? (

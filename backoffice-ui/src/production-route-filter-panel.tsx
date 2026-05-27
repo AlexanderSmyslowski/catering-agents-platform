@@ -1,6 +1,6 @@
 import { StatusCard } from "../components/status-card.js";
 
-type ProductionRouteFilterPanelProps = {
+export type ProductionRouteFilterPanelProps = {
   productionPlanCount: number;
   purchaseListCount: number;
   recipeCount: number;
