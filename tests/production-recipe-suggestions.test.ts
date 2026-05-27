@@ -176,6 +176,26 @@ describe("production recipe suggestions", () => {
     });
   });
 
+  it("suggests cabbage carrot salad recipes across German-English quick-lunch aliases", () => {
+    const suggestions = recipeSuggestionsForComponent("Kraut-Karottensalat vegan", [
+      {
+        recipeId: "recipe-carrot-salad",
+        name: "Carrot Salad Buffet",
+        source: { reference: "internal/carrot-salad.md" }
+      },
+      {
+        recipeId: "recipe-cabbage-carrot-salad",
+        name: "Coleslaw Cabbage Carrot Salad vegan",
+        source: { reference: "internal/cabbage-carrot-salad.md" }
+      }
+    ]);
+
+    expect(suggestions[0]).toEqual({
+      recipeId: "recipe-cabbage-carrot-salad",
+      name: "Coleslaw Cabbage Carrot Salad vegan"
+    });
+  });
+
   it("suggests Hummus offer wording for internal Humus recipe spelling variants", () => {
     expect(
       recipeSuggestionsForComponent("Hummus vegan", [

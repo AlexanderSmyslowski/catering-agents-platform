@@ -180,10 +180,28 @@ describe("production recipe alias parity", () => {
       ].join("\n")
     },
     {
+      componentLabel: "Kraut-Karottensalat vegan",
+      category: "vegan" as const,
+      recipeName: "Coleslaw Cabbage Carrot Salad vegan",
+      filename: "internes-rezept-487.pdf",
+      sourceRef: "test:quick-lunch-cabbage-carrot-salad",
+      text: [
+        "Coleslaw Cabbage Carrot Salad vegan",
+        "Zutaten",
+        "2 kg Kraut",
+        "1 kg Karotten",
+        "500 ml Vinaigrette",
+        "Zubereitung",
+        "1. Kraut fein schneiden.",
+        "2. Karotten raspeln.",
+        "3. Coleslaw vegan kalt bereitstellen."
+      ].join("\n")
+    },
+    {
       componentLabel: "Auberginenröllchen vegan",
       category: "vegan" as const,
       recipeName: "Eggplant Rolls vegan",
-      filename: "internes-rezept-487.pdf",
+      filename: "internes-rezept-488.pdf",
       sourceRef: "test:antipasti-eggplant-rolls",
       text: [
         "Eggplant Rolls vegan",
@@ -200,7 +218,7 @@ describe("production recipe alias parity", () => {
       componentLabel: "Schokokuchen vegan",
       category: "vegan" as const,
       recipeName: "Chocolate Cake vegan",
-      filename: "internes-rezept-488.pdf",
+      filename: "internes-rezept-489.pdf",
       sourceRef: "test:dessert-chocolate-cake",
       text: [
         "Chocolate Cake vegan",
@@ -217,7 +235,7 @@ describe("production recipe alias parity", () => {
       componentLabel: "Wildkräutersalat mit Petersilien-Vinaigrette",
       category: "vegan" as const,
       recipeName: "Wild Herb Salad Parsley Vinaigrette vegan",
-      filename: "internes-rezept-489.pdf",
+      filename: "internes-rezept-490.pdf",
       sourceRef: "test:buffet-wild-herb-salad",
       text: [
         "Wild Herb Salad Parsley Vinaigrette vegan",
