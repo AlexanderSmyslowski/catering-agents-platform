@@ -12,7 +12,6 @@ import {
 import { buildProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
 import { DashboardShell } from "../components/dashboard-shell.js";
 import {
-  compareNewestRecordsBy,
   detectRoute,
   emptyDashboardState,
   emptyServiceHealthState,
@@ -28,7 +27,6 @@ import {
   countOfferHandoffReadiness,
   filterDashboardRecords,
   isInitialHomeDashboardLoading,
-  mapSpecsById,
   selectActiveOfferSpec,
   selectRecordByStringId
 } from "./app-dashboard-selectors.js";
@@ -45,7 +43,6 @@ import {
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
   countClarificationAnswerStatuses,
   formatStructuredProductionAnswerSummary,
-  selectProductionArtifactSpecIds,
   selectFocusedProductionSpec,
   selectProductionIntakeRequestId,
   selectProductionPlanSpec,
@@ -78,6 +75,7 @@ import {
   getSpecLabel
 } from "./production-language.js";
 import { buildProductionCurrentArtifactsState } from "./production-current-artifacts-state.js";
+import { buildProductionDashboardRecordsState } from "./production-dashboard-records-state.js";
 import { buildProductionManualInputState } from "./production-manual-input-state.js";
 import {
   extractAcceptedSpecId,
@@ -202,29 +200,37 @@ export function App() {
     void refreshDashboard();
   }, []);
 
-  const filteredSpecs = useMemo(
-    () => filterDashboardRecords(dashboard.acceptedSpecs, deferredSearch),
-    [dashboard.acceptedSpecs, deferredSearch]
-  );
-
-  const filteredPlans = useMemo(
-    () => filterDashboardRecords(dashboard.productionPlans, deferredSearch),
-    [dashboard.productionPlans, deferredSearch]
-  );
-
-  const filteredAuditEvents = useMemo(
-    () => filterDashboardRecords(dashboard.auditEvents, deferredSearch),
-    [dashboard.auditEvents, deferredSearch]
-  );
-
   const filteredOfferDrafts = useMemo(
     () => filterDashboardRecords(dashboard.offerDrafts, deferredSearch),
     [dashboard.offerDrafts, deferredSearch]
   );
 
-  const filteredRecipes = useMemo(
-    () => filterDashboardRecords(dashboard.recipes, deferredSearch),
-    [dashboard.recipes, deferredSearch]
+  const {
+    filteredSpecs,
+    filteredAuditEvents,
+    filteredRecipes,
+    orderedPlans,
+    orderedPurchaseLists,
+    specById,
+    productionArtifactSpecIds
+  } = useMemo(
+    () =>
+      buildProductionDashboardRecordsState({
+        acceptedSpecs: dashboard.acceptedSpecs,
+        productionPlans: dashboard.productionPlans,
+        purchaseLists: dashboard.purchaseLists,
+        auditEvents: dashboard.auditEvents,
+        recipes: dashboard.recipes,
+        searchText: deferredSearch
+      }),
+    [
+      dashboard.acceptedSpecs,
+      dashboard.auditEvents,
+      dashboard.productionPlans,
+      dashboard.purchaseLists,
+      dashboard.recipes,
+      deferredSearch
+    ]
   );
 
   const recipeReviewCounts = useMemo(() => countRecipeReviewStates(dashboard.recipes), [dashboard.recipes]);
@@ -242,23 +248,6 @@ export function App() {
   );
   const isInitialHomeLoading = isInitialHomeDashboardLoading({ route, loading, dashboard });
 
-  const filteredPurchaseLists = useMemo(
-    () => filterDashboardRecords(dashboard.purchaseLists, deferredSearch),
-    [dashboard.purchaseLists, deferredSearch]
-  );
-
-  const orderedPlans = useMemo(
-    () => [...filteredPlans].sort(compareNewestRecordsBy("planId")),
-    [filteredPlans]
-  );
-
-  const orderedPurchaseLists = useMemo(
-    () => [...filteredPurchaseLists].sort(compareNewestRecordsBy("purchaseListId")),
-    [filteredPurchaseLists]
-  );
-
-  const specById = useMemo(() => mapSpecsById(dashboard.acceptedSpecs), [dashboard.acceptedSpecs]);
-
   const selectedDraft = useMemo(
     () => selectRecordByStringId(dashboard.offerDrafts, "draftId", selectedDraftId),
     [dashboard.offerDrafts, selectedDraftId]
@@ -266,11 +255,6 @@ export function App() {
 
   const activeOfferDraft = selectedDraft ?? filteredOfferDrafts[0];
   const activeOfferSpec = selectActiveOfferSpec(dashboard.acceptedSpecs, filteredSpecs);
-
-  const productionArtifactSpecIds = useMemo(
-    () => selectProductionArtifactSpecIds([...orderedPlans, ...orderedPurchaseLists]),
-    [orderedPlans, orderedPurchaseLists]
-  );
 
   const focusedProductionSpec = useMemo(
     () =>
