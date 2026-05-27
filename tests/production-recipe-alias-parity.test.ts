@@ -105,10 +105,28 @@ describe("production recipe alias parity", () => {
       ].join("\n")
     },
     {
+      componentLabel: "Vegetarische Tomatensuppe",
+      category: "vegetarian" as const,
+      recipeName: "Tomato Soup vegetarian",
+      filename: "internes-rezept-483.pdf",
+      sourceRef: "test:tomato-soup-vegetarian",
+      text: [
+        "Tomato Soup vegetarian",
+        "Zutaten",
+        "6 kg Tomaten",
+        "1 kg Zwiebeln",
+        "3 l Gemüsebrühe",
+        "Zubereitung",
+        "1. Tomaten und Zwiebeln schneiden.",
+        "2. Tomatensuppe kochen.",
+        "3. Pürieren und warmhalten."
+      ].join("\n")
+    },
+    {
       componentLabel: "Obstspiesse vegan",
       category: "vegan" as const,
       recipeName: "Fruit Skewers vegan",
-      filename: "internes-rezept-483.pdf",
+      filename: "internes-rezept-484.pdf",
       sourceRef: "test:coffee-break-fruit-skewers",
       text: [
         "Fruit Skewers vegan",
