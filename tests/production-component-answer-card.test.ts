@@ -102,4 +102,34 @@ describe("production component answer card", () => {
       recipeOverrideId: "recipe-potato-salad"
     });
   });
+
+  it("distinguishes an empty recipe inventory from a missing recipe match", () => {
+    const emptyInventory = renderProductionComponentAnswerCard({
+      componentLabel: "Linseneintopf vegan",
+      recipes: []
+    });
+
+    expect(emptyInventory.container.textContent ?? "").toContain(
+      "Noch keine Bibliotheksrezepte im Bestand. Rezeptupload oder Freigabe zuerst ergänzen."
+    );
+    expect(emptyInventory.container.textContent ?? "").not.toContain(
+      "Für diese Bezeichnung wurden noch keine naheliegenden Bibliotheksrezepte gefunden."
+    );
+
+    const noMatch = renderProductionComponentAnswerCard({
+      componentLabel: "Linseneintopf vegan",
+      recipes: [
+        {
+          recipeId: "recipe-vegetable-curry",
+          name: "Vegetable Curry vegan",
+          source: { reference: "internal/vegetable-curry.md" }
+        }
+      ]
+    });
+
+    expect(noMatch.container.textContent ?? "").toContain(
+      "Für diese Bezeichnung wurden noch keine naheliegenden Bibliotheksrezepte gefunden."
+    );
+    expect(noMatch.container.textContent ?? "").not.toContain("Noch keine Bibliotheksrezepte im Bestand.");
+  });
 });
