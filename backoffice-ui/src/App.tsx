@@ -74,6 +74,7 @@ import {
   extractProductionPlanId
 } from "./production-api-response-ids.js";
 import { channelForFile } from "./production-document-channel.js";
+import { resetProductionStateAfterDocumentFailure } from "./production-document-failure-reset.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import {
   buildProductionObjectsActions,
@@ -577,14 +578,16 @@ export function App() {
       await refreshDashboard();
       setNotice(`Dokument ${file.name} wurde übernommen und analysiert.`);
     } catch (submitError) {
-      failIncomingProductionFile(file);
-      failDocumentProgress();
-      setProductionWorkspaceCleared(true);
-      setFocusedProductionSpecId(undefined);
-      setSelectedPlanId(undefined);
-      resetPlanProgress();
-      resetIntakeRequestDetail();
-      resetSpecEdit(false);
+      resetProductionStateAfterDocumentFailure(file, {
+        failIncomingProductionFile,
+        failDocumentProgress,
+        setProductionWorkspaceCleared,
+        clearFocusedProductionSpecId: () => setFocusedProductionSpecId(undefined),
+        clearSelectedPlanId: () => setSelectedPlanId(undefined),
+        resetPlanProgress,
+        resetIntakeRequestDetail,
+        resetSpecEdit
+      });
       setError(
         submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
       );
