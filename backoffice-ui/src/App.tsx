@@ -34,6 +34,7 @@ import {
   selectRecordByStringId
 } from "./app-dashboard-selectors.js";
 import { HomeRoute } from "./home-route.js";
+import { buildOfferSpecEditState } from "./offer-spec-edit-state.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
@@ -1026,6 +1027,14 @@ export function App() {
     hasFocusedSpecEditChanges,
     recipes: dashboard.recipes
   });
+  const offerSpecEdit = buildOfferSpecEditState({
+    editingSpecId,
+    eventType: editingEventType,
+    eventDate: editingEventDate,
+    attendeeCount: editingAttendeeCount,
+    serviceForm: editingServiceForm,
+    menuItems: editingMenuItems
+  });
 
   return (
     <DashboardShell
@@ -1110,14 +1119,7 @@ export function App() {
           activeSpec={activeOfferSpec}
           completeSpecCount={offerHandoffCounts.complete}
           partialSpecCount={offerHandoffCounts.partial}
-          specEdit={{
-            editingSpecId,
-            eventType: editingEventType,
-            eventDate: editingEventDate,
-            attendeeCount: editingAttendeeCount,
-            serviceForm: editingServiceForm,
-            menuItems: editingMenuItems
-          }}
+          specEdit={offerSpecEdit}
           specEditActions={{
             beginSpecEdit,
             setEventType: setEditingEventType,
