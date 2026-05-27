@@ -179,6 +179,23 @@ describe("production recipe alias parity", () => {
       ].join("\n")
     },
     {
+      componentLabel: "Kartoffelgratin vegetarisch",
+      category: "vegetarian" as const,
+      recipeName: "Potato Gratin vegetarian",
+      filename: "internes-rezept-495.pdf",
+      sourceRef: "test:buffet-potato-gratin-vegetarian",
+      text: [
+        "Potato Gratin vegetarian",
+        "Zutaten",
+        "5 kg Kartoffeln",
+        "2 l Sahne",
+        "1 kg Käse",
+        "Zubereitung",
+        "1. Kartoffeln hobeln.",
+        "2. Potato Gratin vegetarisch schichten und backen."
+      ].join("\n")
+    },
+    {
       componentLabel: "Mini-Quiche Spinat Feta",
       category: "vegetarian" as const,
       recipeName: "Flying Bites Mini-Quiche Spinat Feta",

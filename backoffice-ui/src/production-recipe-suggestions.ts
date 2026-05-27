@@ -36,6 +36,7 @@ const RECIPE_SUGGESTION_TOKEN_EXPANSIONS: Record<string, string[]> = {
   eintopf: ["stew"],
   stew: ["eintopf"],
   kartoffelsalat: ["potato"],
+  kartoffelgratin: ["potato", "gratin"],
   nudelsalat: ["pasta"],
   mandel: ["almond"],
   mandeln: ["almond", "almonds"],

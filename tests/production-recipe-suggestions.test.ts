@@ -89,6 +89,24 @@ describe("production recipe suggestions", () => {
       ])
     ).toEqual([{ recipeId: "recipe-pasta-salat", name: "Pasta-Salat mit frischem Gemüse" }]);
 
+    const gratinSuggestions = recipeSuggestionsForComponent("Kartoffelgratin vegetarisch", [
+      {
+        recipeId: "recipe-potato-gratin",
+        name: "Potato Gratin vegetarian",
+        source: { reference: "internal/potato-gratin.md" }
+      },
+      {
+        recipeId: "recipe-potato-salad",
+        name: "Potato Salad with Herbs",
+        source: { reference: "internal/potato-salad.md" }
+      }
+    ]);
+
+    expect(gratinSuggestions[0]).toEqual({
+      recipeId: "recipe-potato-gratin",
+      name: "Potato Gratin vegetarian"
+    });
+
     expect(
       recipeSuggestionsForComponent("KALBSFRIKADELLEN | SCHMORZWIEBELN", [
         {
