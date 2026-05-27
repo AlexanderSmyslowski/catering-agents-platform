@@ -39,12 +39,9 @@ import { RouteMasthead } from "./route-masthead.js";
 import {
   buildWorkbenchSpecFacts,
   canArchiveCurrentIntake as canArchiveCurrentIntakeFromState,
-  buildProductionPlanComponentMap,
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
   countClarificationAnswerStatuses,
-  formatStructuredProductionAnswerSummary,
-  selectProductionPlanSpec,
-  selectProductionWorkbenchPlan
+  formatStructuredProductionAnswerSummary
 } from "./production-route-state.js";
 import {
   archiveIntakeRequest,
@@ -76,6 +73,7 @@ import { buildProductionCurrentArtifactsState } from "./production-current-artif
 import { buildProductionDashboardRecordsState } from "./production-dashboard-records-state.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionManualInputState } from "./production-manual-input-state.js";
+import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
 import {
   extractAcceptedSpecId,
   extractProductionPlanId
@@ -326,26 +324,21 @@ export function App() {
     [currentProductionSpecId, orderedPlans, orderedPurchaseLists, productionWorkspaceCleared]
   );
 
-  const selectedPlan = useMemo(
+  const {
+    selectedPlan,
+    selectedPlanSpec,
+    selectedPlanComponentsById
+  } = useMemo(
     () =>
-      selectProductionWorkbenchPlan({
+      buildProductionSelectedPlanState({
         currentProductionSpecId,
         currentSpecPlans,
         orderedPlans,
         productionWorkspaceCleared,
-        selectedPlanId
+        selectedPlanId,
+        specById
       }),
-    [currentProductionSpecId, currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId]
-  );
-
-  const selectedPlanSpec = useMemo(
-    () => selectProductionPlanSpec({ selectedPlan, specsById: specById }),
-    [selectedPlan, specById]
-  );
-
-  const selectedPlanComponentsById = useMemo(
-    () => buildProductionPlanComponentMap(selectedPlanSpec),
-    [selectedPlanSpec]
+    [currentProductionSpecId, currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId, specById]
   );
 
   const productionQuestions = useMemo(
