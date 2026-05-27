@@ -9,11 +9,20 @@ const NON_RECIPE_SUGGESTION_TOKENS = new Set([
   "klassisch",
   "vegetarian",
   "vegetarisch",
+  "vegetarische",
+  "vegetarischer",
+  "vegetarisches",
   "topping",
   "salad"
 ]);
 
 const RECIPE_SUGGESTION_TOKEN_EXPANSIONS: Record<string, string[]> = {
+  tomatensuppe: ["tomato", "soup"],
+  tomaten: ["tomato"],
+  tomate: ["tomato"],
+  tomato: ["tomate", "tomaten"],
+  suppe: ["soup"],
+  soup: ["suppe"],
   kartoffelsalat: ["potato"],
   nudelsalat: ["pasta"],
   hummus: ["humus"],

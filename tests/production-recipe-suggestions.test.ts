@@ -105,6 +105,23 @@ describe("production recipe suggestions", () => {
     ).toEqual([{ recipeId: "recipe-fruit-skewers", name: "Fruit Skewers vegan" }]);
   });
 
+  it("suggests tomato soup recipes across German-English catering aliases", () => {
+    expect(
+      recipeSuggestionsForComponent("Vegetarische Tomatensuppe", [
+        {
+          recipeId: "recipe-tomato-soup",
+          name: "Tomato Soup vegetarian",
+          source: { reference: "internal/tomato-soup.md" }
+        },
+        {
+          recipeId: "recipe-vegetable-curry",
+          name: "Vegetarisches Curry",
+          source: { reference: "internal/vegetable-curry.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-tomato-soup", name: "Tomato Soup vegetarian" }]);
+  });
+
   it("suggests Hummus offer wording for internal Humus recipe spelling variants", () => {
     expect(
       recipeSuggestionsForComponent("Hummus vegan", [
