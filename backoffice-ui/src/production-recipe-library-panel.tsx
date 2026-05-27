@@ -1,10 +1,7 @@
 import type { ChangeEvent } from "react";
+import type { RecipeReviewCounts } from "./production-recipe-review-state.js";
 
-export type RecipeReviewCounts = {
-  approved: number;
-  reviewRequired: number;
-  rejected: number;
-};
+export type { RecipeReviewCounts } from "./production-recipe-review-state.js";
 
 export type ProductionRecipeStatusState = {
   recipeReviewStatusLabel: string;
