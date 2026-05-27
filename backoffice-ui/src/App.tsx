@@ -61,7 +61,10 @@ import { buildProductionConversationState } from "./production-conversation-stat
 import { buildProductionCurrentArtifactsState } from "./production-current-artifacts-state.js";
 import { buildProductionDashboardRecordsState } from "./production-dashboard-records-state.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
-import { buildProductionManualInputState } from "./production-manual-input-state.js";
+import {
+  buildProductionManualInputActions,
+  buildProductionManualInputStateFromForm
+} from "./production-manual-input-state.js";
 import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
 import {
   extractAcceptedSpecId,
@@ -135,26 +138,11 @@ export function App() {
     completePlanProgress,
     failPlanProgress
   } = useProductionPlanProgress();
+  const manualSpecForm = useProductionManualSpecForm();
   const {
-    manualEventType,
-    manualEventDate,
-    manualAttendeeCount,
-    manualServiceForm,
-    manualMenuItems,
-    manualCustomerName,
-    manualVenueName,
-    manualNotes,
-    setManualEventType,
-    setManualEventDate,
-    setManualAttendeeCount,
-    setManualServiceForm,
-    setManualMenuItems,
-    setManualCustomerName,
-    setManualVenueName,
-    setManualNotes,
     buildCurrentManualSpecInput,
     resetManualSpecDraft
-  } = useProductionManualSpecForm();
+  } = manualSpecForm;
   const deferredSearch = useDeferredValue(search);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -876,27 +864,11 @@ export function App() {
     productionUploadInputRef.current?.click();
   }
 
-  const manualSpecInput = buildProductionManualInputState({
-    eventType: manualEventType,
-    eventDate: manualEventDate,
-    attendeeCount: manualAttendeeCount,
-    serviceForm: manualServiceForm,
-    menuItems: manualMenuItems,
-    customerName: manualCustomerName,
-    venueName: manualVenueName,
-    notes: manualNotes
-  });
-  const manualSpecActions = {
-    setEventType: setManualEventType,
-    setEventDate: setManualEventDate,
-    setAttendeeCount: setManualAttendeeCount,
-    setServiceForm: setManualServiceForm,
-    setMenuItems: setManualMenuItems,
-    setCustomerName: setManualCustomerName,
-    setVenueName: setManualVenueName,
-    setNotes: setManualNotes,
+  const manualSpecInput = buildProductionManualInputStateFromForm(manualSpecForm);
+  const manualSpecActions = buildProductionManualInputActions({
+    ...manualSpecForm,
     submitManualSpec: handleManualSpecSubmit
-  };
+  });
   const productionSourceInput = buildProductionSourceInputState({
     dragActive,
     intakeFile,
