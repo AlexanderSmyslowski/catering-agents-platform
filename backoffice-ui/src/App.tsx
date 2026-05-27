@@ -90,6 +90,7 @@ import {
   buildProductionQuestions,
   getSpecLabel
 } from "./production-language.js";
+import { buildProductionManualInputState } from "./production-manual-input-state.js";
 import {
   extractAcceptedSpecId,
   extractProductionPlanId
@@ -981,7 +982,7 @@ export function App() {
     productionUploadInputRef.current?.click();
   }
 
-  const manualSpecInput = {
+  const manualSpecInput = buildProductionManualInputState({
     eventType: manualEventType,
     eventDate: manualEventDate,
     attendeeCount: manualAttendeeCount,
@@ -990,7 +991,7 @@ export function App() {
     customerName: manualCustomerName,
     venueName: manualVenueName,
     notes: manualNotes
-  };
+  });
   const manualSpecActions = {
     setEventType: setManualEventType,
     setEventDate: setManualEventDate,
