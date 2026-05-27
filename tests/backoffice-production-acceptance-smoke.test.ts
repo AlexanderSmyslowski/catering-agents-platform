@@ -763,6 +763,9 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Kein aktiver Vorgang");
       expect(content).toContain("Auftrag einfügen oder Datei ablegen");
       expect(content).not.toContain("requestId: request-production-fallback-1");
+      expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
+      expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
+      expect(content).not.toContain("Produktionsblatt exportieren");
       expect(archiveButton?.disabled).toBe(true);
     } finally {
       await act(async () => {
