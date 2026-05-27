@@ -95,6 +95,7 @@ import {
   extractProductionPlanId
 } from "./production-api-response-ids.js";
 import { channelForFile } from "./production-document-channel.js";
+import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import { buildProductionSourceInputState } from "./production-source-input-state.js";
 import {
@@ -1013,6 +1014,17 @@ export function App() {
     canClearWorkspace: canClearProductionWorkspace,
     canArchiveCurrentIntake
   });
+  const productionQuestionEditorState = buildProductionQuestionEditorState({
+    editingSpecId,
+    editingEventType,
+    editingEventDate,
+    editingAttendeeCount,
+    editingServiceForm,
+    editingMenuItems,
+    editingComponentStates,
+    hasFocusedSpecEditChanges,
+    recipes: dashboard.recipes
+  });
 
   return (
     <DashboardShell
@@ -1143,17 +1155,7 @@ export function App() {
               setFocusedProductionSpecId(specId);
             }
           }}
-          editorState={{
-            editingSpecId,
-            editingEventType,
-            editingEventDate,
-            editingAttendeeCount,
-            editingServiceForm,
-            editingMenuItems,
-            editingComponentStates,
-            hasFocusedSpecEditChanges,
-            recipes: dashboard.recipes
-          }}
+          editorState={productionQuestionEditorState}
           editorActions={{
             setEditingEventType,
             setEditingEventDate,
