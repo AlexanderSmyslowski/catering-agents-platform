@@ -23,7 +23,11 @@ export function ProductionRecipeOverrideSelect({
     <>
       <label className="field-block">
         <span>Rezept gezielt aus Bibliothek zuweisen</span>
-        <select value={selectedRecipeId} onChange={(event) => onRecipeOverrideChange(event.target.value)}>
+        <select
+          aria-label="Rezept gezielt aus Bibliothek zuweisen"
+          value={selectedRecipeId}
+          onChange={(event) => onRecipeOverrideChange(event.target.value)}
+        >
           <option value="">Automatisch suchen</option>
           {recipeOptions.map((option) => (
             <option key={option.recipeId} value={option.recipeId}>

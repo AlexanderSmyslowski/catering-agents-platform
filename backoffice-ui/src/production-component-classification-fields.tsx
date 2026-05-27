@@ -15,7 +15,11 @@ export function ProductionComponentClassificationFields({
     <div className="answer-grid">
       <label className="field-block">
         <span>Kategorie im Angebot</span>
-        <select value={menuCategory} onChange={(event) => onMenuCategoryChange(event.target.value)}>
+        <select
+          aria-label="Kategorie im Angebot"
+          value={menuCategory}
+          onChange={(event) => onMenuCategoryChange(event.target.value)}
+        >
           <option value="">Bitte wählen</option>
           <option value="classic">klassisch</option>
           <option value="vegetarian">vegetarisch</option>
@@ -24,7 +28,11 @@ export function ProductionComponentClassificationFields({
       </label>
       <label className="field-block">
         <span>Herstellungsart</span>
-        <select value={productionMode} onChange={(event) => onProductionModeChange(event.target.value)}>
+        <select
+          aria-label="Herstellungsart"
+          value={productionMode}
+          onChange={(event) => onProductionModeChange(event.target.value)}
+        >
           <option value="">Bitte wählen</option>
           <option value="scratch">Eigenproduktion</option>
           <option value="hybrid">Hybrid</option>
