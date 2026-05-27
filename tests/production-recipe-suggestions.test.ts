@@ -122,6 +122,23 @@ describe("production recipe suggestions", () => {
     ).toEqual([{ recipeId: "recipe-tomato-soup", name: "Tomato Soup vegetarian" }]);
   });
 
+  it("suggests lentil stew recipes across German-English catering aliases", () => {
+    expect(
+      recipeSuggestionsForComponent("Linseneintopf vegan", [
+        {
+          recipeId: "recipe-lentil-stew",
+          name: "Lentil Stew vegan",
+          source: { reference: "internal/lentil-stew.md" }
+        },
+        {
+          recipeId: "recipe-vegetable-curry",
+          name: "Vegetable Curry vegan",
+          source: { reference: "internal/vegetable-curry.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-lentil-stew", name: "Lentil Stew vegan" }]);
+  });
+
   it("suggests Hummus offer wording for internal Humus recipe spelling variants", () => {
     expect(
       recipeSuggestionsForComponent("Hummus vegan", [

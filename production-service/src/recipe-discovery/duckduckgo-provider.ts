@@ -9,7 +9,7 @@ type SearchResultLink = {
 };
 
 const recipeCuePattern =
-  /\b(rezept|recipe|salat|salad|curry|cake|kuchen|suppe|soup|bread|brot|baguette|vinaigrette|dessert|gem[uü]sepfanne|wildkr[aä]uter|wild herb|parsley|krautsalat|karottensalat|coleslaw|pfanne)\b/i;
+  /\b(rezept|recipe|salat|salad|curry|cake|kuchen|suppe|soup|linseneintopf|eintopf|lentil|lentils|stew|bread|brot|baguette|vinaigrette|dessert|gem[uü]sepfanne|wildkr[aä]uter|wild herb|parsley|krautsalat|karottensalat|coleslaw|pfanne)\b/i;
 const collectionPagePattern =
   /\b(top\s*\d+|\d+\s+(extra\s+schnelle|schnelle|beste|best|easy|einfache?)\b|best\s+\w+\s+(recipes?|salads?|cakes?|desserts?)|ideen|ideas|sammlung|collection|best of|die leckersten|die besten)\b/i;
 
