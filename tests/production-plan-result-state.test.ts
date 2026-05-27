@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   completeProductionStateAfterPlanSuccess,
+  prepareProductionSpecForPlanning,
   resetProductionStateAfterPlanFailure,
   startProductionPlanRunState,
   type ProductionPlanFailureActions,
   type ProductionPlanStartActions,
-  type ProductionPlanSuccessActions
+  type ProductionPlanSuccessActions,
+  type ProductionSpecPlanningPreflightActions
 } from "../backoffice-ui/src/production-plan-result-state.js";
 
 function buildSuccessActions(calls: string[]): ProductionPlanSuccessActions {
@@ -26,6 +28,71 @@ function buildSuccessActions(calls: string[]): ProductionPlanSuccessActions {
 }
 
 describe("production plan result state", () => {
+  it("saves currently edited answers quietly before planning the same focused spec", async () => {
+    const originalSpec = { specId: "spec-planning-1", menuPlan: ["old"] };
+    const updatedSpec = { specId: "spec-planning-1", menuPlan: ["updated"] };
+    const calls: string[] = [];
+    const actions: ProductionSpecPlanningPreflightActions = {
+      persistCurrentSpecEdit: vi.fn(async (options) => {
+        calls.push(`persistCurrentSpecEdit:${String(options.quiet)}`);
+        return updatedSpec;
+      }),
+      setNotice: vi.fn((message) => {
+        calls.push(`setNotice:${message}`);
+      })
+    };
+
+    const specForPlanning = await prepareProductionSpecForPlanning(
+      originalSpec,
+      "spec-planning-1",
+      actions
+    );
+
+    expect(specForPlanning).toBe(updatedSpec);
+    expect(actions.setNotice).toHaveBeenCalledWith("Antworten werden übernommen...");
+    expect(actions.persistCurrentSpecEdit).toHaveBeenCalledWith({ quiet: true });
+    expect(calls).toEqual([
+      "setNotice:Antworten werden übernommen...",
+      "persistCurrentSpecEdit:true"
+    ]);
+  });
+
+  it("uses the original planning spec when no matching answer edit is open", async () => {
+    const spec = { specId: "spec-planning-2" };
+    const actions: ProductionSpecPlanningPreflightActions = {
+      persistCurrentSpecEdit: vi.fn(async () => ({ specId: "should-not-be-used" })),
+      setNotice: vi.fn()
+    };
+
+    const specForPlanning = await prepareProductionSpecForPlanning(
+      spec,
+      "other-spec",
+      actions
+    );
+
+    expect(specForPlanning).toBe(spec);
+    expect(actions.persistCurrentSpecEdit).not.toHaveBeenCalled();
+    expect(actions.setNotice).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the original planning spec when the quiet save returns no update", async () => {
+    const spec = { specId: "spec-planning-3" };
+    const actions: ProductionSpecPlanningPreflightActions = {
+      persistCurrentSpecEdit: vi.fn(async () => undefined),
+      setNotice: vi.fn()
+    };
+
+    const specForPlanning = await prepareProductionSpecForPlanning(
+      spec,
+      "spec-planning-3",
+      actions
+    );
+
+    expect(specForPlanning).toBe(spec);
+    expect(actions.persistCurrentSpecEdit).toHaveBeenCalledWith({ quiet: true });
+    expect(actions.setNotice).toHaveBeenCalledWith("Antworten werden übernommen...");
+  });
+
   it("starts planning progress, clears stale plan focus and announces the running calculation", () => {
     const calls: string[] = [];
     const spec = { specId: "spec-planning-1" };

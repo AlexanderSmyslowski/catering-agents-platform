@@ -6,6 +6,11 @@ export type ProductionPlanStartActions = {
   setNotice: (message: string) => void;
 };
 
+export type ProductionSpecPlanningPreflightActions = {
+  persistCurrentSpecEdit: (options: { quiet: true }) => Promise<Record<string, unknown> | undefined>;
+  setNotice: (message: string) => void;
+};
+
 export type ProductionPlanSuccessActions = {
   setSelectedPlanId: (planId: string) => void;
   refreshDashboard: () => Promise<void>;
@@ -26,6 +31,20 @@ export function startProductionPlanRunState(
   actions.startPlanProgress(spec, specLabel);
   actions.clearSelectedPlanId();
   actions.setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
+}
+
+export async function prepareProductionSpecForPlanning(
+  spec: Record<string, unknown>,
+  editingSpecId: string | undefined,
+  actions: ProductionSpecPlanningPreflightActions
+) {
+  const focusedSpecId = String(spec.specId ?? "");
+  if (!editingSpecId || editingSpecId !== focusedSpecId) {
+    return spec;
+  }
+
+  actions.setNotice("Antworten werden übernommen...");
+  return (await actions.persistCurrentSpecEdit({ quiet: true })) ?? spec;
 }
 
 export async function completeProductionStateAfterPlanSuccess(

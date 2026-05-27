@@ -75,6 +75,7 @@ import { completeProductionStateAfterDocumentSuccess } from "./production-docume
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import {
   completeProductionStateAfterPlanSuccess,
+  prepareProductionSpecForPlanning,
   resetProductionStateAfterPlanFailure,
   startProductionPlanRunState
 } from "./production-plan-result-state.js";
@@ -639,16 +640,10 @@ export function App() {
     setProductionWorkspaceCleared(false);
     clearMessages();
     try {
-      let specForPlanning = spec;
-      const focusedSpecId = String(spec.specId ?? "");
-
-      if (editingSpecId && editingSpecId === focusedSpecId) {
-        setNotice("Antworten werden übernommen...");
-        const updatedSpec = await persistCurrentSpecEdit({ quiet: true });
-        if (updatedSpec) {
-          specForPlanning = updatedSpec;
-        }
-      }
+      const specForPlanning = await prepareProductionSpecForPlanning(spec, editingSpecId, {
+        persistCurrentSpecEdit,
+        setNotice
+      });
 
       const specLabel = getSpecLabel(specForPlanning);
       startProductionPlanRunState(specForPlanning, specLabel, {
