@@ -56,6 +56,7 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   eintopf: ["stew"],
   stew: ["eintopf"],
   kartoffelsalat: ["potato", "salad"],
+  kartoffelgratin: ["potato", "gratin"],
   nudelsalat: ["pasta", "salad"],
   salat: ["salad"],
   krautsalat: ["coleslaw", "salad", "kraut"],
@@ -173,6 +174,8 @@ const specificTokenAliases: Record<string, string[]> = {
   pastasalat: ["nudelsalat"],
   kartoffelsalat: ["potatosalad"],
   potatosalad: ["kartoffelsalat"],
+  kartoffelgratin: ["potatogratin"],
+  potatogratin: ["kartoffelgratin"],
   hummus: ["humus"],
   humus: ["hummus"],
   linseneintopf: ["lentil", "lentils", "stew"],
@@ -412,6 +415,7 @@ function translateLabelForLocale(label: string, locale: "de" | "en"): string {
     [/\beintopf\b/g, "stew"],
     [/\bsuppe\b/g, "soup"],
     [/\bkartoffelsalat\b/g, "potato salad"],
+    [/\bkartoffelgratin\b/g, "potato gratin"],
     [/\bnudelsalat\b/g, "pasta salad"],
     [/\bkrautsalat\b/g, "coleslaw"],
     [/\bkarottensalat\b/g, "carrot salad"],
@@ -479,6 +483,9 @@ function dishArchetypeForComponent(
   }
   if (/kraut|karott|salat|vinaigrette/.test(normalized)) {
     return locale === "de" ? "salat" : "salad";
+  }
+  if (/kartoffelgratin|potato.*gratin/.test(normalized)) {
+    return "gratin";
   }
   if (/wildkräuter|wildkraeuter|wild.*salat|kräutersalat|kraeutersalat/.test(normalized)) {
     return locale === "de" ? "salat" : "salad";
