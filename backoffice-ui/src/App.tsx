@@ -75,7 +75,8 @@ import { completeProductionStateAfterDocumentSuccess } from "./production-docume
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import {
   completeProductionStateAfterPlanSuccess,
-  resetProductionStateAfterPlanFailure
+  resetProductionStateAfterPlanFailure,
+  startProductionPlanRunState
 } from "./production-plan-result-state.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import {
@@ -641,9 +642,11 @@ export function App() {
       }
 
       const specLabel = getSpecLabel(specForPlanning);
-      startPlanProgress(specForPlanning, specLabel);
-      setSelectedPlanId(undefined);
-      setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
+      startProductionPlanRunState(specForPlanning, specLabel, {
+        startPlanProgress,
+        clearSelectedPlanId: () => setSelectedPlanId(undefined),
+        setNotice
+      });
       const response = await createProductionPlan(specForPlanning);
       await completeProductionStateAfterPlanSuccess(response, {
         setSelectedPlanId,

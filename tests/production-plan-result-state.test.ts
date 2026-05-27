@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   completeProductionStateAfterPlanSuccess,
   resetProductionStateAfterPlanFailure,
+  startProductionPlanRunState,
   type ProductionPlanFailureActions,
+  type ProductionPlanStartActions,
   type ProductionPlanSuccessActions
 } from "../backoffice-ui/src/production-plan-result-state.js";
 
@@ -24,6 +26,35 @@ function buildSuccessActions(calls: string[]): ProductionPlanSuccessActions {
 }
 
 describe("production plan result state", () => {
+  it("starts planning progress, clears stale plan focus and announces the running calculation", () => {
+    const calls: string[] = [];
+    const spec = { specId: "spec-planning-1" };
+    const actions: ProductionPlanStartActions = {
+      startPlanProgress: vi.fn((receivedSpec, specLabel) => {
+        calls.push(`startPlanProgress:${String(receivedSpec.specId)}:${specLabel}`);
+      }),
+      clearSelectedPlanId: vi.fn(() => {
+        calls.push("clearSelectedPlanId");
+      }),
+      setNotice: vi.fn((message) => {
+        calls.push(`setNotice:${message}`);
+      })
+    };
+
+    startProductionPlanRunState(spec, "Konferenz 42", actions);
+
+    expect(actions.startPlanProgress).toHaveBeenCalledWith(spec, "Konferenz 42");
+    expect(actions.clearSelectedPlanId).toHaveBeenCalledTimes(1);
+    expect(actions.setNotice).toHaveBeenCalledWith(
+      "Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen..."
+    );
+    expect(calls).toEqual([
+      "startPlanProgress:spec-planning-1:Konferenz 42",
+      "clearSelectedPlanId",
+      "setNotice:Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen..."
+    ]);
+  });
+
   it("focuses the created plan and completes the planning progress after refresh", async () => {
     const calls: string[] = [];
     const actions = buildSuccessActions(calls);
