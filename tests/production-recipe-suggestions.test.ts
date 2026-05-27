@@ -176,6 +176,23 @@ describe("production recipe suggestions", () => {
     ).toEqual([{ recipeId: "recipe-humus-tahini", name: "Humus Tahini Dip vegan" }]);
   });
 
+  it("suggests eggplant roll recipes across German-English antipasti aliases", () => {
+    expect(
+      recipeSuggestionsForComponent("Auberginenröllchen vegan", [
+        {
+          recipeId: "recipe-eggplant-rolls",
+          name: "Eggplant Rolls vegan",
+          source: { reference: "internal/eggplant-rolls.md" }
+        },
+        {
+          recipeId: "recipe-generic-vegan",
+          name: "Vegan Basisrezept",
+          source: { reference: "internal/vegan.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-eggplant-rolls", name: "Eggplant Rolls vegan" }]);
+  });
+
   it("resolves selected recipe names while preserving recipe ids as fallback labels", () => {
     expect(resolveRecipeNameById("recipe-kalbsbuletten", recipes)).toBe("Kalbsbuletten mit Schmorzweibeln");
     expect(resolveRecipeNameById("missing", recipes)).toBeUndefined();

@@ -178,6 +178,23 @@ describe("production recipe alias parity", () => {
         "1. Vegan curry kochen.",
         "2. Mit basmati rice und coriander servieren."
       ].join("\n")
+    },
+    {
+      componentLabel: "Auberginenröllchen vegan",
+      category: "vegan" as const,
+      recipeName: "Eggplant Rolls vegan",
+      filename: "internes-rezept-487.pdf",
+      sourceRef: "test:antipasti-eggplant-rolls",
+      text: [
+        "Eggplant Rolls vegan",
+        "Zutaten",
+        "4 kg Auberginen",
+        "1 kg Tomaten",
+        "500 g Kräuter",
+        "Zubereitung",
+        "1. Auberginen grillen.",
+        "2. Eggplant Rolls vegan fuellen und kalt stellen."
+      ].join("\n")
     }
   ];
 
