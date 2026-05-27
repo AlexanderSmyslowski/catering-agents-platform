@@ -128,7 +128,8 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   pak: ["pak"],
   choi: ["choi"],
   gemüsepfanne: ["vegetable", "stir", "fry"],
-  gemuesepfanne: ["vegetable", "stir", "fry"]
+  gemuesepfanne: ["vegetable", "stir", "fry"],
+  gemusepfanne: ["vegetable", "stir", "fry"]
 };
 
 const veganCuePattern = /\b(vegan|pflanzlich|plant[- ]based|dairy[- ]free|eggless)\b/i;
@@ -209,8 +210,9 @@ const specificTokenAliases: Record<string, string[]> = {
   koriander: ["coriander", "cilantro"],
   coriander: ["koriander"],
   cilantro: ["koriander"],
-  gemuesepfanne: ["gemusepfanne"],
-  gemusepfanne: ["gemuesepfanne"]
+  gemuesepfanne: ["gemusepfanne", "stirfry"],
+  gemusepfanne: ["gemuesepfanne", "stirfry"],
+  stirfry: ["gemuesepfanne", "gemusepfanne"]
 };
 
 function normalizeTokens(value: string): string[] {
