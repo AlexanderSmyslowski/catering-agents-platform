@@ -28,7 +28,11 @@ export function ProductionEventAnswerFields({
       <div className="answer-grid">
         <label className="field-block">
           <span>Veranstaltungstyp</span>
-          <select value={editingEventType} onChange={(event) => setEditingEventType(event.target.value)}>
+          <select
+            aria-label="Veranstaltungstyp"
+            value={editingEventType}
+            onChange={(event) => setEditingEventType(event.target.value)}
+          >
             <option value="">Bitte wählen</option>
             <option value="meeting">Besprechung</option>
             <option value="conference">Konferenz</option>
@@ -57,7 +61,11 @@ export function ProductionEventAnswerFields({
         </label>
         <label className="field-block">
           <span>Serviceform</span>
-          <select value={editingServiceForm} onChange={(event) => setEditingServiceForm(event.target.value)}>
+          <select
+            aria-label="Serviceform"
+            value={editingServiceForm}
+            onChange={(event) => setEditingServiceForm(event.target.value)}
+          >
             <option value="">Bitte wählen</option>
             <option value="buffet">Buffet</option>
             <option value="plated">Menü am Platz</option>
