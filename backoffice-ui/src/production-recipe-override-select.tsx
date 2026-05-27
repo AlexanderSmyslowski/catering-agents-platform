@@ -36,6 +36,8 @@ export function ProductionRecipeOverrideSelect({
         <p className="helper-text">
           Vorgeschlagene Bibliotheksrezepte: {recipeOptions.map((option) => option.name).join(", ")}
         </p>
+      ) : recipes.length === 0 ? (
+        <p className="helper-text">Noch keine Bibliotheksrezepte im Bestand. Rezeptupload oder Freigabe zuerst ergänzen.</p>
       ) : (
         <p className="helper-text">Für diese Bezeichnung wurden noch keine naheliegenden Bibliotheksrezepte gefunden.</p>
       )}
