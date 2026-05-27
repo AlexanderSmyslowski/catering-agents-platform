@@ -1,7 +1,69 @@
-import { describe, expect, it } from "vitest";
-import { buildProductionQuestionEditorState } from "../backoffice-ui/src/production-question-editor-state.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  buildProductionQuestionEditorState,
+  completeProductionQuestionEditSuccess,
+  type ProductionQuestionEditSuccessActions
+} from "../backoffice-ui/src/production-question-editor-state.js";
 
 describe("production question editor state", () => {
+  it("completes a saved answer edit with focused spec, reset editor and dashboard refresh", async () => {
+    const calls: string[] = [];
+    const actions: ProductionQuestionEditSuccessActions = {
+      setProductionWorkspaceCleared: vi.fn((cleared) => {
+        calls.push(`setProductionWorkspaceCleared:${cleared}`);
+      }),
+      setFocusedProductionSpecId: vi.fn((specId) => {
+        calls.push(`setFocusedProductionSpecId:${specId}`);
+      }),
+      resetSpecEdit: vi.fn((markDismissed) => {
+        calls.push(`resetSpecEdit:${markDismissed}`);
+      }),
+      refreshDashboard: vi.fn(async () => {
+        calls.push("refreshDashboard");
+      }),
+      setNotice: vi.fn((message) => {
+        calls.push(`setNotice:${message}`);
+      })
+    };
+
+    const updatedSpecId = await completeProductionQuestionEditSuccess(
+      { specId: "spec-updated-1" },
+      "spec-fallback-1",
+      actions
+    );
+
+    expect(updatedSpecId).toBe("spec-updated-1");
+    expect(actions.setNotice).toHaveBeenCalledWith("Spezifikation wurde gespeichert.");
+    expect(calls).toEqual([
+      "setProductionWorkspaceCleared:false",
+      "setFocusedProductionSpecId:spec-updated-1",
+      "resetSpecEdit:false",
+      "refreshDashboard",
+      "setNotice:Spezifikation wurde gespeichert."
+    ]);
+  });
+
+  it("keeps saved answer success quiet and falls back to the editing spec id", async () => {
+    const actions: ProductionQuestionEditSuccessActions = {
+      setProductionWorkspaceCleared: vi.fn(),
+      setFocusedProductionSpecId: vi.fn(),
+      resetSpecEdit: vi.fn(),
+      refreshDashboard: vi.fn(async () => undefined),
+      setNotice: vi.fn()
+    };
+
+    const updatedSpecId = await completeProductionQuestionEditSuccess(
+      {},
+      "spec-fallback-2",
+      actions,
+      { quiet: true }
+    );
+
+    expect(updatedSpecId).toBe("spec-fallback-2");
+    expect(actions.setFocusedProductionSpecId).toHaveBeenCalledWith("spec-fallback-2");
+    expect(actions.setNotice).not.toHaveBeenCalled();
+  });
+
   it("maps the editor state fields without changing collection references", () => {
     const editingComponentStates = {
       component_a: {
