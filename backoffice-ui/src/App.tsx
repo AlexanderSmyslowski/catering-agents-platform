@@ -16,7 +16,6 @@ import {
   detectRoute,
   emptyDashboardState,
   emptyServiceHealthState,
-  formatAuditEventHandoffLabel,
   formatCounts,
   formatLatestIntakeRequest,
   getBaseUrl,
@@ -45,23 +44,12 @@ import {
   buildProductionPlanComponentMap,
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
   countClarificationAnswerStatuses,
-  countPurchaseListItems,
-  formatActiveProductionContextLabel,
-  formatProductionObjectStatusLabel,
-  formatProductionHandoffContextLabel,
-  formatProductionHandoffExportLabel,
-  formatProductionIntakeOriginLabel,
-  formatProductionPlanStatusLabel,
-  formatProductionReadinessLabel,
   formatStructuredProductionAnswerSummary,
-  formatProductionTimingWindow,
-  formatPurchaseZoneStatusLabel,
   selectProductionArtifactSpecIds,
   selectFocusedProductionSpec,
   selectProductionIntakeRequestId,
   selectProductionPlanSpec,
-  selectProductionWorkbenchPlan,
-  selectProductionNextStep
+  selectProductionWorkbenchPlan
 } from "./production-route-state.js";
 import {
   archiveIntakeRequest,
@@ -99,6 +87,7 @@ import { channelForFile } from "./production-document-channel.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import { buildProductionSourceInputState } from "./production-source-input-state.js";
+import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import {
   countRecipeReviewStates,
   formatRecipeReviewStatusLabel,
@@ -432,61 +421,45 @@ export function App() {
     [focusedProductionSpecRecord]
   );
 
-  const focusedSpecReadinessLabel = formatProductionReadinessLabel(focusedProductionSpecRecord);
-  const selectedPlanReadinessLabel = selectedPlan ? formatProductionReadinessLabel(selectedPlan) : undefined;
-  const productionPlanStatusLabel = formatProductionPlanStatusLabel(selectedPlan);
-  const productionObjectStatusLabel = formatProductionObjectStatusLabel({
-    currentSpecPlanCount: currentSpecPlans.length,
-    selectedPlan
-  });
-
-  const currentPurchaseListItemCount = useMemo(
-    () => countPurchaseListItems(currentSpecPurchaseLists),
-    [currentSpecPurchaseLists]
-  );
-
-  const purchaseZoneStatusLabel = formatPurchaseZoneStatusLabel({
-    purchaseListCount: currentSpecPurchaseLists.length,
-    itemCount: currentPurchaseListItemCount
-  });
-
-  const productionIntakeOriginLabel = formatProductionIntakeOriginLabel({
-    intakeRequestDetail,
-    currentIntakeRequestId
-  });
-
-  const productionHandoffExportLabel = formatProductionHandoffExportLabel({
-    hasSelectedPlan: Boolean(selectedPlan),
-    purchaseListCount: currentSpecPurchaseLists.length
-  });
-
-  const productionHandoffContextLabel = formatProductionHandoffContextLabel({
-    selectedPlan,
-    selectedPlanSpec,
-    purchaseLists: currentSpecPurchaseLists
-  });
-
-  const latestProductionAuditEvent = filteredAuditEvents[0];
-  const productionAuditTrailLabel = latestProductionAuditEvent
-    ? formatAuditEventHandoffLabel(latestProductionAuditEvent)
-    : "keine Audit-Ereignisse geladen";
-
-  const productionNextStep = useMemo(
+  const {
+    activeProductionContextLabel,
+    focusedSpecReadinessLabel,
+    selectedPlanReadinessLabel,
+    productionPlanStatusLabel,
+    productionObjectStatusLabel,
+    purchaseZoneStatusLabel,
+    productionIntakeOriginLabel,
+    productionAuditTrailLabel,
+    productionHandoffExportLabel,
+    productionHandoffContextLabel,
+    productionNextStep
+  } = useMemo(
     () =>
-      selectProductionNextStep({
-        hasFocusedProductionSpec: Boolean(focusedProductionSpec),
-        questionCount: productionQuestions.length,
-        hasSelectedPlan: Boolean(selectedPlan),
-        purchaseListCount: currentSpecPurchaseLists.length
+      buildProductionStatusSummaryState({
+        focusedProductionSpec,
+        selectedPlan,
+        selectedPlanSpec,
+        currentSpecPlans,
+        currentSpecPurchaseLists,
+        productionQuestions,
+        filteredAuditEvents,
+        intakeRequestDetail,
+        currentIntakeRequestId,
+        productionWorkspaceCleared
       }),
-    [currentSpecPurchaseLists.length, focusedProductionSpec, productionQuestions.length, selectedPlan]
+    [
+      currentIntakeRequestId,
+      currentSpecPlans,
+      currentSpecPurchaseLists,
+      filteredAuditEvents,
+      focusedProductionSpec,
+      intakeRequestDetail,
+      productionQuestions,
+      productionWorkspaceCleared,
+      selectedPlan,
+      selectedPlanSpec
+    ]
   );
-  const activeProductionContextLabel = formatActiveProductionContextLabel({
-    focusedProductionSpecLabel: focusedProductionSpec ? getSpecLabel(focusedProductionSpec) : undefined,
-    selectedPlan,
-    selectedPlanSpecLabel: selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : undefined,
-    productionWorkspaceCleared
-  });
 
   const productionRouteViewState = buildProductionRouteViewState({
     activeProductionContextLabel,
