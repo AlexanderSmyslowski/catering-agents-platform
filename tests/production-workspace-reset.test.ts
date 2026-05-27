@@ -1,12 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  clearProductionWorkspaceState,
   completeProductionIntakeArchiveSuccess,
   resetProductionWorkspace,
   type ProductionIntakeArchiveSuccessActions,
+  type ProductionWorkspaceClearActions,
   type ProductionWorkspaceResetActions
 } from "../backoffice-ui/src/production-workspace-reset.js";
 
 describe("production workspace reset", () => {
+  it("clears the workspace with reset, message cleanup and the existing operator notice", () => {
+    const calls: string[] = [];
+    const actions: ProductionWorkspaceClearActions = {
+      resetProductionWorkspaceState: vi.fn(() => {
+        calls.push("resetProductionWorkspaceState");
+      }),
+      clearMessages: vi.fn(() => {
+        calls.push("clearMessages");
+      }),
+      setNotice: vi.fn((message) => {
+        calls.push(`setNotice:${message}`);
+      })
+    };
+
+    clearProductionWorkspaceState(actions);
+
+    expect(actions.setNotice).toHaveBeenCalledWith(
+      "Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert."
+    );
+    expect(calls).toEqual([
+      "resetProductionWorkspaceState",
+      "clearMessages",
+      "setNotice:Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert."
+    ]);
+  });
+
   it("completes a soft-archived intake by resetting the workspace before refreshing and announcing it", async () => {
     const calls: string[] = [];
     const actions: ProductionIntakeArchiveSuccessActions = {

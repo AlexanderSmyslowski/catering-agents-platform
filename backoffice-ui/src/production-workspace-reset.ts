@@ -16,6 +16,12 @@ export type ProductionIntakeArchiveSuccessActions = {
   setNotice: (message: string) => void;
 };
 
+export type ProductionWorkspaceClearActions = {
+  resetProductionWorkspaceState: () => void;
+  clearMessages: () => void;
+  setNotice: (message: string) => void;
+};
+
 export function resetProductionWorkspace(actions: ProductionWorkspaceResetActions) {
   actions.setProductionWorkspaceCleared(true);
   actions.resetIntakeDraft();
@@ -26,6 +32,12 @@ export function resetProductionWorkspace(actions: ProductionWorkspaceResetAction
   actions.resetIntakeRequestDetail();
   actions.resetSpecEdit(false);
   actions.clearUploadInput();
+}
+
+export function clearProductionWorkspaceState(actions: ProductionWorkspaceClearActions) {
+  actions.resetProductionWorkspaceState();
+  actions.clearMessages();
+  actions.setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
 }
 
 export async function completeProductionIntakeArchiveSuccess(
