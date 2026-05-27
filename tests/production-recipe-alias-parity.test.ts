@@ -142,6 +142,25 @@ describe("production recipe alias parity", () => {
       ].join("\n")
     },
     {
+      componentLabel: "NUDELSALAT | FRISCHGEDOENS",
+      category: "vegetarian" as const,
+      recipeName: "Pasta-Salat mit frischem Gemüse",
+      filename: "internes-rezept-491.pdf",
+      sourceRef: "test:buffet-pasta-salad-fresh-vegetables",
+      text: [
+        "Pasta-Salat mit frischem Gemüse",
+        "Zutaten",
+        "3 kg Pasta",
+        "2 kg Tomaten",
+        "1 kg Gurken",
+        "1 l Vinaigrette",
+        "Zubereitung",
+        "1. Pasta kochen und abkuehlen.",
+        "2. Gemuese schneiden.",
+        "3. Pasta-Salat vegetarisch kalt bereitstellen."
+      ].join("\n")
+    },
+    {
       componentLabel: "Linseneintopf vegan",
       category: "vegan" as const,
       recipeName: "Lentil Stew vegan",
