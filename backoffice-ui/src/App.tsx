@@ -40,6 +40,7 @@ import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import { RouteMasthead } from "./route-masthead.js";
 import {
   buildWorkbenchSpecFacts,
+  canArchiveCurrentIntake as canArchiveCurrentIntakeFromState,
   buildProductionPlanComponentMap,
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
   countClarificationAnswerStatuses,
@@ -553,7 +554,10 @@ export function App() {
     hasFocusedProductionSpecId: Boolean(focusedProductionSpecId),
     hasSelectedPlanId: Boolean(selectedPlanId)
   });
-  const canArchiveCurrentIntake = Boolean(currentIntakeRequestId) && !productionWorkspaceCleared;
+  const canArchiveCurrentIntake = canArchiveCurrentIntakeFromState({
+    currentIntakeRequestId,
+    productionWorkspaceCleared
+  });
 
   function clearMessages() {
     setError(undefined);

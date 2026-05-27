@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProductionPlanComponentMap,
   buildWorkbenchSpecFacts,
+  canArchiveCurrentIntake,
   canClearProductionWorkspace,
   countClarificationAnswerStatuses,
   countPurchaseListItems,
@@ -258,6 +259,28 @@ describe("production route state", () => {
     expect(components.get("")).toBe(spec.menuPlan[2]);
     expect(buildProductionPlanComponentMap({ menuPlan: "invalid" }).size).toBe(0);
     expect(buildProductionPlanComponentMap().size).toBe(0);
+  });
+
+  it("keeps Fehlupload archive availability tied to an active intake context", () => {
+    expect(
+      canArchiveCurrentIntake({
+        currentIntakeRequestId: "request-1",
+        productionWorkspaceCleared: false
+      })
+    ).toBe(true);
+    expect(
+      canArchiveCurrentIntake({
+        currentIntakeRequestId: "request-1",
+        productionWorkspaceCleared: true
+      })
+    ).toBe(false);
+    expect(
+      canArchiveCurrentIntake({
+        currentIntakeRequestId: "   ",
+        productionWorkspaceCleared: false
+      })
+    ).toBe(false);
+    expect(canArchiveCurrentIntake({ productionWorkspaceCleared: false })).toBe(false);
   });
 
   it("selects the existing production next-step sequence", () => {

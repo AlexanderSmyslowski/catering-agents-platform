@@ -327,6 +327,13 @@ export function canClearProductionWorkspace(input: {
   );
 }
 
+export function canArchiveCurrentIntake(input: {
+  currentIntakeRequestId?: string;
+  productionWorkspaceCleared: boolean;
+}): boolean {
+  return Boolean(input.currentIntakeRequestId?.trim()) && !input.productionWorkspaceCleared;
+}
+
 export function countPurchaseListItems(purchaseLists: Array<Record<string, unknown>>): number {
   return purchaseLists.reduce((sum, purchaseList) => {
     const totals = purchaseList.totals as Record<string, unknown> | undefined;
