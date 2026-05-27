@@ -714,6 +714,64 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Offene Punkte: keine");
   });
 
+  it("clears stale production context after a failed replacement upload while keeping the file retryable", async () => {
+    installProductionAcceptanceMocks();
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    const defaultFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/intake/v1/intake/documents/upload")) {
+        return new Response(JSON.stringify({ message: "Upload passt nicht zum Angebot." }), {
+          status: 422,
+          statusText: "Unprocessable Content",
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      return await defaultFetch?.(input, init);
+    });
+
+    const { container, root } = await renderProductionRouteInteractive();
+
+    try {
+      expect(document.body.textContent ?? "").toContain("requestId: request-production-fallback-1");
+
+      const fileInput = container.querySelector("input[type='file']") as HTMLInputElement | null;
+      if (!fileInput) {
+        throw new Error("Production upload input not found");
+      }
+
+      const wrongFile = new File(["falsches angebot"], "falsches-angebot.txt", { type: "text/plain" });
+      Object.defineProperty(fileInput, "files", {
+        value: [wrongFile],
+        configurable: true
+      });
+
+      await act(async () => {
+        fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+        await flushProductionRouteUpdates(12);
+      });
+
+      const content = document.body.textContent ?? "";
+      const archiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+        (button.textContent ?? "").includes("Fehlupload archivieren")
+      ) as HTMLButtonElement | undefined;
+
+      expect(content).toContain("Upload passt nicht zum Angebot.");
+      expect(content).toContain("Ausgewählt: falsches-angebot.txt");
+      expect(content).toContain("Kein aktiver Vorgang");
+      expect(content).toContain("Auftrag einfügen oder Datei ablegen");
+      expect(content).not.toContain("requestId: request-production-fallback-1");
+      expect(archiveButton?.disabled).toBe(true);
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   it("archives the focused intake context from the production route without hard delete", async () => {
     installProductionAcceptanceMocks();
 
