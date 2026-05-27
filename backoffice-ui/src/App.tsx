@@ -25,6 +25,14 @@ import {
   getRouteTitle,
   translateHealthStatus
 } from "./app-shell-state.js";
+import {
+  countOfferHandoffReadiness,
+  filterDashboardRecords,
+  isInitialHomeDashboardLoading,
+  mapSpecsById,
+  selectActiveOfferSpec,
+  selectRecordByStringId
+} from "./app-dashboard-selectors.js";
 import { HomeRoute } from "./home-route.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
@@ -201,99 +209,50 @@ export function App() {
     void refreshDashboard();
   }, []);
 
-  const filteredSpecs = useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
-    if (!query) {
-      return dashboard.acceptedSpecs;
-    }
-    return dashboard.acceptedSpecs.filter((spec) =>
-      JSON.stringify(spec).toLowerCase().includes(query)
-    );
-  }, [dashboard.acceptedSpecs, deferredSearch]);
+  const filteredSpecs = useMemo(
+    () => filterDashboardRecords(dashboard.acceptedSpecs, deferredSearch),
+    [dashboard.acceptedSpecs, deferredSearch]
+  );
 
-  const filteredPlans = useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
-    if (!query) {
-      return dashboard.productionPlans;
-    }
-    return dashboard.productionPlans.filter((plan) =>
-      JSON.stringify(plan).toLowerCase().includes(query)
-    );
-  }, [dashboard.productionPlans, deferredSearch]);
+  const filteredPlans = useMemo(
+    () => filterDashboardRecords(dashboard.productionPlans, deferredSearch),
+    [dashboard.productionPlans, deferredSearch]
+  );
 
-  const filteredAuditEvents = useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
-    if (!query) {
-      return dashboard.auditEvents;
-    }
-    return dashboard.auditEvents.filter((entry) =>
-      JSON.stringify(entry).toLowerCase().includes(query)
-    );
-  }, [dashboard.auditEvents, deferredSearch]);
+  const filteredAuditEvents = useMemo(
+    () => filterDashboardRecords(dashboard.auditEvents, deferredSearch),
+    [dashboard.auditEvents, deferredSearch]
+  );
 
-  const filteredOfferDrafts = useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
-    if (!query) {
-      return dashboard.offerDrafts;
-    }
-    return dashboard.offerDrafts.filter((draft) =>
-      JSON.stringify(draft).toLowerCase().includes(query)
-    );
-  }, [dashboard.offerDrafts, deferredSearch]);
+  const filteredOfferDrafts = useMemo(
+    () => filterDashboardRecords(dashboard.offerDrafts, deferredSearch),
+    [dashboard.offerDrafts, deferredSearch]
+  );
 
-  const filteredRecipes = useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
-    if (!query) {
-      return dashboard.recipes;
-    }
-    return dashboard.recipes.filter((recipe) =>
-      JSON.stringify(recipe).toLowerCase().includes(query)
-    );
-  }, [dashboard.recipes, deferredSearch]);
+  const filteredRecipes = useMemo(
+    () => filterDashboardRecords(dashboard.recipes, deferredSearch),
+    [dashboard.recipes, deferredSearch]
+  );
 
   const recipeReviewCounts = useMemo(() => countRecipeReviewStates(dashboard.recipes), [dashboard.recipes]);
   const recipeReviewStatusLabel = formatRecipeReviewStatusLabel(recipeReviewCounts);
   const recipeUsageStatusLabel = formatRecipeUsageStatusLabel(recipeReviewCounts);
 
-  const offerHandoffCounts = useMemo(() => {
-    return dashboard.acceptedSpecs.reduce(
-      (counts: { complete: number; partial: number }, spec) => {
-        const readiness = String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "");
-        if (readiness === "complete") {
-          counts.complete += 1;
-        } else if (readiness === "partial") {
-          counts.partial += 1;
-        }
-        return counts;
-      },
-      { complete: 0, partial: 0 }
-    );
-  }, [dashboard.acceptedSpecs]);
+  const offerHandoffCounts = useMemo(
+    () => countOfferHandoffReadiness(dashboard.acceptedSpecs),
+    [dashboard.acceptedSpecs]
+  );
 
   const latestIntakeRequestSummary = useMemo(
     () => formatLatestIntakeRequest(dashboard.intakeRequests),
     [dashboard.intakeRequests]
   );
-  const isInitialHomeLoading =
-    route === "home" &&
-    loading &&
-    dashboard.intakeRequests.length === 0 &&
-    dashboard.acceptedSpecs.length === 0 &&
-    dashboard.offerDrafts.length === 0 &&
-    dashboard.productionPlans.length === 0 &&
-    dashboard.purchaseLists.length === 0 &&
-    dashboard.recipes.length === 0 &&
-    dashboard.auditEvents.length === 0;
+  const isInitialHomeLoading = isInitialHomeDashboardLoading({ route, loading, dashboard });
 
-  const filteredPurchaseLists = useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
-    if (!query) {
-      return dashboard.purchaseLists;
-    }
-    return dashboard.purchaseLists.filter((purchaseList) =>
-      JSON.stringify(purchaseList).toLowerCase().includes(query)
-    );
-  }, [dashboard.purchaseLists, deferredSearch]);
+  const filteredPurchaseLists = useMemo(
+    () => filterDashboardRecords(dashboard.purchaseLists, deferredSearch),
+    [dashboard.purchaseLists, deferredSearch]
+  );
 
   const orderedPlans = useMemo(
     () => [...filteredPlans].sort(compareNewestRecordsBy("planId")),
@@ -305,22 +264,15 @@ export function App() {
     [filteredPurchaseLists]
   );
 
-  const specById = useMemo(
-    () =>
-      new Map(
-        dashboard.acceptedSpecs.map((spec) => [String(spec.specId ?? ""), spec] as const)
-      ),
-    [dashboard.acceptedSpecs]
-  );
+  const specById = useMemo(() => mapSpecsById(dashboard.acceptedSpecs), [dashboard.acceptedSpecs]);
 
   const selectedDraft = useMemo(
-    () => dashboard.offerDrafts.find((draft) => String(draft.draftId) === selectedDraftId),
+    () => selectRecordByStringId(dashboard.offerDrafts, "draftId", selectedDraftId),
     [dashboard.offerDrafts, selectedDraftId]
   );
 
   const activeOfferDraft = selectedDraft ?? filteredOfferDrafts[0];
-  const activeOfferSpec =
-    filteredSpecs[filteredSpecs.length - 1] ?? dashboard.acceptedSpecs[dashboard.acceptedSpecs.length - 1];
+  const activeOfferSpec = selectActiveOfferSpec(dashboard.acceptedSpecs, filteredSpecs);
 
   const productionArtifactSpecIds = useMemo(
     () => selectProductionArtifactSpecIds([...orderedPlans, ...orderedPurchaseLists]),
