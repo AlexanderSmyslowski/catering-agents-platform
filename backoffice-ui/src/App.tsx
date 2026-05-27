@@ -43,8 +43,6 @@ import {
   canClearProductionWorkspace as canClearProductionWorkspaceFromState,
   countClarificationAnswerStatuses,
   formatStructuredProductionAnswerSummary,
-  selectFocusedProductionSpec,
-  selectProductionIntakeRequestId,
   selectProductionPlanSpec,
   selectProductionWorkbenchPlan
 } from "./production-route-state.js";
@@ -76,6 +74,7 @@ import {
 } from "./production-language.js";
 import { buildProductionCurrentArtifactsState } from "./production-current-artifacts-state.js";
 import { buildProductionDashboardRecordsState } from "./production-dashboard-records-state.js";
+import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionManualInputState } from "./production-manual-input-state.js";
 import {
   extractAcceptedSpecId,
@@ -256,9 +255,13 @@ export function App() {
   const activeOfferDraft = selectedDraft ?? filteredOfferDrafts[0];
   const activeOfferSpec = selectActiveOfferSpec(dashboard.acceptedSpecs, filteredSpecs);
 
-  const focusedProductionSpec = useMemo(
+  const {
+    focusedProductionSpec,
+    focusedProductionSpecRecord,
+    currentIntakeRequestId
+  } = useMemo(
     () =>
-      selectFocusedProductionSpec({
+      buildProductionFocusState({
         acceptedSpecs: dashboard.acceptedSpecs,
         filteredSpecs,
         focusedProductionSpecId,
@@ -278,21 +281,12 @@ export function App() {
     ]
   );
 
-  const currentIntakeRequestId = useMemo(() => {
-    if (route !== "production" || !focusedProductionSpec) {
-      return undefined;
-    }
-
-    return selectProductionIntakeRequestId(focusedProductionSpec as Record<string, unknown>);
-  }, [focusedProductionSpec, route]);
-
   const {
     intakeRequestDetail,
     intakeRequestDetailError,
     resetIntakeRequestDetail
   } = useProductionIntakeRequestDetail({ currentIntakeRequestId });
 
-  const focusedProductionSpecRecord = focusedProductionSpec as Record<string, unknown> | undefined;
   const {
     editingSpecId,
     dismissedProductionAnswerSpecId,
