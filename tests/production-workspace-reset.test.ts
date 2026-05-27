@@ -1,10 +1,38 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  completeProductionIntakeArchiveSuccess,
   resetProductionWorkspace,
+  type ProductionIntakeArchiveSuccessActions,
   type ProductionWorkspaceResetActions
 } from "../backoffice-ui/src/production-workspace-reset.js";
 
 describe("production workspace reset", () => {
+  it("completes a soft-archived intake by resetting the workspace before refreshing and announcing it", async () => {
+    const calls: string[] = [];
+    const actions: ProductionIntakeArchiveSuccessActions = {
+      resetProductionWorkspaceState: vi.fn(() => {
+        calls.push("resetProductionWorkspaceState");
+      }),
+      refreshDashboard: vi.fn(async () => {
+        calls.push("refreshDashboard");
+      }),
+      setNotice: vi.fn((message) => {
+        calls.push(`setNotice:${message}`);
+      })
+    };
+
+    await completeProductionIntakeArchiveSuccess("request-wrong-upload-1", actions);
+
+    expect(actions.setNotice).toHaveBeenCalledWith(
+      "Fehlupload request-wrong-upload-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+    );
+    expect(calls).toEqual([
+      "resetProductionWorkspaceState",
+      "refreshDashboard",
+      "setNotice:Fehlupload request-wrong-upload-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+    ]);
+  });
+
   it("clears the active production workspace and upload input in the existing reset order", () => {
     const calls: string[] = [];
     const actions: ProductionWorkspaceResetActions = {

@@ -10,6 +10,12 @@ export type ProductionWorkspaceResetActions = {
   clearUploadInput: () => void;
 };
 
+export type ProductionIntakeArchiveSuccessActions = {
+  resetProductionWorkspaceState: () => void;
+  refreshDashboard: () => Promise<void>;
+  setNotice: (message: string) => void;
+};
+
 export function resetProductionWorkspace(actions: ProductionWorkspaceResetActions) {
   actions.setProductionWorkspaceCleared(true);
   actions.resetIntakeDraft();
@@ -20,4 +26,15 @@ export function resetProductionWorkspace(actions: ProductionWorkspaceResetAction
   actions.resetIntakeRequestDetail();
   actions.resetSpecEdit(false);
   actions.clearUploadInput();
+}
+
+export async function completeProductionIntakeArchiveSuccess(
+  archivedRequestId: string,
+  actions: ProductionIntakeArchiveSuccessActions
+) {
+  actions.resetProductionWorkspaceState();
+  await actions.refreshDashboard();
+  actions.setNotice(
+    `Fehlupload ${archivedRequestId} wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.`
+  );
 }

@@ -95,7 +95,10 @@ import {
 } from "./production-source-input-state.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
-import { resetProductionWorkspace } from "./production-workspace-reset.js";
+import {
+  completeProductionIntakeArchiveSuccess,
+  resetProductionWorkspace
+} from "./production-workspace-reset.js";
 import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
@@ -504,11 +507,11 @@ export function App() {
     clearMessages();
     try {
       await archiveIntakeRequest(archivedRequestId, "wrong_upload");
-      resetProductionWorkspaceState();
-      await refreshDashboard();
-      setNotice(
-        `Fehlupload ${archivedRequestId} wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.`
-      );
+      await completeProductionIntakeArchiveSuccess(archivedRequestId, {
+        resetProductionWorkspaceState,
+        refreshDashboard,
+        setNotice
+      });
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Fehlupload konnte nicht archiviert werden."
