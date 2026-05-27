@@ -161,6 +161,24 @@ describe("production recipe alias parity", () => {
       ].join("\n")
     },
     {
+      componentLabel: "Mini-Quiche Spinat Feta",
+      category: "vegetarian" as const,
+      recipeName: "Flying Bites Mini-Quiche Spinat Feta",
+      filename: "internes-rezept-492.pdf",
+      sourceRef: "test:reception-mini-quiche-spinat-feta",
+      text: [
+        "Flying Bites Mini-Quiche Spinat Feta",
+        "Zutaten",
+        "1 kg Spinat",
+        "500 g Feta",
+        "12 Eier",
+        "1 kg Quiche-Teig",
+        "Zubereitung",
+        "1. Spinat und Feta vorbereiten.",
+        "2. Mini-Quiches backen und warm bereitstellen."
+      ].join("\n")
+    },
+    {
       componentLabel: "Linseneintopf vegan",
       category: "vegan" as const,
       recipeName: "Lentil Stew vegan",
