@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_ROOT_FILE="${ROOT_DIR}/.runtime/local-stack/data-root.txt"
+CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 
 print_screen_status() {
   local session_name="$1"
@@ -18,7 +19,7 @@ print_screen_status() {
 print_url_status() {
   local label="$1"
   local url="$2"
-  if curl -sf "${url}" >/dev/null 2>&1; then
+  if curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf "${url}" >/dev/null 2>&1; then
     echo "  ${label}-URL: erreichbar (${url})"
   else
     echo "  ${label}-URL: nicht erreichbar (${url})"
