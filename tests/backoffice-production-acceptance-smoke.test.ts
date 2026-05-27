@@ -855,7 +855,7 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation noch nicht im Fokus");
+    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-fallback-1");
     expect(content).toContain("Produktionsblatt exportieren");
     expect(content).not.toContain("Noch kein aktiver Vorgang");
   });
@@ -865,7 +865,7 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation noch nicht im Fokus");
+    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
     expect(content).toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).toContain("Produktionsblatt exportieren");
     expect(content).toContain("Einkaufsliste exportieren");
