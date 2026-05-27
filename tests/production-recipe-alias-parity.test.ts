@@ -179,6 +179,24 @@ describe("production recipe alias parity", () => {
       ].join("\n")
     },
     {
+      componentLabel: "Tomaten Mozzarella Spiesse vegetarisch",
+      category: "vegetarian" as const,
+      recipeName: "Tomaten Mozzarella Spiesse vegetarisch",
+      filename: "internes-rezept-493.pdf",
+      sourceRef: "test:reception-tomaten-mozzarella-spiesse",
+      text: [
+        "Tomaten Mozzarella Spiesse vegetarisch",
+        "Zutaten",
+        "1 kg Tomaten",
+        "800 g Mozzarella",
+        "150 g Basilikum",
+        "120 ml Pesto",
+        "Zubereitung",
+        "1. Tomaten und Mozzarella portionieren.",
+        "2. Spiesse stecken und gekuehlt bereitstellen."
+      ].join("\n")
+    },
+    {
       componentLabel: "Linseneintopf vegan",
       category: "vegan" as const,
       recipeName: "Lentil Stew vegan",
