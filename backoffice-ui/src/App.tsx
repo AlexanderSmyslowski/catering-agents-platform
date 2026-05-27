@@ -682,6 +682,12 @@ export function App() {
     } catch (submitError) {
       failIncomingProductionFile(file);
       failDocumentProgress();
+      setProductionWorkspaceCleared(true);
+      setFocusedProductionSpecId(undefined);
+      setSelectedPlanId(undefined);
+      resetPlanProgress();
+      resetIntakeRequestDetail();
+      resetSpecEdit(false);
       setError(
         submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
       );
