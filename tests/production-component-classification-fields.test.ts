@@ -54,6 +54,8 @@ describe("production component classification fields", () => {
 
     const selects = Array.from(container.querySelectorAll("select"));
     expect(selects).toHaveLength(2);
+    expect(selects[0].getAttribute("aria-label")).toBe("Kategorie im Angebot");
+    expect(selects[1].getAttribute("aria-label")).toBe("Herstellungsart");
 
     act(() => {
       selects[0].value = "vegetarian";
