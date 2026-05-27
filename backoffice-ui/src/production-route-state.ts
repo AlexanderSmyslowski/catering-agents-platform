@@ -283,6 +283,7 @@ export function selectProductionNextStep(input: {
 export function formatActiveProductionContextLabel(input: {
   focusedProductionSpecLabel?: string;
   selectedPlan?: Record<string, unknown>;
+  selectedPlanSpecLabel?: string;
   productionWorkspaceCleared: boolean;
 }): string {
   if (input.focusedProductionSpecLabel) {
@@ -290,6 +291,14 @@ export function formatActiveProductionContextLabel(input: {
   }
 
   if (input.selectedPlan) {
+    if (input.selectedPlanSpecLabel) {
+      return `Plan-Kontext geladen: ${String(input.selectedPlan.planId ?? "-")} · Spezifikation: ${input.selectedPlanSpecLabel}`;
+    }
+
+    if (input.selectedPlan.eventSpecId) {
+      return `Plan-Kontext geladen: ${String(input.selectedPlan.planId ?? "-")} · Spezifikation: ${String(input.selectedPlan.eventSpecId)}`;
+    }
+
     return `Plan-Kontext geladen: ${String(input.selectedPlan.planId ?? "-")} · Spezifikation noch nicht im Fokus`;
   }
 

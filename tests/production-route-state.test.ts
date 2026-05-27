@@ -321,6 +321,19 @@ describe("production route state", () => {
     expect(
       formatActiveProductionContextLabel({
         selectedPlan: { planId: "plan-123" },
+        selectedPlanSpecLabel: "Lunch · 80 Teilnehmer · 2026-03-04",
+        productionWorkspaceCleared: false
+      })
+    ).toBe("Plan-Kontext geladen: plan-123 · Spezifikation: Lunch · 80 Teilnehmer · 2026-03-04");
+    expect(
+      formatActiveProductionContextLabel({
+        selectedPlan: { planId: "plan-123", eventSpecId: "spec-123" },
+        productionWorkspaceCleared: false
+      })
+    ).toBe("Plan-Kontext geladen: plan-123 · Spezifikation: spec-123");
+    expect(
+      formatActiveProductionContextLabel({
+        selectedPlan: { planId: "plan-123" },
         productionWorkspaceCleared: false
       })
     ).toBe("Plan-Kontext geladen: plan-123 · Spezifikation noch nicht im Fokus");

@@ -562,6 +562,7 @@ export function App() {
   const activeProductionContextLabel = formatActiveProductionContextLabel({
     focusedProductionSpecLabel: focusedProductionSpec ? getSpecLabel(focusedProductionSpec) : undefined,
     selectedPlan,
+    selectedPlanSpecLabel: selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : undefined,
     productionWorkspaceCleared
   });
 
