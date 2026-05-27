@@ -74,6 +74,7 @@ import {
   extractProductionPlanId
 } from "./production-api-response-ids.js";
 import { resetProductionStateAfterDocumentFailure } from "./production-document-failure-reset.js";
+import { completeProductionStateAfterDocumentSuccess } from "./production-document-success-state.js";
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import {
@@ -574,14 +575,13 @@ export function App() {
 
     try {
       const response = await createAcceptedSpecFromDocument(file, channel);
-      const specId = extractAcceptedSpecId(response);
-      if (specId) {
-        setFocusedProductionSpecId(specId);
-      }
-      completeIncomingProductionFile();
-      completeDocumentProgress();
-      await refreshDashboard();
-      setNotice(`Dokument ${file.name} wurde übernommen und analysiert.`);
+      await completeProductionStateAfterDocumentSuccess(file, response, {
+        setFocusedProductionSpecId,
+        completeIncomingProductionFile,
+        completeDocumentProgress,
+        refreshDashboard,
+        setNotice
+      });
     } catch (submitError) {
       resetProductionStateAfterDocumentFailure(file, {
         failIncomingProductionFile,
