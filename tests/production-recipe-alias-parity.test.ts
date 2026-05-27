@@ -159,6 +159,25 @@ describe("production recipe alias parity", () => {
         "2. Lentil Stew vegan abschmecken.",
         "3. Warmhalten."
       ].join("\n")
+    },
+    {
+      componentLabel: "MANDEL-CURRY | BASMATIREIS & KORIANDER-TOPPING",
+      category: "vegan" as const,
+      recipeName: "Almond Curry with Basmati Rice vegan",
+      filename: "internes-rezept-486.pdf",
+      sourceRef: "test:quick-lunch-almond-curry",
+      text: [
+        "Almond Curry with Basmati Rice vegan",
+        "Zutaten",
+        "1 kg Gemüse",
+        "400 g almonds",
+        "1 l coconut milk",
+        "800 g basmati rice",
+        "120 g coriander",
+        "Zubereitung",
+        "1. Vegan curry kochen.",
+        "2. Mit basmati rice und coriander servieren."
+      ].join("\n")
     }
   ];
 
