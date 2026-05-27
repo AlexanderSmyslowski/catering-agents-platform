@@ -73,8 +73,8 @@ import {
   extractAcceptedSpecId,
   extractProductionPlanId
 } from "./production-api-response-ids.js";
-import { channelForFile } from "./production-document-channel.js";
 import { resetProductionStateAfterDocumentFailure } from "./production-document-failure-reset.js";
+import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import {
   buildProductionObjectsActions,
@@ -750,10 +750,12 @@ export function App() {
         return;
       }
       event.preventDefault();
-      setDragActive(false);
       const file = event.dataTransfer.files[0];
-      setIntakeFile(file);
-      void processIncomingProductionFile(file, channelForFile(file));
+      startProductionDocumentUpload(file, {
+        setDragActive,
+        setIntakeFile,
+        processIncomingProductionFile
+      });
     };
 
     const handleWindowDragLeave = (event: globalThis.DragEvent) => {
@@ -855,13 +857,15 @@ export function App() {
 
   function handleProductionDrop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
-    setDragActive(false);
     const file = event.dataTransfer.files?.[0];
     if (!file) {
       return;
     }
-    setIntakeFile(file);
-    void processIncomingProductionFile(file, channelForFile(file));
+    startProductionDocumentUpload(file, {
+      setDragActive,
+      setIntakeFile,
+      processIncomingProductionFile
+    });
   }
 
   function handleProductionFileSelection(event: ChangeEvent<HTMLInputElement>) {
@@ -869,9 +873,11 @@ export function App() {
     if (!nextFile) {
       return;
     }
-    setDragActive(false);
-    setIntakeFile(nextFile);
-    void processIncomingProductionFile(nextFile, channelForFile(nextFile));
+    startProductionDocumentUpload(nextFile, {
+      setDragActive,
+      setIntakeFile,
+      processIncomingProductionFile
+    });
     event.target.value = "";
   }
 
