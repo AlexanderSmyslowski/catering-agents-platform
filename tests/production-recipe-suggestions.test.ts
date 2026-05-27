@@ -46,6 +46,23 @@ describe("production recipe suggestions", () => {
     ]);
   });
 
+  it("suggests chocolate cake recipes across German-English dessert aliases", () => {
+    expect(
+      recipeSuggestionsForComponent("Schokokuchen vegan", [
+        {
+          recipeId: "recipe-chocolate-cake",
+          name: "Chocolate Cake vegan",
+          source: { reference: "internal/chocolate-cake.md" }
+        },
+        {
+          recipeId: "recipe-generic-vegan",
+          name: "Vegan Basisrezept",
+          source: { reference: "internal/vegan.md" }
+        }
+      ])
+    ).toEqual([{ recipeId: "recipe-chocolate-cake", name: "Chocolate Cake vegan" }]);
+  });
+
   it("suggests internal recipes across common German-English catering aliases", () => {
     expect(
       recipeSuggestionsForComponent("KARTOFFELSALAT | DE LUX", [

@@ -164,6 +164,10 @@ const genericPrimaryTokens = new Set([
 ]);
 
 const specificTokenAliases: Record<string, string[]> = {
+  schokoladenkuchen: ["chocolate", "cake"],
+  schokokuchen: ["chocolate", "cake"],
+  chocolate: ["schokoladenkuchen", "schokokuchen"],
+  cake: ["schokoladenkuchen", "schokokuchen"],
   nudelsalat: ["pastasalat"],
   pastasalat: ["nudelsalat"],
   kartoffelsalat: ["potatosalad"],

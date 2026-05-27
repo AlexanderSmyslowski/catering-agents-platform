@@ -23,6 +23,12 @@ function slugify(value: string): string {
 }
 
 const searchTokenExpansions: Record<string, string[]> = {
+  schokoladenkuchen: ["chocolate", "cake"],
+  schokokuchen: ["chocolate", "cake"],
+  schokolade: ["chocolate"],
+  chocolate: ["schokolade", "schokoladenkuchen", "schokokuchen"],
+  cake: ["kuchen", "schokoladenkuchen", "schokokuchen"],
+  kuchen: ["cake"],
   schafskaese: ["feta"],
   feta: ["schafskaese"],
   schafskase: ["feta"],
@@ -93,9 +99,7 @@ const searchTokenExpansions: Record<string, string[]> = {
   wildkrauter: ["wild", "herbs"],
   petersilien: ["parsley"],
   gemuesepfanne: ["gemusepfanne", "vegetable", "stir", "fry"],
-  gemusepfanne: ["gemuesepfanne", "vegetable", "stir", "fry"],
-  cake: ["kuchen"],
-  kuchen: ["cake"]
+  gemusepfanne: ["gemuesepfanne", "vegetable", "stir", "fry"]
 };
 
 const ignoredSearchTokens = new Set([

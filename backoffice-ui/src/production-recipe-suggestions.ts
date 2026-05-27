@@ -17,6 +17,12 @@ const NON_RECIPE_SUGGESTION_TOKENS = new Set([
 ]);
 
 const RECIPE_SUGGESTION_TOKEN_EXPANSIONS: Record<string, string[]> = {
+  schokoladenkuchen: ["chocolate", "cake"],
+  schokokuchen: ["chocolate", "cake"],
+  schokolade: ["chocolate"],
+  kuchen: ["cake"],
+  chocolate: ["schokolade", "schokoladenkuchen", "schokokuchen"],
+  cake: ["kuchen", "schokoladenkuchen", "schokokuchen"],
   tomatensuppe: ["tomato", "soup"],
   tomaten: ["tomato"],
   tomate: ["tomato"],
