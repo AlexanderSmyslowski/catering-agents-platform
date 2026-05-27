@@ -140,6 +140,25 @@ describe("production recipe alias parity", () => {
         "2. Obstspiesse stecken.",
         "3. Gekuehlt bereitstellen."
       ].join("\n")
+    },
+    {
+      componentLabel: "Linseneintopf vegan",
+      category: "vegan" as const,
+      recipeName: "Lentil Stew vegan",
+      filename: "internes-rezept-485.pdf",
+      sourceRef: "test:lentil-stew-vegan",
+      text: [
+        "Lentil Stew vegan",
+        "Zutaten",
+        "3 kg Linsen",
+        "2 kg Karotten",
+        "1 kg Sellerie",
+        "4 l Gemüsebrühe",
+        "Zubereitung",
+        "1. Linsen und Gemüse garen.",
+        "2. Lentil Stew vegan abschmecken.",
+        "3. Warmhalten."
+      ].join("\n")
     }
   ];
 

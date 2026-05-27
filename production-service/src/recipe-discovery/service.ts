@@ -48,6 +48,13 @@ const culinaryTokenExpansions: Record<string, string[]> = {
   schokokuchen: ["chocolate", "cake"],
   tomatensuppe: ["tomato", "soup"],
   suppe: ["soup"],
+  linseneintopf: ["lentil", "lentils", "stew"],
+  linsen: ["lentil", "lentils"],
+  linse: ["lentil"],
+  lentil: ["linse", "linsen"],
+  lentils: ["linse", "linsen"],
+  eintopf: ["stew"],
+  stew: ["eintopf"],
   kartoffelsalat: ["potato", "salad"],
   nudelsalat: ["pasta", "salad"],
   salat: ["salad"],
@@ -153,6 +160,12 @@ const specificTokenAliases: Record<string, string[]> = {
   potatosalad: ["kartoffelsalat"],
   hummus: ["humus"],
   humus: ["hummus"],
+  linseneintopf: ["lentil", "lentils", "stew"],
+  linsen: ["lentil", "lentils"],
+  lentil: ["linse", "linsen"],
+  lentils: ["linse", "linsen"],
+  eintopf: ["stew"],
+  stew: ["eintopf"],
   kalbsbuletten: ["veal", "meatballs", "buletten"],
   kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
   buletten: ["meatballs"],
@@ -368,6 +381,9 @@ function translateLabelForLocale(label: string, locale: "de" | "en"): string {
     [/\bkuchen\b/g, "cake"],
     [/\bschokolade\b/g, "chocolate"],
     [/\btomatensuppe\b/g, "tomato soup"],
+    [/\blinseneintopf\b/g, "lentil stew"],
+    [/\blinsen\b/g, "lentils"],
+    [/\beintopf\b/g, "stew"],
     [/\bsuppe\b/g, "soup"],
     [/\bkartoffelsalat\b/g, "potato salad"],
     [/\bnudelsalat\b/g, "pasta salad"],
@@ -428,6 +444,9 @@ function dishArchetypeForComponent(
   }
   if (/curry/.test(normalized)) {
     return "curry";
+  }
+  if (/linseneintopf|eintopf|stew/.test(normalized)) {
+    return locale === "de" ? "eintopf" : "stew";
   }
   if (/kraut|karott|salat|vinaigrette/.test(normalized)) {
     return locale === "de" ? "salat" : "salad";

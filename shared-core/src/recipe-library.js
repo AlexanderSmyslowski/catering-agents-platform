@@ -36,6 +36,13 @@ const searchTokenExpansions = {
     potatosalad: ["kartoffelsalat", "potato", "salat"],
     hummus: ["humus"],
     humus: ["hummus"],
+    linseneintopf: ["lentil", "lentils", "stew"],
+    linsen: ["lentil", "lentils"],
+    linse: ["lentil"],
+    lentil: ["linse", "linsen"],
+    lentils: ["linse", "linsen"],
+    eintopf: ["stew"],
+    stew: ["eintopf"],
     kalbsbuletten: ["veal", "meatballs", "buletten"],
     kalbsfrikadellen: ["veal", "meatballs", "frikadellen"],
     buletten: ["meatballs"],
@@ -143,6 +150,9 @@ function deriveArchetypeTokens(label) {
     }
     if (/curry/.test(normalized)) {
         return ["curry"];
+    }
+    if (/linseneintopf|eintopf|stew/.test(normalized)) {
+        return ["eintopf", "stew"];
     }
     if (/salat|krautsalat|kartoffelsalat|nudelsalat|wildkrautersalat/.test(normalized)) {
         return ["salat", "salad"];
