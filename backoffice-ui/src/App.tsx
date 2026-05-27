@@ -30,7 +30,10 @@ import {
   selectRecordByStringId
 } from "./app-dashboard-selectors.js";
 import { HomeRoute } from "./home-route.js";
-import { buildOfferSpecEditState } from "./offer-spec-edit-state.js";
+import {
+  buildOfferSpecEditActions,
+  buildOfferSpecEditState
+} from "./offer-spec-edit-state.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
@@ -949,6 +952,16 @@ export function App() {
     serviceForm: editingServiceForm,
     menuItems: editingMenuItems
   });
+  const offerSpecEditActions = buildOfferSpecEditActions({
+    beginSpecEdit,
+    setEventType: setEditingEventType,
+    setEventDate: setEditingEventDate,
+    setAttendeeCount: setEditingAttendeeCount,
+    setServiceForm: setEditingServiceForm,
+    setMenuItems: setEditingMenuItems,
+    saveSpecEdit: handleSaveSpecEdit,
+    resetSpecEdit
+  });
 
   return (
     <DashboardShell
@@ -1034,16 +1047,7 @@ export function App() {
           completeSpecCount={offerHandoffCounts.complete}
           partialSpecCount={offerHandoffCounts.partial}
           specEdit={offerSpecEdit}
-          specEditActions={{
-            beginSpecEdit,
-            setEventType: setEditingEventType,
-            setEventDate: setEditingEventDate,
-            setAttendeeCount: setEditingAttendeeCount,
-            setServiceForm: setEditingServiceForm,
-            setMenuItems: setEditingMenuItems,
-            saveSpecEdit: handleSaveSpecEdit,
-            resetSpecEdit
-          }}
+          specEditActions={offerSpecEditActions}
         />
       ) : null}
       {route === "production" ? (
