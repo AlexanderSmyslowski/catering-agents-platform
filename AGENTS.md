@@ -3,6 +3,43 @@
 ## Zweck
 Diese Datei richtet die Arbeit fuer ChatGPT, Hermes Agent, Codex 5.4 mini und aehnliche Agenten auf einen konsistenten Repo-Workflow aus.
 
+## Central Agent Data Hub
+Dieses Repo ist im Central Agent Data Hub unter dem Projekt-Slug `catering-agents-platform` angebunden.
+
+Vor substanzieller Arbeit zuerst den Hub-Kontext laden:
+
+```bash
+/Users/alexandersmyslowski/Projects/central-agent-data-hub/scripts/agent_start.sh \
+  --project catering-agents-platform \
+  --query "<aktueller arbeitsfokus>"
+```
+
+Wenn noch kein Fokus formuliert ist:
+
+```bash
+/Users/alexandersmyslowski/Projects/central-agent-data-hub/scripts/agent_start.sh \
+  --project catering-agents-platform
+```
+
+Nach substanzieller Arbeit eine Abschluss-/Uebergabe-Sicht erzeugen:
+
+```bash
+/Users/alexandersmyslowski/Projects/central-agent-data-hub/scripts/agent_finish.sh \
+  --project catering-agents-platform
+```
+
+Nur gepruefte, nicht-sensitive Erinnerungen duerfen in den Hub zurueckgeschrieben werden:
+
+```bash
+/Users/alexandersmyslowski/Projects/central-agent-data-hub/scripts/project_remember.sh \
+  --project catering-agents-platform \
+  --type fact \
+  --text "Gepruefte Erinnerung." \
+  --source "nicht-sensitive Quelle"
+```
+
+Keine Passwoerter, Tokens, FTP-Daten, privaten Kundendaten, rohen Rechnungsdaten oder Deployment-Secrets im Hub speichern. `memory.md` bleibt die fuehrende detaillierte Repo-Memory; der Hub ist die kanal- und agentenuebergreifende Start-/Finish- und kuratierte Writeback-Schicht.
+
 ## Pflicht-Lesereihenfolge
 1. `memory.md`
 2. `HANDOFF_PROMPT.md`
