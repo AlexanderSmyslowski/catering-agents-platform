@@ -45,7 +45,7 @@ type SpecEditActions = {
   resetSpecEdit: () => void;
 };
 
-type OfferWorkbenchProps = {
+export type OfferWorkbenchProps = {
   submitting: boolean;
   latestSourceLabel: string;
   offerText: string;

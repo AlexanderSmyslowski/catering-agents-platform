@@ -33,6 +33,7 @@ import {
   buildOfferSpecEditState
 } from "./offer-spec-edit-state.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
+import { buildOfferWorkbenchState } from "./offer-workbench-state.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import { RouteMasthead } from "./route-masthead.js";
@@ -998,6 +999,34 @@ export function App() {
     search,
     setSearch
   });
+  const offerWorkbenchState = buildOfferWorkbenchState({
+    submitting,
+    latestSourceLabel: latestIntakeRequestSummary,
+    offerText,
+    setOfferText,
+    submitOfferText: handleOfferSubmit,
+    intakeText,
+    setIntakeText,
+    submitIntakeText: handleIntakeSubmit,
+    intakeChannel,
+    setIntakeChannel,
+    intakeFile,
+    setIntakeFile,
+    submitIntakeDocument: handleIntakeDocumentSubmit,
+    manualInput: manualSpecInput,
+    manualActions: manualSpecActions,
+    filteredOfferDrafts,
+    activeDraft: activeOfferDraft,
+    selectedDraft,
+    setSelectedDraftId,
+    promoteDraft: handlePromoteDraft,
+    filteredSpecs,
+    activeSpec: activeOfferSpec,
+    completeSpecCount: offerHandoffCounts.complete,
+    partialSpecCount: offerHandoffCounts.partial,
+    specEdit: offerSpecEdit,
+    specEditActions: offerSpecEditActions
+  });
   const productionRouteMainLayoutState = buildProductionRouteMainLayoutState({
     viewState: productionRouteViewState,
     submitting,
@@ -1060,34 +1089,7 @@ export function App() {
       ) : null}
 
       {route === "offer" ? (
-        <OfferConversationalWorkbench
-          submitting={submitting}
-          latestSourceLabel={latestIntakeRequestSummary}
-          offerText={offerText}
-          setOfferText={setOfferText}
-          submitOfferText={handleOfferSubmit}
-          intakeText={intakeText}
-          setIntakeText={setIntakeText}
-          submitIntakeText={handleIntakeSubmit}
-          intakeChannel={intakeChannel}
-          setIntakeChannel={setIntakeChannel}
-          intakeFile={intakeFile}
-          setIntakeFile={setIntakeFile}
-          submitIntakeDocument={handleIntakeDocumentSubmit}
-          manualInput={manualSpecInput}
-          manualActions={manualSpecActions}
-          filteredOfferDrafts={filteredOfferDrafts}
-          activeDraft={activeOfferDraft}
-          selectedDraft={selectedDraft}
-          setSelectedDraftId={setSelectedDraftId}
-          promoteDraft={handlePromoteDraft}
-          filteredSpecs={filteredSpecs}
-          activeSpec={activeOfferSpec}
-          completeSpecCount={offerHandoffCounts.complete}
-          partialSpecCount={offerHandoffCounts.partial}
-          specEdit={offerSpecEdit}
-          specEditActions={offerSpecEditActions}
-        />
+        <OfferConversationalWorkbench {...offerWorkbenchState} />
       ) : null}
       {route === "production" ? (
         <ProductionRouteMainLayout {...productionRouteMainLayoutState} />

@@ -1,0 +1,61 @@
+import type { OfferWorkbenchProps } from "./offer-workbench.js";
+
+export type OfferWorkbenchStateInput = OfferWorkbenchProps;
+
+export function buildOfferWorkbenchState({
+  submitting,
+  latestSourceLabel,
+  offerText,
+  setOfferText,
+  submitOfferText,
+  intakeText,
+  setIntakeText,
+  submitIntakeText,
+  intakeChannel,
+  setIntakeChannel,
+  intakeFile,
+  setIntakeFile,
+  submitIntakeDocument,
+  manualInput,
+  manualActions,
+  filteredOfferDrafts,
+  activeDraft,
+  selectedDraft,
+  setSelectedDraftId,
+  promoteDraft,
+  filteredSpecs,
+  activeSpec,
+  completeSpecCount,
+  partialSpecCount,
+  specEdit,
+  specEditActions
+}: OfferWorkbenchStateInput): OfferWorkbenchProps {
+  return {
+    submitting,
+    latestSourceLabel,
+    offerText,
+    setOfferText,
+    submitOfferText,
+    intakeText,
+    setIntakeText,
+    submitIntakeText,
+    intakeChannel,
+    setIntakeChannel,
+    intakeFile,
+    setIntakeFile,
+    submitIntakeDocument,
+    manualInput,
+    manualActions,
+    filteredOfferDrafts,
+    activeDraft,
+    selectedDraft,
+    setSelectedDraftId,
+    promoteDraft,
+    filteredSpecs,
+    activeSpec,
+    completeSpecCount,
+    partialSpecCount,
+    specEdit,
+    specEditActions
+  };
+}
