@@ -39,7 +39,7 @@ import {
   type ProductionWorkbenchSummary
 } from "./production-workbench.js";
 
-type ProductionRouteMainLayoutProps = {
+export type ProductionRouteMainLayoutProps = {
   workbenchSummary: ProductionWorkbenchSummary;
   workbenchNextStep: ProductionWorkbenchNextStep;
   submitting: boolean;

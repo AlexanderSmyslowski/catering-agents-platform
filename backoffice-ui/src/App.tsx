@@ -88,6 +88,7 @@ import {
   buildProductionRecipeActions
 } from "./production-route-actions.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
+import { buildProductionRouteMainLayoutState } from "./production-route-main-layout-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import {
   buildProductionSourceInputActions,
@@ -997,6 +998,19 @@ export function App() {
     search,
     setSearch
   });
+  const productionRouteMainLayoutState = buildProductionRouteMainLayoutState({
+    viewState: productionRouteViewState,
+    submitting,
+    sourceInput: productionSourceInput,
+    sourceInputActions: productionSourceInputActions,
+    manualInput: manualSpecInput,
+    manualInputActions: manualSpecActions,
+    questionActions: productionQuestionActions,
+    editorState: productionQuestionEditorState,
+    editorActions: productionQuestionEditorActions,
+    objectPanelActions: productionObjectsActions,
+    recipeActions: productionRecipeActions
+  });
 
   return (
     <DashboardShell
@@ -1076,19 +1090,7 @@ export function App() {
         />
       ) : null}
       {route === "production" ? (
-        <ProductionRouteMainLayout
-          {...productionRouteViewState}
-          submitting={submitting}
-          sourceInput={productionSourceInput}
-          sourceInputActions={productionSourceInputActions}
-          manualInput={manualSpecInput}
-          manualInputActions={manualSpecActions}
-          questionActions={productionQuestionActions}
-          editorState={productionQuestionEditorState}
-          editorActions={productionQuestionEditorActions}
-          objectPanelActions={productionObjectsActions}
-          recipeActions={productionRecipeActions}
-        />
+        <ProductionRouteMainLayout {...productionRouteMainLayoutState} />
       ) : null}
 
       <footer className="footer-note">
