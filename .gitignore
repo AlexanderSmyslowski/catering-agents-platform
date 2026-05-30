@@ -7,3 +7,5 @@ coverage
 data
 .runtime
 .playwright-cli
+output
+tmp
