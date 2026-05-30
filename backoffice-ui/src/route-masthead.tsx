@@ -1,6 +1,6 @@
 import type { AppRoute } from "./app-shell-state.js";
 
-type RouteMastheadProps = {
+export type RouteMastheadProps = {
   route: AppRoute;
   baseUrl: string;
   operatorName: string;

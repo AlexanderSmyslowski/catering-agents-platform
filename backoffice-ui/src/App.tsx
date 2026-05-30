@@ -16,10 +16,9 @@ import {
   emptyServiceHealthState,
   formatLatestIntakeRequest,
   getBaseUrl,
-  getPathname,
-  getRouteSubtitle,
-  getRouteTitle
+  getPathname
 } from "./app-shell-state.js";
+import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import {
   countOfferHandoffReadiness,
   filterDashboardRecords,
@@ -1040,30 +1039,20 @@ export function App() {
     objectPanelActions: productionObjectsActions,
     recipeActions: productionRecipeActions
   });
+  const appRouteShellState = buildAppRouteShellState({
+    route,
+    baseUrl,
+    operatorName,
+    loading,
+    submitting,
+    onOperatorNameChange: handleOperatorNameChange,
+    onSeedDemoData: handleSeedDemoData,
+    onRefreshDashboard: refreshDashboard
+  });
 
   return (
-    <DashboardShell
-      title={getRouteTitle(route)}
-      subtitle={getRouteSubtitle(route)}
-      hideKicker={route !== "home"}
-      className={
-        route === "production"
-          ? "app-shell--production-route"
-          : route === "offer"
-            ? "app-shell--offer-route"
-            : undefined
-      }
-    >
-      <RouteMasthead
-        route={route}
-        baseUrl={baseUrl}
-        operatorName={operatorName}
-        loading={loading}
-        submitting={submitting}
-        onOperatorNameChange={handleOperatorNameChange}
-        onSeedDemoData={handleSeedDemoData}
-        onRefreshDashboard={refreshDashboard}
-      />
+    <DashboardShell {...appRouteShellState.shell}>
+      <RouteMasthead {...appRouteShellState.masthead} />
 
       {route === "home" ? (
         <HomeRoute
