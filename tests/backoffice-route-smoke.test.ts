@@ -551,7 +551,7 @@ describe("backoffice route smoke", () => {
   });
 
   it("walks the offer happy path from central request input to focused draft and handoff anchors", async () => {
-    const acceptedSpecs = [
+    const acceptedSpecs: Array<Record<string, unknown>> = [
       { specId: "c3-spec-complete", readiness: { status: "complete" }, event: { type: "lunch" } }
     ];
     const offerDrafts: Array<Record<string, unknown>> = [
@@ -563,6 +563,7 @@ describe("backoffice route smoke", () => {
       }
     ];
     const postedBodies: Array<Record<string, unknown>> = [];
+    const promotedBodies: Array<Record<string, unknown>> = [];
 
     installBackofficeEnvironmentMocks({ acceptedSpecs, offerDrafts });
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
@@ -584,6 +585,46 @@ describe("backoffice route smoke", () => {
           status: 201,
           headers: { "content-type": "application/json" }
         });
+      }
+
+      if (url.endsWith("/api/offers/v1/offers/drafts/c3-draft-created/promote")) {
+        promotedBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+        acceptedSpecs.push({
+          specId: "c3-spec-promoted",
+          requestId: "c3-request-promoted",
+          draftId: "c3-draft-created",
+          sourceLineage: [{ sourceType: "offer_draft", reference: "c3-draft-created" }],
+          readiness: { status: "partial", reasons: ["Getränkepaket noch klären"] },
+          event: { type: "sommerfest", date: "2026-08-20" },
+          servicePlan: { serviceForm: "buffet" },
+          attendees: { expected: 80 },
+          menuPlan: [
+            {
+              componentId: "c3-component-buffet",
+              label: "Buffet und Dessertstation",
+              menuCategory: "classic",
+              productionDecision: { mode: "scratch" }
+            }
+          ]
+        });
+        return new Response(JSON.stringify({ specId: "c3-spec-promoted" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/intake/v1/intake/requests/c3-request-promoted")) {
+        return new Response(
+          JSON.stringify({
+            requestId: "c3-request-promoted",
+            source: { channel: "offer", receivedAt: "2026-08-20T09:00:00.000Z" },
+            rawInputs: []
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
       }
 
       if (url.endsWith("/api/intake/v1/intake/requests")) {
@@ -691,9 +732,32 @@ describe("backoffice route smoke", () => {
     expect(text).toContain("Zur Produktion");
 
     await act(async () => {
+      findButtonByText("Variante übernehmen: Klassisch").click();
+      await flush();
+    });
+
+    const promotedText = document.body.textContent ?? "";
+    expect(promotedBodies).toEqual([{ variantId: "classic" }]);
+    expect(promotedText).toContain("Angebotsvariante wurde als operative Spezifikation übernommen.");
+    expect(promotedText).toContain("Übergabe: 1 vollständig · 1 teilweise");
+    expect(promotedText).toContain("aktive Spezifikation: c3-spec-promoted (teilweise vollständig)");
+    expect(promotedText).toContain("specId: c3-spec-promoted");
+    expect(promotedText).toContain("requestId: c3-request-promoted");
+
+    await act(async () => {
       root.unmount();
     });
     container.remove();
+
+    const production = await renderRoute("/produktion");
+    expect(production.text).toContain("sommerfest · 80 Teilnehmer · 2026-08-20");
+    expect(production.text).toContain("specId: c3-spec-promoted");
+    expect(production.text).toContain("requestId: c3-request-promoted");
+    expect(production.text).toContain("Ursprüngliche Intake-AnfragerequestId: c3-request-promoted");
+    expect(production.text).toContain("Intake-Ursprungoffer · 2026-08-20T09:00:00.000Z · c3-request-promoted");
+    expect(production.text).not.toContain("Die ursprüngliche Intake-Anfrage konnte nicht geladen werden");
+    expect(production.text).toContain("Nächster SchrittRückfragen beantworten");
+    expect(production.text).toContain("Produktionsobjektenoch kein Plan");
   });
 
   it("keeps production upload limit errors visible in the workbench", async () => {
