@@ -98,11 +98,19 @@ Keine Passwoerter, Tokens, FTP-Daten, privaten Kundendaten, rohen Rechnungsdaten
 
 Project slug: `catering-agents-platform`
 
+Run Card:
+`/Users/alexandersmyslowski/Projects/central-agent-data-hub/docs/agent-run-card.md`
+
+Use the Run Card rhythm for substantial work: start with Hub context, work inside
+one project boundary, finish with review, and write back only reviewed,
+non-sensitive memory.
+
 Use the shared Hub before and after substantial project work:
 
 ```bash
 /Users/alexandersmyslowski/Projects/central-agent-data-hub/scripts/agent_start.sh --project catering-agents-platform --query "<current focus>"
-/Users/alexandersmyslowski/Projects/central-agent-data-hub/scripts/agent_finish.sh --project catering-agents-platform
+/Users/alexandersmyslowski/Projects/central-agent-data-hub/scripts/agent_start.sh --project catering-agents-platform --query "<current focus>" --review
+/Users/alexandersmyslowski/Projects/central-agent-data-hub/scripts/agent_finish.sh --project catering-agents-platform --review
 ```
 
 For reviewed, non-sensitive memory candidates, dry-run first:
