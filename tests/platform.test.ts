@@ -1268,6 +1268,7 @@ describe("catering agents platform", () => {
     expect(purchaseItemByName.get("Kaffeefilter für Filterkaffee Station")).toBe("beverages");
     expect(purchaseItemByName.get("Baguette für BROT & BAGUETTE")).toBe("bakery");
     expect(purchaseItemByName.get("Brot für BROT & BAGUETTE")).toBe("bakery");
+    expectOperationalPurchaseListQuality(body.purchaseList.items);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
