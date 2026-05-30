@@ -697,6 +697,166 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("builds a synthetic business-buffet plan with soup, hybrid quiche, and dessert anchors", async () => {
+    const dataRoot = createDataRoot();
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const recipeUploads = [
+      {
+        recipeName: "Tomatensuppe mit Basilikum",
+        filename: "Tomatensuppe mit Basilikum.pdf",
+        sourceRef: "test:business-buffet-tomatensuppe",
+        text: [
+          "Tomatensuppe mit Basilikum",
+          "Zutaten",
+          "4 kg Tomaten",
+          "800 g Zwiebeln",
+          "500 g Sellerie",
+          "1 l Gemüsefond",
+          "120 g Basilikum",
+          "Zubereitung",
+          "1. Gemüse anschwitzen.",
+          "2. Suppe kochen und pürieren."
+        ].join("\n")
+      },
+      {
+        recipeName: "Quiche Spinat Feta",
+        filename: "Quiche Spinat Feta.pdf",
+        sourceRef: "test:business-buffet-quiche-spinat-feta",
+        text: [
+          "Quiche Spinat Feta",
+          "Zutaten",
+          "2 kg Spinat",
+          "900 g Feta",
+          "18 Eier",
+          "1 l Sahne",
+          "Zubereitung",
+          "1. Füllung mischen.",
+          "2. Quiche backen."
+        ].join("\n")
+      },
+      {
+        recipeName: "Panna Cotta mit Beerenspiegel",
+        filename: "Panna Cotta mit Beerenspiegel.pdf",
+        sourceRef: "test:business-buffet-panna-cotta",
+        text: [
+          "Panna Cotta mit Beerenspiegel",
+          "Zutaten",
+          "3 l Sahne",
+          "500 g Zucker",
+          "20 g Gelatine",
+          "1 kg Beeren",
+          "Zubereitung",
+          "1. Panna Cotta ansetzen.",
+          "2. Beerenspiegel vorbereiten."
+        ].join("\n")
+      }
+    ];
+
+    for (const upload of recipeUploads) {
+      await repository.save(parseUploadedRecipeText(upload));
+    }
+
+    const app = buildProductionApp({
+      repository,
+      discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
+      dataRoot
+    });
+    const normalizedSpec = normalizeEventRequestToSpec(
+      baseEventRequest(
+        "Business-Lunch am 2026-10-14 fuer 64 Teilnehmer mit Buffet: Tomatensuppe, Quiche Spinat Feta und Panna Cotta."
+      )
+    );
+    const spec: AcceptedEventSpec = {
+      ...normalizedSpec,
+      event: { ...normalizedSpec.event, type: "business_lunch", date: "2026-10-14" },
+      attendees: { ...normalizedSpec.attendees, expected: 64 },
+      servicePlan: { ...normalizedSpec.servicePlan, serviceForm: "buffet" },
+      menuPlan: [
+        {
+          componentId: "business-buffet-soup-1",
+          label: "Tomatensuppe",
+          course: "starter",
+          menuCategory: "vegetarian",
+          serviceStyle: "buffet",
+          servings: 64,
+          dietaryTags: ["vegetarian"],
+          productionDecision: { mode: "scratch" }
+        },
+        {
+          componentId: "business-buffet-quiche-2",
+          label: "Quiche Spinat Feta",
+          course: "main",
+          menuCategory: "vegetarian",
+          serviceStyle: "buffet",
+          servings: 64,
+          dietaryTags: ["vegetarian"],
+          productionDecision: {
+            mode: "hybrid",
+            purchasedElements: ["Quiche-Teig"]
+          }
+        },
+        {
+          componentId: "business-buffet-dessert-3",
+          label: "Panna Cotta mit Beerenspiegel",
+          course: "dessert",
+          menuCategory: "vegetarian",
+          serviceStyle: "buffet",
+          servings: 64,
+          dietaryTags: ["vegetarian"],
+          productionDecision: { mode: "scratch" }
+        }
+      ]
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    const recipeSelections = body.productionPlan.recipeSelections as Array<{
+      componentId: string;
+      sourceTier?: string;
+      autoUsedInternetRecipe?: boolean;
+      selectionReason?: string;
+    }>;
+    const selectionByComponent = new Map(
+      recipeSelections.map((selection) => [selection.componentId, selection])
+    );
+
+    for (const componentId of [
+      "business-buffet-soup-1",
+      "business-buffet-quiche-2",
+      "business-buffet-dessert-3"
+    ]) {
+      expect(selectionByComponent.get(componentId)?.sourceTier, componentId).toBe("internal_approved");
+      expect(selectionByComponent.get(componentId)?.autoUsedInternetRecipe, componentId).toBe(false);
+      expect(selectionByComponent.get(componentId)?.selectionReason, componentId).toContain("internen Bibliothek");
+    }
+
+    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    expect(body.productionPlan.productionBatches).toHaveLength(3);
+    expect(body.productionPlan.kitchenSheets).toHaveLength(3);
+    const purchaseDisplayNames = body.purchaseList.items.map((item: { displayName: string }) => item.displayName);
+    expect(purchaseDisplayNames).toEqual(expect.arrayContaining(["Quiche-Teig für Quiche Spinat Feta"]));
+    expect(purchaseDisplayNames).not.toEqual(
+      expect.arrayContaining([
+        "Gemüse anschwitzen.",
+        "Füllung mischen.",
+        "Panna Cotta ansetzen.",
+        "Beerenspiegel vorbereiten."
+      ])
+    );
+    expectOperationalPurchaseListQuality(body.purchaseList.items);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("accepts larger uploaded intake documents without failing on body size limits", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
