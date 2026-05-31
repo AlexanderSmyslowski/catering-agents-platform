@@ -47,7 +47,6 @@ import {
   uploadRecipeFile,
   type DashboardState,
   type IntakeDocumentChannel,
-  type RecipeReviewDecision,
   type ServiceHealthState
 } from "./api.js";
 import { getSpecLabel } from "./production-language.js";
@@ -85,6 +84,7 @@ import {
 import { buildProductionSourceFileUploadActions } from "./production-source-file-actions.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
+import { buildProductionRecipeSubmissionActions } from "./production-recipe-submission-actions.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import {
   clearProductionWorkspaceState,
@@ -763,26 +763,6 @@ export function App() {
     }
   }
 
-  async function handleRecipeUpload(target: "offer" | "production") {
-    if (!recipeFile) {
-      setError("Bitte wähle zuerst eine Rezeptdatei aus.");
-      return;
-    }
-
-    setSubmitting(true);
-    clearMessages();
-    try {
-      await uploadRecipeFile(target, recipeFile, recipeName);
-      clearRecipeUploadDraft();
-      await refreshDashboard();
-      setNotice("Rezeptdatei wurde in die gemeinsame Bibliothek übernommen.");
-    } catch (submitError) {
-      setError(formatSubmitErrorMessage(submitError, "Rezept konnte nicht hochgeladen werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   async function handleSeedDemoData() {
     setSubmitting(true);
     clearMessages();
@@ -797,23 +777,21 @@ export function App() {
     }
   }
 
-  async function handleRecipeReview(
-    target: "offer" | "production",
-    recipeId: string,
-    decision: RecipeReviewDecision
-  ) {
-    setSubmitting(true);
-    clearMessages();
-    try {
-      await reviewRecipe(target, recipeId, decision);
-      await refreshDashboard();
-      setNotice("Rezeptprüfung wurde gespeichert.");
-    } catch (submitError) {
-      setError(formatSubmitErrorMessage(submitError, "Rezeptprüfung konnte nicht gespeichert werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const {
+    handleRecipeUpload,
+    handleRecipeReview
+  } = buildProductionRecipeSubmissionActions({
+    uploadRecipeFile,
+    reviewRecipe,
+    recipeFile,
+    recipeName,
+    setSubmitting,
+    clearMessages,
+    clearRecipeUploadDraft,
+    refreshDashboard,
+    setNotice,
+    setError
+  });
 
   const {
     openProductionFilePicker,
