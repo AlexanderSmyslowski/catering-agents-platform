@@ -1,5 +1,6 @@
 import { buildProductionHandoffState } from "./production-handoff-state.js";
 import type { ProductionHandoffState } from "./production-handoff-panel.js";
+import { buildProductionObjectProgressState } from "./production-object-progress-state.js";
 import type {
   ProductionObjectsState,
   ProductionPlanProgressState
@@ -152,12 +153,12 @@ export function buildProductionRouteViewState({
       documentPhase,
       productionWorkspaceCleared
     }),
-    objectPanelProgress: {
+    objectPanelProgress: buildProductionObjectProgressState({
       planPhase,
       planningSpecLabel,
       planProgress,
       planEtaSeconds
-    },
+    }),
     objectPanelState: {
       focusedProductionSpec,
       productionWorkspaceCleared,
