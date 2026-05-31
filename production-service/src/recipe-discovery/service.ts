@@ -6,26 +6,10 @@ import type {
   RecipeSelection,
   WebRecipeCandidate
 } from "@catering/shared-core";
-import { validateRecipe } from "@catering/shared-core";
 import { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
-import {
-  candidateSupportsMenuCategory,
-  evaluateMenuCategoryCompatibility
-} from "./menu-category-compatibility.js";
-import { candidateToRecipe, type WebRecipeSearchProvider } from "./provider.js";
-import {
-  candidateRecipeText,
-  extractionCompletenessForCandidate,
-  isCollectionLikeCandidate,
-  qualityScoreForCandidate
-} from "./web-candidate-quality.js";
+import { type WebRecipeSearchProvider } from "./provider.js";
 import { buildSearchQueries } from "./recipe-query-builder.js";
-import {
-  candidateFormMismatch,
-  fitScoreForRecipe,
-  isStrongRecipeCandidate,
-  webSpecificMatchScore
-} from "./recipe-candidate-scoring.js";
+import { isStrongRecipeCandidate } from "./recipe-candidate-scoring.js";
 import { selectInternalRecipeCandidate } from "./internal-recipe-selection.js";
 import { buildInternalRecipeResolution } from "./internal-recipe-resolution.js";
 import {
@@ -38,6 +22,7 @@ import {
   buildUnresolvedWebRecipeResolution,
   buildWebRecipeWinnerResolution
 } from "./web-recipe-resolution.js";
+import { materializeWebRecipeCandidate } from "./web-recipe-candidate-materialization.js";
 
 export interface RecipeResolution {
   recipe?: Recipe;
@@ -117,60 +102,18 @@ export class RecipeDiscoveryService {
         }
 
         for (const candidate of searchResults) {
-          if (!candidateSupportsMenuCategory(candidate, component)) {
-            searchTrace.push(`Verworfen: ${candidate.title} (Kategorie passt nicht).`);
-            continue;
-          }
-
-          if (
-            isCollectionLikeCandidate(candidate) &&
-            (candidate.qualitySignals.stepCount < 4 || candidate.qualitySignals.ingredientCount < 6)
-          ) {
-            searchTrace.push(`Verworfen: ${candidate.title} (Sammlungs-/Übersichtsseite).`);
-            continue;
-          }
-
-          const qualityScore = qualityScoreForCandidate(candidate);
-          const compatibility = evaluateMenuCategoryCompatibility(candidate, component);
-          const fitScore = fitScoreForRecipe(candidateRecipeText(candidate), component, eventSpec);
-          const specificFitScore = webSpecificMatchScore(candidateRecipeText(candidate), component);
-          if (fitScore < 0.2) {
-            searchTrace.push(`Verworfen: ${candidate.title} (zu geringe Textpassung).`);
-            continue;
-          }
-          if (specificFitScore === 0) {
-            searchTrace.push(`Verworfen: ${candidate.title} (keine Fachbegriffe des Gerichts getroffen).`);
-            continue;
-          }
-          if (candidateFormMismatch(candidateRecipeText(candidate), component)) {
-            searchTrace.push(`Verworfen: ${candidate.title} (falsches Rezeptformat).`);
-            continue;
-          }
-          const extractionCompleteness = extractionCompletenessForCandidate(candidate);
-          const autoUsable =
-            qualityScore >= 0.75 &&
-            fitScore >= (compatibility.confidence === "explicit" ? 0.72 : 0.8) &&
-            extractionCompleteness >= 0.9 &&
-            candidate.qualitySignals.hasYield &&
-            candidate.qualitySignals.mappedIngredientRatio >= 0.85;
-
-          const materialized = candidateToRecipe(candidate, component, eventSpec, locale, {
-            qualityScore,
-            fitScore,
-            extractionCompleteness,
-            autoUsable,
-            inferredDietTags: compatibility.inferredDietTags
+          const materialization = materializeWebRecipeCandidate({
+            candidate,
+            component,
+            eventSpec,
+            locale,
+            query
           });
-
-          if (materialized) {
-            try {
-              candidates.push({
-                recipe: validateRecipe(materialized),
-                query
-              });
-            } catch {
-              continue;
-            }
+          if (materialization.traceMessage) {
+            searchTrace.push(materialization.traceMessage);
+          }
+          if (materialization.candidate) {
+            candidates.push(materialization.candidate);
           }
         }
 
