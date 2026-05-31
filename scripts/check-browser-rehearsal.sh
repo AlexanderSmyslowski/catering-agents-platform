@@ -316,6 +316,38 @@ open_question_markers='async () => {
   if (html.includes("/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv")) {
     missing.push("Offener-Rueckfragen-Pfad zeigt alten Einkaufslisten-Exportlink");
   }
+  const answerSaveButton = [...document.querySelectorAll("button")].find((button) =>
+    (button.textContent ?? "").replace(/\s+/g, " ").trim() === "Antworten speichern"
+  );
+  const planWithSaveButton = [...document.querySelectorAll("button")].find((button) =>
+    (button.textContent ?? "").replace(/\s+/g, " ").trim() === "Speichern und Berechnung starten"
+  );
+  const attendeeInput = [...document.querySelectorAll("input")].find((input) =>
+    input.getAttribute("placeholder") === "Teilnehmerzahl"
+  );
+
+  if (!answerSaveButton) {
+    missing.push("Offener-Rueckfragen-Pfad ohne Antworten-speichern-Aktion");
+  } else if (!answerSaveButton.disabled) {
+    missing.push("Antworten-speichern-Aktion ist vor einer strukturierten Aenderung aktiv");
+  }
+  if (!planWithSaveButton) {
+    missing.push("Offener-Rueckfragen-Pfad ohne Speichern-und-Berechnung-starten-Aktion");
+  }
+  if (!attendeeInput) {
+    missing.push("Offener-Rueckfragen-Pfad ohne Teilnehmerzahl-Feld");
+  } else {
+    attendeeInput.value = "43";
+    attendeeInput.dispatchEvent(new Event("input", { bubbles: true }));
+    attendeeInput.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (answerSaveButton?.disabled) {
+      missing.push("Antworten-speichern-Aktion bleibt nach strukturierter Aenderung deaktiviert");
+    }
+    if (document.body.innerText.includes("Teilnehmerzahl: 43")) {
+      missing.push("Strukturierte Antwort-Aenderung wurde vor dem Speichern als aktueller Spec-Text angezeigt");
+    }
+  }
   if (missing.length > 0) {
     throw new Error(`Offener-Rueckfragen-Browserpfad fehlgeschlagen: ${missing.join(" | ")}`);
   }
