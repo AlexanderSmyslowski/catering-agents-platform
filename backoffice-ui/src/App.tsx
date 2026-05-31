@@ -82,11 +82,9 @@ import { buildProductionSourceFileUploadActions } from "./production-source-file
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionRecipeSubmissionActions } from "./production-recipe-submission-actions.js";
-import { buildProductionIntakeArchiveAction } from "./production-intake-archive-action.js";
 import { buildProductionSpecFocusActions } from "./production-spec-focus-actions.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
-import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
-import { buildProductionWorkspaceUiActions } from "./production-workspace-ui-actions.js";
+import { buildProductionWorkspaceControls } from "./production-workspace-controls.js";
 import {
   buildProductionWindowFileActions
 } from "./production-window-file-actions.js";
@@ -451,8 +449,12 @@ export function App() {
   });
   const {
     canClearProductionWorkspace,
-    canArchiveCurrentIntake
-  } = buildProductionWorkspaceActionState({
+    canArchiveCurrentIntake,
+    clearMessages,
+    resetProductionWorkspaceState,
+    clearProductionWorkspace,
+    handleArchiveCurrentIntake
+  } = buildProductionWorkspaceControls({
     hasFocusedProductionSpec: Boolean(focusedProductionSpec),
     hasSelectedPlan: Boolean(selectedPlan),
     hasIntakeFile: Boolean(intakeFile),
@@ -462,14 +464,10 @@ export function App() {
     hasFocusedProductionSpecId: Boolean(focusedProductionSpecId),
     hasSelectedPlanId: Boolean(selectedPlanId),
     currentIntakeRequestId,
-    productionWorkspaceCleared
-  });
-
-  const {
-    clearMessages,
-    resetProductionWorkspaceState,
-    clearProductionWorkspace
-  } = buildProductionWorkspaceUiActions({
+    productionWorkspaceCleared,
+    archiveIntakeRequest,
+    setSubmitting,
+    refreshDashboard,
     setError,
     setNotice,
     setProductionWorkspaceCleared,
@@ -485,17 +483,6 @@ export function App() {
         productionUploadInputRef.current.value = "";
       }
     }
-  });
-
-  const handleArchiveCurrentIntake = buildProductionIntakeArchiveAction({
-    archiveIntakeRequest,
-    currentIntakeRequestId,
-    setSubmitting,
-    clearMessages,
-    resetProductionWorkspaceState,
-    refreshDashboard,
-    setNotice,
-    setError
   });
 
   const handleIntakeSubmit = buildProductionTextIntakeSubmitAction({
