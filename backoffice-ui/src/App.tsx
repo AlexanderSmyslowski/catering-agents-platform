@@ -18,6 +18,7 @@ import {
   getBaseUrl,
   getPathname
 } from "./app-shell-state.js";
+import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import {
   countOfferHandoffReadiness,
@@ -1070,13 +1071,6 @@ export function App() {
         <ProductionRouteFilterPanel {...productionRouteFilterState} />
       ) : null}
 
-      {error || notice ? (
-        <div className="toast-stack" aria-live="polite">
-          {error ? <p className="error-banner">{error}</p> : null}
-          {notice ? <p className="notice-banner">{notice}</p> : null}
-        </div>
-      ) : null}
-
       {route === "offer" ? (
         <OfferConversationalWorkbench {...offerWorkbenchState} />
       ) : null}
@@ -1084,11 +1078,7 @@ export function App() {
         <ProductionRouteMainLayout {...productionRouteMainLayoutState} />
       ) : null}
 
-      <footer className="footer-note">
-        {loading
-          ? "Aktuelle Plattformdaten werden geladen..."
-          : "Aktuelle Daten aus Erfassung, Angebot und Produktion wurden geladen."}
-      </footer>
+      <AppFeedbackShell error={error} notice={notice} loading={loading} />
     </DashboardShell>
   );
 }
