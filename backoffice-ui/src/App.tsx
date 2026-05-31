@@ -31,6 +31,7 @@ import { AppRouteContent } from "./app-route-content.js";
 import { buildAppRouteContentState } from "./app-route-content-state.js";
 import { RouteMasthead } from "./route-masthead.js";
 import { refreshAppDashboardState } from "./app-dashboard-refresh.js";
+import { buildAppSeedDemoAction } from "./app-seed-demo-action.js";
 import {
   archiveIntakeRequest,
   createAcceptedSpecFromDocument,
@@ -681,19 +682,14 @@ export function App() {
     setError
   });
 
-  async function handleSeedDemoData() {
-    setSubmitting(true);
-    clearMessages();
-    try {
-      await seedDemoData();
-      await refreshDashboard();
-      setNotice("Demo-Daten wurden geladen.");
-    } catch (submitError) {
-      setError(formatSubmitErrorMessage(submitError, "Demo-Daten konnten nicht geladen werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const handleSeedDemoData = buildAppSeedDemoAction({
+    seedDemoData,
+    setSubmitting,
+    clearMessages,
+    refreshDashboard,
+    setNotice,
+    setError
+  });
 
   const {
     handleRecipeUpload,
