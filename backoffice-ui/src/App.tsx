@@ -109,6 +109,7 @@ import { useProductionIntakeRequestDetail } from "./use-production-intake-reques
 import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useOperatorNameState } from "./use-operator-name-state.js";
+import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
@@ -126,8 +127,13 @@ export function App() {
   const [offerText, setOfferText] = useState(
     "Besprechung am 2026-06-25 für 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
   );
-  const [recipeName, setRecipeName] = useState("");
-  const [recipeFile, setRecipeFile] = useState<File | null>(null);
+  const {
+    recipeName,
+    setRecipeName,
+    recipeFile,
+    setRecipeFile,
+    clearRecipeUploadDraft
+  } = useRecipeUploadDraft();
   const [search, setSearch] = useState("");
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
@@ -791,8 +797,7 @@ export function App() {
     clearMessages();
     try {
       await uploadRecipeFile(target, recipeFile, recipeName);
-      setRecipeFile(null);
-      setRecipeName("");
+      clearRecipeUploadDraft();
       await refreshDashboard();
       setNotice("Rezeptdatei wurde in die gemeinsame Bibliothek übernommen.");
     } catch (submitError) {
