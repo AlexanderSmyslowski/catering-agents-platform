@@ -23,11 +23,12 @@ export function selectCurrentProductionArtifactsScopeSpecId(input: {
     return focusedProductionSpecId;
   }
 
-  const selectedPlan = input.selectedPlanId
-    ? input.orderedPlans.find((plan) => String(plan.planId ?? "") === input.selectedPlanId)
+  const selectedPlanId = input.selectedPlanId?.trim();
+  const selectedPlan = selectedPlanId
+    ? input.orderedPlans.find((plan) => String(plan.planId ?? "").trim() === selectedPlanId)
     : undefined;
   const fallbackPlan = selectedPlan ?? input.orderedPlans[0];
-  return String(fallbackPlan?.eventSpecId ?? "");
+  return String(fallbackPlan?.eventSpecId ?? "").trim();
 }
 
 export function buildProductionCurrentArtifactsState<
