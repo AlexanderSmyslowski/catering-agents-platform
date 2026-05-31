@@ -120,6 +120,10 @@ export function buildProductionRouteViewState({
   recipeFile,
   filteredRecipes
 }: ProductionRouteViewStateInput): ProductionRouteViewState {
+  const questionPanelIntakeRequestDetail = productionWorkspaceCleared ? null : intakeRequestDetail;
+  const questionPanelIntakeRequestDetailError = productionWorkspaceCleared ? undefined : intakeRequestDetailError;
+  const questionPanelFilteredSpecs = productionWorkspaceCleared ? [] : filteredSpecs;
+
   return {
     workbenchSummary: {
       activeSpecLabel: activeProductionContextLabel,
@@ -144,9 +148,9 @@ export function buildProductionRouteViewState({
       productionAssumptions,
       productionConversationProjection,
       workbenchSpecFacts,
-      intakeRequestDetailError,
-      intakeRequestDetail,
-      filteredSpecs,
+      intakeRequestDetailError: questionPanelIntakeRequestDetailError,
+      intakeRequestDetail: questionPanelIntakeRequestDetail,
+      filteredSpecs: questionPanelFilteredSpecs,
       documentPhase,
       productionWorkspaceCleared
     },
