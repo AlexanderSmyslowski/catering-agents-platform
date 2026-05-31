@@ -18,8 +18,7 @@ import {
   prepWindowFor,
   procurementKitchenSheet,
   purchasedElementsSummary,
-  stationFor,
-  unresolvedKitchenSheet
+  stationFor
 } from "./production-sheet-builders.js";
 import {
   isBlockingPlanningIssue
@@ -29,6 +28,7 @@ import { createPlanningIssueCollector } from "./planning-issue-collector.js";
 import { selectOperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
 import { normalizeRecipeResolution } from "./planning-recipe-resolution.js";
 import { productionConstraintConflictReason } from "./production-constraint-conflicts.js";
+import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -61,17 +61,17 @@ export async function buildProductionArtifacts(
           eventSpec.productionConstraints
         );
         if (constraintConflict) {
-          recipeSelections.push({
-            componentId: component.componentId,
-            selectionReason: constraintConflict,
-            autoUsedInternetRecipe: false
+          const artifacts = buildUnresolvedComponentArtifacts({
+            component,
+            eventSpec,
+            servings,
+            reason: constraintConflict,
+            timelineLabel: `${component.label} Bäcker-Zukauf klären`
           });
-          noteIssue(constraintConflict, true);
-          kitchenSheets.push(unresolvedKitchenSheet(component, servings, constraintConflict, eventSpec));
-          timeline.push({
-            label: `${component.label} Bäcker-Zukauf klären`,
-            at: prepWindowFor(eventSpec)
-          });
+          recipeSelections.push(artifacts.selection);
+          noteIssue(artifacts.issue, artifacts.blocking);
+          kitchenSheets.push(artifacts.kitchenSheet);
+          timeline.push(artifacts.timelineItem);
           continue;
         }
 
@@ -92,17 +92,18 @@ export async function buildProductionArtifacts(
 
       if (!component.menuCategory) {
         const reason = "Gerichtsklassifikation fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.";
-        recipeSelections.push({
-          componentId: component.componentId,
-          selectionReason: reason,
-          autoUsedInternetRecipe: false
+        const artifacts = buildUnresolvedComponentArtifacts({
+          component,
+          eventSpec,
+          servings,
+          reason,
+          issue: `Klassifikation für ${component.label} fehlt.`,
+          timelineLabel: `${component.label} fachlich klären`
         });
-        noteIssue(`Klassifikation für ${component.label} fehlt.`, true);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
-        timeline.push({
-          label: `${component.label} fachlich klären`,
-          at: prepWindowFor(eventSpec)
-        });
+        recipeSelections.push(artifacts.selection);
+        noteIssue(artifacts.issue, artifacts.blocking);
+        kitchenSheets.push(artifacts.kitchenSheet);
+        timeline.push(artifacts.timelineItem);
         continue;
       }
 
@@ -111,39 +112,38 @@ export async function buildProductionArtifacts(
         const reason =
           hybridReason ??
           "Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.";
-        recipeSelections.push({
-          componentId: component.componentId,
-          selectionReason: reason,
-          autoUsedInternetRecipe: false
-        });
-        noteIssue(
-          hybridReason
+        const artifacts = buildUnresolvedComponentArtifacts({
+          component,
+          eventSpec,
+          servings,
+          reason,
+          issue: hybridReason
             ? `Herstellungsentscheidung für ${component.label} fehlt (Hybridfall Focaccia).`
             : `Herstellungsentscheidung für ${component.label} fehlt.`,
-          true
-        );
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
-        timeline.push({
-          label: hybridReason ? `${component.label} Hybridfall klären` : `${component.label} Herstellungsart klären`,
-          at: prepWindowFor(eventSpec)
+          timelineLabel: hybridReason ? `${component.label} Hybridfall klären` : `${component.label} Herstellungsart klären`
         });
+        recipeSelections.push(artifacts.selection);
+        noteIssue(artifacts.issue, artifacts.blocking);
+        kitchenSheets.push(artifacts.kitchenSheet);
+        timeline.push(artifacts.timelineItem);
         continue;
       }
 
       if ((productionMode === "hybrid" || productionMode === "convenience_purchase") && purchasedElements.length === 0) {
         const reason =
           "Hybrid-/Convenience-Entscheidung ist gesetzt, aber die zugekauften Bestandteile sind noch nicht benannt.";
-        recipeSelections.push({
-          componentId: component.componentId,
-          selectionReason: reason,
-          autoUsedInternetRecipe: false
+        const artifacts = buildUnresolvedComponentArtifacts({
+          component,
+          eventSpec,
+          servings,
+          reason,
+          issue: `Zugekaufte Bestandteile für ${component.label} fehlen.`,
+          timelineLabel: `${component.label} Beschaffungsanteil klären`
         });
-        noteIssue(`Zugekaufte Bestandteile für ${component.label} fehlen.`, true);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
-        timeline.push({
-          label: `${component.label} Beschaffungsanteil klären`,
-          at: prepWindowFor(eventSpec)
-        });
+        recipeSelections.push(artifacts.selection);
+        noteIssue(artifacts.issue, artifacts.blocking);
+        kitchenSheets.push(artifacts.kitchenSheet);
+        timeline.push(artifacts.timelineItem);
         continue;
       }
 
@@ -191,23 +191,32 @@ export async function buildProductionArtifacts(
         : resolution.selection;
       recipeSelections.push(selectedRecipe);
       if (constraintConflict) {
-        noteIssue(constraintConflict, true);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, constraintConflict, eventSpec));
-        timeline.push({
-          label: `${component.label} Rezeptklärung`,
-          at: prepWindowFor(eventSpec)
+        const artifacts = buildUnresolvedComponentArtifacts({
+          component,
+          eventSpec,
+          servings,
+          reason: constraintConflict,
+          timelineLabel: `${component.label} Rezeptklärung`
         });
+        noteIssue(artifacts.issue, artifacts.blocking);
+        kitchenSheets.push(artifacts.kitchenSheet);
+        timeline.push(artifacts.timelineItem);
         continue;
       }
 
       if (!resolution.recipe || servings <= 0) {
         const reason = resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden.";
-        noteIssue(reason, servings <= 0);
-        kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
-        timeline.push({
-          label: `${component.label} Rezeptklärung`,
-          at: prepWindowFor(eventSpec)
+        const artifacts = buildUnresolvedComponentArtifacts({
+          component,
+          eventSpec,
+          servings,
+          reason,
+          blocking: servings <= 0,
+          timelineLabel: `${component.label} Rezeptklärung`
         });
+        noteIssue(artifacts.issue, artifacts.blocking);
+        kitchenSheets.push(artifacts.kitchenSheet);
+        timeline.push(artifacts.timelineItem);
         continue;
       }
 
@@ -257,17 +266,17 @@ export async function buildProductionArtifacts(
       const reason = error instanceof Error && error.message.startsWith("Ungültige Planungsantwort")
         ? error.message
         : `Technischer Fehler in der Produktionsplanung für ${component.label}: ${error instanceof Error ? error.message : "Unbekannter Fehler"}`;
-      recipeSelections.push({
-        componentId: component.componentId,
-        selectionReason: reason,
-        autoUsedInternetRecipe: false
+      const artifacts = buildUnresolvedComponentArtifacts({
+        component,
+        eventSpec,
+        servings,
+        reason,
+        timelineLabel: `${component.label} Rezeptklärung`
       });
-      noteIssue(reason, true);
-      kitchenSheets.push(unresolvedKitchenSheet(component, servings, reason, eventSpec));
-      timeline.push({
-        label: `${component.label} Rezeptklärung`,
-        at: prepWindowFor(eventSpec)
-      });
+      recipeSelections.push(artifacts.selection);
+      noteIssue(artifacts.issue, artifacts.blocking);
+      kitchenSheets.push(artifacts.kitchenSheet);
+      timeline.push(artifacts.timelineItem);
     }
   }
 
