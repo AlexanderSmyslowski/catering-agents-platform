@@ -448,7 +448,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("production-objects-zone");
     expect(production.text).toContain("Produktionsobjekte");
     expect(production.text).toContain(
-      "Produktionsblatt exportieren für aktuellen Plan corridor-plan-1 · Spezifikation corridor-spec-1"
+      "Produktionsblatt exportieren für Plan corridor-plan-1 · Spezifikation corridor-spec-1"
     );
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/corridor-plan-1/html");
     expect(production.text).toContain(
@@ -926,7 +926,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).not.toContain("B5 Rohtext");
     expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
     expect(production.text).toContain(
-      "Produktionsblatt exportieren für aktuellen Plan c4-plan-handoff · Spezifikation c4-spec-handoff"
+      "Produktionsblatt exportieren für Plan c4-plan-handoff · Spezifikation c4-spec-handoff"
     );
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/c4-plan-handoff/html");
     expect(production.text).toContain(
