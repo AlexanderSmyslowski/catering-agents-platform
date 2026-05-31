@@ -135,6 +135,11 @@ production_markers='() => {
   ].filter((marker) => !text.includes(marker));
   const exportLinks = [...document.querySelectorAll("a")]
     .map((anchor) => anchor.getAttribute("href") ?? "");
+  const buttons = [...document.querySelectorAll("button")].map((button) => ({
+    text: (button.textContent ?? "").replace(/\s+/g, " ").trim(),
+    disabled: button.disabled,
+    title: button.getAttribute("title") ?? ""
+  }));
   if (!exportLinks.some((href) => href.includes("/api/exports/v1/exports/production-plans/") && href.endsWith("/html"))) {
     missing.push("Produktionsplan-Exportlink fehlt");
   }
@@ -172,6 +177,26 @@ production_markers='() => {
   }
   if (text.includes("Ältere Produktionsläufe") && !text.includes("Diese früheren Produktionsläufe sind Kontext aus anderen Vorgängen, nicht das aktuelle Ergebnis.")) {
     missing.push("aeltere Produktionslaeufe sind nicht klar als nicht aktuell markiert");
+  }
+  const clearWorkspaceButton = buttons.find((button) => button.text.startsWith("Arbeitsbereich lokal leeren"));
+  if (!clearWorkspaceButton) {
+    missing.push("Arbeitsbereich-lokal-leeren-Aktion fehlt");
+  } else if (clearWorkspaceButton.disabled) {
+    missing.push("Arbeitsbereich-lokal-leeren-Aktion ist trotz aktuellem Ergebnis deaktiviert");
+  } else if (!clearWorkspaceButton.text.includes("Plan-Kontext geladen:") || !clearWorkspaceButton.title.includes("Lokalen Arbeitsbereich leeren:")) {
+    missing.push("Arbeitsbereich-lokal-leeren-Aktion ist nicht mit aktuellem Kontext beschriftet");
+  }
+  const archiveButton = buttons.find((button) => button.text === "Fehlupload archivieren");
+  if (!archiveButton) {
+    missing.push("Fehlupload-Archiv-Aktion fehlt");
+  } else if (!archiveButton.disabled || archiveButton.title !== "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.") {
+    missing.push("Fehlupload-Archiv-Aktion ist ohne aktiven Intake-Kontext nicht sicher deaktiviert");
+  }
+  const reprocessButton = buttons.find((button) => button.text === "Erneut mit ausgewähltem Typ verarbeiten");
+  if (!reprocessButton) {
+    missing.push("Wiederverarbeitungs-Aktion fehlt");
+  } else if (!reprocessButton.disabled) {
+    missing.push("Wiederverarbeitungs-Aktion ist ohne ausgewählte Datei nicht sicher deaktiviert");
   }
   if (missing.length > 0) {
     throw new Error(`Produktions-Rehearsal-Marker fehlen: ${missing.join(" | ")}`);
