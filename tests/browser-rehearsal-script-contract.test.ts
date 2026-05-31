@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("browser rehearsal script contract", () => {
+  const readmeDoc = readFileSync("README.md", "utf8");
+  const testingDoc = readFileSync("TESTING.md", "utf8");
+
   it("keeps the real-browser rehearsal script wired as an explicit optional npm command", () => {
     const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
       scripts?: Record<string, string>;
@@ -161,6 +164,20 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION");
     expect(script).toContain("Answer-Submit-Modus: aktiv");
     expect(script).toContain("Archiv-Modus: aktiv");
+  });
+
+  it("documents the normal and mutating browser rehearsal modes without widening release claims", () => {
+    for (const doc of [readmeDoc, testingDoc]) {
+      expect(doc).toContain("`npm run browser:rehearsal`");
+      expect(doc).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
+      expect(doc).toContain("`npm run browser:rehearsal:answer-submit`");
+      expect(doc).toContain("`npm run browser:rehearsal:archive-intake`");
+      expect(doc).toContain("`npm run local:start:fresh`");
+      expect(doc).toContain("synthetische");
+      expect(doc).toContain("Fresh-Datenwurzel");
+      expect(doc).toContain("kein Echte-Daten");
+      expect(doc).toContain("keine Produktionsfreigabe");
+    }
   });
 
   it("guards production workspace actions against unsafe stale or empty states", () => {

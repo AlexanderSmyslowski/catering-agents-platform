@@ -100,6 +100,10 @@ describe("local ops check contract", () => {
     expect(testingDoc).toContain("lokaler Stale-Datenbefund");
     expect(testingDoc).toContain("Lokale Datenwurzel");
     expect(testingDoc).toContain("CATERING_DATA_ROOT");
+    expect(testingDoc).toContain("Browser-Rehearsal-Modi");
+    expect(testingDoc).toContain("`npm run browser:rehearsal` ist der nicht-mutierende Browser-Kernpfad");
+    expect(testingDoc).toContain("`npm run browser:rehearsal:answer-submit` ist ein mutierender Fresh-Run");
+    expect(testingDoc).toContain("`npm run browser:rehearsal:archive-intake` ist ein mutierender Fresh-Run");
   });
 
   it("keeps Demo-Seed, local checks, and audit evidence narratively bounded across docs", () => {
