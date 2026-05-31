@@ -28,6 +28,10 @@ import {
 } from "./recipe-candidate-scoring.js";
 import { selectInternalRecipeCandidate } from "./internal-recipe-selection.js";
 import { buildInternalRecipeResolution } from "./internal-recipe-resolution.js";
+import {
+  buildMissingOverrideRecipeResolution,
+  buildOverrideRecipeResolution
+} from "./override-recipe-resolution.js";
 import { createRecipeSearchTrace } from "./recipe-search-trace.js";
 import { selectWebRecipeCandidate } from "./web-recipe-selection.js";
 import {
@@ -53,31 +57,10 @@ export class RecipeDiscoveryService {
   ): Promise<RecipeResolution> {
     const recipe = await this.repository.get(recipeId);
     if (!recipe) {
-      return {
-        selection: {
-          componentId: component.componentId,
-          selectionReason: `Das manuell hinterlegte Rezept ${recipeId} wurde in der Bibliothek nicht gefunden.`,
-          searchTrace: [`Manuelle Rezeptzuweisung: ${recipeId}`, "Bibliothekstreffer: nicht gefunden."],
-          autoUsedInternetRecipe: false
-        },
-        unresolvedItems: [`Rezeptzuweisung ${recipeId} für ${component.label} ist ungültig.`]
-      };
+      return buildMissingOverrideRecipeResolution({ recipeId, component });
     }
 
-    return {
-      recipe,
-      selection: {
-        componentId: component.componentId,
-        recipeId: recipe.recipeId,
-        selectionReason: "Rezept wurde manuell aus der Bibliothek zugewiesen.",
-        searchTrace: [`Manuelle Rezeptzuweisung: ${recipe.name} (${recipe.recipeId}).`],
-        autoUsedInternetRecipe: false,
-        sourceTier: recipe.source.tier,
-        qualityScore: recipe.source.qualityScore,
-        fitScore: recipe.source.fitScore
-      },
-      unresolvedItems: []
-    };
+    return buildOverrideRecipeResolution({ recipe, component });
   }
 
   async resolveRecipe(
