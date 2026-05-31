@@ -102,6 +102,12 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Antwort direkt zur Agentenfrage");
     expect(script).toContain("Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.");
     expect(script).toContain("Produktionsblatt offen · Einkaufsliste offen");
+    expect(script).toContain("Offener-Rueckfragen-Pfad ohne Antworten-speichern-Aktion");
+    expect(script).toContain("Antworten-speichern-Aktion ist vor einer strukturierten Aenderung aktiv");
+    expect(script).toContain("Offener-Rueckfragen-Pfad ohne Speichern-und-Berechnung-starten-Aktion");
+    expect(script).toContain("Offener-Rueckfragen-Pfad ohne Teilnehmerzahl-Feld");
+    expect(script).toContain("Antworten-speichern-Aktion bleibt nach strukturierter Aenderung deaktiviert");
+    expect(script).toContain("Strukturierte Antwort-Aenderung wurde vor dem Speichern als aktueller Spec-Text angezeigt");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");
