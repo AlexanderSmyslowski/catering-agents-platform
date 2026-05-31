@@ -223,9 +223,10 @@ export function selectProductionWorkbenchPlan<T extends Record<string, unknown>>
     return undefined;
   }
 
+  const selectedPlanId = input.selectedPlanId?.trim();
   return (
-    input.currentSpecPlans.find((plan) => String(plan.planId) === input.selectedPlanId) ??
-    input.orderedPlans.find((plan) => String(plan.planId) === input.selectedPlanId) ??
+    input.currentSpecPlans.find((plan) => String(plan.planId ?? "").trim() === selectedPlanId) ??
+    input.orderedPlans.find((plan) => String(plan.planId ?? "").trim() === selectedPlanId) ??
     input.currentSpecPlans[0] ??
     (input.currentProductionSpecId ? undefined : input.orderedPlans[0])
   );
@@ -239,7 +240,7 @@ export function selectProductionPlanSpec<T extends Record<string, unknown>>(inpu
     return undefined;
   }
 
-  return input.specsById.get(String(input.selectedPlan.eventSpecId ?? ""));
+  return input.specsById.get(String(input.selectedPlan.eventSpecId ?? "").trim());
 }
 
 export function buildProductionPlanComponentMap(
