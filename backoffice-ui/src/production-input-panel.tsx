@@ -39,6 +39,8 @@ export type ProductionSourceInputValues = {
   intakeText: string;
   canClearWorkspace: boolean;
   canArchiveCurrentIntake: boolean;
+  clearWorkspaceContextLabel?: string;
+  archiveCurrentIntakeContextLabel?: string;
 };
 
 export type ProductionSourceInputActions = {
@@ -102,6 +104,9 @@ export function ProductionInputPanel({
             onClick={sourceInputActions.clearWorkspace}
           >
             Arbeitsbereich leeren
+            {sourceInput.clearWorkspaceContextLabel ? (
+              <span className="visually-hidden"> für {sourceInput.clearWorkspaceContextLabel}</span>
+            ) : null}
           </button>
           <button
             type="button"
@@ -110,6 +115,9 @@ export function ProductionInputPanel({
             onClick={() => void sourceInputActions.archiveCurrentIntake()}
           >
             Fehlupload archivieren
+            {sourceInput.archiveCurrentIntakeContextLabel ? (
+              <span className="visually-hidden"> für {sourceInput.archiveCurrentIntakeContextLabel}</span>
+            ) : null}
           </button>
         </div>
       </div>

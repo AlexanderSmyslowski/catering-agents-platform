@@ -716,7 +716,11 @@ export function App() {
     documentEtaSeconds,
     intakeText,
     canClearWorkspace: canClearProductionWorkspace,
-    canArchiveCurrentIntake
+    canArchiveCurrentIntake,
+    clearWorkspaceContextLabel: activeProductionContextLabel,
+    archiveCurrentIntakeContextLabel: currentIntakeRequestId
+      ? `Intake-Anfrage ${currentIntakeRequestId}`
+      : undefined
   });
   const productionSourceInputActions = buildProductionSourceInputActions({
     uploadInputRef: productionUploadInputRef,

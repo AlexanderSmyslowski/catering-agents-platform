@@ -19,7 +19,9 @@ describe("production source input state", () => {
       documentEtaSeconds: 7,
       intakeText: "Lunch fuer 30 Personen",
       canClearWorkspace: true,
-      canArchiveCurrentIntake: false
+      canArchiveCurrentIntake: false,
+      clearWorkspaceContextLabel: "Lunch · 30 Teilnehmer",
+      archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1"
     });
 
     expect(state).toEqual({
@@ -32,7 +34,9 @@ describe("production source input state", () => {
       documentEtaSeconds: 7,
       intakeText: "Lunch fuer 30 Personen",
       canClearWorkspace: true,
-      canArchiveCurrentIntake: false
+      canArchiveCurrentIntake: false,
+      clearWorkspaceContextLabel: "Lunch · 30 Teilnehmer",
+      archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1"
     });
     expect(state.intakeFile).toBe(file);
   });

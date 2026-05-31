@@ -14,6 +14,8 @@ export type ProductionSourceInputStateInput = {
   intakeText: string;
   canClearWorkspace: boolean;
   canArchiveCurrentIntake: boolean;
+  clearWorkspaceContextLabel?: string;
+  archiveCurrentIntakeContextLabel?: string;
 };
 
 export function buildProductionSourceInputState({
@@ -26,7 +28,9 @@ export function buildProductionSourceInputState({
   documentEtaSeconds,
   intakeText,
   canClearWorkspace,
-  canArchiveCurrentIntake
+  canArchiveCurrentIntake,
+  clearWorkspaceContextLabel,
+  archiveCurrentIntakeContextLabel
 }: ProductionSourceInputStateInput): ProductionSourceInputValues {
   return {
     dragActive,
@@ -38,7 +42,9 @@ export function buildProductionSourceInputState({
     documentEtaSeconds,
     intakeText,
     canClearWorkspace,
-    canArchiveCurrentIntake
+    canArchiveCurrentIntake,
+    clearWorkspaceContextLabel,
+    archiveCurrentIntakeContextLabel
   };
 }
 
