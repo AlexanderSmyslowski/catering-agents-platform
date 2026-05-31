@@ -85,6 +85,7 @@ import { buildProductionStatusSummaryState } from "./production-status-summary-s
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionRecipeSubmissionActions } from "./production-recipe-submission-actions.js";
 import { buildProductionIntakeArchiveAction } from "./production-intake-archive-action.js";
+import { buildProductionSpecFocusActions } from "./production-spec-focus-actions.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import {
   clearProductionWorkspaceState,
@@ -587,15 +588,15 @@ export function App() {
     setError
   });
 
-  function loadSpecIntoEditor(spec: Record<string, unknown>) {
-    const specId = loadSpecIntoEditorState(spec);
-    setProductionWorkspaceCleared(false);
-    setFocusedProductionSpecId(specId);
-  }
-
-  function beginSpecEdit(spec: Record<string, unknown>) {
-    loadSpecIntoEditor(spec);
-  }
+  const {
+    loadSpecIntoEditor,
+    beginSpecEdit,
+    openSpecForQuestions
+  } = buildProductionSpecFocusActions({
+    loadSpecIntoEditorState,
+    setProductionWorkspaceCleared,
+    setFocusedProductionSpecId
+  });
 
   async function persistCurrentSpecEdit(options?: { quiet?: boolean }) {
     if (!editingSpecId) {
@@ -718,11 +719,6 @@ export function App() {
     processIncomingProductionFile
   });
 
-  function handleOpenSpecForQuestions(specId: string) {
-    setProductionWorkspaceCleared(false);
-    setFocusedProductionSpecId(specId);
-  }
-
   const manualSpecInput = buildProductionManualInputStateFromForm(manualSpecForm);
   const manualSpecActions = buildProductionManualInputActions({
     ...manualSpecForm,
@@ -824,7 +820,7 @@ export function App() {
     manualInput: manualSpecInput,
     manualInputActions: manualSpecActions,
     editorState: productionQuestionEditorState,
-    openSpecForQuestions: handleOpenSpecForQuestions,
+    openSpecForQuestions,
     setEditingEventType,
     setEditingEventDate,
     setEditingAttendeeCount,
