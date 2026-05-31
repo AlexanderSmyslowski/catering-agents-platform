@@ -59,6 +59,8 @@ function buildSourceInput(overrides?: Partial<ProductionSourceInputValues>): Pro
     intakeText: "",
     canClearWorkspace: false,
     canArchiveCurrentIntake: false,
+    clearWorkspaceTitle: "Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.",
+    archiveCurrentIntakeTitle: "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.",
     ...overrides
   };
 }
@@ -82,7 +84,10 @@ describe("production input panel", () => {
         canClearWorkspace: true,
         canArchiveCurrentIntake: true,
         clearWorkspaceContextLabel: "Lunch · 30 Teilnehmer · 2026-06-18",
-        archiveCurrentIntakeContextLabel: "Intake-Anfrage request-123"
+        archiveCurrentIntakeContextLabel: "Intake-Anfrage request-123",
+        clearWorkspaceTitle: "Lokalen Arbeitsbereich leeren: Lunch · 30 Teilnehmer · 2026-06-18",
+        archiveCurrentIntakeTitle:
+          "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-123"
       })
     );
 
@@ -90,6 +95,19 @@ describe("production input panel", () => {
     expect(markup).toContain("für Lunch · 30 Teilnehmer · 2026-06-18");
     expect(markup).toContain("Fehlupload archivieren");
     expect(markup).toContain("für Intake-Anfrage request-123");
+    expect(markup).toContain('title="Lokalen Arbeitsbereich leeren: Lunch · 30 Teilnehmer · 2026-06-18"');
+    expect(markup).toContain(
+      'title="Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-123"'
+    );
+  });
+
+  it("keeps disabled destructive actions explainable without changing visible copy", () => {
+    const markup = renderPanel(buildSourceInput());
+
+    expect(markup).toContain('title="Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren."');
+    expect(markup).toContain('title="Kein aktiver Intake-Kontext für ein Fehlupload-Archiv."');
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Arbeitsbereich lokal leeren<\/button>/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Fehlupload archivieren<\/button>/);
   });
 
   it("keeps the document retry action inactive until a file is available", () => {

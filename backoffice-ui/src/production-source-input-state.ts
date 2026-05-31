@@ -18,6 +18,32 @@ export type ProductionSourceInputStateInput = {
   archiveCurrentIntakeContextLabel?: string;
 };
 
+function formatClearWorkspaceTitle(input: {
+  canClearWorkspace: boolean;
+  clearWorkspaceContextLabel?: string;
+}): string {
+  if (!input.canClearWorkspace) {
+    return "Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.";
+  }
+
+  return input.clearWorkspaceContextLabel
+    ? `Lokalen Arbeitsbereich leeren: ${input.clearWorkspaceContextLabel}`
+    : "Aktuellen Produktionsarbeitsbereich lokal leeren.";
+}
+
+function formatArchiveCurrentIntakeTitle(input: {
+  canArchiveCurrentIntake: boolean;
+  archiveCurrentIntakeContextLabel?: string;
+}): string {
+  if (!input.canArchiveCurrentIntake) {
+    return "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.";
+  }
+
+  return input.archiveCurrentIntakeContextLabel
+    ? `Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: ${input.archiveCurrentIntakeContextLabel}`
+    : "Aktiven Intake-Kontext per Soft-Archiv aus dem Fokus nehmen.";
+}
+
 export function buildProductionSourceInputState({
   dragActive,
   intakeFile,
@@ -44,7 +70,15 @@ export function buildProductionSourceInputState({
     canClearWorkspace,
     canArchiveCurrentIntake,
     clearWorkspaceContextLabel,
-    archiveCurrentIntakeContextLabel
+    archiveCurrentIntakeContextLabel,
+    clearWorkspaceTitle: formatClearWorkspaceTitle({
+      canClearWorkspace,
+      clearWorkspaceContextLabel
+    }),
+    archiveCurrentIntakeTitle: formatArchiveCurrentIntakeTitle({
+      canArchiveCurrentIntake,
+      archiveCurrentIntakeContextLabel
+    })
   };
 }
 

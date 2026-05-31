@@ -36,7 +36,9 @@ describe("production source input state", () => {
       canClearWorkspace: true,
       canArchiveCurrentIntake: false,
       clearWorkspaceContextLabel: "Lunch · 30 Teilnehmer",
-      archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1"
+      archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1",
+      clearWorkspaceTitle: "Lokalen Arbeitsbereich leeren: Lunch · 30 Teilnehmer",
+      archiveCurrentIntakeTitle: "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv."
     });
     expect(state.intakeFile).toBe(file);
   });
@@ -57,6 +59,28 @@ describe("production source input state", () => {
     expect(state.documentEtaSeconds).toBeUndefined();
     expect(state.canClearWorkspace).toBe(false);
     expect(state.canArchiveCurrentIntake).toBe(true);
+    expect(state.clearWorkspaceTitle).toBe("Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.");
+    expect(state.archiveCurrentIntakeTitle).toBe("Aktiven Intake-Kontext per Soft-Archiv aus dem Fokus nehmen.");
+  });
+
+  it("keeps destructive action titles contextual when both actions are available", () => {
+    const state = buildProductionSourceInputState({
+      dragActive: false,
+      intakeFile: null,
+      intakeChannel: "pdf_upload",
+      documentPhase: "idle",
+      documentProgress: 0,
+      intakeText: "",
+      canClearWorkspace: true,
+      canArchiveCurrentIntake: true,
+      clearWorkspaceContextLabel: "Plan-Kontext plan-1",
+      archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1"
+    });
+
+    expect(state.clearWorkspaceTitle).toBe("Lokalen Arbeitsbereich leeren: Plan-Kontext plan-1");
+    expect(state.archiveCurrentIntakeTitle).toBe(
+      "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-1"
+    );
   });
 
   it("maps source input action references without wrapping callbacks", () => {

@@ -41,6 +41,8 @@ export type ProductionSourceInputValues = {
   canArchiveCurrentIntake: boolean;
   clearWorkspaceContextLabel?: string;
   archiveCurrentIntakeContextLabel?: string;
+  clearWorkspaceTitle: string;
+  archiveCurrentIntakeTitle: string;
 };
 
 export type ProductionSourceInputActions = {
@@ -101,6 +103,7 @@ export function ProductionInputPanel({
             type="button"
             className="secondary-button destructive-button"
             disabled={clearWorkspaceDisabled}
+            title={sourceInput.clearWorkspaceTitle}
             onClick={sourceInputActions.clearWorkspace}
           >
             Arbeitsbereich lokal leeren
@@ -112,6 +115,7 @@ export function ProductionInputPanel({
             type="button"
             className="secondary-button destructive-button"
             disabled={archiveCurrentIntakeDisabled}
+            title={sourceInput.archiveCurrentIntakeTitle}
             onClick={() => void sourceInputActions.archiveCurrentIntake()}
           >
             Fehlupload archivieren

@@ -77,7 +77,9 @@ describe("production route main layout state", () => {
       documentProgress: 0,
       intakeText: "",
       canClearWorkspace: false,
-      canArchiveCurrentIntake: false
+      canArchiveCurrentIntake: false,
+      clearWorkspaceTitle: "Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.",
+      archiveCurrentIntakeTitle: "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv."
     };
     const sourceInputActions = {
       uploadInputRef: { current: null },
