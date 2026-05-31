@@ -1137,7 +1137,7 @@ describe("backoffice production acceptance smoke", () => {
     });
   });
 
-  it("summarizes recipe review status as a quiet production blocker zone", async () => {
+  it("keeps recipe review and library states visible on the production route", async () => {
     installProductionAcceptanceMocks({ withRecipeReviewStates: true });
 
     const content = await renderProductionRoute();
@@ -1145,5 +1145,18 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rezeptprüfung");
     expect(content).toContain("1 zu prüfen");
     expect(content).toContain("Freigegebene Rezepte bleiben verwendbar");
+    expect(content).toContain("1 abgelehnt · 3 Rezepte insgesamt · Review-Actions bleiben in der");
+    expect(content).toContain("Rezeptbibliothek");
+    expect(content).toContain("Rezepte verwalten");
+    expect(content).toContain("3 Rezepte · 1 freigegeben · 1 Prüfung nötig");
+    expect(content).toContain("Freigegebenes Baguette");
+    expect(content).toContain("intern verifiziert · intern freigegeben");
+    expect(content).toContain("Baguette in Prüfung");
+    expect(content).toContain("digitalisiertes Kochbuch · Prüfung nötig");
+    expect(content).toContain("Abgelehnte Baguette-Variante");
+    expect(content).toContain("Internet-Ausweichquelle · abgelehnt");
+    expect(content).toContain("Freigeben");
+    expect(content).toContain("Verifizieren");
+    expect(content).toContain("Ablehnen");
   });
 });
