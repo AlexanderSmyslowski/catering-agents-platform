@@ -33,6 +33,7 @@ import {
   withPurchaseCoverageBlockingIssues
 } from "./planning-readiness.js";
 import { createPlanningIssueCollector } from "./planning-issue-collector.js";
+import { selectOperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
 import { normalizeRecipeResolution } from "./planning-recipe-resolution.js";
 import { productionConstraintConflictReason } from "./production-constraint-conflicts.js";
 
@@ -281,12 +282,20 @@ export async function buildProductionArtifacts(
   const uniqueWarnings = [...new Set(warnings)];
   const uniqueBlockingIssues = [...new Set(blockingIssues)];
   const hasBlockingIssues = uniqueBlockingIssues.length > 0;
-  const operationalProductionBatches = hasBlockingIssues ? [] : productionBatches;
-  const operationalTimeline = hasBlockingIssues ? [] : timeline;
-  const operationalKitchenSheets = hasBlockingIssues
-    ? kitchenSheets.filter((sheet) => (sheet.blockingNotes?.length ?? 0) > 0)
-    : kitchenSheets;
-  const operationalProcurementItems = hasBlockingIssues ? [] : procurementItems;
+  const {
+    productionBatches: operationalProductionBatches,
+    timeline: operationalTimeline,
+    kitchenSheets: operationalKitchenSheets,
+    procurementItems: operationalProcurementItems
+  } = selectOperationalPlanningArtifacts(
+    {
+      productionBatches,
+      timeline,
+      kitchenSheets,
+      procurementItems
+    },
+    uniqueBlockingIssues
+  );
   const productionPlan = validateProductionPlan({
     schemaVersion: SCHEMA_VERSION,
     planId: `plan-${eventSpec.specId}`,
