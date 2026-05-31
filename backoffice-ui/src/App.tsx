@@ -67,11 +67,8 @@ import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { buildProductionDocumentSubmitActions } from "./production-document-submit-action.js";
 import { buildProductionTextIntakeSubmitAction } from "./production-text-intake-submit-action.js";
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
-import { buildProductionPlanSubmissionAction } from "./production-plan-submission-action.js";
-import { buildProductionSpecSaveAction } from "./production-spec-save-action.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import { buildProductionQuestionAutoOpenState } from "./production-question-auto-open-state.js";
-import { buildProductionSpecEditPersistAction } from "./production-spec-edit-persist-action.js";
 import { buildAppProductionRouteState } from "./app-production-route-state.js";
 import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
 import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
@@ -82,9 +79,9 @@ import { buildProductionSourceFileUploadActions } from "./production-source-file
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionRecipeSubmissionActions } from "./production-recipe-submission-actions.js";
-import { buildProductionSpecFocusActions } from "./production-spec-focus-actions.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import { buildProductionWorkspaceControls } from "./production-workspace-controls.js";
+import { buildProductionPlanningControls } from "./production-planning-controls.js";
 import {
   buildProductionWindowFileActions
 } from "./production-window-file-actions.js";
@@ -548,49 +545,31 @@ export function App() {
     setError
   });
 
-  const persistCurrentSpecEdit = buildProductionSpecEditPersistAction({
+  const {
+    persistCurrentSpecEdit,
+    loadSpecIntoEditor,
+    beginSpecEdit,
+    openSpecForQuestions,
+    handleCreatePlan,
+    handleSaveSpecEdit
+  } = buildProductionPlanningControls({
     editingSpecId,
     updateAcceptedSpec,
     buildCurrentSpecUpdateInput,
+    loadSpecIntoEditorState,
+    createProductionPlan,
+    setSubmitting,
     setProductionWorkspaceCleared,
     setFocusedProductionSpecId,
     resetSpecEdit,
     refreshDashboard,
-    setNotice
-  });
-
-  const {
-    loadSpecIntoEditor,
-    beginSpecEdit,
-    openSpecForQuestions
-  } = buildProductionSpecFocusActions({
-    loadSpecIntoEditorState,
-    setProductionWorkspaceCleared,
-    setFocusedProductionSpecId
-  });
-
-  const handleCreatePlan = buildProductionPlanSubmissionAction({
-    createProductionPlan,
-    editingSpecId,
-    setSubmitting,
-    setProductionWorkspaceCleared,
     clearMessages,
-    persistCurrentSpecEdit,
     startPlanProgress,
     clearSelectedPlanId: () => setSelectedPlanId(undefined),
     setSelectedPlanId,
-    refreshDashboard,
     completePlanProgress,
     failPlanProgress,
     setNotice,
-    setError
-  });
-
-  const handleSaveSpecEdit = buildProductionSpecSaveAction({
-    editingSpecId,
-    persistCurrentSpecEdit,
-    setSubmitting,
-    clearMessages,
     setError
   });
 
