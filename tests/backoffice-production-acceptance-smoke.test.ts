@@ -724,6 +724,31 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Offene Punkte: keine");
   });
 
+  it("keeps switchable production specs addressable by unique question action labels", async () => {
+    installProductionAcceptanceMocks({ withSearchTargetSpec: true });
+
+    const { container, root } = await renderProductionRouteInteractive();
+
+    try {
+      const actionLabels = Array.from(
+        container.querySelectorAll("button[aria-label^='Rückfragen öffnen:']")
+      ).map((button) => button.getAttribute("aria-label"));
+
+      expect(actionLabels).toContain(
+        "Rückfragen öffnen: Archivsuche Ziel · 12 Teilnehmer · 2099-05-26 · Klarheit: vollständig"
+      );
+      expect(actionLabels).toContain(
+        "Rückfragen öffnen: Konferenz · 36 Teilnehmer · 2026-07-13 · Klarheit: unzureichend"
+      );
+      expect(new Set(actionLabels).size).toBe(actionLabels.length);
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   it("clears stale production context after a failed replacement upload while keeping the file retryable", async () => {
     installProductionAcceptanceMocks();
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
