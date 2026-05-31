@@ -141,6 +141,9 @@ production_markers='async () => {
     "Produktionsagent",
     "Was braucht die Produktion als Nächstes?",
     "Beta-Pfad: Rückfragen -> Ergebnisobjekte -> Exporte/Audit.",
+    "Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar",
+    "Rückfragenstatus:",
+    "Rückfragen und Antworten",
     "Produktionsobjekte und Downloads prüfen",
     "Produktionsblatt exportieren",
     "Einkaufsliste exportieren",
@@ -214,6 +217,21 @@ production_markers='async () => {
   }
   if (text.includes("Ältere Produktionsläufe") && !text.includes("Diese früheren Produktionsläufe sind Kontext aus anderen Vorgängen, nicht das aktuelle Ergebnis.")) {
     missing.push("aeltere Produktionslaeufe sind nicht klar als nicht aktuell markiert");
+  }
+  const questionSummary = text.match(/Rückfragenstatus: offen (\\d+) · beantwortet (\\d+)/);
+  const questionPanelSummary = text.match(/Rückfragen und Antworten\\s+offen (\\d+) · beantwortet (\\d+)/);
+  if (!questionSummary) {
+    missing.push("Rückfragenstatus-Zaehler fehlt");
+  }
+  if (!questionPanelSummary) {
+    missing.push("Rückfragen-und-Antworten-Zaehler fehlt");
+  }
+  if (
+    questionSummary &&
+    questionPanelSummary &&
+    (questionSummary[1] !== questionPanelSummary[1] || questionSummary[2] !== questionPanelSummary[2])
+  ) {
+    missing.push("Rückfragenstatus und Rückfragenpanel zeigen unterschiedliche Zaehler");
   }
   const clearWorkspaceButton = buttons.find((button) => button.text.startsWith("Arbeitsbereich lokal leeren"));
   if (!clearWorkspaceButton) {

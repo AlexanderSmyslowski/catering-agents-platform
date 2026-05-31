@@ -37,6 +37,9 @@ describe("browser rehearsal script contract", () => {
       "Angebotsagent öffnen",
       "Zur Produktion",
       "Was braucht die Produktion als Nächstes?",
+      "Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar",
+      "Rückfragenstatus:",
+      "Rückfragen und Antworten",
       "Produktionsobjekte und Downloads prüfen",
       "Produktionsblatt exportieren",
       "Einkaufsliste exportieren",
@@ -76,6 +79,9 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("aktueller Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header");
     expect(script).toContain("fetch(expectedPlanHref)");
     expect(script).toContain("fetch(expectedPurchaseHref)");
+    expect(script).toContain("Rückfragenstatus-Zaehler fehlt");
+    expect(script).toContain("Rückfragen-und-Antworten-Zaehler fehlt");
+    expect(script).toContain("Rückfragenstatus und Rückfragenpanel zeigen unterschiedliche Zaehler");
     expect(script).toContain("ältere Listen sind kein aktueller Vorgang");
     expect(script).toContain("nicht das aktuelle Ergebnis");
   });
