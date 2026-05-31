@@ -13,9 +13,6 @@ import {
   procurementItemsForComponent
 } from "./procurement-rules.js";
 import {
-  hybridClarificationReason
-} from "./production-sheet-builders.js";
-import {
   isBlockingPlanningIssue
 } from "./planning-readiness.js";
 import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.js";
@@ -26,6 +23,7 @@ import { productionConstraintConflictReason } from "./production-constraint-conf
 import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
 import { buildResolvedRecipePlanningArtifacts } from "./planning-resolved-recipe-artifacts.js";
 import { buildProcurementPlanningArtifacts } from "./planning-procurement-artifacts.js";
+import { buildComponentReadinessArtifacts } from "./planning-component-readiness-artifacts.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -48,7 +46,6 @@ export async function buildProductionArtifacts(
   for (const component of eventSpec.menuPlan) {
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
     const productionMode = component.productionDecision?.mode;
-    const purchasedElements = component.productionDecision?.purchasedElements ?? [];
     const implicitBakerPurchase = productionMode ? undefined : bakerPurchaseComponent(component);
 
     try {
@@ -85,60 +82,16 @@ export async function buildProductionArtifacts(
         continue;
       }
 
-      if (!component.menuCategory) {
-        const reason = "Gerichtsklassifikation fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.";
-        const artifacts = buildUnresolvedComponentArtifacts({
-          component,
-          eventSpec,
-          servings,
-          reason,
-          issue: `Klassifikation für ${component.label} fehlt.`,
-          timelineLabel: `${component.label} fachlich klären`
-        });
-        recipeSelections.push(artifacts.selection);
-        noteIssue(artifacts.issue, artifacts.blocking);
-        kitchenSheets.push(artifacts.kitchenSheet);
-        timeline.push(artifacts.timelineItem);
-        continue;
-      }
-
-      if (!productionMode) {
-        const hybridReason = hybridClarificationReason(component);
-        const reason =
-          hybridReason ??
-          "Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.";
-        const artifacts = buildUnresolvedComponentArtifacts({
-          component,
-          eventSpec,
-          servings,
-          reason,
-          issue: hybridReason
-            ? `Herstellungsentscheidung für ${component.label} fehlt (Hybridfall Focaccia).`
-            : `Herstellungsentscheidung für ${component.label} fehlt.`,
-          timelineLabel: hybridReason ? `${component.label} Hybridfall klären` : `${component.label} Herstellungsart klären`
-        });
-        recipeSelections.push(artifacts.selection);
-        noteIssue(artifacts.issue, artifacts.blocking);
-        kitchenSheets.push(artifacts.kitchenSheet);
-        timeline.push(artifacts.timelineItem);
-        continue;
-      }
-
-      if ((productionMode === "hybrid" || productionMode === "convenience_purchase") && purchasedElements.length === 0) {
-        const reason =
-          "Hybrid-/Convenience-Entscheidung ist gesetzt, aber die zugekauften Bestandteile sind noch nicht benannt.";
-        const artifacts = buildUnresolvedComponentArtifacts({
-          component,
-          eventSpec,
-          servings,
-          reason,
-          issue: `Zugekaufte Bestandteile für ${component.label} fehlen.`,
-          timelineLabel: `${component.label} Beschaffungsanteil klären`
-        });
-        recipeSelections.push(artifacts.selection);
-        noteIssue(artifacts.issue, artifacts.blocking);
-        kitchenSheets.push(artifacts.kitchenSheet);
-        timeline.push(artifacts.timelineItem);
+      const readinessArtifacts = buildComponentReadinessArtifacts({
+        component,
+        eventSpec,
+        servings
+      });
+      if (readinessArtifacts) {
+        recipeSelections.push(readinessArtifacts.selection);
+        noteIssue(readinessArtifacts.issue, readinessArtifacts.blocking);
+        kitchenSheets.push(readinessArtifacts.kitchenSheet);
+        timeline.push(readinessArtifacts.timelineItem);
         continue;
       }
 
