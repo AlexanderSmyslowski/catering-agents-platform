@@ -94,6 +94,11 @@ import {
   resetProductionWorkspace
 } from "./production-workspace-reset.js";
 import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
+import {
+  getProductionWindowDropFile,
+  shouldActivateProductionWindowDrag,
+  shouldClearProductionWindowDrag
+} from "./production-window-drag-state.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
@@ -736,7 +741,7 @@ export function App() {
     }
 
     const handleWindowDragOver = (event: globalThis.DragEvent) => {
-      if (!event.dataTransfer?.types?.includes("Files")) {
+      if (!shouldActivateProductionWindowDrag(event)) {
         return;
       }
       event.preventDefault();
@@ -744,11 +749,11 @@ export function App() {
     };
 
     const handleWindowDrop = (event: globalThis.DragEvent) => {
-      if (!event.dataTransfer?.files?.length) {
+      const file = getProductionWindowDropFile(event);
+      if (!file) {
         return;
       }
       event.preventDefault();
-      const file = event.dataTransfer.files[0];
       startProductionDocumentUpload(file, {
         setDragActive,
         setIntakeFile,
@@ -757,7 +762,7 @@ export function App() {
     };
 
     const handleWindowDragLeave = (event: globalThis.DragEvent) => {
-      if (event.relatedTarget === null) {
+      if (shouldClearProductionWindowDrag(event)) {
         setDragActive(false);
       }
     };
