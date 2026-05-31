@@ -9,17 +9,10 @@ import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.
 import { createPlanningIssueCollector } from "./planning-issue-collector.js";
 import { selectOperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
 import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
-import { buildComponentReadinessArtifacts } from "./planning-component-readiness-artifacts.js";
-import {
-  appendProcurementPlanningArtifacts,
-  appendRecipeComponentPlanningArtifacts,
-  appendUnresolvedComponentArtifacts
-} from "./planning-artifact-appender.js";
+import { appendUnresolvedComponentArtifacts } from "./planning-artifact-appender.js";
 import { planningComponentErrorReason } from "./planning-component-error-reason.js";
 import { createPlanningArtifactState } from "./planning-artifact-state.js";
-import { buildImplicitBakerPurchasePlanningArtifacts } from "./planning-baker-purchase-artifacts.js";
-import { buildExplicitProcurementPlanningArtifacts } from "./planning-explicit-procurement-artifacts.js";
-import { buildRecipeBranchPlanningArtifacts } from "./planning-recipe-branch-artifacts.js";
+import { appendPlanningComponentBranchArtifacts } from "./planning-component-branch.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -46,52 +39,13 @@ export async function buildProductionArtifacts(
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
 
     try {
-      const bakerPurchaseArtifacts = buildImplicitBakerPurchasePlanningArtifacts({
-        eventSpec,
-        component,
-        servings
-      });
-      if (bakerPurchaseArtifacts?.kind === "unresolved") {
-        appendUnresolvedComponentArtifacts(artifactAppender, bakerPurchaseArtifacts.artifacts);
-        continue;
-      }
-      if (bakerPurchaseArtifacts?.kind === "procurement") {
-        appendProcurementPlanningArtifacts(artifactAppender, bakerPurchaseArtifacts.artifacts);
-        continue;
-      }
-
-      const readinessArtifacts = buildComponentReadinessArtifacts({
-        component,
-        eventSpec,
-        servings
-      });
-      if (readinessArtifacts) {
-        appendUnresolvedComponentArtifacts(artifactAppender, readinessArtifacts);
-        continue;
-      }
-
-      const artifacts = buildExplicitProcurementPlanningArtifacts({
-        eventSpec,
-        component,
-        servings
-      });
-      if (artifacts) {
-        appendProcurementPlanningArtifacts(artifactAppender, artifacts);
-        continue;
-      }
-
-      const recipeBranchArtifacts = await buildRecipeBranchPlanningArtifacts({
+      await appendPlanningComponentBranchArtifacts({
         eventSpec,
         component,
         servings,
-        discoveryService
+        discoveryService,
+        artifactAppender
       });
-      procurementItems.push(...recipeBranchArtifacts.procurementItems);
-      const { recipeArtifacts } = recipeBranchArtifacts;
-      appendRecipeComponentPlanningArtifacts(artifactAppender, recipeArtifacts);
-      if (recipeArtifacts.kind === "unresolved") {
-        continue;
-      }
     } catch (error) {
       const reason = planningComponentErrorReason(component.label, error);
       const artifacts = buildUnresolvedComponentArtifacts({
