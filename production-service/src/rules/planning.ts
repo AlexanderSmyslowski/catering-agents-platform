@@ -1,7 +1,6 @@
 import {
   validateAcceptedEventSpec,
   type AcceptedEventSpec,
-  type PurchaseItem,
   type ProductionPlan,
   type PurchaseList
 } from "@catering/shared-core";
@@ -24,17 +23,13 @@ import {
   appendUnresolvedComponentArtifacts
 } from "./planning-artifact-appender.js";
 import { planningComponentErrorReason } from "./planning-component-error-reason.js";
+import { createPlanningArtifactState } from "./planning-artifact-state.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
   discoveryService: RecipeDiscoveryService
 ): Promise<{ productionPlan: ProductionPlan; purchaseList: PurchaseList }> {
   const eventSpec = validateAcceptedEventSpec(eventSpecInput);
-  const productionBatches: ProductionPlan["productionBatches"] = [];
-  const procurementItems: PurchaseItem[] = [];
-  const kitchenSheets: ProductionPlan["kitchenSheets"] = [];
-  const timeline: ProductionPlan["timeline"] = [];
-  const recipeSelections: ProductionPlan["recipeSelections"] = [];
   const issueCollector = createPlanningIssueCollector(eventSpec.missingFields);
   const {
     unresolvedItems,
@@ -42,14 +37,14 @@ export async function buildProductionArtifacts(
     blockingIssues,
     noteIssue
   } = issueCollector;
-  const artifactAppender = {
+  const {
     productionBatches,
     procurementItems,
     kitchenSheets,
     timeline,
     recipeSelections,
-    noteIssue
-  };
+    appender: artifactAppender
+  } = createPlanningArtifactState(noteIssue);
 
   for (const component of eventSpec.menuPlan) {
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
