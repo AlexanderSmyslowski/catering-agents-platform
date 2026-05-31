@@ -87,6 +87,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("aktueller Produktionsplan-Exportlink passt nicht");
     expect(script).toContain("aktueller Einkaufslisten-Kontext fehlt");
     expect(script).toContain("aktueller Einkaufslisten-Exportlink passt nicht");
+    expect(script).toContain("Abschluss-Kontext passt nicht zum aktuellen Plan-/Einkaufslisten-Kontext");
     expect(script).toContain("aktueller Produktionsplan-Export ist im Browser nicht abrufbar");
     expect(script).toContain("aktueller Produktionsplan-Exportinhalt passt nicht");
     expect(script).toContain("aktueller Einkaufslisten-Export ist im Browser nicht abrufbar");
@@ -102,6 +103,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Produktion Ergebnis-Reload stabil");
     expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuellen Plan-Kontext");
     expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuelle Einkaufsliste");
+    expect(script).toContain("Produktions-Ergebnis-Reload verliert passenden Abschluss-Kontext");
     expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuellen Produktionsplan-Exportlink");
     expect(script).toContain("Produktions-Ergebnis-Reload faellt in leeren Ergebniszustand zurueck");
   });
@@ -132,6 +134,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Answer-Submit-Rehearsal ohne gespeicherte strukturierte Teilnehmerzahl");
     expect(script).toContain("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
     expect(script).toContain("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
+    expect(script).toContain("Answer-Submit-Rehearsal ohne passenden Abschluss-Kontext");
     expect(script).toContain("Answer-Submit-Rehearsal Produktionsplan-Exportlink passt nicht");
     expect(script).toContain("Answer-Submit-Rehearsal Produktionsplan-Export ist nicht abrufbar");
     expect(script).toContain("Answer-Submit-Rehearsal Produktionsplan-Exportinhalt passt nicht");
