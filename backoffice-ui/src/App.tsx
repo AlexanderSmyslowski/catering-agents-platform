@@ -28,12 +28,8 @@ import {
   selectRecordByStringId
 } from "./app-dashboard-selectors.js";
 import { HomeRoute } from "./home-route.js";
-import {
-  buildOfferSpecEditActions,
-  buildOfferSpecEditState
-} from "./offer-spec-edit-state.js";
+import { buildAppOfferRouteState } from "./app-offer-route-state.js";
 import { OfferConversationalWorkbench } from "./offer-workbench.js";
-import { buildOfferWorkbenchState } from "./offer-workbench-state.js";
 import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
 import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import { RouteMasthead } from "./route-masthead.js";
@@ -961,24 +957,6 @@ export function App() {
     uploadRecipe: handleRecipeUpload,
     reviewRecipe: handleRecipeReview
   });
-  const offerSpecEdit = buildOfferSpecEditState({
-    editingSpecId,
-    eventType: editingEventType,
-    eventDate: editingEventDate,
-    attendeeCount: editingAttendeeCount,
-    serviceForm: editingServiceForm,
-    menuItems: editingMenuItems
-  });
-  const offerSpecEditActions = buildOfferSpecEditActions({
-    beginSpecEdit,
-    setEventType: setEditingEventType,
-    setEventDate: setEditingEventDate,
-    setAttendeeCount: setEditingAttendeeCount,
-    setServiceForm: setEditingServiceForm,
-    setMenuItems: setEditingMenuItems,
-    saveSpecEdit: handleSaveSpecEdit,
-    resetSpecEdit
-  });
   const productionRouteFilterState = buildProductionRouteFilterState({
     productionPlanCount: dashboard.productionPlans.length,
     purchaseListCount: dashboard.purchaseLists.length,
@@ -990,7 +968,7 @@ export function App() {
     search,
     setSearch
   });
-  const offerWorkbenchState = buildOfferWorkbenchState({
+  const { offerWorkbenchState } = buildAppOfferRouteState({
     submitting,
     latestSourceLabel: latestIntakeRequestSummary,
     offerText,
@@ -1015,8 +993,20 @@ export function App() {
     activeSpec: activeOfferSpec,
     completeSpecCount: offerHandoffCounts.complete,
     partialSpecCount: offerHandoffCounts.partial,
-    specEdit: offerSpecEdit,
-    specEditActions: offerSpecEditActions
+    editingSpecId,
+    eventType: editingEventType,
+    eventDate: editingEventDate,
+    attendeeCount: editingAttendeeCount,
+    serviceForm: editingServiceForm,
+    menuItems: editingMenuItems,
+    beginSpecEdit,
+    setEventType: setEditingEventType,
+    setEventDate: setEditingEventDate,
+    setAttendeeCount: setEditingAttendeeCount,
+    setServiceForm: setEditingServiceForm,
+    setMenuItems: setEditingMenuItems,
+    saveSpecEdit: handleSaveSpecEdit,
+    resetSpecEdit
   });
   const productionRouteMainLayoutState = buildProductionRouteMainLayoutState({
     viewState: productionRouteViewState,
