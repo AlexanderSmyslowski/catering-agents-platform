@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProductionSourceInputActions,
   buildProductionSourceInputState,
+  formatArchiveCurrentIntakeContextLabel,
   type ProductionSourceInputActionsInput
 } from "../backoffice-ui/src/production-source-input-state.js";
 
@@ -81,6 +82,16 @@ describe("production source input state", () => {
     expect(state.archiveCurrentIntakeTitle).toBe(
       "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-1"
     );
+  });
+
+  it("formats archive context labels only for real intake request ids", () => {
+    expect(
+      formatArchiveCurrentIntakeContextLabel({
+        currentIntakeRequestId: " request-123 "
+      })
+    ).toBe("Intake-Anfrage request-123");
+    expect(formatArchiveCurrentIntakeContextLabel({ currentIntakeRequestId: "   " })).toBeUndefined();
+    expect(formatArchiveCurrentIntakeContextLabel({})).toBeUndefined();
   });
 
   it("maps source input action references without wrapping callbacks", () => {
