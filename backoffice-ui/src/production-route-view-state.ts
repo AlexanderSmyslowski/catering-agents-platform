@@ -1,3 +1,4 @@
+import { buildProductionHandoffState } from "./production-handoff-state.js";
 import type { ProductionHandoffState } from "./production-handoff-panel.js";
 import type {
   ProductionObjectsState,
@@ -173,12 +174,12 @@ export function buildProductionRouteViewState({
       specById,
       statusLabel: purchaseZoneStatusLabel
     },
-    handoffState: {
-      intakeOriginLabel: productionIntakeOriginLabel,
-      auditTrailLabel: productionAuditTrailLabel,
-      exportLabel: productionHandoffExportLabel,
-      contextLabel: productionHandoffContextLabel
-    },
+    handoffState: buildProductionHandoffState({
+      productionIntakeOriginLabel,
+      productionAuditTrailLabel,
+      productionHandoffExportLabel,
+      productionHandoffContextLabel
+    }),
     recipeStatus: {
       recipeReviewStatusLabel,
       recipeUsageStatusLabel,
