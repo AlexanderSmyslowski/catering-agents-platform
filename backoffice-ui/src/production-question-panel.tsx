@@ -4,6 +4,7 @@ import { ProductionIntakeOriginCard } from "./production-intake-origin-card.js";
 import { getSpecLabel } from "./production-language.js";
 import { ProductionSpecDetailsCard } from "./production-spec-details.js";
 import { ProductionQuestionThread } from "./production-question-thread.js";
+import { buildProductionSpecSwitchItems } from "./production-spec-switch-list-state.js";
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
@@ -111,6 +112,7 @@ export function ProductionQuestionPanel({
     createPlan,
     resetSpecEdit
   } = editorActions;
+  const specSwitchItems = buildProductionSpecSwitchItems(filteredSpecs);
 
   return (
     <article className="panel form-panel question-panel production-step-card">
@@ -205,7 +207,7 @@ export function ProductionQuestionPanel({
               : "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten."}
         </p>
       )}
-      {!productionWorkspaceCleared && filteredSpecs.length > 1 ? (
+      {!productionWorkspaceCleared && specSwitchItems.length > 1 ? (
         <>
           <div className="divider" />
           <header>
@@ -213,14 +215,15 @@ export function ProductionQuestionPanel({
             <h3>Zwischen mehreren Vorgängen wechseln</h3>
           </header>
           <ul className="item-list compact">
-            {filteredSpecs.slice(0, 6).map((spec) => (
-              <li key={String(spec.specId)}>
-                <strong>{getSpecLabel(spec)}</strong>
+            {specSwitchItems.slice(0, 6).map((item) => (
+              <li key={item.specId}>
+                <strong>{item.label}</strong>
+                <p className="helper-text">{item.readinessLabel}</p>
                 <div className="action-row">
                   <button
                     className="secondary-button"
                     disabled={submitting}
-                    onClick={() => openSpecForQuestions(String(spec.specId))}
+                    onClick={() => openSpecForQuestions(item.specId)}
                   >
                     Für Rückfragen öffnen
                   </button>
