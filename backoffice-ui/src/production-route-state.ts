@@ -368,9 +368,8 @@ export function formatProductionIntakeOriginLabel(input: {
     )}`;
   }
 
-  return input.currentIntakeRequestId
-    ? `Intake-Anfrage ${input.currentIntakeRequestId}`
-    : "kein Intake-Ursprung verknüpft";
+  const requestId = input.currentIntakeRequestId?.trim();
+  return requestId ? `Intake-Anfrage ${requestId}` : "kein Intake-Ursprung verknüpft";
 }
 
 export function formatProductionHandoffExportLabel(input: {

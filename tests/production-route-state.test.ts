@@ -430,6 +430,12 @@ describe("production route state", () => {
     expect(formatProductionIntakeOriginLabel({ currentIntakeRequestId: "request-2" })).toBe(
       "Intake-Anfrage request-2"
     );
+    expect(formatProductionIntakeOriginLabel({ currentIntakeRequestId: " request-2 " })).toBe(
+      "Intake-Anfrage request-2"
+    );
+    expect(formatProductionIntakeOriginLabel({ currentIntakeRequestId: "   " })).toBe(
+      "kein Intake-Ursprung verknüpft"
+    );
     expect(formatProductionIntakeOriginLabel({})).toBe("kein Intake-Ursprung verknüpft");
 
     expect(
