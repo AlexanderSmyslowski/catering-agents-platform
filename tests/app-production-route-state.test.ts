@@ -129,6 +129,16 @@ describe("app production route state", () => {
       hasFocusedSpecEditChanges: false,
       recipes: []
     };
+    const recipeActions = {
+      setRecipeName: (_value: string) => undefined,
+      setRecipeFile: (_file: File | null) => undefined,
+      uploadRecipe: async (_target: "offer" | "production") => undefined,
+      reviewRecipe: async (
+        _target: "offer" | "production",
+        _recipeId: string,
+        _decision: "approve" | "verify" | "reject"
+      ) => undefined
+    };
     const input: AppProductionRouteStateInput = {
       viewState: viewState(),
       submitting: true,
@@ -149,10 +159,7 @@ describe("app production route state", () => {
       createPlan: async (_spec) => undefined,
       resetSpecEdit: (_markDismissed) => undefined,
       setSelectedPlanId: (_planId) => undefined,
-      setRecipeName: (_value) => undefined,
-      setRecipeFile: (_file) => undefined,
-      uploadRecipe: async (_target) => undefined,
-      reviewRecipe: async (_target, _recipeId, _decision) => undefined
+      recipeActions
     };
 
     const state = buildAppProductionRouteState(input);
@@ -161,8 +168,7 @@ describe("app production route state", () => {
     expect(state.productionQuestionEditorActions.saveSpecEdit).toBe(input.saveSpecEdit);
     expect(state.productionQuestionEditorActions.createPlan).toBe(input.createPlan);
     expect(state.productionObjectsActions.setSelectedPlanId).toBe(input.setSelectedPlanId);
-    expect(state.productionRecipeActions.uploadRecipe).toBe(input.uploadRecipe);
-    expect(state.productionRecipeActions.reviewRecipe).toBe(input.reviewRecipe);
+    expect(state.productionRecipeActions).toBe(recipeActions);
     expect(state.productionRouteMainLayoutState.workbenchSummary).toBe(input.viewState.workbenchSummary);
     expect(state.productionRouteMainLayoutState.sourceInput).toBe(sourceInput);
     expect(state.productionRouteMainLayoutState.sourceInputActions).toBe(sourceInputActions);
@@ -171,6 +177,6 @@ describe("app production route state", () => {
     expect(state.productionRouteMainLayoutState.questionActions).toBe(state.productionQuestionActions);
     expect(state.productionRouteMainLayoutState.editorActions).toBe(state.productionQuestionEditorActions);
     expect(state.productionRouteMainLayoutState.objectPanelActions).toBe(state.productionObjectsActions);
-    expect(state.productionRouteMainLayoutState.recipeActions).toBe(state.productionRecipeActions);
+    expect(state.productionRouteMainLayoutState.recipeActions).toBe(recipeActions);
   });
 });

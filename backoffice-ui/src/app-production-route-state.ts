@@ -2,17 +2,16 @@ import {
   buildProductionObjectsActions,
   buildProductionQuestionActions,
   buildProductionQuestionEditorActions,
-  buildProductionRecipeActions,
   type ProductionObjectsActionsInput,
   type ProductionQuestionActionsInput,
-  type ProductionQuestionEditorActionsInput,
-  type ProductionRecipeActionsInput
+  type ProductionQuestionEditorActionsInput
 } from "./production-route-actions.js";
 import {
   buildProductionRouteMainLayoutState,
   type ProductionRouteMainLayoutStateInput
 } from "./production-route-main-layout-state.js";
 import type { ProductionRouteMainLayoutProps } from "./production-route-main-layout.js";
+import type { ProductionRecipeActions } from "./production-recipe-library-panel.js";
 
 export type AppProductionRouteStateInput =
   Omit<
@@ -21,14 +20,15 @@ export type AppProductionRouteStateInput =
   > &
   ProductionQuestionActionsInput &
   ProductionQuestionEditorActionsInput &
-  ProductionObjectsActionsInput &
-  ProductionRecipeActionsInput;
+  ProductionObjectsActionsInput & {
+    recipeActions: ProductionRecipeActions;
+  };
 
 export type AppProductionRouteState = {
   productionQuestionActions: ReturnType<typeof buildProductionQuestionActions>;
   productionQuestionEditorActions: ReturnType<typeof buildProductionQuestionEditorActions>;
   productionObjectsActions: ReturnType<typeof buildProductionObjectsActions>;
-  productionRecipeActions: ReturnType<typeof buildProductionRecipeActions>;
+  productionRecipeActions: ProductionRecipeActions;
   productionRouteMainLayoutState: ProductionRouteMainLayoutProps;
 };
 
@@ -53,18 +53,12 @@ export function buildAppProductionRouteState(
   const productionObjectsActions = buildProductionObjectsActions({
     setSelectedPlanId: input.setSelectedPlanId
   });
-  const productionRecipeActions = buildProductionRecipeActions({
-    setRecipeName: input.setRecipeName,
-    setRecipeFile: input.setRecipeFile,
-    uploadRecipe: input.uploadRecipe,
-    reviewRecipe: input.reviewRecipe
-  });
 
   return {
     productionQuestionActions,
     productionQuestionEditorActions,
     productionObjectsActions,
-    productionRecipeActions,
+    productionRecipeActions: input.recipeActions,
     productionRouteMainLayoutState: buildProductionRouteMainLayoutState({
       viewState: input.viewState,
       submitting: input.submitting,
@@ -76,7 +70,7 @@ export function buildAppProductionRouteState(
       editorState: input.editorState,
       editorActions: productionQuestionEditorActions,
       objectPanelActions: productionObjectsActions,
-      recipeActions: productionRecipeActions
+      recipeActions: input.recipeActions
     })
   };
 }

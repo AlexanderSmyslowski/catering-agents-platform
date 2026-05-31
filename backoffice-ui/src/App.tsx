@@ -781,10 +781,7 @@ export function App() {
     createPlan: handleCreatePlan,
     resetSpecEdit,
     setSelectedPlanId,
-    setRecipeName: productionRecipeControls.setRecipeName,
-    setRecipeFile: productionRecipeControls.setRecipeFile,
-    uploadRecipe: productionRecipeControls.uploadRecipe,
-    reviewRecipe: productionRecipeControls.reviewRecipe
+    recipeActions: productionRecipeControls
   });
   const appRouteShellState = buildAppRouteShellState({
     route,
