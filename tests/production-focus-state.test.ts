@@ -39,6 +39,22 @@ describe("production focus state", () => {
     expect(state.currentIntakeRequestId).toBeUndefined();
   });
 
+  it("binds the intake archive context to the narrowed production search result", () => {
+    const state = buildProductionFocusState({
+      acceptedSpecs,
+      filteredSpecs: [acceptedSpecs[2]],
+      focusedProductionSpecId: "spec-current",
+      productionArtifactSpecIds: [],
+      productionWorkspaceCleared: false,
+      route: "production",
+      searchText: "other"
+    });
+
+    expect(state.focusedProductionSpec).toBe(acceptedSpecs[2]);
+    expect(state.focusedProductionSpecRecord).toBe(acceptedSpecs[2]);
+    expect(state.currentIntakeRequestId).toBe("request-other");
+  });
+
   it("clears focus and intake context when the production workspace is cleared", () => {
     expect(
       buildProductionFocusState({
