@@ -81,6 +81,7 @@ import { buildProductionRecipeStatusSummaryState } from "./production-recipe-sta
 import { buildProductionRecipeControls } from "./production-recipe-controls.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import { buildProductionWorkspaceControls } from "./production-workspace-controls.js";
+import { buildProductionWorkspaceResetCallbacks } from "./production-workspace-reset-callbacks.js";
 import { buildProductionPlanningControls } from "./production-planning-controls.js";
 import {
   buildProductionWindowFileActions
@@ -444,6 +445,14 @@ export function App() {
     recipeFile,
     filteredRecipes
   });
+  const productionWorkspaceResetCallbacks = buildProductionWorkspaceResetCallbacks({
+    setFocusedProductionSpecId,
+    setSelectedPlanId,
+    resetPlanProgress,
+    resetIntakeRequestDetail,
+    resetSpecEdit,
+    uploadInputRef: productionUploadInputRef
+  });
   const {
     canClearProductionWorkspace,
     canArchiveCurrentIntake,
@@ -470,16 +479,7 @@ export function App() {
     setProductionWorkspaceCleared,
     resetIntakeDraft,
     resetDocumentProgress,
-    clearFocusedProductionSpecId: () => setFocusedProductionSpecId(undefined),
-    clearSelectedPlanId: () => setSelectedPlanId(undefined),
-    resetPlanProgress,
-    resetIntakeRequestDetail,
-    resetSpecEdit,
-    clearUploadInput: () => {
-      if (productionUploadInputRef.current) {
-        productionUploadInputRef.current.value = "";
-      }
-    }
+    ...productionWorkspaceResetCallbacks
   });
 
   const handleIntakeSubmit = buildProductionTextIntakeSubmitAction({
@@ -524,11 +524,11 @@ export function App() {
     setNotice,
     failIncomingProductionFile,
     failDocumentProgress,
-    clearFocusedProductionSpecId: () => setFocusedProductionSpecId(undefined),
-    clearSelectedPlanId: () => setSelectedPlanId(undefined),
-    resetPlanProgress,
-    resetIntakeRequestDetail,
-    resetSpecEdit,
+    clearFocusedProductionSpecId: productionWorkspaceResetCallbacks.clearFocusedProductionSpecId,
+    clearSelectedPlanId: productionWorkspaceResetCallbacks.clearSelectedPlanId,
+    resetPlanProgress: productionWorkspaceResetCallbacks.resetPlanProgress,
+    resetIntakeRequestDetail: productionWorkspaceResetCallbacks.resetIntakeRequestDetail,
+    resetSpecEdit: productionWorkspaceResetCallbacks.resetSpecEdit,
     setError
   });
 
@@ -565,7 +565,7 @@ export function App() {
     refreshDashboard,
     clearMessages,
     startPlanProgress,
-    clearSelectedPlanId: () => setSelectedPlanId(undefined),
+    clearSelectedPlanId: productionWorkspaceResetCallbacks.clearSelectedPlanId,
     setSelectedPlanId,
     completePlanProgress,
     failPlanProgress,
