@@ -861,6 +861,43 @@ describe("backoffice production acceptance smoke", () => {
     }
   });
 
+  it("clears the active production workspace without leaving result artifacts as current context", async () => {
+    installProductionAcceptanceMocks();
+
+    const { container, root } = await renderProductionRouteInteractive();
+
+    try {
+      const clearButton = Array.from(container.querySelectorAll("button")).find((button) =>
+        (button.textContent ?? "").includes("Arbeitsbereich leeren")
+      ) as HTMLButtonElement | undefined;
+
+      expect(clearButton).toBeTruthy();
+      expect(clearButton?.disabled).toBe(false);
+      expect(document.body.textContent ?? "").toContain("requestId: request-production-fallback-1");
+
+      await act(async () => {
+        clearButton?.click();
+        await flushProductionRouteUpdates();
+      });
+
+      const content = document.body.textContent ?? "";
+
+      expect(content).toContain("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+      expect(content).toContain("Kein aktiver Vorgang");
+      expect(content).toContain("Auftrag einfügen oder Datei ablegen");
+      expect(content).not.toContain("requestId: request-production-fallback-1");
+      expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
+      expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
+      expect(content).not.toContain("Produktionsblatt exportieren");
+      expect(content).not.toContain("Einkaufsliste exportieren");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   it("moves the active production context to a narrowed search result before archive", async () => {
     installProductionAcceptanceMocks({ withSearchTargetSpec: true });
 
