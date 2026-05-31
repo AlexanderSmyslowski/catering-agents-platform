@@ -29,6 +29,7 @@ export type ProductionStatusSummaryState = {
 };
 
 export function buildProductionStatusSummaryState(input: {
+  isInitialProductionLoading?: boolean;
   focusedProductionSpec?: Record<string, unknown>;
   selectedPlan?: Record<string, unknown>;
   selectedPlanSpec?: Record<string, unknown>;
@@ -42,6 +43,25 @@ export function buildProductionStatusSummaryState(input: {
 }): ProductionStatusSummaryState {
   const currentPurchaseListItemCount = countPurchaseListItems(input.currentSpecPurchaseLists);
   const latestProductionAuditEvent = input.filteredAuditEvents[0];
+
+  if (input.isInitialProductionLoading) {
+    return {
+      activeProductionContextLabel: "Produktionsdaten werden geladen; noch kein Vorgang bewertet.",
+      focusedSpecReadinessLabel: "wird geladen",
+      selectedPlanReadinessLabel: undefined,
+      productionPlanStatusLabel: "wird geladen",
+      productionObjectStatusLabel: "Produktionspläne werden geladen",
+      purchaseZoneStatusLabel: "Einkaufslisten werden geladen",
+      productionIntakeOriginLabel: "Intake-Ursprung wird geladen",
+      productionAuditTrailLabel: "Audit-Ereignisse werden geladen",
+      productionHandoffExportLabel: "Exportstatus wird geladen",
+      productionHandoffContextLabel: undefined,
+      productionNextStep: {
+        title: "Produktionsdaten laden",
+        description: "Bestehende Vorgänge, Pläne, Einkaufslisten und Rückfragen werden gerade geladen."
+      }
+    };
+  }
 
   return {
     activeProductionContextLabel: formatActiveProductionContextLabel({

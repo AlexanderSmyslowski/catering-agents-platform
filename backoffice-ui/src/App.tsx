@@ -248,6 +248,13 @@ export function App() {
     [dashboard.intakeRequests]
   );
   const isInitialHomeLoading = isInitialHomeDashboardLoading({ route, loading, dashboard });
+  const isInitialProductionLoading =
+    route === "production" &&
+    loading &&
+    dashboard.acceptedSpecs.length === 0 &&
+    dashboard.productionPlans.length === 0 &&
+    dashboard.purchaseLists.length === 0 &&
+    dashboard.recipes.length === 0;
 
   const selectedDraft = useMemo(
     () => selectRecordByStringId(dashboard.offerDrafts, "draftId", selectedDraftId),
@@ -384,6 +391,7 @@ export function App() {
   } = useMemo(
     () =>
       buildProductionStatusSummaryState({
+        isInitialProductionLoading,
         focusedProductionSpec,
         selectedPlan,
         selectedPlanSpec,
@@ -402,6 +410,7 @@ export function App() {
       filteredAuditEvents,
       focusedProductionSpec,
       intakeRequestDetail,
+      isInitialProductionLoading,
       productionQuestions,
       productionWorkspaceCleared,
       selectedPlan,
@@ -937,6 +946,7 @@ export function App() {
     recipes: dashboard.recipes
   });
   const productionRouteFilterState = buildProductionRouteFilterState({
+    isInitialProductionLoading,
     productionPlanCount: dashboard.productionPlans.length,
     purchaseListCount: dashboard.purchaseLists.length,
     recipeCount,
