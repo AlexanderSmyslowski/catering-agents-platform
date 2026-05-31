@@ -29,6 +29,7 @@ import {
 } from "./app-dashboard-selectors.js";
 import { buildAppOfferRouteState } from "./app-offer-route-state.js";
 import { AppRouteContent } from "./app-route-content.js";
+import { buildAppRouteContentState } from "./app-route-content-state.js";
 import { RouteMasthead } from "./route-masthead.js";
 import {
   archiveIntakeRequest,
@@ -1021,26 +1022,27 @@ export function App() {
     onSeedDemoData: handleSeedDemoData,
     onRefreshDashboard: refreshDashboard
   });
+  const appRouteContentState = buildAppRouteContentState({
+    route,
+    home: {
+      isInitialHomeLoading,
+      dashboard,
+      serviceHealth,
+      offerHandoffCounts,
+      recipeReviewCounts,
+      latestIntakeRequestSummary,
+      filteredAuditEvents
+    },
+    offerWorkbench: offerWorkbenchState,
+    productionFilter: productionRouteFilterState,
+    productionMain: productionRouteMainLayoutState
+  });
 
   return (
     <DashboardShell {...appRouteShellState.shell}>
       <RouteMasthead {...appRouteShellState.masthead} />
 
-      <AppRouteContent
-        route={route}
-        home={{
-          isInitialHomeLoading,
-          dashboard,
-          serviceHealth,
-          offerHandoffCounts,
-          recipeReviewCounts,
-          latestIntakeRequestSummary,
-          filteredAuditEvents
-        }}
-        offerWorkbench={offerWorkbenchState}
-        productionFilter={productionRouteFilterState}
-        productionMain={productionRouteMainLayoutState}
-      />
+      <AppRouteContent {...appRouteContentState} />
 
       <AppFeedbackShell error={error} notice={notice} loading={loading} />
     </DashboardShell>
