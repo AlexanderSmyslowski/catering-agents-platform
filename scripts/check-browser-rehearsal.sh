@@ -10,16 +10,19 @@ CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 default_pwcli="${HOME}/.codex/skills/playwright/scripts/playwright_cli.sh"
 
 if [[ -n "${CATERING_BROWSER_CLI:-}" ]]; then
+  if [[ ! -x "${CATERING_BROWSER_CLI}" ]]; then
+    echo "CATERING_BROWSER_CLI ist gesetzt, aber nicht ausfuehrbar: ${CATERING_BROWSER_CLI}" >&2
+    exit 2
+  fi
   pwcli=( "${CATERING_BROWSER_CLI}" )
 elif [[ -x "${default_pwcli}" ]]; then
   pwcli=( "${default_pwcli}" )
 else
-  if ! command -v npx >/dev/null 2>&1; then
-    echo "npx ist nicht verfuegbar; Browser-Rehearsal kann nicht gestartet werden." >&2
-    echo "Bitte Node/npm installieren oder CATERING_BROWSER_CLI auf eine playwright-cli-kompatible CLI setzen." >&2
-    exit 1
-  fi
-  pwcli=( npx --yes --package @playwright/cli playwright-cli )
+  echo "Browser-Rehearsal benoetigt die Codex-kompatible Browser-CLI mit -s/open/eval/close." >&2
+  echo "Nicht gefunden: ${default_pwcli}" >&2
+  echo "Setze CATERING_BROWSER_CLI auf einen kompatiblen Wrapper oder fuehre den Check in der Codex-Umgebung aus." >&2
+  echo "Die oeffentliche Playwright-CLI ist kein kompatibler Fallback fuer dieses Script." >&2
+  exit 2
 fi
 
 run_browser() {
@@ -53,13 +56,25 @@ click_rehearsal_link() {
   local label="$1"
   local target_path="$2"
   local click_script="$3"
+  local attempts=30
 
   run_browser eval "${click_script}" >/dev/null
+
+  for _ in $(seq 1 "${attempts}"); do
+    if run_browser eval "() => {
+      if (location.pathname !== \"${target_path}\") {
+        throw new Error(\"${label} wartet auf ${target_path}, aktuell \" + location.pathname);
+      }
+      return { route: location.pathname };
+    }" >/dev/null 2>&1; then
+      printf '  %s: Browser-Navigation nach %s bestaetigt\n' "${label}" "${target_path}"
+      return 0
+    fi
+    sleep 0.2
+  done
+
   run_browser eval "() => {
-    if (location.pathname !== \"${target_path}\") {
-      throw new Error(\"${label} navigierte nach \" + location.pathname + \" statt ${target_path}\");
-    }
-    return { route: location.pathname };
+    throw new Error(\"${label} navigierte nicht stabil nach ${target_path}; aktuell \" + location.pathname);
   }" >/dev/null
   printf '  %s: Browser-Navigation nach %s bestaetigt\n' "${label}" "${target_path}"
 }

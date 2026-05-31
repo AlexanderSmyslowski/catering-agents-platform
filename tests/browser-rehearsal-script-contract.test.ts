@@ -17,6 +17,15 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
   });
 
+  it("does not pretend that the public Playwright CLI supports the Codex browser session protocol", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+
+    expect(script).toContain("Browser-Rehearsal benoetigt die Codex-kompatible Browser-CLI");
+    expect(script).toContain("CATERING_BROWSER_CLI");
+    expect(script).toContain("Die oeffentliche Playwright-CLI ist kein kompatibler Fallback");
+    expect(script).not.toContain("npx --yes --package @playwright/cli playwright-cli");
+  });
+
   it("guards the route, export and audit markers that make the synthetic core path browser-checkable", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
 
@@ -45,7 +54,9 @@ describe("browser rehearsal script contract", () => {
 
     expect(script).toContain("Start -> Angebot");
     expect(script).toContain("Angebot -> Produktion");
-    expect(script).toContain("location.pathname !== \\\"${target_path}\\\"");
+    expect(script).toContain("local attempts=30");
+    expect(script).toContain("wartet auf ${target_path}");
+    expect(script).toContain("navigierte nicht stabil nach ${target_path}");
     expect(script).toContain("click_rehearsal_link \"Start -> Angebot\" \"/angebot\"");
     expect(script).toContain("click_rehearsal_link \"Angebot -> Produktion\" \"/produktion\"");
     expect(script).toContain("link.click()");
