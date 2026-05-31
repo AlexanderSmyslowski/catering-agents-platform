@@ -1,11 +1,6 @@
 import {
-  aggregatePurchaseList,
-  mergeReadiness,
-  SCHEMA_VERSION,
   toProductionBatch,
   validateAcceptedEventSpec,
-  validateProductionPlan,
-  validatePurchaseList,
   type AcceptedEventSpec,
   type PurchaseItem,
   type ProductionPlan,
@@ -27,11 +22,9 @@ import {
   unresolvedKitchenSheet
 } from "./production-sheet-builders.js";
 import {
-  isBlockingPlanningIssue,
-  purchaseCoverageBlockingIssues,
-  summarizeFallbackReason,
-  withPurchaseCoverageBlockingIssues
+  isBlockingPlanningIssue
 } from "./planning-readiness.js";
+import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.js";
 import { createPlanningIssueCollector } from "./planning-issue-collector.js";
 import { selectOperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
 import { normalizeRecipeResolution } from "./planning-recipe-resolution.js";
@@ -278,16 +271,8 @@ export async function buildProductionArtifacts(
     }
   }
 
-  const readiness = mergeReadiness(eventSpec.readiness, unresolvedItems, blockingIssues);
-  const uniqueWarnings = [...new Set(warnings)];
   const uniqueBlockingIssues = [...new Set(blockingIssues)];
-  const hasBlockingIssues = uniqueBlockingIssues.length > 0;
-  const {
-    productionBatches: operationalProductionBatches,
-    timeline: operationalTimeline,
-    kitchenSheets: operationalKitchenSheets,
-    procurementItems: operationalProcurementItems
-  } = selectOperationalPlanningArtifacts(
+  const operationalArtifacts = selectOperationalPlanningArtifacts(
     {
       productionBatches,
       timeline,
@@ -296,35 +281,15 @@ export async function buildProductionArtifacts(
     },
     uniqueBlockingIssues
   );
-  const productionPlan = validateProductionPlan({
-    schemaVersion: SCHEMA_VERSION,
-    planId: `plan-${eventSpec.specId}`,
-    eventSpecId: eventSpec.specId,
-    readiness,
-    productionBatches: operationalProductionBatches,
-    timeline: operationalTimeline,
-    kitchenSheets: operationalKitchenSheets,
+
+  return buildFinalProductionArtifacts({
+    eventSpec,
+    readinessIssues: {
+      unresolvedItems,
+      warnings,
+      blockingIssues: uniqueBlockingIssues
+    },
+    operationalArtifacts,
     recipeSelections,
-    unresolvedItems: [...new Set(unresolvedItems)],
-    ...(uniqueWarnings.length > 0 || uniqueBlockingIssues.length > 0
-      ? {
-          isFallback: true,
-          fallbackReason: summarizeFallbackReason(uniqueBlockingIssues, uniqueWarnings),
-          warnings: uniqueWarnings,
-          blockingIssues: uniqueBlockingIssues
-        }
-      : {})
   });
-
-  const purchaseList = validatePurchaseList(
-    aggregatePurchaseList(eventSpec.specId, operationalProductionBatches, operationalProcurementItems)
-  );
-  const purchaseCoverageIssues = purchaseCoverageBlockingIssues(productionPlan, purchaseList);
-
-  return {
-    productionPlan: purchaseCoverageIssues.length > 0
-      ? withPurchaseCoverageBlockingIssues(eventSpec, productionPlan, purchaseCoverageIssues)
-      : productionPlan,
-    purchaseList
-  };
 }
