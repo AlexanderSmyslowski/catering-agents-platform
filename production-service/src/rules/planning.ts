@@ -1,10 +1,10 @@
 import {
-  toProductionBatch,
   validateAcceptedEventSpec,
   type AcceptedEventSpec,
   type PurchaseItem,
   type ProductionPlan,
-  type PurchaseList
+  type PurchaseList,
+  type Recipe
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import {
@@ -13,12 +13,9 @@ import {
   procurementItemsForComponent
 } from "./procurement-rules.js";
 import {
-  gnPlanFor,
   hybridClarificationReason,
   prepWindowFor,
-  procurementKitchenSheet,
-  purchasedElementsSummary,
-  stationFor
+  procurementKitchenSheet
 } from "./production-sheet-builders.js";
 import {
   isBlockingPlanningIssue
@@ -29,6 +26,7 @@ import { selectOperationalPlanningArtifacts } from "./planning-operational-artif
 import { normalizeRecipeResolution } from "./planning-recipe-resolution.js";
 import { productionConstraintConflictReason } from "./production-constraint-conflicts.js";
 import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
+import { buildResolvedRecipePlanningArtifacts } from "./planning-resolved-recipe-artifacts.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -220,48 +218,15 @@ export async function buildProductionArtifacts(
         continue;
       }
 
-      const resolvedRecipe = resolution.recipe as {
-        recipeId: string;
-        name: string;
-        allergens?: string[];
-        dietTags?: string[];
-      };
-      const draftBatch = toProductionBatch(resolution.recipe as any, component.componentId, servings);
-      const batchId = `batch-${eventSpec.specId}-${component.componentId}`;
-      const batch = {
-        batchId,
-        ...draftBatch,
-        station: stationFor(component.label),
-        prepWindow: prepWindowFor(eventSpec),
-        gnPlan: gnPlanFor(servings)
-      };
-      const procurementNotes = productionMode === "hybrid"
-        ? [`Zukaufteil separat disponieren: ${purchasedElementsSummary(component)}.`]
-        : [];
-
-      productionBatches.push(batch);
-      kitchenSheets.push({
-        title: `${component.label} - ${resolvedRecipe.name}`,
-        componentId: component.componentId,
-        recipeId: resolvedRecipe.recipeId,
-        productionQty: batch.scaledYield,
-        station: batch.station,
-        prepWindow: batch.prepWindow,
-        ingredients: batch.ingredients,
-        steps: batch.steps,
-        allergens: resolvedRecipe.allergens ?? [],
-        dietTags: resolvedRecipe.dietTags ?? [],
-        gnPlan: batch.gnPlan,
-        ...(procurementNotes.length > 0 ? { procurementNotes } : {}),
-        instructions: [
-          ...batch.steps.map((step) => `${step.index}. ${step.instruction}`),
-          ...procurementNotes
-        ]
+      const artifacts = buildResolvedRecipePlanningArtifacts({
+        eventSpec,
+        component,
+        recipe: resolution.recipe as Recipe,
+        servings
       });
-      timeline.push({
-        label: `${component.label} vorbereiten`,
-        at: batch.prepWindow
-      });
+      productionBatches.push(artifacts.batch);
+      kitchenSheets.push(artifacts.kitchenSheet);
+      timeline.push(artifacts.timelineItem);
     } catch (error) {
       const reason = error instanceof Error && error.message.startsWith("Ungültige Planungsantwort")
         ? error.message
