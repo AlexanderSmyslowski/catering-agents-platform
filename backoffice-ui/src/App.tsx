@@ -51,7 +51,10 @@ import {
   type ServiceHealthState
 } from "./api.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
-import { buildProductionCurrentArtifactsState } from "./production-current-artifacts-state.js";
+import {
+  buildProductionCurrentArtifactsState,
+  selectCurrentProductionArtifactsScopeSpecId
+} from "./production-current-artifacts-state.js";
 import { buildProductionDashboardRecordsState } from "./production-dashboard-records-state.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import {
@@ -301,7 +304,11 @@ export function App() {
     buildCurrentSpecUpdateInput
   } = useProductionSpecEditor({ focusedProductionSpec: focusedProductionSpecRecord });
 
-  const currentProductionSpecId = String(focusedProductionSpec?.specId ?? "");
+  const currentProductionSpecId = selectCurrentProductionArtifactsScopeSpecId({
+    focusedProductionSpecId: String(focusedProductionSpec?.specId ?? ""),
+    selectedPlanId,
+    orderedPlans
+  });
 
   const {
     currentSpecPlans,

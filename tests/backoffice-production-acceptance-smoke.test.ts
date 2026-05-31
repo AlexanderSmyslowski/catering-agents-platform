@@ -23,6 +23,7 @@ function installProductionAcceptanceMocks(
     withArchivedProductionContext?: boolean;
     withSearchTargetSpec?: boolean;
     withPlanOnlyArtifacts?: boolean;
+    withSecondPlanOnlyArtifact?: boolean;
     withInstructionLikeCurrentPurchaseItem?: boolean;
   } = {}
 ) {
@@ -394,6 +395,23 @@ function installProductionAcceptanceMocks(
                           recipeSelections: []
                         }
                       ]
+                    : []),
+                  ...(options.withSecondPlanOnlyArtifact
+                    ? [
+                        {
+                          planId: "plan-production-other-0",
+                          eventSpecId: "spec-production-plan-only-other",
+                          readiness: {
+                            status: "complete",
+                            reasons: []
+                          },
+                          isFallback: false,
+                          unresolvedItems: [],
+                          productionBatches: [],
+                          kitchenSheets: [],
+                          recipeSelections: []
+                        }
+                      ]
                     : [])
                 ]
           }),
@@ -466,6 +484,22 @@ function installProductionAcceptanceMocks(
                           items: [
                             {
                               articleName: "Alte Testposition",
+                              purchaseQty: 1,
+                              purchaseUnit: "kg"
+                            }
+                          ]
+                        }
+                      ]
+                    : []),
+                  ...(options.withSecondPlanOnlyArtifact
+                    ? [
+                        {
+                          purchaseListId: "purchase-production-other-0",
+                          eventSpecId: "spec-production-plan-only-other",
+                          totals: { itemCount: 1 },
+                          items: [
+                            {
+                              articleName: "Andere Plan-Only Position",
                               purchaseQty: 1,
                               purchaseUnit: "kg"
                             }
@@ -1011,6 +1045,23 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
     expect(content).not.toContain("Rückfragen beantworten");
     expect(content).not.toContain("requestId: request-production-fallback-1");
+  });
+
+  it("keeps plan-centered purchase lists scoped to the visible plan context", async () => {
+    installProductionAcceptanceMocks({
+      withCurrentPurchaseList: true,
+      withPlanOnlyArtifacts: true,
+      withSecondPlanOnlyArtifact: true
+    });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
+    expect(content).toContain("1 Liste · 2 Positionen");
+    expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-plan-only-1");
+    expect(content).toContain("Ältere Einkaufslisten");
+    expect(content).toContain("1 frühere Listen");
+    expect(content).not.toContain("2 Listen · 3 Positionen");
   });
 
   it("keeps the clear action inactive when no upload or production context exists", async () => {
