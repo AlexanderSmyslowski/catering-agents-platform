@@ -1,6 +1,9 @@
 import { purchaseListExportUrl } from "./api.js";
 import { getSpecLabel } from "./production-language.js";
-import { getPurchaseListPreviewItems } from "./production-purchase-list-preview.js";
+import {
+  getPurchaseListPreviewItems,
+  getPurchaseListQualityWarnings
+} from "./production-purchase-list-preview.js";
 
 export type ProductionPurchaseListState = {
   currentPurchaseLists: Array<Record<string, unknown>>;
@@ -31,6 +34,7 @@ export function ProductionPurchaseListPanel({
         {currentPurchaseLists.map((purchaseList) => {
           const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
           const purchaseListPreviewItems = getPurchaseListPreviewItems(purchaseList);
+          const qualityWarnings = getPurchaseListQualityWarnings(purchaseList);
           return (
             <li key={String(purchaseList.purchaseListId)}>
               <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
@@ -47,6 +51,12 @@ export function ProductionPurchaseListPanel({
                 Einkaufsliste exportieren
                 <span className="visually-hidden"> Einkaufsliste herunterladen</span>
               </a>
+              {qualityWarnings.map((warning) => (
+                <p className="helper-text" key={warning.code}>
+                  Prüfhinweis: {warning.itemCount} mögliche Rezept-Arbeitsschritte als Einkaufspositionen erkannt.
+                  Für das Rehearsal als lokalen Stale-Datenbefund markieren; Beispiele: {warning.examples.join(", ")}.
+                </p>
+              ))}
               {purchaseListPreviewItems.length > 0 ? (
                 <>
                   <p className="helper-text">Kurzübersicht der ersten Positionen:</p>

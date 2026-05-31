@@ -23,6 +23,7 @@ function installProductionAcceptanceMocks(
     withArchivedProductionContext?: boolean;
     withSearchTargetSpec?: boolean;
     withPlanOnlyArtifacts?: boolean;
+    withInstructionLikeCurrentPurchaseItem?: boolean;
   } = {}
 ) {
   const storage = new Map<string, string>();
@@ -444,7 +445,16 @@ function installProductionAcceptanceMocks(
                         articleName: "Olivenöl",
                         purchaseQty: 1,
                         purchaseUnit: "l"
-                      }
+                      },
+                      ...(options.withInstructionLikeCurrentPurchaseItem
+                        ? [
+                            {
+                              articleName: "Mix veal, breadcrumbs and eggs.",
+                              purchaseQty: 16.2,
+                              purchaseUnit: "pcs"
+                            }
+                          ]
+                        : [])
                     ]
                   },
                   ...(options.withArchivedProductionContext
@@ -966,6 +976,21 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Glutenfreies Baguette");
     expect(content).toContain("Olivenöl");
     expect(content).not.toContain("Aktueller Vorgang zuerst");
+  });
+
+  it("flags current purchase lists that look polluted by recipe instructions", async () => {
+    installProductionAcceptanceMocks({
+      withCurrentPurchaseList: true,
+      withInstructionLikeCurrentPurchaseItem: true
+    });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Prüfhinweis: 1 mögliche Rezept-Arbeitsschritte als Einkaufspositionen erkannt.");
+    expect(content).toContain(
+      "Für das Rehearsal als lokalen Stale-Datenbefund markieren; Beispiele: Mix veal, breadcrumbs and eggs."
+    );
+    expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-fallback-1");
   });
 
   it("marks older production objects and purchase lists as non-current context", async () => {

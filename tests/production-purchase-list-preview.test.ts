@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getPurchaseListPreviewItems } from "../backoffice-ui/src/production-purchase-list-preview.js";
+import {
+  getPurchaseListPreviewItems,
+  getPurchaseListQualityWarnings
+} from "../backoffice-ui/src/production-purchase-list-preview.js";
 
 describe("production purchase list preview", () => {
   it("reads the canonical purchase list item fields used by production exports", () => {
@@ -63,5 +66,34 @@ describe("production purchase list preview", () => {
       { articleName: "Sellerie", quantity: "2", unit: "Bund" },
       { articleName: "Petersilie", quantity: "-", unit: "-" }
     ]);
+  });
+
+  it("flags recipe instructions that leaked into purchase list item names", () => {
+    expect(
+      getPurchaseListQualityWarnings({
+        items: [
+          { displayName: "Baguette", purchaseQty: 120, purchaseUnit: "Stück" },
+          { displayName: "Mix veal, breadcrumbs and eggs.", purchaseQty: 16.2, purchaseUnit: "pcs" },
+          { articleName: "Boil potatoes.", purchaseQty: 12, purchaseUnit: "pcs" }
+        ]
+      })
+    ).toEqual([
+      {
+        code: "instruction_like_purchase_item",
+        itemCount: 2,
+        examples: ["Mix veal, breadcrumbs and eggs.", "Boil potatoes."]
+      }
+    ]);
+  });
+
+  it("keeps ordinary procurement labels quiet", () => {
+    expect(
+      getPurchaseListQualityWarnings({
+        items: [
+          { displayName: "Baguette für Brotstation", purchaseQty: 120, purchaseUnit: "Stück" },
+          { articleName: "Olivenöl", purchaseQty: 1, purchaseUnit: "l" }
+        ]
+      })
+    ).toEqual([]);
   });
 });
