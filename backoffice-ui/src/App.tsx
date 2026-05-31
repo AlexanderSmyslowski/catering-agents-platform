@@ -24,6 +24,7 @@ import {
   countOfferHandoffReadiness,
   filterDashboardRecords,
   isInitialHomeDashboardLoading,
+  isInitialProductionDashboardLoading,
   selectActiveOfferSpec,
   selectRecordByStringId
 } from "./app-dashboard-selectors.js";
@@ -248,13 +249,7 @@ export function App() {
     [dashboard.intakeRequests]
   );
   const isInitialHomeLoading = isInitialHomeDashboardLoading({ route, loading, dashboard });
-  const isInitialProductionLoading =
-    route === "production" &&
-    loading &&
-    dashboard.acceptedSpecs.length === 0 &&
-    dashboard.productionPlans.length === 0 &&
-    dashboard.purchaseLists.length === 0 &&
-    dashboard.recipes.length === 0;
+  const isInitialProductionLoading = isInitialProductionDashboardLoading({ route, loading, dashboard });
 
   const selectedDraft = useMemo(
     () => selectRecordByStringId(dashboard.offerDrafts, "draftId", selectedDraftId),
