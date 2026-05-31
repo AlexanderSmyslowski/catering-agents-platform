@@ -1030,6 +1030,9 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-fallback-1");
     expect(content).toContain(
+      "Einzelheiten zu Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1"
+    );
+    expect(content).toContain(
       "Produktionsblatt exportieren für Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1"
     );
     expect(content).not.toContain("Noch kein aktiver Vorgang");
@@ -1041,6 +1044,9 @@ describe("backoffice production acceptance smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
+    expect(content).toContain(
+      "Einzelheiten zu Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1"
+    );
     expect(content).toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).toContain(
       "Produktionsblatt exportieren für Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1"
@@ -1138,6 +1144,9 @@ describe("backoffice production acceptance smoke", () => {
     );
     expect(content).toContain("Nur bei Bedarf aufklappen; ältere Läufe sind nicht der aktuelle Vorgang.");
     expect(content).toContain("Ältere Produktionsläufe");
+    expect(content).toContain(
+      "Einzelheiten zu Plan plan-production-previous-1 · Spezifikation spec-production-previous-1"
+    );
     expect(content).toContain(
       "Diese früheren Produktionsläufe sind Kontext aus anderen Vorgängen, nicht das aktuelle Ergebnis."
     );

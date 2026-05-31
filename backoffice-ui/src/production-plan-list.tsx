@@ -48,6 +48,10 @@ export function ProductionPlanList({
                 onClick={() => setSelectedPlanId(String(plan.planId))}
               >
                 Einzelheiten
+                <span className="visually-hidden">
+                  {" "}
+                  zu Plan {String(plan.planId ?? "-")} · Spezifikation {String(plan.eventSpecId ?? "-")}
+                </span>
               </button>
             </div>
             <a
