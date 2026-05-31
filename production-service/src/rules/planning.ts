@@ -13,9 +13,7 @@ import {
   procurementItemsForComponent
 } from "./procurement-rules.js";
 import {
-  hybridClarificationReason,
-  prepWindowFor,
-  procurementKitchenSheet
+  hybridClarificationReason
 } from "./production-sheet-builders.js";
 import {
   isBlockingPlanningIssue
@@ -27,6 +25,7 @@ import { normalizeRecipeResolution } from "./planning-recipe-resolution.js";
 import { productionConstraintConflictReason } from "./production-constraint-conflicts.js";
 import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
 import { buildResolvedRecipePlanningArtifacts } from "./planning-resolved-recipe-artifacts.js";
+import { buildProcurementPlanningArtifacts } from "./planning-procurement-artifacts.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -73,18 +72,16 @@ export async function buildProductionArtifacts(
           continue;
         }
 
-        procurementItems.push(...procurementItemsForComponent(implicitBakerPurchase, servings));
-        recipeSelections.push({
-          componentId: component.componentId,
-          selectionReason:
-            "Brot/Baguette ist als klarer Bäcker-Zukauf markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen.",
-          autoUsedInternetRecipe: false
+        const artifacts = buildProcurementPlanningArtifacts({
+          eventSpec,
+          component: implicitBakerPurchase,
+          servings,
+          kind: "baker_purchase"
         });
-        kitchenSheets.push(procurementKitchenSheet(implicitBakerPurchase, servings, eventSpec));
-        timeline.push({
-          label: `${component.label} beim Bäcker beschaffen`,
-          at: prepWindowFor(eventSpec)
-        });
+        procurementItems.push(...artifacts.procurementItems);
+        recipeSelections.push(artifacts.selection);
+        kitchenSheets.push(artifacts.kitchenSheet);
+        timeline.push(artifacts.timelineItem);
         continue;
       }
 
@@ -146,23 +143,16 @@ export async function buildProductionArtifacts(
       }
 
       if (productionMode === "convenience_purchase" || productionMode === "external_finished") {
-        procurementItems.push(...procurementItemsForComponent(component, servings));
-        recipeSelections.push({
-          componentId: component.componentId,
-          selectionReason:
-            productionMode === "convenience_purchase"
-              ? "Komponente ist als Convenience-Zukauf markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen."
-              : "Komponente ist als Fertigprodukt markiert und wurde als Beschaffungsposition in die Einkaufsliste übernommen.",
-          autoUsedInternetRecipe: false
+        const artifacts = buildProcurementPlanningArtifacts({
+          eventSpec,
+          component,
+          servings,
+          kind: "component_procurement"
         });
-        kitchenSheets.push(procurementKitchenSheet(component, servings, eventSpec));
-        timeline.push({
-          label:
-            productionMode === "convenience_purchase"
-              ? `${component.label} beschaffen`
-              : `${component.label} extern disponieren`,
-          at: prepWindowFor(eventSpec)
-        });
+        procurementItems.push(...artifacts.procurementItems);
+        recipeSelections.push(artifacts.selection);
+        kitchenSheets.push(artifacts.kitchenSheet);
+        timeline.push(artifacts.timelineItem);
         continue;
       }
 
