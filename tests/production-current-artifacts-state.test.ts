@@ -63,7 +63,7 @@ describe("production current artifacts state", () => {
   it("scopes plan-centered artifacts from the selected or newest production plan", () => {
     expect(
       selectCurrentProductionArtifactsScopeSpecId({
-        focusedProductionSpecId: "spec-focused",
+        focusedProductionSpecId: " spec-focused ",
         selectedPlanId: "plan-other",
         orderedPlans: plans
       })
@@ -82,5 +82,17 @@ describe("production current artifacts state", () => {
         orderedPlans: plans
       })
     ).toBe("spec-current");
+  });
+
+  it("normalizes selected plan and plan spec IDs before scoping current artifacts", () => {
+    expect(
+      selectCurrentProductionArtifactsScopeSpecId({
+        selectedPlanId: " plan-archived ",
+        orderedPlans: [
+          { planId: "plan-current", eventSpecId: "spec-current" },
+          { planId: " plan-archived ", eventSpecId: " spec-other " }
+        ]
+      })
+    ).toBe("spec-other");
   });
 });
