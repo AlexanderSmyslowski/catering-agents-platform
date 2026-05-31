@@ -31,6 +31,7 @@ Fuer den kompletten lokalen Stack mit Demo-Daten:
 
 ```bash
 npm run local:start
+npm run local:start:fresh
 ```
 
 Der lokale Stack laeuft dabei bewusst in getrennten `screen`-Sitzungen mit automatischem Neustart pro Dienst. Dadurch bleiben UI und Agenten auch dann erreichbar, wenn das startende Terminal oder die Codex-Sitzung endet.
@@ -44,7 +45,7 @@ npm run local:stop
 ```
 
 `npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht fuer die erwarteten `screen`-Sitzungen und Service-Ports. `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack: UI-Routen, Health-Endpunkte, read-only Exportpfade und Demo-Start-/Auditbeleg.
-`npm run local:start` startet diesen lokalen Stack mit Demo-Seeding; `npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse wieder. Dieser lokale Runbook-Weg bleibt interne Demo-/Abnahmeverifikation und ist kein Deployment, keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Aussage.
+`npm run local:start` startet diesen lokalen Stack mit Demo-Seeding; `npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert und startet mit einer temporaeren synthetischen Datenwurzel neu, damit Browser-Rehearsals nicht gegen Repo-Altlasten laufen. `npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse wieder. Dieser lokale Runbook-Weg bleibt interne Demo-/Abnahmeverifikation und ist kein Deployment, keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Aussage.
 `npm run local:start` zeichnet die wirksame lokale Datenwurzel auf. `npm run local:check` nutzt diese Aufzeichnung, damit isolierte Frischlaeufe mit `CATERING_DATA_ROOT=/tmp/...` nicht versehentlich gegen Repo-Altlasten bewertet werden; eine abweichende Check-Env ist ein lokales Konsistenzsignal und verlangt einen kontrollierten Stop/Neustart.
 Wenn `local:check` einen aufgefuellten lokalen Datenbestand erkennt, meldet der Check nur einen Rehearsal-Datenhinweis: kein rotes Gate, aber auch kein sauberer Frischlauf. Wenn lokale Einkaufslisten moegliche Rezept-Arbeitsschritte als Einkaufspositionen enthalten, meldet der Check ebenfalls nur einen lokalen Stale-Datenbefund. Der Check loescht, bereinigt oder archiviert lokale Daten nicht automatisch; einzelne falsche interne/synthetische Intake-Kontexte koennen nach C9 in `/produktion` bewusst per Soft-Archiv aus aktiven Listen genommen werden.
 

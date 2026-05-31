@@ -16,6 +16,7 @@
     "checkpoint": "bash ./scripts/create-checkpoint.sh",
     "import:recipes:caterings": "tsx scripts/import-catering-recipes.ts",
     "local:start": "bash ./scripts/start-local-stack.sh --seed-demo",
+    "local:start:fresh": "bash ./scripts/start-fresh-local-stack.sh",
     "local:stop": "bash ./scripts/stop-local-stack.sh",
     "local:status": "bash ./scripts/status-local-stack.sh",
     "local:check": "bash ./scripts/check-local-ops.sh",
