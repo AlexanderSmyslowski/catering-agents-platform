@@ -91,6 +91,7 @@ import {
 } from "./production-source-file-events.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
+import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import {
   clearProductionWorkspaceState,
   completeProductionIntakeArchiveSuccess,
@@ -520,9 +521,7 @@ export function App() {
         setNotice
       });
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Fehlupload konnte nicht archiviert werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Fehlupload konnte nicht archiviert werden."));
     } finally {
       setSubmitting(false);
     }
@@ -542,9 +541,7 @@ export function App() {
       setNotice("Freitext wurde in eine operative Spezifikation überführt.");
     } catch (submitError) {
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Erfassungstext konnte nicht normalisiert werden."
+        formatSubmitErrorMessage(submitError, "Erfassungstext konnte nicht normalisiert werden.")
       );
     } finally {
       setSubmitting(false);
@@ -563,9 +560,7 @@ export function App() {
       await refreshDashboard();
       setNotice("Angebotsentwurf wurde erstellt.");
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Angebotsentwurf konnte nicht erstellt werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Angebotsentwurf konnte nicht erstellt werden."));
     } finally {
       setSubmitting(false);
     }
@@ -608,9 +603,7 @@ export function App() {
         resetIntakeRequestDetail,
         resetSpecEdit
       });
-      setError(
-        submitError instanceof Error ? submitError.message : "Dokument konnte nicht normalisiert werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Dokument konnte nicht normalisiert werden."));
     } finally {
       setSubmitting(false);
     }
@@ -630,9 +623,7 @@ export function App() {
       await refreshDashboard();
       setNotice("Manuelle Spezifikation wurde angelegt.");
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Manuelle Spezifikation konnte nicht erstellt werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Manuelle Spezifikation konnte nicht erstellt werden."));
     } finally {
       setSubmitting(false);
     }
@@ -713,9 +704,7 @@ export function App() {
     try {
       await persistCurrentSpecEdit();
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Spezifikation konnte nicht gespeichert werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Spezifikation konnte nicht gespeichert werden."));
     } finally {
       setSubmitting(false);
     }
@@ -792,9 +781,7 @@ export function App() {
       await refreshDashboard();
       setNotice("Angebotsvariante wurde als operative Spezifikation übernommen.");
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Angebotsvariante konnte nicht übernommen werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Angebotsvariante konnte nicht übernommen werden."));
     } finally {
       setSubmitting(false);
     }
@@ -815,9 +802,7 @@ export function App() {
       await refreshDashboard();
       setNotice("Rezeptdatei wurde in die gemeinsame Bibliothek übernommen.");
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Rezept konnte nicht hochgeladen werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Rezept konnte nicht hochgeladen werden."));
     } finally {
       setSubmitting(false);
     }
@@ -831,9 +816,7 @@ export function App() {
       await refreshDashboard();
       setNotice("Demo-Daten wurden geladen.");
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Demo-Daten konnten nicht geladen werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Demo-Daten konnten nicht geladen werden."));
     } finally {
       setSubmitting(false);
     }
@@ -851,9 +834,7 @@ export function App() {
       await refreshDashboard();
       setNotice("Rezeptprüfung wurde gespeichert.");
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Rezeptprüfung konnte nicht gespeichert werden."
-      );
+      setError(formatSubmitErrorMessage(submitError, "Rezeptprüfung konnte nicht gespeichert werden."));
     } finally {
       setSubmitting(false);
     }

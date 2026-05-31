@@ -1,4 +1,5 @@
 import { extractProductionPlanId } from "./production-api-response-ids.js";
+import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
 export type ProductionPlanStartActions = {
   startPlanProgress: (spec: Record<string, unknown>, specLabel: string) => void;
@@ -66,6 +67,6 @@ export function resetProductionStateAfterPlanFailure(
 ) {
   actions.failPlanProgress();
   actions.setError(
-    submitError instanceof Error ? submitError.message : "Produktionsplan konnte nicht erstellt werden."
+    formatSubmitErrorMessage(submitError, "Produktionsplan konnte nicht erstellt werden.")
   );
 }
