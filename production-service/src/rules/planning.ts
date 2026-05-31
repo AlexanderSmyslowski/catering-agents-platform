@@ -32,6 +32,7 @@ import {
   summarizeFallbackReason,
   withPurchaseCoverageBlockingIssues
 } from "./planning-readiness.js";
+import { createPlanningIssueCollector } from "./planning-issue-collector.js";
 import { normalizeRecipeResolution } from "./planning-recipe-resolution.js";
 import { productionConstraintConflictReason } from "./production-constraint-conflicts.js";
 
@@ -45,25 +46,13 @@ export async function buildProductionArtifacts(
   const kitchenSheets: ProductionPlan["kitchenSheets"] = [];
   const timeline: ProductionPlan["timeline"] = [];
   const recipeSelections: ProductionPlan["recipeSelections"] = [];
-  const unresolvedItems: string[] = [...(eventSpec.missingFields ?? [])];
-  const warnings: string[] = [];
-  const blockingIssues: string[] = [];
-
-  const pushUnique = (values: string[], value: string) => {
-    if (!values.includes(value)) {
-      values.push(value);
-    }
-  };
-
-  const noteIssue = (message: string, blocking = isBlockingPlanningIssue(message)) => {
-    pushUnique(unresolvedItems, message);
-    if (blocking) {
-      pushUnique(blockingIssues, message);
-      return;
-    }
-
-    pushUnique(warnings, message);
-  };
+  const issueCollector = createPlanningIssueCollector(eventSpec.missingFields);
+  const {
+    unresolvedItems,
+    warnings,
+    blockingIssues,
+    noteIssue
+  } = issueCollector;
 
   for (const component of eventSpec.menuPlan) {
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
