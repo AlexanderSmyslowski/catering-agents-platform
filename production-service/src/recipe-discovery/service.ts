@@ -10,8 +10,7 @@ import { validateRecipe } from "@catering/shared-core";
 import { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 import {
   candidateSupportsMenuCategory,
-  evaluateMenuCategoryCompatibility,
-  recipeSupportsMenuCategory
+  evaluateMenuCategoryCompatibility
 } from "./menu-category-compatibility.js";
 import { candidateToRecipe, type WebRecipeSearchProvider } from "./provider.js";
 import {
@@ -20,27 +19,15 @@ import {
   isCollectionLikeCandidate,
   qualityScoreForCandidate
 } from "./web-candidate-quality.js";
-import {
-  buildSearchQueries,
-  recipeSearchText
-} from "./recipe-query-builder.js";
+import { buildSearchQueries } from "./recipe-query-builder.js";
 import {
   candidateFormMismatch,
   fitScoreForRecipe,
   isStrongRecipeCandidate,
-  leadNameMatchScore,
-  primaryMatchScore,
-  specificPrimaryMatchScore,
   webSpecificMatchScore
 } from "./recipe-candidate-scoring.js";
+import { selectInternalRecipeCandidate } from "./internal-recipe-selection.js";
 import { createRecipeSearchTrace } from "./recipe-search-trace.js";
-
-const tierWeight: Record<Recipe["source"]["tier"], number> = {
-  internal_verified: 4,
-  digitized_cookbook: 3,
-  internal_approved: 2,
-  internet_fallback: 1
-};
 
 export interface RecipeResolution {
   recipe?: Recipe;
@@ -93,43 +80,7 @@ export class RecipeDiscoveryService {
   ): Promise<RecipeResolution> {
     const searchTrace = createRecipeSearchTrace();
     const repositoryCandidates = await this.repository.findCandidates(component);
-    const internalCandidates = repositoryCandidates
-      .filter((recipe) => recipeSupportsMenuCategory(recipe, component))
-      .map((recipe, index) => ({
-        recipe,
-        repositoryRank: index,
-        fitScore: fitScoreForRecipe(recipeSearchText(recipe), component, eventSpec),
-        primaryScore: primaryMatchScore(recipeSearchText(recipe), component),
-        specificPrimaryScore: specificPrimaryMatchScore(recipeSearchText(recipe), component),
-        leadNameScore: leadNameMatchScore(recipe.name, component)
-      }))
-      .filter(
-        (candidate) =>
-          (candidate.fitScore >= 0.75 ||
-            (candidate.repositoryRank === 0 &&
-              candidate.leadNameScore === 1 &&
-              candidate.fitScore >= 0.55)) &&
-          (candidate.primaryScore >= 0.5 || candidate.leadNameScore === 1) &&
-          (candidate.specificPrimaryScore >= 0.34 || candidate.leadNameScore === 1)
-      )
-      .sort((left, right) => {
-        const tierDifference =
-          tierWeight[right.recipe.source.tier] - tierWeight[left.recipe.source.tier];
-        if (tierDifference !== 0) {
-          return tierDifference;
-        }
-
-        const rankDifference = left.repositoryRank - right.repositoryRank;
-        if (rankDifference !== 0) {
-          return rankDifference;
-        }
-
-        const leftScore =
-          left.fitScore + left.specificPrimaryScore * 0.5 + left.leadNameScore * 0.35;
-        const rightScore =
-          right.fitScore + right.specificPrimaryScore * 0.5 + right.leadNameScore * 0.35;
-        return rightScore - leftScore;
-      });
+    const internalWinner = selectInternalRecipeCandidate(repositoryCandidates, component, eventSpec);
 
     if (repositoryCandidates.length > 0) {
       searchTrace.push(
@@ -142,7 +93,6 @@ export class RecipeDiscoveryService {
       searchTrace.push("Interne Kandidaten: keine Treffer.");
     }
 
-    const internalWinner = internalCandidates[0];
     if (internalWinner?.recipe) {
       searchTrace.push(`Interner Treffer gewählt: ${internalWinner.recipe.name}.`);
       return {
