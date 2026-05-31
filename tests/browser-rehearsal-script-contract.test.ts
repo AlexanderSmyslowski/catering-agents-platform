@@ -61,4 +61,16 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("ältere Listen sind kein aktueller Vorgang");
     expect(script).toContain("nicht das aktuelle Ergebnis");
   });
+
+  it("guards production workspace actions against unsafe stale or empty states", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+
+    expect(script).toContain("Arbeitsbereich-lokal-leeren-Aktion fehlt");
+    expect(script).toContain("Arbeitsbereich-lokal-leeren-Aktion ist trotz aktuellem Ergebnis deaktiviert");
+    expect(script).toContain("Arbeitsbereich-lokal-leeren-Aktion ist nicht mit aktuellem Kontext beschriftet");
+    expect(script).toContain("Fehlupload-Archiv-Aktion fehlt");
+    expect(script).toContain("Fehlupload-Archiv-Aktion ist ohne aktiven Intake-Kontext nicht sicher deaktiviert");
+    expect(script).toContain("Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.");
+    expect(script).toContain("Wiederverarbeitungs-Aktion ist ohne ausgewählte Datei nicht sicher deaktiviert");
+  });
 });
