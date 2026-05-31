@@ -82,6 +82,7 @@ import {
   buildProductionQuestionEditorState,
   completeProductionQuestionEditSuccess
 } from "./production-question-editor-state.js";
+import { buildProductionQuestionAutoOpenState } from "./production-question-auto-open-state.js";
 import {
   buildProductionObjectsActions,
   buildProductionQuestionActions,
@@ -720,25 +721,15 @@ export function App() {
   }
 
   useEffect(() => {
-    if (route !== "production" || !focusedProductionSpec) {
-      return;
-    }
+    const autoOpenState = buildProductionQuestionAutoOpenState({
+      route,
+      focusedProductionSpec,
+      productionQuestionCount: productionQuestions.length,
+      editingSpecId,
+      dismissedProductionAnswerSpecId
+    });
 
-    const specId = String(focusedProductionSpec.specId ?? "");
-    if (!specId) {
-      return;
-    }
-
-    const readiness = String(
-      (focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? ""
-    );
-    const shouldAutoOpen = productionQuestions.length > 0 || readiness !== "complete";
-
-    if (
-      shouldAutoOpen &&
-      editingSpecId !== specId &&
-      dismissedProductionAnswerSpecId !== specId
-    ) {
+    if (autoOpenState.shouldAutoOpen && autoOpenState.specId && focusedProductionSpec) {
       loadSpecIntoEditor(focusedProductionSpec);
     }
   }, [
