@@ -11,14 +11,8 @@ import {
   buildOverrideRecipeResolution
 } from "./override-recipe-resolution.js";
 import { createRecipeSearchTrace } from "./recipe-search-trace.js";
-import { selectWebRecipeCandidate } from "./web-recipe-selection.js";
-import {
-  buildUnresolvedWebRecipeResolution,
-  buildWebRecipeWinnerResolution
-} from "./web-recipe-resolution.js";
-import { collectWebRecipeCandidates } from "./web-recipe-candidate-search.js";
-import { appendWebRecipeWinnerTrace } from "./web-recipe-trace.js";
 import { resolveInternalRecipeCandidate } from "./internal-recipe-candidate-resolution.js";
+import { resolveWebRecipeCandidate } from "./web-recipe-candidate-resolution.js";
 
 export interface RecipeResolution {
   recipe?: Recipe;
@@ -61,30 +55,12 @@ export class RecipeDiscoveryService {
       return internalResolution;
     }
 
-    const { candidates, webSearchFailed } = await collectWebRecipeCandidates({
+    return resolveWebRecipeCandidate({
       component,
       eventSpec,
       webProvider: this.webProvider,
+      repository: this.repository,
       searchTrace
-    });
-
-    const winner = selectWebRecipeCandidate(candidates);
-
-    if (!winner) {
-      return buildUnresolvedWebRecipeResolution({
-        component,
-        searchTrace: searchTrace.entries,
-        webSearchFailed
-      });
-    }
-
-    await this.repository.save(winner.recipe);
-    appendWebRecipeWinnerTrace(searchTrace, winner.recipe);
-
-    return buildWebRecipeWinnerResolution({
-      component,
-      winner,
-      searchTrace: searchTrace.entries
     });
   }
 }
