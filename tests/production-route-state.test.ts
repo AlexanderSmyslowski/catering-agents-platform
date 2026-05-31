@@ -452,6 +452,13 @@ describe("production route state", () => {
         purchaseLists: []
       })
     ).toBe("planId plan-2 · specId spec-fallback");
+    expect(
+      formatProductionHandoffContextLabel({
+        selectedPlan: { planId: " plan-3 ", eventSpecId: "   " },
+        selectedPlanSpec: { specId: " spec-fallback " },
+        purchaseLists: [{ purchaseListId: " purchase-3 " }]
+      })
+    ).toBe("planId plan-3 · specId spec-fallback · purchaseListId purchase-3");
     expect(formatProductionHandoffContextLabel({ purchaseLists: [] })).toBeUndefined();
   });
 

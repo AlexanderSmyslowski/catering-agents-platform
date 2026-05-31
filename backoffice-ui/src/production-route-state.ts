@@ -31,6 +31,16 @@ function readStringOrNumber(record: Record<string, unknown> | undefined, keys: s
   return undefined;
 }
 
+function formatContextId(...values: unknown[]): string {
+  for (const value of values) {
+    const id = typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
+    if (id) {
+      return id;
+    }
+  }
+  return "-";
+}
+
 export function translateReadiness(value?: string): string {
   const labels: Record<string, string> = {
     complete: "vollständig",
@@ -392,9 +402,9 @@ export function formatProductionHandoffContextLabel(input: {
   }
 
   return [
-    `planId ${String(input.selectedPlan.planId ?? "-")}`,
-    `specId ${String(input.selectedPlan.eventSpecId ?? input.selectedPlanSpec?.specId ?? "-")}`,
-    input.purchaseLists[0] ? `purchaseListId ${String(input.purchaseLists[0].purchaseListId ?? "-")}` : undefined
+    `planId ${formatContextId(input.selectedPlan.planId)}`,
+    `specId ${formatContextId(input.selectedPlan.eventSpecId, input.selectedPlanSpec?.specId)}`,
+    input.purchaseLists[0] ? `purchaseListId ${formatContextId(input.purchaseLists[0].purchaseListId)}` : undefined
   ]
     .filter(Boolean)
     .join(" · ");
