@@ -840,6 +840,7 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
       expect(content).not.toContain("Produktionsblatt exportieren");
       expect(archiveButton?.disabled).toBe(true);
+      expect(archiveButton?.getAttribute("title")).toBe("Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.");
     } finally {
       await act(async () => {
         root.unmount();
@@ -866,6 +867,9 @@ describe("backoffice production acceptance smoke", () => {
       expect(archiveButton?.disabled).toBe(false);
       expect(archiveButton?.textContent).toContain(
         "Fehlupload archivieren für Intake-Anfrage request-production-fallback-1"
+      );
+      expect(archiveButton?.getAttribute("title")).toBe(
+        "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-production-fallback-1"
       );
 
       await act(async () => {
@@ -935,6 +939,9 @@ describe("backoffice production acceptance smoke", () => {
       expect(clearButton).toBeTruthy();
       expect(clearButton?.disabled).toBe(false);
       expect(clearButton?.textContent).toContain("Arbeitsbereich lokal leeren für Konferenz · 36 Teilnehmer · 2026-07-13");
+      expect(clearButton?.getAttribute("title")).toBe(
+        "Lokalen Arbeitsbereich leeren: Konferenz · 36 Teilnehmer · 2026-07-13"
+      );
       expect(document.body.textContent ?? "").toContain("requestId: request-production-fallback-1");
       expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
       expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren");
