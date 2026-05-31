@@ -848,6 +848,10 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Auftrag einfügen oder Datei ablegen");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Rückfragen: 1 offene Rückfrage");
+      expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
+      expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
+      expect(content).not.toContain("Produktionsblatt exportieren");
+      expect(content).not.toContain("Einkaufsliste exportieren");
       expect(content).not.toContain("Löschen");
     } finally {
       await act(async () => {
