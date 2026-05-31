@@ -9,8 +9,12 @@ describe("browser rehearsal script contract", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
 
     expect(packageJson.scripts?.["browser:rehearsal"]).toBe("bash ./scripts/check-browser-rehearsal.sh");
+    expect(packageJson.scripts?.["browser:rehearsal:answer-submit"]).toBe(
+      "CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 bash ./scripts/check-browser-rehearsal.sh"
+    );
     expect(script).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
+    expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
     expect(script).toContain("Browser-Navigations- und Markerpruefung");
     expect(script).toContain("click_rehearsal_link");
@@ -108,10 +112,28 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Offener-Rueckfragen-Pfad ohne Teilnehmerzahl-Feld");
     expect(script).toContain("Antworten-speichern-Aktion bleibt nach strukturierter Aenderung deaktiviert");
     expect(script).toContain("Strukturierte Antwort-Aenderung wurde vor dem Speichern als aktueller Spec-Text angezeigt");
+    expect(script).toContain("shouldSubmitAnswers");
+    expect(script).toContain("planWithSaveButton.click()");
+    expect(script).toContain("Answer-Submit-Rehearsal ohne Plan-Erfolgsmeldung");
+    expect(script).toContain("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
+    expect(script).toContain("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
+    expect(script).toContain("Answer-Submit-Rehearsal ohne Produktionsplan-Exportlink");
+    expect(script).toContain("Answer-Submit-Rehearsal ohne Einkaufslisten-Exportlink");
+    expect(script).toContain("Answer-Submit-Rehearsal bleibt nach Berechnung in leerem Ergebniszustand");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Einkaufslisten-Exportlink");
+  });
+
+  it("keeps answer-submit browser rehearsal isolated to a fresh synthetic data root by default", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+
+    expect(script).toContain("Answer-Submit-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run.");
+    expect(script).toContain("npm run local:start:fresh");
+    expect(script).toContain("catering-agents-rehearsal-");
+    expect(script).toContain("CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION");
+    expect(script).toContain("Answer-Submit-Modus: aktiv");
   });
 
   it("guards production workspace actions against unsafe stale or empty states", () => {
