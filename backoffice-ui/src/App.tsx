@@ -842,9 +842,9 @@ export function App() {
     <DashboardShell {...appRouteShellState.shell}>
       <RouteMasthead {...appRouteShellState.masthead} />
 
-      <AppRouteContent {...appRouteContentState} />
-
       <AppFeedbackShell error={error} notice={notice} loading={loading} />
+
+      <AppRouteContent {...appRouteContentState} />
     </DashboardShell>
   );
 }

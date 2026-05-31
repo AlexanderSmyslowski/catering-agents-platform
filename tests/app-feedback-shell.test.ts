@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AppFeedbackShell } from "../backoffice-ui/src/app-feedback-shell.js";
@@ -41,5 +42,13 @@ describe("app feedback shell", () => {
     expect(renderFeedback({ loading: false })).toContain(
       "Aktuelle Daten aus Erfassung, Angebot und Produktion wurden geladen."
     );
+  });
+
+  it("keeps feedback before route content so sticky toasts stay near the top", () => {
+    const appSource = readFileSync("backoffice-ui/src/App.tsx", "utf8");
+
+    expect(appSource.indexOf("<RouteMasthead")).toBeGreaterThan(-1);
+    expect(appSource.indexOf("<AppFeedbackShell")).toBeGreaterThan(appSource.indexOf("<RouteMasthead"));
+    expect(appSource.indexOf("<AppFeedbackShell")).toBeLessThan(appSource.indexOf("<AppRouteContent"));
   });
 });
