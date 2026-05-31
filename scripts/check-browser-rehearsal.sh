@@ -186,10 +186,14 @@ production_markers='async () => {
     missing.push("Einkaufslisten-Exportlink fehlt");
   }
   const planContext = text.match(/Plan-Kontext: planId ([^\\s]+) · specId ([^\\s]+)/);
+  let currentPlanId;
+  let currentPlanSpecId;
   if (!planContext) {
     missing.push("aktueller Plan-Kontext fehlt");
   } else {
     const [, planId, specId] = planContext;
+    currentPlanId = planId;
+    currentPlanSpecId = specId;
     const expectedPlanHref = `/api/exports/v1/exports/production-plans/${planId}/html`;
     if (!exportLinks.includes(expectedPlanHref)) {
       missing.push(`aktueller Produktionsplan-Exportlink passt nicht zu ${planId}`);
@@ -208,10 +212,14 @@ production_markers='async () => {
     }
   }
   const purchaseContext = text.match(/purchaseListId: ([^\\s]+) · specId: ([^\\s]+)/);
+  let currentPurchaseListId;
+  let currentPurchaseSpecId;
   if (!purchaseContext) {
     missing.push("aktueller Einkaufslisten-Kontext fehlt");
   } else {
     const [, purchaseListId, specId] = purchaseContext;
+    currentPurchaseListId = purchaseListId;
+    currentPurchaseSpecId = specId;
     const expectedPurchaseHref = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
     if (!exportLinks.includes(expectedPurchaseHref)) {
       missing.push(`aktueller Einkaufslisten-Exportlink passt nicht zu ${purchaseListId}`);
@@ -231,6 +239,16 @@ production_markers='async () => {
       ) {
         missing.push(`aktueller Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${purchaseListId}`);
       }
+    }
+  }
+  if (currentPlanId && currentPlanSpecId && currentPurchaseListId && currentPurchaseSpecId) {
+    if (currentPlanSpecId !== currentPurchaseSpecId) {
+      missing.push(`Abschluss-Kontext hat unterschiedliche Spezifikationen ${currentPlanSpecId}/${currentPurchaseSpecId}`);
+    }
+    const expectedHandoffContext =
+      `Abschluss-Kontext: planId ${currentPlanId} · specId ${currentPlanSpecId} · purchaseListId ${currentPurchaseListId}`;
+    if (!text.includes(expectedHandoffContext)) {
+      missing.push("Abschluss-Kontext passt nicht zum aktuellen Plan-/Einkaufslisten-Kontext");
     }
   }
   if (text.includes("ÄLTERE EINKAUFSLISTEN") && !text.includes("Nur bei Bedarf aufklappen; ältere Listen sind kein aktueller Vorgang.")) {
@@ -530,6 +548,10 @@ open_question_markers='async () => {
         .map((anchor) => anchor.getAttribute("href") ?? "");
       const submittedPlanContext = submittedText.match(/Plan-Kontext: planId ([^\\s]+) · specId ([^\\s]+)/);
       const submittedPurchaseContext = submittedText.match(/purchaseListId: ([^\\s]+) · specId: ([^\\s]+)/);
+      let submittedPlanId;
+      let submittedPlanSpecId;
+      let submittedPurchaseListId;
+      let submittedPurchaseSpecId;
       if (!submittedText.includes("Produktionsplan wurde erzeugt.")) {
         missing.push("Answer-Submit-Rehearsal ohne Plan-Erfolgsmeldung");
       }
@@ -540,6 +562,8 @@ open_question_markers='async () => {
         missing.push("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
       } else {
         const [, planId, specId] = submittedPlanContext;
+        submittedPlanId = planId;
+        submittedPlanSpecId = specId;
         const expectedPlanHref = `/api/exports/v1/exports/production-plans/${planId}/html`;
         if (!submittedExportLinks.includes(expectedPlanHref)) {
           missing.push(`Answer-Submit-Rehearsal Produktionsplan-Exportlink passt nicht zu ${planId}`);
@@ -558,7 +582,9 @@ open_question_markers='async () => {
       if (!submittedPurchaseContext) {
         missing.push("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
       } else {
-        const [, purchaseListId] = submittedPurchaseContext;
+        const [, purchaseListId, specId] = submittedPurchaseContext;
+        submittedPurchaseListId = purchaseListId;
+        submittedPurchaseSpecId = specId;
         const expectedPurchaseHref = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
         if (!submittedExportLinks.includes(expectedPurchaseHref)) {
           missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Exportlink passt nicht zu ${purchaseListId}`);
@@ -576,6 +602,16 @@ open_question_markers='async () => {
               missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${purchaseListId}`);
             }
           }
+        }
+      }
+      if (submittedPlanId && submittedPlanSpecId && submittedPurchaseListId && submittedPurchaseSpecId) {
+        if (submittedPlanSpecId !== submittedPurchaseSpecId) {
+          missing.push(`Answer-Submit-Rehearsal Abschluss-Kontext hat unterschiedliche Spezifikationen ${submittedPlanSpecId}/${submittedPurchaseSpecId}`);
+        }
+        const expectedHandoffContext =
+          `Abschluss-Kontext: planId ${submittedPlanId} · specId ${submittedPlanSpecId} · purchaseListId ${submittedPurchaseListId}`;
+        if (!submittedText.includes(expectedHandoffContext)) {
+          missing.push("Answer-Submit-Rehearsal ohne passenden Abschluss-Kontext");
         }
       }
       if (!submittedHtml.includes("/api/exports/v1/exports/production-plans/")) {
@@ -636,6 +672,13 @@ production_result_reload_markers='async () => {
   const [, purchaseListId, purchaseSpecId] = purchaseContext;
   const planExport = `/api/exports/v1/exports/production-plans/${planId}/html`;
   const purchaseExport = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
+  const handoffContext = `Abschluss-Kontext: planId ${planId} · specId ${planSpecId} · purchaseListId ${purchaseListId}`;
+  if (planSpecId !== purchaseSpecId) {
+    missing.push(`Produktions-Ergebnis-Reload vor Reload Abschluss-Kontext hat unterschiedliche Spezifikationen ${planSpecId}/${purchaseSpecId}`);
+  }
+  if (!beforeText.includes(handoffContext)) {
+    missing.push("Produktions-Ergebnis-Reload vor Reload ohne passenden Abschluss-Kontext");
+  }
   if (!beforeHtml.includes(planExport)) {
     missing.push(`Produktions-Ergebnis-Reload vor Reload ohne Produktionsplan-Export ${planExport}`);
   }
@@ -654,6 +697,7 @@ production_result_reload_markers='async () => {
     if (
       text.includes(`Plan-Kontext: planId ${planId} · specId ${planSpecId}`) &&
       text.includes(`purchaseListId: ${purchaseListId} · specId: ${purchaseSpecId}`) &&
+      text.includes(handoffContext) &&
       html.includes(planExport) &&
       html.includes(purchaseExport)
     ) {
@@ -668,6 +712,9 @@ production_result_reload_markers='async () => {
   }
   if (!afterText.includes(`purchaseListId: ${purchaseListId} · specId: ${purchaseSpecId}`)) {
     missing.push("Produktions-Ergebnis-Reload verliert aktuelle Einkaufsliste");
+  }
+  if (!afterText.includes(handoffContext)) {
+    missing.push("Produktions-Ergebnis-Reload verliert passenden Abschluss-Kontext");
   }
   if (!afterHtml.includes(planExport)) {
     missing.push("Produktions-Ergebnis-Reload verliert aktuellen Produktionsplan-Exportlink");
