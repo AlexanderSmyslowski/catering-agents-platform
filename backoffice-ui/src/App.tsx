@@ -93,10 +93,8 @@ import {
 } from "./production-workspace-reset.js";
 import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
 import {
-  getProductionWindowDropFile,
-  shouldActivateProductionWindowDrag,
-  shouldClearProductionWindowDrag
-} from "./production-window-drag-state.js";
+  buildProductionWindowFileActions
+} from "./production-window-file-actions.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
@@ -730,32 +728,15 @@ export function App() {
       return;
     }
 
-    const handleWindowDragOver = (event: globalThis.DragEvent) => {
-      if (!shouldActivateProductionWindowDrag(event)) {
-        return;
-      }
-      event.preventDefault();
-      setDragActive(true);
-    };
-
-    const handleWindowDrop = (event: globalThis.DragEvent) => {
-      const file = getProductionWindowDropFile(event);
-      if (!file) {
-        return;
-      }
-      event.preventDefault();
-      startProductionDocumentUpload(file, {
-        setDragActive,
-        setIntakeFile,
-        processIncomingProductionFile
-      });
-    };
-
-    const handleWindowDragLeave = (event: globalThis.DragEvent) => {
-      if (shouldClearProductionWindowDrag(event)) {
-        setDragActive(false);
-      }
-    };
+    const {
+      handleWindowDragOver,
+      handleWindowDrop,
+      handleWindowDragLeave
+    } = buildProductionWindowFileActions({
+      setDragActive,
+      setIntakeFile,
+      processIncomingProductionFile
+    });
 
     window.addEventListener("dragover", handleWindowDragOver);
     window.addEventListener("drop", handleWindowDrop);
