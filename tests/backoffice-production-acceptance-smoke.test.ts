@@ -356,29 +356,33 @@ function installProductionAcceptanceMocks(
             items: options.withoutPlans
               ? []
               : [
-                  options.withQuickLunchMixedPlan
-                    ? quickLunchPlan
-                    : {
-                        planId: "plan-production-fallback-1",
-                        eventSpecId: planSpecId,
-                        readiness: options.completeSpec
-                          ? {
-                              status: "complete",
-                              reasons: []
-                            }
+                  ...(archivedSpecIds.has(planSpecId)
+                    ? []
+                    : [
+                        options.withQuickLunchMixedPlan
+                          ? quickLunchPlan
                           : {
-                              status: "insufficient",
-                              reasons: ["Glutenfrei-Konflikt bleibt ungelöst."]
-                            },
-                        isFallback: !options.completeSpec,
-                        fallbackReason: options.completeSpec ? undefined : "Glutenfrei-Konflikt bleibt ungelöst.",
-                        unresolvedItems: options.completeSpec
-                          ? []
-                          : ["Glutenfrei-Konflikt bleibt ungelöst.", "Klassifikation für Brot-Baguette fehlt."],
-                        productionBatches: [],
-                        kitchenSheets: [],
-                        recipeSelections: []
-                      },
+                              planId: "plan-production-fallback-1",
+                              eventSpecId: planSpecId,
+                              readiness: options.completeSpec
+                                ? {
+                                    status: "complete",
+                                    reasons: []
+                                  }
+                                : {
+                                    status: "insufficient",
+                                    reasons: ["Glutenfrei-Konflikt bleibt ungelöst."]
+                                  },
+                              isFallback: !options.completeSpec,
+                              fallbackReason: options.completeSpec ? undefined : "Glutenfrei-Konflikt bleibt ungelöst.",
+                              unresolvedItems: options.completeSpec
+                                ? []
+                                : ["Glutenfrei-Konflikt bleibt ungelöst.", "Klassifikation für Brot-Baguette fehlt."],
+                              productionBatches: [],
+                              kitchenSheets: [],
+                              recipeSelections: []
+                            }
+                      ]),
                   ...(options.withArchivedProductionContext
                     ? [
                         {
@@ -447,7 +451,7 @@ function installProductionAcceptanceMocks(
                     ]
                   }
                 ]
-              : options.withCurrentPurchaseList
+              : options.withCurrentPurchaseList && !archivedSpecIds.has(purchaseListSpecId)
               ? [
                   {
                     purchaseListId: "purchase-production-current-1",
@@ -848,8 +852,10 @@ describe("backoffice production acceptance smoke", () => {
     installProductionAcceptanceMocks({ withCurrentPurchaseList: true });
 
     const { container, root } = await renderProductionRouteInteractive();
+    let mounted = true;
 
     try {
+      expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
       expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren");
 
       const archiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
@@ -889,16 +895,32 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).not.toContain("Produktionsblatt exportieren");
       expect(content).not.toContain("Einkaufsliste exportieren");
       expect(content).not.toContain("Löschen");
-    } finally {
+
       await act(async () => {
         root.unmount();
       });
       container.remove();
+      mounted = false;
+
+      const freshContent = await renderProductionRoute();
+      expect(freshContent).toContain("Noch kein aktiver Vorgang");
+      expect(freshContent).not.toContain("requestId: request-production-fallback-1");
+      expect(freshContent).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
+      expect(freshContent).not.toContain("Klassifikation für Brot-Baguette fehlt.");
+      expect(freshContent).not.toContain("Produktionsblatt exportieren");
+      expect(freshContent).not.toContain("Einkaufsliste exportieren");
+    } finally {
+      if (mounted) {
+        await act(async () => {
+          root.unmount();
+        });
+        container.remove();
+      }
     }
   });
 
   it("clears the active production workspace without leaving result artifacts as current context", async () => {
-    installProductionAcceptanceMocks();
+    installProductionAcceptanceMocks({ withCurrentPurchaseList: true });
 
     const { container, root } = await renderProductionRouteInteractive();
 
@@ -910,6 +932,8 @@ describe("backoffice production acceptance smoke", () => {
       expect(clearButton).toBeTruthy();
       expect(clearButton?.disabled).toBe(false);
       expect(document.body.textContent ?? "").toContain("requestId: request-production-fallback-1");
+      expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
+      expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren");
 
       await act(async () => {
         clearButton?.click();
@@ -1231,7 +1255,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Plan-Kontext: planId plan-production-fallback-1 · specId spec-production-fallback-1");
     expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-fallback-1");
     expect(content).toContain(
-      "Produktionsblatt exportieren für aktuellen Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1"
+      "Produktionsblatt exportieren für Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1"
     );
     expect(content).toContain(
       "Einkaufsliste exportieren für aktuellen Vorgang purchase-production-current-1 · Spezifikation spec-production-fallback-1"

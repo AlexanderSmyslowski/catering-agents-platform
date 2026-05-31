@@ -68,7 +68,7 @@ export function ProductionPlanDownloadCard({
           Produktionsblatt exportieren
           <span className="visually-hidden">
             {" "}
-            für aktuellen Plan {String(selectedPlan.planId ?? "-")} · Spezifikation{" "}
+            für Plan {String(selectedPlan.planId ?? "-")} · Spezifikation{" "}
             {String(selectedPlan.eventSpecId ?? selectedPlanSpec?.specId ?? "-")}
           </span>
         </a>
