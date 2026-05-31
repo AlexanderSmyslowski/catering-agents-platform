@@ -86,6 +86,10 @@ import {
   buildProductionSourceInputActions,
   buildProductionSourceInputState
 } from "./production-source-input-state.js";
+import {
+  getProductionSourceDroppedFile,
+  getProductionSourceSelectedFile
+} from "./production-source-file-events.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import {
@@ -860,7 +864,7 @@ export function App() {
 
   function handleProductionDrop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
-    const file = event.dataTransfer.files?.[0];
+    const file = getProductionSourceDroppedFile(event);
     if (!file) {
       return;
     }
@@ -872,7 +876,7 @@ export function App() {
   }
 
   function handleProductionFileSelection(event: ChangeEvent<HTMLInputElement>) {
-    const nextFile = event.target.files?.[0] ?? null;
+    const nextFile = getProductionSourceSelectedFile(event);
     if (!nextFile) {
       return;
     }
