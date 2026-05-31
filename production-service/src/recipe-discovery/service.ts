@@ -23,6 +23,7 @@ import {
   buildWebRecipeWinnerResolution
 } from "./web-recipe-resolution.js";
 import { collectWebRecipeCandidates } from "./web-recipe-candidate-search.js";
+import { appendWebRecipeWinnerTrace } from "./web-recipe-trace.js";
 
 export interface RecipeResolution {
   recipe?: Recipe;
@@ -85,7 +86,7 @@ export class RecipeDiscoveryService {
     }
 
     await this.repository.save(winner.recipe);
-    searchTrace.push(`Webtreffer gewählt: ${winner.recipe.name}.`);
+    appendWebRecipeWinnerTrace(searchTrace, winner.recipe);
 
     return buildWebRecipeWinnerResolution({
       component,
