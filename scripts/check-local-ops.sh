@@ -174,6 +174,43 @@ if [[ "${intake_specs_body}" != *"spec-demo-intake-conference-lunch"* ]]; then
 fi
 printf '  Intake-Spec-Check: erreichbar (%s, enthält spec-demo-intake-conference-lunch)\n' "${intake_specs_url}"
 
+if ! clarification_spec_anchor="$(printf '%s' "${intake_specs_body}" | node -e '
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  input += chunk;
+});
+process.stdin.on("end", () => {
+  const payload = JSON.parse(input);
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const spec = items.find((entry) => entry.specId === "spec-demo-production-answered-clarification");
+  if (!spec) {
+    console.error("Synthetischer Rueckfragenanker spec-demo-production-answered-clarification fehlt.");
+    process.exit(1);
+  }
+
+  const sourceLineage = Array.isArray(spec.sourceLineage) ? spec.sourceLineage : [];
+  const hasRequestReference = sourceLineage.some((entry) =>
+    entry && entry.reference === "demo-production-answered-clarification"
+  );
+  if (!hasRequestReference) {
+    console.error("Synthetischer Rueckfragenanker hat keinen passenden Request-Bezug.");
+    process.exit(1);
+  }
+
+  if (!spec.readiness || spec.readiness.status !== "partial") {
+    console.error("Synthetischer Rueckfragenanker hat keinen partial-Readiness-Status.");
+    process.exit(1);
+  }
+
+  process.stdout.write(JSON.stringify({ specId: spec.specId, reference: "demo-production-answered-clarification" }));
+});
+')"; then
+  echo "  Rueckfragen-Check: synthetischer Demo-Anker fehlt oder ist ungueltig (${intake_specs_url})" >&2
+  exit 1
+fi
+printf '  Rueckfragen-Check: erreichbar (%s, enthält spec-demo-production-answered-clarification mit partial-Readiness)\n' "${intake_specs_url}"
+
 offer_drafts_url="http://127.0.0.1:3102/v1/offers/drafts"
 offer_drafts_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS -H "x-actor-name: Angebots-Mitarbeiter" "${offer_drafts_url}")"
 if [[ "${offer_drafts_body}" != *"draft-demo-offer-conference-buffet"* ]]; then
@@ -297,7 +334,7 @@ fi
 printf '  Audit-Check: erreichbar (%s, enthält production.seed_demo und Betriebs-/Audit-Operator)\n' "${audit_url}"
 
 echo ""
-echo "Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health -> Export -> Bootstrap/Audit."
+echo "Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health -> Rueckfragenanker -> Export -> Bootstrap/Audit."
 echo "Rehearsal-Grenze: local:check ist nur ein lokaler Betriebs-/Seed-/Export-/Auditbeleg."
 echo "Kein Rehearsal-Go ohne manuelle UI-Sichtung, Evidence-Paket und Reibungslog."
 echo "Keine Produktionsfreigabe, keine echten Daten, keine rechtssichere Audit-/Compliance-Aussage."

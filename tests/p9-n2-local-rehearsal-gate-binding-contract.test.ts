@@ -38,7 +38,7 @@ describe("P9-N2 local rehearsal gate binding contract", () => {
   });
 
   it("prints the bounded local check result in the existing script without adding new runtime scope", () => {
-    expect(checkScript).toContain("Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health -> Export -> Bootstrap/Audit.");
+    expect(checkScript).toContain("Lokaler Betriebsweg reproduzierbar bestaetigt: Start -> Status -> Health -> Rueckfragenanker -> Export -> Bootstrap/Audit.");
     expect(checkScript).toContain("Rehearsal-Grenze: local:check ist nur ein lokaler Betriebs-/Seed-/Export-/Auditbeleg.");
     expect(checkScript).toContain("Kein Rehearsal-Go ohne manuelle UI-Sichtung, Evidence-Paket und Reibungslog.");
     expect(checkScript).toContain("Keine Produktionsfreigabe, keine echten Daten, keine rechtssichere Audit-/Compliance-Aussage.");

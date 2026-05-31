@@ -3235,6 +3235,15 @@ describe("catering agents platform", () => {
       expect(response.statusCode).toBe(201);
     });
 
+    expect(seedResponses[0].json().seeded).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: "demo-production-answered-clarification",
+          specId: "spec-demo-production-answered-clarification"
+        })
+      ])
+    );
+
     const repeatedSeedResponses = await Promise.all([
       intakeApp.inject({
         method: "POST",

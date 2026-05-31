@@ -6,6 +6,7 @@ import {
   createEventRequestFromManualForm,
   createUploadSourceMetadata,
   getDemoIntakeRequests,
+  getDemoProductionAnsweredClarificationAnchor,
   ingestDocument,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
@@ -685,6 +686,14 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         specId: spec.specId
       });
     }
+    const answeredClarificationAnchor = getDemoProductionAnsweredClarificationAnchor();
+    const answeredClarificationSpec = validateAcceptedEventSpec(answeredClarificationAnchor.spec);
+    await store.saveRequest(answeredClarificationAnchor.request);
+    await store.saveSpec(answeredClarificationSpec);
+    seeded.push({
+      requestId: answeredClarificationAnchor.request.requestId,
+      specId: answeredClarificationSpec.specId
+    });
     await auditLog.log({
       action: "intake.seed_demo",
       entityType: "SeedBatch",
