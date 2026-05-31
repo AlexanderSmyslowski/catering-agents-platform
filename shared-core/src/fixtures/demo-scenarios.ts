@@ -8,6 +8,7 @@ import { normalizeEventRequestToSpec } from "../rules/normalization.js";
 import type { AcceptedEventSpec, EventRequest } from "../types.js";
 
 export interface DemoProductionAnsweredClarificationAnchor {
+  request: EventRequest;
   spec: AcceptedEventSpec;
   clarificationAnswers: ProductionClarificationAnswer[];
 }
@@ -78,13 +79,14 @@ export function getDemoProductionSpecs(): AcceptedEventSpec[] {
 }
 
 export function getDemoProductionAnsweredClarificationAnchor(): DemoProductionAnsweredClarificationAnchor {
-  const spec = normalizeEventRequestToSpec(
-    createEventRequestFromText({
+  const request = createEventRequestFromText({
       requestId: "demo-production-answered-clarification",
       channel: "text",
       rawText:
         "Synthetischer Demoanker am 2026-12-16 fuer 42 Teilnehmer mit Lunchbuffet und Rueckfragen-Fortsetzung."
-    }),
+    });
+  const spec = normalizeEventRequestToSpec(
+    request,
     {
       sourceType: "manual_input",
       reference: "demo-production-answered-clarification",
@@ -102,6 +104,7 @@ export function getDemoProductionAnsweredClarificationAnchor(): DemoProductionAn
   const [question] = questions;
 
   return {
+    request,
     spec: clarificationSpec,
     clarificationAnswers: question
       ? [

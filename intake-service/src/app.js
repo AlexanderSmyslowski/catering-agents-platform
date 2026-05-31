@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
-import { AuditLogStore, createEventRequestFromManualForm, createUploadSourceMetadata, getDemoIntakeRequests, ingestDocument, normalizeEventRequestToSpec, resolveMinimalMvpRoleFromTrustedActor, trustedActorFromHeaders, multipartLimitsForUpload, readLimitedUploadBuffer, uploadErrorResponse, validateUploadedDocument, validateUploadedDocumentMetadata, withEvaluatedReadiness, validateAcceptedEventSpec, validateEventRequest } from "@catering/shared-core";
+import { AuditLogStore, createEventRequestFromManualForm, createUploadSourceMetadata, getDemoIntakeRequests, getDemoProductionAnsweredClarificationAnchor, ingestDocument, normalizeEventRequestToSpec, resolveMinimalMvpRoleFromTrustedActor, trustedActorFromHeaders, multipartLimitsForUpload, readLimitedUploadBuffer, uploadErrorResponse, validateUploadedDocument, validateUploadedDocumentMetadata, withEvaluatedReadiness, validateAcceptedEventSpec, validateEventRequest } from "@catering/shared-core";
 import { buildEventRequestFromText } from "./extraction.js";
 import { IntakeStore } from "./store.js";
 function safeDocumentIngestionSummary(results) {
@@ -481,6 +481,14 @@ export function buildIntakeApp(input = {}) {
                 specId: spec.specId
             });
         }
+        const answeredClarificationAnchor = getDemoProductionAnsweredClarificationAnchor();
+        const answeredClarificationSpec = validateAcceptedEventSpec(answeredClarificationAnchor.spec);
+        await store.saveRequest(answeredClarificationAnchor.request);
+        await store.saveSpec(answeredClarificationSpec);
+        seeded.push({
+            requestId: answeredClarificationAnchor.request.requestId,
+            specId: answeredClarificationSpec.specId
+        });
         await auditLog.log({
             action: "intake.seed_demo",
             entityType: "SeedBatch",

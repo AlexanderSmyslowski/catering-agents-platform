@@ -55,11 +55,12 @@ export function getDemoProductionSpecs() {
     ];
 }
 export function getDemoProductionAnsweredClarificationAnchor() {
-    const spec = normalizeEventRequestToSpec(createEventRequestFromText({
+    const request = createEventRequestFromText({
         requestId: "demo-production-answered-clarification",
         channel: "text",
         rawText: "Synthetischer Demoanker am 2026-12-16 fuer 42 Teilnehmer mit Lunchbuffet und Rueckfragen-Fortsetzung."
-    }), {
+    });
+    const spec = normalizeEventRequestToSpec(request, {
         sourceType: "manual_input",
         reference: "demo-production-answered-clarification",
         commercialState: "manual"
@@ -74,6 +75,7 @@ export function getDemoProductionAnsweredClarificationAnchor() {
     const questions = buildProductionClarificationQuestions({ spec: clarificationSpec });
     const [question] = questions;
     return {
+        request,
         spec: clarificationSpec,
         clarificationAnswers: question
             ? [

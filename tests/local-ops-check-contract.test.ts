@@ -133,12 +133,13 @@ describe("local ops check contract", () => {
       "/v1/production/plans",
       "draft-demo-offer-conference-buffet",
       "plan-spec-demo-production-coffee",
-      "purchase-spec-demo-production-coffee"
+      "purchase-spec-demo-production-coffee",
+      "Rueckfragenanker -> Export"
     ]) {
       expect(checkScript).toContain(expectedLocalCheckAnchor);
     }
 
-    expect(testingDoc).toContain("Start-, Intake-/Request-, Angebots-, Produktions- und Exportanker");
+    expect(testingDoc).toContain("Start-, Intake-/Request-, Angebots-, Produktions-, Rueckfragen- und Exportanker");
   });
 
   it("verifies that local UI routes serve the app shell before manual browser rehearsal", () => {
@@ -161,6 +162,7 @@ describe("local ops check contract", () => {
       clarificationAnswers: anchor.clarificationAnswers
     });
 
+    expect(anchor.request.requestId).toBe("demo-production-answered-clarification");
     expect(anchor.spec.specId).toBe("spec-demo-production-answered-clarification");
     expect(anchor.clarificationAnswers).toHaveLength(1);
     expect(anchor.clarificationAnswers[0]?.answerText.value).toContain("Synthetische Demo-Antwort");
@@ -168,6 +170,11 @@ describe("local ops check contract", () => {
     expect(projection.messages.some((message) => message.type === "user_structured_answer")).toBe(true);
     expect(demoScenarios).toContain("demo-production-answered-clarification");
     expect(demoScenarios).toContain("Synthetische Demo-Antwort");
+    expect(checkScript).toContain("Rueckfragen-Check");
+    expect(checkScript).toContain("spec-demo-production-answered-clarification");
+    expect(checkScript).toContain("demo-production-answered-clarification");
+    expect(checkScript).toContain("partial-Readiness");
+    expect(checkScript).toContain("synthetischer Demo-Anker fehlt oder ist ungueltig");
 
     for (const doc of [c8AcceptanceDoc, testingDoc]) {
       expect(doc).toContain("spec-demo-production-answered-clarification");

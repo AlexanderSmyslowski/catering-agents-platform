@@ -18,7 +18,7 @@ describe("P8-N4 local ops option A boundary", () => {
   });
 
   it("keeps the local check focused on existing smoke anchors without schedule processing", () => {
-    expect(checkScript).toContain("Start -> Status -> Health -> Export -> Bootstrap/Audit");
+    expect(checkScript).toContain("Start -> Status -> Health -> Rueckfragenanker -> Export -> Bootstrap/Audit");
     expect(checkScript).toContain("/v1/production/audit/events?limit=200");
     expect(checkScript).toContain("plan-spec-demo-production-coffee");
     expect(checkScript).not.toContain("event.schedule");
