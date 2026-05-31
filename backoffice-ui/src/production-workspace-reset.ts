@@ -37,7 +37,7 @@ export function resetProductionWorkspace(actions: ProductionWorkspaceResetAction
 export function clearProductionWorkspaceState(actions: ProductionWorkspaceClearActions) {
   actions.resetProductionWorkspaceState();
   actions.clearMessages();
-  actions.setNotice("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+  actions.setNotice("Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert.");
 }
 
 export async function completeProductionIntakeArchiveSuccess(

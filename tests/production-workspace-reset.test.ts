@@ -26,12 +26,12 @@ describe("production workspace reset", () => {
     clearProductionWorkspaceState(actions);
 
     expect(actions.setNotice).toHaveBeenCalledWith(
-      "Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert."
+      "Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert."
     );
     expect(calls).toEqual([
       "resetProductionWorkspaceState",
       "clearMessages",
-      "setNotice:Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert."
+      "setNotice:Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert."
     ]);
   });
 

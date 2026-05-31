@@ -44,11 +44,11 @@ Entscheidung:
 
 ## 4. Optionen
 
-### Option A: Status quo plus UI-Arbeitsbereich leeren
+### Option A: Status quo plus UI-Arbeitsbereich lokal leeren
 
 Beschreibung:
 
-Der bestehende UI-Pfad bleibt fuehrend. `Arbeitsbereich leeren` entfernt nur den aktuellen lokalen Fokus, aber keine backend-seitigen Intake-, Spec-, Plan-, Einkaufslisten- oder Audit-Daten.
+Der bestehende UI-Pfad bleibt fuehrend. `Arbeitsbereich lokal leeren` entfernt nur den aktuellen lokalen Fokus, aber keine backend-seitigen Intake-, Spec-, Plan-, Einkaufslisten- oder Audit-Daten.
 
 Vorteile:
 

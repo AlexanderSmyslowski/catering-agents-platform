@@ -46,7 +46,7 @@ describe("C9 Fehlupload archive/delete decision contract", () => {
   });
 
   it("compares status quo, soft archive and hard delete with a clear recommendation", () => {
-    expect(doc).toContain("Option A: Status quo plus UI-Arbeitsbereich leeren");
+    expect(doc).toContain("Option A: Status quo plus UI-Arbeitsbereich lokal leeren");
     expect(doc).toContain("Option B: Soft-Archiv aus aktivem Arbeitsfokus");
     expect(doc).toContain("Option C: Hard-Delete");
     expect(doc).toContain("Empfehlung: Option B, Soft-Archiv aus aktivem Arbeitsfokus");
