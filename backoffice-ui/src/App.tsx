@@ -32,6 +32,7 @@ import { buildAppOfferRouteState } from "./app-offer-route-state.js";
 import { AppRouteContent } from "./app-route-content.js";
 import { buildAppRouteContentState } from "./app-route-content-state.js";
 import { RouteMasthead } from "./route-masthead.js";
+import { refreshAppDashboardState } from "./app-dashboard-refresh.js";
 import {
   archiveIntakeRequest,
   createAcceptedSpecFromDocument,
@@ -175,24 +176,15 @@ export function App() {
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDashboard = useEffectEvent(async () => {
-    setLoading(true);
-    setError(undefined);
-
-    try {
-      const [state, health] = await Promise.all([loadDashboardState(), loadServiceHealth()]);
-      startTransition(() => {
-        setDashboard(state);
-        setServiceHealth(health);
-        setLoading(false);
-      });
-    } catch (refreshError) {
-      setLoading(false);
-      setError(
-        refreshError instanceof Error
-          ? refreshError.message
-          : "Arbeitsoberfläche konnte nicht geladen werden."
-      );
-    }
+    await refreshAppDashboardState({
+      loadDashboardState,
+      loadServiceHealth,
+      setDashboard,
+      setServiceHealth,
+      setLoading,
+      setError,
+      transition: startTransition
+    });
   });
 
   useEffect(() => {
