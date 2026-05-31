@@ -12,7 +12,6 @@ import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.
 import { createPlanningIssueCollector } from "./planning-issue-collector.js";
 import { selectOperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
 import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
-import { buildProcurementPlanningArtifacts } from "./planning-procurement-artifacts.js";
 import { buildComponentReadinessArtifacts } from "./planning-component-readiness-artifacts.js";
 import { buildRecipeComponentPlanningArtifacts } from "./planning-recipe-component-artifacts.js";
 import {
@@ -23,6 +22,7 @@ import {
 import { planningComponentErrorReason } from "./planning-component-error-reason.js";
 import { createPlanningArtifactState } from "./planning-artifact-state.js";
 import { buildImplicitBakerPurchasePlanningArtifacts } from "./planning-baker-purchase-artifacts.js";
+import { buildExplicitProcurementPlanningArtifacts } from "./planning-explicit-procurement-artifacts.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -47,7 +47,6 @@ export async function buildProductionArtifacts(
 
   for (const component of eventSpec.menuPlan) {
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
-    const productionMode = component.productionDecision?.mode;
 
     try {
       const bakerPurchaseArtifacts = buildImplicitBakerPurchasePlanningArtifacts({
@@ -74,13 +73,12 @@ export async function buildProductionArtifacts(
         continue;
       }
 
-      if (productionMode === "convenience_purchase" || productionMode === "external_finished") {
-        const artifacts = buildProcurementPlanningArtifacts({
-          eventSpec,
-          component,
-          servings,
-          kind: "component_procurement"
-        });
+      const artifacts = buildExplicitProcurementPlanningArtifacts({
+        eventSpec,
+        component,
+        servings
+      });
+      if (artifacts) {
         appendProcurementPlanningArtifacts(artifactAppender, artifacts);
         continue;
       }
