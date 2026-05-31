@@ -943,8 +943,16 @@ describe("backoffice production acceptance smoke", () => {
         "Lokalen Arbeitsbereich leeren: Konferenz · 36 Teilnehmer · 2026-07-13"
       );
       expect(document.body.textContent ?? "").toContain("requestId: request-production-fallback-1");
+      expect(document.body.textContent ?? "").toContain("Plan-Kontext: planId plan-production-fallback-1");
+      expect(document.body.textContent ?? "").toContain("purchaseListId: purchase-production-current-1");
       expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
       expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren");
+      expect(container.innerHTML).toContain(
+        "/api/exports/v1/exports/production-plans/plan-production-fallback-1/html"
+      );
+      expect(container.innerHTML).toContain(
+        "/api/exports/v1/exports/purchase-lists/purchase-production-current-1/csv"
+      );
 
       await act(async () => {
         clearButton?.click();
@@ -957,10 +965,36 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Kein aktiver Vorgang");
       expect(content).toContain("Auftrag einfügen oder Datei ablegen");
       expect(content).not.toContain("requestId: request-production-fallback-1");
+      expect(content).not.toContain("Plan-Kontext: planId plan-production-fallback-1");
+      expect(content).not.toContain("purchaseListId: purchase-production-current-1");
       expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
       expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
       expect(content).not.toContain("Produktionsblatt exportieren");
       expect(content).not.toContain("Einkaufsliste exportieren");
+      expect(container.innerHTML).not.toContain(
+        "/api/exports/v1/exports/production-plans/plan-production-fallback-1/html"
+      );
+      expect(container.innerHTML).not.toContain(
+        "/api/exports/v1/exports/purchase-lists/purchase-production-current-1/csv"
+      );
+
+      const clearedClearButton = Array.from(container.querySelectorAll("button")).find((button) =>
+        (button.textContent ?? "").includes("Arbeitsbereich lokal leeren")
+      ) as HTMLButtonElement | undefined;
+      const clearedArchiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+        (button.textContent ?? "").includes("Fehlupload archivieren")
+      ) as HTMLButtonElement | undefined;
+
+      expect(clearedClearButton).toBeTruthy();
+      expect(clearedClearButton?.disabled).toBe(true);
+      expect(clearedClearButton?.getAttribute("title")).toBe(
+        "Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren."
+      );
+      expect(clearedArchiveButton).toBeTruthy();
+      expect(clearedArchiveButton?.disabled).toBe(true);
+      expect(clearedArchiveButton?.getAttribute("title")).toBe(
+        "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv."
+      );
     } finally {
       await act(async () => {
         root.unmount();
