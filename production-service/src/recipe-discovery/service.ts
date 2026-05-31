@@ -27,6 +27,7 @@ import {
   webSpecificMatchScore
 } from "./recipe-candidate-scoring.js";
 import { selectInternalRecipeCandidate } from "./internal-recipe-selection.js";
+import { buildInternalRecipeResolution } from "./internal-recipe-resolution.js";
 import { createRecipeSearchTrace } from "./recipe-search-trace.js";
 import { selectWebRecipeCandidate } from "./web-recipe-selection.js";
 
@@ -96,20 +97,11 @@ export class RecipeDiscoveryService {
 
     if (internalWinner?.recipe) {
       searchTrace.push(`Interner Treffer gewählt: ${internalWinner.recipe.name}.`);
-      return {
-        recipe: internalWinner.recipe,
-        selection: {
-          componentId: component.componentId,
-          recipeId: internalWinner.recipe.recipeId,
-          selectionReason: "Passendes Rezept in der internen Bibliothek gefunden.",
-          autoUsedInternetRecipe: false,
-          searchTrace: searchTrace.entries,
-          sourceTier: internalWinner.recipe.source.tier,
-          qualityScore: internalWinner.recipe.source.qualityScore,
-          fitScore: internalWinner.fitScore
-        },
-        unresolvedItems: []
-      };
+      return buildInternalRecipeResolution({
+        component,
+        winner: internalWinner,
+        searchTrace: searchTrace.entries
+      });
     }
 
     const locales: ("de" | "en")[] = ["de", "en"];
