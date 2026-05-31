@@ -49,7 +49,11 @@ export function ProductionPurchaseListPanel({
                 rel="noreferrer"
               >
                 Einkaufsliste exportieren
-                <span className="visually-hidden"> Einkaufsliste herunterladen</span>
+                <span className="visually-hidden">
+                  {" "}
+                  für aktuellen Vorgang {String(purchaseList.purchaseListId)} · Spezifikation{" "}
+                  {String(purchaseList.eventSpecId ?? "-")}
+                </span>
               </a>
               {qualityWarnings.map((warning) => (
                 <p className="helper-text" key={warning.code}>
@@ -106,7 +110,11 @@ export function ProductionPurchaseListPanel({
                       rel="noreferrer"
                     >
                       Einkaufsliste exportieren
-                      <span className="visually-hidden"> Einkaufsliste herunterladen</span>
+                      <span className="visually-hidden">
+                        {" "}
+                        aus älterem Vorgang {String(purchaseList.purchaseListId)} · Spezifikation{" "}
+                        {String(purchaseList.eventSpecId ?? "-")}
+                      </span>
                     </a>
                   </li>
                 );

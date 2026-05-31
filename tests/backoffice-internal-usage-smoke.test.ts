@@ -533,12 +533,14 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Produktionsobjekte und Downloads prüfen");
     expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
     expect(document.body.textContent ?? "").toContain("Einkaufsliste");
-    expect(document.body.textContent ?? "").toContain("Einkaufsliste herunterladen");
+    expect(document.body.textContent ?? "").toContain(
+      `Einkaufsliste exportieren für aktuellen Vorgang ${artifacts.purchaseList.purchaseListId} · Spezifikation ${fixture.plannedSpec.specId}`
+    );
     expect(document.body.textContent ?? "").toContain("Tomaten");
     expect(findAnchorByText("Produktionsblatt exportieren").href).toContain(
       `/api/exports/v1/exports/production-plans/${artifacts.productionPlan.planId}/html`
     );
-    expect(findAnchorByText("Einkaufsliste herunterladen").href).toContain(
+    expect(findAnchorByText("Einkaufsliste exportieren").href).toContain(
       `/api/exports/v1/exports/purchase-lists/${artifacts.purchaseList.purchaseListId}/csv`
     );
     expect(document.body.textContent ?? "").toContain("Vegetarische Tomatensuppe");
