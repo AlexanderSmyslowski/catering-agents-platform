@@ -30,6 +30,10 @@ import { selectInternalRecipeCandidate } from "./internal-recipe-selection.js";
 import { buildInternalRecipeResolution } from "./internal-recipe-resolution.js";
 import { createRecipeSearchTrace } from "./recipe-search-trace.js";
 import { selectWebRecipeCandidate } from "./web-recipe-selection.js";
+import {
+  buildUnresolvedWebRecipeResolution,
+  buildWebRecipeWinnerResolution
+} from "./web-recipe-resolution.js";
 
 export interface RecipeResolution {
   recipe?: Recipe;
@@ -200,57 +204,20 @@ export class RecipeDiscoveryService {
     const winner = selectWebRecipeCandidate(candidates);
 
     if (!winner) {
-      const categoryHint =
-        component.menuCategory === "vegan"
-          ? "veganer "
-          : component.menuCategory === "vegetarian"
-            ? "vegetarischer "
-            : "";
-      const unresolvedReason = webSearchFailed
-        ? `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden, Internetrecherche fehlgeschlagen.`
-        : `Kein ${categoryHint}Rezeptkandidat für ${component.label} gefunden.`;
-      return {
-        selection: {
-          componentId: component.componentId,
-          selectionReason: webSearchFailed
-            ? "Es konnte kein interner Rezeptkandidat gefunden werden und die Internetrecherche ist fehlgeschlagen."
-            : component.menuCategory === "vegan"
-              ? "Es konnte kein interner oder externer veganer Rezeptkandidat belastbar validiert werden."
-              : component.menuCategory === "vegetarian"
-                ? "Es konnte kein interner oder externer vegetarischer Rezeptkandidat belastbar validiert werden."
-                : "Es konnte kein interner oder externer Rezeptkandidat belastbar validiert werden.",
-          searchTrace: searchTrace.entries,
-          autoUsedInternetRecipe: false
-        },
-        unresolvedItems: [unresolvedReason]
-      };
+      return buildUnresolvedWebRecipeResolution({
+        component,
+        searchTrace: searchTrace.entries,
+        webSearchFailed
+      });
     }
 
     await this.repository.save(winner.recipe);
     searchTrace.push(`Webtreffer gewählt: ${winner.recipe.name}.`);
 
-    const unresolvedItems =
-      winner.recipe.source.approvalState === "review_required"
-        ? [`Rezept ${winner.recipe.name} muss vor der finalen Produktion manuell geprueft werden.`]
-        : [];
-
-    return {
-      recipe: winner.recipe,
-      selection: {
-        componentId: component.componentId,
-        recipeId: winner.recipe.recipeId,
-        selectionReason:
-          winner.recipe.source.approvalState === "auto_usable"
-            ? "Internet-Ausweichrezept mit ausreichender Qualität automatisch ausgewählt."
-            : "Internet-Ausweichrezept ausgewählt, aber zur Prüfung markiert.",
-        searchQuery: winner.query.query,
-        searchTrace: searchTrace.entries,
-        autoUsedInternetRecipe: winner.recipe.source.approvalState === "auto_usable",
-        sourceTier: winner.recipe.source.tier,
-        qualityScore: winner.recipe.source.qualityScore,
-        fitScore: winner.recipe.source.fitScore
-      },
-      unresolvedItems
-    };
+    return buildWebRecipeWinnerResolution({
+      component,
+      winner,
+      searchTrace: searchTrace.entries
+    });
   }
 }
