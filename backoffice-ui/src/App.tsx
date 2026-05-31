@@ -41,9 +41,7 @@ import {
   createProductionPlan,
   loadDashboardState,
   loadServiceHealth,
-  persistOperatorName,
   promoteOfferDraft,
-  readOperatorName,
   reviewRecipe,
   seedDemoData,
   updateAcceptedSpec,
@@ -109,6 +107,7 @@ import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
 import { useProductionIntakeRequestDetail } from "./use-production-intake-request-detail.js";
 import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
+import { useOperatorNameState } from "./use-operator-name-state.js";
 
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
@@ -119,7 +118,10 @@ export function App() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  const [operatorName, setOperatorName] = useState(() => readOperatorName());
+  const {
+    operatorName,
+    handleOperatorNameChange
+  } = useOperatorNameState();
   const [offerText, setOfferText] = useState(
     "Besprechung am 2026-06-25 für 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
   );
@@ -838,11 +840,6 @@ export function App() {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function handleOperatorNameChange(value: string) {
-    const persisted = persistOperatorName(value);
-    setOperatorName(persisted);
   }
 
   function handleProductionDrop(event: DragEvent<HTMLLabelElement>) {
