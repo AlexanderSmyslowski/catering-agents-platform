@@ -1,7 +1,5 @@
 import {
   startTransition,
-  type ChangeEvent,
-  type DragEvent,
   useDeferredValue,
   useEffect,
   useEffectEvent,
@@ -84,10 +82,7 @@ import {
   buildProductionSourceInputActions,
   buildProductionSourceInputState
 } from "./production-source-input-state.js";
-import {
-  getProductionSourceDroppedFile,
-  getProductionSourceSelectedFile
-} from "./production-source-file-events.js";
+import { buildProductionSourceFileUploadActions } from "./production-source-file-actions.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
@@ -839,35 +834,16 @@ export function App() {
     }
   }
 
-  function handleProductionDrop(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    const file = getProductionSourceDroppedFile(event);
-    if (!file) {
-      return;
-    }
-    startProductionDocumentUpload(file, {
-      setDragActive,
-      setIntakeFile,
-      processIncomingProductionFile
-    });
-  }
-
-  function handleProductionFileSelection(event: ChangeEvent<HTMLInputElement>) {
-    const nextFile = getProductionSourceSelectedFile(event);
-    if (!nextFile) {
-      return;
-    }
-    startProductionDocumentUpload(nextFile, {
-      setDragActive,
-      setIntakeFile,
-      processIncomingProductionFile
-    });
-    event.target.value = "";
-  }
-
-  function openProductionFilePicker() {
-    productionUploadInputRef.current?.click();
-  }
+  const {
+    openProductionFilePicker,
+    handleProductionDrop,
+    handleProductionFileSelection
+  } = buildProductionSourceFileUploadActions({
+    uploadInputRef: productionUploadInputRef,
+    setDragActive,
+    setIntakeFile,
+    processIncomingProductionFile
+  });
 
   function handleOpenSpecForQuestions(specId: string) {
     setProductionWorkspaceCleared(false);
