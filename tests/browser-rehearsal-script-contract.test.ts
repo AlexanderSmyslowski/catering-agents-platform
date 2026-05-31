@@ -14,6 +14,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
     expect(script).toContain("Browser-Navigations- und Markerpruefung");
     expect(script).toContain("click_rehearsal_link");
+    expect(script).toContain("Produktion lokal geleert");
     expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
   });
 
@@ -83,5 +84,20 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Fehlupload-Archiv-Aktion ist ohne aktiven Intake-Kontext nicht sicher deaktiviert");
     expect(script).toContain("Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.");
     expect(script).toContain("Wiederverarbeitungs-Aktion ist ohne ausgewählte Datei nicht sicher deaktiviert");
+  });
+
+  it("clicks local clear in the browser and rejects stale production artifacts afterwards", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+
+    expect(script).toContain("clear_workspace_markers");
+    expect(script).toContain("Clear-Check vor Klick ohne aktuellen Plan-Kontext");
+    expect(script).toContain("clearButton.click()");
+    expect(script).toContain("Kein aktiver Vorgang");
+    expect(script).toContain("Auftrag einfügen oder Datei ablegen");
+    expect(script).toContain("Clear-Check nach Klick zeigt alten Produktionsplan");
+    expect(script).toContain("Clear-Check nach Klick zeigt alte Einkaufsliste");
+    expect(script).toContain("Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.");
+    expect(script).toContain("Clear-Check nach Klick laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
+    expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit -> lokales Leeren");
   });
 });
