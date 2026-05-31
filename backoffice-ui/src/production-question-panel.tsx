@@ -223,6 +223,8 @@ export function ProductionQuestionPanel({
                   <button
                     className="secondary-button"
                     disabled={submitting}
+                    aria-label={item.openActionLabel}
+                    title={item.openActionLabel}
                     onClick={() => openSpecForQuestions(item.specId)}
                   >
                     Für Rückfragen öffnen

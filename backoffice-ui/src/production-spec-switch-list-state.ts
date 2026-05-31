@@ -6,6 +6,7 @@ export type ProductionSpecSwitchItem = {
   specId: string;
   label: string;
   readinessLabel: string;
+  openActionLabel: string;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -17,14 +18,16 @@ export function buildProductionSpecSwitchItems(
 ): ProductionSpecSwitchItem[] {
   return specs.map((spec) => {
     const specId = String(spec.specId ?? "");
+    const label = getSpecLabel(spec);
     const readiness = String(asRecord(spec.readiness)?.status ?? "");
     const readinessLabel = translateReadiness(readiness || undefined);
 
     return {
       spec,
       specId,
-      label: getSpecLabel(spec),
-      readinessLabel: `Klarheit: ${readinessLabel}`
+      label,
+      readinessLabel: `Klarheit: ${readinessLabel}`,
+      openActionLabel: `Rückfragen öffnen: ${label} · Klarheit: ${readinessLabel}`
     };
   });
 }
