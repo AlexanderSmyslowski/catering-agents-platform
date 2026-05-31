@@ -141,6 +141,38 @@ production_markers='() => {
   if (!exportLinks.some((href) => href.includes("/api/exports/v1/exports/purchase-lists/") && href.endsWith("/csv"))) {
     missing.push("Einkaufslisten-Exportlink fehlt");
   }
+  const planContext = text.match(/Plan-Kontext: planId ([^\\s]+) · specId ([^\\s]+)/);
+  if (!planContext) {
+    missing.push("aktueller Plan-Kontext fehlt");
+  } else {
+    const [, planId, specId] = planContext;
+    const expectedPlanHref = `/api/exports/v1/exports/production-plans/${planId}/html`;
+    if (!exportLinks.includes(expectedPlanHref)) {
+      missing.push(`aktueller Produktionsplan-Exportlink passt nicht zu ${planId}`);
+    }
+    if (!text.includes(`Produktionsblatt exportieren\\nfür Plan ${planId} · Spezifikation ${specId}`)) {
+      missing.push(`Produktionsplan-Exportlabel passt nicht zu ${planId}/${specId}`);
+    }
+  }
+  const purchaseContext = text.match(/purchaseListId: ([^\\s]+) · specId: ([^\\s]+)/);
+  if (!purchaseContext) {
+    missing.push("aktueller Einkaufslisten-Kontext fehlt");
+  } else {
+    const [, purchaseListId, specId] = purchaseContext;
+    const expectedPurchaseHref = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
+    if (!exportLinks.includes(expectedPurchaseHref)) {
+      missing.push(`aktueller Einkaufslisten-Exportlink passt nicht zu ${purchaseListId}`);
+    }
+    if (!text.includes(`Einkaufsliste exportieren\\nfür aktuellen Vorgang ${purchaseListId} · Spezifikation ${specId}`)) {
+      missing.push(`Einkaufslisten-Exportlabel passt nicht zu ${purchaseListId}/${specId}`);
+    }
+  }
+  if (text.includes("ÄLTERE EINKAUFSLISTEN") && !text.includes("Nur bei Bedarf aufklappen; ältere Listen sind kein aktueller Vorgang.")) {
+    missing.push("aeltere Einkaufslisten sind nicht klar als nicht aktuell markiert");
+  }
+  if (text.includes("Ältere Produktionsläufe") && !text.includes("Diese früheren Produktionsläufe sind Kontext aus anderen Vorgängen, nicht das aktuelle Ergebnis.")) {
+    missing.push("aeltere Produktionslaeufe sind nicht klar als nicht aktuell markiert");
+  }
   if (missing.length > 0) {
     throw new Error(`Produktions-Rehearsal-Marker fehlen: ${missing.join(" | ")}`);
   }

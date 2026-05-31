@@ -30,6 +30,8 @@ describe("browser rehearsal script contract", () => {
       "Produktionsobjekte und Downloads prüfen",
       "Produktionsblatt exportieren",
       "Einkaufsliste exportieren",
+      "Plan-Kontext: planId",
+      "purchaseListId:",
       "Audit-Spur",
       "/api/exports/v1/exports/production-plans/",
       "/api/exports/v1/exports/purchase-lists/"
@@ -47,5 +49,16 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("click_rehearsal_link \"Start -> Angebot\" \"/angebot\"");
     expect(script).toContain("click_rehearsal_link \"Angebot -> Produktion\" \"/produktion\"");
     expect(script).toContain("link.click()");
+  });
+
+  it("guards current production context against stale artifact confusion", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+
+    expect(script).toContain("aktueller Plan-Kontext fehlt");
+    expect(script).toContain("aktueller Produktionsplan-Exportlink passt nicht");
+    expect(script).toContain("aktueller Einkaufslisten-Kontext fehlt");
+    expect(script).toContain("aktueller Einkaufslisten-Exportlink passt nicht");
+    expect(script).toContain("ältere Listen sind kein aktueller Vorgang");
+    expect(script).toContain("nicht das aktuelle Ergebnis");
   });
 });
