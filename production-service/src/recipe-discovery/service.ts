@@ -28,6 +28,7 @@ import {
 } from "./recipe-candidate-scoring.js";
 import { selectInternalRecipeCandidate } from "./internal-recipe-selection.js";
 import { createRecipeSearchTrace } from "./recipe-search-trace.js";
+import { selectWebRecipeCandidate } from "./web-recipe-selection.js";
 
 export interface RecipeResolution {
   recipe?: Recipe;
@@ -204,11 +205,7 @@ export class RecipeDiscoveryService {
       }
     }
 
-    const winner = candidates.sort((left, right) => {
-      const leftScore = left.recipe.source.qualityScore * 1.4 + left.recipe.source.fitScore;
-      const rightScore = right.recipe.source.qualityScore * 1.4 + right.recipe.source.fitScore;
-      return rightScore - leftScore;
-    })[0];
+    const winner = selectWebRecipeCandidate(candidates);
 
     if (!winner) {
       const categoryHint =
