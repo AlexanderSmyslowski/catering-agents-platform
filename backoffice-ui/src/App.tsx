@@ -68,7 +68,6 @@ import { buildProductionDocumentSubmitActions } from "./production-document-subm
 import { buildProductionTextIntakeSubmitAction } from "./production-text-intake-submit-action.js";
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
-import { buildProductionQuestionAutoOpenState } from "./production-question-auto-open-state.js";
 import { buildAppProductionRouteState } from "./app-production-route-state.js";
 import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
 import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
@@ -87,6 +86,7 @@ import {
   buildProductionWindowFileActions
 } from "./production-window-file-actions.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
+import { useProductionQuestionAutoOpen } from "./use-production-question-auto-open.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
 import { useProductionIntakeRequestDetail } from "./use-production-intake-request-detail.js";
@@ -573,25 +573,14 @@ export function App() {
     setError
   });
 
-  useEffect(() => {
-    const autoOpenState = buildProductionQuestionAutoOpenState({
-      route,
-      focusedProductionSpec,
-      productionQuestionCount: productionQuestions.length,
-      editingSpecId,
-      dismissedProductionAnswerSpecId
-    });
-
-    if (autoOpenState.shouldAutoOpen && autoOpenState.specId && focusedProductionSpec) {
-      loadSpecIntoEditor(focusedProductionSpec);
-    }
-  }, [
-    dismissedProductionAnswerSpecId,
-    editingSpecId,
+  useProductionQuestionAutoOpen({
+    route,
     focusedProductionSpec,
-    productionQuestions.length,
-    route
-  ]);
+    productionQuestionCount: productionQuestions.length,
+    editingSpecId,
+    dismissedProductionAnswerSpecId,
+    loadSpecIntoEditor
+  });
 
   useEffect(() => {
     if (route !== "production") {
