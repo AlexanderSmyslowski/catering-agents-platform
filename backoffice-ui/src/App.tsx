@@ -57,6 +57,7 @@ import {
   buildProductionManualInputActions,
   buildProductionManualInputStateFromForm
 } from "./production-manual-input-state.js";
+import { buildProductionManualSpecSubmitAction } from "./production-manual-spec-submit-action.js";
 import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { buildProductionDocumentSubmitActions } from "./production-document-submit-action.js";
@@ -568,25 +569,18 @@ export function App() {
     setError
   });
 
-  async function handleManualSpecSubmit() {
-    setSubmitting(true);
-    setProductionWorkspaceCleared(false);
-    clearMessages();
-    try {
-      const response = await createAcceptedSpecFromManualForm(buildCurrentManualSpecInput());
-      const specId = extractAcceptedSpecId(response);
-      if (specId) {
-        setFocusedProductionSpecId(specId);
-      }
-      resetManualSpecDraft();
-      await refreshDashboard();
-      setNotice("Manuelle Spezifikation wurde angelegt.");
-    } catch (submitError) {
-      setError(formatSubmitErrorMessage(submitError, "Manuelle Spezifikation konnte nicht erstellt werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const handleManualSpecSubmit = buildProductionManualSpecSubmitAction({
+    createAcceptedSpecFromManualForm,
+    buildCurrentManualSpecInput,
+    setSubmitting,
+    setProductionWorkspaceCleared,
+    clearMessages,
+    setFocusedProductionSpecId,
+    resetManualSpecDraft,
+    refreshDashboard,
+    setNotice,
+    setError
+  });
 
   const handleCreatePlan = buildProductionPlanSubmissionAction({
     createProductionPlan,
