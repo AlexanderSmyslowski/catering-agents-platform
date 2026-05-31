@@ -4,6 +4,7 @@ import type {
   ProductionPlanProgressState
 } from "./production-objects-panel.js";
 import type { ProductionPurchaseListState } from "./production-purchase-list-panel.js";
+import { buildProductionQuestionPanelState } from "./production-question-panel-state.js";
 import type { ProductionQuestionPanelState } from "./production-question-panel.js";
 import type {
   ProductionRecipeLibraryState,
@@ -120,10 +121,6 @@ export function buildProductionRouteViewState({
   recipeFile,
   filteredRecipes
 }: ProductionRouteViewStateInput): ProductionRouteViewState {
-  const questionPanelIntakeRequestDetail = productionWorkspaceCleared ? null : intakeRequestDetail;
-  const questionPanelIntakeRequestDetailError = productionWorkspaceCleared ? undefined : intakeRequestDetailError;
-  const questionPanelFilteredSpecs = productionWorkspaceCleared ? [] : filteredSpecs;
-
   return {
     workbenchSummary: {
       activeSpecLabel: activeProductionContextLabel,
@@ -138,7 +135,7 @@ export function buildProductionRouteViewState({
       purchaseListCount: currentSpecPurchaseLists.length
     },
     workbenchNextStep: productionNextStep,
-    questionState: {
+    questionState: buildProductionQuestionPanelState({
       focusedProductionSpec,
       focusedSpecReadinessLabel,
       selectedPlan,
@@ -148,12 +145,12 @@ export function buildProductionRouteViewState({
       productionAssumptions,
       productionConversationProjection,
       workbenchSpecFacts,
-      intakeRequestDetailError: questionPanelIntakeRequestDetailError,
-      intakeRequestDetail: questionPanelIntakeRequestDetail,
-      filteredSpecs: questionPanelFilteredSpecs,
+      intakeRequestDetailError,
+      intakeRequestDetail,
+      filteredSpecs,
       documentPhase,
       productionWorkspaceCleared
-    },
+    }),
     objectPanelProgress: {
       planPhase,
       planningSpecLabel,
