@@ -135,6 +135,11 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Einkaufslisten-Exportlink");
+    expect(script).toContain("Offener-Rueckfragen-Pfad ohne Fehlupload-Archiv-Aktion");
+    expect(script).toContain("Offener-Rueckfragen-Pfad deaktiviert Fehlupload-Archiv trotz aktivem Intake-Kontext");
+    expect(script).toContain("Offener-Rueckfragen-Pfad bindet Fehlupload-Archiv nicht an den aktuellen Intake-Kontext");
+    expect(script).toContain("Offener-Rueckfragen-Pfad beschriftet Fehlupload-Archiv nicht mit dem aktuellen Intake-Kontext");
+    expect(script).toContain("Intake-Anfrage demo-production-answered-clarification");
   });
 
   it("keeps answer-submit browser rehearsal isolated to a fresh synthetic data root by default", () => {

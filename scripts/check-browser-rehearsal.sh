@@ -334,6 +334,27 @@ open_question_markers='async () => {
   if (html.includes("/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv")) {
     missing.push("Offener-Rueckfragen-Pfad zeigt alten Einkaufslisten-Exportlink");
   }
+  const archiveButton = [...document.querySelectorAll("button")].find((button) =>
+    (button.textContent ?? "").replace(/\s+/g, " ").trim().startsWith("Fehlupload archivieren")
+  );
+  if (!archiveButton) {
+    missing.push("Offener-Rueckfragen-Pfad ohne Fehlupload-Archiv-Aktion");
+  } else {
+    const archiveButtonText = (archiveButton.textContent ?? "").replace(/\s+/g, " ").trim();
+    const archiveTitle = archiveButton.getAttribute("title") ?? "";
+    if (archiveButton.disabled) {
+      missing.push("Offener-Rueckfragen-Pfad deaktiviert Fehlupload-Archiv trotz aktivem Intake-Kontext");
+    }
+    if (!archiveButtonText.includes("Intake-Anfrage demo-production-answered-clarification")) {
+      missing.push("Offener-Rueckfragen-Pfad bindet Fehlupload-Archiv nicht an den aktuellen Intake-Kontext");
+    }
+    if (
+      archiveTitle !==
+      "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage demo-production-answered-clarification"
+    ) {
+      missing.push("Offener-Rueckfragen-Pfad beschriftet Fehlupload-Archiv nicht mit dem aktuellen Intake-Kontext");
+    }
+  }
   const answerSaveButton = [...document.querySelectorAll("button")].find((button) =>
     (button.textContent ?? "").replace(/\s+/g, " ").trim() === "Antworten speichern"
   );
