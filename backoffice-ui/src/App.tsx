@@ -61,6 +61,7 @@ import { buildProductionManualSpecSubmitAction } from "./production-manual-spec-
 import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { buildProductionDocumentSubmitActions } from "./production-document-submit-action.js";
+import { buildProductionTextIntakeSubmitAction } from "./production-text-intake-submit-action.js";
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import { buildProductionPlanSubmissionAction } from "./production-plan-submission-action.js";
 import { buildProductionSpecSaveAction } from "./production-spec-save-action.js";
@@ -503,26 +504,17 @@ export function App() {
     setError
   });
 
-  async function handleIntakeSubmit() {
-    setSubmitting(true);
-    setProductionWorkspaceCleared(false);
-    clearMessages();
-    try {
-      const response = await createAcceptedSpecFromText(intakeText);
-      const specId = extractAcceptedSpecId(response);
-      if (specId) {
-        setFocusedProductionSpecId(specId);
-      }
-      await refreshDashboard();
-      setNotice("Freitext wurde in eine operative Spezifikation überführt.");
-    } catch (submitError) {
-      setError(
-        formatSubmitErrorMessage(submitError, "Erfassungstext konnte nicht normalisiert werden.")
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const handleIntakeSubmit = buildProductionTextIntakeSubmitAction({
+    createAcceptedSpecFromText,
+    intakeText,
+    setSubmitting,
+    setProductionWorkspaceCleared,
+    clearMessages,
+    setFocusedProductionSpecId,
+    refreshDashboard,
+    setNotice,
+    setError
+  });
 
   async function handleOfferSubmit() {
     setSubmitting(true);
