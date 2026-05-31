@@ -41,14 +41,27 @@ require_ui_shell() {
   fi
 }
 
-check_markers() {
+check_current_page_markers() {
   local label="$1"
-  local route="$2"
-  local marker_script="$3"
+  local marker_script="$2"
 
-  run_browser goto "${BASE_URL}${route}" >/dev/null
   run_browser eval "${marker_script}" >/dev/null
-  printf '  %s: Browser-Marker sichtbar (%s%s)\n' "${label}" "${BASE_URL}" "${route}"
+  printf '  %s: Browser-Marker sichtbar\n' "${label}"
+}
+
+click_rehearsal_link() {
+  local label="$1"
+  local target_path="$2"
+  local click_script="$3"
+
+  run_browser eval "${click_script}" >/dev/null
+  run_browser eval "() => {
+    if (location.pathname !== \"${target_path}\") {
+      throw new Error(\"${label} navigierte nach \" + location.pathname + \" statt ${target_path}\");
+    }
+    return { route: location.pathname };
+  }" >/dev/null
+  printf '  %s: Browser-Navigation nach %s bestaetigt\n' "${label}" "${target_path}"
 }
 
 trap close_browser EXIT
@@ -134,10 +147,39 @@ production_markers='() => {
   return { route: location.pathname, markers: "production-ok" };
 }'
 
-echo "Route-/Markerpruefung:"
-check_markers "Start" "/" "${home_markers}"
-check_markers "Angebot" "/angebot" "${offer_markers}"
-check_markers "Produktion" "/produktion" "${production_markers}"
+home_to_offer='() => {
+  const candidates = [...document.querySelectorAll("a")];
+  const link = candidates.find((anchor) =>
+    anchor.getAttribute("href") === "/angebot" &&
+    ((anchor.textContent ?? "").includes("Angebotsagent öffnen") ||
+      (anchor.textContent ?? "").includes("Angebotsagent"))
+  );
+  if (!link) {
+    throw new Error("Start-Link zum Angebotsagent fehlt");
+  }
+  link.click();
+  return { clicked: link.textContent?.trim() };
+}'
+
+offer_to_production='() => {
+  const candidates = [...document.querySelectorAll("a")];
+  const link = candidates.find((anchor) =>
+    anchor.getAttribute("href") === "/produktion" &&
+    (anchor.textContent ?? "").includes("Zur Produktion")
+  );
+  if (!link) {
+    throw new Error("Angebot-Handoff-Link zur Produktion fehlt");
+  }
+  link.click();
+  return { clicked: link.textContent?.trim() };
+}'
+
+echo "Browser-Navigations- und Markerpruefung:"
+check_current_page_markers "Start" "${home_markers}"
+click_rehearsal_link "Start -> Angebot" "/angebot" "${home_to_offer}"
+check_current_page_markers "Angebot" "${offer_markers}"
+click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
+check_current_page_markers "Produktion" "${production_markers}"
 
 echo ""
 echo "Browser-Rehearsal-Kernpfad bestaetigt: Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit."
