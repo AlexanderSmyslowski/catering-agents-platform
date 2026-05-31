@@ -7,6 +7,7 @@ BASE_URL="${CATERING_BROWSER_REHEARSAL_BASE_URL:-http://127.0.0.1:3200}"
 SESSION_NAME="${CATERING_BROWSER_REHEARSAL_SESSION:-cap}"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 SUBMIT_ANSWERS="${CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS:-0}"
+ARCHIVE_INTAKE="${CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE:-0}"
 ALLOW_PERSISTENT_MUTATION="${CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION:-0}"
 DATA_ROOT_FILE="${ROOT_DIR}/.runtime/local-stack/data-root.txt"
 
@@ -86,10 +87,10 @@ trap close_browser EXIT
 
 cd "${ROOT_DIR}"
 
-if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
+if [[ "${SUBMIT_ANSWERS}" == "1" || "${ARCHIVE_INTAKE}" == "1" ]]; then
   recorded_data_root="$(cat "${DATA_ROOT_FILE}" 2>/dev/null || true)"
   if [[ "${ALLOW_PERSISTENT_MUTATION}" != "1" && "${recorded_data_root}" != *"catering-agents-rehearsal-"* ]]; then
-    echo "Answer-Submit-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run." >&2
+    echo "Mutierender Browser-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run." >&2
     echo "Starte vorher: npm run local:start:fresh" >&2
     echo "Aktuelle Datenwurzel: ${recorded_data_root:-unbekannt}" >&2
     echo "Nur bewusst ueberschreiben mit CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION=1." >&2
@@ -102,6 +103,9 @@ echo "Base URL: ${BASE_URL}"
 echo "Session: ${SESSION_NAME}"
 if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
   echo "Answer-Submit-Modus: aktiv (Fresh-Rehearsal-Datenroot erwartet)"
+fi
+if [[ "${ARCHIVE_INTAKE}" == "1" ]]; then
+  echo "Archiv-Modus: aktiv (Fresh-Rehearsal-Datenroot erwartet)"
 fi
 echo ""
 
@@ -279,6 +283,7 @@ production_markers='async () => {
 open_question_markers='async () => {
   const missing = [];
   const shouldSubmitAnswers = '"${SUBMIT_ANSWERS}"' === "1";
+  const shouldArchiveIntake = '"${ARCHIVE_INTAKE}"' === "1";
   const partialQuestionButton = [...document.querySelectorAll("button")].find((button) => {
     const label = button.getAttribute("aria-label") ?? "";
     return label.includes("Rückfragen öffnen: Lunch") && label.includes("teilweise vollständig");
@@ -354,6 +359,73 @@ open_question_markers='async () => {
     ) {
       missing.push("Offener-Rueckfragen-Pfad beschriftet Fehlupload-Archiv nicht mit dem aktuellen Intake-Kontext");
     }
+  }
+  if (shouldArchiveIntake) {
+    if (!archiveButton) {
+      missing.push("Archive-Rehearsal ohne Fehlupload-Archiv-Aktion");
+    } else if (archiveButton.disabled) {
+      missing.push("Archive-Rehearsal kann Fehlupload-Archiv-Aktion nicht klicken");
+    } else {
+      archiveButton.click();
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const archivedText = document.body.innerText;
+        if (
+          archivedText.includes(
+            "Fehlupload demo-production-answered-clarification wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+          ) &&
+          archivedText.includes("Kein aktiver Vorgang") &&
+          archivedText.includes("Auftrag einfügen oder Datei ablegen") &&
+          !archivedText.includes("requestId: demo-production-answered-clarification")
+        ) {
+          break;
+        }
+      }
+
+      const archivedText = document.body.innerText;
+      const archivedHtml = document.body.innerHTML;
+      const archivedButtons = [...document.querySelectorAll("button")].map((button) => ({
+        text: (button.textContent ?? "").replace(/\s+/g, " ").trim(),
+        disabled: button.disabled,
+        title: button.getAttribute("title") ?? ""
+      }));
+      const archivedArchiveButton = archivedButtons.find((button) => button.text === "Fehlupload archivieren");
+      if (
+        !archivedText.includes(
+          "Fehlupload demo-production-answered-clarification wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+        )
+      ) {
+        missing.push("Archive-Rehearsal ohne Soft-Archiv-Erfolgsmeldung");
+      }
+      if (!archivedText.includes("Kein aktiver Vorgang")) {
+        missing.push("Archive-Rehearsal ohne leeren aktiven Vorgang nach Klick");
+      }
+      if (!archivedText.includes("Auftrag einfügen oder Datei ablegen")) {
+        missing.push("Archive-Rehearsal ohne sichere naechste Eingabe nach Klick");
+      }
+      if (archivedText.includes("requestId: demo-production-answered-clarification")) {
+        missing.push("Archive-Rehearsal zeigt archivierten Intake weiter als aktiven Kontext");
+      }
+      if (archivedText.includes("Lunch · 42 Teilnehmer · 2026-12-16")) {
+        missing.push("Archive-Rehearsal zeigt archivierte Spezifikation weiter als aktiven Vorgang");
+      }
+      if (archivedHtml.includes("/api/intake/v1/intake/requests/demo-production-answered-clarification")) {
+        missing.push("Archive-Rehearsal behaelt archivierten Intake-Detailanker im DOM");
+      }
+      if (!archivedArchiveButton) {
+        missing.push("Archive-Rehearsal nach Klick ohne Fehlupload-Archiv-Aktion");
+      } else if (
+        !archivedArchiveButton.disabled ||
+        archivedArchiveButton.title !== "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv."
+      ) {
+        missing.push("Archive-Rehearsal laesst Fehlupload-Archiv nach Klick aktiv oder falsch beschriftet");
+      }
+    }
+
+    if (missing.length > 0) {
+      throw new Error(`Archiv-Browserpfad fehlgeschlagen: ${missing.join(" | ")}`);
+    }
+    return { route: location.pathname, markers: "archive-intake-ok" };
   }
   const answerSaveButton = [...document.querySelectorAll("button")].find((button) =>
     (button.textContent ?? "").replace(/\s+/g, " ").trim() === "Antworten speichern"
@@ -630,6 +702,12 @@ check_current_page_markers "Angebot" "${offer_markers}"
 click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
 check_current_page_markers "Produktion" "${production_markers}"
 check_current_page_markers "Produktion offene Rueckfragen" "${open_question_markers}"
+if [[ "${ARCHIVE_INTAKE}" == "1" ]]; then
+  echo ""
+  echo "Browser-Rehearsal-Archivpfad bestaetigt: synthetischer aktiver Intake-Kontext wurde per Soft-Archiv aus dem Fokus genommen."
+  echo "Grenze: mutierender Fresh-Rehearsal-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
+  exit 0
+fi
 run_browser open "${BASE_URL}/produktion" >/dev/null
 check_current_page_markers "Produktion Ergebnis-Kontext wiederhergestellt" "${production_markers}"
 if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then

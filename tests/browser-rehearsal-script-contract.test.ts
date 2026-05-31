@@ -12,9 +12,13 @@ describe("browser rehearsal script contract", () => {
     expect(packageJson.scripts?.["browser:rehearsal:answer-submit"]).toBe(
       "CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 bash ./scripts/check-browser-rehearsal.sh"
     );
+    expect(packageJson.scripts?.["browser:rehearsal:archive-intake"]).toBe(
+      "CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 bash ./scripts/check-browser-rehearsal.sh"
+    );
     expect(script).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
+    expect(script).toContain("CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE");
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
     expect(script).toContain("Browser-Navigations- und Markerpruefung");
     expect(script).toContain("click_rehearsal_link");
@@ -140,16 +144,23 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Offener-Rueckfragen-Pfad bindet Fehlupload-Archiv nicht an den aktuellen Intake-Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad beschriftet Fehlupload-Archiv nicht mit dem aktuellen Intake-Kontext");
     expect(script).toContain("Intake-Anfrage demo-production-answered-clarification");
+    expect(script).toContain("shouldArchiveIntake");
+    expect(script).toContain("archiveButton.click()");
+    expect(script).toContain("Archive-Rehearsal ohne Soft-Archiv-Erfolgsmeldung");
+    expect(script).toContain("Archive-Rehearsal zeigt archivierten Intake weiter als aktiven Kontext");
+    expect(script).toContain("Archive-Rehearsal laesst Fehlupload-Archiv nach Klick aktiv oder falsch beschriftet");
+    expect(script).toContain("Browser-Rehearsal-Archivpfad bestaetigt");
   });
 
-  it("keeps answer-submit browser rehearsal isolated to a fresh synthetic data root by default", () => {
+  it("keeps mutating browser rehearsals isolated to a fresh synthetic data root by default", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
 
-    expect(script).toContain("Answer-Submit-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run.");
+    expect(script).toContain("Mutierender Browser-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run.");
     expect(script).toContain("npm run local:start:fresh");
     expect(script).toContain("catering-agents-rehearsal-");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION");
     expect(script).toContain("Answer-Submit-Modus: aktiv");
+    expect(script).toContain("Archiv-Modus: aktiv");
   });
 
   it("guards production workspace actions against unsafe stale or empty states", () => {
