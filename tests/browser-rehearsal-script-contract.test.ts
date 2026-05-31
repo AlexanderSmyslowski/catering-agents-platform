@@ -12,6 +12,8 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
+    expect(script).toContain("Browser-Navigations- und Markerpruefung");
+    expect(script).toContain("click_rehearsal_link");
     expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
   });
 
@@ -22,6 +24,7 @@ describe("browser rehearsal script contract", () => {
       "Internes Beta-Kontrollzentrum",
       "Beta-Weg: Start → Angebot → Produktion → Rückfragen → Exporte/Audit.",
       "Kundenanfrage einfügen und ruhigen Entwurf erzeugen",
+      "Angebotsagent öffnen",
       "Zur Produktion",
       "Was braucht die Produktion als Nächstes?",
       "Produktionsobjekte und Downloads prüfen",
@@ -33,5 +36,16 @@ describe("browser rehearsal script contract", () => {
     ]) {
       expect(script).toContain(marker);
     }
+  });
+
+  it("requires the browser flow to navigate through visible app links instead of route-only checks", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+
+    expect(script).toContain("Start -> Angebot");
+    expect(script).toContain("Angebot -> Produktion");
+    expect(script).toContain("location.pathname !== \\\"${target_path}\\\"");
+    expect(script).toContain("click_rehearsal_link \"Start -> Angebot\" \"/angebot\"");
+    expect(script).toContain("click_rehearsal_link \"Angebot -> Produktion\" \"/produktion\"");
+    expect(script).toContain("link.click()");
   });
 });
