@@ -14,6 +14,8 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
     expect(script).toContain("Browser-Navigations- und Markerpruefung");
     expect(script).toContain("click_rehearsal_link");
+    expect(script).toContain("Produktion offene Rueckfragen");
+    expect(script).toContain("Produktion Ergebnis-Kontext wiederhergestellt");
     expect(script).toContain("Produktion lokal geleert");
     expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
   });
@@ -84,6 +86,26 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Rückfragenstatus und Rückfragenpanel zeigen unterschiedliche Zaehler");
     expect(script).toContain("ältere Listen sind kein aktueller Vorgang");
     expect(script).toContain("nicht das aktuelle Ergebnis");
+  });
+
+  it("clicks a synthetic partial production spec and guards the open question browser path", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+
+    expect(script).toContain("open_question_markers");
+    expect(script).toContain("Rückfragen öffnen: Lunch");
+    expect(script).toContain("teilweise vollständig");
+    expect(script).toContain("Lunch · 42 Teilnehmer · 2026-12-16");
+    expect(script).toContain("Rückfragenstatus: offen 5 · beantwortet 0");
+    expect(script).toContain("Rückfragen und Antworten\\\\noffen 5 · beantwortet 0");
+    expect(script).toContain("production-session-spec-demo-production-answered-clarification");
+    expect(script).toContain("Bitte prüfen: Synthetischer Rueckfragenanker fuer Demo.");
+    expect(script).toContain("Antwort direkt zur Agentenfrage");
+    expect(script).toContain("Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.");
+    expect(script).toContain("Produktionsblatt offen · Einkaufsliste offen");
+    expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan als aktuellen Kontext");
+    expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
+    expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");
+    expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Einkaufslisten-Exportlink");
   });
 
   it("guards production workspace actions against unsafe stale or empty states", () => {

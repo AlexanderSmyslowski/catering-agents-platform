@@ -259,6 +259,69 @@ production_markers='async () => {
   return { route: location.pathname, markers: "production-ok" };
 }'
 
+open_question_markers='async () => {
+  const missing = [];
+  const partialQuestionButton = [...document.querySelectorAll("button")].find((button) => {
+    const label = button.getAttribute("aria-label") ?? "";
+    return label.includes("Rückfragen öffnen: Lunch") && label.includes("teilweise vollständig");
+  });
+
+  if (!partialQuestionButton) {
+    throw new Error("Offener-Rueckfragen-Browserpfad ohne partial Lunch-Aktion");
+  }
+
+  partialQuestionButton.click();
+
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const text = document.body.innerText;
+    if (
+      text.includes("Lunch · 42 Teilnehmer · 2026-12-16") &&
+      text.includes("Rückfragenstatus: offen 5 · beantwortet 0") &&
+      text.includes("production-session-spec-demo-production-answered-clarification")
+    ) {
+      break;
+    }
+  }
+
+  const text = document.body.innerText;
+  const html = document.body.innerHTML;
+  for (const marker of [
+    "Nächster Schritt\\n\\nRückfragen beantworten",
+    "Lunch · 42 Teilnehmer · 2026-12-16",
+    "Klarheit: teilweise vollständig · Rückfragen: 5 offene Rückfragen",
+    "Rückfragenstatus: offen 5 · beantwortet 0",
+    "Rückfragen und Antworten\\noffen 5 · beantwortet 0",
+    "ConversationSession-Projektion",
+    "production-session-spec-demo-production-answered-clarification",
+    "Rückfrage offen",
+    "Bitte prüfen: Synthetischer Rueckfragenanker fuer Demo.",
+    "Antwort direkt zur Agentenfrage",
+    "Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.",
+    "Produktionsblatt offen · Einkaufsliste offen"
+  ]) {
+    if (!text.includes(marker)) {
+      missing.push(`Offener-Rueckfragen-Marker fehlt: ${marker}`);
+    }
+  }
+  if (text.includes("Plan-Kontext: planId plan-spec-demo-production-coffee")) {
+    missing.push("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan als aktuellen Kontext");
+  }
+  if (text.includes("purchaseListId: purchase-spec-demo-production-coffee")) {
+    missing.push("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
+  }
+  if (html.includes("/api/exports/v1/exports/production-plans/plan-spec-demo-production-coffee/html")) {
+    missing.push("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");
+  }
+  if (html.includes("/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv")) {
+    missing.push("Offener-Rueckfragen-Pfad zeigt alten Einkaufslisten-Exportlink");
+  }
+  if (missing.length > 0) {
+    throw new Error(`Offener-Rueckfragen-Browserpfad fehlgeschlagen: ${missing.join(" | ")}`);
+  }
+  return { route: location.pathname, markers: "open-question-ok" };
+}'
+
 clear_workspace_markers='async () => {
   const beforeText = document.body.innerText;
   const beforeHtml = document.body.innerHTML;
@@ -388,6 +451,9 @@ click_rehearsal_link "Start -> Angebot" "/angebot" "${home_to_offer}"
 check_current_page_markers "Angebot" "${offer_markers}"
 click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
 check_current_page_markers "Produktion" "${production_markers}"
+check_current_page_markers "Produktion offene Rueckfragen" "${open_question_markers}"
+run_browser open "${BASE_URL}/produktion" >/dev/null
+check_current_page_markers "Produktion Ergebnis-Kontext wiederhergestellt" "${production_markers}"
 check_current_page_markers "Produktion lokal geleert" "${clear_workspace_markers}"
 
 echo ""
