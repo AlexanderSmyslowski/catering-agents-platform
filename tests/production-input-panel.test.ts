@@ -76,6 +76,22 @@ function renderPanel(sourceInput: ProductionSourceInputValues): string {
 }
 
 describe("production input panel", () => {
+  it("keeps workspace actions contextual for rehearsal cleanup", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        canClearWorkspace: true,
+        canArchiveCurrentIntake: true,
+        clearWorkspaceContextLabel: "Lunch · 30 Teilnehmer · 2026-06-18",
+        archiveCurrentIntakeContextLabel: "Intake-Anfrage request-123"
+      })
+    );
+
+    expect(markup).toContain("Arbeitsbereich leeren");
+    expect(markup).toContain("für Lunch · 30 Teilnehmer · 2026-06-18");
+    expect(markup).toContain("Fehlupload archivieren");
+    expect(markup).toContain("für Intake-Anfrage request-123");
+  });
+
   it("keeps the document retry action inactive until a file is available", () => {
     const markup = renderPanel(buildSourceInput());
 

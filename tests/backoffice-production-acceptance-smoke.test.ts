@@ -858,6 +858,9 @@ describe("backoffice production acceptance smoke", () => {
 
       expect(archiveButton).toBeTruthy();
       expect(archiveButton?.disabled).toBe(false);
+      expect(archiveButton?.textContent).toContain(
+        "Fehlupload archivieren für Intake-Anfrage request-production-fallback-1"
+      );
 
       await act(async () => {
         archiveButton?.click();
@@ -909,6 +912,7 @@ describe("backoffice production acceptance smoke", () => {
 
       expect(clearButton).toBeTruthy();
       expect(clearButton?.disabled).toBe(false);
+      expect(clearButton?.textContent).toContain("Arbeitsbereich leeren für Konferenz · 36 Teilnehmer · 2026-07-13");
       expect(document.body.textContent ?? "").toContain("requestId: request-production-fallback-1");
 
       await act(async () => {
@@ -1089,9 +1093,9 @@ describe("backoffice production acceptance smoke", () => {
     expect(route.text).toContain("Fehlupload archivieren");
     expect(route.text).toContain("Rückfragen: keine offenen Rückfragen");
     expect(route.text).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
-    expect(route.html).toContain("Arbeitsbereich leeren</button>");
-    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Arbeitsbereich leeren\s*<\/button>/);
-    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlupload archivieren\s*<\/button>/);
+    expect(route.html).toContain("Arbeitsbereich leeren");
+    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Arbeitsbereich leeren/);
+    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlupload archivieren/);
     expect(route.text).not.toContain("Löschen");
   });
 
