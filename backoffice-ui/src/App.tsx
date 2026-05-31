@@ -59,8 +59,7 @@ import {
 } from "./production-manual-input-state.js";
 import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
-import { resetProductionStateAfterDocumentFailure } from "./production-document-failure-reset.js";
-import { completeProductionStateAfterDocumentSuccess } from "./production-document-success-state.js";
+import { buildProductionDocumentSubmitActions } from "./production-document-submit-action.js";
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import { buildProductionPlanSubmissionAction } from "./production-plan-submission-action.js";
 import { buildProductionSpecSaveAction } from "./production-spec-save-action.js";
@@ -542,48 +541,32 @@ export function App() {
     }
   }
 
-  async function handleIntakeDocumentSubmit() {
-    if (!intakeFile) {
-      setError("Bitte wähle zuerst ein Dokument aus.");
-      return;
-    }
-
-    await processIncomingProductionFile(intakeFile, intakeChannel);
-  }
-
-  async function processIncomingProductionFile(file: File, channel: IntakeDocumentChannel) {
-    setSubmitting(true);
-    setProductionWorkspaceCleared(false);
-    clearMessages();
-    startIncomingProductionFile(file, channel);
-    startDocumentProgress(file);
-    setNotice(`Dokument ${file.name} wird analysiert...`);
-
-    try {
-      const response = await createAcceptedSpecFromDocument(file, channel);
-      await completeProductionStateAfterDocumentSuccess(file, response, {
-        setFocusedProductionSpecId,
-        completeIncomingProductionFile,
-        completeDocumentProgress,
-        refreshDashboard,
-        setNotice
-      });
-    } catch (submitError) {
-      resetProductionStateAfterDocumentFailure(file, {
-        failIncomingProductionFile,
-        failDocumentProgress,
-        setProductionWorkspaceCleared,
-        clearFocusedProductionSpecId: () => setFocusedProductionSpecId(undefined),
-        clearSelectedPlanId: () => setSelectedPlanId(undefined),
-        resetPlanProgress,
-        resetIntakeRequestDetail,
-        resetSpecEdit
-      });
-      setError(formatSubmitErrorMessage(submitError, "Dokument konnte nicht normalisiert werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const {
+    submitSelectedDocument: handleIntakeDocumentSubmit,
+    processIncomingProductionFile
+  } = buildProductionDocumentSubmitActions({
+    createAcceptedSpecFromDocument,
+    intakeFile,
+    intakeChannel,
+    setSubmitting,
+    setProductionWorkspaceCleared,
+    clearMessages,
+    startIncomingProductionFile,
+    startDocumentProgress,
+    setFocusedProductionSpecId,
+    completeIncomingProductionFile,
+    completeDocumentProgress,
+    refreshDashboard,
+    setNotice,
+    failIncomingProductionFile,
+    failDocumentProgress,
+    clearFocusedProductionSpecId: () => setFocusedProductionSpecId(undefined),
+    clearSelectedPlanId: () => setSelectedPlanId(undefined),
+    resetPlanProgress,
+    resetIntakeRequestDetail,
+    resetSpecEdit,
+    setError
+  });
 
   async function handleManualSpecSubmit() {
     setSubmitting(true);
