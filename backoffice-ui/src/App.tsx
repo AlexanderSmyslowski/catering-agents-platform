@@ -66,11 +66,9 @@ import { buildProductionTextIntakeSubmitAction } from "./production-text-intake-
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import { buildProductionPlanSubmissionAction } from "./production-plan-submission-action.js";
 import { buildProductionSpecSaveAction } from "./production-spec-save-action.js";
-import {
-  buildProductionQuestionEditorState,
-  completeProductionQuestionEditSuccess
-} from "./production-question-editor-state.js";
+import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import { buildProductionQuestionAutoOpenState } from "./production-question-auto-open-state.js";
+import { buildProductionSpecEditPersistAction } from "./production-spec-edit-persist-action.js";
 import { buildAppProductionRouteState } from "./app-production-route-state.js";
 import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
 import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
@@ -559,6 +557,27 @@ export function App() {
     setError
   });
 
+  const persistCurrentSpecEdit = buildProductionSpecEditPersistAction({
+    editingSpecId,
+    updateAcceptedSpec,
+    buildCurrentSpecUpdateInput,
+    setProductionWorkspaceCleared,
+    setFocusedProductionSpecId,
+    resetSpecEdit,
+    refreshDashboard,
+    setNotice
+  });
+
+  const {
+    loadSpecIntoEditor,
+    beginSpecEdit,
+    openSpecForQuestions
+  } = buildProductionSpecFocusActions({
+    loadSpecIntoEditorState,
+    setProductionWorkspaceCleared,
+    setFocusedProductionSpecId
+  });
+
   const handleCreatePlan = buildProductionPlanSubmissionAction({
     createProductionPlan,
     editingSpecId,
@@ -575,38 +594,6 @@ export function App() {
     setNotice,
     setError
   });
-
-  const {
-    loadSpecIntoEditor,
-    beginSpecEdit,
-    openSpecForQuestions
-  } = buildProductionSpecFocusActions({
-    loadSpecIntoEditorState,
-    setProductionWorkspaceCleared,
-    setFocusedProductionSpecId
-  });
-
-  async function persistCurrentSpecEdit(options?: { quiet?: boolean }) {
-    if (!editingSpecId) {
-      return undefined;
-    }
-
-    const response = await updateAcceptedSpec(editingSpecId, buildCurrentSpecUpdateInput());
-    const updatedSpec = response.acceptedEventSpec;
-    await completeProductionQuestionEditSuccess(
-      updatedSpec,
-      editingSpecId,
-      {
-        setProductionWorkspaceCleared,
-        setFocusedProductionSpecId,
-        resetSpecEdit,
-        refreshDashboard,
-        setNotice
-      },
-      options
-    );
-    return updatedSpec;
-  }
 
   const handleSaveSpecEdit = buildProductionSpecSaveAction({
     editingSpecId,
