@@ -6,8 +6,6 @@ import {
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import {
-  bakerPurchaseComponent,
-  bakerPurchaseConstraintConflictReason,
   procurementItemsForComponent
 } from "./procurement-rules.js";
 import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.js";
@@ -24,6 +22,7 @@ import {
 } from "./planning-artifact-appender.js";
 import { planningComponentErrorReason } from "./planning-component-error-reason.js";
 import { createPlanningArtifactState } from "./planning-artifact-state.js";
+import { buildImplicitBakerPurchasePlanningArtifacts } from "./planning-baker-purchase-artifacts.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -49,33 +48,19 @@ export async function buildProductionArtifacts(
   for (const component of eventSpec.menuPlan) {
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
     const productionMode = component.productionDecision?.mode;
-    const implicitBakerPurchase = productionMode ? undefined : bakerPurchaseComponent(component);
 
     try {
-      if (implicitBakerPurchase) {
-        const constraintConflict = bakerPurchaseConstraintConflictReason(
-          implicitBakerPurchase,
-          eventSpec.productionConstraints
-        );
-        if (constraintConflict) {
-          const artifacts = buildUnresolvedComponentArtifacts({
-            component,
-            eventSpec,
-            servings,
-            reason: constraintConflict,
-            timelineLabel: `${component.label} Bäcker-Zukauf klären`
-          });
-          appendUnresolvedComponentArtifacts(artifactAppender, artifacts);
-          continue;
-        }
-
-        const artifacts = buildProcurementPlanningArtifacts({
-          eventSpec,
-          component: implicitBakerPurchase,
-          servings,
-          kind: "baker_purchase"
-        });
-        appendProcurementPlanningArtifacts(artifactAppender, artifacts);
+      const bakerPurchaseArtifacts = buildImplicitBakerPurchasePlanningArtifacts({
+        eventSpec,
+        component,
+        servings
+      });
+      if (bakerPurchaseArtifacts?.kind === "unresolved") {
+        appendUnresolvedComponentArtifacts(artifactAppender, bakerPurchaseArtifacts.artifacts);
+        continue;
+      }
+      if (bakerPurchaseArtifacts?.kind === "procurement") {
+        appendProcurementPlanningArtifacts(artifactAppender, bakerPurchaseArtifacts.artifacts);
         continue;
       }
 
