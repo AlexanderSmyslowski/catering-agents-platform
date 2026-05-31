@@ -392,6 +392,9 @@ open_question_markers='async () => {
       if (!submittedText.includes("Produktionsplan wurde erzeugt.")) {
         missing.push("Answer-Submit-Rehearsal ohne Plan-Erfolgsmeldung");
       }
+      if (!submittedText.includes("Teilnehmerzahl: 43")) {
+        missing.push("Answer-Submit-Rehearsal ohne gespeicherte strukturierte Teilnehmerzahl");
+      }
       if (!submittedText.includes("Plan-Kontext: planId ")) {
         missing.push("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
       }
