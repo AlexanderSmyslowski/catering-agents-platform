@@ -77,10 +77,7 @@ import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
 import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
-import {
-  buildProductionSourceInputActions,
-  buildProductionSourceInputState
-} from "./production-source-input-state.js";
+import { buildProductionSourceInputBundle } from "./production-source-input-bundle.js";
 import { buildProductionSourceFileUploadActions } from "./production-source-file-actions.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
@@ -706,7 +703,10 @@ export function App() {
     ...manualSpecForm,
     submitManualSpec: handleManualSpecSubmit
   });
-  const productionSourceInput = buildProductionSourceInputState({
+  const {
+    productionSourceInput,
+    productionSourceInputActions
+  } = buildProductionSourceInputBundle({
     dragActive,
     intakeFile,
     intakeChannel,
@@ -720,9 +720,7 @@ export function App() {
     clearWorkspaceContextLabel: activeProductionContextLabel,
     archiveCurrentIntakeContextLabel: currentIntakeRequestId
       ? `Intake-Anfrage ${currentIntakeRequestId}`
-      : undefined
-  });
-  const productionSourceInputActions = buildProductionSourceInputActions({
+      : undefined,
     uploadInputRef: productionUploadInputRef,
     setDragActive,
     setIntakeChannel,
