@@ -23,13 +23,15 @@ describe("production spec switch list state", () => {
         spec: completeSpec,
         specId: "spec-complete",
         label: "Konferenz · 120 Teilnehmer · 2026-09-18",
-        readinessLabel: "Klarheit: vollständig"
+        readinessLabel: "Klarheit: vollständig",
+        openActionLabel: "Rückfragen öffnen: Konferenz · 120 Teilnehmer · 2026-09-18 · Klarheit: vollständig"
       },
       {
         spec: partialSpec,
         specId: "spec-demo-production-answered-clarification",
         label: "Lunch · 42 Teilnehmer · 2026-12-16",
-        readinessLabel: "Klarheit: teilweise vollständig"
+        readinessLabel: "Klarheit: teilweise vollständig",
+        openActionLabel: "Rückfragen öffnen: Lunch · 42 Teilnehmer · 2026-12-16 · Klarheit: teilweise vollständig"
       }
     ]);
   });
@@ -46,7 +48,8 @@ describe("production spec switch list state", () => {
     expect(item).toMatchObject({
       specId: "spec-open",
       label: "Besprechung · ? Teilnehmer · offen",
-      readinessLabel: "Klarheit: -"
+      readinessLabel: "Klarheit: -",
+      openActionLabel: "Rückfragen öffnen: Besprechung · ? Teilnehmer · offen · Klarheit: -"
     });
   });
 });
