@@ -98,6 +98,12 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Rückfragenstatus und Rückfragenpanel zeigen unterschiedliche Zaehler");
     expect(script).toContain("ältere Listen sind kein aktueller Vorgang");
     expect(script).toContain("nicht das aktuelle Ergebnis");
+    expect(script).toContain("production_result_reload_markers");
+    expect(script).toContain("Produktion Ergebnis-Reload stabil");
+    expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuellen Plan-Kontext");
+    expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuelle Einkaufsliste");
+    expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuellen Produktionsplan-Exportlink");
+    expect(script).toContain("Produktions-Ergebnis-Reload faellt in leeren Ergebniszustand zurueck");
   });
 
   it("clicks a synthetic partial production spec and guards the open question browser path", () => {
