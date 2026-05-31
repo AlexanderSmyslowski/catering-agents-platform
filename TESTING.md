@@ -271,6 +271,13 @@ Abgrenzung der lokalen Befehle:
 - Wenn `npm run local:check` moegliche Rezept-Arbeitsschritte als Einkaufspositionen in lokalen Einkaufslisten meldet, ist das ebenfalls kein rotes Gate, aber ein lokaler Stale-Datenbefund. Die manuelle UI-Sichtung darf daraus kein aktuelles Parser-/Planungsproblem ableiten, ohne einen kontrollierten Frischlauf oder bewussten Soft-Archiv-Pfad zu dokumentieren; der Check bereinigt diese Listen nicht automatisch.
 - `npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse wieder. Der Befehl ist der Abschluss des lokalen Demo-Durchlaufs und kein Server- oder Deployment-Eingriff.
 
+Browser-Rehearsal-Modi:
+
+- `npm run browser:rehearsal` ist der nicht-mutierende Browser-Kernpfad fuer `Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit` gegen den laufenden lokalen Stack.
+- `npm run browser:rehearsal:answer-submit` ist ein mutierender Fresh-Run: vorher `npm run local:start:fresh`, dann synthetische Rueckfragenantworten speichern, Produktionsplan/Einkaufsliste berechnen und Reload-Kontext pruefen.
+- `npm run browser:rehearsal:archive-intake` ist ein mutierender Fresh-Run: vorher `npm run local:start:fresh`, dann den synthetischen Fehlupload-/Intake-Kontext per Soft-Archiv aus dem aktiven Produktionsfokus nehmen.
+- Mutierende Browser-Rehearsals duerfen nur die temporaere synthetische Fresh-Datenwurzel veraendern; sie sind kein Echte-Daten-Beleg, kein Deployment, keine Compliance-Aussage und keine Produktionsfreigabe.
+
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 
 Option-A-Zeitfenster-Grenze im lokalen Smoke-Korridor: lokale Gruensignale aus `npm run local:status` und `npm run local:check` belegen keine strukturierte Zeitfensterloesung; die `Zeitfenster-Rehearsal-Notiz` bleibt eine manuelle Copy-/Anleitungsnotiz; es gibt keine automatische `event.schedule`-Uebernahme und kein Schedule-/Zeitfenster-Datenmodell.
