@@ -85,4 +85,30 @@ describe("production status summary state", () => {
     });
     expect(state.productionNextStep.title).toBe("Auftrag einfügen oder Datei ablegen");
   });
+
+  it("keeps the initial production loading state from looking like an empty active workflow", () => {
+    const state = buildProductionStatusSummaryState({
+      isInitialProductionLoading: true,
+      currentSpecPlans: [],
+      currentSpecPurchaseLists: [],
+      productionQuestions: [],
+      filteredAuditEvents: [],
+      productionWorkspaceCleared: false
+    });
+
+    expect(state).toMatchObject({
+      activeProductionContextLabel: "Produktionsdaten werden geladen; noch kein Vorgang bewertet.",
+      focusedSpecReadinessLabel: "wird geladen",
+      productionPlanStatusLabel: "wird geladen",
+      productionObjectStatusLabel: "Produktionspläne werden geladen",
+      purchaseZoneStatusLabel: "Einkaufslisten werden geladen",
+      productionIntakeOriginLabel: "Intake-Ursprung wird geladen",
+      productionAuditTrailLabel: "Audit-Ereignisse werden geladen",
+      productionHandoffExportLabel: "Exportstatus wird geladen"
+    });
+    expect(state.productionNextStep).toEqual({
+      title: "Produktionsdaten laden",
+      description: "Bestehende Vorgänge, Pläne, Einkaufslisten und Rückfragen werden gerade geladen."
+    });
+  });
 });

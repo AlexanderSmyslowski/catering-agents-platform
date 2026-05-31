@@ -5,6 +5,7 @@ import {
 import type { ProductionRouteFilterPanelProps } from "./production-route-filter-panel.js";
 
 export type ProductionRouteFilterStateInput = {
+  isInitialProductionLoading?: boolean;
   productionPlanCount: number;
   purchaseListCount: number;
   recipeCount: number;
@@ -17,6 +18,7 @@ export type ProductionRouteFilterStateInput = {
 };
 
 export function buildProductionRouteFilterState({
+  isInitialProductionLoading,
   productionPlanCount,
   purchaseListCount,
   recipeCount,
@@ -28,6 +30,7 @@ export function buildProductionRouteFilterState({
   setSearch
 }: ProductionRouteFilterStateInput): ProductionRouteFilterPanelProps {
   return {
+    isInitialProductionLoading: Boolean(isInitialProductionLoading),
     productionPlanCount,
     purchaseListCount,
     recipeCount,

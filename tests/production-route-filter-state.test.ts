@@ -7,6 +7,7 @@ describe("production route filter state", () => {
 
     expect(
       buildProductionRouteFilterState({
+        isInitialProductionLoading: false,
         productionPlanCount: 3,
         purchaseListCount: 2,
         recipeCount: 12,
@@ -21,6 +22,7 @@ describe("production route filter state", () => {
         setSearch
       })
     ).toEqual({
+      isInitialProductionLoading: false,
       productionPlanCount: 3,
       purchaseListCount: 2,
       recipeCount: 12,
@@ -35,6 +37,7 @@ describe("production route filter state", () => {
 
   it("keeps unknown production service status labels explicit", () => {
     const state = buildProductionRouteFilterState({
+      isInitialProductionLoading: true,
       productionPlanCount: 0,
       purchaseListCount: 0,
       recipeCount: 0,
@@ -46,6 +49,7 @@ describe("production route filter state", () => {
       setSearch: (_value) => undefined
     });
 
+    expect(state.isInitialProductionLoading).toBe(true);
     expect(state.productionServiceStatusLabel).toBe("degraded");
     expect(state.productionServiceCountsLabel).toBe("Keine Zähler");
   });

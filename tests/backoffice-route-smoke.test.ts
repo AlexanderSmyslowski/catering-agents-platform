@@ -281,6 +281,24 @@ describe("backoffice route smoke", () => {
     expect(home).not.toContain("Noch keine Änderungen geladen.");
   });
 
+  it("keeps the production initial loading state from looking like an empty production workspace", async () => {
+    installPendingBackofficeEnvironmentMocks();
+
+    const production = (await renderRoute("/produktion")).text;
+
+    expect(production).toContain("Produktionsdaten werden geladen; noch kein Vorgang bewertet.");
+    expect(production).toContain("Produktionsbestand wird geladen · Produktionsdienst wird geprüft");
+    expect(production).toContain("Produktionsdaten laden");
+    expect(production).toContain("Produktionspläne werden geladen; noch keine Planbewertung.");
+    expect(production).toContain("Einkaufslisten werden geladen; noch keine Beschaffungsbewertung.");
+    expect(production).toContain("Rezeptbestand wird geladen; noch keine Review-Bewertung.");
+    expect(production).toContain("Healthcheck läuft · Produktionszähler werden geladen");
+    expect(production).toContain("Aktuelle Plattformdaten werden geladen...");
+    expect(production).not.toContain("Noch kein aktiver Vorgang");
+    expect(production).not.toContain("0 Pläne · 0 Einkaufslisten · 0 Rezepte");
+    expect(production).not.toContain("0 Küchenpläne mit Zeit- und Rezeptbezug sind vorhanden.");
+  });
+
   it("keeps the home navigation entries wired to route-stable offer and production markers", async () => {
     installBackofficeEnvironmentMocks();
 
