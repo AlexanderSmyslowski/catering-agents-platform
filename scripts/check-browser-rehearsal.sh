@@ -777,6 +777,60 @@ clear_workspace_markers='async () => {
   } else if (!clearedArchiveButton.disabled || clearedArchiveButton.title !== "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.") {
     missing.push("Clear-Check nach Klick laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
   }
+  location.reload();
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const text = document.body.innerText;
+    const html = document.body.innerHTML;
+    if (
+      text.includes("Kein aktiver Vorgang") &&
+      text.includes("Auftrag einfügen oder Datei ablegen") &&
+      !text.includes(`Plan-Kontext: planId ${planId}`) &&
+      !text.includes(`purchaseListId: ${purchaseListId}`) &&
+      !html.includes(planExport) &&
+      !html.includes(purchaseExport)
+    ) {
+      break;
+    }
+  }
+
+  const reloadedText = document.body.innerText;
+  const reloadedHtml = document.body.innerHTML;
+  const reloadedButtons = [...document.querySelectorAll("button")].map((button) => ({
+    text: (button.textContent ?? "").replace(/\s+/g, " ").trim(),
+    disabled: button.disabled,
+    title: button.getAttribute("title") ?? ""
+  }));
+  const reloadedClearButton = reloadedButtons.find((button) => button.text.startsWith("Arbeitsbereich lokal leeren"));
+  const reloadedArchiveButton = reloadedButtons.find((button) => button.text === "Fehlupload archivieren");
+  if (!reloadedText.includes("Kein aktiver Vorgang")) {
+    missing.push("Clear-Check Reload ohne leeren Vorgang");
+  }
+  if (!reloadedText.includes("Auftrag einfügen oder Datei ablegen")) {
+    missing.push("Clear-Check Reload ohne sichere naechste Eingabe");
+  }
+  if (reloadedText.includes(`Plan-Kontext: planId ${planId}`) || reloadedHtml.includes(planExport)) {
+    missing.push(`Clear-Check Reload zeigt alten Produktionsplan ${planId}`);
+  }
+  if (reloadedText.includes(`purchaseListId: ${purchaseListId}`) || reloadedHtml.includes(purchaseExport)) {
+    missing.push(`Clear-Check Reload zeigt alte Einkaufsliste ${purchaseListId}`);
+  }
+  if (!reloadedClearButton) {
+    missing.push("Clear-Check Reload ohne Clear-Aktion");
+  } else if (
+    !reloadedClearButton.disabled ||
+    reloadedClearButton.title !== "Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren."
+  ) {
+    missing.push("Clear-Check Reload laesst Clear-Aktion aktiv oder falsch beschriftet");
+  }
+  if (!reloadedArchiveButton) {
+    missing.push("Clear-Check Reload ohne Fehlupload-Archiv-Aktion");
+  } else if (
+    !reloadedArchiveButton.disabled ||
+    reloadedArchiveButton.title !== "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv."
+  ) {
+    missing.push("Clear-Check Reload laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
+  }
   if (missing.length > 0) {
     throw new Error(`Produktions-Clear-Rehearsal fehlgeschlagen: ${missing.join(" | ")}`);
   }
