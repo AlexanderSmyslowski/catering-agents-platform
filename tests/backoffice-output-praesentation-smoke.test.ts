@@ -417,7 +417,9 @@ describe("backoffice production presentation smoke", () => {
     expect(content).not.toContain("noch zu bestätigen");
     expect(content).toContain("requestId: presentation-intake-success");
     expect(content).toContain("channel: manual_form");
-    expect(content).toContain("Einkaufsliste herunterladen");
+    expect(content).toContain(
+      "Einkaufsliste exportieren für aktuellen Vorgang presentation-purchase-success · Spezifikation presentation-spec-success"
+    );
     expect(content).toContain("production-purchase-zone");
     expect(content).toContain("Einkaufsliste");
     expect(content).toContain("1 Liste · 3 Positionen");

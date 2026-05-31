@@ -447,9 +447,13 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("requestId: corridor-request-1");
     expect(production.text).toContain("production-objects-zone");
     expect(production.text).toContain("Produktionsobjekte");
-    expect(production.text).toContain("Produktionsblatt exportieren");
+    expect(production.text).toContain(
+      "Produktionsblatt exportieren für aktuellen Plan corridor-plan-1 · Spezifikation corridor-spec-1"
+    );
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/corridor-plan-1/html");
-    expect(production.text).toContain("Einkaufsliste herunterladen");
+    expect(production.text).toContain(
+      "Einkaufsliste exportieren für aktuellen Vorgang corridor-purchase-1 · Spezifikation corridor-spec-1"
+    );
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/corridor-purchase-1/csv");
     expect(production.text).toContain("Audit-Spur");
     expect(production.text).toContain("Korridor-Demo vorbereitet · Betriebs-/Audit-Operator · production.seed_demo");
@@ -921,9 +925,13 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Quellenmetadaten (gekürzt): c4-angebot.pdf · application/pdf · 2.0 KB · sha256:abcdef123456 · intake");
     expect(production.text).not.toContain("B5 Rohtext");
     expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
-    expect(production.text).toContain("Produktionsblatt exportieren");
+    expect(production.text).toContain(
+      "Produktionsblatt exportieren für aktuellen Plan c4-plan-handoff · Spezifikation c4-spec-handoff"
+    );
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/c4-plan-handoff/html");
-    expect(production.text).toContain("Einkaufsliste herunterladen");
+    expect(production.text).toContain(
+      "Einkaufsliste exportieren für aktuellen Vorgang c4-purchase-handoff · Spezifikation c4-spec-handoff"
+    );
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/c4-purchase-handoff/csv");
   });
 
@@ -963,7 +971,9 @@ describe("backoffice route smoke", () => {
 
     expect(production.text).toContain("Downloadbereich");
     expect(production.text).toContain("Plan-Kontext: planId b23-plan-detail · specId b23-spec-detail");
-    expect(production.text).toContain("Produktionsblatt exportieren");
+    expect(production.text).toContain(
+      "Produktionsblatt exportieren für Plan b23-plan-detail · Spezifikation b23-spec-detail"
+    );
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/b23-plan-detail/html");
   });
 

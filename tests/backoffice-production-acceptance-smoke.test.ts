@@ -1029,7 +1029,9 @@ describe("backoffice production acceptance smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-fallback-1");
-    expect(content).toContain("Produktionsblatt exportieren");
+    expect(content).toContain(
+      "Produktionsblatt exportieren für Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1"
+    );
     expect(content).not.toContain("Noch kein aktiver Vorgang");
   });
 
@@ -1040,7 +1042,9 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
     expect(content).toContain("Produktionsobjekte und Downloads prüfen");
-    expect(content).toContain("Produktionsblatt exportieren");
+    expect(content).toContain(
+      "Produktionsblatt exportieren für Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1"
+    );
     expect(content).toContain("Einkaufsliste exportieren");
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
     expect(content).not.toContain("Rückfragen beantworten");
@@ -1059,6 +1063,12 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
     expect(content).toContain("1 Liste · 2 Positionen");
     expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-plan-only-1");
+    expect(content).toContain(
+      "Einkaufsliste exportieren für aktuellen Vorgang purchase-production-current-1 · Spezifikation spec-production-plan-only-1"
+    );
+    expect(content).toContain(
+      "Einkaufsliste exportieren aus älterem Vorgang purchase-production-other-0 · Spezifikation spec-production-plan-only-other"
+    );
     expect(content).toContain("Ältere Einkaufslisten");
     expect(content).toContain("1 frühere Listen");
     expect(content).not.toContain("2 Listen · 3 Positionen");
@@ -1091,7 +1101,9 @@ describe("backoffice production acceptance smoke", () => {
     );
     expect(content).toContain("1 Liste · 2 Positionen");
     expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-fallback-1");
-    expect(content).toContain("Einkaufsliste herunterladen");
+    expect(content).toContain(
+      "Einkaufsliste exportieren für aktuellen Vorgang purchase-production-current-1 · Spezifikation spec-production-fallback-1"
+    );
     expect(content).toContain("Glutenfreies Baguette");
     expect(content).toContain("Olivenöl");
     expect(content).not.toContain("Aktueller Vorgang zuerst");
@@ -1209,8 +1221,12 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Plan-Kontext: planId plan-production-fallback-1 · specId spec-production-fallback-1");
     expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-fallback-1");
-    expect(content).toContain("Produktionsblatt exportieren");
-    expect(content).toContain("Einkaufsliste exportieren");
+    expect(content).toContain(
+      "Produktionsblatt exportieren für aktuellen Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1"
+    );
+    expect(content).toContain(
+      "Einkaufsliste exportieren für aktuellen Vorgang purchase-production-current-1 · Spezifikation spec-production-fallback-1"
+    );
     expect(content).toContain("Audit-Spur");
     expect(content).toContain("Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T09:15:00.000Z");
     expect(content).toContain("Abschluss-Kontext: planId plan-production-fallback-1 · specId spec-production-fallback-1 · purchaseListId purchase-production-current-1");

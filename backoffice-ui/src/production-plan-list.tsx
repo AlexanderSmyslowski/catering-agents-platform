@@ -57,6 +57,10 @@ export function ProductionPlanList({
               rel="noreferrer"
             >
               Produktionsblatt exportieren
+              <span className="visually-hidden">
+                {" "}
+                für Plan {String(plan.planId ?? "-")} · Spezifikation {String(plan.eventSpecId ?? "-")}
+              </span>
             </a>
           </li>
         );
