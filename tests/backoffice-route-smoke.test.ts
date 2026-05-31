@@ -971,6 +971,7 @@ describe("backoffice route smoke", () => {
 
     expect(production.text).toContain("Downloadbereich");
     expect(production.text).toContain("Plan-Kontext: planId b23-plan-detail · specId b23-spec-detail");
+    expect(production.text).toContain("Einzelheiten zu Plan b23-plan-detail · Spezifikation b23-spec-detail");
     expect(production.text).toContain(
       "Produktionsblatt exportieren für Plan b23-plan-detail · Spezifikation b23-spec-detail"
     );
