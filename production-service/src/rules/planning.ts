@@ -23,6 +23,7 @@ import {
   appendRecipeComponentPlanningArtifacts,
   appendUnresolvedComponentArtifacts
 } from "./planning-artifact-appender.js";
+import { planningComponentErrorReason } from "./planning-component-error-reason.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -117,9 +118,7 @@ export async function buildProductionArtifacts(
         continue;
       }
     } catch (error) {
-      const reason = error instanceof Error && error.message.startsWith("Ungültige Planungsantwort")
-        ? error.message
-        : `Technischer Fehler in der Produktionsplanung für ${component.label}: ${error instanceof Error ? error.message : "Unbekannter Fehler"}`;
+      const reason = planningComponentErrorReason(component.label, error);
       const artifacts = buildUnresolvedComponentArtifacts({
         component,
         eventSpec,
