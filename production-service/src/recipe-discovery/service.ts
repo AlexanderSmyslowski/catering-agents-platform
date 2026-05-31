@@ -33,6 +33,7 @@ import {
   specificPrimaryMatchScore,
   webSpecificMatchScore
 } from "./recipe-candidate-scoring.js";
+import { createRecipeSearchTrace } from "./recipe-search-trace.js";
 
 const tierWeight: Record<Recipe["source"]["tier"], number> = {
   internal_verified: 4,
@@ -90,12 +91,7 @@ export class RecipeDiscoveryService {
     component: MenuComponent,
     eventSpec: AcceptedEventSpec
   ): Promise<RecipeResolution> {
-    const searchTrace: string[] = [];
-    const pushTrace = (message: string) => {
-      if (searchTrace.length < 12) {
-        searchTrace.push(message);
-      }
-    };
+    const searchTrace = createRecipeSearchTrace();
     const repositoryCandidates = await this.repository.findCandidates(component);
     const internalCandidates = repositoryCandidates
       .filter((recipe) => recipeSupportsMenuCategory(recipe, component))
@@ -136,19 +132,19 @@ export class RecipeDiscoveryService {
       });
 
     if (repositoryCandidates.length > 0) {
-      pushTrace(
+      searchTrace.push(
         `Interne Kandidaten: ${repositoryCandidates
           .slice(0, 3)
           .map((recipe) => recipe.name)
           .join(", ")}`
       );
     } else {
-      pushTrace("Interne Kandidaten: keine Treffer.");
+      searchTrace.push("Interne Kandidaten: keine Treffer.");
     }
 
     const internalWinner = internalCandidates[0];
     if (internalWinner?.recipe) {
-      pushTrace(`Interner Treffer gewählt: ${internalWinner.recipe.name}.`);
+      searchTrace.push(`Interner Treffer gewählt: ${internalWinner.recipe.name}.`);
       return {
         recipe: internalWinner.recipe,
         selection: {
@@ -156,7 +152,7 @@ export class RecipeDiscoveryService {
           recipeId: internalWinner.recipe.recipeId,
           selectionReason: "Passendes Rezept in der internen Bibliothek gefunden.",
           autoUsedInternetRecipe: false,
-          searchTrace,
+          searchTrace: searchTrace.entries,
           sourceTier: internalWinner.recipe.source.tier,
           qualityScore: internalWinner.recipe.source.qualityScore,
           fitScore: internalWinner.fitScore
@@ -183,16 +179,16 @@ export class RecipeDiscoveryService {
 
         let searchResults: WebRecipeCandidate[] = [];
         try {
-          pushTrace(`Websuche: ${query.query}`);
+          searchTrace.push(`Websuche: ${query.query}`);
           searchResults = await this.webProvider.searchRecipes(query);
         } catch {
           webSearchFailed = true;
-          pushTrace(`Websuche fehlgeschlagen: ${query.query}`);
+          searchTrace.push(`Websuche fehlgeschlagen: ${query.query}`);
         }
 
         for (const candidate of searchResults) {
           if (!candidateSupportsMenuCategory(candidate, component)) {
-            pushTrace(`Verworfen: ${candidate.title} (Kategorie passt nicht).`);
+            searchTrace.push(`Verworfen: ${candidate.title} (Kategorie passt nicht).`);
             continue;
           }
 
@@ -200,7 +196,7 @@ export class RecipeDiscoveryService {
             isCollectionLikeCandidate(candidate) &&
             (candidate.qualitySignals.stepCount < 4 || candidate.qualitySignals.ingredientCount < 6)
           ) {
-            pushTrace(`Verworfen: ${candidate.title} (Sammlungs-/Übersichtsseite).`);
+            searchTrace.push(`Verworfen: ${candidate.title} (Sammlungs-/Übersichtsseite).`);
             continue;
           }
 
@@ -209,15 +205,15 @@ export class RecipeDiscoveryService {
           const fitScore = fitScoreForRecipe(candidateRecipeText(candidate), component, eventSpec);
           const specificFitScore = webSpecificMatchScore(candidateRecipeText(candidate), component);
           if (fitScore < 0.2) {
-            pushTrace(`Verworfen: ${candidate.title} (zu geringe Textpassung).`);
+            searchTrace.push(`Verworfen: ${candidate.title} (zu geringe Textpassung).`);
             continue;
           }
           if (specificFitScore === 0) {
-            pushTrace(`Verworfen: ${candidate.title} (keine Fachbegriffe des Gerichts getroffen).`);
+            searchTrace.push(`Verworfen: ${candidate.title} (keine Fachbegriffe des Gerichts getroffen).`);
             continue;
           }
           if (candidateFormMismatch(candidateRecipeText(candidate), component)) {
-            pushTrace(`Verworfen: ${candidate.title} (falsches Rezeptformat).`);
+            searchTrace.push(`Verworfen: ${candidate.title} (falsches Rezeptformat).`);
             continue;
           }
           const extractionCompleteness = extractionCompletenessForCandidate(candidate);
@@ -284,7 +280,7 @@ export class RecipeDiscoveryService {
               : component.menuCategory === "vegetarian"
                 ? "Es konnte kein interner oder externer vegetarischer Rezeptkandidat belastbar validiert werden."
                 : "Es konnte kein interner oder externer Rezeptkandidat belastbar validiert werden.",
-          searchTrace,
+          searchTrace: searchTrace.entries,
           autoUsedInternetRecipe: false
         },
         unresolvedItems: [unresolvedReason]
@@ -292,7 +288,7 @@ export class RecipeDiscoveryService {
     }
 
     await this.repository.save(winner.recipe);
-    pushTrace(`Webtreffer gewählt: ${winner.recipe.name}.`);
+    searchTrace.push(`Webtreffer gewählt: ${winner.recipe.name}.`);
 
     const unresolvedItems =
       winner.recipe.source.approvalState === "review_required"
@@ -309,7 +305,7 @@ export class RecipeDiscoveryService {
             ? "Internet-Ausweichrezept mit ausreichender Qualität automatisch ausgewählt."
             : "Internet-Ausweichrezept ausgewählt, aber zur Prüfung markiert.",
         searchQuery: winner.query.query,
-        searchTrace,
+        searchTrace: searchTrace.entries,
         autoUsedInternetRecipe: winner.recipe.source.approvalState === "auto_usable",
         sourceTier: winner.recipe.source.tier,
         qualityScore: winner.recipe.source.qualityScore,
