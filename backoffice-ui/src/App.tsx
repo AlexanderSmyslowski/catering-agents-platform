@@ -79,10 +79,10 @@ import { buildProductionSourceFileUploadActions } from "./production-source-file
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionRecipeSubmissionActions } from "./production-recipe-submission-actions.js";
+import { buildProductionIntakeArchiveAction } from "./production-intake-archive-action.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import {
   clearProductionWorkspaceState,
-  completeProductionIntakeArchiveSuccess,
   resetProductionWorkspace
 } from "./production-workspace-reset.js";
 import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
@@ -491,28 +491,16 @@ export function App() {
     });
   }
 
-  async function handleArchiveCurrentIntake() {
-    if (!currentIntakeRequestId) {
-      setError("Kein verknüpfter Intake-Kontext zum Archivieren vorhanden.");
-      return;
-    }
-
-    const archivedRequestId = currentIntakeRequestId;
-    setSubmitting(true);
-    clearMessages();
-    try {
-      await archiveIntakeRequest(archivedRequestId, "wrong_upload");
-      await completeProductionIntakeArchiveSuccess(archivedRequestId, {
-        resetProductionWorkspaceState,
-        refreshDashboard,
-        setNotice
-      });
-    } catch (submitError) {
-      setError(formatSubmitErrorMessage(submitError, "Fehlupload konnte nicht archiviert werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const handleArchiveCurrentIntake = buildProductionIntakeArchiveAction({
+    archiveIntakeRequest,
+    currentIntakeRequestId,
+    setSubmitting,
+    clearMessages,
+    resetProductionWorkspaceState,
+    refreshDashboard,
+    setNotice,
+    setError
+  });
 
   async function handleIntakeSubmit() {
     setSubmitting(true);
