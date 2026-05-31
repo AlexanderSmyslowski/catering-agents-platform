@@ -15,6 +15,7 @@ import type {
   ProductionWorkbenchNextStep,
   ProductionWorkbenchSummary
 } from "./production-workbench.js";
+import { buildProductionWorkbenchSummaryState } from "./production-workbench-summary-state.js";
 
 type ClarificationStatusCounts = {
   answered: number;
@@ -122,18 +123,17 @@ export function buildProductionRouteViewState({
   filteredRecipes
 }: ProductionRouteViewStateInput): ProductionRouteViewState {
   return {
-    workbenchSummary: {
-      activeSpecLabel: activeProductionContextLabel,
-      readinessLabel: focusedSpecReadinessLabel,
-      planStatusLabel: productionPlanStatusLabel,
-      purchaseStatusLabel: purchaseZoneStatusLabel,
-      questionCount: productionQuestions.length,
-      answeredQuestionCount: clarificationStatusCounts.answered,
-      unansweredQuestionCount: clarificationStatusCounts.unanswered,
-      productionObjectCount: currentSpecPlans.length,
+    workbenchSummary: buildProductionWorkbenchSummaryState({
+      activeProductionContextLabel,
+      focusedSpecReadinessLabel,
+      productionPlanStatusLabel,
+      purchaseZoneStatusLabel,
+      productionQuestions,
+      clarificationStatusCounts,
+      currentSpecPlans,
       productionObjectStatusLabel,
-      purchaseListCount: currentSpecPurchaseLists.length
-    },
+      currentSpecPurchaseLists
+    }),
     workbenchNextStep: productionNextStep,
     questionState: buildProductionQuestionPanelState({
       focusedProductionSpec,
