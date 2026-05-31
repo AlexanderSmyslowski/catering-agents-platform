@@ -811,11 +811,13 @@ describe("backoffice production acceptance smoke", () => {
   });
 
   it("archives the focused intake context from the production route without hard delete", async () => {
-    installProductionAcceptanceMocks();
+    installProductionAcceptanceMocks({ withCurrentPurchaseList: true });
 
     const { container, root } = await renderProductionRouteInteractive();
 
     try {
+      expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren");
+
       const archiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
         (button.textContent ?? "").includes("Fehlupload archivieren")
       ) as HTMLButtonElement | undefined;
