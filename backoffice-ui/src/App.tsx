@@ -73,6 +73,7 @@ import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
 import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
+import { formatArchiveCurrentIntakeContextLabel } from "./production-source-input-state.js";
 import { buildProductionSourceInputBundle } from "./production-source-input-bundle.js";
 import { buildProductionSourceFileUploadActions } from "./production-source-file-actions.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
@@ -672,9 +673,9 @@ export function App() {
     canClearWorkspace: canClearProductionWorkspace,
     canArchiveCurrentIntake,
     clearWorkspaceContextLabel: activeProductionContextLabel,
-    archiveCurrentIntakeContextLabel: currentIntakeRequestId
-      ? `Intake-Anfrage ${currentIntakeRequestId}`
-      : undefined,
+    archiveCurrentIntakeContextLabel: formatArchiveCurrentIntakeContextLabel({
+      currentIntakeRequestId
+    }),
     uploadInputRef: productionUploadInputRef,
     setDragActive,
     setIntakeChannel,

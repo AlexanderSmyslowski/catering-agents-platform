@@ -44,6 +44,14 @@ function formatArchiveCurrentIntakeTitle(input: {
     : "Aktiven Intake-Kontext per Soft-Archiv aus dem Fokus nehmen.";
 }
 
+export function formatArchiveCurrentIntakeContextLabel(input: {
+  currentIntakeRequestId?: string;
+}): string | undefined {
+  const requestId = input.currentIntakeRequestId?.trim();
+
+  return requestId ? `Intake-Anfrage ${requestId}` : undefined;
+}
+
 export function buildProductionSourceInputState({
   dragActive,
   intakeFile,
