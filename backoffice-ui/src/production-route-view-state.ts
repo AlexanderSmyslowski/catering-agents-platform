@@ -5,6 +5,7 @@ import type {
   ProductionObjectsState,
   ProductionPlanProgressState
 } from "./production-objects-panel.js";
+import { buildProductionPurchaseListState } from "./production-purchase-list-state.js";
 import type { ProductionPurchaseListState } from "./production-purchase-list-panel.js";
 import { buildProductionQuestionPanelState } from "./production-question-panel-state.js";
 import type { ProductionQuestionPanelState } from "./production-question-panel.js";
@@ -169,12 +170,12 @@ export function buildProductionRouteViewState({
       archivedPlans,
       specById
     },
-    purchaseListState: {
-      currentPurchaseLists: currentSpecPurchaseLists,
+    purchaseListState: buildProductionPurchaseListState({
+      currentSpecPurchaseLists,
       archivedPurchaseLists,
       specById,
-      statusLabel: purchaseZoneStatusLabel
-    },
+      purchaseZoneStatusLabel
+    }),
     handoffState: buildProductionHandoffState({
       productionIntakeOriginLabel,
       productionAuditTrailLabel,
