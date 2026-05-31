@@ -60,6 +60,10 @@ function installProductionAcceptanceMocks(
   const purchaseListSpecId = options.withPlanOnlyArtifacts ? planSpecId : specId;
   const archivedRequestIds = new Set<string>();
   const archivedSpecIds = new Set<string>();
+  const requestSpecIds = new Map<string, string>([
+    [requestId, specId],
+    [searchRequestId, searchSpecId]
+  ]);
   const quickLunchMenuPlan = [
     {
       componentId: "quick-lunch-kalbsbuletten",
@@ -316,7 +320,18 @@ function installProductionAcceptanceMocks(
         );
       }
 
-      if (url.endsWith(`/api/intake/v1/intake/requests/${requestId}/archive`)) {
+      const archiveMatch = url.match(/\/api\/intake\/v1\/intake\/requests\/([^/]+)\/archive$/);
+      if (archiveMatch) {
+        const archivedRequestId = archiveMatch[1];
+        const archivedSpecId = requestSpecIds.get(archivedRequestId);
+
+        if (!archivedSpecId) {
+          return new Response(JSON.stringify({ message: "Intake request not found" }), {
+            status: 404,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
         if (init?.method !== "POST") {
           return new Response(JSON.stringify({ message: "Method not allowed" }), {
             status: 405,
@@ -324,19 +339,19 @@ function installProductionAcceptanceMocks(
           });
         }
 
-        archivedRequestIds.add(requestId);
-        archivedSpecIds.add(specId);
+        archivedRequestIds.add(archivedRequestId);
+        archivedSpecIds.add(archivedSpecId);
 
         return new Response(
           JSON.stringify({
             eventRequest: {
-              requestId,
+              requestId: archivedRequestId,
               operationalArchive: {
                 reasonCode: "wrong_upload",
                 archivedAt: "2026-05-26T10:00:00.000Z"
               }
             },
-            archivedSpecIds: [specId],
+            archivedSpecIds: [archivedSpecId],
             hardDeleted: false
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -1003,7 +1018,7 @@ describe("backoffice production acceptance smoke", () => {
     }
   });
 
-  it("moves the active production context to a narrowed search result before archive", async () => {
+  it("archives the narrowed search result instead of the previous active production context", async () => {
     installProductionAcceptanceMocks({ withSearchTargetSpec: true });
 
     const { container, root } = await renderProductionRouteInteractive();
@@ -1042,6 +1057,49 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Archivsuche Ziel · 12 Teilnehmer · 2099-05-26");
       expect(content).toContain("requestId: request-production-search-target-1");
       expect(content).not.toContain("requestId: request-production-fallback-1");
+
+      const archiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+        (button.textContent ?? "").includes("Fehlupload archivieren")
+      ) as HTMLButtonElement | undefined;
+
+      expect(archiveButton).toBeTruthy();
+      expect(archiveButton?.disabled).toBe(false);
+      expect(archiveButton?.textContent).toContain(
+        "Fehlupload archivieren für Intake-Anfrage request-production-search-target-1"
+      );
+      expect(archiveButton?.getAttribute("title")).toBe(
+        "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-production-search-target-1"
+      );
+
+      await act(async () => {
+        archiveButton?.click();
+        await flushProductionRouteUpdates();
+      });
+
+      const fetchMock = vi.mocked(fetch);
+      const archiveCalls = fetchMock.mock.calls.filter(([input]) =>
+        String(input).includes("/api/intake/v1/intake/requests/")
+      );
+      const searchTargetArchiveCall = archiveCalls.find(([input]) =>
+        String(input).endsWith("/api/intake/v1/intake/requests/request-production-search-target-1/archive")
+      );
+      const fallbackArchiveCall = archiveCalls.find(([input]) =>
+        String(input).endsWith("/api/intake/v1/intake/requests/request-production-fallback-1/archive")
+      );
+      const archivedContent = document.body.textContent ?? "";
+
+      expect(searchTargetArchiveCall).toBeTruthy();
+      expect(searchTargetArchiveCall?.[1]).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({ reasonCode: "wrong_upload" })
+      });
+      expect(fallbackArchiveCall).toBeUndefined();
+      expect(archivedContent).toContain(
+        "Fehlupload request-production-search-target-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+      );
+      expect(archivedContent).toContain("Kein aktiver Vorgang");
+      expect(archivedContent).not.toContain("requestId: request-production-search-target-1");
+      expect(archivedContent).not.toContain("requestId: request-production-fallback-1");
     } finally {
       await act(async () => {
         root.unmount();
