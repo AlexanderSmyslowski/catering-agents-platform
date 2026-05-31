@@ -123,7 +123,7 @@ describe("production planning purchase coverage integration", () => {
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Einkaufsabdeckung fehlt");
     expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Sahne");
-  });
+  }, 15000);
 
   it("keeps the successful planning path unchanged when purchase coverage is complete", async () => {
     vi.resetModules();

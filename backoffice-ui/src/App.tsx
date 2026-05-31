@@ -63,6 +63,7 @@ import { resetProductionStateAfterDocumentFailure } from "./production-document-
 import { completeProductionStateAfterDocumentSuccess } from "./production-document-success-state.js";
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import { buildProductionPlanSubmissionAction } from "./production-plan-submission-action.js";
+import { buildProductionSpecSaveAction } from "./production-spec-save-action.js";
 import {
   buildProductionQuestionEditorState,
   completeProductionQuestionEditSuccess
@@ -653,21 +654,13 @@ export function App() {
     return updatedSpec;
   }
 
-  async function handleSaveSpecEdit() {
-    if (!editingSpecId) {
-      return;
-    }
-
-    setSubmitting(true);
-    clearMessages();
-    try {
-      await persistCurrentSpecEdit();
-    } catch (submitError) {
-      setError(formatSubmitErrorMessage(submitError, "Spezifikation konnte nicht gespeichert werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const handleSaveSpecEdit = buildProductionSpecSaveAction({
+    editingSpecId,
+    persistCurrentSpecEdit,
+    setSubmitting,
+    clearMessages,
+    setError
+  });
 
   useEffect(() => {
     const autoOpenState = buildProductionQuestionAutoOpenState({

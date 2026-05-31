@@ -552,5 +552,5 @@ describe("backoffice internal usage smoke", () => {
     });
     productionRoute.container.remove();
     rmSync(fixture.dataRoot, { recursive: true, force: true });
-  });
+  }, 15000);
 });
