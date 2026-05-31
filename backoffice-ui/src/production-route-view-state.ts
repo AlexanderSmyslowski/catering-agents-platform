@@ -10,6 +10,7 @@ import { buildProductionPurchaseListState } from "./production-purchase-list-sta
 import type { ProductionPurchaseListState } from "./production-purchase-list-panel.js";
 import { buildProductionQuestionPanelState } from "./production-question-panel-state.js";
 import type { ProductionQuestionPanelState } from "./production-question-panel.js";
+import { buildProductionRecipePanelState } from "./production-recipe-panel-state.js";
 import type {
   ProductionRecipeLibraryState,
   ProductionRecipeStatusState,
@@ -183,18 +184,14 @@ export function buildProductionRouteViewState({
       productionHandoffExportLabel,
       productionHandoffContextLabel
     }),
-    recipeStatus: {
+    ...buildProductionRecipePanelState({
       recipeReviewStatusLabel,
       recipeUsageStatusLabel,
       recipeReviewCounts,
-      recipeCount
-    },
-    recipeUpload: {
+      recipeCount,
       recipeName,
-      recipeFile
-    },
-    recipeLibrary: {
+      recipeFile,
       filteredRecipes
-    }
+    })
   };
 }
