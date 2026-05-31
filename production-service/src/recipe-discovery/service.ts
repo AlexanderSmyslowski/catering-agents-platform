@@ -13,6 +13,10 @@ import {
   buildOverrideRecipeResolution
 } from "./override-recipe-resolution.js";
 import { createRecipeSearchTrace } from "./recipe-search-trace.js";
+import {
+  appendInternalRecipeCandidatesTrace,
+  appendInternalRecipeWinnerTrace
+} from "./internal-recipe-trace.js";
 import { selectWebRecipeCandidate } from "./web-recipe-selection.js";
 import {
   buildUnresolvedWebRecipeResolution,
@@ -52,19 +56,10 @@ export class RecipeDiscoveryService {
     const repositoryCandidates = await this.repository.findCandidates(component);
     const internalWinner = selectInternalRecipeCandidate(repositoryCandidates, component, eventSpec);
 
-    if (repositoryCandidates.length > 0) {
-      searchTrace.push(
-        `Interne Kandidaten: ${repositoryCandidates
-          .slice(0, 3)
-          .map((recipe) => recipe.name)
-          .join(", ")}`
-      );
-    } else {
-      searchTrace.push("Interne Kandidaten: keine Treffer.");
-    }
+    appendInternalRecipeCandidatesTrace(searchTrace, repositoryCandidates);
 
     if (internalWinner?.recipe) {
-      searchTrace.push(`Interner Treffer gewählt: ${internalWinner.recipe.name}.`);
+      appendInternalRecipeWinnerTrace(searchTrace, internalWinner.recipe);
       return buildInternalRecipeResolution({
         component,
         winner: internalWinner,
