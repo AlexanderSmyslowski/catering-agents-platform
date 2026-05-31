@@ -18,6 +18,11 @@ import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-compone
 import { buildProcurementPlanningArtifacts } from "./planning-procurement-artifacts.js";
 import { buildComponentReadinessArtifacts } from "./planning-component-readiness-artifacts.js";
 import { buildRecipeComponentPlanningArtifacts } from "./planning-recipe-component-artifacts.js";
+import {
+  appendProcurementPlanningArtifacts,
+  appendRecipeComponentPlanningArtifacts,
+  appendUnresolvedComponentArtifacts
+} from "./planning-artifact-appender.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -36,6 +41,14 @@ export async function buildProductionArtifacts(
     blockingIssues,
     noteIssue
   } = issueCollector;
+  const artifactAppender = {
+    productionBatches,
+    procurementItems,
+    kitchenSheets,
+    timeline,
+    recipeSelections,
+    noteIssue
+  };
 
   for (const component of eventSpec.menuPlan) {
     const servings = component.servings ?? eventSpec.attendees.expected ?? 0;
@@ -56,10 +69,7 @@ export async function buildProductionArtifacts(
             reason: constraintConflict,
             timelineLabel: `${component.label} Bäcker-Zukauf klären`
           });
-          recipeSelections.push(artifacts.selection);
-          noteIssue(artifacts.issue, artifacts.blocking);
-          kitchenSheets.push(artifacts.kitchenSheet);
-          timeline.push(artifacts.timelineItem);
+          appendUnresolvedComponentArtifacts(artifactAppender, artifacts);
           continue;
         }
 
@@ -69,10 +79,7 @@ export async function buildProductionArtifacts(
           servings,
           kind: "baker_purchase"
         });
-        procurementItems.push(...artifacts.procurementItems);
-        recipeSelections.push(artifacts.selection);
-        kitchenSheets.push(artifacts.kitchenSheet);
-        timeline.push(artifacts.timelineItem);
+        appendProcurementPlanningArtifacts(artifactAppender, artifacts);
         continue;
       }
 
@@ -82,10 +89,7 @@ export async function buildProductionArtifacts(
         servings
       });
       if (readinessArtifacts) {
-        recipeSelections.push(readinessArtifacts.selection);
-        noteIssue(readinessArtifacts.issue, readinessArtifacts.blocking);
-        kitchenSheets.push(readinessArtifacts.kitchenSheet);
-        timeline.push(readinessArtifacts.timelineItem);
+        appendUnresolvedComponentArtifacts(artifactAppender, readinessArtifacts);
         continue;
       }
 
@@ -96,10 +100,7 @@ export async function buildProductionArtifacts(
           servings,
           kind: "component_procurement"
         });
-        procurementItems.push(...artifacts.procurementItems);
-        recipeSelections.push(artifacts.selection);
-        kitchenSheets.push(artifacts.kitchenSheet);
-        timeline.push(artifacts.timelineItem);
+        appendProcurementPlanningArtifacts(artifactAppender, artifacts);
         continue;
       }
 
@@ -111,17 +112,10 @@ export async function buildProductionArtifacts(
         servings,
         discoveryService
       });
-      recipeSelections.push(recipeArtifacts.selection);
-      for (const issue of recipeArtifacts.issues) {
-        noteIssue(issue.issue, issue.blocking);
-      }
-      kitchenSheets.push(recipeArtifacts.kitchenSheet);
-      timeline.push(recipeArtifacts.timelineItem);
+      appendRecipeComponentPlanningArtifacts(artifactAppender, recipeArtifacts);
       if (recipeArtifacts.kind === "unresolved") {
         continue;
       }
-
-      productionBatches.push(recipeArtifacts.batch);
     } catch (error) {
       const reason = error instanceof Error && error.message.startsWith("Ungültige Planungsantwort")
         ? error.message
@@ -133,10 +127,7 @@ export async function buildProductionArtifacts(
         reason,
         timelineLabel: `${component.label} Rezeptklärung`
       });
-      recipeSelections.push(artifacts.selection);
-      noteIssue(artifacts.issue, artifacts.blocking);
-      kitchenSheets.push(artifacts.kitchenSheet);
-      timeline.push(artifacts.timelineItem);
+      appendUnresolvedComponentArtifacts(artifactAppender, artifacts);
     }
   }
 
