@@ -219,6 +219,102 @@ production_markers='() => {
   return { route: location.pathname, markers: "production-ok" };
 }'
 
+clear_workspace_markers='async () => {
+  const beforeText = document.body.innerText;
+  const beforeHtml = document.body.innerHTML;
+  const missing = [];
+  const planContext = beforeText.match(/Plan-Kontext: planId ([^\\s]+) · specId ([^\\s]+)/);
+  const purchaseContext = beforeText.match(/purchaseListId: ([^\\s]+) · specId: ([^\\s]+)/);
+  const clearButton = [...document.querySelectorAll("button")].find((button) =>
+    (button.textContent ?? "").replace(/\s+/g, " ").trim().startsWith("Arbeitsbereich lokal leeren")
+  );
+
+  if (!planContext) {
+    missing.push("Clear-Check vor Klick ohne aktuellen Plan-Kontext");
+  }
+  if (!purchaseContext) {
+    missing.push("Clear-Check vor Klick ohne aktuellen Einkaufslisten-Kontext");
+  }
+  if (!clearButton) {
+    missing.push("Clear-Check ohne Arbeitsbereich-lokal-leeren-Aktion");
+  } else if (clearButton.disabled) {
+    missing.push("Clear-Check kann nicht klicken, Aktion ist deaktiviert");
+  }
+  if (missing.length > 0) {
+    throw new Error(`Produktions-Clear-Rehearsal vor Klick unsicher: ${missing.join(" | ")}`);
+  }
+
+  const [, planId] = planContext;
+  const [, purchaseListId] = purchaseContext;
+  const planExport = `/api/exports/v1/exports/production-plans/${planId}/html`;
+  const purchaseExport = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
+
+  if (!beforeHtml.includes(planExport)) {
+    missing.push(`Clear-Check vor Klick ohne Produktionsplan-Export ${planExport}`);
+  }
+  if (!beforeHtml.includes(purchaseExport)) {
+    missing.push(`Clear-Check vor Klick ohne Einkaufslisten-Export ${purchaseExport}`);
+  }
+  if (missing.length > 0) {
+    throw new Error(`Produktions-Clear-Rehearsal vor Klick unvollstaendig: ${missing.join(" | ")}`);
+  }
+
+  clearButton.click();
+
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const text = document.body.innerText;
+    const html = document.body.innerHTML;
+    if (
+      text.includes("Kein aktiver Vorgang") &&
+      text.includes("Auftrag einfügen oder Datei ablegen") &&
+      !text.includes(`Plan-Kontext: planId ${planId}`) &&
+      !text.includes(`purchaseListId: ${purchaseListId}`) &&
+      !html.includes(planExport) &&
+      !html.includes(purchaseExport)
+    ) {
+      break;
+    }
+  }
+
+  const afterText = document.body.innerText;
+  const afterHtml = document.body.innerHTML;
+  const buttons = [...document.querySelectorAll("button")].map((button) => ({
+    text: (button.textContent ?? "").replace(/\s+/g, " ").trim(),
+    disabled: button.disabled,
+    title: button.getAttribute("title") ?? ""
+  }));
+  const clearedClearButton = buttons.find((button) => button.text.startsWith("Arbeitsbereich lokal leeren"));
+  const clearedArchiveButton = buttons.find((button) => button.text === "Fehlupload archivieren");
+
+  if (!afterText.includes("Kein aktiver Vorgang")) {
+    missing.push("Clear-Check nach Klick ohne leeren Vorgang");
+  }
+  if (!afterText.includes("Auftrag einfügen oder Datei ablegen")) {
+    missing.push("Clear-Check nach Klick ohne sichere naechste Eingabe");
+  }
+  if (afterText.includes(`Plan-Kontext: planId ${planId}`) || afterHtml.includes(planExport)) {
+    missing.push(`Clear-Check nach Klick zeigt alten Produktionsplan ${planId}`);
+  }
+  if (afterText.includes(`purchaseListId: ${purchaseListId}`) || afterHtml.includes(purchaseExport)) {
+    missing.push(`Clear-Check nach Klick zeigt alte Einkaufsliste ${purchaseListId}`);
+  }
+  if (!clearedClearButton) {
+    missing.push("Clear-Check nach Klick ohne Clear-Aktion");
+  } else if (!clearedClearButton.disabled || clearedClearButton.title !== "Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.") {
+    missing.push("Clear-Check nach Klick laesst Clear-Aktion aktiv oder falsch beschriftet");
+  }
+  if (!clearedArchiveButton) {
+    missing.push("Clear-Check nach Klick ohne Fehlupload-Archiv-Aktion");
+  } else if (!clearedArchiveButton.disabled || clearedArchiveButton.title !== "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.") {
+    missing.push("Clear-Check nach Klick laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
+  }
+  if (missing.length > 0) {
+    throw new Error(`Produktions-Clear-Rehearsal fehlgeschlagen: ${missing.join(" | ")}`);
+  }
+  return { route: location.pathname, markers: "production-clear-ok", planId, purchaseListId };
+}'
+
 home_to_offer='() => {
   const candidates = [...document.querySelectorAll("a")];
   const link = candidates.find((anchor) =>
@@ -252,7 +348,8 @@ click_rehearsal_link "Start -> Angebot" "/angebot" "${home_to_offer}"
 check_current_page_markers "Angebot" "${offer_markers}"
 click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
 check_current_page_markers "Produktion" "${production_markers}"
+check_current_page_markers "Produktion lokal geleert" "${clear_workspace_markers}"
 
 echo ""
-echo "Browser-Rehearsal-Kernpfad bestaetigt: Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit."
+echo "Browser-Rehearsal-Kernpfad bestaetigt: Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit -> lokales Leeren."
 echo "Grenze: lokaler synthetischer Browser-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
