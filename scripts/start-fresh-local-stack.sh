@@ -12,6 +12,11 @@ echo "Temporäre Datenwurzel: ${FRESH_DATA_ROOT}"
 
 bash "${ROOT_DIR}/scripts/stop-local-stack.sh"
 
+if [[ -n "${CATERING_DATABASE_URL:-}" || -n "${DATABASE_URL:-}" ]]; then
+  echo "Database-URLs aus der Umgebung werden fuer diesen Fresh-File-Run ignoriert."
+fi
+unset CATERING_DATABASE_URL
+unset DATABASE_URL
 export CATERING_DATA_ROOT="${FRESH_DATA_ROOT}"
 bash "${ROOT_DIR}/scripts/start-local-stack.sh" --seed-demo
 

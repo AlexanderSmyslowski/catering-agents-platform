@@ -72,6 +72,9 @@ describe("local ops check contract", () => {
     expect(freshStartScript).toContain("catering-agents-rehearsal-");
     expect(freshStartScript).toContain("Bestehende Repo-Daten unter ./data werden nicht geloescht");
     expect(freshStartScript).toContain("scripts/stop-local-stack.sh");
+    expect(freshStartScript).toContain("Database-URLs aus der Umgebung werden fuer diesen Fresh-File-Run ignoriert");
+    expect(freshStartScript).toContain("unset CATERING_DATABASE_URL");
+    expect(freshStartScript).toContain("unset DATABASE_URL");
     expect(freshStartScript).toContain("export CATERING_DATA_ROOT");
     expect(freshStartScript).toContain("scripts/start-local-stack.sh");
     expect(freshStartScript).toContain("--seed-demo");
