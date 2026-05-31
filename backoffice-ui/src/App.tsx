@@ -78,7 +78,7 @@ import { buildProductionSourceInputBundle } from "./production-source-input-bund
 import { buildProductionSourceFileUploadActions } from "./production-source-file-actions.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
-import { buildProductionRecipeSubmissionActions } from "./production-recipe-submission-actions.js";
+import { buildProductionRecipeControls } from "./production-recipe-controls.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import { buildProductionWorkspaceControls } from "./production-workspace-controls.js";
 import { buildProductionPlanningControls } from "./production-planning-controls.js";
@@ -637,14 +637,13 @@ export function App() {
     setError
   });
 
-  const {
-    handleRecipeUpload,
-    handleRecipeReview
-  } = buildProductionRecipeSubmissionActions({
+  const productionRecipeControls = buildProductionRecipeControls({
     uploadRecipeFile,
     reviewRecipe,
     recipeFile,
     recipeName,
+    setRecipeName,
+    setRecipeFile,
     setSubmitting,
     clearMessages,
     clearRecipeUploadDraft,
@@ -782,10 +781,10 @@ export function App() {
     createPlan: handleCreatePlan,
     resetSpecEdit,
     setSelectedPlanId,
-    setRecipeName,
-    setRecipeFile,
-    uploadRecipe: handleRecipeUpload,
-    reviewRecipe: handleRecipeReview
+    setRecipeName: productionRecipeControls.setRecipeName,
+    setRecipeFile: productionRecipeControls.setRecipeFile,
+    uploadRecipe: productionRecipeControls.uploadRecipe,
+    reviewRecipe: productionRecipeControls.reviewRecipe
   });
   const appRouteShellState = buildAppRouteShellState({
     route,
