@@ -77,4 +77,57 @@ describe("production route view state", () => {
     expect(viewState.recipeUpload.recipeName).toBe("Neues Rezept");
     expect(viewState.recipeLibrary.filteredRecipes).toEqual([{ recipeId: "recipe-1" }]);
   });
+
+  it("does not pass stale intake detail into the question panel after workspace clear", () => {
+    const viewState = buildProductionRouteViewState({
+      activeProductionContextLabel: "Kein aktiver Vorgang",
+      focusedSpecReadinessLabel: "-",
+      productionPlanStatusLabel: "offen",
+      purchaseZoneStatusLabel: "noch keine Liste",
+      productionQuestions: [],
+      clarificationStatusCounts: { answered: 0, unanswered: 0 },
+      currentSpecPlans: [],
+      productionObjectStatusLabel: "noch kein Plan",
+      currentSpecPurchaseLists: [],
+      productionNextStep: {
+        title: "Auftrag einfügen oder Datei ablegen",
+        description: "Neuen Produktionskontext starten."
+      },
+      productionAssumptions: [],
+      productionConversationProjection: { sessionId: "session-cleared", messages: [] },
+      workbenchSpecFacts: [],
+      intakeRequestDetailError: "stale detail should not leak",
+      intakeRequestDetail: {
+        requestId: "request-stale",
+        source: { channel: "pdf_upload", receivedAt: "2026-05-26T01:00:00.000Z" },
+        rawInputs: []
+      },
+      filteredSpecs: [{ specId: "spec-stale" }],
+      documentPhase: "done",
+      productionWorkspaceCleared: true,
+      planPhase: "idle",
+      planProgress: 0,
+      selectedPlanComponentsById: new Map(),
+      archivedPlans: [],
+      specById: new Map(),
+      archivedPurchaseLists: [],
+      productionIntakeOriginLabel: "kein Intake-Ursprung verknüpft",
+      productionAuditTrailLabel: "keine Audit-Ereignisse geladen",
+      productionHandoffExportLabel: "Produktionsblatt offen · Einkaufsliste offen",
+      recipeReviewStatusLabel: "keine offene Prüfung",
+      recipeUsageStatusLabel: "Noch keine freigegebenen Rezepte im Bestand",
+      recipeReviewCounts: { approved: 0, reviewRequired: 0, rejected: 0 },
+      recipeCount: 0,
+      recipeName: "",
+      recipeFile: null,
+      filteredRecipes: []
+    });
+
+    expect(viewState.questionState.productionWorkspaceCleared).toBe(true);
+    expect(viewState.questionState.focusedProductionSpec).toBeUndefined();
+    expect(viewState.questionState.intakeRequestDetail).toBeNull();
+    expect(viewState.questionState.intakeRequestDetailError).toBeUndefined();
+    expect(viewState.questionState.filteredSpecs).toEqual([]);
+    expect(viewState.handoffState.intakeOriginLabel).toBe("kein Intake-Ursprung verknüpft");
+  });
 });
