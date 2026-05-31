@@ -70,6 +70,12 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("aktueller Produktionsplan-Exportlink passt nicht");
     expect(script).toContain("aktueller Einkaufslisten-Kontext fehlt");
     expect(script).toContain("aktueller Einkaufslisten-Exportlink passt nicht");
+    expect(script).toContain("aktueller Produktionsplan-Export ist im Browser nicht abrufbar");
+    expect(script).toContain("aktueller Produktionsplan-Exportinhalt passt nicht");
+    expect(script).toContain("aktueller Einkaufslisten-Export ist im Browser nicht abrufbar");
+    expect(script).toContain("aktueller Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header");
+    expect(script).toContain("fetch(expectedPlanHref)");
+    expect(script).toContain("fetch(expectedPurchaseHref)");
     expect(script).toContain("ältere Listen sind kein aktueller Vorgang");
     expect(script).toContain("nicht das aktuelle Ergebnis");
   });
