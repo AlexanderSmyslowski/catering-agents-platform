@@ -74,8 +74,7 @@ import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import { formatArchiveCurrentIntakeContextLabel } from "./production-source-input-state.js";
-import { buildProductionSourceInputBundle } from "./production-source-input-bundle.js";
-import { buildProductionSourceFileUploadActions } from "./production-source-file-actions.js";
+import { buildProductionSourceInputAppBoundary } from "./production-source-input-app-boundary.js";
 import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionRecipeControls } from "./production-recipe-controls.js";
@@ -621,17 +620,6 @@ export function App() {
     setError
   });
 
-  const {
-    openProductionFilePicker,
-    handleProductionDrop,
-    handleProductionFileSelection
-  } = buildProductionSourceFileUploadActions({
-    uploadInputRef: productionUploadInputRef,
-    setDragActive,
-    setIntakeFile,
-    processIncomingProductionFile
-  });
-
   const manualSpecInput = buildProductionManualInputStateFromForm(manualSpecForm);
   const manualSpecActions = buildProductionManualInputActions({
     ...manualSpecForm,
@@ -640,7 +628,7 @@ export function App() {
   const {
     productionSourceInput,
     productionSourceInputActions
-  } = buildProductionSourceInputBundle({
+  } = buildProductionSourceInputAppBoundary({
     dragActive,
     intakeFile,
     intakeChannel,
@@ -659,11 +647,10 @@ export function App() {
     setDragActive,
     setIntakeChannel,
     setIntakeText,
-    openFilePicker: openProductionFilePicker,
+    setIntakeFile,
+    processIncomingProductionFile,
     clearWorkspace: clearProductionWorkspace,
     archiveCurrentIntake: handleArchiveCurrentIntake,
-    handleDrop: handleProductionDrop,
-    handleFileSelection: handleProductionFileSelection,
     submitDocument: handleIntakeDocumentSubmit,
     submitText: handleIntakeSubmit
   });
