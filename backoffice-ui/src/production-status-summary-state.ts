@@ -86,8 +86,8 @@ export function buildProductionStatusSummaryState(input: {
       itemCount: currentPurchaseListItemCount
     }),
     productionIntakeOriginLabel: formatProductionIntakeOriginLabel({
-      intakeRequestDetail: input.intakeRequestDetail,
-      currentIntakeRequestId: input.currentIntakeRequestId
+      intakeRequestDetail: input.productionWorkspaceCleared ? undefined : input.intakeRequestDetail,
+      currentIntakeRequestId: input.productionWorkspaceCleared ? undefined : input.currentIntakeRequestId
     }),
     productionAuditTrailLabel: latestProductionAuditEvent
       ? formatAuditEventHandoffLabel(latestProductionAuditEvent)
