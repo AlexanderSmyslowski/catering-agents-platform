@@ -5,15 +5,11 @@ import {
   type PurchaseList
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
-import {
-  procurementItemsForComponent
-} from "./procurement-rules.js";
 import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.js";
 import { createPlanningIssueCollector } from "./planning-issue-collector.js";
 import { selectOperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
 import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
 import { buildComponentReadinessArtifacts } from "./planning-component-readiness-artifacts.js";
-import { buildRecipeComponentPlanningArtifacts } from "./planning-recipe-component-artifacts.js";
 import {
   appendProcurementPlanningArtifacts,
   appendRecipeComponentPlanningArtifacts,
@@ -23,6 +19,7 @@ import { planningComponentErrorReason } from "./planning-component-error-reason.
 import { createPlanningArtifactState } from "./planning-artifact-state.js";
 import { buildImplicitBakerPurchasePlanningArtifacts } from "./planning-baker-purchase-artifacts.js";
 import { buildExplicitProcurementPlanningArtifacts } from "./planning-explicit-procurement-artifacts.js";
+import { buildRecipeBranchPlanningArtifacts } from "./planning-recipe-branch-artifacts.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -83,14 +80,14 @@ export async function buildProductionArtifacts(
         continue;
       }
 
-      procurementItems.push(...procurementItemsForComponent(component, servings));
-
-      const recipeArtifacts = await buildRecipeComponentPlanningArtifacts({
+      const recipeBranchArtifacts = await buildRecipeBranchPlanningArtifacts({
         eventSpec,
         component,
         servings,
         discoveryService
       });
+      procurementItems.push(...recipeBranchArtifacts.procurementItems);
+      const { recipeArtifacts } = recipeBranchArtifacts;
       appendRecipeComponentPlanningArtifacts(artifactAppender, recipeArtifacts);
       if (recipeArtifacts.kind === "unresolved") {
         continue;
