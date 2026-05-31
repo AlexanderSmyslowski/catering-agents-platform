@@ -151,6 +151,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Einkaufslisten-Exportlink");
+    expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Abschluss-Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad ohne Fehlupload-Archiv-Aktion");
     expect(script).toContain("Offener-Rueckfragen-Pfad deaktiviert Fehlupload-Archiv trotz aktivem Intake-Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad bindet Fehlupload-Archiv nicht an den aktuellen Intake-Kontext");
@@ -160,11 +161,17 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("archiveButton.click()");
     expect(script).toContain("Archive-Rehearsal ohne Soft-Archiv-Erfolgsmeldung");
     expect(script).toContain("Archive-Rehearsal zeigt archivierten Intake weiter als aktiven Kontext");
+    expect(script).toContain("Archive-Rehearsal zeigt alten Abschluss-Kontext nach Klick");
+    expect(script).toContain("Archive-Rehearsal behaelt Produktionsplan-Exportlink nach Klick");
+    expect(script).toContain("Archive-Rehearsal behaelt Einkaufslisten-Exportlink nach Klick");
     expect(script).toContain("Archive-Rehearsal laesst Fehlupload-Archiv nach Klick aktiv oder falsch beschriftet");
     expect(script).toContain("location.reload()");
     expect(script).toContain("Archive-Rehearsal Reload ohne leeren aktiven Vorgang");
     expect(script).toContain("Archive-Rehearsal Reload zeigt archivierten Intake wieder als aktiven Kontext");
     expect(script).toContain("Archive-Rehearsal Reload behaelt archivierten Intake-Detailanker im DOM");
+    expect(script).toContain("Archive-Rehearsal Reload zeigt alten Abschluss-Kontext");
+    expect(script).toContain("Archive-Rehearsal Reload behaelt Produktionsplan-Exportlink");
+    expect(script).toContain("Archive-Rehearsal Reload behaelt Einkaufslisten-Exportlink");
     expect(script).toContain("Archive-Rehearsal Reload laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
     expect(script).toContain("Browser-Rehearsal-Archivpfad bestaetigt");
   });
