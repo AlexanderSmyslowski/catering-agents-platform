@@ -27,11 +27,8 @@ import {
   selectActiveOfferSpec,
   selectRecordByStringId
 } from "./app-dashboard-selectors.js";
-import { HomeRoute } from "./home-route.js";
 import { buildAppOfferRouteState } from "./app-offer-route-state.js";
-import { OfferConversationalWorkbench } from "./offer-workbench.js";
-import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
-import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
+import { AppRouteContent } from "./app-route-content.js";
 import { RouteMasthead } from "./route-masthead.js";
 import {
   archiveIntakeRequest,
@@ -1029,28 +1026,21 @@ export function App() {
     <DashboardShell {...appRouteShellState.shell}>
       <RouteMasthead {...appRouteShellState.masthead} />
 
-      {route === "home" ? (
-        <HomeRoute
-          isInitialHomeLoading={isInitialHomeLoading}
-          dashboard={dashboard}
-          serviceHealth={serviceHealth}
-          offerHandoffCounts={offerHandoffCounts}
-          recipeReviewCounts={recipeReviewCounts}
-          latestIntakeRequestSummary={latestIntakeRequestSummary}
-          filteredAuditEvents={filteredAuditEvents}
-        />
-      ) : null}
-
-      {route === "production" ? (
-        <ProductionRouteFilterPanel {...productionRouteFilterState} />
-      ) : null}
-
-      {route === "offer" ? (
-        <OfferConversationalWorkbench {...offerWorkbenchState} />
-      ) : null}
-      {route === "production" ? (
-        <ProductionRouteMainLayout {...productionRouteMainLayoutState} />
-      ) : null}
+      <AppRouteContent
+        route={route}
+        home={{
+          isInitialHomeLoading,
+          dashboard,
+          serviceHealth,
+          offerHandoffCounts,
+          recipeReviewCounts,
+          latestIntakeRequestSummary,
+          filteredAuditEvents
+        }}
+        offerWorkbench={offerWorkbenchState}
+        productionFilter={productionRouteFilterState}
+        productionMain={productionRouteMainLayoutState}
+      />
 
       <AppFeedbackShell error={error} notice={notice} loading={loading} />
     </DashboardShell>
