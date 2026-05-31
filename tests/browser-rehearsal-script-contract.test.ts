@@ -216,11 +216,13 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Auftrag einfügen oder Datei ablegen");
     expect(script).toContain("Clear-Check nach Klick zeigt alten Produktionsplan");
     expect(script).toContain("Clear-Check nach Klick zeigt alte Einkaufsliste");
+    expect(script).toContain("Clear-Check nach Klick zeigt alten Abschluss-Kontext");
     expect(script).toContain("Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.");
     expect(script).toContain("Clear-Check nach Klick laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
     expect(script).toContain("Clear-Check Reload ohne leeren Vorgang");
     expect(script).toContain("Clear-Check Reload zeigt alten Produktionsplan");
     expect(script).toContain("Clear-Check Reload zeigt alte Einkaufsliste");
+    expect(script).toContain("Clear-Check Reload zeigt alten Abschluss-Kontext");
     expect(script).toContain("Clear-Check Reload laesst Clear-Aktion aktiv oder falsch beschriftet");
     expect(script).toContain("Clear-Check Reload laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit -> lokales Leeren");
