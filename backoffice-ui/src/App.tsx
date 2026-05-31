@@ -71,6 +71,7 @@ import {
 } from "./production-question-editor-state.js";
 import { buildProductionQuestionAutoOpenState } from "./production-question-auto-open-state.js";
 import { buildAppProductionRouteState } from "./app-production-route-state.js";
+import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import {
@@ -516,23 +517,16 @@ export function App() {
     setError
   });
 
-  async function handleOfferSubmit() {
-    setSubmitting(true);
-    clearMessages();
-    try {
-      const response = await createOfferFromText(offerText);
-      const createdDraftId = typeof response.draftId === "string" ? response.draftId : undefined;
-      if (createdDraftId) {
-        setSelectedDraftId(createdDraftId);
-      }
-      await refreshDashboard();
-      setNotice("Angebotsentwurf wurde erstellt.");
-    } catch (submitError) {
-      setError(formatSubmitErrorMessage(submitError, "Angebotsentwurf konnte nicht erstellt werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const handleOfferSubmit = buildOfferTextSubmitAction({
+    createOfferFromText,
+    offerText,
+    setSubmitting,
+    clearMessages,
+    setSelectedDraftId,
+    refreshDashboard,
+    setNotice,
+    setError
+  });
 
   const {
     submitSelectedDocument: handleIntakeDocumentSubmit,
