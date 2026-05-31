@@ -83,9 +83,6 @@ import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import { buildProductionWorkspaceControls } from "./production-workspace-controls.js";
 import { buildProductionWorkspaceResetCallbacks } from "./production-workspace-reset-callbacks.js";
 import { buildProductionPlanningControls } from "./production-planning-controls.js";
-import {
-  buildProductionWindowFileActions
-} from "./production-window-file-actions.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionQuestionAutoOpen } from "./use-production-question-auto-open.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
@@ -93,6 +90,7 @@ import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
 import { useProductionIntakeRequestDetail } from "./use-production-intake-request-detail.js";
 import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
+import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
 import { useOperatorNameState } from "./use-operator-name-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 
@@ -583,31 +581,12 @@ export function App() {
     loadSpecIntoEditor
   });
 
-  useEffect(() => {
-    if (route !== "production") {
-      return;
-    }
-
-    const {
-      handleWindowDragOver,
-      handleWindowDrop,
-      handleWindowDragLeave
-    } = buildProductionWindowFileActions({
-      setDragActive,
-      setIntakeFile,
-      processIncomingProductionFile
-    });
-
-    window.addEventListener("dragover", handleWindowDragOver);
-    window.addEventListener("drop", handleWindowDrop);
-    window.addEventListener("dragleave", handleWindowDragLeave);
-
-    return () => {
-      window.removeEventListener("dragover", handleWindowDragOver);
-      window.removeEventListener("drop", handleWindowDrop);
-      window.removeEventListener("dragleave", handleWindowDragLeave);
-    };
-  }, [route]);
+  useProductionWindowFileDrop({
+    route,
+    setDragActive,
+    setIntakeFile,
+    processIncomingProductionFile
+  });
 
   const handlePromoteDraft = buildOfferDraftPromoteAction({
     promoteOfferDraft,
