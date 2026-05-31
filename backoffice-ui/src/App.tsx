@@ -71,6 +71,7 @@ import {
 } from "./production-question-editor-state.js";
 import { buildProductionQuestionAutoOpenState } from "./production-question-auto-open-state.js";
 import { buildAppProductionRouteState } from "./app-production-route-state.js";
+import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
 import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
@@ -671,19 +672,14 @@ export function App() {
     };
   }, [route]);
 
-  async function handlePromoteDraft(draftId: string, variantId?: string) {
-    setSubmitting(true);
-    clearMessages();
-    try {
-      await promoteOfferDraft(draftId, variantId);
-      await refreshDashboard();
-      setNotice("Angebotsvariante wurde als operative Spezifikation übernommen.");
-    } catch (submitError) {
-      setError(formatSubmitErrorMessage(submitError, "Angebotsvariante konnte nicht übernommen werden."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const handlePromoteDraft = buildOfferDraftPromoteAction({
+    promoteOfferDraft,
+    setSubmitting,
+    clearMessages,
+    refreshDashboard,
+    setNotice,
+    setError
+  });
 
   async function handleSeedDemoData() {
     setSubmitting(true);
