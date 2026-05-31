@@ -414,8 +414,11 @@ describe("backoffice internal usage smoke", () => {
     const homeRoute = await renderAppRoute("/");
 
     expect(document.body.textContent ?? "").toContain("Internes Beta-Kontrollzentrum");
+    expect(document.body.textContent ?? "").toContain("Angebotsagent öffnen");
     expect(document.body.textContent ?? "").toContain("Produktionsagent öffnen");
+    const offerStartLink = findAnchorByText("Angebotsagent öffnen");
     const productionStartLink = findAnchorByText("Produktionsagent öffnen");
+    expect(offerStartLink.getAttribute("href")).toBe("/angebot");
     expect(productionStartLink.getAttribute("href")).toBe("/produktion");
 
     await act(async () => {
@@ -423,7 +426,20 @@ describe("backoffice internal usage smoke", () => {
     });
     homeRoute.container.remove();
 
-    const productionRoute = await renderProductionRoute();
+    const offerRoute = await renderAppRoute(offerStartLink.getAttribute("href") ?? "/angebot");
+
+    expect(document.body.textContent ?? "").toContain("Angebotsagent");
+    expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(document.body.textContent ?? "").toContain("Produktionsagent");
+    const productionHandoffLink = findAnchorByText("Produktionsagent");
+    expect(productionHandoffLink.getAttribute("href")).toBe("/produktion");
+
+    await act(async () => {
+      offerRoute.root.unmount();
+    });
+    offerRoute.container.remove();
+
+    const productionRoute = await renderAppRoute(productionHandoffLink.getAttribute("href") ?? "/produktion");
 
     expect(document.body.textContent ?? "").toContain("Was braucht die Produktion als Nächstes?");
     expect(document.body.textContent ?? "").toContain("Aktiver Vorgang");
