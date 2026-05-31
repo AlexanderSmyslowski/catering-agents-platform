@@ -2,7 +2,6 @@ import {
   aggregatePurchaseList,
   checkPurchaseCoverage,
   mergeReadiness,
-  procurementGroupFor,
   SCHEMA_VERSION,
   toProductionBatch,
   validateAcceptedEventSpec,
@@ -14,6 +13,11 @@ import {
   type PurchaseList
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
+import {
+  bakerPurchaseComponent,
+  bakerPurchaseConstraintConflictReason,
+  procurementItemsForComponent
+} from "./procurement-rules.js";
 
 function stationFor(label: string): string {
   if (/salat|dessert/i.test(label)) {
@@ -42,129 +46,12 @@ function gnPlanFor(servings: number): { container: string; count: number }[] {
   ];
 }
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function procurementItemsForComponent(
-  component: AcceptedEventSpec["menuPlan"][number],
-  servings: number
-): PurchaseItem[] {
-  const productionMode = component.productionDecision?.mode;
-  const purchasedElements = component.productionDecision?.purchasedElements ?? [];
-
-  if (productionMode === "hybrid") {
-    return purchasedElements.map((element, index) => ({
-      ingredientId: `proc-${slugify(component.componentId)}-${slugify(element)}-${index + 1}`,
-      displayName: `${element} für ${component.label}`,
-      normalizedQty: servings,
-      normalizedUnit: "portion",
-      purchaseQty: servings,
-      purchaseUnit: "portion",
-      group: procurementGroupFor(element),
-      supplierHint: "Metro Convenience",
-      sourceRecipes: [`procurement:${component.componentId}`],
-      mappingConfidence: 0.7
-    }));
-  }
-
-  if (productionMode === "convenience_purchase") {
-    return purchasedElements.map((element, index) => ({
-      ingredientId: `proc-${slugify(component.componentId)}-${slugify(element)}-${index + 1}`,
-      displayName: `${element} für ${component.label}`,
-      normalizedQty: servings,
-      normalizedUnit: "portion",
-      purchaseQty: servings,
-      purchaseUnit: "portion",
-      group: procurementGroupFor(element),
-      supplierHint: "Metro Convenience",
-      sourceRecipes: [`procurement:${component.componentId}`],
-      mappingConfidence: 0.7
-    }));
-  }
-
-  if (productionMode === "external_finished") {
-    return [
-      {
-        ingredientId: `proc-${slugify(component.componentId)}-finished`,
-        displayName: component.label,
-        normalizedQty: servings,
-        normalizedUnit: "portion",
-        purchaseQty: servings,
-        purchaseUnit: "portion",
-        group: procurementGroupFor(component.label),
-        supplierHint: "Metro / externer Lieferant",
-        sourceRecipes: [`procurement:${component.componentId}`],
-        mappingConfidence: 0.65
-      }
-    ];
-  }
-
-  return [];
-}
-
-function isBakerPurchaseLabel(label: string): boolean {
-  const normalized = label.replace(/\s+/g, " ").trim();
-  return /^(?:klassisch\s+)?(?:brot\s*(?:&|und|-)?\s*baguette|baguette|br[öo]tchen|broetchen|brotkorb|brot)$/i.test(
-    normalized
-  );
-}
-
-function bakerPurchasedElements(label: string): string[] {
-  const normalized = label.toLowerCase();
-  if (/baguette/.test(normalized) && /brot/.test(normalized)) {
-    return ["Baguette", "Brot"];
-  }
-  if (/baguette/.test(normalized)) {
-    return ["Baguette"];
-  }
-  if (/br[öo]tchen|broetchen/.test(normalized)) {
-    return ["Brötchen"];
-  }
-  if (/brotkorb/.test(normalized)) {
-    return ["Brotkorb"];
-  }
-  return ["Brot"];
-}
-
-function bakerPurchaseComponent(
-  component: AcceptedEventSpec["menuPlan"][number]
-): AcceptedEventSpec["menuPlan"][number] | undefined {
-  if (!isBakerPurchaseLabel(component.label)) {
-    return undefined;
-  }
-
-  return {
-    ...component,
-    menuCategory: component.menuCategory ?? "classic",
-    productionDecision: {
-      mode: "convenience_purchase",
-      purchasedElements: bakerPurchasedElements(component.label),
-      notes: component.productionDecision?.notes
-    }
-  };
-}
-
 function hybridClarificationReason(component: AcceptedEventSpec["menuPlan"][number]): string | undefined {
   if (!/\bfocaccia\b/i.test(component.label)) {
     return undefined;
   }
 
   return `Hybridfall ${component.label}: Bitte bewusst klären, ob Eigenproduktion, Bäcker-Zukauf, Convenience-Zukauf oder Fertigprodukt gilt.`;
-}
-
-function bakerPurchaseConstraintConflictReason(
-  component: AcceptedEventSpec["menuPlan"][number],
-  productionConstraints?: string[]
-): string | undefined {
-  if (!Array.isArray(productionConstraints) || !productionConstraints.includes("gluten_free")) {
-    return undefined;
-  }
-
-  return `Harte Intake-Restriktion gluten_free blockiert den Bäcker-Zukauf für ${component.label}.`;
 }
 
 function purchasedElementsSummary(component: AcceptedEventSpec["menuPlan"][number]): string {
