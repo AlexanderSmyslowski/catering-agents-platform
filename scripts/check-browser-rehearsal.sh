@@ -357,6 +357,9 @@ open_question_markers='async () => {
   if (html.includes("/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv")) {
     missing.push("Offener-Rueckfragen-Pfad zeigt alten Einkaufslisten-Exportlink");
   }
+  if (text.includes("Abschluss-Kontext:")) {
+    missing.push("Offener-Rueckfragen-Pfad zeigt alten Abschluss-Kontext");
+  }
   const archiveButton = [...document.querySelectorAll("button")].find((button) =>
     (button.textContent ?? "").replace(/\s+/g, " ").trim().startsWith("Fehlupload archivieren")
   );
@@ -430,6 +433,15 @@ open_question_markers='async () => {
       if (archivedHtml.includes("/api/intake/v1/intake/requests/demo-production-answered-clarification")) {
         missing.push("Archive-Rehearsal behaelt archivierten Intake-Detailanker im DOM");
       }
+      if (archivedText.includes("Abschluss-Kontext:")) {
+        missing.push("Archive-Rehearsal zeigt alten Abschluss-Kontext nach Klick");
+      }
+      if (archivedHtml.includes("/api/exports/v1/exports/production-plans/")) {
+        missing.push("Archive-Rehearsal behaelt Produktionsplan-Exportlink nach Klick");
+      }
+      if (archivedHtml.includes("/api/exports/v1/exports/purchase-lists/")) {
+        missing.push("Archive-Rehearsal behaelt Einkaufslisten-Exportlink nach Klick");
+      }
       if (!archivedArchiveButton) {
         missing.push("Archive-Rehearsal nach Klick ohne Fehlupload-Archiv-Aktion");
       } else if (
@@ -473,6 +485,15 @@ open_question_markers='async () => {
       }
       if (reloadedHtml.includes("/api/intake/v1/intake/requests/demo-production-answered-clarification")) {
         missing.push("Archive-Rehearsal Reload behaelt archivierten Intake-Detailanker im DOM");
+      }
+      if (reloadedText.includes("Abschluss-Kontext:")) {
+        missing.push("Archive-Rehearsal Reload zeigt alten Abschluss-Kontext");
+      }
+      if (reloadedHtml.includes("/api/exports/v1/exports/production-plans/")) {
+        missing.push("Archive-Rehearsal Reload behaelt Produktionsplan-Exportlink");
+      }
+      if (reloadedHtml.includes("/api/exports/v1/exports/purchase-lists/")) {
+        missing.push("Archive-Rehearsal Reload behaelt Einkaufslisten-Exportlink");
       }
       if (!reloadedArchiveButton) {
         missing.push("Archive-Rehearsal Reload ohne Fehlupload-Archiv-Aktion");
