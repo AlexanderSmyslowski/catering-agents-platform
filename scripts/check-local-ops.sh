@@ -49,6 +49,20 @@ process.stdin.on("end", () => {
 '
 }
 
+verify_ui_route_shell() {
+  local label="$1"
+  local url="$2"
+  local body
+
+  body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${url}")"
+  if [[ "${body}" != *'<div id="root"></div>'* || "${body}" != *'/src/main.tsx'* ]]; then
+    echo "  ${label}: UI-App-Shell unerwartet (${url})" >&2
+    exit 1
+  fi
+
+  printf '  %s: App-Shell erreichbar (%s, root + main.tsx)\n' "${label}" "${url}"
+}
+
 instruction_like_purchase_item_report() {
   local data_root="$1"
   DATA_ROOT="${data_root}" node - <<'NODE'
@@ -135,6 +149,12 @@ for entry in "${required_urls[@]}"; do
   fi
   echo "  ${label}: erreichbar (${url}, HTTP 200)"
 done
+
+echo ""
+echo "UI-Route-Shellpruefung:"
+verify_ui_route_shell "Start-Route" "http://127.0.0.1:3200/"
+verify_ui_route_shell "Angebot-Route" "http://127.0.0.1:3200/angebot"
+verify_ui_route_shell "Produktion-Route" "http://127.0.0.1:3200/produktion"
 
 echo ""
 echo "Erwartungsankerpruefung:"

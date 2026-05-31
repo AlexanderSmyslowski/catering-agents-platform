@@ -123,6 +123,18 @@ describe("local ops check contract", () => {
     expect(testingDoc).toContain("Start-, Intake-/Request-, Angebots-, Produktions- und Exportanker");
   });
 
+  it("verifies that local UI routes serve the app shell before manual browser rehearsal", () => {
+    expect(checkScript).toContain("verify_ui_route_shell()");
+    expect(checkScript).toContain("UI-Route-Shellpruefung");
+    expect(checkScript).toContain("Start-Route");
+    expect(checkScript).toContain("Angebot-Route");
+    expect(checkScript).toContain("Produktion-Route");
+    expect(checkScript).toContain('<div id="root"></div>');
+    expect(checkScript).toContain("/src/main.tsx");
+    expect(checkScript).toContain("UI-App-Shell unerwartet");
+    expect(checkScript).toContain("App-Shell erreichbar");
+  });
+
   it("keeps a synthetic answered clarification demo anchor traceable without real data", () => {
     const anchor = getDemoProductionAnsweredClarificationAnchor();
     const projection = buildProductionConversationProjection({
