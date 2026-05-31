@@ -79,14 +79,8 @@ import {
   completeProductionQuestionEditSuccess
 } from "./production-question-editor-state.js";
 import { buildProductionQuestionAutoOpenState } from "./production-question-auto-open-state.js";
-import {
-  buildProductionObjectsActions,
-  buildProductionQuestionActions,
-  buildProductionQuestionEditorActions,
-  buildProductionRecipeActions
-} from "./production-route-actions.js";
+import { buildAppProductionRouteState } from "./app-production-route-state.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
-import { buildProductionRouteMainLayoutState } from "./production-route-main-layout-state.js";
 import { buildProductionRouteViewState } from "./production-route-view-state.js";
 import {
   buildProductionSourceInputActions,
@@ -935,28 +929,6 @@ export function App() {
     hasFocusedSpecEditChanges,
     recipes: dashboard.recipes
   });
-  const productionQuestionActions = buildProductionQuestionActions({
-    openSpecForQuestions: handleOpenSpecForQuestions
-  });
-  const productionQuestionEditorActions = buildProductionQuestionEditorActions({
-    setEditingEventType,
-    setEditingEventDate,
-    setEditingAttendeeCount,
-    setEditingServiceForm,
-    setEditingMenuItems,
-    updateEditingComponentState,
-    beginSpecEdit,
-    saveSpecEdit: handleSaveSpecEdit,
-    createPlan: handleCreatePlan,
-    resetSpecEdit
-  });
-  const productionObjectsActions = buildProductionObjectsActions({ setSelectedPlanId });
-  const productionRecipeActions = buildProductionRecipeActions({
-    setRecipeName,
-    setRecipeFile,
-    uploadRecipe: handleRecipeUpload,
-    reviewRecipe: handleRecipeReview
-  });
   const productionRouteFilterState = buildProductionRouteFilterState({
     productionPlanCount: dashboard.productionPlans.length,
     purchaseListCount: dashboard.purchaseLists.length,
@@ -1008,18 +980,30 @@ export function App() {
     saveSpecEdit: handleSaveSpecEdit,
     resetSpecEdit
   });
-  const productionRouteMainLayoutState = buildProductionRouteMainLayoutState({
+  const { productionRouteMainLayoutState } = buildAppProductionRouteState({
     viewState: productionRouteViewState,
     submitting,
     sourceInput: productionSourceInput,
     sourceInputActions: productionSourceInputActions,
     manualInput: manualSpecInput,
     manualInputActions: manualSpecActions,
-    questionActions: productionQuestionActions,
     editorState: productionQuestionEditorState,
-    editorActions: productionQuestionEditorActions,
-    objectPanelActions: productionObjectsActions,
-    recipeActions: productionRecipeActions
+    openSpecForQuestions: handleOpenSpecForQuestions,
+    setEditingEventType,
+    setEditingEventDate,
+    setEditingAttendeeCount,
+    setEditingServiceForm,
+    setEditingMenuItems,
+    updateEditingComponentState,
+    beginSpecEdit,
+    saveSpecEdit: handleSaveSpecEdit,
+    createPlan: handleCreatePlan,
+    resetSpecEdit,
+    setSelectedPlanId,
+    setRecipeName,
+    setRecipeFile,
+    uploadRecipe: handleRecipeUpload,
+    reviewRecipe: handleRecipeReview
   });
   const appRouteShellState = buildAppRouteShellState({
     route,
