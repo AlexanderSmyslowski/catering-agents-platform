@@ -1,6 +1,7 @@
 import { buildProductionHandoffState } from "./production-handoff-state.js";
 import type { ProductionHandoffState } from "./production-handoff-panel.js";
 import { buildProductionObjectProgressState } from "./production-object-progress-state.js";
+import { buildProductionObjectsState } from "./production-objects-state.js";
 import type {
   ProductionObjectsState,
   ProductionPlanProgressState
@@ -160,7 +161,7 @@ export function buildProductionRouteViewState({
       planProgress,
       planEtaSeconds
     }),
-    objectPanelState: {
+    objectPanelState: buildProductionObjectsState({
       focusedProductionSpec,
       productionWorkspaceCleared,
       currentSpecPlans,
@@ -169,7 +170,7 @@ export function buildProductionRouteViewState({
       selectedPlanComponentsById,
       archivedPlans,
       specById
-    },
+    }),
     purchaseListState: buildProductionPurchaseListState({
       currentSpecPurchaseLists,
       archivedPurchaseLists,
