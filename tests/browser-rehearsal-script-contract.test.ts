@@ -115,6 +115,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("shouldSubmitAnswers");
     expect(script).toContain("planWithSaveButton.click()");
     expect(script).toContain("Answer-Submit-Rehearsal ohne Plan-Erfolgsmeldung");
+    expect(script).toContain("Answer-Submit-Rehearsal ohne gespeicherte strukturierte Teilnehmerzahl");
     expect(script).toContain("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
     expect(script).toContain("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
     expect(script).toContain("Answer-Submit-Rehearsal ohne Produktionsplan-Exportlink");
