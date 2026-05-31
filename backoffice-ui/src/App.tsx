@@ -49,7 +49,6 @@ import {
   type IntakeDocumentChannel,
   type ServiceHealthState
 } from "./api.js";
-import { getSpecLabel } from "./production-language.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
 import { buildProductionCurrentArtifactsState } from "./production-current-artifacts-state.js";
 import { buildProductionDashboardRecordsState } from "./production-dashboard-records-state.js";
@@ -63,12 +62,7 @@ import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { resetProductionStateAfterDocumentFailure } from "./production-document-failure-reset.js";
 import { completeProductionStateAfterDocumentSuccess } from "./production-document-success-state.js";
 import { startProductionDocumentUpload } from "./production-document-upload-start.js";
-import {
-  completeProductionStateAfterPlanSuccess,
-  prepareProductionSpecForPlanning,
-  resetProductionStateAfterPlanFailure,
-  startProductionPlanRunState
-} from "./production-plan-result-state.js";
+import { buildProductionPlanSubmissionAction } from "./production-plan-submission-action.js";
 import {
   buildProductionQuestionEditorState,
   completeProductionQuestionEditSuccess
@@ -622,38 +616,22 @@ export function App() {
     }
   }
 
-  async function handleCreatePlan(spec: Record<string, unknown>) {
-    setSubmitting(true);
-    setProductionWorkspaceCleared(false);
-    clearMessages();
-    try {
-      const specForPlanning = await prepareProductionSpecForPlanning(spec, editingSpecId, {
-        persistCurrentSpecEdit,
-        setNotice
-      });
-
-      const specLabel = getSpecLabel(specForPlanning);
-      startProductionPlanRunState(specForPlanning, specLabel, {
-        startPlanProgress,
-        clearSelectedPlanId: () => setSelectedPlanId(undefined),
-        setNotice
-      });
-      const response = await createProductionPlan(specForPlanning);
-      await completeProductionStateAfterPlanSuccess(response, {
-        setSelectedPlanId,
-        refreshDashboard,
-        completePlanProgress,
-        setNotice
-      });
-    } catch (submitError) {
-      resetProductionStateAfterPlanFailure(submitError, {
-        failPlanProgress,
-        setError
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const handleCreatePlan = buildProductionPlanSubmissionAction({
+    createProductionPlan,
+    editingSpecId,
+    setSubmitting,
+    setProductionWorkspaceCleared,
+    clearMessages,
+    persistCurrentSpecEdit,
+    startPlanProgress,
+    clearSelectedPlanId: () => setSelectedPlanId(undefined),
+    setSelectedPlanId,
+    refreshDashboard,
+    completePlanProgress,
+    failPlanProgress,
+    setNotice,
+    setError
+  });
 
   function loadSpecIntoEditor(spec: Record<string, unknown>) {
     const specId = loadSpecIntoEditorState(spec);
