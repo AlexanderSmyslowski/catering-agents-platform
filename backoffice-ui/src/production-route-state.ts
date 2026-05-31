@@ -301,15 +301,17 @@ export function formatActiveProductionContextLabel(input: {
   }
 
   if (input.selectedPlan) {
+    const planId = formatContextId(input.selectedPlan.planId);
     if (input.selectedPlanSpecLabel) {
-      return `Plan-Kontext geladen: ${String(input.selectedPlan.planId ?? "-")} · Spezifikation: ${input.selectedPlanSpecLabel}`;
+      return `Plan-Kontext geladen: ${planId} · Spezifikation: ${input.selectedPlanSpecLabel}`;
     }
 
-    if (input.selectedPlan.eventSpecId) {
-      return `Plan-Kontext geladen: ${String(input.selectedPlan.planId ?? "-")} · Spezifikation: ${String(input.selectedPlan.eventSpecId)}`;
+    const eventSpecId = formatContextId(input.selectedPlan.eventSpecId);
+    if (eventSpecId !== "-") {
+      return `Plan-Kontext geladen: ${planId} · Spezifikation: ${eventSpecId}`;
     }
 
-    return `Plan-Kontext geladen: ${String(input.selectedPlan.planId ?? "-")} · Spezifikation noch nicht im Fokus`;
+    return `Plan-Kontext geladen: ${planId} · Spezifikation noch nicht im Fokus`;
   }
 
   return input.productionWorkspaceCleared ? "Kein aktiver Vorgang" : "Noch kein aktiver Vorgang";
