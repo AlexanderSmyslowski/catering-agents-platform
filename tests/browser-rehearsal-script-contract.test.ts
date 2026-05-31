@@ -118,6 +118,12 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Answer-Submit-Rehearsal ohne gespeicherte strukturierte Teilnehmerzahl");
     expect(script).toContain("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
     expect(script).toContain("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
+    expect(script).toContain("Answer-Submit-Rehearsal Produktionsplan-Exportlink passt nicht");
+    expect(script).toContain("Answer-Submit-Rehearsal Produktionsplan-Export ist nicht abrufbar");
+    expect(script).toContain("Answer-Submit-Rehearsal Produktionsplan-Exportinhalt passt nicht");
+    expect(script).toContain("Answer-Submit-Rehearsal Einkaufslisten-Exportlink passt nicht");
+    expect(script).toContain("Answer-Submit-Rehearsal Einkaufslisten-Export ist nicht abrufbar");
+    expect(script).toContain("Answer-Submit-Rehearsal Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header");
     expect(script).toContain("Answer-Submit-Rehearsal ohne Produktionsplan-Exportlink");
     expect(script).toContain("Answer-Submit-Rehearsal ohne Einkaufslisten-Exportlink");
     expect(script).toContain("Answer-Submit-Rehearsal bleibt nach Berechnung in leerem Ergebniszustand");

@@ -389,17 +389,57 @@ open_question_markers='async () => {
 
       const submittedText = document.body.innerText;
       const submittedHtml = document.body.innerHTML;
+      const submittedExportLinks = [...document.querySelectorAll("a")]
+        .map((anchor) => anchor.getAttribute("href") ?? "");
+      const submittedPlanContext = submittedText.match(/Plan-Kontext: planId ([^\\s]+) · specId ([^\\s]+)/);
+      const submittedPurchaseContext = submittedText.match(/purchaseListId: ([^\\s]+) · specId: ([^\\s]+)/);
       if (!submittedText.includes("Produktionsplan wurde erzeugt.")) {
         missing.push("Answer-Submit-Rehearsal ohne Plan-Erfolgsmeldung");
       }
       if (!submittedText.includes("Teilnehmerzahl: 43")) {
         missing.push("Answer-Submit-Rehearsal ohne gespeicherte strukturierte Teilnehmerzahl");
       }
-      if (!submittedText.includes("Plan-Kontext: planId ")) {
+      if (!submittedPlanContext) {
         missing.push("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
+      } else {
+        const [, planId, specId] = submittedPlanContext;
+        const expectedPlanHref = `/api/exports/v1/exports/production-plans/${planId}/html`;
+        if (!submittedExportLinks.includes(expectedPlanHref)) {
+          missing.push(`Answer-Submit-Rehearsal Produktionsplan-Exportlink passt nicht zu ${planId}`);
+        } else {
+          const planExportResponse = await fetch(expectedPlanHref);
+          if (!planExportResponse.ok) {
+            missing.push(`Answer-Submit-Rehearsal Produktionsplan-Export ist nicht abrufbar: ${planExportResponse.status}`);
+          } else {
+            const planExportBody = await planExportResponse.text();
+            if (!planExportBody.includes(`Produktionsplan ${planId}`) || !planExportBody.includes(specId)) {
+              missing.push(`Answer-Submit-Rehearsal Produktionsplan-Exportinhalt passt nicht zu ${planId}/${specId}`);
+            }
+          }
+        }
       }
-      if (!submittedText.includes("purchaseListId: ")) {
+      if (!submittedPurchaseContext) {
         missing.push("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
+      } else {
+        const [, purchaseListId] = submittedPurchaseContext;
+        const expectedPurchaseHref = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
+        if (!submittedExportLinks.includes(expectedPurchaseHref)) {
+          missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Exportlink passt nicht zu ${purchaseListId}`);
+        } else {
+          const purchaseExportResponse = await fetch(expectedPurchaseHref);
+          if (!purchaseExportResponse.ok) {
+            missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Export ist nicht abrufbar: ${purchaseExportResponse.status}`);
+          } else {
+            const purchaseExportBody = await purchaseExportResponse.text();
+            if (
+              !purchaseExportBody.includes(
+                `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
+              )
+            ) {
+              missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${purchaseListId}`);
+            }
+          }
+        }
       }
       if (!submittedHtml.includes("/api/exports/v1/exports/production-plans/")) {
         missing.push("Answer-Submit-Rehearsal ohne Produktionsplan-Exportlink");
