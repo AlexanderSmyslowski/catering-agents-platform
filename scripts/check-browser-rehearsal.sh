@@ -759,16 +759,23 @@ clear_workspace_markers='async () => {
     throw new Error(`Produktions-Clear-Rehearsal vor Klick unsicher: ${missing.join(" | ")}`);
   }
 
-  const [, planId] = planContext;
-  const [, purchaseListId] = purchaseContext;
+  const [, planId, planSpecId] = planContext;
+  const [, purchaseListId, purchaseSpecId] = purchaseContext;
   const planExport = `/api/exports/v1/exports/production-plans/${planId}/html`;
   const purchaseExport = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
+  const handoffContext = `Abschluss-Kontext: planId ${planId} · specId ${planSpecId} · purchaseListId ${purchaseListId}`;
 
   if (!beforeHtml.includes(planExport)) {
     missing.push(`Clear-Check vor Klick ohne Produktionsplan-Export ${planExport}`);
   }
   if (!beforeHtml.includes(purchaseExport)) {
     missing.push(`Clear-Check vor Klick ohne Einkaufslisten-Export ${purchaseExport}`);
+  }
+  if (planSpecId !== purchaseSpecId) {
+    missing.push(`Clear-Check vor Klick Abschluss-Kontext hat unterschiedliche Spezifikationen ${planSpecId}/${purchaseSpecId}`);
+  }
+  if (!beforeText.includes(handoffContext)) {
+    missing.push("Clear-Check vor Klick ohne passenden Abschluss-Kontext");
   }
   if (missing.length > 0) {
     throw new Error(`Produktions-Clear-Rehearsal vor Klick unvollstaendig: ${missing.join(" | ")}`);
@@ -785,6 +792,7 @@ clear_workspace_markers='async () => {
       text.includes("Auftrag einfügen oder Datei ablegen") &&
       !text.includes(`Plan-Kontext: planId ${planId}`) &&
       !text.includes(`purchaseListId: ${purchaseListId}`) &&
+      !text.includes(handoffContext) &&
       !html.includes(planExport) &&
       !html.includes(purchaseExport)
     ) {
@@ -814,6 +822,9 @@ clear_workspace_markers='async () => {
   if (afterText.includes(`purchaseListId: ${purchaseListId}`) || afterHtml.includes(purchaseExport)) {
     missing.push(`Clear-Check nach Klick zeigt alte Einkaufsliste ${purchaseListId}`);
   }
+  if (afterText.includes(handoffContext)) {
+    missing.push("Clear-Check nach Klick zeigt alten Abschluss-Kontext");
+  }
   if (!clearedClearButton) {
     missing.push("Clear-Check nach Klick ohne Clear-Aktion");
   } else if (!clearedClearButton.disabled || clearedClearButton.title !== "Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.") {
@@ -834,6 +845,7 @@ clear_workspace_markers='async () => {
       text.includes("Auftrag einfügen oder Datei ablegen") &&
       !text.includes(`Plan-Kontext: planId ${planId}`) &&
       !text.includes(`purchaseListId: ${purchaseListId}`) &&
+      !text.includes(handoffContext) &&
       !html.includes(planExport) &&
       !html.includes(purchaseExport)
     ) {
@@ -861,6 +873,9 @@ clear_workspace_markers='async () => {
   }
   if (reloadedText.includes(`purchaseListId: ${purchaseListId}`) || reloadedHtml.includes(purchaseExport)) {
     missing.push(`Clear-Check Reload zeigt alte Einkaufsliste ${purchaseListId}`);
+  }
+  if (reloadedText.includes(handoffContext)) {
+    missing.push("Clear-Check Reload zeigt alten Abschluss-Kontext");
   }
   if (!reloadedClearButton) {
     missing.push("Clear-Check Reload ohne Clear-Aktion");
