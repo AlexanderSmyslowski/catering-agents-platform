@@ -13,6 +13,23 @@ export type ProductionCurrentArtifactsState<
   archivedPurchaseLists: TPurchaseList[];
 };
 
+export function selectCurrentProductionArtifactsScopeSpecId(input: {
+  focusedProductionSpecId?: string;
+  selectedPlanId?: string;
+  orderedPlans: Array<Record<string, unknown>>;
+}): string {
+  const focusedProductionSpecId = input.focusedProductionSpecId?.trim();
+  if (focusedProductionSpecId) {
+    return focusedProductionSpecId;
+  }
+
+  const selectedPlan = input.selectedPlanId
+    ? input.orderedPlans.find((plan) => String(plan.planId ?? "") === input.selectedPlanId)
+    : undefined;
+  const fallbackPlan = selectedPlan ?? input.orderedPlans[0];
+  return String(fallbackPlan?.eventSpecId ?? "");
+}
+
 export function buildProductionCurrentArtifactsState<
   TPlan extends Record<string, unknown>,
   TPurchaseList extends Record<string, unknown>

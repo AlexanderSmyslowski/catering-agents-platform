@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildProductionCurrentArtifactsState } from "../backoffice-ui/src/production-current-artifacts-state.js";
+import {
+  buildProductionCurrentArtifactsState,
+  selectCurrentProductionArtifactsScopeSpecId
+} from "../backoffice-ui/src/production-current-artifacts-state.js";
 
 describe("production current artifacts state", () => {
   const plans = [
@@ -55,5 +58,29 @@ describe("production current artifacts state", () => {
       currentSpecPurchaseLists: [],
       archivedPurchaseLists: []
     });
+  });
+
+  it("scopes plan-centered artifacts from the selected or newest production plan", () => {
+    expect(
+      selectCurrentProductionArtifactsScopeSpecId({
+        focusedProductionSpecId: "spec-focused",
+        selectedPlanId: "plan-other",
+        orderedPlans: plans
+      })
+    ).toBe("spec-focused");
+
+    expect(
+      selectCurrentProductionArtifactsScopeSpecId({
+        selectedPlanId: "plan-archived",
+        orderedPlans: plans
+      })
+    ).toBe("spec-other");
+
+    expect(
+      selectCurrentProductionArtifactsScopeSpecId({
+        selectedPlanId: undefined,
+        orderedPlans: plans
+      })
+    ).toBe("spec-current");
   });
 });
