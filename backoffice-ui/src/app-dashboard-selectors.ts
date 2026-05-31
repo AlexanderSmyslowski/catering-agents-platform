@@ -46,6 +46,21 @@ export function isInitialHomeDashboardLoading(input: {
   );
 }
 
+export function isInitialProductionDashboardLoading(input: {
+  route: string;
+  loading: boolean;
+  dashboard: DashboardState;
+}): boolean {
+  return (
+    input.route === "production" &&
+    input.loading &&
+    input.dashboard.acceptedSpecs.length === 0 &&
+    input.dashboard.productionPlans.length === 0 &&
+    input.dashboard.purchaseLists.length === 0 &&
+    input.dashboard.recipes.length === 0
+  );
+}
+
 export function mapSpecsById(specs: Array<Record<string, unknown>>): Map<string, Record<string, unknown>> {
   return new Map(specs.map((spec) => [String(spec.specId ?? ""), spec] as const));
 }

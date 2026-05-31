@@ -3,6 +3,7 @@ import {
   countOfferHandoffReadiness,
   filterDashboardRecords,
   isInitialHomeDashboardLoading,
+  isInitialProductionDashboardLoading,
   mapSpecsById,
   selectActiveOfferSpec,
   selectRecordByStringId
@@ -55,6 +56,32 @@ describe("app dashboard selectors", () => {
         dashboard: { ...emptyDashboard, recipes: [{ recipeId: "recipe-1" }] }
       })
     ).toBe(false);
+  });
+
+  it("keeps initial production loading scoped to the empty production inventory", () => {
+    expect(isInitialProductionDashboardLoading({ route: "production", loading: true, dashboard: emptyDashboard })).toBe(
+      true
+    );
+    expect(isInitialProductionDashboardLoading({ route: "home", loading: true, dashboard: emptyDashboard })).toBe(
+      false
+    );
+    expect(isInitialProductionDashboardLoading({ route: "production", loading: false, dashboard: emptyDashboard })).toBe(
+      false
+    );
+    expect(
+      isInitialProductionDashboardLoading({
+        route: "production",
+        loading: true,
+        dashboard: { ...emptyDashboard, productionPlans: [{ planId: "plan-1" }] }
+      })
+    ).toBe(false);
+    expect(
+      isInitialProductionDashboardLoading({
+        route: "production",
+        loading: true,
+        dashboard: { ...emptyDashboard, intakeRequests: [{ requestId: "request-1" }] }
+      })
+    ).toBe(true);
   });
 
   it("selects specs and drafts with the App.tsx fallback behavior", () => {
