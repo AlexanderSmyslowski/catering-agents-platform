@@ -86,6 +86,27 @@ describe("production status summary state", () => {
     expect(state.productionNextStep.title).toBe("Auftrag einfügen oder Datei ablegen");
   });
 
+  it("does not surface stale intake origin after the production workspace was cleared", () => {
+    const state = buildProductionStatusSummaryState({
+      currentSpecPlans: [],
+      currentSpecPurchaseLists: [],
+      productionQuestions: [],
+      filteredAuditEvents: [],
+      intakeRequestDetail: {
+        requestId: "request-stale",
+        source: { channel: "pdf_upload", receivedAt: "2026-05-26T01:00:00.000Z" }
+      },
+      currentIntakeRequestId: "request-stale",
+      productionWorkspaceCleared: true
+    });
+
+    expect(state).toMatchObject({
+      activeProductionContextLabel: "Kein aktiver Vorgang",
+      productionIntakeOriginLabel: "kein Intake-Ursprung verknüpft",
+      productionHandoffContextLabel: undefined
+    });
+  });
+
   it("keeps the initial production loading state from looking like an empty active workflow", () => {
     const state = buildProductionStatusSummaryState({
       isInitialProductionLoading: true,
