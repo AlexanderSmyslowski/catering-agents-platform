@@ -135,7 +135,7 @@ offer_markers='() => {
   return { route: location.pathname, markers: "offer-ok" };
 }'
 
-production_markers='() => {
+production_markers='async () => {
   const text = document.body.innerText;
   const missing = [
     "Produktionsagent",
@@ -173,6 +173,15 @@ production_markers='() => {
     if (!text.includes(`Produktionsblatt exportieren\\nfür Plan ${planId} · Spezifikation ${specId}`)) {
       missing.push(`Produktionsplan-Exportlabel passt nicht zu ${planId}/${specId}`);
     }
+    const planExportResponse = await fetch(expectedPlanHref);
+    if (!planExportResponse.ok) {
+      missing.push(`aktueller Produktionsplan-Export ist im Browser nicht abrufbar: ${planExportResponse.status}`);
+    } else {
+      const planExportBody = await planExportResponse.text();
+      if (!planExportBody.includes(`Produktionsplan ${planId}`) || !planExportBody.includes(specId)) {
+        missing.push(`aktueller Produktionsplan-Exportinhalt passt nicht zu ${planId}/${specId}`);
+      }
+    }
   }
   const purchaseContext = text.match(/purchaseListId: ([^\\s]+) · specId: ([^\\s]+)/);
   if (!purchaseContext) {
@@ -185,6 +194,19 @@ production_markers='() => {
     }
     if (!text.includes(`Einkaufsliste exportieren\\nfür aktuellen Vorgang ${purchaseListId} · Spezifikation ${specId}`)) {
       missing.push(`Einkaufslisten-Exportlabel passt nicht zu ${purchaseListId}/${specId}`);
+    }
+    const purchaseExportResponse = await fetch(expectedPurchaseHref);
+    if (!purchaseExportResponse.ok) {
+      missing.push(`aktueller Einkaufslisten-Export ist im Browser nicht abrufbar: ${purchaseExportResponse.status}`);
+    } else {
+      const purchaseExportBody = await purchaseExportResponse.text();
+      if (
+        !purchaseExportBody.includes(
+          `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
+        )
+      ) {
+        missing.push(`aktueller Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${purchaseListId}`);
+      }
     }
   }
   if (text.includes("ÄLTERE EINKAUFSLISTEN") && !text.includes("Nur bei Bedarf aufklappen; ältere Listen sind kein aktueller Vorgang.")) {
