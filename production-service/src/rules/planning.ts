@@ -3,8 +3,7 @@ import {
   type AcceptedEventSpec,
   type PurchaseItem,
   type ProductionPlan,
-  type PurchaseList,
-  type Recipe
+  type PurchaseList
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import {
@@ -12,18 +11,13 @@ import {
   bakerPurchaseConstraintConflictReason,
   procurementItemsForComponent
 } from "./procurement-rules.js";
-import {
-  isBlockingPlanningIssue
-} from "./planning-readiness.js";
 import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.js";
 import { createPlanningIssueCollector } from "./planning-issue-collector.js";
 import { selectOperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
-import { normalizeRecipeResolution } from "./planning-recipe-resolution.js";
-import { productionConstraintConflictReason } from "./production-constraint-conflicts.js";
 import { buildUnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
-import { buildResolvedRecipePlanningArtifacts } from "./planning-resolved-recipe-artifacts.js";
 import { buildProcurementPlanningArtifacts } from "./planning-procurement-artifacts.js";
 import { buildComponentReadinessArtifacts } from "./planning-component-readiness-artifacts.js";
+import { buildRecipeComponentPlanningArtifacts } from "./planning-recipe-component-artifacts.js";
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
@@ -111,65 +105,23 @@ export async function buildProductionArtifacts(
 
       procurementItems.push(...procurementItemsForComponent(component, servings));
 
-      const rawResolution = component.recipeOverrideId
-        ? await discoveryService.resolveRecipeOverride(component.recipeOverrideId, component)
-        : await discoveryService.resolveRecipe(component, eventSpec);
-      const resolution = normalizeRecipeResolution(rawResolution, component.label);
-      for (const issue of resolution.unresolvedItems) {
-        noteIssue(issue, isBlockingPlanningIssue(issue));
-      }
-
-      const constraintConflict = productionConstraintConflictReason(
-        resolution.recipe,
-        eventSpec.productionConstraints
-      );
-      const selectedRecipe = constraintConflict
-        ? {
-            ...resolution.selection,
-            selectionReason: constraintConflict,
-            autoUsedInternetRecipe: false
-          }
-        : resolution.selection;
-      recipeSelections.push(selectedRecipe);
-      if (constraintConflict) {
-        const artifacts = buildUnresolvedComponentArtifacts({
-          component,
-          eventSpec,
-          servings,
-          reason: constraintConflict,
-          timelineLabel: `${component.label} Rezeptklärung`
-        });
-        noteIssue(artifacts.issue, artifacts.blocking);
-        kitchenSheets.push(artifacts.kitchenSheet);
-        timeline.push(artifacts.timelineItem);
-        continue;
-      }
-
-      if (!resolution.recipe || servings <= 0) {
-        const reason = resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden.";
-        const artifacts = buildUnresolvedComponentArtifacts({
-          component,
-          eventSpec,
-          servings,
-          reason,
-          blocking: servings <= 0,
-          timelineLabel: `${component.label} Rezeptklärung`
-        });
-        noteIssue(artifacts.issue, artifacts.blocking);
-        kitchenSheets.push(artifacts.kitchenSheet);
-        timeline.push(artifacts.timelineItem);
-        continue;
-      }
-
-      const artifacts = buildResolvedRecipePlanningArtifacts({
+      const recipeArtifacts = await buildRecipeComponentPlanningArtifacts({
         eventSpec,
         component,
-        recipe: resolution.recipe as Recipe,
-        servings
+        servings,
+        discoveryService
       });
-      productionBatches.push(artifacts.batch);
-      kitchenSheets.push(artifacts.kitchenSheet);
-      timeline.push(artifacts.timelineItem);
+      recipeSelections.push(recipeArtifacts.selection);
+      for (const issue of recipeArtifacts.issues) {
+        noteIssue(issue.issue, issue.blocking);
+      }
+      kitchenSheets.push(recipeArtifacts.kitchenSheet);
+      timeline.push(recipeArtifacts.timelineItem);
+      if (recipeArtifacts.kind === "unresolved") {
+        continue;
+      }
+
+      productionBatches.push(recipeArtifacts.batch);
     } catch (error) {
       const reason = error instanceof Error && error.message.startsWith("Ungültige Planungsantwort")
         ? error.message
