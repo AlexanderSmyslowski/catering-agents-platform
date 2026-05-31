@@ -6,17 +6,11 @@ import type {
 } from "@catering/shared-core";
 import { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 import { type WebRecipeSearchProvider } from "./provider.js";
-import { selectInternalRecipeCandidate } from "./internal-recipe-selection.js";
-import { buildInternalRecipeResolution } from "./internal-recipe-resolution.js";
 import {
   buildMissingOverrideRecipeResolution,
   buildOverrideRecipeResolution
 } from "./override-recipe-resolution.js";
 import { createRecipeSearchTrace } from "./recipe-search-trace.js";
-import {
-  appendInternalRecipeCandidatesTrace,
-  appendInternalRecipeWinnerTrace
-} from "./internal-recipe-trace.js";
 import { selectWebRecipeCandidate } from "./web-recipe-selection.js";
 import {
   buildUnresolvedWebRecipeResolution,
@@ -24,6 +18,7 @@ import {
 } from "./web-recipe-resolution.js";
 import { collectWebRecipeCandidates } from "./web-recipe-candidate-search.js";
 import { appendWebRecipeWinnerTrace } from "./web-recipe-trace.js";
+import { resolveInternalRecipeCandidate } from "./internal-recipe-candidate-resolution.js";
 
 export interface RecipeResolution {
   recipe?: Recipe;
@@ -55,17 +50,15 @@ export class RecipeDiscoveryService {
   ): Promise<RecipeResolution> {
     const searchTrace = createRecipeSearchTrace();
     const repositoryCandidates = await this.repository.findCandidates(component);
-    const internalWinner = selectInternalRecipeCandidate(repositoryCandidates, component, eventSpec);
+    const internalResolution = resolveInternalRecipeCandidate({
+      repositoryCandidates,
+      component,
+      eventSpec,
+      searchTrace
+    });
 
-    appendInternalRecipeCandidatesTrace(searchTrace, repositoryCandidates);
-
-    if (internalWinner?.recipe) {
-      appendInternalRecipeWinnerTrace(searchTrace, internalWinner.recipe);
-      return buildInternalRecipeResolution({
-        component,
-        winner: internalWinner,
-        searchTrace: searchTrace.entries
-      });
+    if (internalResolution) {
+      return internalResolution;
     }
 
     const { candidates, webSearchFailed } = await collectWebRecipeCandidates({
