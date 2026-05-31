@@ -18,6 +18,9 @@ describe("browser rehearsal script contract", () => {
     expect(packageJson.scripts?.["browser:rehearsal:archive-intake"]).toBe(
       "CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 bash ./scripts/check-browser-rehearsal.sh"
     );
+    expect(packageJson.scripts?.["browser:rehearsal:full-fresh"]).toBe(
+      "bash ./scripts/check-browser-rehearsal-full-fresh.sh"
+    );
     expect(script).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
@@ -29,6 +32,19 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Produktion Ergebnis-Kontext wiederhergestellt");
     expect(script).toContain("Produktion Submit-Reload gespeichert");
     expect(script).toContain("Produktion lokal geleert");
+    expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
+  });
+
+  it("keeps the full fresh browser rehearsal wired to the three synthetic browser modes", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal-full-fresh.sh", "utf8");
+
+    expect(script).toContain("start-fresh-local-stack.sh");
+    expect(script).toContain("check-browser-rehearsal.sh");
+    expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1");
+    expect(script).toContain("CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1");
+    expect(script).toContain("Normaler Kernpfad");
+    expect(script).toContain("Answer-Submit-Pfad");
+    expect(script).toContain("Archiv-Pfad");
     expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
   });
 
@@ -193,6 +209,7 @@ describe("browser rehearsal script contract", () => {
       expect(doc).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
       expect(doc).toContain("`npm run browser:rehearsal:answer-submit`");
       expect(doc).toContain("`npm run browser:rehearsal:archive-intake`");
+      expect(doc).toContain("`npm run browser:rehearsal:full-fresh`");
       expect(doc).toContain("`npm run local:start:fresh`");
       expect(doc).toContain("synthetische");
       expect(doc).toContain("Fresh-Datenwurzel");

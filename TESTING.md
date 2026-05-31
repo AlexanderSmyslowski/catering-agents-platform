@@ -276,7 +276,8 @@ Browser-Rehearsal-Modi:
 - `npm run browser:rehearsal` ist der nicht-mutierende Browser-Kernpfad fuer `Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit` gegen den laufenden lokalen Stack.
 - `npm run browser:rehearsal:answer-submit` ist ein mutierender Fresh-Run: vorher `npm run local:start:fresh`, dann synthetische Rueckfragenantworten speichern, Produktionsplan/Einkaufsliste berechnen und Reload-Kontext pruefen.
 - `npm run browser:rehearsal:archive-intake` ist ein mutierender Fresh-Run: vorher `npm run local:start:fresh`, dann den synthetischen Fehlupload-/Intake-Kontext per Soft-Archiv aus dem aktiven Produktionsfokus nehmen.
-- Mutierende Browser-Rehearsals duerfen nur die temporaere synthetische Fresh-Datenwurzel veraendern; sie sind kein Echte-Daten-Beleg, kein Deployment, keine Compliance-Aussage und keine Produktionsfreigabe.
+- `npm run browser:rehearsal:full-fresh` startet fuer jeden der drei Browser-Rehearsal-Modi eine kontrolliert frische temporaere synthetische Datenwurzel und fuehrt normaler Kernpfad, Answer-Submit-Pfad und Soft-Archiv-Pfad hintereinander aus.
+- Browser-Rehearsals duerfen nur synthetische lokale Fresh-Datenwurzeln veraendern; sie sind kein Echte-Daten-Beleg, kein Deployment, keine Compliance-Aussage und keine Produktionsfreigabe.
 
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 

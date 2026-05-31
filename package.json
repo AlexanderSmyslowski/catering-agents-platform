@@ -23,6 +23,7 @@
     "browser:rehearsal": "bash ./scripts/check-browser-rehearsal.sh",
     "browser:rehearsal:answer-submit": "CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 bash ./scripts/check-browser-rehearsal.sh",
     "browser:rehearsal:archive-intake": "CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 bash ./scripts/check-browser-rehearsal.sh",
+    "browser:rehearsal:full-fresh": "bash ./scripts/check-browser-rehearsal-full-fresh.sh",
     "dev:ui": "npm --workspace @catering/backoffice-ui run dev",
     "dev:intake": "tsx intake-service/src/server.ts",
     "dev:offer": "tsx offer-service/src/server.ts",
