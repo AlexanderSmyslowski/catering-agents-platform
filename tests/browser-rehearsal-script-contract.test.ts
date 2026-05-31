@@ -20,6 +20,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("click_rehearsal_link");
     expect(script).toContain("Produktion offene Rueckfragen");
     expect(script).toContain("Produktion Ergebnis-Kontext wiederhergestellt");
+    expect(script).toContain("Produktion Submit-Reload gespeichert");
     expect(script).toContain("Produktion lokal geleert");
     expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
   });
@@ -127,6 +128,9 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Answer-Submit-Rehearsal ohne Produktionsplan-Exportlink");
     expect(script).toContain("Answer-Submit-Rehearsal ohne Einkaufslisten-Exportlink");
     expect(script).toContain("Answer-Submit-Rehearsal bleibt nach Berechnung in leerem Ergebniszustand");
+    expect(script).toContain("submitted_reload_markers");
+    expect(script).toContain("Answer-Submit-Rehearsal Reload ohne gespeicherte strukturierte Teilnehmerzahl");
+    expect(script).toContain("Answer-Submit-Rehearsal Reload faellt in leeren Ergebniszustand zurueck");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");

@@ -458,6 +458,27 @@ open_question_markers='async () => {
   return { route: location.pathname, markers: "open-question-ok" };
 }'
 
+submitted_reload_markers='() => {
+  const text = document.body.innerText;
+  const missing = [];
+  if (!text.includes("Teilnehmerzahl: 43")) {
+    missing.push("Answer-Submit-Rehearsal Reload ohne gespeicherte strukturierte Teilnehmerzahl");
+  }
+  if (!text.includes("Plan-Kontext: planId ")) {
+    missing.push("Answer-Submit-Rehearsal Reload ohne aktuellen Plan-Kontext");
+  }
+  if (!text.includes("purchaseListId: ")) {
+    missing.push("Answer-Submit-Rehearsal Reload ohne aktuelle Einkaufsliste");
+  }
+  if (text.includes("Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.")) {
+    missing.push("Answer-Submit-Rehearsal Reload faellt in leeren Ergebniszustand zurueck");
+  }
+  if (missing.length > 0) {
+    throw new Error(`Answer-Submit-Rehearsal Reload fehlgeschlagen: ${missing.join(" | ")}`);
+  }
+  return { route: location.pathname, markers: "submit-reload-ok" };
+}'
+
 clear_workspace_markers='async () => {
   const beforeText = document.body.innerText;
   const beforeHtml = document.body.innerHTML;
@@ -590,6 +611,9 @@ check_current_page_markers "Produktion" "${production_markers}"
 check_current_page_markers "Produktion offene Rueckfragen" "${open_question_markers}"
 run_browser open "${BASE_URL}/produktion" >/dev/null
 check_current_page_markers "Produktion Ergebnis-Kontext wiederhergestellt" "${production_markers}"
+if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
+  check_current_page_markers "Produktion Submit-Reload gespeichert" "${submitted_reload_markers}"
+fi
 check_current_page_markers "Produktion lokal geleert" "${clear_workspace_markers}"
 
 echo ""
