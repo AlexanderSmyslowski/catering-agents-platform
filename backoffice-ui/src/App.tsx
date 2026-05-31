@@ -87,11 +87,8 @@ import { buildProductionRecipeSubmissionActions } from "./production-recipe-subm
 import { buildProductionIntakeArchiveAction } from "./production-intake-archive-action.js";
 import { buildProductionSpecFocusActions } from "./production-spec-focus-actions.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
-import {
-  clearProductionWorkspaceState,
-  resetProductionWorkspace
-} from "./production-workspace-reset.js";
 import { buildProductionWorkspaceActionState } from "./production-workspace-action-state.js";
+import { buildProductionWorkspaceUiActions } from "./production-workspace-ui-actions.js";
 import {
   buildProductionWindowFileActions
 } from "./production-window-file-actions.js";
@@ -466,36 +463,27 @@ export function App() {
     productionWorkspaceCleared
   });
 
-  function clearMessages() {
-    setError(undefined);
-    setNotice(undefined);
-  }
-
-  function resetProductionWorkspaceState() {
-    resetProductionWorkspace({
-      setProductionWorkspaceCleared,
-      resetIntakeDraft,
-      resetDocumentProgress,
-      clearFocusedProductionSpecId: () => setFocusedProductionSpecId(undefined),
-      clearSelectedPlanId: () => setSelectedPlanId(undefined),
-      resetPlanProgress,
-      resetIntakeRequestDetail,
-      resetSpecEdit,
-      clearUploadInput: () => {
-        if (productionUploadInputRef.current) {
-          productionUploadInputRef.current.value = "";
-        }
+  const {
+    clearMessages,
+    resetProductionWorkspaceState,
+    clearProductionWorkspace
+  } = buildProductionWorkspaceUiActions({
+    setError,
+    setNotice,
+    setProductionWorkspaceCleared,
+    resetIntakeDraft,
+    resetDocumentProgress,
+    clearFocusedProductionSpecId: () => setFocusedProductionSpecId(undefined),
+    clearSelectedPlanId: () => setSelectedPlanId(undefined),
+    resetPlanProgress,
+    resetIntakeRequestDetail,
+    resetSpecEdit,
+    clearUploadInput: () => {
+      if (productionUploadInputRef.current) {
+        productionUploadInputRef.current.value = "";
       }
-    });
-  }
-
-  function clearProductionWorkspace() {
-    clearProductionWorkspaceState({
-      resetProductionWorkspaceState,
-      clearMessages,
-      setNotice
-    });
-  }
+    }
+  });
 
   const handleArchiveCurrentIntake = buildProductionIntakeArchiveAction({
     archiveIntakeRequest,
