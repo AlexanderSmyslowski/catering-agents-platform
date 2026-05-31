@@ -86,7 +86,7 @@ describe("production input panel", () => {
       })
     );
 
-    expect(markup).toContain("Arbeitsbereich leeren");
+    expect(markup).toContain("Arbeitsbereich lokal leeren");
     expect(markup).toContain("für Lunch · 30 Teilnehmer · 2026-06-18");
     expect(markup).toContain("Fehlupload archivieren");
     expect(markup).toContain("für Intake-Anfrage request-123");

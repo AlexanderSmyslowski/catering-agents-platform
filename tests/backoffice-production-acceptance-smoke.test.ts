@@ -715,7 +715,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsagent-Chat");
     expect(content).toContain("Was braucht die Produktion als Nächstes?");
     expect(content).toContain("+ Angebot hinzufügen");
-    expect(content).toContain("Arbeitsbereich leeren");
+    expect(content).toContain("Arbeitsbereich lokal leeren");
     expect(content).toContain("Fehlupload archivieren");
     expect(content).toContain("Angebot hier ablegen");
     expect(content).toContain("Downloadbereich");
@@ -929,12 +929,12 @@ describe("backoffice production acceptance smoke", () => {
 
     try {
       const clearButton = Array.from(container.querySelectorAll("button")).find((button) =>
-        (button.textContent ?? "").includes("Arbeitsbereich leeren")
+        (button.textContent ?? "").includes("Arbeitsbereich lokal leeren")
       ) as HTMLButtonElement | undefined;
 
       expect(clearButton).toBeTruthy();
       expect(clearButton?.disabled).toBe(false);
-      expect(clearButton?.textContent).toContain("Arbeitsbereich leeren für Konferenz · 36 Teilnehmer · 2026-07-13");
+      expect(clearButton?.textContent).toContain("Arbeitsbereich lokal leeren für Konferenz · 36 Teilnehmer · 2026-07-13");
       expect(document.body.textContent ?? "").toContain("requestId: request-production-fallback-1");
       expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
       expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren");
@@ -946,7 +946,7 @@ describe("backoffice production acceptance smoke", () => {
 
       const content = document.body.textContent ?? "";
 
-      expect(content).toContain("Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert.");
+      expect(content).toContain("Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert.");
       expect(content).toContain("Kein aktiver Vorgang");
       expect(content).toContain("Auftrag einfügen oder Datei ablegen");
       expect(content).not.toContain("requestId: request-production-fallback-1");
@@ -1113,12 +1113,12 @@ describe("backoffice production acceptance smoke", () => {
 
     const route = await renderProductionRouteMarkup();
 
-    expect(route.text).toContain("Arbeitsbereich leeren");
+    expect(route.text).toContain("Arbeitsbereich lokal leeren");
     expect(route.text).toContain("Fehlupload archivieren");
     expect(route.text).toContain("Rückfragen: keine offenen Rückfragen");
     expect(route.text).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
-    expect(route.html).toContain("Arbeitsbereich leeren");
-    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Arbeitsbereich leeren/);
+    expect(route.html).toContain("Arbeitsbereich lokal leeren");
+    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Arbeitsbereich lokal leeren/);
     expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlupload archivieren/);
     expect(route.text).not.toContain("Löschen");
   });

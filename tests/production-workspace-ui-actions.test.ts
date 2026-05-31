@@ -105,14 +105,14 @@ describe("production workspace UI actions", () => {
     actions.clearProductionWorkspace();
 
     expect(actionInput.setNotice).toHaveBeenLastCalledWith(
-      "Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert."
+      "Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert."
     );
     expect(calls).toEqual([
       "setProductionWorkspaceCleared:true",
       "clearUploadInput",
       "setError:undefined",
       "setNotice:undefined",
-      "setNotice:Aktueller Upload wurde verworfen. Rückfragen und Ergebnisse wurden geleert."
+      "setNotice:Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert."
     ]);
   });
 });

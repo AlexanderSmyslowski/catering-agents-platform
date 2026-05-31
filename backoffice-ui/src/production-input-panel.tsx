@@ -103,7 +103,7 @@ export function ProductionInputPanel({
             disabled={clearWorkspaceDisabled}
             onClick={sourceInputActions.clearWorkspace}
           >
-            Arbeitsbereich leeren
+            Arbeitsbereich lokal leeren
             {sourceInput.clearWorkspaceContextLabel ? (
               <span className="visually-hidden"> für {sourceInput.clearWorkspaceContextLabel}</span>
             ) : null}
