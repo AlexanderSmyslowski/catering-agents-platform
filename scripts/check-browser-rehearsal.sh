@@ -6,6 +6,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_URL="${CATERING_BROWSER_REHEARSAL_BASE_URL:-http://127.0.0.1:3200}"
 SESSION_NAME="${CATERING_BROWSER_REHEARSAL_SESSION:-cap}"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
+SUBMIT_ANSWERS="${CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS:-0}"
+ALLOW_PERSISTENT_MUTATION="${CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION:-0}"
+DATA_ROOT_FILE="${ROOT_DIR}/.runtime/local-stack/data-root.txt"
 
 default_pwcli="${HOME}/.codex/skills/playwright/scripts/playwright_cli.sh"
 
@@ -83,9 +86,23 @@ trap close_browser EXIT
 
 cd "${ROOT_DIR}"
 
+if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
+  recorded_data_root="$(cat "${DATA_ROOT_FILE}" 2>/dev/null || true)"
+  if [[ "${ALLOW_PERSISTENT_MUTATION}" != "1" && "${recorded_data_root}" != *"catering-agents-rehearsal-"* ]]; then
+    echo "Answer-Submit-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run." >&2
+    echo "Starte vorher: npm run local:start:fresh" >&2
+    echo "Aktuelle Datenwurzel: ${recorded_data_root:-unbekannt}" >&2
+    echo "Nur bewusst ueberschreiben mit CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION=1." >&2
+    exit 2
+  fi
+fi
+
 echo "Browser-Rehearsal fuer lokalen synthetischen Kernpfad"
 echo "Base URL: ${BASE_URL}"
 echo "Session: ${SESSION_NAME}"
+if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
+  echo "Answer-Submit-Modus: aktiv (Fresh-Rehearsal-Datenroot erwartet)"
+fi
 echo ""
 
 require_ui_shell "${BASE_URL}/"
@@ -261,6 +278,7 @@ production_markers='async () => {
 
 open_question_markers='async () => {
   const missing = [];
+  const shouldSubmitAnswers = '"${SUBMIT_ANSWERS}"' === "1";
   const partialQuestionButton = [...document.querySelectorAll("button")].find((button) => {
     const label = button.getAttribute("aria-label") ?? "";
     return label.includes("Rückfragen öffnen: Lunch") && label.includes("teilweise vollständig");
@@ -346,6 +364,49 @@ open_question_markers='async () => {
     }
     if (document.body.innerText.includes("Teilnehmerzahl: 43")) {
       missing.push("Strukturierte Antwort-Aenderung wurde vor dem Speichern als aktueller Spec-Text angezeigt");
+    }
+  }
+  if (shouldSubmitAnswers) {
+    if (!planWithSaveButton) {
+      missing.push("Answer-Submit-Rehearsal ohne Berechnungsaktion");
+    } else if (planWithSaveButton.disabled) {
+      missing.push("Answer-Submit-Rehearsal kann Berechnungsaktion nach strukturierter Aenderung nicht klicken");
+    } else {
+      planWithSaveButton.click();
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const submittedText = document.body.innerText;
+        if (
+          submittedText.includes("Produktionsplan wurde erzeugt.") &&
+          submittedText.includes("Plan-Kontext: planId ") &&
+          submittedText.includes("purchaseListId: ") &&
+          submittedText.includes("Produktionsblatt exportieren") &&
+          submittedText.includes("Einkaufsliste exportieren")
+        ) {
+          break;
+        }
+      }
+
+      const submittedText = document.body.innerText;
+      const submittedHtml = document.body.innerHTML;
+      if (!submittedText.includes("Produktionsplan wurde erzeugt.")) {
+        missing.push("Answer-Submit-Rehearsal ohne Plan-Erfolgsmeldung");
+      }
+      if (!submittedText.includes("Plan-Kontext: planId ")) {
+        missing.push("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
+      }
+      if (!submittedText.includes("purchaseListId: ")) {
+        missing.push("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
+      }
+      if (!submittedHtml.includes("/api/exports/v1/exports/production-plans/")) {
+        missing.push("Answer-Submit-Rehearsal ohne Produktionsplan-Exportlink");
+      }
+      if (!submittedHtml.includes("/api/exports/v1/exports/purchase-lists/")) {
+        missing.push("Answer-Submit-Rehearsal ohne Einkaufslisten-Exportlink");
+      }
+      if (submittedText.includes("Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.")) {
+        missing.push("Answer-Submit-Rehearsal bleibt nach Berechnung in leerem Ergebniszustand");
+      }
     }
   }
   if (missing.length > 0) {
