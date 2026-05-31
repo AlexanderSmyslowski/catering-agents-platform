@@ -33,11 +33,30 @@ describe("production selected plan state", () => {
       currentSpecPlans,
       orderedPlans,
       productionWorkspaceCleared: false,
-      selectedPlanId: "plan-current-selected",
+      selectedPlanId: " plan-current-selected ",
       specById
     });
 
     expect(state.selectedPlan).toBe(currentSpecPlans[0]);
+    expect(state.selectedPlanSpec).toBe(currentSpec);
+    expect([...state.selectedPlanComponentsById.keys()]).toEqual([
+      "component-main",
+      "component-dessert"
+    ]);
+  });
+
+  it("normalizes selected plan IDs and selected plan spec IDs before resolving state", () => {
+    const spacedCurrentPlan = { planId: " plan-current-spaced ", eventSpecId: " spec-current " };
+    const state = buildProductionSelectedPlanState({
+      currentProductionSpecId: "spec-current",
+      currentSpecPlans: [spacedCurrentPlan],
+      orderedPlans: [orderedPlans[0], spacedCurrentPlan],
+      productionWorkspaceCleared: false,
+      selectedPlanId: "plan-current-spaced",
+      specById
+    });
+
+    expect(state.selectedPlan).toBe(spacedCurrentPlan);
     expect(state.selectedPlanSpec).toBe(currentSpec);
     expect([...state.selectedPlanComponentsById.keys()]).toEqual([
       "component-main",

@@ -190,7 +190,7 @@ describe("production route state", () => {
         currentSpecPlans,
         orderedPlans,
         productionWorkspaceCleared: false,
-        selectedPlanId: "plan-current-selected"
+        selectedPlanId: " plan-current-selected "
       })
     ).toBe(currentSpecPlans[0]);
     expect(
@@ -242,7 +242,7 @@ describe("production route state", () => {
     expect(selectProductionPlanSpec({ specsById })).toBeUndefined();
     expect(
       selectProductionPlanSpec({
-        selectedPlan: { planId: "plan-1", eventSpecId: "spec-current" },
+        selectedPlan: { planId: "plan-1", eventSpecId: " spec-current " },
         specsById
       })
     ).toBe(spec);
