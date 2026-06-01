@@ -46,15 +46,9 @@ import {
   selectCurrentProductionArtifactsScopeSpecId
 } from "./production-current-artifacts-state.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
-import {
-  buildProductionManualInputActions,
-  buildProductionManualInputStateFromForm
-} from "./production-manual-input-state.js";
-import { buildProductionManualSpecSubmitAction } from "./production-manual-spec-submit-action.js";
+import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
 import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
-import { buildProductionDocumentSubmitActions } from "./production-document-submit-action.js";
-import { buildProductionTextIntakeSubmitAction } from "./production-text-intake-submit-action.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import { buildAppProductionRouteState } from "./app-production-route-state.js";
 import { buildAppOfferRouteAppBoundary } from "./app-offer-route-app-boundary.js";
@@ -140,10 +134,6 @@ export function App() {
     failPlanProgress
   } = useProductionPlanProgress();
   const manualSpecForm = useProductionManualSpecForm();
-  const {
-    buildCurrentManualSpecInput,
-    resetManualSpecDraft
-  } = manualSpecForm;
   const deferredSearch = useDeferredValue(search);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -393,35 +383,22 @@ export function App() {
     handleArchiveCurrentIntake
   } = productionWorkspaceControls;
 
-  const handleIntakeSubmit = buildProductionTextIntakeSubmitAction({
+  const {
+    handleIntakeSubmit,
+    submitSelectedDocument: handleIntakeDocumentSubmit,
+    processIncomingProductionFile,
+    manualSpecInput,
+    manualSpecActions
+  } = buildProductionIntakeActionsAppBoundary({
     createAcceptedSpecFromText,
     intakeText,
-    setSubmitting,
-    setProductionWorkspaceCleared,
-    clearMessages,
-    setFocusedProductionSpecId,
-    refreshDashboard,
-    setNotice,
-    setError
-  });
-
-  const {
-    submitSelectedDocument: handleIntakeDocumentSubmit,
-    processIncomingProductionFile
-  } = buildProductionDocumentSubmitActions({
     createAcceptedSpecFromDocument,
     intakeFile,
     intakeChannel,
-    setSubmitting,
-    setProductionWorkspaceCleared,
-    clearMessages,
     startIncomingProductionFile,
     startDocumentProgress,
-    setFocusedProductionSpecId,
     completeIncomingProductionFile,
     completeDocumentProgress,
-    refreshDashboard,
-    setNotice,
     failIncomingProductionFile,
     failDocumentProgress,
     clearFocusedProductionSpecId: productionWorkspaceResetCallbacks.clearFocusedProductionSpecId,
@@ -429,17 +406,14 @@ export function App() {
     resetPlanProgress: productionWorkspaceResetCallbacks.resetPlanProgress,
     resetIntakeRequestDetail: productionWorkspaceResetCallbacks.resetIntakeRequestDetail,
     resetSpecEdit: productionWorkspaceResetCallbacks.resetSpecEdit,
-    setError
-  });
-
-  const handleManualSpecSubmit = buildProductionManualSpecSubmitAction({
     createAcceptedSpecFromManualForm,
-    buildCurrentManualSpecInput,
+    buildCurrentManualSpecInput: manualSpecForm.buildCurrentManualSpecInput,
+    resetManualSpecDraft: manualSpecForm.resetManualSpecDraft,
+    manualSpecForm,
     setSubmitting,
     setProductionWorkspaceCleared,
     clearMessages,
     setFocusedProductionSpecId,
-    resetManualSpecDraft,
     refreshDashboard,
     setNotice,
     setError
@@ -513,11 +487,6 @@ export function App() {
     setError
   });
 
-  const manualSpecInput = buildProductionManualInputStateFromForm(manualSpecForm);
-  const manualSpecActions = buildProductionManualInputActions({
-    ...manualSpecForm,
-    submitManualSpec: handleManualSpecSubmit
-  });
   const {
     productionSourceInput,
     productionSourceInputActions
