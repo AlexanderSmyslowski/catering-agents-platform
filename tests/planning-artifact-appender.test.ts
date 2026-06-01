@@ -5,6 +5,7 @@ import type {
 } from "../shared-core/src/index.js";
 import {
   appendProcurementPlanningArtifacts,
+  appendRecipeBranchPlanningArtifacts,
   appendRecipeComponentPlanningArtifacts,
   appendUnresolvedComponentArtifacts,
   type PlanningArtifactAppender
@@ -152,6 +153,53 @@ describe("planning artifact appender", () => {
 
     appendRecipeComponentPlanningArtifacts(appender, artifacts);
 
+    expect(appender.productionBatches).toEqual([batch]);
+    expect(appender.recipeSelections).toEqual([selection]);
+    expect(appender.kitchenSheets).toEqual([kitchenSheet]);
+    expect(appender.timeline).toEqual([timelineItem]);
+    expect(appender.notedIssues).toEqual([]);
+  });
+
+  it("appends recipe branch procurement items before recipe component artifacts", () => {
+    const appender = createAppender();
+    const item: PurchaseItem = {
+      ingredientId: "purchase-bread",
+      displayName: "Brot",
+      normalizedQty: 12,
+      normalizedUnit: "pcs",
+      purchaseQty: 12,
+      purchaseUnit: "pcs",
+      group: "bakery",
+      sourceRecipes: ["procurement:component-soup"],
+      mappingConfidence: 1
+    };
+    const batch: ProductionPlan["productionBatches"][number] = {
+      batchId: "batch-soup",
+      componentId: "component-soup",
+      recipeId: "recipe-soup",
+      scaledYield: { amount: 40, unit: "servings" },
+      batchCount: 1,
+      lossFactor: 1.05,
+      station: "Kalte Küche",
+      prepWindow: "2026-06-01 T-1",
+      ingredients: [],
+      steps: [],
+      gnPlan: []
+    };
+
+    appendRecipeBranchPlanningArtifacts(appender, {
+      procurementItems: [item],
+      recipeArtifacts: {
+        kind: "resolved",
+        selection,
+        batch,
+        kitchenSheet,
+        timelineItem,
+        issues: []
+      }
+    });
+
+    expect(appender.procurementItems).toEqual([item]);
     expect(appender.productionBatches).toEqual([batch]);
     expect(appender.recipeSelections).toEqual([selection]);
     expect(appender.kitchenSheets).toEqual([kitchenSheet]);

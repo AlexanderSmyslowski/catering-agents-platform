@@ -2,7 +2,7 @@ import type { AcceptedEventSpec } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import {
   appendProcurementPlanningArtifacts,
-  appendRecipeComponentPlanningArtifacts,
+  appendRecipeBranchPlanningArtifacts,
   appendUnresolvedComponentArtifacts,
   type PlanningArtifactAppender
 } from "./planning-artifact-appender.js";
@@ -68,6 +68,5 @@ export async function appendPlanningComponentBranchArtifacts(input: {
     servings,
     discoveryService
   });
-  artifactAppender.procurementItems.push(...recipeBranchArtifacts.procurementItems);
-  appendRecipeComponentPlanningArtifacts(artifactAppender, recipeBranchArtifacts.recipeArtifacts);
+  appendRecipeBranchPlanningArtifacts(artifactAppender, recipeBranchArtifacts);
 }
