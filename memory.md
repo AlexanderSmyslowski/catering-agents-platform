@@ -1564,3 +1564,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.323 - 2026-05-27
 - Produktionsroute-View-State wird in `backoffice-ui/src/production-route-view-state.ts` als reine Assembly-Funktion gebaut; `App.tsx` uebergibt die gebuendelten View-State-Objekte per Spread an `ProductionRouteMainLayout`.
 - `tests/production-route-view-state.test.ts` schuetzt die reine Feldzuordnung fuer Workbench, Rueckfragen, Objekte, Einkauf, Handoff und Rezeptbibliothek. Keine Aenderung an UI-Texten, Rueckfragenlogik, Antwortspeicherung, Planung, Rezeptmatching, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.324 - 2026-06-01
+- Browser-Rehearsal-Harness ist verhaltensgleich entlastet: gemeinsame Shell-/Browser-Helfer liegen in `scripts/browser-rehearsal-shell.sh`, waehrend `scripts/check-browser-rehearsal.sh` die Szenario- und Markerlogik behaelt.
+- Belegt mit `npm run browser:rehearsal:full-fresh`, `npm test` und `npm run build`. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
