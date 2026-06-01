@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 describe("browser rehearsal script contract", () => {
   const readmeDoc = readFileSync("README.md", "utf8");
   const testingDoc = readFileSync("TESTING.md", "utf8");
+  const browserShellHelpers = readFileSync("scripts/browser-rehearsal-shell.sh", "utf8");
 
   it("keeps the real-browser rehearsal script wired as an explicit optional npm command", () => {
     const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
@@ -21,7 +22,8 @@ describe("browser rehearsal script contract", () => {
     expect(packageJson.scripts?.["browser:rehearsal:full-fresh"]).toBe(
       "bash ./scripts/check-browser-rehearsal-full-fresh.sh"
     );
-    expect(script).toContain("playwright");
+    expect(script).toContain("browser-rehearsal-shell.sh");
+    expect(browserShellHelpers).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE");
@@ -52,12 +54,10 @@ describe("browser rehearsal script contract", () => {
   });
 
   it("does not pretend that the public Playwright CLI supports the Codex browser session protocol", () => {
-    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
-
-    expect(script).toContain("Browser-Rehearsal benoetigt die Codex-kompatible Browser-CLI");
-    expect(script).toContain("CATERING_BROWSER_CLI");
-    expect(script).toContain("Die oeffentliche Playwright-CLI ist kein kompatibler Fallback");
-    expect(script).not.toContain("npx --yes --package @playwright/cli playwright-cli");
+    expect(browserShellHelpers).toContain("Browser-Rehearsal benoetigt die Codex-kompatible Browser-CLI");
+    expect(browserShellHelpers).toContain("CATERING_BROWSER_CLI");
+    expect(browserShellHelpers).toContain("Die oeffentliche Playwright-CLI ist kein kompatibler Fallback");
+    expect(browserShellHelpers).not.toContain("npx --yes --package @playwright/cli playwright-cli");
   });
 
   it("guards the route, export and audit markers that make the synthetic core path browser-checkable", () => {
@@ -91,9 +91,9 @@ describe("browser rehearsal script contract", () => {
 
     expect(script).toContain("Start -> Angebot");
     expect(script).toContain("Angebot -> Produktion");
-    expect(script).toContain("local attempts=30");
-    expect(script).toContain("wartet auf ${target_path}");
-    expect(script).toContain("navigierte nicht stabil nach ${target_path}");
+    expect(browserShellHelpers).toContain("local attempts=30");
+    expect(browserShellHelpers).toContain("wartet auf ${target_path}");
+    expect(browserShellHelpers).toContain("navigierte nicht stabil nach ${target_path}");
     expect(script).toContain("click_rehearsal_link \"Start -> Angebot\" \"/angebot\"");
     expect(script).toContain("click_rehearsal_link \"Angebot -> Produktion\" \"/produktion\"");
     expect(script).toContain("link.click()");
@@ -199,9 +199,9 @@ describe("browser rehearsal script contract", () => {
   it("keeps mutating browser rehearsals isolated to a fresh synthetic data root by default", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
 
-    expect(script).toContain("Mutierender Browser-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run.");
-    expect(script).toContain("npm run local:start:fresh");
-    expect(script).toContain("catering-agents-rehearsal-");
+    expect(browserShellHelpers).toContain("Mutierender Browser-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run.");
+    expect(browserShellHelpers).toContain("npm run local:start:fresh");
+    expect(browserShellHelpers).toContain("catering-agents-rehearsal-");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION");
     expect(script).toContain("Answer-Submit-Modus: aktiv");
     expect(script).toContain("Archiv-Modus: aktiv");
