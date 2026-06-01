@@ -95,7 +95,7 @@ Warum dieser Schritt:
 - Er macht spaetere LLM-Entscheidungen entscheidungsreif statt improvisiert.
 - Er haelt den deterministischen Kern fuehrend.
 
-PA26 setzt den ersten Teil dieses Schritts um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. PA28 verbindet diese Bausteine ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, Secrets, echte Daten, API, Persistenz oder Schreibwirkung. Danach bleibt als naechster autonomer Schritt weitere synthetische Fixture-Schaerfung oder eine entscheidungsreife Vorlage fuer den LLM-Provider-/Datenrahmen.
+PA26 setzt den ersten Teil dieses Schritts um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. PA28 verbindet diese Bausteine ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, Secrets, echte Daten, API, Persistenz oder Schreibwirkung. PA29 macht die Input-Seite des Vertrags validierbar und lehnt Provider-, Echtdaten-, Write-Tool- und Rohpayload-Kandidaten ab. Danach bleibt als naechster autonomer Schritt weitere synthetische Fixture-Schaerfung oder eine entscheidungsreife Vorlage fuer den LLM-Provider-/Datenrahmen.
 
 ## 7. Sicherer Default
 
