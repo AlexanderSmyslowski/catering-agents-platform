@@ -81,12 +81,18 @@ export function compareInternalRecipeCandidates(
   return internalRecipeCandidateSortScore(right) - internalRecipeCandidateSortScore(left);
 }
 
+export function rankInternalRecipeCandidates(
+  candidates: InternalRecipeCandidate[]
+): InternalRecipeCandidate[] {
+  return [...candidates].sort(compareInternalRecipeCandidates);
+}
+
 export function selectInternalRecipeCandidate(
   repositoryCandidates: Recipe[],
   component: MenuComponent,
   eventSpec: AcceptedEventSpec
 ): InternalRecipeCandidate | undefined {
-  return repositoryCandidates
+  const candidates = repositoryCandidates
     .filter((recipe) => recipeSupportsMenuCategory(recipe, component))
     .map((recipe, index) =>
       buildInternalRecipeCandidate({
@@ -96,6 +102,7 @@ export function selectInternalRecipeCandidate(
         eventSpec
       })
     )
-    .filter(internalRecipeCandidatePassesThresholds)
-    .sort(compareInternalRecipeCandidates)[0];
+    .filter(internalRecipeCandidatePassesThresholds);
+
+  return rankInternalRecipeCandidates(candidates)[0];
 }
