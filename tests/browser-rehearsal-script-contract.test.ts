@@ -196,6 +196,20 @@ describe("browser rehearsal script contract", () => {
     expect(rehearsalBundle).toContain(
       "Answer-Submit-Rehearsal Reload faellt in leeren Ergebniszustand zurueck"
     );
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Produktionsplan-Exportlink passt nicht");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Produktionsplan-Export ist nicht abrufbar");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Produktionsplan-Exportinhalt passt nicht");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Produktionsplan-Exportlabel passt nicht");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Einkaufslisten-Exportlink passt nicht");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Einkaufslisten-Export ist nicht abrufbar");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Einkaufslisten-Exportlabel passt nicht");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload ohne passenden Abschluss-Kontext");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload Abschluss-Kontext hat unterschiedliche Spezifikationen");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload ohne Produktionsplan-Exportlink");
+    expect(rehearsalBundle).toContain("Answer-Submit-Rehearsal Reload ohne Einkaufslisten-Exportlink");
+    expect(rehearsalBundle).toContain("fetch(expectedPlanHref)");
+    expect(rehearsalBundle).toContain("fetch(expectedPurchaseHref)");
     expect(rehearsalBundle).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan als aktuellen Kontext");
     expect(rehearsalBundle).toContain("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
     expect(rehearsalBundle).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");
