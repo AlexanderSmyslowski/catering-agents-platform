@@ -1,16 +1,15 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("browser rehearsal script contract", () => {
   const readmeDoc = readFileSync("README.md", "utf8");
   const testingDoc = readFileSync("TESTING.md", "utf8");
   const browserShellHelpers = readFileSync("scripts/browser-rehearsal-shell.sh", "utf8");
-  const browserRouteScripts = [
-    "scripts/browser-rehearsal/home-markers.js",
-    "scripts/browser-rehearsal/offer-markers.js",
-    "scripts/browser-rehearsal/home-to-offer.js",
-    "scripts/browser-rehearsal/offer-to-production.js"
-  ].map((path) => readFileSync(path, "utf8")).join("\n");
+  const browserRehearsalScripts = readdirSync("scripts/browser-rehearsal")
+    .filter((fileName) => fileName.endsWith(".js"))
+    .sort()
+    .map((fileName) => readFileSync(`scripts/browser-rehearsal/${fileName}`, "utf8"))
+    .join("\n");
 
   it("keeps the real-browser rehearsal script wired as an explicit optional npm command", () => {
     const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
@@ -31,6 +30,8 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("browser-rehearsal-shell.sh");
     expect(script).toContain("load_rehearsal_script \"home-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"offer-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"submitted-reload-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"archive-reload-markers.js\"");
     expect(browserShellHelpers).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
@@ -70,7 +71,7 @@ describe("browser rehearsal script contract", () => {
 
   it("guards the route, export and audit markers that make the synthetic core path browser-checkable", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
-    const rehearsalBundle = `${script}\n${browserRouteScripts}`;
+    const rehearsalBundle = `${script}\n${browserRehearsalScripts}`;
 
     for (const marker of [
       "Internes Beta-Kontrollzentrum",
@@ -105,7 +106,7 @@ describe("browser rehearsal script contract", () => {
     expect(browserShellHelpers).toContain("navigierte nicht stabil nach ${target_path}");
     expect(script).toContain("click_rehearsal_link \"Start -> Angebot\" \"/angebot\"");
     expect(script).toContain("click_rehearsal_link \"Angebot -> Produktion\" \"/produktion\"");
-    expect(browserRouteScripts).toContain("link.click()");
+    expect(browserRehearsalScripts).toContain("link.click()");
   });
 
   it("guards current production context against stale artifact confusion", () => {
@@ -138,6 +139,7 @@ describe("browser rehearsal script contract", () => {
 
   it("clicks a synthetic partial production spec and guards the open question browser path", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+    const rehearsalBundle = `${script}\n${browserRehearsalScripts}`;
 
     expect(script).toContain("open_question_markers");
     expect(script).toContain("Rückfragen öffnen: Lunch");
@@ -173,8 +175,12 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Answer-Submit-Rehearsal ohne Einkaufslisten-Exportlink");
     expect(script).toContain("Answer-Submit-Rehearsal bleibt nach Berechnung in leerem Ergebniszustand");
     expect(script).toContain("submitted_reload_markers");
-    expect(script).toContain("Answer-Submit-Rehearsal Reload ohne gespeicherte strukturierte Teilnehmerzahl");
-    expect(script).toContain("Answer-Submit-Rehearsal Reload faellt in leeren Ergebniszustand zurueck");
+    expect(rehearsalBundle).toContain(
+      "Answer-Submit-Rehearsal Reload ohne gespeicherte strukturierte Teilnehmerzahl"
+    );
+    expect(rehearsalBundle).toContain(
+      "Answer-Submit-Rehearsal Reload faellt in leeren Ergebniszustand zurueck"
+    );
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alte Einkaufsliste als aktuellen Kontext");
     expect(script).toContain("Offener-Rueckfragen-Pfad zeigt alten Produktionsplan-Exportlink");
@@ -195,13 +201,13 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("Archive-Rehearsal laesst Fehlupload-Archiv nach Klick aktiv oder falsch beschriftet");
     expect(script).toContain("capArchiveRehearsalChecked");
     expect(script).toContain("Produktion Archiv-Reload stabil");
-    expect(script).toContain("Archive-Rehearsal Reload ohne leeren aktiven Vorgang");
-    expect(script).toContain("Archive-Rehearsal Reload zeigt archivierten Intake wieder als aktiven Kontext");
-    expect(script).toContain("Archive-Rehearsal Reload behaelt archivierten Intake-Detailanker im DOM");
-    expect(script).toContain("Archive-Rehearsal Reload zeigt alten Abschluss-Kontext");
-    expect(script).toContain("Archive-Rehearsal Reload behaelt Produktionsplan-Exportlink");
-    expect(script).toContain("Archive-Rehearsal Reload behaelt Einkaufslisten-Exportlink");
-    expect(script).toContain("Archive-Rehearsal Reload laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
+    expect(rehearsalBundle).toContain("Archive-Rehearsal Reload ohne leeren aktiven Vorgang");
+    expect(rehearsalBundle).toContain("Archive-Rehearsal Reload zeigt archivierten Intake wieder als aktiven Kontext");
+    expect(rehearsalBundle).toContain("Archive-Rehearsal Reload behaelt archivierten Intake-Detailanker im DOM");
+    expect(rehearsalBundle).toContain("Archive-Rehearsal Reload zeigt alten Abschluss-Kontext");
+    expect(rehearsalBundle).toContain("Archive-Rehearsal Reload behaelt Produktionsplan-Exportlink");
+    expect(rehearsalBundle).toContain("Archive-Rehearsal Reload behaelt Einkaufslisten-Exportlink");
+    expect(rehearsalBundle).toContain("Archive-Rehearsal Reload laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
     expect(script).toContain("Browser-Rehearsal-Archivpfad bestaetigt");
   });
 
