@@ -19,6 +19,7 @@ Die Fixtures exportieren:
 
 - `llmReadinessEvalFixtures`
 - `LlmReadinessEvalFixture`
+- `validateLlmReadinessEvalFixture(...)`
 
 ## 3. Enthaltene synthetische Faelle
 
@@ -64,5 +65,6 @@ PA27 ist erfuellt, wenn:
 - alle erwarteten Outputs Human Approval verlangen,
 - alle erwarteten Outputs `writesProductObject: false` tragen,
 - keine verbotenen Roh-/Prompt-/Provider-/Secret-/Toolcall-Payloads vorkommen,
+- jedes Fixture durch `validateLlmReadinessEvalFixture(...)` gueltig ist,
 - `tests/pa27-llm-readiness-eval-fixtures.test.ts` gruen ist,
 - `npm run build` gruen ist.

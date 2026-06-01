@@ -437,6 +437,8 @@ PA28 verbindet PA26 und PA27 ueber `shared-core/src/llm-readiness-draft-registry
 
 PA29 ergaenzt dazu `validateLlmReadinessModelInputCandidate(...)` als Input-Validation-Anker: Model-Input-Kandidaten muessen Provider-Aufrufe deaktivieren, synthetische/Demo-Daten deklarieren, sichere SourceRefs tragen und duerfen keine Write-Tool-Effekte oder Roh-/Prompt-/Provider-/Secret-/Toolcall-Payloads enthalten.
 
+PA30 schliesst die reine Readiness-Kette mit `validateLlmReadinessEvalFixture(...)`: synthetische Eval-Fixtures werden zentral gegen Input-Validator, Output-Validator, Draft-Registry, required SourceRefs und Forbidden-Payload-Grenzen validiert, ohne Prompttext, Provider, Modellaufrufe, API, Persistenz, echte Daten oder Schreibwirkung einzufuehren.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
