@@ -34,6 +34,8 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("load_rehearsal_script \"archive-reload-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"production-result-reload-pre-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"production-result-reload-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"clear-workspace-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"clear-workspace-reload-markers.js\"");
     expect(browserShellHelpers).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
@@ -254,21 +256,22 @@ describe("browser rehearsal script contract", () => {
 
   it("clicks local clear in the browser and rejects stale production artifacts afterwards", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+    const rehearsalBundle = `${script}\n${browserRehearsalScripts}`;
 
     expect(script).toContain("clear_workspace_markers");
-    expect(script).toContain("Clear-Check vor Klick ohne aktuellen Plan-Kontext");
-    expect(script).toContain("clearButton.click()");
-    expect(script).toContain("Kein aktiver Vorgang");
-    expect(script).toContain("Auftrag einfügen oder Datei ablegen");
-    expect(script).toContain("Clear-Check nach Klick zeigt alten Produktionsplan");
-    expect(script).toContain("Clear-Check nach Klick zeigt alte Einkaufsliste");
-    expect(script).toContain("Clear-Check nach Klick zeigt alten Abschluss-Kontext");
-    expect(script).toContain("Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.");
-    expect(script).toContain("Clear-Check nach Klick laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
-    expect(script).toContain("capClearWorkspaceContext");
-    expect(script).toContain("Clear-Check Reload zeigt weder leeren Arbeitsbereich noch konsistent wiederhergestellten aktuellen Kontext");
-    expect(script).toContain("Clear-Check Reload laesst Clear-Aktion aktiv oder falsch beschriftet");
-    expect(script).toContain("Clear-Check Reload laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
+    expect(rehearsalBundle).toContain("Clear-Check vor Klick ohne aktuellen Plan-Kontext");
+    expect(rehearsalBundle).toContain("clearButton.click()");
+    expect(rehearsalBundle).toContain("Kein aktiver Vorgang");
+    expect(rehearsalBundle).toContain("Auftrag einfügen oder Datei ablegen");
+    expect(rehearsalBundle).toContain("Clear-Check nach Klick zeigt alten Produktionsplan");
+    expect(rehearsalBundle).toContain("Clear-Check nach Klick zeigt alte Einkaufsliste");
+    expect(rehearsalBundle).toContain("Clear-Check nach Klick zeigt alten Abschluss-Kontext");
+    expect(rehearsalBundle).toContain("Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.");
+    expect(rehearsalBundle).toContain("Clear-Check nach Klick laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
+    expect(rehearsalBundle).toContain("capClearWorkspaceContext");
+    expect(rehearsalBundle).toContain("Clear-Check Reload zeigt weder leeren Arbeitsbereich noch konsistent wiederhergestellten aktuellen Kontext");
+    expect(rehearsalBundle).toContain("Clear-Check Reload laesst Clear-Aktion aktiv oder falsch beschriftet");
+    expect(rehearsalBundle).toContain("Clear-Check Reload laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
     expect(script).toContain("Produktion lokales Leeren nach Reload konsistent");
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit -> lokales Leeren");
   });

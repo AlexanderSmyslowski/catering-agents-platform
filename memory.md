@@ -1604,3 +1604,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.333 - 2026-06-01
 - Browser-Rehearsal-Ergebnis-Reload-Pruefungen sind aus `scripts/check-browser-rehearsal.sh` nach `scripts/browser-rehearsal/production-result-reload-pre-markers.js` und `scripts/browser-rehearsal/production-result-reload-markers.js` extrahiert.
 - Belegt mit Shell-Syntaxcheck, `tests/browser-rehearsal-script-contract.test.ts`, `npm run build`, vollem `npm test` und `npm run browser:rehearsal:full-fresh`. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.334 - 2026-06-01
+- Browser-Rehearsal-Clear-Workspace-Pruefungen sind aus `scripts/check-browser-rehearsal.sh` nach `scripts/browser-rehearsal/clear-workspace-markers.js` und `scripts/browser-rehearsal/clear-workspace-reload-markers.js` extrahiert.
+- Belegt mit Shell-Syntaxcheck, `tests/browser-rehearsal-script-contract.test.ts`, `npm run build`, vollem `npm test` und `npm run browser:rehearsal:full-fresh`. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
