@@ -28,6 +28,24 @@ export type InternalRecipeCandidate = {
   leadNameScore: number;
 };
 
+export function buildInternalRecipeCandidate(input: {
+  recipe: Recipe;
+  repositoryRank: number;
+  component: MenuComponent;
+  eventSpec: AcceptedEventSpec;
+}): InternalRecipeCandidate {
+  const recipeText = recipeSearchText(input.recipe);
+
+  return {
+    recipe: input.recipe,
+    repositoryRank: input.repositoryRank,
+    fitScore: fitScoreForRecipe(recipeText, input.component, input.eventSpec),
+    primaryScore: primaryMatchScore(recipeText, input.component),
+    specificPrimaryScore: specificPrimaryMatchScore(recipeText, input.component),
+    leadNameScore: leadNameMatchScore(input.recipe.name, input.component)
+  };
+}
+
 export function selectInternalRecipeCandidate(
   repositoryCandidates: Recipe[],
   component: MenuComponent,
@@ -35,14 +53,14 @@ export function selectInternalRecipeCandidate(
 ): InternalRecipeCandidate | undefined {
   return repositoryCandidates
     .filter((recipe) => recipeSupportsMenuCategory(recipe, component))
-    .map((recipe, index) => ({
-      recipe,
-      repositoryRank: index,
-      fitScore: fitScoreForRecipe(recipeSearchText(recipe), component, eventSpec),
-      primaryScore: primaryMatchScore(recipeSearchText(recipe), component),
-      specificPrimaryScore: specificPrimaryMatchScore(recipeSearchText(recipe), component),
-      leadNameScore: leadNameMatchScore(recipe.name, component)
-    }))
+    .map((recipe, index) =>
+      buildInternalRecipeCandidate({
+        recipe,
+        repositoryRank: index,
+        component,
+        eventSpec
+      })
+    )
     .filter(
       (candidate) =>
         (candidate.fitScore >= 0.75 ||
