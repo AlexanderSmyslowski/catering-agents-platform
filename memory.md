@@ -1592,3 +1592,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.330 - 2026-06-01
 - RecipeDiscovery-Dish-Archetype-Erkennung ist aus `recipe-query-builder.ts` nach `recipe-dish-archetypes.ts` extrahiert; der Query-Builder re-exportiert `dishArchetypeForComponent` fuer bestehende Imports weiter.
 - `tests/recipe-dish-archetypes.test.ts` prueft lokalisierte Archetypes, gemeinsam genutzte Archetype-Labels und unbekannte Labels ohne neue Matches. Keine Aenderung an Query-Korridoren, Scoring, Matching-Strategie, UI, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment oder Auth.
+
+### 5.331 - 2026-06-01
+- RecipeDiscovery-Generic-Search-Seeds sind aus `recipe-query-builder.ts` nach `recipe-generic-search-seeds.ts` extrahiert; der Query-Builder re-exportiert `genericSearchSeeds` fuer bestehende Imports weiter.
+- `tests/recipe-generic-search-seeds.test.ts` prueft lokalisierte Cake-/Buffet-Seeds, etablierte Side-Dish-/Curry-Seeds und unbekannte Labels ohne Seed-Erfindung. Keine Aenderung an Query-Korridoren, Scoring, Matching-Strategie, UI, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment oder Auth.
