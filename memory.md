@@ -1588,3 +1588,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.329 - 2026-06-01
 - RecipeDiscovery-Search-Label-Cleaning ist aus `recipe-query-builder.ts` nach `recipe-search-labels.ts` extrahiert; der Query-Builder re-exportiert `cleanedSearchLabel` und `primarySearchSegment` fuer bestehende Imports weiter.
 - `tests/recipe-search-labels.test.ts` prueft Suffix-Filter, Separator-/Whitespace-Normalisierung und primaere Label-Segmente. Keine Aenderung an Query-Korridoren, Rezeptlogik, Matching-Strategie, UI, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment oder Auth.
+
+### 5.330 - 2026-06-01
+- RecipeDiscovery-Dish-Archetype-Erkennung ist aus `recipe-query-builder.ts` nach `recipe-dish-archetypes.ts` extrahiert; der Query-Builder re-exportiert `dishArchetypeForComponent` fuer bestehende Imports weiter.
+- `tests/recipe-dish-archetypes.test.ts` prueft lokalisierte Archetypes, gemeinsam genutzte Archetype-Labels und unbekannte Labels ohne neue Matches. Keine Aenderung an Query-Korridoren, Scoring, Matching-Strategie, UI, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment oder Auth.
