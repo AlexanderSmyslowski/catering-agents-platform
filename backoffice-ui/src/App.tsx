@@ -49,13 +49,10 @@ import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
 import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
-import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
-import { buildAppProductionRouteState } from "./app-production-route-state.js";
+import { buildAppProductionRouteAppBoundary } from "./app-production-route-app-boundary.js";
 import { buildAppOfferRouteAppBoundary } from "./app-offer-route-app-boundary.js";
-import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
 import { buildProductionRouteViewAppBoundary } from "./production-route-view-app-boundary.js";
 import { formatArchiveCurrentIntakeContextLabel } from "./production-source-input-state.js";
-import { buildProductionSourceInputAppBoundary } from "./production-source-input-app-boundary.js";
 import { buildProductionRecipeControls } from "./production-recipe-controls.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import { buildProductionWorkspaceAppBoundary } from "./production-workspace-app-boundary.js";
@@ -488,9 +485,11 @@ export function App() {
   });
 
   const {
-    productionSourceInput,
-    productionSourceInputActions
-  } = buildProductionSourceInputAppBoundary({
+    productionRouteFilterState,
+    productionRouteMainLayoutState
+  } = buildAppProductionRouteAppBoundary({
+    viewState: productionRouteViewState,
+    submitting,
     dragActive,
     intakeFile,
     intakeChannel,
@@ -514,9 +513,7 @@ export function App() {
     clearWorkspace: clearProductionWorkspace,
     archiveCurrentIntake: handleArchiveCurrentIntake,
     submitDocument: handleIntakeDocumentSubmit,
-    submitText: handleIntakeSubmit
-  });
-  const productionQuestionEditorState = buildProductionQuestionEditorState({
+    submitText: handleIntakeSubmit,
     editingSpecId,
     editingEventType,
     editingEventDate,
@@ -525,9 +522,7 @@ export function App() {
     editingMenuItems,
     editingComponentStates,
     hasFocusedSpecEditChanges,
-    recipes: dashboard.recipes
-  });
-  const productionRouteFilterState = buildProductionRouteFilterState({
+    recipes: dashboard.recipes,
     isInitialProductionLoading,
     productionPlanCount: dashboard.productionPlans.length,
     purchaseListCount: dashboard.purchaseLists.length,
@@ -537,7 +532,22 @@ export function App() {
     productionServiceStatus: serviceHealth.production.status,
     productionServiceCounts: serviceHealth.production.counts,
     search,
-    setSearch
+    setSearch,
+    manualInput: manualSpecInput,
+    manualInputActions: manualSpecActions,
+    openSpecForQuestions,
+    setEditingEventType,
+    setEditingEventDate,
+    setEditingAttendeeCount,
+    setEditingServiceForm,
+    setEditingMenuItems,
+    updateEditingComponentState,
+    beginSpecEdit,
+    saveSpecEdit: handleSaveSpecEdit,
+    createPlan: handleCreatePlan,
+    resetSpecEdit,
+    setSelectedPlanId,
+    recipeActions: productionRecipeControls
   });
   const { offerWorkbenchState } = buildAppOfferRouteAppBoundary({
     createOfferFromText,
@@ -583,28 +593,6 @@ export function App() {
     setMenuItems: setEditingMenuItems,
     saveSpecEdit: handleSaveSpecEdit,
     resetSpecEdit
-  });
-  const { productionRouteMainLayoutState } = buildAppProductionRouteState({
-    viewState: productionRouteViewState,
-    submitting,
-    sourceInput: productionSourceInput,
-    sourceInputActions: productionSourceInputActions,
-    manualInput: manualSpecInput,
-    manualInputActions: manualSpecActions,
-    editorState: productionQuestionEditorState,
-    openSpecForQuestions,
-    setEditingEventType,
-    setEditingEventDate,
-    setEditingAttendeeCount,
-    setEditingServiceForm,
-    setEditingMenuItems,
-    updateEditingComponentState,
-    beginSpecEdit,
-    saveSpecEdit: handleSaveSpecEdit,
-    createPlan: handleCreatePlan,
-    resetSpecEdit,
-    setSelectedPlanId,
-    recipeActions: productionRecipeControls
   });
   const appRouteShellState = buildAppRouteShellState({
     route,
