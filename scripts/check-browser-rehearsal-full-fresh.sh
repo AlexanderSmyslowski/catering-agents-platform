@@ -19,19 +19,24 @@ echo "Grenze: lokaler synthetischer Browser-Beleg; keine Produktionsfreigabe, ke
 
 run_fresh_rehearsal \
   "Normaler Kernpfad" \
-  env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE \
+  env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE -u CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD \
     bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
 
 run_fresh_rehearsal \
   "Answer-Submit-Pfad" \
-  env -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 \
+  env -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE -u CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 \
     bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
 
 run_fresh_rehearsal \
   "Archiv-Pfad" \
-  env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 \
+  env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS -u CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 \
+    bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
+
+run_fresh_rehearsal \
+  "Failed-Upload-Pfad" \
+  env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD=1 \
     bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
 
 echo
 echo "Vollstaendiger Fresh-Browser-Rehearsal abgeschlossen."
-echo "Geprueft: normaler Kernpfad, Answer-Submit-Pfad und Soft-Archiv-Pfad auf temporaeren synthetischen Datenwurzeln."
+echo "Geprueft: normaler Kernpfad, Answer-Submit-Pfad, Soft-Archiv-Pfad und Failed-Upload-Pfad auf temporaeren synthetischen Datenwurzeln."

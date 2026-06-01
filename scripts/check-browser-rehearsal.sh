@@ -8,6 +8,7 @@ SESSION_NAME="${CATERING_BROWSER_REHEARSAL_SESSION:-cap}"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 SUBMIT_ANSWERS="${CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS:-0}"
 ARCHIVE_INTAKE="${CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE:-0}"
+FAILED_UPLOAD="${CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD:-0}"
 ALLOW_PERSISTENT_MUTATION="${CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION:-0}"
 DATA_ROOT_FILE="${ROOT_DIR}/.runtime/local-stack/data-root.txt"
 
@@ -21,6 +22,7 @@ cd "${ROOT_DIR}"
 require_fresh_mutation_scope \
   "${SUBMIT_ANSWERS}" \
   "${ARCHIVE_INTAKE}" \
+  "${FAILED_UPLOAD}" \
   "${ALLOW_PERSISTENT_MUTATION}" \
   "${DATA_ROOT_FILE}"
 
@@ -32,6 +34,9 @@ if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
 fi
 if [[ "${ARCHIVE_INTAKE}" == "1" ]]; then
   echo "Archiv-Modus: aktiv (Fresh-Rehearsal-Datenroot erwartet)"
+fi
+if [[ "${FAILED_UPLOAD}" == "1" ]]; then
+  echo "Failed-Upload-Modus: aktiv (Fresh-Rehearsal-Datenroot erwartet)"
 fi
 echo ""
 
@@ -63,6 +68,7 @@ production_result_reload_pre_markers="$(load_rehearsal_script "production-result
 production_result_reload_markers="$(load_rehearsal_script "production-result-reload-markers.js")"
 
 archive_reload_markers="$(load_rehearsal_script "archive-reload-markers.js")"
+failed_upload_markers="$(load_rehearsal_script "failed-upload-markers.js")"
 
 clear_workspace_markers="$(load_rehearsal_script "clear-workspace-markers.js")"
 clear_workspace_reload_markers="$(load_rehearsal_script "clear-workspace-reload-markers.js")"
@@ -92,6 +98,13 @@ run_browser open "${BASE_URL}/produktion" >/dev/null
 check_current_page_markers "Produktion Ergebnis-Reload stabil" "${production_result_reload_markers}"
 if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
   check_current_page_markers "Produktion Submit-Reload gespeichert" "${submitted_reload_markers}"
+fi
+if [[ "${FAILED_UPLOAD}" == "1" ]]; then
+  check_current_page_markers "Produktion Failed-Upload sicher" "${failed_upload_markers}"
+  echo ""
+  echo "Browser-Rehearsal-Fehluploadpfad bestaetigt: synthetischer nicht erlaubter Upload leert stale Produktionskontext, zeigt den Fehler und bleibt retrybar."
+  echo "Grenze: mutierender Fresh-Rehearsal-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
+  exit 0
 fi
 check_current_page_markers "Produktion lokal geleert" "${clear_workspace_markers}"
 run_browser open "${BASE_URL}/produktion" >/dev/null
