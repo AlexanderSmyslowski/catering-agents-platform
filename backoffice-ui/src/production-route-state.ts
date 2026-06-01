@@ -118,6 +118,14 @@ export function selectProductionArtifactSpecIds(items: Array<Record<string, unkn
   );
 }
 
+export function lookupProductionSpecById<T extends Record<string, unknown>>(
+  specsById: Map<string, T>,
+  specId: unknown
+): T | undefined {
+  const normalizedSpecId = String(specId ?? "").trim();
+  return normalizedSpecId ? specsById.get(normalizedSpecId) : undefined;
+}
+
 export function formatProductionTimingWindow(spec?: Record<string, unknown>): string {
   const event = asRecord(spec?.event);
   const date = readStringOrNumber(event, ["date"]);
@@ -240,7 +248,7 @@ export function selectProductionPlanSpec<T extends Record<string, unknown>>(inpu
     return undefined;
   }
 
-  return input.specsById.get(String(input.selectedPlan.eventSpecId ?? "").trim());
+  return lookupProductionSpecById(input.specsById, input.selectedPlan.eventSpecId);
 }
 
 export function buildProductionPlanComponentMap(

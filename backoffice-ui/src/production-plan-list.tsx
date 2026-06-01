@@ -1,5 +1,6 @@
 import { productionExportUrl } from "./api.js";
 import { getSpecLabel } from "./production-language.js";
+import { lookupProductionSpecById } from "./production-route-state.js";
 
 type ProductionPlanListProps = {
   plans: Array<Record<string, unknown>>;
@@ -26,7 +27,7 @@ export function ProductionPlanList({
   return (
     <ul className="item-list compact">
       {plans.map((plan) => {
-        const relatedSpec = specById.get(String(plan.eventSpecId ?? ""));
+        const relatedSpec = lookupProductionSpecById(specById, plan.eventSpecId);
         const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
         const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
         const sheetCount = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets.length : 0;

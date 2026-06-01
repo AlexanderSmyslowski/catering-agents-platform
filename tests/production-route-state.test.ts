@@ -15,6 +15,7 @@ import {
   formatProductionReadinessLabel,
   formatProductionTimingWindow,
   formatStructuredProductionAnswerSummary,
+  lookupProductionSpecById,
   formatPurchaseZoneStatusLabel,
   selectArchivedProductionItems,
   selectProductionArtifactSpecIds,
@@ -121,6 +122,15 @@ describe("production route state", () => {
         productionWorkspaceCleared: false
       }).map((item) => item.id)
     ).toEqual(["plan-b"]);
+  });
+
+  it("looks up production specs with normalized ids for visible artifact labels", () => {
+    const spec = { specId: "spec-current" };
+    const specsById = new Map([["spec-current", spec]]);
+
+    expect(lookupProductionSpecById(specsById, " spec-current ")).toBe(spec);
+    expect(lookupProductionSpecById(specsById, "   ")).toBeUndefined();
+    expect(lookupProductionSpecById(specsById, undefined)).toBeUndefined();
   });
 
   it("keeps production item selectors empty when the workspace is cleared", () => {
