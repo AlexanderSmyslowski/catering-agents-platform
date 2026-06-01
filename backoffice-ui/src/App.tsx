@@ -18,7 +18,6 @@ import {
 import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
-import { buildAppOfferRouteState } from "./app-offer-route-state.js";
 import { AppRouteContent } from "./app-route-content.js";
 import { buildAppRouteContentState } from "./app-route-content-state.js";
 import { RouteMasthead } from "./route-masthead.js";
@@ -58,8 +57,7 @@ import { buildProductionDocumentSubmitActions } from "./production-document-subm
 import { buildProductionTextIntakeSubmitAction } from "./production-text-intake-submit-action.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import { buildAppProductionRouteState } from "./app-production-route-state.js";
-import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
-import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
+import { buildAppOfferRouteAppBoundary } from "./app-offer-route-app-boundary.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
 import { buildProductionRouteViewAppBoundary } from "./production-route-view-app-boundary.js";
 import { formatArchiveCurrentIntakeContextLabel } from "./production-source-input-state.js";
@@ -407,17 +405,6 @@ export function App() {
     setError
   });
 
-  const handleOfferSubmit = buildOfferTextSubmitAction({
-    createOfferFromText,
-    offerText,
-    setSubmitting,
-    clearMessages,
-    setSelectedDraftId,
-    refreshDashboard,
-    setNotice,
-    setError
-  });
-
   const {
     submitSelectedDocument: handleIntakeDocumentSubmit,
     processIncomingProductionFile
@@ -502,15 +489,6 @@ export function App() {
     processIncomingProductionFile
   });
 
-  const handlePromoteDraft = buildOfferDraftPromoteAction({
-    promoteOfferDraft,
-    setSubmitting,
-    clearMessages,
-    refreshDashboard,
-    setNotice,
-    setError
-  });
-
   const handleSeedDemoData = buildAppSeedDemoAction({
     seedDemoData,
     setSubmitting,
@@ -592,12 +570,18 @@ export function App() {
     search,
     setSearch
   });
-  const { offerWorkbenchState } = buildAppOfferRouteState({
+  const { offerWorkbenchState } = buildAppOfferRouteAppBoundary({
+    createOfferFromText,
+    promoteOfferDraft,
     submitting,
+    setSubmitting,
+    clearMessages,
+    refreshDashboard,
+    setNotice,
+    setError,
     latestSourceLabel: latestIntakeRequestSummary,
     offerText,
     setOfferText,
-    submitOfferText: handleOfferSubmit,
     intakeText,
     setIntakeText,
     submitIntakeText: handleIntakeSubmit,
@@ -612,7 +596,6 @@ export function App() {
     activeDraft: activeOfferDraft,
     selectedDraft,
     setSelectedDraftId,
-    promoteDraft: handlePromoteDraft,
     filteredSpecs,
     activeSpec: activeOfferSpec,
     completeSpecCount: offerHandoffCounts.complete,
