@@ -6,10 +6,12 @@ import {
   componentSearchTokens,
   dishArchetypeForComponent,
   leadSpecificPrimaryToken,
+  normalizeSearchQuery,
   primarySearchSegment,
   recipeSearchText,
   specificPrimaryFocusTokens,
   translateLabelForLocale,
+  uniqueNormalizedSearchQueries,
   webSpecificFocusTokens
 } from "../production-service/src/recipe-discovery/recipe-query-builder.js";
 
@@ -31,6 +33,18 @@ const eventSpec = {
 } as AcceptedEventSpec;
 
 describe("recipe query builder", () => {
+  it("normalizes and deduplicates search queries without changing token order", () => {
+    expect(normalizeSearchQuery("  vegan   vegan   kuchen   rezept  ")).toBe("vegan kuchen rezept");
+    expect(
+      uniqueNormalizedSearchQueries([
+        "",
+        "SCHOKOLADENKUCHEN   vegan   rezept",
+        "SCHOKOLADENKUCHEN vegan rezept",
+        "vegan vegan kuchen rezept"
+      ])
+    ).toEqual(["SCHOKOLADENKUCHEN vegan rezept", "vegan kuchen rezept"]);
+  });
+
   it("keeps noisy menu suffixes out of cleaned search labels while preserving the primary segment", () => {
     const label = "KARTOFFELSALAT | DE LUX | TOPPING";
 
