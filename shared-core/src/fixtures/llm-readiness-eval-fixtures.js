@@ -141,14 +141,21 @@ function sameStringList(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function collectSourceObjectTypes(sourceRefs) {
+function collectSourceRefs(sourceRefs) {
   if (!Array.isArray(sourceRefs)) {
     return [];
   }
 
   return sourceRefs
     .filter(isRecord)
-    .map((sourceRef) => sourceRef.objectType);
+    .map((sourceRef) => ({
+      objectType: sourceRef.objectType,
+      objectId: sourceRef.objectId
+    }));
+}
+
+function collectSourceObjectTypes(sourceRefs) {
+  return collectSourceRefs(sourceRefs).map((sourceRef) => sourceRef.objectType);
 }
 
 export function validateLlmReadinessEvalFixture(fixture) {
@@ -227,12 +234,39 @@ export function validateLlmReadinessEvalFixture(fixture) {
       }
     }
 
-    if (isRecord(fixture.expectedOutput) && Array.isArray(fixture.expectedOutput.sourceRefs)) {
-      const outputSourceTypes = collectSourceObjectTypes(fixture.expectedOutput.sourceRefs);
+    if (
+      isRecord(fixture.input) &&
+      Array.isArray(fixture.input.sourceRefs) &&
+      isRecord(fixture.expectedOutput) &&
+      Array.isArray(fixture.expectedOutput.sourceRefs)
+    ) {
+      const inputSourceRefs = collectSourceRefs(fixture.input.sourceRefs);
+      const outputSourceRefs = collectSourceRefs(fixture.expectedOutput.sourceRefs);
+      const outputSourceTypes = outputSourceRefs.map((sourceRef) => sourceRef.objectType);
 
       for (const requiredSourceObjectType of contract.requiredSourceObjectTypes) {
         if (!outputSourceTypes.includes(requiredSourceObjectType)) {
           errors.push(`expectedOutput.sourceRefs must include ${requiredSourceObjectType}`);
+          continue;
+        }
+
+        const requiredInputSourceRefs = inputSourceRefs.filter((sourceRef) =>
+          sourceRef.objectType === requiredSourceObjectType &&
+          typeof sourceRef.objectId === "string" &&
+          sourceRef.objectId.trim().length > 0
+        );
+
+        for (const requiredInputSourceRef of requiredInputSourceRefs) {
+          const hasMatchingOutputSourceRef = outputSourceRefs.some((sourceRef) =>
+            sourceRef.objectType === requiredSourceObjectType &&
+            sourceRef.objectId === requiredInputSourceRef.objectId
+          );
+
+          if (!hasMatchingOutputSourceRef) {
+            errors.push(
+              `expectedOutput.sourceRefs must include ${requiredSourceObjectType} source ${requiredInputSourceRef.objectId}`
+            );
+          }
         }
       }
     }

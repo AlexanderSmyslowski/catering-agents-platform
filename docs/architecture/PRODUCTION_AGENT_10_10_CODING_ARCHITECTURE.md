@@ -445,6 +445,8 @@ PA32 haertet die strukturierte Output-Grenze: `structuredCandidate` bleibt eine 
 
 PA33 macht die synthetischen Eval-Fixtures quellen-symmetrisch: Nicht nur `input.sourceRefs`, sondern auch `expectedOutput.sourceRefs` muessen die vom Draft-Contract geforderten Quellobjekttypen enthalten.
 
+PA34 schliesst daran die Identitaetsluecke: Fuer required SourceRefs muss der erwartete Output dieselben `objectId`s tragen wie der Input, damit Eval-Drafts nicht auf gleichartige, aber andere Arbeitsbelege driften.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
