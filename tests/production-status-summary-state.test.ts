@@ -91,7 +91,15 @@ describe("production status summary state", () => {
       currentSpecPlans: [],
       currentSpecPurchaseLists: [],
       productionQuestions: [],
-      filteredAuditEvents: [],
+      filteredAuditEvents: [
+        {
+          auditId: "audit-stale",
+          at: "2026-05-21T10:00:00.000Z",
+          action: "production.plan.created",
+          summary: "Alter Produktionsplan erstellt",
+          actor: { name: "Küche" }
+        }
+      ],
       intakeRequestDetail: {
         requestId: "request-stale",
         source: { channel: "pdf_upload", receivedAt: "2026-05-26T01:00:00.000Z" }
@@ -103,6 +111,7 @@ describe("production status summary state", () => {
     expect(state).toMatchObject({
       activeProductionContextLabel: "Kein aktiver Vorgang",
       productionIntakeOriginLabel: "kein Intake-Ursprung verknüpft",
+      productionAuditTrailLabel: "keine Audit-Ereignisse geladen",
       productionHandoffContextLabel: undefined
     });
   });

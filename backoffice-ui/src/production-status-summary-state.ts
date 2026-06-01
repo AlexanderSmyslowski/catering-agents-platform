@@ -46,7 +46,9 @@ export function buildProductionStatusSummaryState(
   input: ProductionStatusSummaryStateInput
 ): ProductionStatusSummaryState {
   const currentPurchaseListItemCount = countPurchaseListItems(input.currentSpecPurchaseLists);
-  const latestProductionAuditEvent = input.filteredAuditEvents[0];
+  const latestProductionAuditEvent = input.productionWorkspaceCleared
+    ? undefined
+    : input.filteredAuditEvents[0];
 
   if (input.isInitialProductionLoading) {
     return {
