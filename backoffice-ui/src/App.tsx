@@ -41,13 +41,9 @@ import {
   type ServiceHealthState
 } from "./api.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
-import {
-  buildProductionCurrentArtifactsState,
-  selectCurrentProductionArtifactsScopeSpecId
-} from "./production-current-artifacts-state.js";
+import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
-import { buildProductionSelectedPlanState } from "./production-selected-plan-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { buildAppProductionRouteAppBoundary } from "./app-production-route-app-boundary.js";
 import { buildAppOfferRouteAppBoundary } from "./app-offer-route-app-boundary.js";
@@ -241,43 +237,33 @@ export function App() {
     buildCurrentSpecUpdateInput
   } = useProductionSpecEditor({ focusedProductionSpec: focusedProductionSpecRecord });
 
-  const currentProductionSpecId = selectCurrentProductionArtifactsScopeSpecId({
-    focusedProductionSpecId: String(focusedProductionSpec?.specId ?? ""),
-    selectedPlanId,
-    orderedPlans
-  });
-
   const {
+    currentProductionSpecId,
     currentSpecPlans,
     archivedPlans,
     currentSpecPurchaseLists,
-    archivedPurchaseLists
-  } = useMemo(
-    () =>
-      buildProductionCurrentArtifactsState({
-        currentProductionSpecId,
-        orderedPlans,
-        orderedPurchaseLists,
-        productionWorkspaceCleared
-      }),
-    [currentProductionSpecId, orderedPlans, orderedPurchaseLists, productionWorkspaceCleared]
-  );
-
-  const {
+    archivedPurchaseLists,
     selectedPlan,
     selectedPlanSpec,
     selectedPlanComponentsById
   } = useMemo(
     () =>
-      buildProductionSelectedPlanState({
-        currentProductionSpecId,
-        currentSpecPlans,
+      buildProductionArtifactSelectionAppBoundary({
+        focusedProductionSpecId: String(focusedProductionSpec?.specId ?? ""),
         orderedPlans,
+        orderedPurchaseLists,
         productionWorkspaceCleared,
         selectedPlanId,
         specById
       }),
-    [currentProductionSpecId, currentSpecPlans, orderedPlans, productionWorkspaceCleared, selectedPlanId, specById]
+    [
+      focusedProductionSpec?.specId,
+      orderedPlans,
+      orderedPurchaseLists,
+      productionWorkspaceCleared,
+      selectedPlanId,
+      specById
+    ]
   );
 
   const {
