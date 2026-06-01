@@ -74,6 +74,50 @@ describe("production procurement rules", () => {
     expect(bakerPurchasedElements("Brötchen")).toEqual(["Brötchen"]);
   });
 
+  it("keeps procurement ids readable and stable for German catering labels", () => {
+    const items = procurementItemsForComponent(
+      {
+        ...component("Brötchen", {
+          mode: "convenience_purchase",
+          purchasedElements: ["Brötchen"]
+        }),
+        componentId: "component-brötchen"
+      },
+      80
+    );
+
+    expect(items[0]).toMatchObject({
+      ingredientId: "proc-component-broetchen-broetchen-1",
+      displayName: "Brötchen für Brötchen"
+    });
+  });
+
+  it("falls back to readable labels before using a safe procurement id segment", () => {
+    const items = procurementItemsForComponent(
+      {
+        ...component("Käseplatte", {
+          mode: "external_finished"
+        }),
+        componentId: "###"
+      },
+      12
+    );
+
+    expect(items[0]?.ingredientId).toBe("proc-kaeseplatte-finished");
+
+    const fallbackItems = procurementItemsForComponent(
+      {
+        ...component("###", {
+          mode: "external_finished"
+        }),
+        componentId: "###"
+      },
+      12
+    );
+
+    expect(fallbackItems[0]?.ingredientId).toBe("proc-item-finished");
+  });
+
   it("turns baker labels into convenience purchase components", () => {
     expect(bakerPurchaseComponent(component("Brotkorb"))).toEqual(
       expect.objectContaining({
