@@ -10,6 +10,7 @@ import {
   isBlockingPlanningIssue,
   purchaseCoverageBlockingIssues,
   summarizeFallbackReason,
+  uniquePlanningMessages,
   withPurchaseCoverageBlockingIssues
 } from "../production-service/src/rules/planning-readiness.js";
 
@@ -160,6 +161,14 @@ describe("planning readiness helpers", () => {
     expect(summarizeFallbackReason(["Blocker"], ["Warnung"])).toBe("Blocker");
     expect(summarizeFallbackReason([], ["Warnung"])).toBe("Warnung");
     expect(summarizeFallbackReason([], [])).toContain("deterministischen Fallback");
+  });
+
+  it("keeps planning messages unique without reordering them", () => {
+    expect(uniquePlanningMessages(["Blocker A", "Warnung B", "Blocker A", "Warnung C"])).toEqual([
+      "Blocker A",
+      "Warnung B",
+      "Warnung C"
+    ]);
   });
 
   it("reports missing purchase coverage with ingredient and source references", () => {
