@@ -7,10 +7,20 @@ import {
 type MenuPlanComponent = AcceptedEventSpec["menuPlan"][number];
 
 function slugify(value: string): string {
-  return value
+  const slug = value
     .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+  return slug || "item";
+}
+
+function componentSlug(component: MenuPlanComponent): string {
+  const componentIdSlug = slugify(component.componentId);
+  return componentIdSlug === "item" ? slugify(component.label) : componentIdSlug;
 }
 
 export function procurementItemsForComponent(
@@ -21,8 +31,9 @@ export function procurementItemsForComponent(
   const purchasedElements = component.productionDecision?.purchasedElements ?? [];
 
   if (productionMode === "hybrid" || productionMode === "convenience_purchase") {
+    const baseSlug = componentSlug(component);
     return purchasedElements.map((element, index) => ({
-      ingredientId: `proc-${slugify(component.componentId)}-${slugify(element)}-${index + 1}`,
+      ingredientId: `proc-${baseSlug}-${slugify(element)}-${index + 1}`,
       displayName: `${element} für ${component.label}`,
       normalizedQty: servings,
       normalizedUnit: "portion",
@@ -36,9 +47,10 @@ export function procurementItemsForComponent(
   }
 
   if (productionMode === "external_finished") {
+    const baseSlug = componentSlug(component);
     return [
       {
-        ingredientId: `proc-${slugify(component.componentId)}-finished`,
+        ingredientId: `proc-${baseSlug}-finished`,
         displayName: component.label,
         normalizedQty: servings,
         normalizedUnit: "portion",
