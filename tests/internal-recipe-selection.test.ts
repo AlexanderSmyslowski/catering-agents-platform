@@ -5,7 +5,10 @@ import type {
   Recipe
 } from "../shared-core/src/index.js";
 import { SCHEMA_VERSION } from "../shared-core/src/index.js";
-import { selectInternalRecipeCandidate } from "../production-service/src/recipe-discovery/internal-recipe-selection.js";
+import {
+  buildInternalRecipeCandidate,
+  selectInternalRecipeCandidate
+} from "../production-service/src/recipe-discovery/internal-recipe-selection.js";
 
 function buildComponent(overrides: Partial<MenuComponent> = {}): MenuComponent {
   return {
@@ -87,6 +90,30 @@ function buildRecipe(overrides: {
 }
 
 describe("internal recipe selection", () => {
+  it("builds candidate scores from one shared recipe search text", () => {
+    const component = buildComponent();
+    const eventSpec = buildEventSpec();
+    const recipe = buildRecipe({
+      recipeId: "recipe-tomato-soup-candidate",
+      name: "Tomatensuppe Hausstandard",
+      tier: "internal_verified"
+    });
+
+    const candidate = buildInternalRecipeCandidate({
+      recipe,
+      repositoryRank: 3,
+      component,
+      eventSpec
+    });
+
+    expect(candidate.recipe).toBe(recipe);
+    expect(candidate.repositoryRank).toBe(3);
+    expect(candidate.fitScore).toBeGreaterThanOrEqual(0.75);
+    expect(candidate.primaryScore).toBeGreaterThanOrEqual(0.5);
+    expect(candidate.specificPrimaryScore).toBeGreaterThanOrEqual(0.34);
+    expect(candidate.leadNameScore).toBe(1);
+  });
+
   it("keeps internal tier priority ahead of repository rank when candidates pass the existing thresholds", () => {
     const component = buildComponent();
     const eventSpec = buildEventSpec();
