@@ -28,6 +28,7 @@ async () => {
   const planExport = `/api/exports/v1/exports/production-plans/${planId}/html`;
   const purchaseExport = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
   const handoffContext = `Abschluss-Kontext: planId ${planId} · specId ${planSpecId} · purchaseListId ${purchaseListId}`;
+  const auditTrailLabel = beforeText.match(/Audit-Spur\s+([^\n]+)/)?.[1]?.trim();
 
   if (!beforeHtml.includes(planExport)) {
     missing.push(`Clear-Check vor Klick ohne Produktionsplan-Export ${planExport}`);
@@ -93,6 +94,12 @@ async () => {
   ) {
     missing.push("Clear-Check nach Klick zeigt alten Abschluss-Kontext");
   }
+  if (auditTrailLabel && auditTrailLabel !== "keine Audit-Ereignisse geladen" && afterText.includes(auditTrailLabel)) {
+    missing.push("Clear-Check nach Klick zeigt alte Audit-Spur");
+  }
+  if (!afterText.includes("Audit-Spur\nkeine Audit-Ereignisse geladen")) {
+    missing.push("Clear-Check nach Klick ohne neutralisierte Audit-Spur");
+  }
   if (!clearedClearButton) {
     missing.push("Clear-Check nach Klick ohne Clear-Aktion");
   } else if (!clearedClearButton.disabled || clearedClearButton.title !== "Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren.") {
@@ -110,7 +117,8 @@ async () => {
     purchaseSpecId,
     planExport,
     purchaseExport,
-    handoffContext
+    handoffContext,
+    auditTrailLabel
   }));
   if (missing.length > 0) {
     throw new Error(`Produktions-Clear-Rehearsal fehlgeschlagen: ${missing.join(" | ")}`);

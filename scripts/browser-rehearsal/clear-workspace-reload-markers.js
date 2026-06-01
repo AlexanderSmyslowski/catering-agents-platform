@@ -4,7 +4,7 @@ async () => {
   if (!storedContext) {
     throw new Error("Clear-Check Reload ohne gespeicherten Vor-Reload-Kontext");
   }
-  const { planId, planSpecId, purchaseListId, planExport, purchaseExport, handoffContext } =
+  const { planId, planSpecId, purchaseListId, planExport, purchaseExport, handoffContext, auditTrailLabel } =
     JSON.parse(storedContext);
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -42,6 +42,17 @@ async () => {
     reloadedHtml.includes(purchaseExport);
   if (!reloadIsEmpty && !reloadRestoredCurrentContext) {
     missing.push("Clear-Check Reload zeigt weder leeren Arbeitsbereich noch konsistent wiederhergestellten aktuellen Kontext");
+  }
+  if (
+    reloadIsEmpty &&
+    auditTrailLabel &&
+    auditTrailLabel !== "keine Audit-Ereignisse geladen" &&
+    reloadedText.includes(auditTrailLabel)
+  ) {
+    missing.push("Clear-Check Reload zeigt alte Audit-Spur im leeren Arbeitsbereich");
+  }
+  if (reloadIsEmpty && !reloadedText.includes("Audit-Spur\nkeine Audit-Ereignisse geladen")) {
+    missing.push("Clear-Check Reload ohne neutralisierte Audit-Spur im leeren Arbeitsbereich");
   }
   if (!reloadedClearButton) {
     missing.push("Clear-Check Reload ohne Clear-Aktion");
