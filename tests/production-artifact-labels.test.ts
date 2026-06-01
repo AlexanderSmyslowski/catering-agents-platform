@@ -33,7 +33,7 @@ describe("production artifact labels", () => {
       createElement(ProductionPlanList, {
         plans: [
           {
-            planId: "plan-lunch",
+            planId: " plan-lunch-list ",
             eventSpecId: " spec-lunch ",
             readiness: { status: "complete" },
             productionBatches: [],
@@ -49,6 +49,7 @@ describe("production artifact labels", () => {
     );
 
     expect(markup).toContain("Lunch · 40 Teilnehmer · 2026-06-18");
+    expect(markup).toContain('href="/api/exports/v1/exports/production-plans/plan-lunch-list/html"');
     expect(markup).not.toContain("<strong>Produktionsplan</strong>");
   });
 
@@ -71,6 +72,7 @@ describe("production artifact labels", () => {
     expect(markup).toContain("Plan-Kontext: planId plan-lunch · specId spec-lunch");
     expect(markup).toContain("Produktionsblatt exportieren");
     expect(markup).toContain("für Plan plan-lunch · Spezifikation spec-lunch");
+    expect(markup).toContain('href="/api/exports/v1/exports/production-plans/plan-lunch/html"');
     expect(markup).not.toContain("Plan-Kontext: planId  plan-lunch ");
     expect(markup).not.toContain("Spezifikation  spec-lunch ");
   });
@@ -81,14 +83,14 @@ describe("production artifact labels", () => {
         purchaseListState: {
           currentPurchaseLists: [
             {
-              purchaseListId: "purchase-lunch",
+              purchaseListId: " purchase-lunch ",
               eventSpecId: " spec-lunch ",
               totals: { itemCount: 2 }
             }
           ],
           archivedPurchaseLists: [
             {
-              purchaseListId: "purchase-dinner",
+              purchaseListId: " purchase-dinner ",
               eventSpecId: " spec-dinner ",
               totals: { itemCount: 3 }
             }
@@ -104,6 +106,8 @@ describe("production artifact labels", () => {
 
     expect(markup).toContain("Lunch · 40 Teilnehmer · 2026-06-18");
     expect(markup).toContain("Abendessen · 24 Teilnehmer · 2026-06-19");
+    expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-lunch/csv"');
+    expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-dinner/csv"');
     expect(markup).not.toContain("<strong>Einkaufsliste</strong>");
   });
 });
