@@ -10,6 +10,7 @@ import {
   formatProductionHandoffContextLabel,
   formatProductionHandoffExportLabel,
   formatProductionIntakeOriginLabel,
+  formatProductionContextId,
   formatProductionObjectStatusLabel,
   formatProductionPlanStatusLabel,
   formatProductionReadinessLabel,
@@ -131,6 +132,12 @@ describe("production route state", () => {
     expect(lookupProductionSpecById(specsById, " spec-current ")).toBe(spec);
     expect(lookupProductionSpecById(specsById, "   ")).toBeUndefined();
     expect(lookupProductionSpecById(specsById, undefined)).toBeUndefined();
+  });
+
+  it("formats visible production context ids without stale whitespace", () => {
+    expect(formatProductionContextId(" plan-1 ")).toBe("plan-1");
+    expect(formatProductionContextId("   ", " spec-fallback ")).toBe("spec-fallback");
+    expect(formatProductionContextId(undefined, "   ")).toBe("-");
   });
 
   it("keeps production item selectors empty when the workspace is cleared", () => {

@@ -31,7 +31,7 @@ function readStringOrNumber(record: Record<string, unknown> | undefined, keys: s
   return undefined;
 }
 
-function formatContextId(...values: unknown[]): string {
+export function formatProductionContextId(...values: unknown[]): string {
   for (const value of values) {
     const id = typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
     if (id) {
@@ -310,12 +310,12 @@ export function formatActiveProductionContextLabel(input: {
   }
 
   if (input.selectedPlan) {
-    const planId = formatContextId(input.selectedPlan.planId);
+    const planId = formatProductionContextId(input.selectedPlan.planId);
     if (input.selectedPlanSpecLabel) {
       return `Plan-Kontext geladen: ${planId} · Spezifikation: ${input.selectedPlanSpecLabel}`;
     }
 
-    const eventSpecId = formatContextId(input.selectedPlan.eventSpecId);
+    const eventSpecId = formatProductionContextId(input.selectedPlan.eventSpecId);
     if (eventSpecId !== "-") {
       return `Plan-Kontext geladen: ${planId} · Spezifikation: ${eventSpecId}`;
     }
@@ -413,9 +413,9 @@ export function formatProductionHandoffContextLabel(input: {
   }
 
   return [
-    `planId ${formatContextId(input.selectedPlan.planId)}`,
-    `specId ${formatContextId(input.selectedPlan.eventSpecId, input.selectedPlanSpec?.specId)}`,
-    input.purchaseLists[0] ? `purchaseListId ${formatContextId(input.purchaseLists[0].purchaseListId)}` : undefined
+    `planId ${formatProductionContextId(input.selectedPlan.planId)}`,
+    `specId ${formatProductionContextId(input.selectedPlan.eventSpecId, input.selectedPlanSpec?.specId)}`,
+    input.purchaseLists[0] ? `purchaseListId ${formatProductionContextId(input.purchaseLists[0].purchaseListId)}` : undefined
   ]
     .filter(Boolean)
     .join(" · ");
