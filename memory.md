@@ -1631,4 +1631,5 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 ### 5.340 - 2026-06-01
 - PA27 LLM-Readiness Eval-Fixtures ist additiv in `shared-core/src/fixtures/llm-readiness-eval-fixtures.ts` und `docs/architecture/PA27_LLM_READINESS_EVAL_FIXTURES.md` verankert: synthetische Erwartungsfaelle fuer Clarification-Draft und Operator-Summary-Draft auf Basis des PA26-Vertrags.
+- PA28 LLM-Readiness Draft-Registry ist additiv in `shared-core/src/llm-readiness-draft-registry.ts` und `docs/architecture/PA28_LLM_READINESS_DRAFT_REGISTRY.md` verankert: schema-only Draft-Kontrakte verbinden PA26-Input-/Output-Kinds mit PA27-Fixtures ohne Prompttext, Provider, Modellaufrufe, API, Persistenz, echte Daten oder Schreibwirkung.
 - `tests/pa27-llm-readiness-eval-fixtures.test.ts` schuetzt synthetische IDs/Labels, deaktivierte Provider-Calls, `synthetic_or_demo_only`, Human-Approval-Pflicht, `writesProductObject: false` und das Verbot von Rohtext-, Prompt-, Provider-, Secret- oder Toolcall-Payloads.

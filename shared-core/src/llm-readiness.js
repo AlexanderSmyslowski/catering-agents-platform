@@ -84,7 +84,7 @@ export const llmReadinessModelOutputKinds = [
   "operator_summary_draft"
 ];
 
-const forbiddenRawPayloadKeys = [
+export const llmReadinessForbiddenPayloadKeys = [
   "rawText",
   "extractedText",
   "prompt",
@@ -145,7 +145,7 @@ export function validateLlmReadinessModelOutputCandidate(candidate) {
     errors.push("text must be a non-empty draft string");
   }
 
-  for (const forbiddenKey of forbiddenRawPayloadKeys) {
+  for (const forbiddenKey of llmReadinessForbiddenPayloadKeys) {
     if (forbiddenKey in candidate) {
       errors.push(`${forbiddenKey} is not allowed in readiness output candidates`);
     }
