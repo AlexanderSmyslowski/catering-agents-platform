@@ -18,8 +18,13 @@ describe("recipe text normalization", () => {
   });
 
   it("exposes culinary expansions for focused matching without leaking the map", () => {
-    expect(culinaryExpansionsForToken("gemuesepfanne")).toEqual(["vegetable", "stir", "fry"]);
+    const expansions = culinaryExpansionsForToken("gemuesepfanne");
+
+    expect(expansions).toEqual(["vegetable", "stir", "fry"]);
     expect(culinaryExpansionsForToken("unknown")).toEqual([]);
+
+    expansions.push("mutated");
+    expect(culinaryExpansionsForToken("gemuesepfanne")).toEqual(["vegetable", "stir", "fry"]);
   });
 
   it("normalizes comparable text for ASCII token matching", () => {

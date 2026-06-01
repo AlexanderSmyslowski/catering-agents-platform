@@ -161,7 +161,7 @@ export function normalizeTokens(value: string): string[] {
 }
 
 export function culinaryExpansionsForToken(token: string): string[] {
-  return culinaryTokenExpansions[token] ?? [];
+  return [...(culinaryTokenExpansions[token] ?? [])];
 }
 
 export function normalizeComparableText(value: string): string {
