@@ -70,10 +70,9 @@ import { buildAppProductionRouteState } from "./app-production-route-state.js";
 import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
 import { buildOfferTextSubmitAction } from "./offer-text-submit-action.js";
 import { buildProductionRouteFilterState } from "./production-route-filter-state.js";
-import { buildProductionRouteViewState } from "./production-route-view-state.js";
+import { buildProductionRouteViewAppBoundary } from "./production-route-view-app-boundary.js";
 import { formatArchiveCurrentIntakeContextLabel } from "./production-source-input-state.js";
 import { buildProductionSourceInputAppBoundary } from "./production-source-input-app-boundary.js";
-import { buildProductionStatusSummaryState } from "./production-status-summary-state.js";
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionRecipeControls } from "./production-recipe-controls.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
@@ -356,82 +355,35 @@ export function App() {
   );
 
   const {
-    activeProductionContextLabel,
-    focusedSpecReadinessLabel,
-    selectedPlanReadinessLabel,
-    productionPlanStatusLabel,
-    productionObjectStatusLabel,
-    purchaseZoneStatusLabel,
-    productionIntakeOriginLabel,
-    productionAuditTrailLabel,
-    productionHandoffExportLabel,
-    productionHandoffContextLabel,
-    productionNextStep
-  } = useMemo(
-    () =>
-      buildProductionStatusSummaryState({
-        isInitialProductionLoading,
-        focusedProductionSpec,
-        selectedPlan,
-        selectedPlanSpec,
-        currentSpecPlans,
-        currentSpecPurchaseLists,
-        productionQuestions,
-        filteredAuditEvents,
-        intakeRequestDetail,
-        currentIntakeRequestId,
-        productionWorkspaceCleared
-      }),
-    [
-      currentIntakeRequestId,
-      currentSpecPlans,
-      currentSpecPurchaseLists,
-      filteredAuditEvents,
-      focusedProductionSpec,
-      intakeRequestDetail,
-      isInitialProductionLoading,
-      productionQuestions,
-      productionWorkspaceCleared,
-      selectedPlan,
-      selectedPlanSpec
-    ]
-  );
-
-  const productionRouteViewState = buildProductionRouteViewState({
-    activeProductionContextLabel,
-    focusedSpecReadinessLabel,
-    productionPlanStatusLabel,
-    purchaseZoneStatusLabel,
+    productionStatusSummary,
+    productionRouteViewState
+  } = buildProductionRouteViewAppBoundary({
+    isInitialProductionLoading,
     productionQuestions,
-    clarificationStatusCounts,
-    currentSpecPlans,
-    productionObjectStatusLabel,
     currentSpecPurchaseLists,
-    productionNextStep,
+    currentSpecPlans,
+    filteredAuditEvents,
+    currentIntakeRequestId,
     focusedProductionSpec,
     selectedPlan,
-    selectedPlanReadinessLabel,
+    selectedPlanSpec,
+    intakeRequestDetail,
+    productionWorkspaceCleared,
+    clarificationStatusCounts,
     productionAssumptions,
     productionConversationProjection,
     workbenchSpecFacts,
     intakeRequestDetailError,
-    intakeRequestDetail,
     filteredSpecs,
     documentPhase,
-    productionWorkspaceCleared,
     planPhase,
     planningSpecLabel,
     planProgress,
     planEtaSeconds,
-    selectedPlanSpec,
     selectedPlanComponentsById,
     archivedPlans,
     specById,
     archivedPurchaseLists,
-    productionIntakeOriginLabel,
-    productionAuditTrailLabel,
-    productionHandoffExportLabel,
-    productionHandoffContextLabel,
     recipeReviewStatusLabel,
     recipeUsageStatusLabel,
     recipeReviewCounts,
@@ -637,7 +589,7 @@ export function App() {
     intakeText,
     canClearWorkspace: canClearProductionWorkspace,
     canArchiveCurrentIntake,
-    clearWorkspaceContextLabel: activeProductionContextLabel,
+    clearWorkspaceContextLabel: productionStatusSummary.activeProductionContextLabel,
     archiveCurrentIntakeContextLabel: formatArchiveCurrentIntakeContextLabel({
       currentIntakeRequestId
     }),
