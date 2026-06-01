@@ -30,6 +30,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("browser-rehearsal-shell.sh");
     expect(script).toContain("load_rehearsal_script \"home-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"offer-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"production-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"submitted-reload-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"archive-reload-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"production-result-reload-pre-markers.js\"");
@@ -117,22 +118,22 @@ describe("browser rehearsal script contract", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
     const rehearsalBundle = `${script}\n${browserRehearsalScripts}`;
 
-    expect(script).toContain("aktueller Plan-Kontext fehlt");
-    expect(script).toContain("aktueller Produktionsplan-Exportlink passt nicht");
-    expect(script).toContain("aktueller Einkaufslisten-Kontext fehlt");
-    expect(script).toContain("aktueller Einkaufslisten-Exportlink passt nicht");
-    expect(script).toContain("Abschluss-Kontext passt nicht zum aktuellen Plan-/Einkaufslisten-Kontext");
-    expect(script).toContain("aktueller Produktionsplan-Export ist im Browser nicht abrufbar");
-    expect(script).toContain("aktueller Produktionsplan-Exportinhalt passt nicht");
-    expect(script).toContain("aktueller Einkaufslisten-Export ist im Browser nicht abrufbar");
-    expect(script).toContain("aktueller Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header");
-    expect(script).toContain("fetch(expectedPlanHref)");
-    expect(script).toContain("fetch(expectedPurchaseHref)");
-    expect(script).toContain("Rückfragenstatus-Zaehler fehlt");
-    expect(script).toContain("Rückfragen-und-Antworten-Zaehler fehlt");
-    expect(script).toContain("Rückfragenstatus und Rückfragenpanel zeigen unterschiedliche Zaehler");
-    expect(script).toContain("ältere Listen sind kein aktueller Vorgang");
-    expect(script).toContain("nicht das aktuelle Ergebnis");
+    expect(rehearsalBundle).toContain("aktueller Plan-Kontext fehlt");
+    expect(rehearsalBundle).toContain("aktueller Produktionsplan-Exportlink passt nicht");
+    expect(rehearsalBundle).toContain("aktueller Einkaufslisten-Kontext fehlt");
+    expect(rehearsalBundle).toContain("aktueller Einkaufslisten-Exportlink passt nicht");
+    expect(rehearsalBundle).toContain("Abschluss-Kontext passt nicht zum aktuellen Plan-/Einkaufslisten-Kontext");
+    expect(rehearsalBundle).toContain("aktueller Produktionsplan-Export ist im Browser nicht abrufbar");
+    expect(rehearsalBundle).toContain("aktueller Produktionsplan-Exportinhalt passt nicht");
+    expect(rehearsalBundle).toContain("aktueller Einkaufslisten-Export ist im Browser nicht abrufbar");
+    expect(rehearsalBundle).toContain("aktueller Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header");
+    expect(rehearsalBundle).toContain("fetch(expectedPlanHref)");
+    expect(rehearsalBundle).toContain("fetch(expectedPurchaseHref)");
+    expect(rehearsalBundle).toContain("Rückfragenstatus-Zaehler fehlt");
+    expect(rehearsalBundle).toContain("Rückfragen-und-Antworten-Zaehler fehlt");
+    expect(rehearsalBundle).toContain("Rückfragenstatus und Rückfragenpanel zeigen unterschiedliche Zaehler");
+    expect(rehearsalBundle).toContain("ältere Listen sind kein aktueller Vorgang");
+    expect(rehearsalBundle).toContain("nicht das aktuelle Ergebnis");
     expect(script).toContain("production_result_reload_markers");
     expect(script).toContain("Produktion Ergebnis-Reload stabil");
     expect(rehearsalBundle).toContain("Produktions-Ergebnis-Reload verliert aktuellen Plan-Kontext");
@@ -244,14 +245,15 @@ describe("browser rehearsal script contract", () => {
 
   it("guards production workspace actions against unsafe stale or empty states", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+    const rehearsalBundle = `${script}\n${browserRehearsalScripts}`;
 
-    expect(script).toContain("Arbeitsbereich-lokal-leeren-Aktion fehlt");
-    expect(script).toContain("Arbeitsbereich-lokal-leeren-Aktion ist trotz aktuellem Ergebnis deaktiviert");
-    expect(script).toContain("Arbeitsbereich-lokal-leeren-Aktion ist nicht mit aktuellem Kontext beschriftet");
-    expect(script).toContain("Fehlupload-Archiv-Aktion fehlt");
-    expect(script).toContain("Fehlupload-Archiv-Aktion ist ohne aktiven Intake-Kontext nicht sicher deaktiviert");
-    expect(script).toContain("Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.");
-    expect(script).toContain("Wiederverarbeitungs-Aktion ist ohne ausgewählte Datei nicht sicher deaktiviert");
+    expect(rehearsalBundle).toContain("Arbeitsbereich-lokal-leeren-Aktion fehlt");
+    expect(rehearsalBundle).toContain("Arbeitsbereich-lokal-leeren-Aktion ist trotz aktuellem Ergebnis deaktiviert");
+    expect(rehearsalBundle).toContain("Arbeitsbereich-lokal-leeren-Aktion ist nicht mit aktuellem Kontext beschriftet");
+    expect(rehearsalBundle).toContain("Fehlupload-Archiv-Aktion fehlt");
+    expect(rehearsalBundle).toContain("Fehlupload-Archiv-Aktion ist ohne aktiven Intake-Kontext nicht sicher deaktiviert");
+    expect(rehearsalBundle).toContain("Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.");
+    expect(rehearsalBundle).toContain("Wiederverarbeitungs-Aktion ist ohne ausgewählte Datei nicht sicher deaktiviert");
   });
 
   it("clicks local clear in the browser and rejects stale production artifacts afterwards", () => {
