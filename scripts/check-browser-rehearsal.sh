@@ -41,46 +41,8 @@ require_ui_shell "${BASE_URL}/produktion"
 
 run_browser open "${BASE_URL}/" >/dev/null
 
-home_markers='() => {
-  const text = document.body.innerText;
-  const missing = [
-    "Catering-Agenten",
-    "Internes Beta-Kontrollzentrum",
-    "Beta-Weg: Start → Angebot → Produktion → Rückfragen → Exporte/Audit.",
-    "Rehearsal-Go: erst nach grünem Status, lokalem Check, manueller UI-Evidenz und Reibungslog.",
-    "Nächster Einstieg: zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären."
-  ].filter((marker) => !text.includes(marker));
-  const links = [...document.querySelectorAll("a")].map((anchor) => anchor.getAttribute("href"));
-  for (const href of ["/angebot", "/produktion"]) {
-    if (!links.includes(href)) {
-      missing.push(`Link fehlt: ${href}`);
-    }
-  }
-  if (missing.length > 0) {
-    throw new Error(`Start-Rehearsal-Marker fehlen: ${missing.join(" | ")}`);
-  }
-  return { route: location.pathname, markers: "home-ok" };
-}'
-
-offer_markers='() => {
-  const text = document.body.innerText;
-  const missing = [
-    "Angebotsagent",
-    "Kundenanfrage einfügen und ruhigen Entwurf erzeugen",
-    "Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.",
-    "Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen",
-    "Zur Produktion"
-  ].filter((marker) => !text.includes(marker));
-  const hasProductionHandoff = [...document.querySelectorAll("a")]
-    .some((anchor) => anchor.getAttribute("href") === "/produktion" && (anchor.textContent ?? "").includes("Zur Produktion"));
-  if (!hasProductionHandoff) {
-    missing.push("Handoff-Link Zur Produktion fehlt");
-  }
-  if (missing.length > 0) {
-    throw new Error(`Angebots-Rehearsal-Marker fehlen: ${missing.join(" | ")}`);
-  }
-  return { route: location.pathname, markers: "offer-ok" };
-}'
+home_markers="$(load_rehearsal_script "home-markers.js")"
+offer_markers="$(load_rehearsal_script "offer-markers.js")"
 
 production_markers='async () => {
   const text = document.body.innerText;
@@ -906,32 +868,8 @@ clear_workspace_reload_markers='async () => {
   return { route: location.pathname, markers: "production-clear-reload-ok", planId, purchaseListId };
 }'
 
-home_to_offer='() => {
-  const candidates = [...document.querySelectorAll("a")];
-  const link = candidates.find((anchor) =>
-    anchor.getAttribute("href") === "/angebot" &&
-    ((anchor.textContent ?? "").includes("Angebotsagent öffnen") ||
-      (anchor.textContent ?? "").includes("Angebotsagent"))
-  );
-  if (!link) {
-    throw new Error("Start-Link zum Angebotsagent fehlt");
-  }
-  link.click();
-  return { clicked: link.textContent?.trim() };
-}'
-
-offer_to_production='() => {
-  const candidates = [...document.querySelectorAll("a")];
-  const link = candidates.find((anchor) =>
-    anchor.getAttribute("href") === "/produktion" &&
-    (anchor.textContent ?? "").includes("Zur Produktion")
-  );
-  if (!link) {
-    throw new Error("Angebot-Handoff-Link zur Produktion fehlt");
-  }
-  link.click();
-  return { clicked: link.textContent?.trim() };
-}'
+home_to_offer="$(load_rehearsal_script "home-to-offer.js")"
+offer_to_production="$(load_rehearsal_script "offer-to-production.js")"
 
 echo "Browser-Navigations- und Markerpruefung:"
 check_current_page_markers "Start" "${home_markers}"

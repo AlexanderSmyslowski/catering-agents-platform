@@ -5,6 +5,12 @@ describe("browser rehearsal script contract", () => {
   const readmeDoc = readFileSync("README.md", "utf8");
   const testingDoc = readFileSync("TESTING.md", "utf8");
   const browserShellHelpers = readFileSync("scripts/browser-rehearsal-shell.sh", "utf8");
+  const browserRouteScripts = [
+    "scripts/browser-rehearsal/home-markers.js",
+    "scripts/browser-rehearsal/offer-markers.js",
+    "scripts/browser-rehearsal/home-to-offer.js",
+    "scripts/browser-rehearsal/offer-to-production.js"
+  ].map((path) => readFileSync(path, "utf8")).join("\n");
 
   it("keeps the real-browser rehearsal script wired as an explicit optional npm command", () => {
     const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
@@ -23,6 +29,8 @@ describe("browser rehearsal script contract", () => {
       "bash ./scripts/check-browser-rehearsal-full-fresh.sh"
     );
     expect(script).toContain("browser-rehearsal-shell.sh");
+    expect(script).toContain("load_rehearsal_script \"home-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"offer-markers.js\"");
     expect(browserShellHelpers).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
@@ -62,6 +70,7 @@ describe("browser rehearsal script contract", () => {
 
   it("guards the route, export and audit markers that make the synthetic core path browser-checkable", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+    const rehearsalBundle = `${script}\n${browserRouteScripts}`;
 
     for (const marker of [
       "Internes Beta-Kontrollzentrum",
@@ -82,7 +91,7 @@ describe("browser rehearsal script contract", () => {
       "/api/exports/v1/exports/production-plans/",
       "/api/exports/v1/exports/purchase-lists/"
     ]) {
-      expect(script).toContain(marker);
+      expect(rehearsalBundle).toContain(marker);
     }
   });
 
@@ -96,7 +105,7 @@ describe("browser rehearsal script contract", () => {
     expect(browserShellHelpers).toContain("navigierte nicht stabil nach ${target_path}");
     expect(script).toContain("click_rehearsal_link \"Start -> Angebot\" \"/angebot\"");
     expect(script).toContain("click_rehearsal_link \"Angebot -> Produktion\" \"/produktion\"");
-    expect(script).toContain("link.click()");
+    expect(browserRouteScripts).toContain("link.click()");
   });
 
   it("guards current production context against stale artifact confusion", () => {
