@@ -95,7 +95,7 @@ Warum dieser Schritt:
 - Er macht spaetere LLM-Entscheidungen entscheidungsreif statt improvisiert.
 - Er haelt den deterministischen Kern fuehrend.
 
-PA26 setzt den ersten Teil dieses Schritts um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. Danach bleibt als naechster autonomer Schritt eine ebenso kleine Prompt-/Schema-Registry oder synthetische Eval-Fixture-Grenze, weiterhin ohne Provider, Secrets, echte Daten, API oder Persistenz.
+PA26 setzt den ersten Teil dieses Schritts um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. Danach bleibt als naechster autonomer Schritt eine kleine Prompt-/Schema-Registry oder weitere synthetische Fixture-Schaerfung, weiterhin ohne Provider, Secrets, echte Daten, API oder Persistenz.
 
 ## 7. Sicherer Default
 
