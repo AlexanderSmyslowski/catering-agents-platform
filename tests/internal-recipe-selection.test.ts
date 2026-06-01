@@ -9,6 +9,7 @@ import {
   buildInternalRecipeCandidate,
   compareInternalRecipeCandidates,
   internalRecipeCandidatePassesThresholds,
+  rankInternalRecipeCandidates,
   selectInternalRecipeCandidate
 } from "../production-service/src/recipe-discovery/internal-recipe-selection.js";
 
@@ -209,6 +210,55 @@ describe("internal recipe selection", () => {
 
     expect(selected?.recipe).toBe(first);
     expect(selected?.repositoryRank).toBe(0);
+  });
+
+  it("ranks internal recipe candidates without mutating the caller order", () => {
+    const component = buildComponent();
+    const eventSpec = buildEventSpec();
+    const first = buildInternalRecipeCandidate({
+      recipe: buildRecipe({
+        recipeId: "recipe-first-ranked-tomato-soup",
+        name: "Tomatensuppe",
+        tier: "internal_verified"
+      }),
+      repositoryRank: 0,
+      component,
+      eventSpec
+    });
+    const later = buildInternalRecipeCandidate({
+      recipe: buildRecipe({
+        recipeId: "recipe-later-ranked-tomato-soup",
+        name: "Tomatensuppe Bankett",
+        tier: "internal_verified"
+      }),
+      repositoryRank: 1,
+      component,
+      eventSpec
+    });
+    const approved = buildInternalRecipeCandidate({
+      recipe: buildRecipe({
+        recipeId: "recipe-approved-ranked-tomato-soup",
+        name: "Tomatensuppe Hausstandard",
+        tier: "internal_approved"
+      }),
+      repositoryRank: 2,
+      component,
+      eventSpec
+    });
+    const candidates = [approved, later, first];
+
+    const ranked = rankInternalRecipeCandidates(candidates);
+
+    expect(ranked.map((candidate) => candidate.recipe.recipeId)).toEqual([
+      "recipe-first-ranked-tomato-soup",
+      "recipe-later-ranked-tomato-soup",
+      "recipe-approved-ranked-tomato-soup"
+    ]);
+    expect(candidates.map((candidate) => candidate.recipe.recipeId)).toEqual([
+      "recipe-approved-ranked-tomato-soup",
+      "recipe-later-ranked-tomato-soup",
+      "recipe-first-ranked-tomato-soup"
+    ]);
   });
 
   it("uses the existing lead-name fallback for the top repository candidate", () => {
