@@ -1576,3 +1576,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.326 - 2026-06-01
 - App-Dashboard-/Route-Ableitungen sind aus `App.tsx` nach `backoffice-ui/src/app-dashboard-route-state.ts` extrahiert: Suchfilter, Offer-Fallbacks, Loading-Flags, Rezeptstatus und Produktionslisten werden in einem getesteten Selector-Cluster gebaut.
 - `tests/app-dashboard-route-state.test.ts` schuetzt die bestehende Ableitung ohne UI-Text-, Produktlogik-, API-, Datenmodell-, Persistenz/Migrations-, LLM-, Echtdaten-, Deployment- oder Auth-Aenderung.
+
+### 5.327 - 2026-06-01
+- RecipeDiscovery-Labeluebersetzungen sind aus `production-service/src/recipe-discovery/recipe-query-builder.ts` nach `production-service/src/recipe-discovery/recipe-query-translations.ts` extrahiert; der Query-Builder re-exportiert die bestehende Funktion weiter.
+- `tests/recipe-query-translations.test.ts` schuetzt deutsche No-Op-Labels, etablierte englische Catering-Labeluebersetzungen und Whitespace-Normalisierung. Keine Aenderung an Rezeptlogik, Matching-Strategie, UI, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment oder Auth.
