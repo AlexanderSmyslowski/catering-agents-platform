@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.339
+version: 5.340
 date: 2026-06-01
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1628,3 +1628,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.339 - 2026-06-01
 - PA26 LLM-Readiness-Vertrag ohne Provider ist additiv in `shared-core/src/llm-readiness.ts` und `docs/architecture/PA26_LLM_READINESS_CONTRACT.md` verankert: Model-Input-/Output-Draftgrenzen, Tool-Effektklassen `read`/`draft`/`write`, `decision_required` fuer Write-Tools, Human-Approval-Pflicht und `writesProductObject: false`.
 - `tests/pa26-llm-readiness-contract.test.ts` schuetzt, dass PA26 keinen Provider, keine Secrets, keine Modellaufrufe, keine echten Daten, keine API, keine Persistenz/Migration, keine Runtime-ConversationSession und keine Tool-Orchestrierung mit Schreibwirkung einfuehrt.
+
+### 5.340 - 2026-06-01
+- PA27 LLM-Readiness Eval-Fixtures ist additiv in `shared-core/src/fixtures/llm-readiness-eval-fixtures.ts` und `docs/architecture/PA27_LLM_READINESS_EVAL_FIXTURES.md` verankert: synthetische Erwartungsfaelle fuer Clarification-Draft und Operator-Summary-Draft auf Basis des PA26-Vertrags.
+- `tests/pa27-llm-readiness-eval-fixtures.test.ts` schuetzt synthetische IDs/Labels, deaktivierte Provider-Calls, `synthetic_or_demo_only`, Human-Approval-Pflicht, `writesProductObject: false` und das Verbot von Rohtext-, Prompt-, Provider-, Secret- oder Toolcall-Payloads.
