@@ -17,6 +17,10 @@ export function summarizeFallbackReason(blockingIssues: string[], warnings: stri
   return blockingIssues[0] ?? warnings[0] ?? "Die Produktionsplanung musste in einen deterministischen Fallback wechseln.";
 }
 
+export function uniquePlanningMessages(messages: string[]): string[] {
+  return [...new Set(messages)];
+}
+
 export function purchaseCoverageBlockingIssues(
   productionPlan: ProductionPlan,
   purchaseList: PurchaseList
@@ -38,8 +42,8 @@ export function withPurchaseCoverageBlockingIssues(
   productionPlan: ProductionPlan,
   issues: string[]
 ): ProductionPlan {
-  const blockingIssues = [...new Set([...(productionPlan.blockingIssues ?? []), ...issues])];
-  const unresolvedItems = [...new Set([...productionPlan.unresolvedItems, ...issues])];
+  const blockingIssues = uniquePlanningMessages([...(productionPlan.blockingIssues ?? []), ...issues]);
+  const unresolvedItems = uniquePlanningMessages([...productionPlan.unresolvedItems, ...issues]);
   const warnings = productionPlan.warnings ?? [];
   const blockingNotes = issues;
 
@@ -49,7 +53,7 @@ export function withPurchaseCoverageBlockingIssues(
     unresolvedItems,
     kitchenSheets: productionPlan.kitchenSheets.map((sheet) => ({
       ...sheet,
-      blockingNotes: [...new Set([...(sheet.blockingNotes ?? []), ...blockingNotes])]
+      blockingNotes: uniquePlanningMessages([...(sheet.blockingNotes ?? []), ...blockingNotes])
     })),
     isFallback: true,
     fallbackReason: summarizeFallbackReason(blockingIssues, warnings),

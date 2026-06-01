@@ -11,6 +11,7 @@ import {
 import {
   purchaseCoverageBlockingIssues,
   summarizeFallbackReason,
+  uniquePlanningMessages,
   withPurchaseCoverageBlockingIssues
 } from "./planning-readiness.js";
 import type { OperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
@@ -32,9 +33,9 @@ export function buildFinalProductionArtifacts({
   operationalArtifacts,
   recipeSelections
 }: FinalProductionArtifactsInput): { productionPlan: ProductionPlan; purchaseList: PurchaseList } {
-  const unresolvedItems = [...new Set(readinessIssues.unresolvedItems)];
-  const warnings = [...new Set(readinessIssues.warnings)];
-  const blockingIssues = [...new Set(readinessIssues.blockingIssues)];
+  const unresolvedItems = uniquePlanningMessages(readinessIssues.unresolvedItems);
+  const warnings = uniquePlanningMessages(readinessIssues.warnings);
+  const blockingIssues = uniquePlanningMessages(readinessIssues.blockingIssues);
   const readiness = mergeReadiness(eventSpec.readiness, unresolvedItems, blockingIssues);
 
   const productionPlan = validateProductionPlan({
