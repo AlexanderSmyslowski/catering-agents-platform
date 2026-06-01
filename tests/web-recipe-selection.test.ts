@@ -105,6 +105,44 @@ describe("web recipe selection", () => {
     expect(selected?.query.query).toBe("selected");
   });
 
+  it("does not reorder the caller-owned candidate list while selecting", () => {
+    const originalOrder = [
+      {
+        recipe: buildRecipe({
+          recipeId: "recipe-first",
+          qualityScore: 0.7,
+          fitScore: 0.7
+        }),
+        query: buildQuery("first")
+      },
+      {
+        recipe: buildRecipe({
+          recipeId: "recipe-winner",
+          qualityScore: 0.95,
+          fitScore: 0.95
+        }),
+        query: buildQuery("winner")
+      },
+      {
+        recipe: buildRecipe({
+          recipeId: "recipe-last",
+          qualityScore: 0.6,
+          fitScore: 0.6
+        }),
+        query: buildQuery("last")
+      }
+    ];
+
+    const selected = selectWebRecipeCandidate(originalOrder);
+
+    expect(selected?.recipe.recipeId).toBe("recipe-winner");
+    expect(originalOrder.map((candidate) => candidate.recipe.recipeId)).toEqual([
+      "recipe-first",
+      "recipe-winner",
+      "recipe-last"
+    ]);
+  });
+
   it("returns undefined when no web candidates survived filtering and validation", () => {
     expect(selectWebRecipeCandidate([])).toBeUndefined();
   });
