@@ -439,6 +439,8 @@ PA29 ergaenzt dazu `validateLlmReadinessModelInputCandidate(...)` als Input-Vali
 
 PA30 schliesst die reine Readiness-Kette mit `validateLlmReadinessEvalFixture(...)`: synthetische Eval-Fixtures werden zentral gegen Input-Validator, Output-Validator, Draft-Registry, required SourceRefs und Forbidden-Payload-Grenzen validiert, ohne Prompttext, Provider, Modellaufrufe, API, Persistenz, echte Daten oder Schreibwirkung einzufuehren.
 
+PA31 haertet die SourceRef-Grenze: `llmReadinessSourceObjectTypes` macht die erlaubten Quellobjekttypen runtime-sichtbar, und die Input-/Output-Validatoren akzeptieren nur noch bekannte Arbeitsbelegtypen statt beliebiger `objectType`-Strings.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.

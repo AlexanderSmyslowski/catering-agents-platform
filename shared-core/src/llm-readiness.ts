@@ -102,12 +102,15 @@ export const llmReadinessModelOutputKinds = [
 
 export type LlmReadinessModelOutputKind = typeof llmReadinessModelOutputKinds[number];
 
-export type LlmReadinessSourceObjectType =
-  | "accepted_event_spec"
-  | "production_plan"
-  | "purchase_list"
-  | "conversation_projection"
-  | "safe_source_anchor";
+export const llmReadinessSourceObjectTypes = [
+  "accepted_event_spec",
+  "production_plan",
+  "purchase_list",
+  "conversation_projection",
+  "safe_source_anchor"
+] as const;
+
+export type LlmReadinessSourceObjectType = typeof llmReadinessSourceObjectTypes[number];
 
 export interface LlmReadinessSourceRef {
   objectType: LlmReadinessSourceObjectType;
@@ -171,12 +174,17 @@ function hasAllowedInputKind(value: unknown): value is LlmReadinessModelInputKin
   return typeof value === "string" && llmReadinessModelInputKinds.includes(value as LlmReadinessModelInputKind);
 }
 
+function hasAllowedSourceObjectType(value: unknown): value is LlmReadinessSourceObjectType {
+  return typeof value === "string" &&
+    llmReadinessSourceObjectTypes.includes(value as LlmReadinessSourceObjectType);
+}
+
 function hasSafeSourceRefs(value: unknown): boolean {
   return Array.isArray(value) &&
     value.length > 0 &&
     value.every((sourceRef) =>
       isRecord(sourceRef) &&
-      typeof sourceRef.objectType === "string" &&
+      hasAllowedSourceObjectType(sourceRef.objectType) &&
       typeof sourceRef.objectId === "string" &&
       sourceRef.objectId.trim().length > 0
     );

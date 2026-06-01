@@ -33,6 +33,7 @@ Er exportiert:
 - `llmReadinessContractVersion`
 - `llmReadinessForbiddenBoundaries`
 - `llmReadinessToolBoundaries`
+- `llmReadinessSourceObjectTypes`
 - `LlmReadinessModelInput`
 - `LlmReadinessModelOutputCandidate`
 - `validateLlmReadinessModelInputCandidate(...)`
@@ -97,6 +98,7 @@ PA26 ist erfuellt, wenn:
 - write-Tools nur als `decision_required` klassifiziert sind,
 - Model-Output-Kandidaten Human Approval verlangen und keine Produktobjekte schreiben,
 - Model-Input-Kandidaten Provider-Aufrufe deaktivieren, synthetische/Demo-Daten deklarieren und keine Write-Tool-Effekte erlauben,
+- SourceRefs nur bekannte sichere Quellobjekttypen referenzieren,
 - Rohtext-/Prompt-/Provider-/Secret-/Toolcall-Payloads abgelehnt werden,
 - `tests/pa26-llm-readiness-contract.test.ts` gruen ist,
 - `npm run build` gruen ist.

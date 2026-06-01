@@ -84,6 +84,14 @@ export const llmReadinessModelOutputKinds = [
   "operator_summary_draft"
 ];
 
+export const llmReadinessSourceObjectTypes = [
+  "accepted_event_spec",
+  "production_plan",
+  "purchase_list",
+  "conversation_projection",
+  "safe_source_anchor"
+];
+
 export const llmReadinessForbiddenPayloadKeys = [
   "rawText",
   "extractedText",
@@ -107,12 +115,16 @@ function hasAllowedInputKind(value) {
   return typeof value === "string" && llmReadinessModelInputKinds.includes(value);
 }
 
+function hasAllowedSourceObjectType(value) {
+  return typeof value === "string" && llmReadinessSourceObjectTypes.includes(value);
+}
+
 function hasSafeSourceRefs(value) {
   return Array.isArray(value) &&
     value.length > 0 &&
     value.every((sourceRef) =>
       isRecord(sourceRef) &&
-      typeof sourceRef.objectType === "string" &&
+      hasAllowedSourceObjectType(sourceRef.objectType) &&
       typeof sourceRef.objectId === "string" &&
       sourceRef.objectId.trim().length > 0
     );
