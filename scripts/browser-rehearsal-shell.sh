@@ -77,11 +77,12 @@ click_rehearsal_link() {
 require_fresh_mutation_scope() {
   local submit_answers="$1"
   local archive_intake="$2"
-  local allow_persistent_mutation="$3"
-  local data_root_file="$4"
+  local failed_upload="$3"
+  local allow_persistent_mutation="$4"
+  local data_root_file="$5"
   local recorded_data_root
 
-  if [[ "${submit_answers}" != "1" && "${archive_intake}" != "1" ]]; then
+  if [[ "${submit_answers}" != "1" && "${archive_intake}" != "1" && "${failed_upload}" != "1" ]]; then
     return 0
   fi
 

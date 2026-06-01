@@ -24,6 +24,9 @@ describe("browser rehearsal script contract", () => {
     expect(packageJson.scripts?.["browser:rehearsal:archive-intake"]).toBe(
       "CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 bash ./scripts/check-browser-rehearsal.sh"
     );
+    expect(packageJson.scripts?.["browser:rehearsal:failed-upload"]).toBe(
+      "CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD=1 bash ./scripts/check-browser-rehearsal.sh"
+    );
     expect(packageJson.scripts?.["browser:rehearsal:full-fresh"]).toBe(
       "bash ./scripts/check-browser-rehearsal-full-fresh.sh"
     );
@@ -34,6 +37,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("load_rehearsal_script_with_modes \"open-question-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"submitted-reload-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"archive-reload-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"failed-upload-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"production-result-reload-pre-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"production-result-reload-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"clear-workspace-markers.js\"");
@@ -42,29 +46,33 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE");
+    expect(script).toContain("CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD");
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
     expect(script).toContain("Browser-Navigations- und Markerpruefung");
     expect(script).toContain("click_rehearsal_link");
     expect(script).toContain("Produktion offene Rueckfragen");
     expect(script).toContain("Produktion Ergebnis-Kontext wiederhergestellt");
     expect(script).toContain("Produktion Submit-Reload gespeichert");
+    expect(script).toContain("Produktion Failed-Upload sicher");
     expect(script).toContain("Produktion lokal geleert");
     expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
   });
 
-  it("keeps the full fresh browser rehearsal wired to the three synthetic browser modes", () => {
+  it("keeps the full fresh browser rehearsal wired to the four synthetic browser modes", () => {
     const script = readFileSync("scripts/check-browser-rehearsal-full-fresh.sh", "utf8");
 
     expect(script).toContain("start-fresh-local-stack.sh");
     expect(script).toContain("check-browser-rehearsal.sh");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1");
+    expect(script).toContain("CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD=1");
     expect(script).toContain("env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE");
-    expect(script).toContain("env -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1");
-    expect(script).toContain("env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1");
+    expect(script).toContain("env -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE -u CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1");
+    expect(script).toContain("env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS -u CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1");
     expect(script).toContain("Normaler Kernpfad");
     expect(script).toContain("Answer-Submit-Pfad");
     expect(script).toContain("Archiv-Pfad");
+    expect(script).toContain("Failed-Upload-Pfad");
     expect(script).toContain("keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage");
   });
 
@@ -227,6 +235,7 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION");
     expect(script).toContain("Answer-Submit-Modus: aktiv");
     expect(script).toContain("Archiv-Modus: aktiv");
+    expect(script).toContain("Failed-Upload-Modus: aktiv");
   });
 
   it("documents the normal and mutating browser rehearsal modes without widening release claims", () => {
@@ -235,6 +244,7 @@ describe("browser rehearsal script contract", () => {
       expect(doc).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit");
       expect(doc).toContain("`npm run browser:rehearsal:answer-submit`");
       expect(doc).toContain("`npm run browser:rehearsal:archive-intake`");
+      expect(doc).toContain("`npm run browser:rehearsal:failed-upload`");
       expect(doc).toContain("`npm run browser:rehearsal:full-fresh`");
       expect(doc).toContain("`npm run local:start:fresh`");
       expect(doc).toContain("synthetische");
@@ -277,5 +287,22 @@ describe("browser rehearsal script contract", () => {
     expect(rehearsalBundle).toContain("Clear-Check Reload laesst Fehlupload-Archiv aktiv oder falsch beschriftet");
     expect(script).toContain("Produktion lokales Leeren nach Reload konsistent");
     expect(script).toContain("Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit -> lokales Leeren");
+  });
+
+  it("checks the failed upload browser path without preserving stale production artifacts", () => {
+    const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+    const rehearsalBundle = `${script}\n${browserRehearsalScripts}`;
+
+    expect(script).toContain("failed_upload_markers");
+    expect(rehearsalBundle).toContain("falsches-angebot.exe");
+    expect(rehearsalBundle).toContain("Dateityp .exe ist nicht erlaubt.");
+    expect(rehearsalBundle).toContain("Failed-Upload-Rehearsal ohne sichtbare Upload-Fehlermeldung");
+    expect(rehearsalBundle).toContain("Failed-Upload-Rehearsal verliert die retrybare Fehldatei");
+    expect(rehearsalBundle).toContain("Failed-Upload-Rehearsal ohne leeren aktiven Vorgang nach Fehler");
+    expect(rehearsalBundle).toContain("Failed-Upload-Rehearsal zeigt alten Produktionsplan");
+    expect(rehearsalBundle).toContain("Failed-Upload-Rehearsal zeigt alte Einkaufsliste");
+    expect(rehearsalBundle).toContain("Failed-Upload-Rehearsal laesst Fehlupload-Archiv ohne aktiven Intake-Kontext aktiv oder falsch beschriftet");
+    expect(rehearsalBundle).toContain("Failed-Upload-Rehearsal kann retrybare Fehldatei nicht erneut verarbeiten");
+    expect(rehearsalBundle).toContain("Browser-Rehearsal-Fehluploadpfad bestaetigt");
   });
 });
