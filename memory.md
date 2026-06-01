@@ -1572,3 +1572,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.325 - 2026-06-01
 - Statische Start-/Angebot-/Navigations-Browser-Rehearsal-Scripts sind nach `scripts/browser-rehearsal/*.js` ausgelagert; `scripts/check-browser-rehearsal.sh` laedt sie ueber `load_rehearsal_script` und behaelt die komplexeren Produktionspfad-Szenarien.
 - Belegt mit `npm run browser:rehearsal:full-fresh` und dem Browser-Rehearsal-Contract-Test. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.326 - 2026-06-01
+- App-Dashboard-/Route-Ableitungen sind aus `App.tsx` nach `backoffice-ui/src/app-dashboard-route-state.ts` extrahiert: Suchfilter, Offer-Fallbacks, Loading-Flags, Rezeptstatus und Produktionslisten werden in einem getesteten Selector-Cluster gebaut.
+- `tests/app-dashboard-route-state.test.ts` schuetzt die bestehende Ableitung ohne UI-Text-, Produktlogik-, API-, Datenmodell-, Persistenz/Migrations-, LLM-, Echtdaten-, Deployment- oder Auth-Aenderung.
