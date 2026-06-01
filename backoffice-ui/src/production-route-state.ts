@@ -112,7 +112,7 @@ export function selectProductionArtifactSpecIds(items: Array<Record<string, unkn
   return Array.from(
     new Set(
       items
-        .map((item) => String(item.eventSpecId ?? ""))
+        .map((item) => String(item.eventSpecId ?? "").trim())
         .filter(Boolean)
     )
   );
@@ -197,7 +197,7 @@ export function selectCurrentProductionItems<T extends Record<string, unknown>>(
     return input.items;
   }
 
-  return input.items.filter((item) => String(item.eventSpecId ?? "") === input.currentProductionSpecId);
+  return input.items.filter((item) => String(item.eventSpecId ?? "").trim() === input.currentProductionSpecId);
 }
 
 export function selectArchivedProductionItems<T extends Record<string, unknown>>(input: {
@@ -209,7 +209,7 @@ export function selectArchivedProductionItems<T extends Record<string, unknown>>
     return [];
   }
 
-  return input.items.filter((item) => String(item.eventSpecId ?? "") !== input.currentProductionSpecId);
+  return input.items.filter((item) => String(item.eventSpecId ?? "").trim() !== input.currentProductionSpecId);
 }
 
 export function selectProductionWorkbenchPlan<T extends Record<string, unknown>>(input: {

@@ -104,7 +104,7 @@ describe("production route state", () => {
     const items = [
       { id: "plan-a", eventSpecId: "spec-current" },
       { id: "plan-b", eventSpecId: "spec-other" },
-      { id: "plan-c", eventSpecId: "spec-current" }
+      { id: "plan-c", eventSpecId: " spec-current " }
     ];
 
     expect(
@@ -542,7 +542,8 @@ describe("production route state", () => {
       selectProductionArtifactSpecIds([
         { eventSpecId: "spec-a" },
         { eventSpecId: "spec-b" },
-        { eventSpecId: "spec-a" },
+        { eventSpecId: " spec-a " },
+        { eventSpecId: "   " },
         { eventSpecId: "" },
         { eventSpecId: undefined },
         { other: "ignored" }
