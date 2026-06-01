@@ -4,6 +4,7 @@ import {
   getPurchaseListPreviewItems,
   getPurchaseListQualityWarnings
 } from "./production-purchase-list-preview.js";
+import { lookupProductionSpecById } from "./production-route-state.js";
 
 export type ProductionPurchaseListState = {
   currentPurchaseLists: Array<Record<string, unknown>>;
@@ -32,7 +33,7 @@ export function ProductionPurchaseListPanel({
       </p>
       <ul className="item-list compact">
         {currentPurchaseLists.map((purchaseList) => {
-          const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+          const relatedSpec = lookupProductionSpecById(specById, purchaseList.eventSpecId);
           const purchaseListPreviewItems = getPurchaseListPreviewItems(purchaseList);
           const qualityWarnings = getPurchaseListQualityWarnings(purchaseList);
           return (
@@ -95,7 +96,7 @@ export function ProductionPurchaseListPanel({
           <div className="secondary-workspace__content">
             <ul className="item-list compact">
               {archivedPurchaseLists.map((purchaseList) => {
-                const relatedSpec = specById.get(String(purchaseList.eventSpecId ?? ""));
+                const relatedSpec = lookupProductionSpecById(specById, purchaseList.eventSpecId);
                 return (
                   <li key={String(purchaseList.purchaseListId)}>
                     <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
