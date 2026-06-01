@@ -32,6 +32,8 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("load_rehearsal_script \"offer-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"submitted-reload-markers.js\"");
     expect(script).toContain("load_rehearsal_script \"archive-reload-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"production-result-reload-pre-markers.js\"");
+    expect(script).toContain("load_rehearsal_script \"production-result-reload-markers.js\"");
     expect(browserShellHelpers).toContain("playwright");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_BASE_URL");
     expect(script).toContain("CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS");
@@ -111,6 +113,7 @@ describe("browser rehearsal script contract", () => {
 
   it("guards current production context against stale artifact confusion", () => {
     const script = readFileSync("scripts/check-browser-rehearsal.sh", "utf8");
+    const rehearsalBundle = `${script}\n${browserRehearsalScripts}`;
 
     expect(script).toContain("aktueller Plan-Kontext fehlt");
     expect(script).toContain("aktueller Produktionsplan-Exportlink passt nicht");
@@ -130,11 +133,11 @@ describe("browser rehearsal script contract", () => {
     expect(script).toContain("nicht das aktuelle Ergebnis");
     expect(script).toContain("production_result_reload_markers");
     expect(script).toContain("Produktion Ergebnis-Reload stabil");
-    expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuellen Plan-Kontext");
-    expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuelle Einkaufsliste");
-    expect(script).toContain("Produktions-Ergebnis-Reload verliert passenden Abschluss-Kontext");
-    expect(script).toContain("Produktions-Ergebnis-Reload verliert aktuellen Produktionsplan-Exportlink");
-    expect(script).toContain("Produktions-Ergebnis-Reload faellt in leeren Ergebniszustand zurueck");
+    expect(rehearsalBundle).toContain("Produktions-Ergebnis-Reload verliert aktuellen Plan-Kontext");
+    expect(rehearsalBundle).toContain("Produktions-Ergebnis-Reload verliert aktuelle Einkaufsliste");
+    expect(rehearsalBundle).toContain("Produktions-Ergebnis-Reload verliert passenden Abschluss-Kontext");
+    expect(rehearsalBundle).toContain("Produktions-Ergebnis-Reload verliert aktuellen Produktionsplan-Exportlink");
+    expect(rehearsalBundle).toContain("Produktions-Ergebnis-Reload faellt in leeren Ergebniszustand zurueck");
   });
 
   it("clicks a synthetic partial production spec and guards the open question browser path", () => {
