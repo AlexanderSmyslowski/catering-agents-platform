@@ -94,3 +94,9 @@ require_fresh_mutation_scope() {
     exit 2
   fi
 }
+
+load_rehearsal_script() {
+  local script_name="$1"
+
+  cat "${ROOT_DIR}/scripts/browser-rehearsal/${script_name}"
+}

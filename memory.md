@@ -1568,3 +1568,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.324 - 2026-06-01
 - Browser-Rehearsal-Harness ist verhaltensgleich entlastet: gemeinsame Shell-/Browser-Helfer liegen in `scripts/browser-rehearsal-shell.sh`, waehrend `scripts/check-browser-rehearsal.sh` die Szenario- und Markerlogik behaelt.
 - Belegt mit `npm run browser:rehearsal:full-fresh`, `npm test` und `npm run build`. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.325 - 2026-06-01
+- Statische Start-/Angebot-/Navigations-Browser-Rehearsal-Scripts sind nach `scripts/browser-rehearsal/*.js` ausgelagert; `scripts/check-browser-rehearsal.sh` laedt sie ueber `load_rehearsal_script` und behaelt die komplexeren Produktionspfad-Szenarien.
+- Belegt mit `npm run browser:rehearsal:full-fresh` und dem Browser-Rehearsal-Contract-Test. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
