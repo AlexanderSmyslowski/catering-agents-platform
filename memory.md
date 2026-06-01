@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.298
-date: 2026-05-26
+version: 5.338
+date: 2026-06-01
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1620,3 +1620,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.337 - 2026-06-01
 - Angebotsrouten-App-Boundary ist aus `App.tsx` nach `backoffice-ui/src/app-offer-route-app-boundary.ts` extrahiert; Offer-Submit, Draft-Promotion und `buildAppOfferRouteState` werden dort als ein Offer-Route-Cluster gebaut.
 - `tests/app-offer-route-app-boundary.test.ts` schuetzt die Verdrahtung fuer Angebotsentwurf-Erstellung, Draft-Promotion und Workbench-State-Referenzen. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.338 - 2026-06-01
+- C11 10/10-Gap-Audit ist als Doku-/Vertragstestanker ergaenzt: `docs/product/C11_10_10_GAP_AUDIT.md` trennt den belegten internen 9/10-Rehearsal-Kern von echter 10/10-Produktreife, markiert reale Gates als blockiert oder entscheidungspflichtig und benennt `LLM-Readiness-Vertrag ohne LLM-Provider` als naechsten autonomen Vorbereitungsschritt.
+- `tests/c11-10-10-gap-audit-contract.test.ts` schuetzt Statuskategorien, Rehearsal-Belege, Gate-Grenzen, Verbote und Auffindbarkeit aus README, TESTING und memory.md. Keine Runtime, UI, API, Persistenz/Migration, LLM-Provider, Modellaufrufe, echte Daten, Deployment, Auth oder Compliance.
