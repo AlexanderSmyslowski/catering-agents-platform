@@ -12,20 +12,12 @@ import {
   detectRoute,
   emptyDashboardState,
   emptyServiceHealthState,
-  formatLatestIntakeRequest,
   getBaseUrl,
   getPathname
 } from "./app-shell-state.js";
 import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
-import {
-  countOfferHandoffReadiness,
-  filterDashboardRecords,
-  isInitialHomeDashboardLoading,
-  isInitialProductionDashboardLoading,
-  selectActiveOfferSpec,
-  selectRecordByStringId
-} from "./app-dashboard-selectors.js";
+import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
 import { buildAppOfferRouteState } from "./app-offer-route-state.js";
 import { AppRouteContent } from "./app-route-content.js";
 import { buildAppRouteContentState } from "./app-route-content-state.js";
@@ -54,7 +46,6 @@ import {
   buildProductionCurrentArtifactsState,
   selectCurrentProductionArtifactsScopeSpecId
 } from "./production-current-artifacts-state.js";
-import { buildProductionDashboardRecordsState } from "./production-dashboard-records-state.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import {
   buildProductionManualInputActions,
@@ -73,7 +64,6 @@ import { buildProductionRouteFilterState } from "./production-route-filter-state
 import { buildProductionRouteViewAppBoundary } from "./production-route-view-app-boundary.js";
 import { formatArchiveCurrentIntakeContextLabel } from "./production-source-input-state.js";
 import { buildProductionSourceInputAppBoundary } from "./production-source-input-app-boundary.js";
-import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionRecipeControls } from "./production-recipe-controls.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import { buildProductionWorkspaceAppBoundary } from "./production-workspace-app-boundary.js";
@@ -175,68 +165,43 @@ export function App() {
     void refreshDashboard();
   }, []);
 
-  const filteredOfferDrafts = useMemo(
-    () => filterDashboardRecords(dashboard.offerDrafts, deferredSearch),
-    [dashboard.offerDrafts, deferredSearch]
-  );
-
   const {
+    filteredOfferDrafts,
     filteredSpecs,
     filteredAuditEvents,
     filteredRecipes,
     orderedPlans,
     orderedPurchaseLists,
     specById,
-    productionArtifactSpecIds
-  } = useMemo(
-    () =>
-      buildProductionDashboardRecordsState({
-        acceptedSpecs: dashboard.acceptedSpecs,
-        productionPlans: dashboard.productionPlans,
-        purchaseLists: dashboard.purchaseLists,
-        auditEvents: dashboard.auditEvents,
-        recipes: dashboard.recipes,
-        searchText: deferredSearch
-      }),
-    [
-      dashboard.acceptedSpecs,
-      dashboard.auditEvents,
-      dashboard.productionPlans,
-      dashboard.purchaseLists,
-      dashboard.recipes,
-      deferredSearch
-    ]
-  );
-
-  const {
+    productionArtifactSpecIds,
     recipeReviewCounts,
     recipeReviewStatusLabel,
     recipeUsageStatusLabel,
-    recipeCount
+    recipeCount,
+    offerHandoffCounts,
+    latestIntakeRequestSummary,
+    isInitialHomeLoading,
+    isInitialProductionLoading,
+    selectedDraft,
+    activeOfferDraft,
+    activeOfferSpec
   } = useMemo(
-    () => buildProductionRecipeStatusSummaryState({ recipes: dashboard.recipes }),
-    [dashboard.recipes]
+    () =>
+      buildAppDashboardRouteState({
+        dashboard,
+        route,
+        loading,
+        searchText: deferredSearch,
+        selectedDraftId
+      }),
+    [
+      dashboard,
+      deferredSearch,
+      loading,
+      route,
+      selectedDraftId
+    ]
   );
-
-  const offerHandoffCounts = useMemo(
-    () => countOfferHandoffReadiness(dashboard.acceptedSpecs),
-    [dashboard.acceptedSpecs]
-  );
-
-  const latestIntakeRequestSummary = useMemo(
-    () => formatLatestIntakeRequest(dashboard.intakeRequests),
-    [dashboard.intakeRequests]
-  );
-  const isInitialHomeLoading = isInitialHomeDashboardLoading({ route, loading, dashboard });
-  const isInitialProductionLoading = isInitialProductionDashboardLoading({ route, loading, dashboard });
-
-  const selectedDraft = useMemo(
-    () => selectRecordByStringId(dashboard.offerDrafts, "draftId", selectedDraftId),
-    [dashboard.offerDrafts, selectedDraftId]
-  );
-
-  const activeOfferDraft = selectedDraft ?? filteredOfferDrafts[0];
-  const activeOfferSpec = selectActiveOfferSpec(dashboard.acceptedSpecs, filteredSpecs);
 
   const {
     focusedProductionSpec,
