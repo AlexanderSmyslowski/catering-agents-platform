@@ -1,5 +1,6 @@
 import { productionExportUrl } from "./api.js";
 import { getSpecLabel, translateServiceForm } from "./production-language.js";
+import { formatProductionContextId } from "./production-route-state.js";
 
 type ProductionPlanDownloadCardProps = {
   selectedPlan?: Record<string, unknown>;
@@ -31,6 +32,8 @@ export function ProductionPlanDownloadCard({
   const unresolvedItems = Array.isArray(selectedPlan.unresolvedItems) ? selectedPlan.unresolvedItems : [];
   const hasOperationalSheetsWithoutRecipeBatches =
     productionBatchCount === 0 && kitchenSheetCount > 0;
+  const planId = formatProductionContextId(selectedPlan.planId);
+  const specId = formatProductionContextId(selectedPlan.eventSpecId, selectedPlanSpec?.specId);
 
   return (
     <>
@@ -40,9 +43,7 @@ export function ProductionPlanDownloadCard({
         <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
       </header>
       <p className="helper-text">
-        {`Plan-Kontext: planId ${String(selectedPlan.planId ?? "-")} · specId ${String(
-          selectedPlan.eventSpecId ?? selectedPlanSpec?.specId ?? "-"
-        )}`}
+        {`Plan-Kontext: planId ${planId} · specId ${specId}`}
       </p>
       <p className="helper-text">
         Status: {translateReadiness(String(readiness?.status ?? "-"))}
@@ -68,8 +69,7 @@ export function ProductionPlanDownloadCard({
           Produktionsblatt exportieren
           <span className="visually-hidden">
             {" "}
-            für Plan {String(selectedPlan.planId ?? "-")} · Spezifikation{" "}
-            {String(selectedPlan.eventSpecId ?? selectedPlanSpec?.specId ?? "-")}
+            für Plan {planId} · Spezifikation {specId}
           </span>
         </a>
       </div>
