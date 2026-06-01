@@ -5,6 +5,7 @@ export * from "./document-ingestion.js";
 export * from "./document-text.js";
 export * from "./fixtures/sample-data.js";
 export * from "./fixtures/demo-scenarios.js";
+export * from "./llm-readiness.js";
 export * from "./persistence.js";
 export * from "./production-clarification.js";
 export * from "./recipe-library.js";

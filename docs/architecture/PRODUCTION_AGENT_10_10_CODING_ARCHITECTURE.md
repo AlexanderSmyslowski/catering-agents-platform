@@ -429,6 +429,8 @@ Diese Bausteine duerfen erst nach gesonderter Planung als kleine Slices entstehe
 - `ConversationSession`: erst nach Entscheidung Runtime-Objekt; bis dahin bleibt Projection fuehrend
 - `AgentAudit`: nachvollziehbarer Modell-/Prompt-/Tool-/Operator-Kontext, keine Compliance-Behauptung
 
+PA26 verankert den ersten kleinen LLM-Readiness-Vertrag ohne Provider: `shared-core/src/llm-readiness.ts` definiert Model-Input-/Output-Draftgrenzen, Tool-Effektklassen, `decision_required` fuer Write-Tools, Human-Approval-Pflicht und harte Verbote fuer Provider, Secrets, Modellaufrufe, echte Daten, API, Persistenz, Migration, Runtime-ConversationSession und Schreibwirkung.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
