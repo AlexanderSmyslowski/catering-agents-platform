@@ -79,6 +79,9 @@ describe("production route view state", () => {
   });
 
   it("does not pass stale intake detail into the question panel after workspace clear", () => {
+    const stalePlan = { planId: "plan-stale", eventSpecId: "spec-stale" };
+    const stalePurchaseList = { purchaseListId: "purchase-stale", eventSpecId: "spec-stale" };
+    const staleComponentMap = new Map([["component-stale", { componentId: "component-stale" }]]);
     const viewState = buildProductionRouteViewState({
       activeProductionContextLabel: "Kein aktiver Vorgang",
       focusedSpecReadinessLabel: "-",
@@ -86,13 +89,15 @@ describe("production route view state", () => {
       purchaseZoneStatusLabel: "noch keine Liste",
       productionQuestions: [],
       clarificationStatusCounts: { answered: 0, unanswered: 0 },
-      currentSpecPlans: [],
+      currentSpecPlans: [stalePlan],
       productionObjectStatusLabel: "noch kein Plan",
-      currentSpecPurchaseLists: [],
+      currentSpecPurchaseLists: [stalePurchaseList],
       productionNextStep: {
         title: "Auftrag einfügen oder Datei ablegen",
         description: "Neuen Produktionskontext starten."
       },
+      selectedPlan: stalePlan,
+      selectedPlanSpec: { specId: "spec-stale" },
       productionAssumptions: [],
       productionConversationProjection: { sessionId: "session-cleared", messages: [] },
       workbenchSpecFacts: [],
@@ -107,10 +112,10 @@ describe("production route view state", () => {
       productionWorkspaceCleared: true,
       planPhase: "idle",
       planProgress: 0,
-      selectedPlanComponentsById: new Map(),
-      archivedPlans: [],
+      selectedPlanComponentsById: staleComponentMap,
+      archivedPlans: [{ planId: "plan-archived-stale" }],
       specById: new Map(),
-      archivedPurchaseLists: [],
+      archivedPurchaseLists: [{ purchaseListId: "purchase-archived-stale" }],
       productionIntakeOriginLabel: "kein Intake-Ursprung verknüpft",
       productionAuditTrailLabel: "keine Audit-Ereignisse geladen",
       productionHandoffExportLabel: "Produktionsblatt offen · Einkaufsliste offen",
@@ -125,9 +130,20 @@ describe("production route view state", () => {
 
     expect(viewState.questionState.productionWorkspaceCleared).toBe(true);
     expect(viewState.questionState.focusedProductionSpec).toBeUndefined();
+    expect(viewState.questionState.selectedPlan).toBeUndefined();
+    expect(viewState.questionState.currentSpecPurchaseLists).toEqual([]);
     expect(viewState.questionState.intakeRequestDetail).toBeNull();
     expect(viewState.questionState.intakeRequestDetailError).toBeUndefined();
     expect(viewState.questionState.filteredSpecs).toEqual([]);
+    expect(viewState.workbenchSummary.productionObjectCount).toBe(0);
+    expect(viewState.workbenchSummary.purchaseListCount).toBe(0);
+    expect(viewState.objectPanelState.currentSpecPlans).toEqual([]);
+    expect(viewState.objectPanelState.selectedPlan).toBeUndefined();
+    expect(viewState.objectPanelState.selectedPlanSpec).toBeUndefined();
+    expect(viewState.objectPanelState.selectedPlanComponentsById.size).toBe(0);
+    expect(viewState.objectPanelState.archivedPlans).toEqual([]);
+    expect(viewState.purchaseListState.currentPurchaseLists).toEqual([]);
+    expect(viewState.purchaseListState.archivedPurchaseLists).toEqual([]);
     expect(viewState.handoffState.intakeOriginLabel).toBe("kein Intake-Ursprung verknüpft");
   });
 });

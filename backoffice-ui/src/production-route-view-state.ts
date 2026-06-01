@@ -127,6 +127,16 @@ export function buildProductionRouteViewState({
   recipeFile,
   filteredRecipes
 }: ProductionRouteViewStateInput): ProductionRouteViewState {
+  const safeCurrentSpecPlans = productionWorkspaceCleared ? [] : currentSpecPlans;
+  const safeCurrentSpecPurchaseLists = productionWorkspaceCleared ? [] : currentSpecPurchaseLists;
+  const safeSelectedPlan = productionWorkspaceCleared ? undefined : selectedPlan;
+  const safeSelectedPlanSpec = productionWorkspaceCleared ? undefined : selectedPlanSpec;
+  const safeSelectedPlanComponentsById = productionWorkspaceCleared
+    ? new Map<string, Record<string, unknown>>()
+    : selectedPlanComponentsById;
+  const safeArchivedPlans = productionWorkspaceCleared ? [] : archivedPlans;
+  const safeArchivedPurchaseLists = productionWorkspaceCleared ? [] : archivedPurchaseLists;
+
   return {
     workbenchSummary: buildProductionWorkbenchSummaryState({
       activeProductionContextLabel,
@@ -135,17 +145,17 @@ export function buildProductionRouteViewState({
       purchaseZoneStatusLabel,
       productionQuestions,
       clarificationStatusCounts,
-      currentSpecPlans,
+      currentSpecPlans: safeCurrentSpecPlans,
       productionObjectStatusLabel,
-      currentSpecPurchaseLists
+      currentSpecPurchaseLists: safeCurrentSpecPurchaseLists
     }),
     workbenchNextStep: productionNextStep,
     questionState: buildProductionQuestionPanelState({
       focusedProductionSpec,
       focusedSpecReadinessLabel,
-      selectedPlan,
+      selectedPlan: safeSelectedPlan,
       selectedPlanReadinessLabel,
-      currentSpecPurchaseLists,
+      currentSpecPurchaseLists: safeCurrentSpecPurchaseLists,
       productionQuestions,
       productionAssumptions,
       productionConversationProjection,
@@ -165,16 +175,16 @@ export function buildProductionRouteViewState({
     objectPanelState: buildProductionObjectsState({
       focusedProductionSpec,
       productionWorkspaceCleared,
-      currentSpecPlans,
-      selectedPlan,
-      selectedPlanSpec,
-      selectedPlanComponentsById,
-      archivedPlans,
+      currentSpecPlans: safeCurrentSpecPlans,
+      selectedPlan: safeSelectedPlan,
+      selectedPlanSpec: safeSelectedPlanSpec,
+      selectedPlanComponentsById: safeSelectedPlanComponentsById,
+      archivedPlans: safeArchivedPlans,
       specById
     }),
     purchaseListState: buildProductionPurchaseListState({
-      currentSpecPurchaseLists,
-      archivedPurchaseLists,
+      currentSpecPurchaseLists: safeCurrentSpecPurchaseLists,
+      archivedPurchaseLists: safeArchivedPurchaseLists,
       specById,
       purchaseZoneStatusLabel
     }),
