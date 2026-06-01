@@ -1639,3 +1639,6 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 ### 5.341 - 2026-06-01
 - PA32 LLM-Readiness StructuredCandidate-Validation ist additiv in `shared-core/src/llm-readiness.ts` und `docs/architecture/PA32_LLM_READINESS_STRUCTURED_CANDIDATE_VALIDATION.md` verankert: `validateLlmReadinessModelOutputCandidate(...)` begrenzt strukturierte Draft-Outputs auf flache Scalar-Maps und lehnt verschachtelte Objekte, Arrays, nicht-endliche Zahlen sowie verbotene Payload-Schluessel in `structuredCandidate` ab, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
+
+### 5.342 - 2026-06-01
+- PA33 LLM-Readiness Output SourceRef-Validation ist additiv in `shared-core/src/fixtures/llm-readiness-eval-fixtures.ts` und `docs/architecture/PA33_LLM_READINESS_OUTPUT_SOURCE_REF_VALIDATION.md` verankert: `validateLlmReadinessEvalFixture(...)` verlangt, dass auch `expectedOutput.sourceRefs` die vom Draft-Kontrakt geforderten Quellobjekttypen enthalten, und meldet Input-/Output-SourceRef-Luecken getrennt, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.

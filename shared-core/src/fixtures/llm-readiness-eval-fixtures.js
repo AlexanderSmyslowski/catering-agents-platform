@@ -141,6 +141,16 @@ function sameStringList(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function collectSourceObjectTypes(sourceRefs) {
+  if (!Array.isArray(sourceRefs)) {
+    return [];
+  }
+
+  return sourceRefs
+    .filter(isRecord)
+    .map((sourceRef) => sourceRef.objectType);
+}
+
 export function validateLlmReadinessEvalFixture(fixture) {
   const errors = [];
 
@@ -208,13 +218,21 @@ export function validateLlmReadinessEvalFixture(fixture) {
     }
 
     if (isRecord(fixture.input) && Array.isArray(fixture.input.sourceRefs)) {
-      const inputSourceTypes = fixture.input.sourceRefs
-        .filter(isRecord)
-        .map((sourceRef) => sourceRef.objectType);
+      const inputSourceTypes = collectSourceObjectTypes(fixture.input.sourceRefs);
 
       for (const requiredSourceObjectType of contract.requiredSourceObjectTypes) {
         if (!inputSourceTypes.includes(requiredSourceObjectType)) {
           errors.push(`input.sourceRefs must include ${requiredSourceObjectType}`);
+        }
+      }
+    }
+
+    if (isRecord(fixture.expectedOutput) && Array.isArray(fixture.expectedOutput.sourceRefs)) {
+      const outputSourceTypes = collectSourceObjectTypes(fixture.expectedOutput.sourceRefs);
+
+      for (const requiredSourceObjectType of contract.requiredSourceObjectTypes) {
+        if (!outputSourceTypes.includes(requiredSourceObjectType)) {
+          errors.push(`expectedOutput.sourceRefs must include ${requiredSourceObjectType}`);
         }
       }
     }
