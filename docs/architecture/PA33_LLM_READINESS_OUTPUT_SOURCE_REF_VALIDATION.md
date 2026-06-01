@@ -10,10 +10,11 @@ PA33 haertet die Quellenbindung der synthetischen LLM-Readiness-Eval-Fixtures.
 
 Vor PA33 pruefte `validateLlmReadinessEvalFixture(...)`, ob `input.sourceRefs` alle vom Draft-Registry-Kontrakt geforderten Quellobjekttypen enthaelt. Die erwarteten Outputs mussten zwar sichere SourceRefs tragen, konnten aber einen fuer den Contract erforderlichen Quellobjekttyp verlieren.
 
-PA33 macht die Bindung symmetrisch:
+PA33 macht die Bindung symmetrisch; PA34 ergaenzt diese Grenze um SourceRef-Identitaetsparitaet:
 
 - `input.sourceRefs` muss weiterhin alle `requiredSourceObjectTypes` des Draft-Contracts enthalten,
 - `expectedOutput.sourceRefs` muss dieselben erforderlichen Quellobjekttypen enthalten,
+- bei required SourceRefs muss `expectedOutput.sourceRefs` dieselben `objectId`s tragen wie der Input,
 - Input- und Output-Fehler werden getrennt gemeldet.
 
 Damit bleiben synthetische Erwartungsoutputs sauber auf die Arbeitsbelege zurueckfuehrbar, die der jeweilige Draft-Kontrakt verlangt.

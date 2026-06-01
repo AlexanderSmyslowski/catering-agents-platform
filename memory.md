@@ -1642,3 +1642,6 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 ### 5.342 - 2026-06-01
 - PA33 LLM-Readiness Output SourceRef-Validation ist additiv in `shared-core/src/fixtures/llm-readiness-eval-fixtures.ts` und `docs/architecture/PA33_LLM_READINESS_OUTPUT_SOURCE_REF_VALIDATION.md` verankert: `validateLlmReadinessEvalFixture(...)` verlangt, dass auch `expectedOutput.sourceRefs` die vom Draft-Kontrakt geforderten Quellobjekttypen enthalten, und meldet Input-/Output-SourceRef-Luecken getrennt, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
+
+### 5.343 - 2026-06-01
+- PA34 LLM-Readiness SourceRef-Identity-Parity ist additiv in `shared-core/src/fixtures/llm-readiness-eval-fixtures.ts` und `docs/architecture/PA34_LLM_READINESS_SOURCE_REF_IDENTITY_PARITY.md` verankert: `validateLlmReadinessEvalFixture(...)` verlangt fuer Required-SourceRefs dieselben `objectId`s in Input und erwartetem Output, damit synthetische Eval-Drafts nicht auf gleichartige, aber andere Arbeitsbelege driften, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
