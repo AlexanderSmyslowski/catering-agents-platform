@@ -1616,3 +1616,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.336 - 2026-06-01
 - Browser-Rehearsal-Open-Question-Pfad ist aus `scripts/check-browser-rehearsal.sh` nach `scripts/browser-rehearsal/open-question-markers.js` extrahiert; der Shell-Harness ersetzt nur die bestehenden Submit-/Archiv-Modus-Platzhalter.
 - Belegt mit Shell-Syntaxcheck, `tests/browser-rehearsal-script-contract.test.ts`, `npm run build`, vollem `npm test` und `npm run browser:rehearsal:full-fresh`. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
+
+### 5.337 - 2026-06-01
+- Angebotsrouten-App-Boundary ist aus `App.tsx` nach `backoffice-ui/src/app-offer-route-app-boundary.ts` extrahiert; Offer-Submit, Draft-Promotion und `buildAppOfferRouteState` werden dort als ein Offer-Route-Cluster gebaut.
+- `tests/app-offer-route-app-boundary.test.ts` schuetzt die Verdrahtung fuer Angebotsentwurf-Erstellung, Draft-Promotion und Workbench-State-Referenzen. Keine Aenderung an UI-Texten, Produktlogik, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment, Auth oder Compliance.
