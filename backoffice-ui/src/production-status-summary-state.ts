@@ -28,7 +28,7 @@ export type ProductionStatusSummaryState = {
   productionNextStep: ProductionNextStep;
 };
 
-export function buildProductionStatusSummaryState(input: {
+export type ProductionStatusSummaryStateInput = {
   isInitialProductionLoading?: boolean;
   focusedProductionSpec?: Record<string, unknown>;
   selectedPlan?: Record<string, unknown>;
@@ -40,7 +40,11 @@ export function buildProductionStatusSummaryState(input: {
   intakeRequestDetail?: Record<string, unknown> | null;
   currentIntakeRequestId?: string;
   productionWorkspaceCleared: boolean;
-}): ProductionStatusSummaryState {
+};
+
+export function buildProductionStatusSummaryState(
+  input: ProductionStatusSummaryStateInput
+): ProductionStatusSummaryState {
   const currentPurchaseListItemCount = countPurchaseListItems(input.currentSpecPurchaseLists);
   const latestProductionAuditEvent = input.filteredAuditEvents[0];
 
