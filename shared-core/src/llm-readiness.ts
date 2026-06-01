@@ -118,6 +118,8 @@ export interface LlmReadinessSourceRef {
   label?: string;
 }
 
+export type LlmReadinessStructuredCandidateValue = string | number | boolean | null;
+
 export interface LlmReadinessModelInput {
   contractVersion: typeof llmReadinessContractVersion;
   inputId: string;
@@ -138,7 +140,7 @@ export interface LlmReadinessModelOutputCandidate {
   humanApprovalRequired: true;
   writesProductObject: false;
   text: string;
-  structuredCandidate?: Record<string, string | number | boolean | null>;
+  structuredCandidate?: Record<string, LlmReadinessStructuredCandidateValue>;
 }
 
 export interface LlmReadinessModelOutputValidation {
@@ -200,6 +202,38 @@ function hasAllowedInputToolEffects(value: unknown): boolean {
   }
 
   return value.length === 2 && value[0] === "read" && value[1] === "draft";
+}
+
+function isStructuredCandidateValue(value: unknown): value is LlmReadinessStructuredCandidateValue {
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  return typeof value === "string" || typeof value === "boolean" || value === null;
+}
+
+function validateStructuredCandidate(value: unknown): string[] {
+  const errors: string[] = [];
+
+  if (!isRecord(value)) {
+    return ["structuredCandidate must be a flat scalar object"];
+  }
+
+  for (const [key, candidateValue] of Object.entries(value)) {
+    if (key.trim().length === 0) {
+      errors.push("structuredCandidate keys must be non-empty strings");
+    }
+
+    if (llmReadinessForbiddenPayloadKeys.includes(key as (typeof llmReadinessForbiddenPayloadKeys)[number])) {
+      errors.push("structuredCandidate must not contain forbidden payload keys");
+    }
+
+    if (!isStructuredCandidateValue(candidateValue)) {
+      errors.push("structuredCandidate must be a flat scalar object");
+    }
+  }
+
+  return [...new Set(errors)];
 }
 
 export function validateLlmReadinessModelInputCandidate(
@@ -283,6 +317,10 @@ export function validateLlmReadinessModelOutputCandidate(
 
   if (typeof candidate.text !== "string" || candidate.text.trim().length === 0) {
     errors.push("text must be a non-empty draft string");
+  }
+
+  if (candidate.structuredCandidate !== undefined) {
+    errors.push(...validateStructuredCandidate(candidate.structuredCandidate));
   }
 
   for (const forbiddenKey of llmReadinessForbiddenPayloadKeys) {
