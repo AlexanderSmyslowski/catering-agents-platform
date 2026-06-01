@@ -103,6 +103,10 @@ function hasAllowedKind(value) {
   return typeof value === "string" && llmReadinessModelOutputKinds.includes(value);
 }
 
+function hasAllowedInputKind(value) {
+  return typeof value === "string" && llmReadinessModelInputKinds.includes(value);
+}
+
 function hasSafeSourceRefs(value) {
   return Array.isArray(value) &&
     value.length > 0 &&
@@ -112,6 +116,66 @@ function hasSafeSourceRefs(value) {
       typeof sourceRef.objectId === "string" &&
       sourceRef.objectId.trim().length > 0
     );
+}
+
+function hasAllowedInputToolEffects(value) {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  if (value.length === 1) {
+    return value[0] === "read";
+  }
+
+  return value.length === 2 && value[0] === "read" && value[1] === "draft";
+}
+
+export function validateLlmReadinessModelInputCandidate(candidate) {
+  const errors = [];
+
+  if (!isRecord(candidate)) {
+    return { valid: false, errors: ["candidate must be an object"] };
+  }
+
+  if (candidate.contractVersion !== llmReadinessContractVersion) {
+    errors.push("contractVersion must match llm-readiness-v0");
+  }
+
+  if (typeof candidate.inputId !== "string" || candidate.inputId.trim().length === 0) {
+    errors.push("inputId must be a non-empty string");
+  }
+
+  if (!hasAllowedInputKind(candidate.kind)) {
+    errors.push("kind must be an allowed draft input kind");
+  }
+
+  if (!hasSafeSourceRefs(candidate.sourceRefs)) {
+    errors.push("sourceRefs must contain safe object references");
+  }
+
+  if (!isRecord(candidate.policy)) {
+    errors.push("policy must be an object");
+  } else {
+    if (candidate.policy.providerCalls !== "disabled") {
+      errors.push("policy.providerCalls must be disabled");
+    }
+
+    if (candidate.policy.dataMode !== "synthetic_or_demo_only") {
+      errors.push("policy.dataMode must be synthetic_or_demo_only");
+    }
+
+    if (!hasAllowedInputToolEffects(candidate.policy.allowedToolEffects)) {
+      errors.push("policy.allowedToolEffects must be read or read+draft only");
+    }
+  }
+
+  for (const forbiddenKey of llmReadinessForbiddenPayloadKeys) {
+    if (forbiddenKey in candidate) {
+      errors.push(`${forbiddenKey} is not allowed in readiness input candidates`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 
 export function validateLlmReadinessModelOutputCandidate(candidate) {

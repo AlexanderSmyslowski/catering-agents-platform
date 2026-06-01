@@ -435,6 +435,8 @@ PA27 ergaenzt dazu erste synthetische Eval-Fixtures in `shared-core/src/fixtures
 
 PA28 verbindet PA26 und PA27 ueber `shared-core/src/llm-readiness-draft-registry.ts`: schema-only Draft-Kontrakte ordnen erlaubte Input-/Output-Kinds, Tool-Effekte und Quellobjekttypen zu, bleiben aber ohne Prompttext, Provider, Modellaufrufe, API, Persistenz, echte Daten oder Schreibwirkung.
 
+PA29 ergaenzt dazu `validateLlmReadinessModelInputCandidate(...)` als Input-Validation-Anker: Model-Input-Kandidaten muessen Provider-Aufrufe deaktivieren, synthetische/Demo-Daten deklarieren, sichere SourceRefs tragen und duerfen keine Write-Tool-Effekte oder Roh-/Prompt-/Provider-/Secret-/Toolcall-Payloads enthalten.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
