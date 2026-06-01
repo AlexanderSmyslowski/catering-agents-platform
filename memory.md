@@ -1580,3 +1580,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.327 - 2026-06-01
 - RecipeDiscovery-Labeluebersetzungen sind aus `production-service/src/recipe-discovery/recipe-query-builder.ts` nach `production-service/src/recipe-discovery/recipe-query-translations.ts` extrahiert; der Query-Builder re-exportiert die bestehende Funktion weiter.
 - `tests/recipe-query-translations.test.ts` schuetzt deutsche No-Op-Labels, etablierte englische Catering-Labeluebersetzungen und Whitespace-Normalisierung. Keine Aenderung an Rezeptlogik, Matching-Strategie, UI, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment oder Auth.
+
+### 5.328 - 2026-06-01
+- RecipeDiscovery-Suchquery-Normalisierung ist aus `recipe-query-builder.ts` nach `recipe-search-query-normalization.ts` extrahiert; der Query-Builder re-exportiert `normalizeSearchQuery` und `uniqueNormalizedSearchQueries` fuer bestehende Imports weiter.
+- `tests/recipe-search-query-normalization.test.ts` prueft Whitespace-/Duplikat-Normalisierung und Deduplikation ohne Token-Reordering. Keine Aenderung an Query-Korridoren, Rezeptlogik, Matching-Strategie, UI, API-Endpunkten, Datenmodellen, Persistenz/Migration, LLM, Echtdaten, Deployment oder Auth.
