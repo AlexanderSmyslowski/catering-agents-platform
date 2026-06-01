@@ -35,7 +35,7 @@ Ein Fixture ist nur gueltig, wenn:
 - der Input providerlos und synthetisch/Demo-only bleibt,
 - der Output ein Human-Approval-Draft ohne Schreibwirkung bleibt,
 - Input-Kind und Output-Kind zum registrierten Draft-Kontrakt passen,
-- die erforderlichen Quellobjekttypen enthalten sind,
+- die erforderlichen Quellobjekttypen in Input und erwartetem Output enthalten sind,
 - die erlaubten Tool-Effekte exakt zum Draft-Kontrakt passen,
 - keine Rohtext-, Prompt-, Provider-, Secret- oder Toolcall-Payloads auftauchen.
 
@@ -60,6 +60,6 @@ PA30 ist erfuellt, wenn:
 - alle bestehenden PA27-Fixtures durch `validateLlmReadinessEvalFixture(...)` gueltig sind,
 - unregistrierte Input-/Output-Kombinationen abgelehnt werden,
 - Provider-, Echtdaten-, Write-Tool- und Rohpayload-Verletzungen abgelehnt werden,
-- fehlende required SourceRefs abgelehnt werden,
+- fehlende required SourceRefs in Input oder erwartetem Output abgelehnt werden,
 - `tests/pa30-llm-readiness-eval-fixture-validation.test.ts` gruen ist,
 - `npm run build` gruen ist.

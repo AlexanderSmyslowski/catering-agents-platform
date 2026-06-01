@@ -157,6 +157,16 @@ function sameStringList(left: readonly string[], right: readonly string[]): bool
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function collectSourceObjectTypes(sourceRefs: unknown): unknown[] {
+  if (!Array.isArray(sourceRefs)) {
+    return [];
+  }
+
+  return sourceRefs
+    .filter(isRecord)
+    .map((sourceRef) => sourceRef.objectType);
+}
+
 export function validateLlmReadinessEvalFixture(
   fixture: unknown
 ): LlmReadinessEvalFixtureValidation {
@@ -228,13 +238,21 @@ export function validateLlmReadinessEvalFixture(
     }
 
     if (isRecord(fixture.input) && Array.isArray(fixture.input.sourceRefs)) {
-      const inputSourceTypes = fixture.input.sourceRefs
-        .filter(isRecord)
-        .map((sourceRef) => sourceRef.objectType);
+      const inputSourceTypes = collectSourceObjectTypes(fixture.input.sourceRefs);
 
       for (const requiredSourceObjectType of contract.requiredSourceObjectTypes) {
         if (!inputSourceTypes.includes(requiredSourceObjectType)) {
           errors.push(`input.sourceRefs must include ${requiredSourceObjectType}`);
+        }
+      }
+    }
+
+    if (isRecord(fixture.expectedOutput) && Array.isArray(fixture.expectedOutput.sourceRefs)) {
+      const outputSourceTypes = collectSourceObjectTypes(fixture.expectedOutput.sourceRefs);
+
+      for (const requiredSourceObjectType of contract.requiredSourceObjectTypes) {
+        if (!outputSourceTypes.includes(requiredSourceObjectType)) {
+          errors.push(`expectedOutput.sourceRefs must include ${requiredSourceObjectType}`);
         }
       }
     }

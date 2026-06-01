@@ -443,6 +443,8 @@ PA31 haertet die SourceRef-Grenze: `llmReadinessSourceObjectTypes` macht die erl
 
 PA32 haertet die strukturierte Output-Grenze: `structuredCandidate` bleibt eine flache Scalar-Map, verschachtelte Objekte, Arrays, nicht-endliche Zahlen und verbotene Payload-Schluessel werden abgelehnt.
 
+PA33 macht die synthetischen Eval-Fixtures quellen-symmetrisch: Nicht nur `input.sourceRefs`, sondern auch `expectedOutput.sourceRefs` muessen die vom Draft-Contract geforderten Quellobjekttypen enthalten.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
