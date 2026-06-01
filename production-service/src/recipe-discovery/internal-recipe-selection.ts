@@ -46,6 +46,41 @@ export function buildInternalRecipeCandidate(input: {
   };
 }
 
+export function internalRecipeCandidatePassesThresholds(
+  candidate: InternalRecipeCandidate
+): boolean {
+  return (
+    (candidate.fitScore >= 0.75 ||
+      (candidate.repositoryRank === 0 &&
+        candidate.leadNameScore === 1 &&
+        candidate.fitScore >= 0.55)) &&
+    (candidate.primaryScore >= 0.5 || candidate.leadNameScore === 1) &&
+    (candidate.specificPrimaryScore >= 0.34 || candidate.leadNameScore === 1)
+  );
+}
+
+function internalRecipeCandidateSortScore(candidate: InternalRecipeCandidate): number {
+  return candidate.fitScore + candidate.specificPrimaryScore * 0.5 + candidate.leadNameScore * 0.35;
+}
+
+export function compareInternalRecipeCandidates(
+  left: InternalRecipeCandidate,
+  right: InternalRecipeCandidate
+): number {
+  const tierDifference =
+    tierWeight[right.recipe.source.tier] - tierWeight[left.recipe.source.tier];
+  if (tierDifference !== 0) {
+    return tierDifference;
+  }
+
+  const rankDifference = left.repositoryRank - right.repositoryRank;
+  if (rankDifference !== 0) {
+    return rankDifference;
+  }
+
+  return internalRecipeCandidateSortScore(right) - internalRecipeCandidateSortScore(left);
+}
+
 export function selectInternalRecipeCandidate(
   repositoryCandidates: Recipe[],
   component: MenuComponent,
@@ -61,31 +96,6 @@ export function selectInternalRecipeCandidate(
         eventSpec
       })
     )
-    .filter(
-      (candidate) =>
-        (candidate.fitScore >= 0.75 ||
-          (candidate.repositoryRank === 0 &&
-            candidate.leadNameScore === 1 &&
-            candidate.fitScore >= 0.55)) &&
-        (candidate.primaryScore >= 0.5 || candidate.leadNameScore === 1) &&
-        (candidate.specificPrimaryScore >= 0.34 || candidate.leadNameScore === 1)
-    )
-    .sort((left, right) => {
-      const tierDifference =
-        tierWeight[right.recipe.source.tier] - tierWeight[left.recipe.source.tier];
-      if (tierDifference !== 0) {
-        return tierDifference;
-      }
-
-      const rankDifference = left.repositoryRank - right.repositoryRank;
-      if (rankDifference !== 0) {
-        return rankDifference;
-      }
-
-      const leftScore =
-        left.fitScore + left.specificPrimaryScore * 0.5 + left.leadNameScore * 0.35;
-      const rightScore =
-        right.fitScore + right.specificPrimaryScore * 0.5 + right.leadNameScore * 0.35;
-      return rightScore - leftScore;
-    })[0];
+    .filter(internalRecipeCandidatePassesThresholds)
+    .sort(compareInternalRecipeCandidates)[0];
 }

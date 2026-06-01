@@ -7,6 +7,8 @@ import type {
 import { SCHEMA_VERSION } from "../shared-core/src/index.js";
 import {
   buildInternalRecipeCandidate,
+  compareInternalRecipeCandidates,
+  internalRecipeCandidatePassesThresholds,
   selectInternalRecipeCandidate
 } from "../production-service/src/recipe-discovery/internal-recipe-selection.js";
 
@@ -114,6 +116,43 @@ describe("internal recipe selection", () => {
     expect(candidate.leadNameScore).toBe(1);
   });
 
+  it("keeps candidate thresholds explicit for the normal and lead-name fallback paths", () => {
+    const component = buildComponent();
+    const eventSpec = buildEventSpec();
+    const candidate = buildInternalRecipeCandidate({
+      recipe: buildRecipe({
+        recipeId: "recipe-threshold-tomato-soup",
+        name: "Tomatensuppe Hausstandard",
+        tier: "internal_verified"
+      }),
+      repositoryRank: 0,
+      component,
+      eventSpec
+    });
+
+    expect(internalRecipeCandidatePassesThresholds(candidate)).toBe(true);
+    expect(
+      internalRecipeCandidatePassesThresholds({
+        ...candidate,
+        repositoryRank: 3,
+        fitScore: 0.54,
+        primaryScore: 0.49,
+        specificPrimaryScore: 0.33,
+        leadNameScore: 0
+      })
+    ).toBe(false);
+    expect(
+      internalRecipeCandidatePassesThresholds({
+        ...candidate,
+        repositoryRank: 0,
+        fitScore: 0.55,
+        primaryScore: 0,
+        specificPrimaryScore: 0,
+        leadNameScore: 1
+      })
+    ).toBe(true);
+  });
+
   it("keeps internal tier priority ahead of repository rank when candidates pass the existing thresholds", () => {
     const component = buildComponent();
     const eventSpec = buildEventSpec();
@@ -133,6 +172,21 @@ describe("internal recipe selection", () => {
     expect(selected?.recipe).toBe(verified);
     expect(selected?.repositoryRank).toBe(1);
     expect(selected?.fitScore).toBeGreaterThanOrEqual(0.75);
+
+    const approvedCandidate = buildInternalRecipeCandidate({
+      recipe: approved,
+      repositoryRank: 0,
+      component,
+      eventSpec
+    });
+    const verifiedCandidate = buildInternalRecipeCandidate({
+      recipe: verified,
+      repositoryRank: 1,
+      component,
+      eventSpec
+    });
+
+    expect(compareInternalRecipeCandidates(approvedCandidate, verifiedCandidate)).toBeGreaterThan(0);
   });
 
   it("keeps repository rank ahead of score for candidates in the same source tier", () => {
