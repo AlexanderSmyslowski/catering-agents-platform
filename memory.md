@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.338
+version: 5.339
 date: 2026-06-01
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1624,3 +1624,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.338 - 2026-06-01
 - C11 10/10-Gap-Audit ist als Doku-/Vertragstestanker ergaenzt: `docs/product/C11_10_10_GAP_AUDIT.md` trennt den belegten internen 9/10-Rehearsal-Kern von echter 10/10-Produktreife, markiert reale Gates als blockiert oder entscheidungspflichtig und benennt `LLM-Readiness-Vertrag ohne LLM-Provider` als naechsten autonomen Vorbereitungsschritt.
 - `tests/c11-10-10-gap-audit-contract.test.ts` schuetzt Statuskategorien, Rehearsal-Belege, Gate-Grenzen, Verbote und Auffindbarkeit aus README, TESTING und memory.md. Keine Runtime, UI, API, Persistenz/Migration, LLM-Provider, Modellaufrufe, echte Daten, Deployment, Auth oder Compliance.
+
+### 5.339 - 2026-06-01
+- PA26 LLM-Readiness-Vertrag ohne Provider ist additiv in `shared-core/src/llm-readiness.ts` und `docs/architecture/PA26_LLM_READINESS_CONTRACT.md` verankert: Model-Input-/Output-Draftgrenzen, Tool-Effektklassen `read`/`draft`/`write`, `decision_required` fuer Write-Tools, Human-Approval-Pflicht und `writesProductObject: false`.
+- `tests/pa26-llm-readiness-contract.test.ts` schuetzt, dass PA26 keinen Provider, keine Secrets, keine Modellaufrufe, keine echten Daten, keine API, keine Persistenz/Migration, keine Runtime-ConversationSession und keine Tool-Orchestrierung mit Schreibwirkung einfuehrt.
