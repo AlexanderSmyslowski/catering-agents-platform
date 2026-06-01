@@ -10,7 +10,7 @@ describe("production current artifacts state", () => {
     { planId: "plan-archived", eventSpecId: "spec-other" }
   ];
   const purchaseLists = [
-    { purchaseListId: "purchase-current", eventSpecId: "spec-current" },
+    { purchaseListId: "purchase-current", eventSpecId: " spec-current " },
     { purchaseListId: "purchase-archived", eventSpecId: "spec-other" }
   ];
 
