@@ -441,6 +441,8 @@ PA30 schliesst die reine Readiness-Kette mit `validateLlmReadinessEvalFixture(..
 
 PA31 haertet die SourceRef-Grenze: `llmReadinessSourceObjectTypes` macht die erlaubten Quellobjekttypen runtime-sichtbar, und die Input-/Output-Validatoren akzeptieren nur noch bekannte Arbeitsbelegtypen statt beliebiger `objectType`-Strings.
 
+PA32 haertet die strukturierte Output-Grenze: `structuredCandidate` bleibt eine flache Scalar-Map, verschachtelte Objekte, Arrays, nicht-endliche Zahlen und verbotene Payload-Schluessel werden abgelehnt.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.

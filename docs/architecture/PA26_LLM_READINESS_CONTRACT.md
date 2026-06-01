@@ -74,6 +74,8 @@ PA26 bleibt innerhalb dieser Grenzen:
 
 Output-Kandidaten duerfen ausserdem keine Rohpayload-Felder wie `rawText`, `extractedText`, `prompt`, `messages`, `providerResponse`, `toolCalls`, `secret` oder `apiKey` tragen.
 
+Strukturierte Draft-Daten in `structuredCandidate` bleiben auf flache Scalar-Maps begrenzt. Verschachtelte Objekte, Arrays, nicht-endliche Zahlen und dieselben verbotenen Payload-Schluessel sind auch dort nicht erlaubt.
+
 ## 5. Entscheidungspflichtig
 
 Alexander muss vor jedem naechsten echten LLM-Schritt entscheiden, wenn eines davon noetig wird:
@@ -100,5 +102,6 @@ PA26 ist erfuellt, wenn:
 - Model-Input-Kandidaten Provider-Aufrufe deaktivieren, synthetische/Demo-Daten deklarieren und keine Write-Tool-Effekte erlauben,
 - SourceRefs nur bekannte sichere Quellobjekttypen referenzieren,
 - Rohtext-/Prompt-/Provider-/Secret-/Toolcall-Payloads abgelehnt werden,
+- `structuredCandidate` nur flache Scalar-Draft-Daten enthaelt,
 - `tests/pa26-llm-readiness-contract.test.ts` gruen ist,
 - `npm run build` gruen ist.

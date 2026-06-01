@@ -142,6 +142,38 @@ function hasAllowedInputToolEffects(value) {
   return value.length === 2 && value[0] === "read" && value[1] === "draft";
 }
 
+function isStructuredCandidateValue(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  return typeof value === "string" || typeof value === "boolean" || value === null;
+}
+
+function validateStructuredCandidate(value) {
+  const errors = [];
+
+  if (!isRecord(value)) {
+    return ["structuredCandidate must be a flat scalar object"];
+  }
+
+  for (const [key, candidateValue] of Object.entries(value)) {
+    if (key.trim().length === 0) {
+      errors.push("structuredCandidate keys must be non-empty strings");
+    }
+
+    if (llmReadinessForbiddenPayloadKeys.includes(key)) {
+      errors.push("structuredCandidate must not contain forbidden payload keys");
+    }
+
+    if (!isStructuredCandidateValue(candidateValue)) {
+      errors.push("structuredCandidate must be a flat scalar object");
+    }
+  }
+
+  return [...new Set(errors)];
+}
+
 export function validateLlmReadinessModelInputCandidate(candidate) {
   const errors = [];
 
@@ -219,6 +251,10 @@ export function validateLlmReadinessModelOutputCandidate(candidate) {
 
   if (typeof candidate.text !== "string" || candidate.text.trim().length === 0) {
     errors.push("text must be a non-empty draft string");
+  }
+
+  if (candidate.structuredCandidate !== undefined) {
+    errors.push(...validateStructuredCandidate(candidate.structuredCandidate));
   }
 
   for (const forbiddenKey of llmReadinessForbiddenPayloadKeys) {
