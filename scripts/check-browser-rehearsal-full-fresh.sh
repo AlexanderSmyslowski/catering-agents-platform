@@ -19,15 +19,18 @@ echo "Grenze: lokaler synthetischer Browser-Beleg; keine Produktionsfreigabe, ke
 
 run_fresh_rehearsal \
   "Normaler Kernpfad" \
-  bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
+  env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE \
+    bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
 
 run_fresh_rehearsal \
   "Answer-Submit-Pfad" \
-  env CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
+  env -u CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 \
+    bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
 
 run_fresh_rehearsal \
   "Archiv-Pfad" \
-  env CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
+  env -u CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 \
+    bash "${ROOT_DIR}/scripts/check-browser-rehearsal.sh"
 
 echo
 echo "Vollstaendiger Fresh-Browser-Rehearsal abgeschlossen."
