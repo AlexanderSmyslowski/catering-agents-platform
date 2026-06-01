@@ -1,6 +1,9 @@
 import { productionExportUrl } from "./api.js";
 import { getSpecLabel } from "./production-language.js";
-import { lookupProductionSpecById } from "./production-route-state.js";
+import {
+  formatProductionContextId,
+  lookupProductionSpecById
+} from "./production-route-state.js";
 
 type ProductionPlanListProps = {
   plans: Array<Record<string, unknown>>;
@@ -28,6 +31,8 @@ export function ProductionPlanList({
     <ul className="item-list compact">
       {plans.map((plan) => {
         const relatedSpec = lookupProductionSpecById(specById, plan.eventSpecId);
+        const planId = formatProductionContextId(plan.planId);
+        const specId = formatProductionContextId(plan.eventSpecId);
         const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
         const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
         const sheetCount = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets.length : 0;
@@ -51,20 +56,20 @@ export function ProductionPlanList({
                 Einzelheiten
                 <span className="visually-hidden">
                   {" "}
-                  zu Plan {String(plan.planId ?? "-")} · Spezifikation {String(plan.eventSpecId ?? "-")}
+                  zu Plan {planId} · Spezifikation {specId}
                 </span>
               </button>
             </div>
             <a
               className="ghost-link"
-              href={productionExportUrl(String(plan.planId))}
+              href={productionExportUrl(planId)}
               target="_blank"
               rel="noreferrer"
             >
               Produktionsblatt exportieren
               <span className="visually-hidden">
                 {" "}
-                für Plan {String(plan.planId ?? "-")} · Spezifikation {String(plan.eventSpecId ?? "-")}
+                für Plan {planId} · Spezifikation {specId}
               </span>
             </a>
           </li>

@@ -62,7 +62,7 @@ export function ProductionPlanDownloadCard({
         </div>
         <a
           className="ghost-link"
-          href={productionExportUrl(String(selectedPlan.planId))}
+          href={productionExportUrl(planId)}
           target="_blank"
           rel="noreferrer"
         >

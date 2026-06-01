@@ -4,7 +4,10 @@ import {
   getPurchaseListPreviewItems,
   getPurchaseListQualityWarnings
 } from "./production-purchase-list-preview.js";
-import { lookupProductionSpecById } from "./production-route-state.js";
+import {
+  formatProductionContextId,
+  lookupProductionSpecById
+} from "./production-route-state.js";
 
 export type ProductionPurchaseListState = {
   currentPurchaseLists: Array<Record<string, unknown>>;
@@ -34,6 +37,8 @@ export function ProductionPurchaseListPanel({
       <ul className="item-list compact">
         {currentPurchaseLists.map((purchaseList) => {
           const relatedSpec = lookupProductionSpecById(specById, purchaseList.eventSpecId);
+          const purchaseListId = formatProductionContextId(purchaseList.purchaseListId);
+          const specId = formatProductionContextId(purchaseList.eventSpecId);
           const purchaseListPreviewItems = getPurchaseListPreviewItems(purchaseList);
           const qualityWarnings = getPurchaseListQualityWarnings(purchaseList);
           return (
@@ -41,19 +46,17 @@ export function ProductionPurchaseListPanel({
               <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
               <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
               <p className="helper-text">
-                purchaseListId: {String(purchaseList.purchaseListId)} · specId: {String(purchaseList.eventSpecId ?? "-")}
+                purchaseListId: {purchaseListId} · specId: {specId}
               </p>
               <a
                 className="ghost-link"
-                href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
+                href={purchaseListExportUrl(purchaseListId)}
                 target="_blank"
                 rel="noreferrer"
               >
                 Einkaufsliste exportieren
                 <span className="visually-hidden">
-                  {" "}
-                  für aktuellen Vorgang {String(purchaseList.purchaseListId)} · Spezifikation{" "}
-                  {String(purchaseList.eventSpecId ?? "-")}
+                  {" "}für aktuellen Vorgang {purchaseListId} · Spezifikation {specId}
                 </span>
               </a>
               {qualityWarnings.map((warning) => (
@@ -97,6 +100,8 @@ export function ProductionPurchaseListPanel({
             <ul className="item-list compact">
               {archivedPurchaseLists.map((purchaseList) => {
                 const relatedSpec = lookupProductionSpecById(specById, purchaseList.eventSpecId);
+                const purchaseListId = formatProductionContextId(purchaseList.purchaseListId);
+                const specId = formatProductionContextId(purchaseList.eventSpecId);
                 return (
                   <li key={String(purchaseList.purchaseListId)}>
                     <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Einkaufsliste"}</strong>
@@ -106,15 +111,13 @@ export function ProductionPurchaseListPanel({
                     <p>Positionen: {String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}</p>
                     <a
                       className="ghost-link"
-                      href={purchaseListExportUrl(String(purchaseList.purchaseListId))}
+                      href={purchaseListExportUrl(purchaseListId)}
                       target="_blank"
                       rel="noreferrer"
                     >
                       Einkaufsliste exportieren
                       <span className="visually-hidden">
-                        {" "}
-                        aus älterem Vorgang {String(purchaseList.purchaseListId)} · Spezifikation{" "}
-                        {String(purchaseList.eventSpecId ?? "-")}
+                        {" "}aus älterem Vorgang {purchaseListId} · Spezifikation {specId}
                       </span>
                     </a>
                   </li>
