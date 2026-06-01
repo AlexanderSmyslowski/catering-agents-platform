@@ -47,7 +47,6 @@ import {
   updateAcceptedSpec,
   uploadRecipeFile,
   type DashboardState,
-  type IntakeDocumentChannel,
   type ServiceHealthState
 } from "./api.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
@@ -66,7 +65,6 @@ import { buildProductionSelectedPlanState } from "./production-selected-plan-sta
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { buildProductionDocumentSubmitActions } from "./production-document-submit-action.js";
 import { buildProductionTextIntakeSubmitAction } from "./production-text-intake-submit-action.js";
-import { startProductionDocumentUpload } from "./production-document-upload-start.js";
 import { buildProductionQuestionEditorState } from "./production-question-editor-state.js";
 import { buildAppProductionRouteState } from "./app-production-route-state.js";
 import { buildOfferDraftPromoteAction } from "./offer-draft-promote-action.js";
@@ -79,8 +77,7 @@ import { buildProductionStatusSummaryState } from "./production-status-summary-s
 import { buildProductionRecipeStatusSummaryState } from "./production-recipe-status-state.js";
 import { buildProductionRecipeControls } from "./production-recipe-controls.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
-import { buildProductionWorkspaceControls } from "./production-workspace-controls.js";
-import { buildProductionWorkspaceResetCallbacks } from "./production-workspace-reset-callbacks.js";
+import { buildProductionWorkspaceAppBoundary } from "./production-workspace-app-boundary.js";
 import { buildProductionPlanningControls } from "./production-planning-controls.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionQuestionAutoOpen } from "./use-production-question-auto-open.js";
@@ -443,22 +440,10 @@ export function App() {
     recipeFile,
     filteredRecipes
   });
-  const productionWorkspaceResetCallbacks = buildProductionWorkspaceResetCallbacks({
-    setFocusedProductionSpecId,
-    setSelectedPlanId,
-    resetPlanProgress,
-    resetIntakeRequestDetail,
-    resetSpecEdit,
-    uploadInputRef: productionUploadInputRef
-  });
   const {
-    canClearProductionWorkspace,
-    canArchiveCurrentIntake,
-    clearMessages,
-    resetProductionWorkspaceState,
-    clearProductionWorkspace,
-    handleArchiveCurrentIntake
-  } = buildProductionWorkspaceControls({
+    productionWorkspaceResetCallbacks,
+    productionWorkspaceControls
+  } = buildProductionWorkspaceAppBoundary({
     hasFocusedProductionSpec: Boolean(focusedProductionSpec),
     hasSelectedPlan: Boolean(selectedPlan),
     hasIntakeFile: Boolean(intakeFile),
@@ -477,8 +462,21 @@ export function App() {
     setProductionWorkspaceCleared,
     resetIntakeDraft,
     resetDocumentProgress,
-    ...productionWorkspaceResetCallbacks
+    setFocusedProductionSpecId,
+    setSelectedPlanId,
+    resetPlanProgress,
+    resetIntakeRequestDetail,
+    resetSpecEdit,
+    uploadInputRef: productionUploadInputRef
   });
+  const {
+    canClearProductionWorkspace,
+    canArchiveCurrentIntake,
+    clearMessages,
+    resetProductionWorkspaceState,
+    clearProductionWorkspace,
+    handleArchiveCurrentIntake
+  } = productionWorkspaceControls;
 
   const handleIntakeSubmit = buildProductionTextIntakeSubmitAction({
     createAcceptedSpecFromText,
