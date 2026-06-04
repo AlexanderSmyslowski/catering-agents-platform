@@ -1669,3 +1669,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.349 - 2026-06-05
 
 - PA40 LLM-Readiness Run-Result ist additiv in `shared-core/src/llm-readiness-run-result.ts` und `docs/architecture/PA40_LLM_READINESS_RUN_RESULT.md` verankert: `createLlmReadinessRunResult(...)` fasst einen providerlosen Request, die fixture-only Adapter-Response und den PA39-AgentAudit-Datensatz in ein validiertes synthetic-only Ergebnisartefakt mit Outcome, Prompt-/Policy-/Schema-Metadaten, Approval-Grenze und optionalem `outputCandidate` zusammen, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
+
+### 5.350 - 2026-06-05
+
+- PA41 LLM Provider-/Daten-/Runtime-Entscheidungsrahmen ist additiv in `docs/architecture/PA41_LLM_PROVIDER_DATA_RUNTIME_DECISION_FRAME.md` verankert: Die providerlose PA26-PA40-Kette wird als abgeschlossen festgehalten, und der naechste echte Gate-Schritt fuer Alexander wird als Entscheidungsvorlage mit Optionen A/B/C, Empfehlung fuer einen minimalen synthetic-only Provider-Slice und sicherem Default ohne Provider formuliert.

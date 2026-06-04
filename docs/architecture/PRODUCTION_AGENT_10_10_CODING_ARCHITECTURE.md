@@ -460,6 +460,8 @@ PA39 zieht den kleinsten `AgentAudit`-Anker nach: `createLlmReadinessAgentAuditR
 
 PA40 schliesst den aktuellen providerlosen Vorbereitungskorridor mit einem `Run-Result`-Anker: `createLlmReadinessRunResult(...)` fasst Request, fixture-only Adapter-Response und AgentAudit in ein validiertes Ergebnisartefakt zusammen, das bei Erfolg ein `outputCandidate` und bei Ablehnung nur Fehlerstatus traegt, weiterhin ohne Runtime-`ConversationSession`, Provider, API, Persistenz, echte Daten oder Schreibwirkung.
 
+PA41 beendet den autonomen Korridor bewusst als Entscheidungsvorlage: Der erste echte synthetic-only Provider-Slice braucht ab hier Alexander-Go zu Provider, Datenrahmen, Logging, Secrets, Kostenlimit, Feature-Flag und Runtime-Scope, bevor weiterer Runtime-Code sinnvoll ist.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
