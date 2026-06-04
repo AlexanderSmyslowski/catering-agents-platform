@@ -116,6 +116,53 @@ describe("production status summary state", () => {
     });
   });
 
+  it("masks stale focused spec, selected plan, purchase list, and question state after a workspace clear", () => {
+    const state = buildProductionStatusSummaryState({
+      focusedProductionSpec: {
+        specId: "spec-stale",
+        readiness: { status: "complete" },
+        event: { type: "Lunch", date: "2026-06-01" },
+        attendees: { expected: 80 }
+      },
+      selectedPlan: {
+        planId: "plan-stale",
+        eventSpecId: "spec-stale",
+        readiness: { status: "complete" }
+      },
+      selectedPlanSpec: {
+        specId: "spec-stale",
+        event: { type: "Lunch", date: "2026-06-01" },
+        attendees: { expected: 80 }
+      },
+      currentSpecPlans: [{ planId: "plan-stale", eventSpecId: "spec-stale" }],
+      currentSpecPurchaseLists: [
+        {
+          purchaseListId: "purchase-stale",
+          eventSpecId: "spec-stale",
+          totals: { itemCount: 7 }
+        }
+      ],
+      productionQuestions: ["Stale Rückfrage"],
+      filteredAuditEvents: [],
+      productionWorkspaceCleared: true
+    });
+
+    expect(state).toMatchObject({
+      activeProductionContextLabel: "Kein aktiver Vorgang",
+      focusedSpecReadinessLabel: "-",
+      selectedPlanReadinessLabel: undefined,
+      productionPlanStatusLabel: "offen",
+      productionObjectStatusLabel: "noch kein Plan",
+      purchaseZoneStatusLabel: "noch keine Liste",
+      productionHandoffExportLabel: "Produktionsblatt offen · Einkaufsliste offen",
+      productionHandoffContextLabel: undefined
+    });
+    expect(state.productionNextStep).toEqual({
+      title: "Auftrag einfügen oder Datei ablegen",
+      description: "Starte mit Angebot, E-Mail, Text oder manuellen Veranstaltungsdaten."
+    });
+  });
+
   it("keeps the initial production loading state from looking like an empty active workflow", () => {
     const state = buildProductionStatusSummaryState({
       isInitialProductionLoading: true,

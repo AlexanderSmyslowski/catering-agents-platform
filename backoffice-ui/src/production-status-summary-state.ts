@@ -45,10 +45,14 @@ export type ProductionStatusSummaryStateInput = {
 export function buildProductionStatusSummaryState(
   input: ProductionStatusSummaryStateInput
 ): ProductionStatusSummaryState {
-  const currentPurchaseListItemCount = countPurchaseListItems(input.currentSpecPurchaseLists);
-  const latestProductionAuditEvent = input.productionWorkspaceCleared
-    ? undefined
-    : input.filteredAuditEvents[0];
+  const focusedProductionSpec = input.productionWorkspaceCleared ? undefined : input.focusedProductionSpec;
+  const selectedPlan = input.productionWorkspaceCleared ? undefined : input.selectedPlan;
+  const selectedPlanSpec = input.productionWorkspaceCleared ? undefined : input.selectedPlanSpec;
+  const currentSpecPlans = input.productionWorkspaceCleared ? [] : input.currentSpecPlans;
+  const currentSpecPurchaseLists = input.productionWorkspaceCleared ? [] : input.currentSpecPurchaseLists;
+  const productionQuestions = input.productionWorkspaceCleared ? [] : input.productionQuestions;
+  const currentPurchaseListItemCount = countPurchaseListItems(currentSpecPurchaseLists);
+  const latestProductionAuditEvent = input.productionWorkspaceCleared ? undefined : input.filteredAuditEvents[0];
 
   if (input.isInitialProductionLoading) {
     return {
@@ -71,24 +75,24 @@ export function buildProductionStatusSummaryState(
 
   return {
     activeProductionContextLabel: formatActiveProductionContextLabel({
-      focusedProductionSpecLabel: input.focusedProductionSpec
-        ? getSpecLabel(input.focusedProductionSpec)
+      focusedProductionSpecLabel: focusedProductionSpec
+        ? getSpecLabel(focusedProductionSpec)
         : undefined,
-      selectedPlan: input.selectedPlan,
-      selectedPlanSpecLabel: input.selectedPlanSpec ? getSpecLabel(input.selectedPlanSpec) : undefined,
+      selectedPlan,
+      selectedPlanSpecLabel: selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : undefined,
       productionWorkspaceCleared: input.productionWorkspaceCleared
     }),
-    focusedSpecReadinessLabel: formatProductionReadinessLabel(input.focusedProductionSpec),
-    selectedPlanReadinessLabel: input.selectedPlan
-      ? formatProductionReadinessLabel(input.selectedPlan)
+    focusedSpecReadinessLabel: formatProductionReadinessLabel(focusedProductionSpec),
+    selectedPlanReadinessLabel: selectedPlan
+      ? formatProductionReadinessLabel(selectedPlan)
       : undefined,
-    productionPlanStatusLabel: formatProductionPlanStatusLabel(input.selectedPlan),
+    productionPlanStatusLabel: formatProductionPlanStatusLabel(selectedPlan),
     productionObjectStatusLabel: formatProductionObjectStatusLabel({
-      currentSpecPlanCount: input.currentSpecPlans.length,
-      selectedPlan: input.selectedPlan
+      currentSpecPlanCount: currentSpecPlans.length,
+      selectedPlan
     }),
     purchaseZoneStatusLabel: formatPurchaseZoneStatusLabel({
-      purchaseListCount: input.currentSpecPurchaseLists.length,
+      purchaseListCount: currentSpecPurchaseLists.length,
       itemCount: currentPurchaseListItemCount
     }),
     productionIntakeOriginLabel: formatProductionIntakeOriginLabel({
@@ -99,19 +103,19 @@ export function buildProductionStatusSummaryState(
       ? formatAuditEventHandoffLabel(latestProductionAuditEvent)
       : "keine Audit-Ereignisse geladen",
     productionHandoffExportLabel: formatProductionHandoffExportLabel({
-      hasSelectedPlan: Boolean(input.selectedPlan),
-      purchaseListCount: input.currentSpecPurchaseLists.length
+      hasSelectedPlan: Boolean(selectedPlan),
+      purchaseListCount: currentSpecPurchaseLists.length
     }),
     productionHandoffContextLabel: formatProductionHandoffContextLabel({
-      selectedPlan: input.selectedPlan,
-      selectedPlanSpec: input.selectedPlanSpec,
-      purchaseLists: input.currentSpecPurchaseLists
+      selectedPlan,
+      selectedPlanSpec,
+      purchaseLists: currentSpecPurchaseLists
     }),
     productionNextStep: selectProductionNextStep({
-      hasFocusedProductionSpec: Boolean(input.focusedProductionSpec),
-      questionCount: input.productionQuestions.length,
-      hasSelectedPlan: Boolean(input.selectedPlan),
-      purchaseListCount: input.currentSpecPurchaseLists.length
+      hasFocusedProductionSpec: Boolean(focusedProductionSpec),
+      questionCount: productionQuestions.length,
+      hasSelectedPlan: Boolean(selectedPlan),
+      purchaseListCount: currentSpecPurchaseLists.length
     })
   };
 }

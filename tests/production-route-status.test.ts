@@ -59,4 +59,15 @@ describe("production route status", () => {
       { label: "Menü", value: "2 Komponenten" }
     ]);
   });
+
+  it("prefers the cleared workspace label over stale focused or selected plan context", () => {
+    expect(
+      formatActiveProductionContextLabel({
+        focusedProductionSpecLabel: "Lunch · 80 Teilnehmer · 2026-06-01",
+        selectedPlan: { planId: "plan-stale", eventSpecId: "spec-stale" },
+        selectedPlanSpecLabel: "Lunch · 80 Teilnehmer · 2026-06-01",
+        productionWorkspaceCleared: true
+      })
+    ).toBe("Kein aktiver Vorgang");
+  });
 });
