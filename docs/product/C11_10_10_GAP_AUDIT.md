@@ -44,7 +44,7 @@ Es trennt hart zwischen:
 | Deterministische Planung, Rezeptsuche, Einkaufsliste | umgesetzt und breit getestet | `production-service/src/rules/*`, `recipe-discovery/*`, Produktions-/Recipe-/Purchase-Tests | weitere synthetische Catering-Faelle und Qualitaetschecks koennen autonom nachziehen |
 | Conversation/Rueckfragen | teilweise umgesetzt | `ProductionConversationProjection`, Clarification-Fragen/-Antworten, read-only UI | echte `ConversationSession` als Runtime-Objekt bleibt Entscheidungspflicht |
 | LLM-Readiness ohne Provider | als kleiner Vertrag weitgehend bis Level-9-Vorbereitung umgesetzt | 10/10-Coding-Architektur, PA26-PA40 | nicht-leere Prompt-Artefakte und eine entscheidungsreife Provider-/Daten-/Runtime-Vorlage fehlen noch |
-| LLM-Provider / Modellaufrufe | blockiert | 10/10-Coding-Architektur, Produktziel | Alexander-Entscheidung zu Provider, Kosten, Logging, Secrets, Datenrahmen erforderlich |
+| LLM-Provider / Modellaufrufe | blockiert, Entscheidungsvorlage vorbereitet | PA41, 10/10-Coding-Architektur, Produktziel | Alexander-Entscheidung zu Provider, Kosten, Logging, Secrets, Datenrahmen und Runtime-Scope erforderlich |
 | Tool-Orchestrierung mit Schreibwirkung | blockiert | 10/10-Coding-Architektur, Produktziel | Entscheidung zu Tool-Allowlist, Auth/Rollen, Audit, Human Approval erforderlich |
 | Auth/OIDC/IAP/Proxy fuer echte Nutzung | dokumentiert, nicht umgesetzt | B8, B9, B10, PA9 | Alexander-Entscheidung und Umsetzung erforderlich |
 | PII/Retention/Backup/Restore | dokumentiert, blockiert | B13, B36, P12-N2 | Alexander-Entscheidung erforderlich |
@@ -79,23 +79,23 @@ Diese Punkte duerfen nicht autonom in Runtime-Code kippen.
 
 Der naechste nicht-gate-pflichtige Fortschritt ist:
 
-`LLM-Readiness-Vertrag ohne LLM-Provider`
+`Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice`
 
 Minimaler Scope:
 
-- Model-Input-/Output-Grenze als Doku-/Testvertrag oder kleiner schema-naher Anchor,
-- Tool-Allowlist zunaechst nur als Read-/Draft-/Write-Klassifikation,
-- synthetische Eval-Fixtures nur als nicht-sensitive Erwartungsanker,
-- klare Verbote: kein Provider, keine Secrets, keine Modellaufrufe, keine neue API, keine Persistenz, keine echten Daten, keine Schreibwirkung.
+- vorhandenen providerlosen PA26-PA40-Korridor als abgeschlossen festhalten,
+- minimale sichere Option fuer den ersten echten providerbasierten synthetic-only Slice benennen,
+- Provider-, Daten-, Logging-, Secret-, Kosten- und Runtime-Entscheidungen explizit machen,
+- klare Verbote: keine echten Daten, keine Runtime-`ConversationSession`, keine Write-Tools, keine neue API, keine Persistenz, keine Schreibwirkung ohne neuen Go.
 
 Warum dieser Schritt:
 
-- Er fuehrt Richtung echter Agentenfaehigkeit.
-- Er verletzt keine harten Gates.
-- Er macht spaetere LLM-Entscheidungen entscheidungsreif statt improvisiert.
-- Er haelt den deterministischen Kern fuehrend.
+- Der autonome providerlose Vorbereitungskorridor ist mit PA40 fachlich vollstaendig genug.
+- Der naechste weitere Fortschritt beruehrt echte Gates und darf nicht mehr stillschweigend gebaut werden.
+- Eine gute Entscheidungsvorlage beschleunigt spaetere Umsetzung mehr als weiterer vertragsnaher Scheinfortschritt.
+- Der deterministische Kern bleibt fuehrend und die Gate-Linie bleibt ehrlich.
 
-PA26 setzt den ersten Teil dieses Schritts um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. PA28 verbindet diese Bausteine ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, Secrets, echte Daten, API, Persistenz oder Schreibwirkung. PA29 macht die Input-Seite des Vertrags validierbar und lehnt Provider-, Echtdaten-, Write-Tool- und Rohpayload-Kandidaten ab. PA30 validiert komplette synthetische Eval-Fixtures zentral gegen Input, Output, Draft-Registry, SourceRefs und Forbidden-Payload-Grenzen. PA31 begrenzt SourceRefs runtime-seitig auf bekannte sichere Arbeitsbelegtypen. PA32 begrenzt strukturierte Draft-Outputs auf flache Scalar-Maps ohne verschachtelte Payloads oder verbotene Schluessel. PA33 bindet auch erwartete Eval-Outputs an die Required-SourceRefs des Draft-Kontrakts. PA34 verhindert SourceRef-ID-Drift zwischen Input und erwartetem Output. PA35 stellt sicher, dass jeder registrierte Draft-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat. PA36 vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen. PA37 registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt ohne Prompttext oder Provider-Ausfuehrung. PA38 fuegt einen fixture-only ProviderAdapter hinzu, der nur gueltige synthetische Inputs auf vorhandene Fixture-Erwartungsoutputs mappt. PA39 verdichtet diese Kette in einen providerlosen AgentAudit-Anker fuer Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus. PA40 fasst Request, Adapter-Response und AgentAudit in ein synthetic-only Run-Result-Artefakt zusammen. Danach bleibt als naechster autonomer Schritt eine entscheidungsreife Vorlage fuer den LLM-Provider-/Daten-/Runtime-Rahmen.
+PA26 setzt den ersten Teil dieses Schritts um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. PA28 verbindet diese Bausteine ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, Secrets, echte Daten, API, Persistenz oder Schreibwirkung. PA29 macht die Input-Seite des Vertrags validierbar und lehnt Provider-, Echtdaten-, Write-Tool- und Rohpayload-Kandidaten ab. PA30 validiert komplette synthetische Eval-Fixtures zentral gegen Input, Output, Draft-Registry, SourceRefs und Forbidden-Payload-Grenzen. PA31 begrenzt SourceRefs runtime-seitig auf bekannte sichere Arbeitsbelegtypen. PA32 begrenzt strukturierte Draft-Outputs auf flache Scalar-Maps ohne verschachtelte Payloads oder verbotene Schluessel. PA33 bindet auch erwartete Eval-Outputs an die Required-SourceRefs des Draft-Kontrakts. PA34 verhindert SourceRef-ID-Drift zwischen Input und erwartetem Output. PA35 stellt sicher, dass jeder registrierte Draft-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat. PA36 vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen. PA37 registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt ohne Prompttext oder Provider-Ausfuehrung. PA38 fuegt einen fixture-only ProviderAdapter hinzu, der nur gueltige synthetische Inputs auf vorhandene Fixture-Erwartungsoutputs mappt. PA39 verdichtet diese Kette in einen providerlosen AgentAudit-Anker fuer Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus. PA40 fasst Request, Adapter-Response und AgentAudit in ein synthetic-only Run-Result-Artefakt zusammen. PA41 macht danach den naechsten echten Gate-Schritt fuer Alexander entscheidungsreif: minimaler providerbasierter synthetic-only Slice oder bewusst weiter providerlos bleiben.
 
 ## 7. Sicherer Default
 

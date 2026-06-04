@@ -61,19 +61,18 @@ describe("C11 10/10 gap audit contract", () => {
     }
   });
 
-  it("chooses the next autonomous step as LLM readiness without provider or runtime writes", () => {
-    expect(gapAudit).toContain("`LLM-Readiness-Vertrag ohne LLM-Provider`");
-    expect(gapAudit).toContain("Model-Input-/Output-Grenze");
-    expect(gapAudit).toContain("Tool-Allowlist");
-    expect(gapAudit).toContain("synthetische Eval-Fixtures");
+  it("chooses the next autonomous step as a decision-ready frame after the providerless chain", () => {
+    expect(gapAudit).toContain("`Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice`");
+    expect(gapAudit).toContain("providerlosen PA26-PA40-Korridor als abgeschlossen festhalten");
+    expect(gapAudit).toContain("providerbasierten synthetic-only Slice benennen");
+    expect(gapAudit).toContain("Provider-, Daten-, Logging-, Secret-, Kosten- und Runtime-Entscheidungen");
 
     for (const forbidden of [
-      "kein Provider",
-      "keine Secrets",
-      "keine Modellaufrufe",
+      "keine echten Daten",
+      "keine Runtime-`ConversationSession`",
+      "keine Write-Tools",
       "keine neue API",
       "keine Persistenz",
-      "keine echten Daten",
       "keine Schreibwirkung"
     ]) {
       expect(gapAudit).toContain(forbidden);
