@@ -4,6 +4,7 @@ import {
   type DragEvent
 } from "react";
 import type { IntakeDocumentChannel } from "./api.js";
+import { buildProductionInputPanelState } from "./production-input-panel-state.js";
 
 export type ProductionManualInputValues = {
   eventType: string;
@@ -67,13 +68,6 @@ type ProductionInputPanelProps = {
   manualInputActions: ProductionManualInputActions;
 };
 
-function formatEta(seconds: number): string {
-  if (seconds <= 1) {
-    return "weniger als 1 Sekunde";
-  }
-  return `${seconds} Sekunden`;
-}
-
 export function ProductionInputPanel({
   submitting,
   sourceInput,
@@ -81,9 +75,10 @@ export function ProductionInputPanel({
   manualInput,
   manualInputActions
 }: ProductionInputPanelProps) {
-  const clearWorkspaceDisabled = submitting || !sourceInput.canClearWorkspace;
-  const archiveCurrentIntakeDisabled = submitting || !sourceInput.canArchiveCurrentIntake;
-  const submitDocumentDisabled = submitting || !sourceInput.intakeFile;
+  const panelState = buildProductionInputPanelState({
+    submitting,
+    sourceInput
+  });
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
@@ -102,7 +97,7 @@ export function ProductionInputPanel({
           <button
             type="button"
             className="secondary-button destructive-button"
-            disabled={clearWorkspaceDisabled}
+            disabled={panelState.clearWorkspaceDisabled}
             title={sourceInput.clearWorkspaceTitle}
             onClick={sourceInputActions.clearWorkspace}
           >
@@ -114,7 +109,7 @@ export function ProductionInputPanel({
           <button
             type="button"
             className="secondary-button destructive-button"
-            disabled={archiveCurrentIntakeDisabled}
+            disabled={panelState.archiveCurrentIntakeDisabled}
             title={sourceInput.archiveCurrentIntakeTitle}
             onClick={() => void sourceInputActions.archiveCurrentIntake()}
           >
@@ -153,8 +148,8 @@ export function ProductionInputPanel({
         <span className="drag-drop-zone__cta">+ Angebot auswählen</span>
       </label>
       <div className="activity-slot">
-        {sourceInput.intakeFile ? <p className="helper-text">Ausgewählt: {sourceInput.intakeFile.name}</p> : null}
-        {sourceInput.documentPhase === "analysing" && sourceInput.activeDocumentName ? (
+        {panelState.selectedFileName ? <p className="helper-text">Ausgewählt: {panelState.selectedFileName}</p> : null}
+        {panelState.showAnalysingProgress ? (
           <div className="progress-panel">
             <div
               className="progress-ring"
@@ -174,13 +169,11 @@ export function ProductionInputPanel({
                   style={{ width: `${Math.max(0, Math.min(sourceInput.documentProgress, 100))}%` }}
                 />
               </div>
-              <p className="helper-text">
-                Geschätzte Restzeit: {formatEta(sourceInput.documentEtaSeconds ?? 1)}
-              </p>
+              <p className="helper-text">Geschätzte Restzeit: {panelState.documentEtaLabel}</p>
             </div>
           </div>
         ) : null}
-        {sourceInput.documentPhase === "done" && sourceInput.activeDocumentName ? (
+        {panelState.showCompletedProgress ? (
           <div className="progress-panel">
             <div
               className="progress-ring progress-ring--done"
@@ -210,7 +203,7 @@ export function ProductionInputPanel({
           <option value="email">E-Mail</option>
           <option value="text">Textdatei</option>
         </select>
-        <button disabled={submitDocumentDisabled} onClick={() => void sourceInputActions.submitDocument()}>
+        <button disabled={panelState.submitDocumentDisabled} onClick={() => void sourceInputActions.submitDocument()}>
           Erneut mit ausgewähltem Typ verarbeiten
         </button>
       </div>
