@@ -10,7 +10,7 @@ import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
 
-export { formatDocumentIngestionSummary } from "./production-intake-origin-card.js";
+export { formatDocumentIngestionSummary } from "./production-intake-origin-card-state.js";
 
 export type ProductionQuestionEditorState = {
   editingSpecId?: string;

@@ -1,5 +1,5 @@
 import type { DashboardState, ServiceHealthState } from "./api.js";
-import { formatDocumentIngestionSummary } from "./production-intake-origin-card.js";
+import { formatDocumentIngestionSummary } from "./production-intake-origin-card-state.js";
 
 export type AppRoute = "home" | "offer" | "production";
 
