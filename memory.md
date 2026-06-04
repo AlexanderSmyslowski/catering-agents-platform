@@ -1649,3 +1649,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.344 - 2026-06-04
 
 - PA35 LLM-Readiness Draft-Registry-Coverage ist additiv in `shared-core/src/fixtures/llm-readiness-eval-fixtures.ts` und `docs/architecture/PA35_LLM_READINESS_DRAFT_REGISTRY_COVERAGE.md` verankert: `validateLlmReadinessEvalFixtureCoverage(...)` verlangt, dass jeder registrierte Draft-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat, und zaehlt ungueltige Fixtures nicht als Coverage, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
+
+### 5.345 - 2026-06-04
+
+- PA36 LLM-Readiness Eval-Harness ist additiv in `shared-core/src/llm-readiness-eval-harness.ts` und `docs/architecture/PA36_LLM_READINESS_EVAL_HARNESS.md` verankert: `validateLlmReadinessEvalOutputCandidateMatch(...)` vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen, inklusive `kind`, `sourceRefs`, Approval-/Write-Flags, `structuredCandidate` und normalisiertem Draft-Text, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.

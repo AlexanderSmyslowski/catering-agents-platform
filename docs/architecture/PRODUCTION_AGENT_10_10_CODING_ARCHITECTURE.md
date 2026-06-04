@@ -449,6 +449,8 @@ PA34 schliesst daran die Identitaetsluecke: Fuer required SourceRefs muss der er
 
 PA35 schliesst die Registry-Coverage-Luecke: Jeder `llmReadinessDraftContracts`-Eintrag muss mindestens eine gueltige synthetische Eval-Fixture haben; ungueltige Fixtures zaehlen nicht als Abdeckung.
 
+PA36 setzt den fehlenden Eval-Harness-Anker als Code um: `validateLlmReadinessEvalOutputCandidateMatch(...)` vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen, inklusive `kind`, `sourceRefs`, Approval-/Write-Flags, `structuredCandidate` und normalisiertem Draft-Text.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
