@@ -8,6 +8,7 @@ export * from "./fixtures/demo-scenarios.js";
 export * from "./fixtures/llm-readiness-eval-fixtures.js";
 export * from "./llm-readiness-draft-registry.js";
 export * from "./llm-readiness-eval-harness.js";
+export * from "./llm-readiness-prompt-schema-registry.js";
 export * from "./llm-readiness.js";
 export * from "./persistence.js";
 export * from "./production-clarification.js";
