@@ -453,6 +453,8 @@ PA36 setzt den fehlenden Eval-Harness-Anker als Code um: `validateLlmReadinessEv
 
 PA37 schliesst daran die schema-only Prompt-/Schema-Luecke: `llmReadinessPromptSchemaRegistry` registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt, bleibt aber bewusst ohne Prompttext, Provider-Ausfuehrung oder Runtime.
 
+PA38 setzt den `ProviderAdapter` zuerst als fixture-only Codeanker um: `FixtureOnlyLlmReadinessProviderAdapter` nimmt nur synthetische, validierte Inputs an und gibt ausschliesslich passende Fixture-Erwartungsoutputs zurueck, ohne Prompt-Ausfuehrung oder echten Provider.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
