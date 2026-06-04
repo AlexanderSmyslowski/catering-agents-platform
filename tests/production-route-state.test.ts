@@ -21,6 +21,7 @@ import {
   selectArchivedProductionItems,
   selectProductionArtifactSpecIds,
   selectCurrentProductionItems,
+  selectProductionPlanById,
   selectFocusedProductionSpec,
   selectProductionIntakeRequestId,
   selectProductionNextStep,
@@ -243,6 +244,31 @@ describe("production route state", () => {
         productionWorkspaceCleared: false
       })
     ).toBe(orderedPlans[0]);
+  });
+
+  it("shares normalized selected plan lookup across current and ordered plan scopes", () => {
+    const orderedPlans = [
+      { planId: "plan-current", eventSpecId: "spec-current" },
+      { planId: " plan-other ", eventSpecId: "spec-other" }
+    ];
+
+    expect(
+      selectProductionPlanById({
+        plans: orderedPlans,
+        selectedPlanId: "plan-other"
+      })
+    ).toBe(orderedPlans[1]);
+    expect(
+      selectProductionPlanById({
+        plans: orderedPlans,
+        selectedPlanId: "   "
+      })
+    ).toBeUndefined();
+    expect(
+      selectProductionPlanById({
+        plans: orderedPlans
+      })
+    ).toBeUndefined();
   });
 
   it("selects a production plan spec and maps its menu components", () => {

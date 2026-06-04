@@ -1,4 +1,5 @@
 import {
+  selectProductionPlanById,
   selectArchivedProductionItems,
   selectCurrentProductionItems
 } from "./production-route-state.js";
@@ -23,10 +24,10 @@ export function selectCurrentProductionArtifactsScopeSpecId(input: {
     return focusedProductionSpecId;
   }
 
-  const selectedPlanId = input.selectedPlanId?.trim();
-  const selectedPlan = selectedPlanId
-    ? input.orderedPlans.find((plan) => String(plan.planId ?? "").trim() === selectedPlanId)
-    : undefined;
+  const selectedPlan = selectProductionPlanById({
+    plans: input.orderedPlans,
+    selectedPlanId: input.selectedPlanId
+  });
   const fallbackPlan = selectedPlan ?? input.orderedPlans[0];
   return String(fallbackPlan?.eventSpecId ?? "").trim();
 }
