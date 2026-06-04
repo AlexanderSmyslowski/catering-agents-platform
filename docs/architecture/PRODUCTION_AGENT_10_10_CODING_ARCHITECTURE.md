@@ -451,6 +451,8 @@ PA35 schliesst die Registry-Coverage-Luecke: Jeder `llmReadinessDraftContracts`-
 
 PA36 setzt den fehlenden Eval-Harness-Anker als Code um: `validateLlmReadinessEvalOutputCandidateMatch(...)` vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen, inklusive `kind`, `sourceRefs`, Approval-/Write-Flags, `structuredCandidate` und normalisiertem Draft-Text.
 
+PA37 schliesst daran die schema-only Prompt-/Schema-Luecke: `llmReadinessPromptSchemaRegistry` registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt, bleibt aber bewusst ohne Prompttext, Provider-Ausfuehrung oder Runtime.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
