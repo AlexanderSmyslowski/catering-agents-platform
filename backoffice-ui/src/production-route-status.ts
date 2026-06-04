@@ -164,6 +164,10 @@ export function formatActiveProductionContextLabel(input: {
   selectedPlanSpecLabel?: string;
   productionWorkspaceCleared: boolean;
 }): string {
+  if (input.productionWorkspaceCleared) {
+    return "Kein aktiver Vorgang";
+  }
+
   if (input.focusedProductionSpecLabel) {
     return input.focusedProductionSpecLabel;
   }
@@ -181,8 +185,7 @@ export function formatActiveProductionContextLabel(input: {
 
     return `Plan-Kontext geladen: ${planId} · Spezifikation noch nicht im Fokus`;
   }
-
-  return input.productionWorkspaceCleared ? "Kein aktiver Vorgang" : "Noch kein aktiver Vorgang";
+  return "Noch kein aktiver Vorgang";
 }
 
 export function canClearProductionWorkspace(input: {
