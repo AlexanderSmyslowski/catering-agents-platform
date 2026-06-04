@@ -447,6 +447,8 @@ PA33 macht die synthetischen Eval-Fixtures quellen-symmetrisch: Nicht nur `input
 
 PA34 schliesst daran die Identitaetsluecke: Fuer required SourceRefs muss der erwartete Output dieselben `objectId`s tragen wie der Input, damit Eval-Drafts nicht auf gleichartige, aber andere Arbeitsbelege driften.
 
+PA35 schliesst die Registry-Coverage-Luecke: Jeder `llmReadinessDraftContracts`-Eintrag muss mindestens eine gueltige synthetische Eval-Fixture haben; ungueltige Fixtures zaehlen nicht als Abdeckung.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.
