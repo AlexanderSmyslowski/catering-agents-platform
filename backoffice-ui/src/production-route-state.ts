@@ -58,6 +58,18 @@ export function lookupProductionSpecById<T extends Record<string, unknown>>(
   return normalizedSpecId ? specsById.get(normalizedSpecId) : undefined;
 }
 
+export function selectProductionPlanById<T extends Record<string, unknown>>(input: {
+  plans: T[];
+  selectedPlanId?: string;
+}): T | undefined {
+  const selectedPlanId = input.selectedPlanId?.trim();
+  if (!selectedPlanId) {
+    return undefined;
+  }
+
+  return input.plans.find((plan) => String(plan.planId ?? "").trim() === selectedPlanId);
+}
+
 export function selectFocusedProductionSpec(input: {
   acceptedSpecs: ProductionRouteFocusSpec[];
   filteredSpecs: ProductionRouteFocusSpec[];
@@ -132,10 +144,15 @@ export function selectProductionWorkbenchPlan<T extends Record<string, unknown>>
     return undefined;
   }
 
-  const selectedPlanId = input.selectedPlanId?.trim();
   return (
-    input.currentSpecPlans.find((plan) => String(plan.planId ?? "").trim() === selectedPlanId) ??
-    input.orderedPlans.find((plan) => String(plan.planId ?? "").trim() === selectedPlanId) ??
+    selectProductionPlanById({
+      plans: input.currentSpecPlans,
+      selectedPlanId: input.selectedPlanId
+    }) ??
+    selectProductionPlanById({
+      plans: input.orderedPlans,
+      selectedPlanId: input.selectedPlanId
+    }) ??
     input.currentSpecPlans[0] ??
     (input.currentProductionSpecId ? undefined : input.orderedPlans[0])
   );
