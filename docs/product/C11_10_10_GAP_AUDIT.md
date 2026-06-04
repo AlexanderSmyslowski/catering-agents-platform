@@ -75,27 +75,27 @@ Es trennt hart zwischen:
 
 Diese Punkte duerfen nicht autonom in Runtime-Code kippen.
 
-## 6. Naechster autonomer Schritt
+## 6. Naechster nicht-gate-pflichtige Schritt
 
-Der naechste nicht-gate-pflichtige Fortschritt ist:
+PA41 hat die `Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice` bereits geliefert.
 
-`Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice`
+Damit ist der naechste echte LLM-Fortschritt bewusst gate-pflichtig. Der naechste autonome Fortschritt liegt deshalb nicht mehr in weiterem providernahem Runtime-Code, sondern in kleinen, reviewbaren Qualitaetsschnitten im bestehenden Produktionskern und in der ruhigen Arbeitsoberflaeche.
 
 Minimaler Scope:
 
-- vorhandenen providerlosen PA26-PA40-Korridor als abgeschlossen festhalten,
-- minimale sichere Option fuer den ersten echten providerbasierten synthetic-only Slice benennen,
-- Provider-, Daten-, Logging-, Secret-, Kosten- und Runtime-Entscheidungen explizit machen,
-- klare Verbote: keine echten Daten, keine Runtime-`ConversationSession`, keine Write-Tools, keine neue API, keine Persistenz, keine Schreibwirkung ohne neuen Go.
+- den providerlosen PA26-PA40-Korridor als abgeschlossen behandeln,
+- PA41 als vorhandene Entscheidungsvorlage fuer Provider-, Daten-, Logging-, Secret-, Kosten- und Runtime-Scope nutzen,
+- bis zu einer Alexander-Entscheidung nur den kleinsten nicht-gate-pflichtigen Boundary-, State-, Selector-, Action- oder Smoke-/Rehearsal-Schnitt waehlen,
+- keine echten Daten, keine Runtime-`ConversationSession`, keine Write-Tools, keine neue API, keine Persistenz und keine Schreibwirkung ohne neuen Go.
 
 Warum dieser Schritt:
 
 - Der autonome providerlose Vorbereitungskorridor ist mit PA40 fachlich vollstaendig genug.
-- Der naechste weitere Fortschritt beruehrt echte Gates und darf nicht mehr stillschweigend gebaut werden.
-- Eine gute Entscheidungsvorlage beschleunigt spaetere Umsetzung mehr als weiterer vertragsnaher Scheinfortschritt.
+- PA41 macht den ersten echten providerbasierten synthetic-only Slice bereits entscheidungsreif.
+- Weiterer sinnvoller autonomer Fortschritt liegt jetzt in Deterministik, UI-Klarheit, Browser-Rehearsal und Code-Eleganz statt in verdecktem Gate-Ueberschritt.
 - Der deterministische Kern bleibt fuehrend und die Gate-Linie bleibt ehrlich.
 
-PA26 setzt den ersten Teil dieses Schritts um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. PA28 verbindet diese Bausteine ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, Secrets, echte Daten, API, Persistenz oder Schreibwirkung. PA29 macht die Input-Seite des Vertrags validierbar und lehnt Provider-, Echtdaten-, Write-Tool- und Rohpayload-Kandidaten ab. PA30 validiert komplette synthetische Eval-Fixtures zentral gegen Input, Output, Draft-Registry, SourceRefs und Forbidden-Payload-Grenzen. PA31 begrenzt SourceRefs runtime-seitig auf bekannte sichere Arbeitsbelegtypen. PA32 begrenzt strukturierte Draft-Outputs auf flache Scalar-Maps ohne verschachtelte Payloads oder verbotene Schluessel. PA33 bindet auch erwartete Eval-Outputs an die Required-SourceRefs des Draft-Kontrakts. PA34 verhindert SourceRef-ID-Drift zwischen Input und erwartetem Output. PA35 stellt sicher, dass jeder registrierte Draft-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat. PA36 vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen. PA37 registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt ohne Prompttext oder Provider-Ausfuehrung. PA38 fuegt einen fixture-only ProviderAdapter hinzu, der nur gueltige synthetische Inputs auf vorhandene Fixture-Erwartungsoutputs mappt. PA39 verdichtet diese Kette in einen providerlosen AgentAudit-Anker fuer Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus. PA40 fasst Request, Adapter-Response und AgentAudit in ein synthetic-only Run-Result-Artefakt zusammen. PA41 macht danach den naechsten echten Gate-Schritt fuer Alexander entscheidungsreif: minimaler providerbasierter synthetic-only Slice oder bewusst weiter providerlos bleiben.
+PA26 setzt den ersten Teil dieses Korridors um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. PA28 verbindet diese Bausteine ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, Secrets, echte Daten, API, Persistenz oder Schreibwirkung. PA29 macht die Input-Seite des Vertrags validierbar und lehnt Provider-, Echtdaten-, Write-Tool- und Rohpayload-Kandidaten ab. PA30 validiert komplette synthetische Eval-Fixtures zentral gegen Input, Output, Draft-Registry, SourceRefs und Forbidden-Payload-Grenzen. PA31 begrenzt SourceRefs runtime-seitig auf bekannte sichere Arbeitsbelegtypen. PA32 begrenzt strukturierte Draft-Outputs auf flache Scalar-Maps ohne verschachtelte Payloads oder verbotene Schluessel. PA33 bindet auch erwartete Eval-Outputs an die Required-SourceRefs des Draft-Kontrakts. PA34 verhindert SourceRef-ID-Drift zwischen Input und erwartetem Output. PA35 stellt sicher, dass jeder registrierte Draft-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat. PA36 vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen. PA37 registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt ohne Prompttext oder Provider-Ausfuehrung. PA38 fuegt einen fixture-only ProviderAdapter hinzu, der nur gueltige synthetische Inputs auf vorhandene Fixture-Erwartungsoutputs mappt. PA39 verdichtet diese Kette in einen providerlosen AgentAudit-Anker fuer Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus. PA40 fasst Request, Adapter-Response und AgentAudit in ein synthetic-only Run-Result-Artefakt zusammen. PA41 macht danach den naechsten echten Gate-Schritt fuer Alexander entscheidungsreif: minimaler providerbasierter synthetic-only Slice oder bewusst weiter providerlos bleiben.
 
 ## 7. Sicherer Default
 

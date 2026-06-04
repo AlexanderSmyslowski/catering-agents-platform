@@ -61,11 +61,11 @@ describe("C11 10/10 gap audit contract", () => {
     }
   });
 
-  it("chooses the next autonomous step as a decision-ready frame after the providerless chain", () => {
-    expect(gapAudit).toContain("`Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice`");
-    expect(gapAudit).toContain("providerlosen PA26-PA40-Korridor als abgeschlossen festhalten");
-    expect(gapAudit).toContain("providerbasierten synthetic-only Slice benennen");
-    expect(gapAudit).toContain("Provider-, Daten-, Logging-, Secret-, Kosten- und Runtime-Entscheidungen");
+  it("keeps PA41 complete and redirects autonomous progress back to non-gated quality slices", () => {
+    expect(gapAudit).toContain("PA41 hat die `Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice` bereits geliefert");
+    expect(gapAudit).toContain("providerlosen PA26-PA40-Korridor als abgeschlossen behandeln");
+    expect(gapAudit).toContain("PA41 als vorhandene Entscheidungsvorlage");
+    expect(gapAudit).toContain("Boundary-, State-, Selector-, Action- oder Smoke-/Rehearsal-Schnitt");
 
     for (const forbidden of [
       "keine echten Daten",
