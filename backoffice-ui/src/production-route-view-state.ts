@@ -11,6 +11,7 @@ import type { ProductionPurchaseListState } from "./production-purchase-list-pan
 import { buildProductionQuestionPanelState } from "./production-question-panel-state.js";
 import type { ProductionQuestionPanelState } from "./production-question-panel.js";
 import { buildProductionRecipePanelState } from "./production-recipe-panel-state.js";
+import { buildProductionRouteVisibleArtifacts } from "./production-route-visible-artifacts.js";
 import type {
   ProductionRecipeLibraryState,
   ProductionRecipeStatusState,
@@ -127,15 +128,16 @@ export function buildProductionRouteViewState({
   recipeFile,
   filteredRecipes
 }: ProductionRouteViewStateInput): ProductionRouteViewState {
-  const safeCurrentSpecPlans = productionWorkspaceCleared ? [] : currentSpecPlans;
-  const safeCurrentSpecPurchaseLists = productionWorkspaceCleared ? [] : currentSpecPurchaseLists;
-  const safeSelectedPlan = productionWorkspaceCleared ? undefined : selectedPlan;
-  const safeSelectedPlanSpec = productionWorkspaceCleared ? undefined : selectedPlanSpec;
-  const safeSelectedPlanComponentsById = productionWorkspaceCleared
-    ? new Map<string, Record<string, unknown>>()
-    : selectedPlanComponentsById;
-  const safeArchivedPlans = productionWorkspaceCleared ? [] : archivedPlans;
-  const safeArchivedPurchaseLists = productionWorkspaceCleared ? [] : archivedPurchaseLists;
+  const visibleArtifacts = buildProductionRouteVisibleArtifacts({
+    productionWorkspaceCleared,
+    currentSpecPlans,
+    currentSpecPurchaseLists,
+    selectedPlan,
+    selectedPlanSpec,
+    selectedPlanComponentsById,
+    archivedPlans,
+    archivedPurchaseLists
+  });
 
   return {
     workbenchSummary: buildProductionWorkbenchSummaryState({
@@ -145,17 +147,17 @@ export function buildProductionRouteViewState({
       purchaseZoneStatusLabel,
       productionQuestions,
       clarificationStatusCounts,
-      currentSpecPlans: safeCurrentSpecPlans,
+      currentSpecPlans: visibleArtifacts.currentSpecPlans,
       productionObjectStatusLabel,
-      currentSpecPurchaseLists: safeCurrentSpecPurchaseLists
+      currentSpecPurchaseLists: visibleArtifacts.currentSpecPurchaseLists
     }),
     workbenchNextStep: productionNextStep,
     questionState: buildProductionQuestionPanelState({
       focusedProductionSpec,
       focusedSpecReadinessLabel,
-      selectedPlan: safeSelectedPlan,
+      selectedPlan: visibleArtifacts.selectedPlan,
       selectedPlanReadinessLabel,
-      currentSpecPurchaseLists: safeCurrentSpecPurchaseLists,
+      currentSpecPurchaseLists: visibleArtifacts.currentSpecPurchaseLists,
       productionQuestions,
       productionAssumptions,
       productionConversationProjection,
@@ -175,16 +177,16 @@ export function buildProductionRouteViewState({
     objectPanelState: buildProductionObjectsState({
       focusedProductionSpec,
       productionWorkspaceCleared,
-      currentSpecPlans: safeCurrentSpecPlans,
-      selectedPlan: safeSelectedPlan,
-      selectedPlanSpec: safeSelectedPlanSpec,
-      selectedPlanComponentsById: safeSelectedPlanComponentsById,
-      archivedPlans: safeArchivedPlans,
+      currentSpecPlans: visibleArtifacts.currentSpecPlans,
+      selectedPlan: visibleArtifacts.selectedPlan,
+      selectedPlanSpec: visibleArtifacts.selectedPlanSpec,
+      selectedPlanComponentsById: visibleArtifacts.selectedPlanComponentsById,
+      archivedPlans: visibleArtifacts.archivedPlans,
       specById
     }),
     purchaseListState: buildProductionPurchaseListState({
-      currentSpecPurchaseLists: safeCurrentSpecPurchaseLists,
-      archivedPurchaseLists: safeArchivedPurchaseLists,
+      currentSpecPurchaseLists: visibleArtifacts.currentSpecPurchaseLists,
+      archivedPurchaseLists: visibleArtifacts.archivedPurchaseLists,
       specById,
       purchaseZoneStatusLabel
     }),
