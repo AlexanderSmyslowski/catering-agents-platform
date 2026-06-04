@@ -7,7 +7,11 @@ import {
   type LlmReadinessModelInputKind,
   type LlmReadinessModelOutputCandidate
 } from "../llm-readiness.js";
-import { findLlmReadinessDraftContractByInputKind } from "../llm-readiness-draft-registry.js";
+import {
+  findLlmReadinessDraftContractByInputKind,
+  llmReadinessDraftContracts,
+  type LlmReadinessDraftContract
+} from "../llm-readiness-draft-registry.js";
 
 export interface LlmReadinessEvalFixture {
   fixtureId: string;
@@ -18,6 +22,11 @@ export interface LlmReadinessEvalFixture {
 }
 
 export interface LlmReadinessEvalFixtureValidation {
+  valid: boolean;
+  errors: string[];
+}
+
+export interface LlmReadinessEvalFixtureCoverageValidation {
   valid: boolean;
   errors: string[];
 }
@@ -179,6 +188,21 @@ function collectSourceObjectTypes(sourceRefs: unknown): unknown[] {
   return collectSourceRefs(sourceRefs).map((sourceRef) => sourceRef.objectType);
 }
 
+function getFixtureId(fixture: unknown, index: number): string {
+  return isRecord(fixture) && typeof fixture.fixtureId === "string" ? fixture.fixtureId : `fixture[${index}]`;
+}
+
+function fixtureCoversDraftContract(fixture: unknown, contract: LlmReadinessDraftContract): boolean {
+  return (
+    isRecord(fixture) &&
+    isRecord(fixture.input) &&
+    isRecord(fixture.expectedOutput) &&
+    fixture.input.kind === contract.inputKind &&
+    fixture.expectedOutput.kind === contract.outputKind &&
+    validateLlmReadinessEvalFixture(fixture).valid
+  );
+}
+
 export function validateLlmReadinessEvalFixture(
   fixture: unknown
 ): LlmReadinessEvalFixtureValidation {
@@ -310,6 +334,32 @@ export function validateLlmReadinessEvalFixture(
 
     if (isRecord(fixture.expectedOutput) && hasOwn(fixture.expectedOutput, forbiddenKey)) {
       errors.push(`expectedOutput.${forbiddenKey} is not allowed`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateLlmReadinessEvalFixtureCoverage(
+  fixtures: unknown = llmReadinessEvalFixtures
+): LlmReadinessEvalFixtureCoverageValidation {
+  const errors: string[] = [];
+
+  if (!Array.isArray(fixtures)) {
+    return { valid: false, errors: ["fixtures must be an array"] };
+  }
+
+  fixtures.forEach((fixture, index) => {
+    const validation = validateLlmReadinessEvalFixture(fixture);
+
+    if (!validation.valid) {
+      errors.push(`${getFixtureId(fixture, index)} must be a valid readiness eval fixture`);
+    }
+  });
+
+  for (const contract of llmReadinessDraftContracts) {
+    if (!fixtures.some((fixture) => fixtureCoversDraftContract(fixture, contract))) {
+      errors.push(`draft contract ${contract.contractId} must have a valid synthetic eval fixture`);
     }
   }
 

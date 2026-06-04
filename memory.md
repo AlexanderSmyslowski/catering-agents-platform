@@ -1645,3 +1645,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 ### 5.343 - 2026-06-01
 - PA34 LLM-Readiness SourceRef-Identity-Parity ist additiv in `shared-core/src/fixtures/llm-readiness-eval-fixtures.ts` und `docs/architecture/PA34_LLM_READINESS_SOURCE_REF_IDENTITY_PARITY.md` verankert: `validateLlmReadinessEvalFixture(...)` verlangt fuer Required-SourceRefs dieselben `objectId`s in Input und erwartetem Output, damit synthetische Eval-Drafts nicht auf gleichartige, aber andere Arbeitsbelege driften, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
+
+### 5.344 - 2026-06-04
+
+- PA35 LLM-Readiness Draft-Registry-Coverage ist additiv in `shared-core/src/fixtures/llm-readiness-eval-fixtures.ts` und `docs/architecture/PA35_LLM_READINESS_DRAFT_REGISTRY_COVERAGE.md` verankert: `validateLlmReadinessEvalFixtureCoverage(...)` verlangt, dass jeder registrierte Draft-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat, und zaehlt ungueltige Fixtures nicht als Coverage, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
