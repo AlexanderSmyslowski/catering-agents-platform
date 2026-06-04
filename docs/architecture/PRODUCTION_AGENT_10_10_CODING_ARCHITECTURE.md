@@ -19,9 +19,10 @@ Der robuste Weg zu 10/10 ist:
 Aktueller realistischer Coding-Stand:
 
 ```text
-Interner lokaler Rehearsal-/MVP-Korridor: ca. 6.5/10
-Deterministischer Produktionskern mit synthetischem Quick-Lunch-Smoke: ca. 7/10
-LLM-faehiger ProductionAgent-v1: noch nicht gebaut
+Interner lokaler Rehearsal-/MVP-Korridor: belastbare 9/10
+Deterministischer Produktionskern mit browsernahem synthetischem Rehearsal: ca. 9/10
+LLM-Readiness ohne Provider/Runtime-Schreibwirkung: ca. 8.8/10
+LLM-faehiger ProductionAgent-v1 mit echtem Provider/Runtime: blocked hinter Gates
 Produktionsnahe echte Datennutzung: blocked
 ```
 
@@ -454,6 +455,8 @@ PA36 setzt den fehlenden Eval-Harness-Anker als Code um: `validateLlmReadinessEv
 PA37 schliesst daran die schema-only Prompt-/Schema-Luecke: `llmReadinessPromptSchemaRegistry` registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt, bleibt aber bewusst ohne Prompttext, Provider-Ausfuehrung oder Runtime.
 
 PA38 setzt den `ProviderAdapter` zuerst als fixture-only Codeanker um: `FixtureOnlyLlmReadinessProviderAdapter` nimmt nur synthetische, validierte Inputs an und gibt ausschliesslich passende Fixture-Erwartungsoutputs zurueck, ohne Prompt-Ausfuehrung oder echten Provider.
+
+PA39 zieht den kleinsten `AgentAudit`-Anker nach: `createLlmReadinessAgentAuditRecord(...)` verdichtet Request, Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus in einen providerlosen Audit-Datensatz fuer synthetische Draft-Laeufe, ohne Runtime-`ConversationSession`, Provider, API, Persistenz, echte Daten oder Schreibwirkung.
 
 ### Harte Kopplungsregeln
 
