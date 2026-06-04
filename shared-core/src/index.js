@@ -6,6 +6,7 @@ export * from "./document-text.js";
 export * from "./fixtures/sample-data.js";
 export * from "./fixtures/demo-scenarios.js";
 export * from "./fixtures/llm-readiness-eval-fixtures.js";
+export * from "./llm-readiness-agent-audit.js";
 export * from "./llm-readiness-draft-registry.js";
 export * from "./llm-readiness-eval-harness.js";
 export * from "./llm-readiness-prompt-schema-registry.js";
