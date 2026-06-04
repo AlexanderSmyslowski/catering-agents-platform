@@ -5,6 +5,7 @@ import { getSpecLabel } from "./production-language.js";
 import { ProductionSpecDetailsCard } from "./production-spec-details.js";
 import { ProductionQuestionThread } from "./production-question-thread.js";
 import { buildProductionSpecSwitchItems } from "./production-spec-switch-list-state.js";
+import { buildProductionQuestionPanelVisibilityState } from "./production-question-panel-visibility-state.js";
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
@@ -113,6 +114,13 @@ export function ProductionQuestionPanel({
     resetSpecEdit
   } = editorActions;
   const specSwitchItems = buildProductionSpecSwitchItems(filteredSpecs);
+  const visibilityState = buildProductionQuestionPanelVisibilityState({
+    documentPhase,
+    productionWorkspaceCleared,
+    specSwitchItemCount: specSwitchItems.length,
+    editingSpecId,
+    focusedProductionSpecId: String(focusedProductionSpec?.specId ?? "")
+  });
 
   return (
     <article className="panel form-panel question-panel production-step-card">
@@ -199,15 +207,9 @@ export function ProductionQuestionPanel({
           </div>
         </>
       ) : (
-        <p className="helper-text">
-          {documentPhase === "analysing"
-            ? "Der Agent wertet das hochgeladene Dokument gerade aus und erzeugt daraus operative Veranstaltungsdaten."
-            : productionWorkspaceCleared
-              ? "Der aktuelle Vorgang wurde geleert. Nach einem neuen Upload erscheinen hier wieder die Rückfragen des Agenten."
-              : "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten."}
-        </p>
+        <p className="helper-text">{visibilityState.emptyStateMessage}</p>
       )}
-      {!productionWorkspaceCleared && specSwitchItems.length > 1 ? (
+      {visibilityState.showSpecSwitch ? (
         <>
           <div className="divider" />
           <header>
@@ -235,7 +237,7 @@ export function ProductionQuestionPanel({
           </ul>
         </>
       ) : null}
-      {editingSpecId && editingSpecId !== String(focusedProductionSpec?.specId ?? "") ? (
+      {visibilityState.showDetachedEditor ? (
         <>
           <div className="divider" />
           <div className="form-panel">
