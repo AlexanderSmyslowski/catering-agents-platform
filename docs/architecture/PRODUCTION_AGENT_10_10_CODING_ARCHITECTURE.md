@@ -458,6 +458,8 @@ PA38 setzt den `ProviderAdapter` zuerst als fixture-only Codeanker um: `FixtureO
 
 PA39 zieht den kleinsten `AgentAudit`-Anker nach: `createLlmReadinessAgentAuditRecord(...)` verdichtet Request, Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus in einen providerlosen Audit-Datensatz fuer synthetische Draft-Laeufe, ohne Runtime-`ConversationSession`, Provider, API, Persistenz, echte Daten oder Schreibwirkung.
 
+PA40 schliesst den aktuellen providerlosen Vorbereitungskorridor mit einem `Run-Result`-Anker: `createLlmReadinessRunResult(...)` fasst Request, fixture-only Adapter-Response und AgentAudit in ein validiertes Ergebnisartefakt zusammen, das bei Erfolg ein `outputCandidate` und bei Ablehnung nur Fehlerstatus traegt, weiterhin ohne Runtime-`ConversationSession`, Provider, API, Persistenz, echte Daten oder Schreibwirkung.
+
 ### Harte Kopplungsregeln
 
 - LLM-Outputs duerfen nie direkt `AcceptedEventSpec`, `ProductionPlan` oder `PurchaseList` ersetzen.

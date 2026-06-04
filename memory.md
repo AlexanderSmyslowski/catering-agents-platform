@@ -1665,3 +1665,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.348 - 2026-06-05
 
 - PA39 LLM-Readiness AgentAudit ist additiv in `shared-core/src/llm-readiness-agent-audit.ts` und `docs/architecture/PA39_LLM_READINESS_AGENT_AUDIT.md` verankert: `createLlmReadinessAgentAuditRecord(...)` verdichtet einen providerlosen Request-/PromptSchema-/FixtureAdapter-Lauf in einen kleinen Audit-Datensatz mit Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
+
+### 5.349 - 2026-06-05
+
+- PA40 LLM-Readiness Run-Result ist additiv in `shared-core/src/llm-readiness-run-result.ts` und `docs/architecture/PA40_LLM_READINESS_RUN_RESULT.md` verankert: `createLlmReadinessRunResult(...)` fasst einen providerlosen Request, die fixture-only Adapter-Response und den PA39-AgentAudit-Datensatz in ein validiertes synthetic-only Ergebnisartefakt mit Outcome, Prompt-/Policy-/Schema-Metadaten, Approval-Grenze und optionalem `outputCandidate` zusammen, ohne Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
