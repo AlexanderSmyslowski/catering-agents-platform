@@ -1657,3 +1657,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.346 - 2026-06-04
 
 - PA37 LLM-Readiness Prompt-/Schema-Registry ist additiv in `shared-core/src/llm-readiness-prompt-schema-registry.ts` und `docs/architecture/PA37_LLM_READINESS_PROMPT_SCHEMA_REGISTRY.md` verankert: `llmReadinessPromptSchemaRegistry` registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt, bleibt aber bewusst schema-only ohne Prompttext, Provider-Ausfuehrung, Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe.
+
+### 5.347 - 2026-06-05
+
+- PA38 LLM-Readiness Fixture-ProviderAdapter ist additiv in `shared-core/src/llm-readiness-provider-adapter.ts` und `docs/architecture/PA38_LLM_READINESS_FIXTURE_PROVIDER_ADAPTER.md` verankert: `FixtureOnlyLlmReadinessProviderAdapter` nimmt nur gueltige synthetische Inputs an und gibt ausschliesslich passende Fixture-Erwartungsoutputs zurueck, ohne Prompt-Ausfuehrung, echten Provider, Runtime, API, Persistenz, echte Daten oder LLM-Aufrufe einzufuehren.
