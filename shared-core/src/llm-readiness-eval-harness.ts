@@ -14,6 +14,21 @@ export interface LlmReadinessEvalOutputMatchValidation {
   errors: string[];
 }
 
+export interface LlmReadinessEvalOutputMatchChecks {
+  outputKindMatches: boolean;
+  humanApprovalMatches: boolean;
+  writesProductObjectMatches: boolean;
+  sourceRefsMatch: boolean;
+  textMatches: boolean;
+  structuredCandidateMatches: boolean;
+}
+
+export interface LlmReadinessEvalOutputMatchDetails {
+  valid: boolean;
+  errors: string[];
+  checks: LlmReadinessEvalOutputMatchChecks;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -77,7 +92,26 @@ export function validateLlmReadinessEvalOutputCandidateMatch(
   fixture: unknown,
   candidate: unknown
 ): LlmReadinessEvalOutputMatchValidation {
+  const evaluation = evaluateLlmReadinessEvalOutputCandidateMatch(fixture, candidate);
+  return {
+    valid: evaluation.valid,
+    errors: evaluation.errors
+  };
+}
+
+export function evaluateLlmReadinessEvalOutputCandidateMatch(
+  fixture: unknown,
+  candidate: unknown
+): LlmReadinessEvalOutputMatchDetails {
   const errors: string[] = [];
+  const checks: LlmReadinessEvalOutputMatchChecks = {
+    outputKindMatches: false,
+    humanApprovalMatches: false,
+    writesProductObjectMatches: false,
+    sourceRefsMatch: false,
+    textMatches: false,
+    structuredCandidateMatches: false
+  };
 
   const fixtureValidation = validateLlmReadinessEvalFixture(fixture);
   for (const fixtureError of fixtureValidation.errors) {
@@ -90,43 +124,60 @@ export function validateLlmReadinessEvalOutputCandidateMatch(
   }
 
   if (!isRecord(fixture) || !isRecord(fixture.expectedOutput) || !isRecord(candidate)) {
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, checks };
   }
 
   const expectedOutput = fixture.expectedOutput as unknown as LlmReadinessModelOutputCandidate;
   const outputCandidate = candidate as unknown as LlmReadinessModelOutputCandidate;
 
-  if (outputCandidate.kind !== expectedOutput.kind) {
+  checks.outputKindMatches = outputCandidate.kind === expectedOutput.kind;
+  if (!checks.outputKindMatches) {
     errors.push("candidate.kind must match fixture expectedOutput.kind");
   }
 
-  if (outputCandidate.humanApprovalRequired !== expectedOutput.humanApprovalRequired) {
+  checks.humanApprovalMatches =
+    outputCandidate.humanApprovalRequired === expectedOutput.humanApprovalRequired;
+  if (!checks.humanApprovalMatches) {
     errors.push("candidate.humanApprovalRequired must match fixture expectedOutput.humanApprovalRequired");
   }
 
-  if (outputCandidate.writesProductObject !== expectedOutput.writesProductObject) {
+  checks.writesProductObjectMatches =
+    outputCandidate.writesProductObject === expectedOutput.writesProductObject;
+  if (!checks.writesProductObjectMatches) {
     errors.push("candidate.writesProductObject must match fixture expectedOutput.writesProductObject");
   }
 
+  checks.sourceRefsMatch =
+    Array.isArray(outputCandidate.sourceRefs) &&
+    Array.isArray(expectedOutput.sourceRefs) &&
+    sameStringList(collectSourceRefKeys(outputCandidate.sourceRefs), collectSourceRefKeys(expectedOutput.sourceRefs));
   if (
     Array.isArray(outputCandidate.sourceRefs) &&
     Array.isArray(expectedOutput.sourceRefs) &&
-    !sameStringList(collectSourceRefKeys(outputCandidate.sourceRefs), collectSourceRefKeys(expectedOutput.sourceRefs))
+    !checks.sourceRefsMatch
   ) {
     errors.push("candidate.sourceRefs must match fixture expectedOutput.sourceRefs");
   }
 
+  checks.textMatches =
+    typeof outputCandidate.text === "string" &&
+    typeof expectedOutput.text === "string" &&
+    normalizeDraftText(outputCandidate.text) === normalizeDraftText(expectedOutput.text);
   if (
     typeof outputCandidate.text === "string" &&
     typeof expectedOutput.text === "string" &&
-    normalizeDraftText(outputCandidate.text) !== normalizeDraftText(expectedOutput.text)
+    !checks.textMatches
   ) {
     errors.push("candidate.text must match fixture expectedOutput.text");
   }
 
-  if (!sameStructuredCandidate(expectedOutput.structuredCandidate, outputCandidate.structuredCandidate)) {
+  checks.structuredCandidateMatches = sameStructuredCandidate(
+    expectedOutput.structuredCandidate,
+    outputCandidate.structuredCandidate
+  );
+  if (!checks.structuredCandidateMatches) {
     errors.push("candidate.structuredCandidate must match fixture expectedOutput.structuredCandidate");
   }
 
-  return { valid: errors.length === 0, errors };
+  return { valid: errors.length === 0, errors, checks };
 }
