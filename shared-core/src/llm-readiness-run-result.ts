@@ -53,6 +53,8 @@ export interface LlmReadinessRunResult {
   policyVersion: string;
   outputSchemaId: string;
   fixtureId?: string;
+  providerId?: string;
+  providerRequestId?: string;
   providerCalls: "disabled";
   dataMode: "synthetic_or_demo_only";
   allowedToolEffects: readonly LlmReadinessToolEffect[];
@@ -89,6 +91,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function hasAllowedStatus(value: unknown): value is LlmReadinessRunResultStatus {
   return typeof value === "string" &&
     llmReadinessRunResultStatuses.includes(value as LlmReadinessRunResultStatus);
+}
+
+function hasAllowedAdapterMode(value: unknown): value is LlmReadinessProviderAdapterMode {
+  return value === "fixture_only" || value === "synthetic_live";
 }
 
 function hasAllowedInputKind(value: unknown): value is LlmReadinessModelInputKind {
@@ -189,6 +195,14 @@ function validateAuditConsistency(
     errors.push("auditRecord.fixtureId must match response.fixtureId");
   }
 
+  if (auditRecord.providerId !== response.providerId) {
+    errors.push("auditRecord.providerId must match response.providerId");
+  }
+
+  if (auditRecord.providerRequestId !== response.providerRequestId) {
+    errors.push("auditRecord.providerRequestId must match response.providerRequestId");
+  }
+
   if (auditRecord.errorCount !== response.errors.length) {
     errors.push("auditRecord.errorCount must match response.errors.length");
   }
@@ -197,8 +211,12 @@ function validateAuditConsistency(
     errors.push("auditRecord.errors must match response.errors");
   }
 
-  if (response.ok && auditRecord.status !== "matched_fixture") {
-    errors.push("auditRecord.status must be matched_fixture when response.ok is true");
+  if (
+    response.ok &&
+    ((response.adapterMode === "fixture_only" && auditRecord.status !== "matched_fixture") ||
+      (response.adapterMode === "synthetic_live" && auditRecord.status !== "matched_provider"))
+  ) {
+    errors.push("auditRecord.status must match the successful adapter mode");
   }
 
   if (!response.ok && auditRecord.status !== "rejected") {
@@ -254,8 +272,8 @@ export function validateLlmReadinessRunResult(
     errors.push("status must be an allowed run-result status");
   }
 
-  if (candidate.adapterMode !== "fixture_only") {
-    errors.push("adapterMode must stay fixture_only");
+  if (!hasAllowedAdapterMode(candidate.adapterMode)) {
+    errors.push("adapterMode must be a supported adapter mode");
   }
 
   if (!hasAllowedInputKind(candidate.inputKind)) {
@@ -271,6 +289,20 @@ export function validateLlmReadinessRunResult(
     (typeof candidate.fixtureId !== "string" || candidate.fixtureId.trim().length === 0)
   ) {
     errors.push("fixtureId must be a non-empty string when present");
+  }
+
+  if (
+    candidate.providerId !== undefined &&
+    (typeof candidate.providerId !== "string" || candidate.providerId.trim().length === 0)
+  ) {
+    errors.push("providerId must be a non-empty string when present");
+  }
+
+  if (
+    candidate.providerRequestId !== undefined &&
+    (typeof candidate.providerRequestId !== "string" || candidate.providerRequestId.trim().length === 0)
+  ) {
+    errors.push("providerRequestId must be a non-empty string when present");
   }
 
   if (candidate.providerCalls !== "disabled") {
@@ -415,6 +447,8 @@ export function createLlmReadinessRunResult(
     policyVersion: buildRequest.auditRecord.policyVersion,
     outputSchemaId: buildRequest.auditRecord.outputSchemaId,
     fixtureId: buildRequest.response.fixtureId,
+    providerId: buildRequest.response.providerId,
+    providerRequestId: buildRequest.response.providerRequestId,
     providerCalls: buildRequest.request.input.policy.providerCalls,
     dataMode: buildRequest.request.input.policy.dataMode,
     allowedToolEffects: [...buildRequest.request.input.policy.allowedToolEffects],

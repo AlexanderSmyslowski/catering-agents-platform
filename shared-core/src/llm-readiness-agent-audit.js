@@ -13,7 +13,7 @@ import {
 
 export const llmReadinessAgentAuditVersion = "llm-readiness-agent-audit-v0";
 
-export const llmReadinessAgentAuditStatuses = ["matched_fixture", "rejected"];
+export const llmReadinessAgentAuditStatuses = ["matched_fixture", "matched_provider", "rejected"];
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -21,6 +21,10 @@ function isRecord(value) {
 
 function hasAllowedAuditStatus(value) {
   return typeof value === "string" && llmReadinessAgentAuditStatuses.includes(value);
+}
+
+function hasAllowedAdapterMode(value) {
+  return value === "fixture_only" || value === "synthetic_live";
 }
 
 function hasAllowedInputKind(value) {
@@ -69,8 +73,8 @@ function validateResponseConsistency(request, response, promptSchemaEntry) {
     errors.push("response.adapterId must be a non-empty string");
   }
 
-  if (response.adapterMode !== "fixture_only") {
-    errors.push("response.adapterMode must stay fixture_only");
+  if (!hasAllowedAdapterMode(response.adapterMode)) {
+    errors.push("response.adapterMode must be a supported adapter mode");
   }
 
   if (
@@ -97,6 +101,12 @@ function validateResponseConsistency(request, response, promptSchemaEntry) {
     if (response.outputCandidate?.kind !== promptSchemaEntry.outputKind) {
       errors.push("response.outputCandidate.kind must match the registered output kind");
     }
+
+    if (response.adapterMode === "synthetic_live") {
+      if (typeof response.providerId !== "string" || response.providerId.trim().length === 0) {
+        errors.push("response.providerId must be a non-empty string for synthetic_live");
+      }
+    }
   } else {
     if (response.outputCandidate !== undefined) {
       errors.push("response.outputCandidate must be undefined when response.ok is false");
@@ -106,8 +116,11 @@ function validateResponseConsistency(request, response, promptSchemaEntry) {
       errors.push("response.errors must not be empty when response.ok is false");
     }
 
-    if (response.fixtureId !== undefined) {
-      errors.push("response.fixtureId must be undefined when response.ok is false");
+    if (
+      response.providerId !== undefined &&
+      (typeof response.providerId !== "string" || response.providerId.trim().length === 0)
+    ) {
+      errors.push("response.providerId must be a non-empty string when present");
     }
   }
 
@@ -153,8 +166,8 @@ export function validateLlmReadinessAgentAuditRecord(candidate) {
     errors.push("adapterId must be a non-empty string");
   }
 
-  if (candidate.adapterMode !== "fixture_only") {
-    errors.push("adapterMode must stay fixture_only");
+  if (!hasAllowedAdapterMode(candidate.adapterMode)) {
+    errors.push("adapterMode must be a supported adapter mode");
   }
 
   if (typeof candidate.inputId !== "string" || candidate.inputId.trim().length === 0) {
@@ -187,6 +200,20 @@ export function validateLlmReadinessAgentAuditRecord(candidate) {
     (typeof candidate.fixtureId !== "string" || candidate.fixtureId.trim().length === 0)
   ) {
     errors.push("fixtureId must be a non-empty string when present");
+  }
+
+  if (
+    candidate.providerId !== undefined &&
+    (typeof candidate.providerId !== "string" || candidate.providerId.trim().length === 0)
+  ) {
+    errors.push("providerId must be a non-empty string when present");
+  }
+
+  if (
+    candidate.providerRequestId !== undefined &&
+    (typeof candidate.providerRequestId !== "string" || candidate.providerRequestId.trim().length === 0)
+  ) {
+    errors.push("providerRequestId must be a non-empty string when present");
   }
 
   if (candidate.providerCalls !== "disabled") {
@@ -235,6 +262,24 @@ export function validateLlmReadinessAgentAuditRecord(candidate) {
     }
   }
 
+  if (candidate.status === "matched_provider") {
+    if (candidate.fixtureId === undefined) {
+      errors.push("fixtureId is required when status is matched_provider");
+    }
+
+    if (candidate.adapterMode !== "synthetic_live") {
+      errors.push("adapterMode must be synthetic_live when status is matched_provider");
+    }
+
+    if (candidate.providerId === undefined) {
+      errors.push("providerId is required when status is matched_provider");
+    }
+
+    if (Array.isArray(candidate.errors) && candidate.errors.length > 0) {
+      errors.push("errors must be empty when status is matched_provider");
+    }
+  }
+
   if (candidate.status === "rejected") {
     if (Array.isArray(candidate.errors) && candidate.errors.length === 0) {
       errors.push("errors must not be empty when status is rejected");
@@ -274,7 +319,11 @@ export function createLlmReadinessAgentAuditRecord(buildRequest) {
     readinessContractVersion: llmReadinessContractVersion,
     promptSchemaRegistryVersion: llmReadinessPromptSchemaRegistryVersion,
     auditId: buildRequest.auditId,
-    status: buildRequest.response.ok ? "matched_fixture" : "rejected",
+    status: buildRequest.response.ok
+      ? buildRequest.response.adapterMode === "synthetic_live"
+        ? "matched_provider"
+        : "matched_fixture"
+      : "rejected",
     adapterId: buildRequest.response.adapterId,
     adapterMode: buildRequest.response.adapterMode,
     inputId: buildRequest.request.input.inputId,
@@ -287,6 +336,8 @@ export function createLlmReadinessAgentAuditRecord(buildRequest) {
     policyVersion: promptSchemaEntry.policyVersion,
     outputSchemaId: promptSchemaEntry.outputSchemaId,
     fixtureId: buildRequest.response.fixtureId,
+    providerId: buildRequest.response.providerId,
+    providerRequestId: buildRequest.response.providerRequestId,
     providerCalls: buildRequest.request.input.policy.providerCalls,
     dataMode: buildRequest.request.input.policy.dataMode,
     allowedToolEffects: [...buildRequest.request.input.policy.allowedToolEffects],
