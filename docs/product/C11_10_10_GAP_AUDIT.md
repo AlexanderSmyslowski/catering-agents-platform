@@ -44,7 +44,7 @@ Es trennt hart zwischen:
 | Deterministische Planung, Rezeptsuche, Einkaufsliste | umgesetzt und breit getestet | `production-service/src/rules/*`, `recipe-discovery/*`, Produktions-/Recipe-/Purchase-Tests | weitere synthetische Catering-Faelle und Qualitaetschecks koennen autonom nachziehen |
 | Conversation/Rueckfragen | teilweise umgesetzt | `ProductionConversationProjection`, Clarification-Fragen/-Antworten, read-only UI | echte `ConversationSession` als Runtime-Objekt bleibt Entscheidungspflicht |
 | LLM-Readiness ohne Provider | als kleiner Vertrag weitgehend bis Level-9-Vorbereitung umgesetzt | 10/10-Coding-Architektur, PA26-PA40 | nicht-leere Prompt-Artefakte und eine entscheidungsreife Provider-/Daten-/Runtime-Vorlage fehlen noch |
-| LLM-Provider / Modellaufrufe | teilweise lokal umgesetzt, uebergeordnet weiter gate-pflichtig | PA41, PA42-PA50, 10/10-Coding-Architektur, Produktziel | lokaler synthetic-only Korridor ist vorhanden; Alexander-Entscheidung zu Operatorrahmen, Kosten, Logging, Secrets, Datenrahmen und spaeterem Runtime-Scope bleibt erforderlich |
+| LLM-Provider / Modellaufrufe | teilweise lokal umgesetzt, uebergeordnet weiter gate-pflichtig | PA41, PA42-PA50, PA51, PA54, PA55, PA56, 10/10-Coding-Architektur, Produktziel | lokaler synthetic-only Korridor ist vorhanden; Alexander-Entscheidung zu Operatorrahmen, Kosten, Logging/Retention/Evidence, Secrets, Datenrahmen und spaeterem Runtime-Scope bleibt erforderlich |
 | Tool-Orchestrierung mit Schreibwirkung | blockiert | 10/10-Coding-Architektur, Produktziel | Entscheidung zu Tool-Allowlist, Auth/Rollen, Audit, Human Approval erforderlich |
 | Auth/OIDC/IAP/Proxy fuer echte Nutzung | dokumentiert, nicht umgesetzt | B8, B9, B10, PA9, PA55 | Alexander-Entscheidung und Umsetzung erforderlich |
 | PII/Retention/Backup/Restore | dokumentiert, blockiert | B13, B36, P12-N2, PA54 | Alexander-Entscheidung erforderlich |
@@ -93,6 +93,7 @@ Minimaler Scope:
 - PA51 als Entscheidungsvorlage fuer lokalen Operatorrahmen, Kosten und Human Approval nutzen,
 - PA54 als naechste Entscheidungsvorlage fuer den LLM-Datenrahmen oberhalb von `synthetic_live` nutzen,
 - PA55 als Schwester-Entscheidungsvorlage fuer Trusted-Operator-/Auth-Kontext oberhalb von `synthetic_live` nutzen,
+- PA56 als Schwester-Entscheidungsvorlage fuer Prompt-/Response-Retention- und Evidence-Rahmen oberhalb von `synthetic_live` nutzen,
 - bis zu einer Alexander-Entscheidung nur den kleinsten nicht-gate-pflichtigen Boundary-, State-, Selector-, Action- oder Smoke-/Rehearsal-Schnitt waehlen,
 - keine echten Daten, keine Runtime-`ConversationSession`, keine Write-Tools, keine neue API, keine Persistenz und keine Schreibwirkung ohne neuen Go.
 
@@ -103,6 +104,7 @@ Warum dieser Schritt:
 - PA51 macht den lokalen Operator-, Kosten- und Approval-Rahmen entscheidungsreif.
 - PA54 zieht direkt danach die naechste Datengrenze fuer spaetere providerfaehige Draft-Inputs scharf, ohne schon B13 oder echte Daten zu oeffnen.
 - PA55 zieht direkt danach die Schwesterfrage fuer Trusted-Operator-/Auth-Kontext scharf, ohne schon B8/B9/PA9 in Runtime- oder Login-Code zu kippen.
+- PA56 zieht direkt danach die Schwesterfrage fuer Prompt-/Response-Retention und Review-Evidence scharf, ohne schon Logging-Pipelines, Backup-Retention oder allgemeine Artefaktwege zu oeffnen.
 - Weiterer sinnvoller autonomer Fortschritt liegt jetzt in Deterministik, UI-Klarheit, Browser-Rehearsal, Code-Eleganz und Gate-Vorlagen statt in verdecktem Gate-Ueberschritt.
 - Der deterministische Kern bleibt fuehrend und die Gate-Linie bleibt ehrlich.
 

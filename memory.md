@@ -23,6 +23,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
   - `backoffice-ui`
 
 ## Projektkontext der aktuellen Arbeit
+- PA56 ist als naechster 10/10-Gate-Rahmen docs-/contract-only umgesetzt: `docs/architecture/PA56_LLM_RETENTION_EVIDENCE_DECISION_FRAME.md` zieht oberhalb von `synthetic_live` die Schwesterfrage zu PA54/PA55 nach, naemlich welcher Prompt-/Response-Retention- und Evidence-Rahmen fuer spaetere providerfaehige Draft-Laeufe ueberhaupt denkbar ist. Empfehlung: strukturierte Default-Nachweise (`AgentAudit`, `RunResult`, Eval-Felder) plus hoechstens eng begrenzte lokale redigierte Drift-/Operator-Review-Ausschnitte; keine Raw Prompt-/Response-Sammlungen in Repo, PR, Ticket oder Chat, keine Gleichsetzung mit allgemeiner Backup-Retention und keine Runtime-Ausweitung.
 - P1 Rollen-/Rechte-Arbeit ist in einer ersten MVP-Stufe real verankert und gezielt verifiziert: zentrale Konvention im `shared-core` plus Guards fuer die mutierenden Intake-, Offer- und Production-Kernpfade, den Demo-Seed-/Audit-Korridor und die Recipe-Review-/Finalize-Pfade; kleiner Access-Control-Korridor ist gruen
 - P3-Betriebscheck ist bewusst konsolidiert und soll nicht weiter in Mikro-Härtungen ausfransen; naechster sinnvoller Block liegt ausserhalb von P3, bevorzugt im Shared-Core-/Access-Control-/Governance-Anker
 - P3 Stufe 1 und 2 sind begonnen und mit reproduzierbarem lokalem Betriebscheck gehärtet; der Check bestaetigt Exportpfad und einen read-only Audit-Beleg fuer den Demo-Startweg in gehärteter Form
