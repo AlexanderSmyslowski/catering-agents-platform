@@ -320,9 +320,10 @@ Browser-Rehearsal-Modi:
 Synthetische Live-Probe-Kommandos:
 
 - `npm run llm:synthetic-live:preflight` ist der lokale Operator-/Env-Preflight fuer den `synthetic_live`-Korridor und prueft Feature-Flag, benoetigte Env-Werte, Prompt-Artefakte und vorhandene Clarification-Fixtures, bevor ein echter Probe-Lauf versucht wird.
+- `npm run llm:synthetic-live:check` fuehrt zuerst den lokalen Preflight und danach den strikten Probe-Lauf aus; der Befehl ist der kompakte lokale Evidence-Korridor fuer den bereits vorhandenen `synthetic_live`-Pfad.
 - `npm run llm:synthetic-live:probe` fuehrt den kleinen `synthetic_live`-Clarification-Probe-Lauf gegen synthetische Fixtures aus und gibt `response`, `evaluation`, `AgentAudit` und `RunResult` als lokales JSON aus.
 - `npm run llm:synthetic-live:probe:strict` ist derselbe Probe-Lauf mit hartem Exit-Code bei Eval-Drift oder Probe-Fehler und eignet sich fuer kleine lokale Guardrail-/Automation-Schritte.
-- Alle drei Kommandos bleiben auf Feature-Flag, synthetische Fixtures, lokale Env-Werte ausserhalb des Repos und produktfreie Draft-Ausgaben begrenzt; sie sind kein UI-Rehearsal, kein Deployment, keine Produktionsfreigabe und kein Echte-Daten-Korridor.
+- Alle vier Kommandos bleiben auf Feature-Flag, synthetische Fixtures, lokale Env-Werte ausserhalb des Repos und produktfreie Draft-Ausgaben begrenzt; sie sind kein UI-Rehearsal, kein Deployment, keine Produktionsfreigabe und kein Echte-Daten-Korridor.
 
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 
