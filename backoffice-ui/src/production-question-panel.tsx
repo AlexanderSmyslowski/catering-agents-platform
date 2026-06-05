@@ -5,6 +5,7 @@ import { getSpecLabel } from "./production-language.js";
 import { ProductionSpecDetailsCard } from "./production-spec-details.js";
 import { ProductionQuestionThread } from "./production-question-thread.js";
 import { buildProductionSpecSwitchItems } from "./production-spec-switch-list-state.js";
+import { buildProductionQuestionPanelActionState } from "./production-question-panel-action-state.js";
 import { buildProductionQuestionPanelVisibilityState } from "./production-question-panel-visibility-state.js";
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
@@ -114,6 +115,12 @@ export function ProductionQuestionPanel({
     resetSpecEdit
   } = editorActions;
   const specSwitchItems = buildProductionSpecSwitchItems(filteredSpecs);
+  const actionState = buildProductionQuestionPanelActionState({
+    focusedProductionSpec,
+    editingSpecId,
+    submitting,
+    hasFocusedSpecEditChanges
+  });
   const visibilityState = buildProductionQuestionPanelVisibilityState({
     documentPhase,
     productionWorkspaceCleared,
@@ -144,7 +151,7 @@ export function ProductionQuestionPanel({
               currentSpecPurchaseLists={currentSpecPurchaseLists}
               productionConversationProjection={productionConversationProjection}
               answerEditor={
-                editingSpecId === String(focusedProductionSpec.specId) ? (
+                actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
                     focusedProductionSpec={focusedProductionSpec}
                     editingEventType={editingEventType}
@@ -185,24 +192,22 @@ export function ProductionQuestionPanel({
           <div className="action-row">
             <button
               className="secondary-button"
-              disabled={submitting || editingSpecId === String(focusedProductionSpec.specId)}
+              disabled={actionState.editAnswersDisabled}
               onClick={() => beginSpecEdit(focusedProductionSpec)}
             >
               Antworten bearbeiten
             </button>
-            {editingSpecId === String(focusedProductionSpec.specId) ? (
+            {actionState.showSaveAnswersButton ? (
               <button
                 className="secondary-button"
-                disabled={submitting || !hasFocusedSpecEditChanges}
+                disabled={actionState.saveAnswersDisabled}
                 onClick={() => void saveSpecEdit()}
               >
                 Antworten speichern
               </button>
             ) : null}
             <button disabled={submitting} onClick={() => void createPlan(focusedProductionSpec)}>
-              {editingSpecId === String(focusedProductionSpec.specId)
-                ? "Speichern und Berechnung starten"
-                : "Berechnung starten"}
+              {actionState.primaryActionLabel}
             </button>
           </div>
         </>
