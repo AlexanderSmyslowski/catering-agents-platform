@@ -317,6 +317,12 @@ Browser-Rehearsal-Modi:
 - `npm run browser:rehearsal:full-fresh` startet fuer jeden der vier Browser-Rehearsal-Modi eine kontrolliert frische temporaere synthetische Datenwurzel und fuehrt normaler Kernpfad, Answer-Submit-Pfad, Soft-Archiv-Pfad und Failed-Upload-Pfad hintereinander aus.
 - Browser-Rehearsals duerfen nur synthetische lokale Fresh-Datenwurzeln veraendern; sie sind kein Echte-Daten-Beleg, kein Deployment, keine Compliance-Aussage und keine Produktionsfreigabe.
 
+Synthetische Live-Probe-Kommandos:
+
+- `npm run llm:synthetic-live:probe` fuehrt den kleinen `synthetic_live`-Clarification-Probe-Lauf gegen synthetische Fixtures aus und gibt `response`, `evaluation`, `AgentAudit` und `RunResult` als lokales JSON aus.
+- `npm run llm:synthetic-live:probe:strict` ist derselbe Probe-Lauf mit hartem Exit-Code bei Eval-Drift oder Probe-Fehler und eignet sich fuer kleine lokale Guardrail-/Automation-Schritte.
+- Beide Probe-Kommandos bleiben auf Feature-Flag, synthetische Fixtures, lokale Env-Werte ausserhalb des Repos und produktfreie Draft-Ausgaben begrenzt; sie sind kein UI-Rehearsal, kein Deployment, keine Produktionsfreigabe und kein Echte-Daten-Korridor.
+
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage.
 
 Option-A-Zeitfenster-Grenze im lokalen Smoke-Korridor: lokale Gruensignale aus `npm run local:status` und `npm run local:check` belegen keine strukturierte Zeitfensterloesung; die `Zeitfenster-Rehearsal-Notiz` bleibt eine manuelle Copy-/Anleitungsnotiz; es gibt keine automatische `event.schedule`-Uebernahme und kein Schedule-/Zeitfenster-Datenmodell.
