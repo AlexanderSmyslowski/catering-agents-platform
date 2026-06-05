@@ -80,6 +80,7 @@ export async function runLlmReadinessSyntheticLiveProbe(request) {
       fixtureId: fixture.fixtureId,
       providerRunId,
       evaluation,
+      evalMatched: evaluation?.valid,
       input,
       response
     };
@@ -99,6 +100,7 @@ export async function runLlmReadinessSyntheticLiveProbe(request) {
       fixtureId: fixture.fixtureId,
       providerRunId,
       evaluation,
+      evalMatched: evaluation?.valid,
       input,
       response,
       auditRecord: auditBuild.auditRecord
@@ -111,6 +113,7 @@ export async function runLlmReadinessSyntheticLiveProbe(request) {
     fixtureId: fixture.fixtureId,
     providerRunId,
     evaluation,
+    evalMatched: evaluation?.valid,
     input,
     response,
     auditRecord: auditBuild.auditRecord,
