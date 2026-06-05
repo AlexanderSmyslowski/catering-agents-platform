@@ -40,6 +40,7 @@ export interface LlmReadinessSyntheticLiveProbeResult {
   fixtureId?: string;
   providerRunId?: string;
   evaluation?: LlmReadinessEvalOutputMatchDetails;
+  evalMatched?: boolean;
   input?: LlmReadinessModelInput;
   response?: LlmReadinessSyntheticLiveSliceResponse;
   auditRecord?: LlmReadinessAgentAuditRecord;
@@ -123,6 +124,7 @@ export async function runLlmReadinessSyntheticLiveProbe(
       fixtureId: fixture.fixtureId,
       providerRunId,
       evaluation,
+      evalMatched: evaluation?.valid,
       input,
       response
     };
@@ -142,6 +144,7 @@ export async function runLlmReadinessSyntheticLiveProbe(
       fixtureId: fixture.fixtureId,
       providerRunId,
       evaluation,
+      evalMatched: evaluation?.valid,
       input,
       response,
       auditRecord: auditBuild.auditRecord
@@ -154,6 +157,7 @@ export async function runLlmReadinessSyntheticLiveProbe(
     fixtureId: fixture.fixtureId,
     providerRunId,
     evaluation,
+    evalMatched: evaluation?.valid,
     input,
     response,
     auditRecord: auditBuild.auditRecord,
