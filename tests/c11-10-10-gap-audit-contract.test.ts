@@ -61,10 +61,11 @@ describe("C11 10/10 gap audit contract", () => {
     }
   });
 
-  it("keeps PA41 complete and redirects autonomous progress back to non-gated quality slices", () => {
-    expect(gapAudit).toContain("PA41 hat die `Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice` bereits geliefert");
+  it("keeps PA41 as the historical first gate and PA51 as the next management decision frame", () => {
+    expect(gapAudit).toContain("PA42 bis PA50 als abgeschlossenen lokalen synthetic-live Evidence-Korridor behandeln");
+    expect(gapAudit).toContain("PA41 als historische Entscheidungsvorlage fuer den ersten echten synthetic-only Slice nutzen");
+    expect(gapAudit).toContain("PA51 als naechste Entscheidungsvorlage fuer lokalen Operatorrahmen, Kosten und Human Approval nutzen");
     expect(gapAudit).toContain("providerlosen PA26-PA40-Korridor als abgeschlossen behandeln");
-    expect(gapAudit).toContain("PA41 als vorhandene Entscheidungsvorlage");
     expect(gapAudit).toContain("Boundary-, State-, Selector-, Action- oder Smoke-/Rehearsal-Schnitt");
 
     for (const forbidden of [

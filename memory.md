@@ -1673,3 +1673,4 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.350 - 2026-06-05
 
 - PA41 LLM Provider-/Daten-/Runtime-Entscheidungsrahmen ist additiv in `docs/architecture/PA41_LLM_PROVIDER_DATA_RUNTIME_DECISION_FRAME.md` verankert: Die providerlose PA26-PA40-Kette wird als abgeschlossen festgehalten, und der naechste echte Gate-Schritt fuer Alexander wird als Entscheidungsvorlage mit Optionen A/B/C, Empfehlung fuer einen minimalen synthetic-only Provider-Slice und sicherem Default ohne Provider formuliert.
+- PA51 LLM Operator-/Kosten-/Approval-Entscheidungsrahmen ist additiv in `docs/architecture/PA51_LLM_OPERATOR_COST_APPROVAL_DECISION_FRAME.md` verankert: PA42-PA50 gelten als vorhandener lokaler synthetic-live Korridor, und die naechste Entscheidung fuer Alexander wird als lokaler Operator-, Kosten-, Modell- und Human-Approval-Rahmen formuliert, ohne Deployment-, Echte-Daten- oder Write-Gates zu oeffnen.
