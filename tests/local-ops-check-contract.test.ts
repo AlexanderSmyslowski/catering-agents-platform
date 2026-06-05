@@ -105,6 +105,7 @@ describe("local ops check contract", () => {
     expect(testingDoc).toContain("`npm run browser:rehearsal:answer-submit` ist ein mutierender Fresh-Run");
     expect(testingDoc).toContain("`npm run browser:rehearsal:archive-intake` ist ein mutierender Fresh-Run");
     expect(testingDoc).toContain("Synthetische Live-Probe-Kommandos");
+    expect(testingDoc).toContain("`npm run llm:synthetic-live:preflight`");
     expect(testingDoc).toContain("`npm run llm:synthetic-live:probe`");
     expect(testingDoc).toContain("`npm run llm:synthetic-live:probe:strict`");
     expect(testingDoc).toContain("kein Echte-Daten-Korridor");
@@ -124,6 +125,7 @@ describe("local ops check contract", () => {
     }
 
     for (const doc of [readmeDoc, testingDoc]) {
+      expect(doc).toContain("`npm run llm:synthetic-live:preflight`");
       expect(doc).toContain("`npm run llm:synthetic-live:probe`");
       expect(doc).toContain("`npm run llm:synthetic-live:probe:strict`");
       expect(doc).toContain("produktfreie Draft-Ausgaben");
@@ -210,6 +212,9 @@ describe("local ops check contract", () => {
     expect(packageJson.scripts["local:status"]).toBe("bash ./scripts/status-local-stack.sh");
     expect(packageJson.scripts["local:check"]).toBe("bash ./scripts/check-local-ops.sh");
     expect(packageJson.scripts["local:stop"]).toBe("bash ./scripts/stop-local-stack.sh");
+    expect(packageJson.scripts["llm:synthetic-live:preflight"]).toBe(
+      "tsx scripts/check-synthetic-live-llm-readiness.ts"
+    );
     expect(packageJson.scripts["llm:synthetic-live:probe"]).toBe("tsx scripts/run-synthetic-live-llm-readiness.ts");
     expect(packageJson.scripts["llm:synthetic-live:probe:strict"]).toBe(
       "tsx scripts/run-synthetic-live-llm-readiness.ts --fail-on-eval-mismatch"
