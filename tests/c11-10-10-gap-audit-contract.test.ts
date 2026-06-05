@@ -61,7 +61,7 @@ describe("C11 10/10 gap audit contract", () => {
     }
   });
 
-  it("keeps PA41 as the historical first gate and PA51/PA54/PA55/PA56/PA57/PA58 as the next management decision frames", () => {
+  it("keeps PA41 as the historical first gate and PA51/PA54/PA55/PA56/PA57/PA58/PA59 as the next management decision frames", () => {
     expect(gapAudit).toContain("PA42 bis PA50 als abgeschlossenen lokalen synthetic-live Evidence-Korridor behandeln");
     expect(gapAudit).toContain("PA41 als historische Entscheidungsvorlage fuer den ersten echten synthetic-only Slice nutzen");
     expect(gapAudit).toContain("PA51 als Entscheidungsvorlage fuer lokalen Operatorrahmen, Kosten und Human Approval nutzen");
@@ -70,6 +70,7 @@ describe("C11 10/10 gap audit contract", () => {
     expect(gapAudit).toContain("PA56 als Schwester-Entscheidungsvorlage fuer Prompt-/Response-Retention- und Evidence-Rahmen oberhalb von `synthetic_live` nutzen");
     expect(gapAudit).toContain("PA57 als Schwester-Entscheidungsvorlage fuer Deployment-/Zielumgebungsrahmen oberhalb von `synthetic_live` nutzen");
     expect(gapAudit).toContain("PA58 als Schwester-Entscheidungsvorlage fuer Human-Approval-/Operator-Handover-Rahmen oberhalb von `synthetic_live` nutzen");
+    expect(gapAudit).toContain("PA59 als Schwester-Entscheidungsvorlage fuer Tool-/Write-Effect-Rahmen oberhalb von `synthetic_live` nutzen");
     expect(gapAudit).toContain("providerlosen PA26-PA40-Korridor als abgeschlossen behandeln");
     expect(gapAudit).toContain("Boundary-, State-, Selector-, Action- oder Smoke-/Rehearsal-Schnitt");
 
