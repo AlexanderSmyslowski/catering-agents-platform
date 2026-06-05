@@ -1,4 +1,5 @@
 import { createLlmReadinessAgentAuditRecord } from "./llm-readiness-agent-audit.js";
+import { evaluateLlmReadinessEvalOutputCandidateMatch } from "./llm-readiness-eval-harness.js";
 import { llmReadinessEvalFixtures } from "./fixtures/llm-readiness-eval-fixtures.js";
 import { createOpenAiSyntheticLiveTransportFromEnv } from "./llm-readiness-openai-transport.js";
 import { createLlmReadinessRunResult } from "./llm-readiness-run-result.js";
@@ -62,6 +63,9 @@ export async function runLlmReadinessSyntheticLiveProbe(request) {
     providerRunId,
     input
   });
+  const evaluation = response.outputCandidate
+    ? evaluateLlmReadinessEvalOutputCandidateMatch(fixture, response.outputCandidate)
+    : undefined;
 
   const auditBuild = createLlmReadinessAgentAuditRecord({
     auditId: buildAuditId(providerRunId),
@@ -75,6 +79,7 @@ export async function runLlmReadinessSyntheticLiveProbe(request) {
       errors: auditBuild.errors,
       fixtureId: fixture.fixtureId,
       providerRunId,
+      evaluation,
       input,
       response
     };
@@ -93,6 +98,7 @@ export async function runLlmReadinessSyntheticLiveProbe(request) {
       errors: runResultBuild.errors,
       fixtureId: fixture.fixtureId,
       providerRunId,
+      evaluation,
       input,
       response,
       auditRecord: auditBuild.auditRecord
@@ -104,6 +110,7 @@ export async function runLlmReadinessSyntheticLiveProbe(request) {
     errors: [],
     fixtureId: fixture.fixtureId,
     providerRunId,
+    evaluation,
     input,
     response,
     auditRecord: auditBuild.auditRecord,

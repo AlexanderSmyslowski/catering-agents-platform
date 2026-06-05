@@ -30,6 +30,7 @@ async function main(): Promise<void> {
     errors: result.errors,
     fixtureId: result.fixtureId,
     providerRunId: result.providerRunId,
+    evaluation: result.evaluation,
     response: result.response,
     auditRecord: result.auditRecord,
     runResult: result.runResult

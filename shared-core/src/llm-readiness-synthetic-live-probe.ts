@@ -3,6 +3,10 @@ import {
   type LlmReadinessAgentAuditRecord
 } from "./llm-readiness-agent-audit.js";
 import {
+  evaluateLlmReadinessEvalOutputCandidateMatch,
+  type LlmReadinessEvalOutputMatchDetails
+} from "./llm-readiness-eval-harness.js";
+import {
   llmReadinessEvalFixtures,
   type LlmReadinessEvalFixture
 } from "./fixtures/llm-readiness-eval-fixtures.js";
@@ -35,6 +39,7 @@ export interface LlmReadinessSyntheticLiveProbeResult {
   errors: string[];
   fixtureId?: string;
   providerRunId?: string;
+  evaluation?: LlmReadinessEvalOutputMatchDetails;
   input?: LlmReadinessModelInput;
   response?: LlmReadinessSyntheticLiveSliceResponse;
   auditRecord?: LlmReadinessAgentAuditRecord;
@@ -101,6 +106,9 @@ export async function runLlmReadinessSyntheticLiveProbe(
     providerRunId,
     input
   });
+  const evaluation = response.outputCandidate
+    ? evaluateLlmReadinessEvalOutputCandidateMatch(fixture, response.outputCandidate)
+    : undefined;
 
   const auditBuild = createLlmReadinessAgentAuditRecord({
     auditId: buildAuditId(providerRunId),
@@ -114,6 +122,7 @@ export async function runLlmReadinessSyntheticLiveProbe(
       errors: auditBuild.errors,
       fixtureId: fixture.fixtureId,
       providerRunId,
+      evaluation,
       input,
       response
     };
@@ -132,6 +141,7 @@ export async function runLlmReadinessSyntheticLiveProbe(
       errors: runResultBuild.errors,
       fixtureId: fixture.fixtureId,
       providerRunId,
+      evaluation,
       input,
       response,
       auditRecord: auditBuild.auditRecord
@@ -143,6 +153,7 @@ export async function runLlmReadinessSyntheticLiveProbe(
     errors: [],
     fixtureId: fixture.fixtureId,
     providerRunId,
+    evaluation,
     input,
     response,
     auditRecord: auditBuild.auditRecord,
