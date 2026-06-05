@@ -1,5 +1,8 @@
 import type { CSSProperties } from "react";
-import { getSpecLabel } from "./production-language.js";
+import {
+  buildProductionObjectsPanelState,
+  formatProductionObjectsEta
+} from "./production-objects-panel-state.js";
 import { ProductionPlanDownloadCard } from "./production-plan-download-card.js";
 import { ProductionPlanList } from "./production-plan-list.js";
 import { ProductionPlanSecondaryDetails } from "./production-plan-secondary-details.js";
@@ -33,23 +36,18 @@ type ProductionObjectsPanelProps = {
   submitting: boolean;
 };
 
-function formatEta(seconds: number): string {
-  if (seconds <= 1) {
-    return "weniger als 1 Sekunde";
-  }
-  return `${seconds} Sekunden`;
-}
-
 export function ProductionObjectsPanel({
   progressState,
   objectsState,
   objectsActions,
   submitting
 }: ProductionObjectsPanelProps) {
-  const { planPhase, planningSpecLabel, planProgress, planEtaSeconds } = progressState;
+  const panelState = buildProductionObjectsPanelState({
+    progressState,
+    objectsState
+  });
   const {
     focusedProductionSpec,
-    productionWorkspaceCleared,
     currentSpecPlans,
     selectedPlan,
     selectedPlanSpec,
@@ -66,35 +64,35 @@ export function ProductionObjectsPanel({
         <h3>Plan und Ergebnis leise prüfen</h3>
       </header>
       <div className="activity-slot">
-        {planPhase === "planning" && planningSpecLabel ? (
+        {panelState.showPlanningProgress ? (
           <div className="progress-panel">
             <div
               className="progress-ring"
               style={
                 {
-                  "--progress-angle": `${Math.max(0, Math.min(planProgress, 100)) * 3.6}deg`
+                  "--progress-angle": `${panelState.clampedPlanProgress * 3.6}deg`
                 } as CSSProperties
               }
             >
-              <span>{planProgress}%</span>
+              <span>{panelState.clampedPlanProgress}%</span>
             </div>
             <div className="progress-panel__content">
               <p className="processing-note">
-                Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen für {planningSpecLabel} ...
+                Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen für {panelState.planningSpecLabel} ...
               </p>
               <div className="progress-bar">
                 <div
                   className="progress-bar__fill"
-                  style={{ width: `${Math.max(0, Math.min(planProgress, 100))}%` }}
+                  style={{ width: `${panelState.clampedPlanProgress}%` }}
                 />
               </div>
               <p className="helper-text">
-                Geschätzte Restzeit: {formatEta(planEtaSeconds ?? 1)}
+                Geschätzte Restzeit: {formatProductionObjectsEta(panelState.planEtaSeconds ?? 1)}
               </p>
             </div>
           </div>
         ) : null}
-        {planPhase === "done" && planningSpecLabel ? (
+        {panelState.showDoneProgress ? (
           <div className="progress-panel">
             <div
               className="progress-ring progress-ring--done"
@@ -104,7 +102,7 @@ export function ProductionObjectsPanel({
             </div>
             <div className="progress-panel__content">
               <p className="processing-note processing-note--success">
-                Produktionsplan wurde für {planningSpecLabel} erzeugt.
+                Produktionsplan wurde für {panelState.planningSpecLabel} erzeugt.
               </p>
               <div className="progress-bar">
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
@@ -118,20 +116,10 @@ export function ProductionObjectsPanel({
       </div>
       <header>
         <p className="eyebrow">Aktueller Vorgang</p>
-        <h4 className="subsection-title">
-          {focusedProductionSpec
-            ? getSpecLabel(focusedProductionSpec)
-            : productionWorkspaceCleared
-              ? "Kein aktiver Vorgang"
-              : "Neuester Produktionslauf"}
-        </h4>
+        <h4 className="subsection-title">{panelState.currentRunTitle}</h4>
       </header>
-      <p className="helper-text">
-        {productionWorkspaceCleared
-          ? "Die Ergebnisfelder wurden geleert. Ein neuer Upload oder eine neue Erfassung füllt diesen Bereich wieder."
-          : "Hier erscheinen die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere geladene Läufe bleiben eingeklappt getrennt und sind kein aktueller Vorgang."}
-      </p>
-      {!productionWorkspaceCleared ? (
+      <p className="helper-text">{panelState.currentRunHelperText}</p>
+      {panelState.showCurrentPlans ? (
         <ProductionPlanList
           plans={currentSpecPlans}
           specById={specById}
@@ -139,7 +127,7 @@ export function ProductionObjectsPanel({
           setSelectedPlanId={setSelectedPlanId}
         />
       ) : null}
-      {selectedPlan ? (
+      {panelState.showSelectedPlanDetails ? (
         <>
           <ProductionPlanDownloadCard selectedPlan={selectedPlan} selectedPlanSpec={selectedPlanSpec} />
 
@@ -150,7 +138,7 @@ export function ProductionObjectsPanel({
             specById={specById}
             submitting={submitting}
             setSelectedPlanId={setSelectedPlanId}
-            showArchivedPlans={!productionWorkspaceCleared}
+            showArchivedPlans={panelState.showArchivedPlans}
           />
         </>
       ) : null}
