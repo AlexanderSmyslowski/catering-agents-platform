@@ -21,6 +21,7 @@
     "local:status": "bash ./scripts/status-local-stack.sh",
     "local:check": "bash ./scripts/check-local-ops.sh",
     "llm:synthetic-live:preflight": "tsx scripts/check-synthetic-live-llm-readiness.ts",
+    "llm:synthetic-live:check": "npm run llm:synthetic-live:preflight && npm run llm:synthetic-live:probe:strict",
     "llm:synthetic-live:probe": "tsx scripts/run-synthetic-live-llm-readiness.ts",
     "llm:synthetic-live:probe:strict": "tsx scripts/run-synthetic-live-llm-readiness.ts --fail-on-eval-mismatch",
     "browser:rehearsal": "bash ./scripts/check-browser-rehearsal.sh",
