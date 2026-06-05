@@ -44,7 +44,7 @@ Es trennt hart zwischen:
 | Deterministische Planung, Rezeptsuche, Einkaufsliste | umgesetzt und breit getestet | `production-service/src/rules/*`, `recipe-discovery/*`, Produktions-/Recipe-/Purchase-Tests | weitere synthetische Catering-Faelle und Qualitaetschecks koennen autonom nachziehen |
 | Conversation/Rueckfragen | teilweise umgesetzt | `ProductionConversationProjection`, Clarification-Fragen/-Antworten, read-only UI | echte `ConversationSession` als Runtime-Objekt bleibt Entscheidungspflicht |
 | LLM-Readiness ohne Provider | als kleiner Vertrag weitgehend bis Level-9-Vorbereitung umgesetzt | 10/10-Coding-Architektur, PA26-PA40 | nicht-leere Prompt-Artefakte und eine entscheidungsreife Provider-/Daten-/Runtime-Vorlage fehlen noch |
-| LLM-Provider / Modellaufrufe | blockiert, Entscheidungsvorlage vorbereitet | PA41, 10/10-Coding-Architektur, Produktziel | Alexander-Entscheidung zu Provider, Kosten, Logging, Secrets, Datenrahmen und Runtime-Scope erforderlich |
+| LLM-Provider / Modellaufrufe | teilweise lokal umgesetzt, uebergeordnet weiter gate-pflichtig | PA41, PA42-PA50, 10/10-Coding-Architektur, Produktziel | lokaler synthetic-only Korridor ist vorhanden; Alexander-Entscheidung zu Operatorrahmen, Kosten, Logging, Secrets, Datenrahmen und spaeterem Runtime-Scope bleibt erforderlich |
 | Tool-Orchestrierung mit Schreibwirkung | blockiert | 10/10-Coding-Architektur, Produktziel | Entscheidung zu Tool-Allowlist, Auth/Rollen, Audit, Human Approval erforderlich |
 | Auth/OIDC/IAP/Proxy fuer echte Nutzung | dokumentiert, nicht umgesetzt | B8, B9, B10, PA9 | Alexander-Entscheidung und Umsetzung erforderlich |
 | PII/Retention/Backup/Restore | dokumentiert, blockiert | B13, B36, P12-N2 | Alexander-Entscheidung erforderlich |
@@ -79,23 +79,30 @@ Diese Punkte duerfen nicht autonom in Runtime-Code kippen.
 
 PA41 hat die `Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice` bereits geliefert.
 
-Damit ist der naechste echte LLM-Fortschritt bewusst gate-pflichtig. Der naechste autonome Fortschritt liegt deshalb nicht mehr in weiterem providernahem Runtime-Code, sondern in kleinen, reviewbaren Qualitaetsschnitten im bestehenden Produktionskern und in der ruhigen Arbeitsoberflaeche.
+Damit ist der naechste echte LLM-Fortschritt weiter gate-pflichtig, auch wenn
+der kleinste lokale `synthetic_live`-Korridor inzwischen gebaut wurde. Der
+naechste autonome Fortschritt liegt deshalb in klaren Entscheidungsvorlagen und
+kleinen, reviewbaren Qualitaetsschnitten statt in weiterer stiller
+Runtime-Ausweitung.
 
 Minimaler Scope:
 
 - den providerlosen PA26-PA40-Korridor als abgeschlossen behandeln,
-- PA41 als vorhandene Entscheidungsvorlage fuer Provider-, Daten-, Logging-, Secret-, Kosten- und Runtime-Scope nutzen,
+- PA42 bis PA50 als abgeschlossenen lokalen synthetic-live Evidence-Korridor behandeln,
+- PA41 als historische Entscheidungsvorlage fuer den ersten echten synthetic-only Slice nutzen,
+- PA51 als naechste Entscheidungsvorlage fuer lokalen Operatorrahmen, Kosten und Human Approval nutzen,
 - bis zu einer Alexander-Entscheidung nur den kleinsten nicht-gate-pflichtigen Boundary-, State-, Selector-, Action- oder Smoke-/Rehearsal-Schnitt waehlen,
 - keine echten Daten, keine Runtime-`ConversationSession`, keine Write-Tools, keine neue API, keine Persistenz und keine Schreibwirkung ohne neuen Go.
 
 Warum dieser Schritt:
 
 - Der autonome providerlose Vorbereitungskorridor ist mit PA40 fachlich vollstaendig genug.
-- PA41 macht den ersten echten providerbasierten synthetic-only Slice bereits entscheidungsreif.
-- Weiterer sinnvoller autonomer Fortschritt liegt jetzt in Deterministik, UI-Klarheit, Browser-Rehearsal und Code-Eleganz statt in verdecktem Gate-Ueberschritt.
+- PA42 bis PA50 haben den kleinsten lokalen providerbasierten synthetic-only Slice mitsamt Audit, Preflight und strict evidence corridor bereits umgesetzt.
+- PA51 macht den naechsten echten Management-Schritt fuer Operatorrahmen, Kosten und Human Approval entscheidungsreif.
+- Weiterer sinnvoller autonomer Fortschritt liegt jetzt in Deterministik, UI-Klarheit, Browser-Rehearsal, Code-Eleganz und Gate-Vorlagen statt in verdecktem Gate-Ueberschritt.
 - Der deterministische Kern bleibt fuehrend und die Gate-Linie bleibt ehrlich.
 
-PA26 setzt den ersten Teil dieses Korridors um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. PA28 verbindet diese Bausteine ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, Secrets, echte Daten, API, Persistenz oder Schreibwirkung. PA29 macht die Input-Seite des Vertrags validierbar und lehnt Provider-, Echtdaten-, Write-Tool- und Rohpayload-Kandidaten ab. PA30 validiert komplette synthetische Eval-Fixtures zentral gegen Input, Output, Draft-Registry, SourceRefs und Forbidden-Payload-Grenzen. PA31 begrenzt SourceRefs runtime-seitig auf bekannte sichere Arbeitsbelegtypen. PA32 begrenzt strukturierte Draft-Outputs auf flache Scalar-Maps ohne verschachtelte Payloads oder verbotene Schluessel. PA33 bindet auch erwartete Eval-Outputs an die Required-SourceRefs des Draft-Kontrakts. PA34 verhindert SourceRef-ID-Drift zwischen Input und erwartetem Output. PA35 stellt sicher, dass jeder registrierte Draft-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat. PA36 vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen. PA37 registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt ohne Prompttext oder Provider-Ausfuehrung. PA38 fuegt einen fixture-only ProviderAdapter hinzu, der nur gueltige synthetische Inputs auf vorhandene Fixture-Erwartungsoutputs mappt. PA39 verdichtet diese Kette in einen providerlosen AgentAudit-Anker fuer Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus. PA40 fasst Request, Adapter-Response und AgentAudit in ein synthetic-only Run-Result-Artefakt zusammen. PA41 macht danach den naechsten echten Gate-Schritt fuer Alexander entscheidungsreif: minimaler providerbasierter synthetic-only Slice oder bewusst weiter providerlos bleiben.
+PA26 setzt den ersten Teil dieses Korridors um: einen kleinen `shared-core`-Vertrag fuer Model-Input-/Output-Drafts, Tool-Effektklassen, Human-Approval-Pflicht und harte No-go-Grenzen ohne Provider oder Runtime-Schreibwirkung. PA27 ergaenzt synthetische Eval-Fixtures fuer diese Grenze. PA28 verbindet diese Bausteine ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, Secrets, echte Daten, API, Persistenz oder Schreibwirkung. PA29 macht die Input-Seite des Vertrags validierbar und lehnt Provider-, Echtdaten-, Write-Tool- und Rohpayload-Kandidaten ab. PA30 validiert komplette synthetische Eval-Fixtures zentral gegen Input, Output, Draft-Registry, SourceRefs und Forbidden-Payload-Grenzen. PA31 begrenzt SourceRefs runtime-seitig auf bekannte sichere Arbeitsbelegtypen. PA32 begrenzt strukturierte Draft-Outputs auf flache Scalar-Maps ohne verschachtelte Payloads oder verbotene Schluessel. PA33 bindet auch erwartete Eval-Outputs an die Required-SourceRefs des Draft-Kontrakts. PA34 verhindert SourceRef-ID-Drift zwischen Input und erwartetem Output. PA35 stellt sicher, dass jeder registrierte Draft-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat. PA36 vergleicht synthetische Output-Kandidaten providerlos gegen gueltige Fixture-Erwartungen. PA37 registriert versionierte Prompt-, Policy- und Output-Schema-Artefakte pro Draft-Kontrakt ohne Prompttext oder Provider-Ausfuehrung. PA38 fuegt einen fixture-only ProviderAdapter hinzu, der nur gueltige synthetische Inputs auf vorhandene Fixture-Erwartungsoutputs mappt. PA39 verdichtet diese Kette in einen providerlosen AgentAudit-Anker fuer Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus. PA40 fasst Request, Adapter-Response und AgentAudit in ein synthetic-only Run-Result-Artefakt zusammen. PA41 macht den ersten echten Gate-Schritt fuer Alexander entscheidungsreif. PA42 bis PA50 setzen danach den kleinsten lokalen synthetic-live Korridor mit Prompt-Artefakten, OpenAI-Transport, Audit/Run-Result, Probe, Eval-Vergleich, Preflight und strict evidence corridor um. PA51 zieht anschliessend die naechste Management-Kante nach: Wer darf diesen Korridor unter welchem Kosten-, Secret- und Human-Approval-Rahmen ueberhaupt nutzen?
 
 ## 7. Sicherer Default
 
