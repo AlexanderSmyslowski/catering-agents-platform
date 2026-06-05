@@ -44,7 +44,7 @@ Es trennt hart zwischen:
 | Deterministische Planung, Rezeptsuche, Einkaufsliste | umgesetzt und breit getestet | `production-service/src/rules/*`, `recipe-discovery/*`, Produktions-/Recipe-/Purchase-Tests | weitere synthetische Catering-Faelle und Qualitaetschecks koennen autonom nachziehen |
 | Conversation/Rueckfragen | teilweise umgesetzt | `ProductionConversationProjection`, Clarification-Fragen/-Antworten, read-only UI | echte `ConversationSession` als Runtime-Objekt bleibt Entscheidungspflicht |
 | LLM-Readiness ohne Provider | als kleiner Vertrag weitgehend bis Level-9-Vorbereitung umgesetzt | 10/10-Coding-Architektur, PA26-PA40 | nicht-leere Prompt-Artefakte und eine entscheidungsreife Provider-/Daten-/Runtime-Vorlage fehlen noch |
-| LLM-Provider / Modellaufrufe | teilweise lokal umgesetzt, uebergeordnet weiter gate-pflichtig | PA41, PA42-PA50, PA51, PA54, PA55, PA56, PA57, PA58, PA59, 10/10-Coding-Architektur, Produktziel | lokaler synthetic-only Korridor ist vorhanden; Alexander-Entscheidung zu Operatorrahmen, Kosten, Logging/Retention/Evidence, Secrets, Datenrahmen, Deployment-/Zielumgebungsrahmen, Human-Approval-/Handover-Rahmen, Tool-/Write-Effect-Grenzen und spaeterem Runtime-Scope bleibt erforderlich |
+| LLM-Provider / Modellaufrufe | teilweise lokal umgesetzt, uebergeordnet weiter gate-pflichtig | PA41, PA42-PA50, PA51, PA54, PA55, PA56, PA57, PA58, PA59, PA60, 10/10-Coding-Architektur, Produktziel | lokaler synthetic-only Korridor ist vorhanden; Alexander-Entscheidung zu Operatorrahmen, Kosten, Logging/Retention/Evidence, Secrets, Datenrahmen, Deployment-/Zielumgebungsrahmen, Human-Approval-/Handover-Rahmen, Tool-/Write-Effect-Grenzen, Runtime-/ConversationSession-Rahmen und spaeterem Runtime-Scope bleibt erforderlich |
 | Tool-Orchestrierung mit Schreibwirkung | blockiert | 10/10-Coding-Architektur, Produktziel | Entscheidung zu Tool-Allowlist, Auth/Rollen, Audit, Human Approval erforderlich |
 | Auth/OIDC/IAP/Proxy fuer echte Nutzung | dokumentiert, nicht umgesetzt | B8, B9, B10, PA9, PA55 | Alexander-Entscheidung und Umsetzung erforderlich |
 | PII/Retention/Backup/Restore | dokumentiert, blockiert | B13, B36, P12-N2, PA54 | Alexander-Entscheidung erforderlich |
@@ -97,6 +97,7 @@ Minimaler Scope:
 - PA57 als Schwester-Entscheidungsvorlage fuer Deployment-/Zielumgebungsrahmen oberhalb von `synthetic_live` nutzen,
 - PA58 als Schwester-Entscheidungsvorlage fuer Human-Approval-/Operator-Handover-Rahmen oberhalb von `synthetic_live` nutzen,
 - PA59 als Schwester-Entscheidungsvorlage fuer Tool-/Write-Effect-Rahmen oberhalb von `synthetic_live` nutzen,
+- PA60 als Schwester-Entscheidungsvorlage fuer Runtime-/ConversationSession-Rahmen oberhalb von `synthetic_live` nutzen,
 - bis zu einer Alexander-Entscheidung nur den kleinsten nicht-gate-pflichtigen Boundary-, State-, Selector-, Action- oder Smoke-/Rehearsal-Schnitt waehlen,
 - keine echten Daten, keine Runtime-`ConversationSession`, keine Write-Tools, keine neue API, keine Persistenz und keine Schreibwirkung ohne neuen Go.
 
@@ -111,6 +112,7 @@ Warum dieser Schritt:
 - PA57 zieht direkt danach die Schwesterfrage fuer Deployment-/Zielumgebungsrahmen scharf, ohne schon B25-B37 oder PA9 in Infrastruktur- oder Runtime-Arbeit zu kippen.
 - PA58 zieht direkt danach die Schwesterfrage fuer Human Approval und Operator-Handover scharf, ohne schon neue Approval-Runtime, Handover-Engine oder produktwirksame Agent-Orchestrierung zu bauen.
 - PA59 zieht direkt danach die Schwesterfrage fuer Tool-Allowlist und Write-Effect-Grenzen scharf, ohne schon Tool-Orchestrierung, Write-Pfade oder produktwirksame Agent-Runtime zu bauen.
+- PA60 zieht direkt danach die Schwesterfrage fuer Runtime-/ConversationSession-Grenzen scharf, ohne schon Chat-Runtime, Session-Persistenz oder neue produktwirksame Agent-Laufzeit zu bauen.
 - Weiterer sinnvoller autonomer Fortschritt liegt jetzt in Deterministik, UI-Klarheit, Browser-Rehearsal, Code-Eleganz und Gate-Vorlagen statt in verdecktem Gate-Ueberschritt.
 - Der deterministische Kern bleibt fuehrend und die Gate-Linie bleibt ehrlich.
 
