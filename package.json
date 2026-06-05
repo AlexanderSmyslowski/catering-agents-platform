@@ -21,6 +21,7 @@
     "local:status": "bash ./scripts/status-local-stack.sh",
     "local:check": "bash ./scripts/check-local-ops.sh",
     "llm:synthetic-live:probe": "tsx scripts/run-synthetic-live-llm-readiness.ts",
+    "llm:synthetic-live:probe:strict": "tsx scripts/run-synthetic-live-llm-readiness.ts --fail-on-eval-mismatch",
     "browser:rehearsal": "bash ./scripts/check-browser-rehearsal.sh",
     "browser:rehearsal:answer-submit": "CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 bash ./scripts/check-browser-rehearsal.sh",
     "browser:rehearsal:archive-intake": "CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 bash ./scripts/check-browser-rehearsal.sh",
