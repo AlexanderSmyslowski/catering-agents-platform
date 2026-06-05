@@ -1,3 +1,5 @@
+import { buildProductionHandoffPanelState } from "./production-handoff-panel-state.js";
+
 export type ProductionHandoffState = {
   intakeOriginLabel: string;
   auditTrailLabel: string;
@@ -12,7 +14,7 @@ type ProductionHandoffPanelProps = {
 export function ProductionHandoffPanel({
   handoffState
 }: ProductionHandoffPanelProps) {
-  const { intakeOriginLabel, auditTrailLabel, exportLabel, contextLabel } = handoffState;
+  const state = buildProductionHandoffPanelState(handoffState);
 
   return (
     <article className="production-handoff-zone" aria-label="Herkunft und Übergabe">
@@ -24,24 +26,12 @@ export function ProductionHandoffPanel({
         </p>
       </header>
       <div className="handoff-fact-grid">
-        <div className="handoff-fact">
-          <span>Intake-Ursprung</span>
-          <strong>{intakeOriginLabel}</strong>
-        </div>
-        <div className="handoff-fact">
-          <span>Audit-Spur</span>
-          <strong>{auditTrailLabel}</strong>
-        </div>
-        <div className="handoff-fact">
-          <span>Übergabe-/Exportartefakte</span>
-          <strong>{exportLabel}</strong>
-        </div>
-        {contextLabel ? (
-          <div className="handoff-fact">
-            <span>Abschluss-Kontext</span>
-            <strong>Abschluss-Kontext: {contextLabel}</strong>
+        {state.facts.map((fact) => (
+          <div className="handoff-fact" key={fact.key}>
+            <span>{fact.label}</span>
+            <strong>{fact.value}</strong>
           </div>
-        ) : null}
+        ))}
       </div>
       <p className="helper-text">
         Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.
