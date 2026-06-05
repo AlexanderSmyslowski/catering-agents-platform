@@ -1,12 +1,16 @@
 export type ProductionRouteFocusSpec = Record<string, unknown>;
 export {
-  buildWorkbenchSpecFacts,
   canArchiveCurrentIntake,
   canClearProductionWorkspace,
-  countClarificationAnswerStatuses,
-  countPurchaseListItems,
   formatActiveProductionContextLabel,
   formatProductionContextId,
+  selectProductionNextStep
+} from "./production-route-context-state.js";
+export type { ProductionNextStep } from "./production-route-context-state.js";
+export {
+  buildWorkbenchSpecFacts,
+  countClarificationAnswerStatuses,
+  countPurchaseListItems,
   formatProductionHandoffContextLabel,
   formatProductionHandoffExportLabel,
   formatProductionIntakeOriginLabel,
@@ -16,14 +20,9 @@ export {
   formatProductionTimingWindow,
   formatPurchaseZoneStatusLabel,
   formatStructuredProductionAnswerSummary,
-  selectProductionNextStep,
   translateReadiness
 } from "./production-route-status.js";
-export type {
-  ClarificationAnswerStatusCounts,
-  ProductionNextStep,
-  WorkbenchSpecFact
-} from "./production-route-status.js";
+export type { ClarificationAnswerStatusCounts, WorkbenchSpecFact } from "./production-route-status.js";
 
 export function selectProductionIntakeRequestId(spec: Record<string, unknown> | undefined): string | undefined {
   const requestId = spec?.requestId;
