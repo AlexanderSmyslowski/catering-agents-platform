@@ -12,6 +12,9 @@ import {
 
 const docPath = "docs/architecture/PA46_SYNTHETIC_LIVE_PROBE_FAIL_ON_EVAL_MISMATCH.md";
 const doc = existsSync(docPath) ? readFileSync(docPath, "utf8") : "";
+const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+  scripts: Record<string, string>;
+};
 
 describe("PA46 synthetic-live probe fail on eval mismatch", () => {
   it("documents the optional hard-fail CLI mode", () => {
@@ -39,6 +42,15 @@ describe("PA46 synthetic-live probe fail on eval mismatch", () => {
       providerRunId: "run-1",
       failOnEvalMismatch: true
     });
+  });
+
+  it("keeps a strict npm script alias discoverable", () => {
+    expect(packageJson.scripts["llm:synthetic-live:probe"]).toBe(
+      "tsx scripts/run-synthetic-live-llm-readiness.ts"
+    );
+    expect(packageJson.scripts["llm:synthetic-live:probe:strict"]).toBe(
+      "tsx scripts/run-synthetic-live-llm-readiness.ts --fail-on-eval-mismatch"
+    );
   });
 
   it("marks drifted probe results as eval mismatches without changing the base run status", async () => {
