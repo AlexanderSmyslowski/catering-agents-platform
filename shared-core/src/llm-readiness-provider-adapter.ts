@@ -14,7 +14,7 @@ import {
 } from "./llm-readiness-prompt-schema-registry.js";
 import { validateLlmReadinessEvalOutputCandidateMatch } from "./llm-readiness-eval-harness.js";
 
-export type LlmReadinessProviderAdapterMode = "fixture_only";
+export type LlmReadinessProviderAdapterMode = "fixture_only" | "synthetic_live";
 
 export interface LlmReadinessProviderAdapterRequest {
   input: LlmReadinessModelInput;
@@ -28,6 +28,8 @@ export interface LlmReadinessProviderAdapterResponse {
   adapterMode: LlmReadinessProviderAdapterMode;
   fixtureId?: string;
   promptSchemaId?: string;
+  providerId?: string;
+  providerRequestId?: string;
   outputCandidate?: LlmReadinessModelOutputCandidate;
 }
 
