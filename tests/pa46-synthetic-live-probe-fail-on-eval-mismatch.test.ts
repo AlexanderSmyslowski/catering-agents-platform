@@ -28,7 +28,8 @@ describe("PA46 synthetic-live probe fail on eval mismatch", () => {
 
   it("parses the mismatch flag conservatively", () => {
     expect(parseSyntheticLiveProbeCliArgs([])).toEqual({
-      failOnEvalMismatch: false
+      failOnEvalMismatch: false,
+      requireMiniPilotReady: false
     });
 
     expect(
@@ -40,7 +41,8 @@ describe("PA46 synthetic-live probe fail on eval mismatch", () => {
     ).toEqual({
       fixtureId: "test-fixture",
       providerRunId: "run-1",
-      failOnEvalMismatch: true
+      failOnEvalMismatch: true,
+      requireMiniPilotReady: false
     });
   });
 
