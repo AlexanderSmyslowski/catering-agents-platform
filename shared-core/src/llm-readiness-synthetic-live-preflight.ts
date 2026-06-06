@@ -12,6 +12,7 @@ import {
   findLlmReadinessPromptArtifactByInputKind,
   validateLlmReadinessPromptArtifacts
 } from "./llm-readiness-prompt-artifacts.js";
+import { readLlmReadinessMiniPilotPolicy } from "./llm-readiness-mini-pilot-policy.js";
 import { isLlmReadinessSyntheticLiveSliceEnabled } from "./llm-readiness-synthetic-live-slice.js";
 
 export interface LlmReadinessSyntheticLivePreflightRequest {
@@ -32,8 +33,18 @@ export interface LlmReadinessSyntheticLivePreflightResult {
   operatorNamePresent: boolean;
   budgetNotePresent: boolean;
   humanApprovalRequired: boolean;
+  miniPilotReady: boolean;
+  miniPilotEnabled: boolean;
+  namedOperatorScopeConfirmed: boolean;
+  approvedDataScopeConfirmed: boolean;
+  draftOnlyConfirmed: boolean;
+  humanApprovalConfirmed: boolean;
+  writeEffectsAllowed: false;
   rawPromptResponseLoggingAllowed: boolean;
   preferredEvidenceCommand: "npm run llm:synthetic-live:check";
+  preferredMiniPilotCommand: "npm run llm:synthetic-live:check";
+  pilotScope: "internal_named_users_draft_only";
+  miniPilotWarnings: string[];
   providerId: "openai-responses";
   fixtureId?: string;
   promptSchemaId?: string;
@@ -65,6 +76,7 @@ export function runLlmReadinessSyntheticLivePreflight(
   const promptArtifact = findLlmReadinessPromptArtifactByInputKind("clarification_draft_request");
   const operatorName = env.CATERING_SYNTHETIC_LLM_OPERATOR_NAME?.trim();
   const budgetNote = env.CATERING_SYNTHETIC_LLM_BUDGET_NOTE?.trim();
+  const miniPilotPolicy = readLlmReadinessMiniPilotPolicy(env);
   const operatorNamePresent = Boolean(operatorName);
   const budgetNotePresent = Boolean(budgetNote);
 
@@ -114,8 +126,18 @@ export function runLlmReadinessSyntheticLivePreflight(
     operatorNamePresent,
     budgetNotePresent,
     humanApprovalRequired,
+    miniPilotReady: miniPilotPolicy.miniPilotReady,
+    miniPilotEnabled: miniPilotPolicy.miniPilotEnabled,
+    namedOperatorScopeConfirmed: miniPilotPolicy.namedOperatorScopeConfirmed,
+    approvedDataScopeConfirmed: miniPilotPolicy.approvedDataScopeConfirmed,
+    draftOnlyConfirmed: miniPilotPolicy.draftOnlyConfirmed,
+    humanApprovalConfirmed: miniPilotPolicy.humanApprovalConfirmed,
+    writeEffectsAllowed: miniPilotPolicy.writeEffectsAllowed,
     rawPromptResponseLoggingAllowed,
     preferredEvidenceCommand,
+    preferredMiniPilotCommand: miniPilotPolicy.preferredMiniPilotCommand,
+    pilotScope: miniPilotPolicy.pilotScope,
+    miniPilotWarnings: miniPilotPolicy.warnings,
     providerId: "openai-responses",
     fixtureId: clarificationFixture?.fixtureId,
     promptSchemaId: promptSchemaEntry?.promptSchemaId,
