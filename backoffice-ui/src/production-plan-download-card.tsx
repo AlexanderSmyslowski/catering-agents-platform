@@ -81,6 +81,7 @@ export function ProductionPlanDownloadCard({
           <p className="eyebrow">{miniPilotActionState.eyebrow}</p>
           <strong>{miniPilotActionState.title}</strong>
           <p className="helper-text">{miniPilotActionState.statusLabel}</p>
+          <p className="helper-text">{miniPilotActionState.reasonLabel}</p>
           {miniPilotActionState.provenanceLabel ? (
             <p className="helper-text">{miniPilotActionState.provenanceLabel}</p>
           ) : null}

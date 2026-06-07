@@ -15,6 +15,7 @@ describe("buildProductionMiniPilotActionState", () => {
       eyebrow: "Mini-Pilot-Status vor Export",
       title: "Produktions-Export ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
+      reasonLabel: "Grund: Mini-Pilot-Rahmen ist gruen.",
       provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
       helperText: "Draft nur manuell pruefen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
@@ -34,6 +35,7 @@ describe("buildProductionMiniPilotActionState", () => {
       eyebrow: "Mini-Pilot-Status vor Export",
       title: "Export erst nach gruenem Mini-Pilot-Check",
       statusLabel: "Status: blocked",
+      reasonLabel: "Grund: Mini-Pilot-Rahmen ist noch nicht vollstaendig markiert.",
       provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
       helperText: "PA62-Markierungen korrigieren.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
