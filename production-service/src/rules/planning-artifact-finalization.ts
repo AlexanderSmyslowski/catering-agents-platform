@@ -14,6 +14,7 @@ import {
   uniquePlanningMessages,
   withPurchaseCoverageBlockingIssues
 } from "./planning-readiness.js";
+import { buildComponentReadinessGate } from "./planning-component-readiness-gate.js";
 import type { OperationalPlanningArtifacts } from "./planning-operational-artifacts.js";
 
 export type FinalProductionArtifactsInput = {
@@ -47,6 +48,15 @@ export function buildFinalProductionArtifacts({
     timeline: operationalArtifacts.timeline,
     kitchenSheets: operationalArtifacts.kitchenSheets,
     recipeSelections,
+    componentReadiness: buildComponentReadinessGate({
+      eventSpec,
+      productionBatches: operationalArtifacts.productionBatches,
+      kitchenSheets: operationalArtifacts.kitchenSheets,
+      procurementItems: operationalArtifacts.procurementItems,
+      recipeSelections,
+      unresolvedItems,
+      blockingIssues
+    }),
     unresolvedItems,
     ...(warnings.length > 0 || blockingIssues.length > 0
       ? {

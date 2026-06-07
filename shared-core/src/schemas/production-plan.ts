@@ -193,6 +193,35 @@ export const productionPlanSchema = {
         }
       }
     },
+    componentReadiness: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "componentId",
+          "label",
+          "status",
+          "reason",
+          "hasProductionBatch",
+          "hasKitchenSheet",
+          "includedInPurchaseList",
+          "blocksProduction"
+        ],
+        properties: {
+          componentId: { type: "string" },
+          label: { type: "string" },
+          status: {
+            enum: ["operational", "needs_clarification", "blocked"]
+          },
+          reason: { type: "string" },
+          hasProductionBatch: { type: "boolean" },
+          hasKitchenSheet: { type: "boolean" },
+          includedInPurchaseList: { type: "boolean" },
+          blocksProduction: { type: "boolean" }
+        }
+      }
+    },
     unresolvedItems: {
       type: "array",
       items: { type: "string" }
