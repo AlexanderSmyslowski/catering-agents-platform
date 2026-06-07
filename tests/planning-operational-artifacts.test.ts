@@ -26,14 +26,14 @@ describe("planning operational artifacts", () => {
     expect(selected.procurementItems).toBe(draft.procurementItems);
   });
 
-  it("suppresses operational artifacts and keeps only blocking kitchen sheets for fallback plans", () => {
+  it("keeps usable kitchen and purchase artifacts visible while suppressing fallback timing", () => {
     const selected = selectOperationalPlanningArtifacts(draft as any, [
       "Herstellungsentscheidung fehlt."
     ]);
 
-    expect(selected.productionBatches).toEqual([]);
+    expect(selected.productionBatches).toEqual(draft.productionBatches);
     expect(selected.timeline).toEqual([]);
-    expect(selected.procurementItems).toEqual([]);
-    expect(selected.kitchenSheets).toEqual([draft.kitchenSheets[1]]);
+    expect(selected.procurementItems).toEqual(draft.procurementItems);
+    expect(selected.kitchenSheets).toBe(draft.kitchenSheets);
   });
 });

@@ -51,6 +51,22 @@ export function withPurchaseCoverageBlockingIssues(
     ...productionPlan,
     readiness: mergeReadiness(eventSpec.readiness, unresolvedItems, blockingIssues),
     unresolvedItems,
+    componentReadiness: productionPlan.componentReadiness?.map((component) => {
+      const componentIssue = issues.find((issue) =>
+        issue.includes(`(${component.componentId}/`) || issue.includes(`/${component.componentId}/`)
+      );
+      if (!componentIssue) {
+        return component;
+      }
+
+      return {
+        ...component,
+        status: "blocked" as const,
+        reason: componentIssue,
+        includedInPurchaseList: false,
+        blocksProduction: true
+      };
+    }),
     kitchenSheets: productionPlan.kitchenSheets.map((sheet) => ({
       ...sheet,
       blockingNotes: uniquePlanningMessages([...(sheet.blockingNotes ?? []), ...blockingNotes])

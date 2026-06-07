@@ -375,6 +375,19 @@ export interface TimelineEntry {
   at: string;
 }
 
+export type ComponentReadinessStatus = "operational" | "needs_clarification" | "blocked";
+
+export interface ComponentReadiness {
+  componentId: string;
+  label: string;
+  status: ComponentReadinessStatus;
+  reason: string;
+  hasProductionBatch: boolean;
+  hasKitchenSheet: boolean;
+  includedInPurchaseList: boolean;
+  blocksProduction: boolean;
+}
+
 export interface ProductionPlan {
   schemaVersion: string;
   planId: string;
@@ -384,6 +397,7 @@ export interface ProductionPlan {
   timeline: TimelineEntry[];
   kitchenSheets: KitchenSheet[];
   recipeSelections: RecipeSelection[];
+  componentReadiness?: ComponentReadiness[];
   unresolvedItems: string[];
   isFallback?: boolean;
   fallbackReason?: string;
