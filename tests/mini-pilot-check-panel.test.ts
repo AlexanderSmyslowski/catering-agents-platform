@@ -131,6 +131,7 @@ describe("MiniPilotCheckPanel", () => {
 
     const text = document.body.textContent ?? "";
     expect(text).toContain("Lokaler Stand übernommen · zuletzt aktualisiert 07.06.26, 18:20");
+    expect(text).toContain("Vertrauenslage: übernommener lokaler Stand.");
     expect(text).toContain("Übernommener lokaler Stand: bei Unsicherheit den Check lokal noch einmal frisch ausführen.");
 
     await act(async () => {
@@ -164,9 +165,42 @@ describe("MiniPilotCheckPanel", () => {
 
     const text = document.body.textContent ?? "";
     expect(text).toContain("älter als 30 Minuten");
+    expect(text).toContain("Vertrauenslage: älterer übernommener Stand.");
     expect(text).toContain(
       "Übernommener lokaler Stand ist älter als 30 Minuten: den Check besser noch einmal frisch ausführen."
     );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("shows a fresh local trust line for a locally saved result", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(MiniPilotCheckPanel as never, {
+          rawResult:
+            '{"ok":true,"errors":[],"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell pruefen."}}',
+          onRawResultChange: () => undefined,
+          reportState: {
+            statusLabel: "ready",
+            reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
+            nextStepLabel: "Draft nur manuell pruefen.",
+            commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+            errorLabels: []
+          },
+          storageHintLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20"
+        })
+      );
+    });
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Vertrauenslage: frisch lokal gesetzt.");
+    expect(text).not.toContain("Übernommener lokaler Stand");
 
     await act(async () => {
       root.unmount();
