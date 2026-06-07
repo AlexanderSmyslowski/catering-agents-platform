@@ -1,5 +1,6 @@
 import type { ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
+import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import { buildOfferMiniPilotCardState } from "./offer-mini-pilot-card-state.js";
 import { getSpecLabel } from "./production-language.js";
 
@@ -240,6 +241,7 @@ export function OfferConversationalWorkbench({
             ))}
           </ul>
         </div>
+        <MiniPilotCheckPanel />
       </aside>
 
       <div className="offer-progressive-zone">
