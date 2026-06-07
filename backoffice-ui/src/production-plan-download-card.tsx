@@ -82,6 +82,9 @@ export function ProductionPlanDownloadCard({
           <strong>{miniPilotActionState.title}</strong>
           <p className="helper-text">{miniPilotActionState.statusLabel}</p>
           <p className="helper-text">{miniPilotActionState.reasonLabel}</p>
+          {miniPilotActionState.trustLabel ? (
+            <p className="helper-text">{miniPilotActionState.trustLabel}</p>
+          ) : null}
           {miniPilotActionState.provenanceLabel ? (
             <p className="helper-text">{miniPilotActionState.provenanceLabel}</p>
           ) : null}

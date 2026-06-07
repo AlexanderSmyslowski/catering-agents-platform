@@ -16,6 +16,7 @@ describe("buildProductionMiniPilotActionState", () => {
       title: "Produktions-Export ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
       reasonLabel: "Grund: Mini-Pilot-Rahmen ist gruen.",
+      trustLabel: "Vertrauenslage: frisch lokal gesetzt.",
       provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
       cautionLabel: undefined,
       helperText: "Draft nur manuell pruefen.",
@@ -37,6 +38,7 @@ describe("buildProductionMiniPilotActionState", () => {
       title: "Export erst nach gruenem Mini-Pilot-Check",
       statusLabel: "Status: blocked",
       reasonLabel: "Grund: Mini-Pilot-Rahmen ist noch nicht vollstaendig markiert.",
+      trustLabel: "Vertrauenslage: übernommener lokaler Stand.",
       provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
       cautionLabel: "Übernommener lokaler Stand: vor dem Export besser noch einmal frisch prüfen.",
       helperText: "PA62-Markierungen korrigieren.",
@@ -56,6 +58,7 @@ describe("buildProductionMiniPilotActionState", () => {
     ).toMatchObject({
       title: "Vor dem Export Mini-Pilot-Check besser neu ausfuehren",
       statusLabel: "Status: ready, aber neu pruefen",
+      trustLabel: "Vertrauenslage: älterer übernommener Stand.",
       cautionLabel: "Übernommener lokaler Stand ist älter als 30 Minuten: vor dem Export bitte neu prüfen."
     });
   });

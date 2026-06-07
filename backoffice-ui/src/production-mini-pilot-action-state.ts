@@ -5,10 +5,31 @@ export interface ProductionMiniPilotActionState {
   title: string;
   statusLabel: string;
   reasonLabel: string;
+  trustLabel?: string;
   provenanceLabel?: string;
   cautionLabel?: string;
   helperText: string;
   commandLabel: string;
+}
+
+function buildMiniPilotTrustLabel(storageHintLabel?: string): string | undefined {
+  if (!storageHintLabel) {
+    return undefined;
+  }
+
+  if (/^Lokal gespeichert/i.test(storageHintLabel)) {
+    return "Vertrauenslage: frisch lokal gesetzt.";
+  }
+
+  if (!/^Lokaler Stand (übernommen|uebernommen)/i.test(storageHintLabel)) {
+    return undefined;
+  }
+
+  if (/älter als 30 Minuten/i.test(storageHintLabel)) {
+    return "Vertrauenslage: älterer übernommener Stand.";
+  }
+
+  return "Vertrauenslage: übernommener lokaler Stand.";
 }
 
 function buildMiniPilotCarryoverCautionLabel(storageHintLabel?: string): string | undefined {
@@ -45,6 +66,7 @@ export function buildProductionMiniPilotActionState(
         : "Produktions-Export ist jetzt fachlich pruefbar",
       statusLabel: staleCarryover ? "Status: ready, aber neu pruefen" : "Status: ready",
       reasonLabel: `Grund: ${reportState.reasonLabel}`,
+      trustLabel: buildMiniPilotTrustLabel(storageHintLabel),
       provenanceLabel: storageHintLabel,
       cautionLabel: buildMiniPilotCarryoverCautionLabel(storageHintLabel),
       helperText: reportState.nextStepLabel,
@@ -57,6 +79,7 @@ export function buildProductionMiniPilotActionState(
     title: "Export erst nach gruenem Mini-Pilot-Check",
     statusLabel: `Status: ${reportState.statusLabel}`,
     reasonLabel: `Grund: ${reportState.reasonLabel}`,
+    trustLabel: buildMiniPilotTrustLabel(storageHintLabel),
     provenanceLabel: storageHintLabel,
     cautionLabel: buildMiniPilotCarryoverCautionLabel(storageHintLabel),
     helperText: reportState.nextStepLabel,

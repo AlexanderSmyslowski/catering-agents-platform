@@ -16,6 +16,7 @@ describe("buildOfferMiniPilotActionState", () => {
       title: "Uebernahme erst nach gruenem Mini-Pilot-Check",
       statusLabel: "Status: noch kein Ergebnis",
       reasonLabel: "Grund: JSON-Ausgabe fehlt.",
+      trustLabel: "Vertrauenslage: übernommener lokaler Stand.",
       provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
       cautionLabel: "Übernommener lokaler Stand: vor der manuellen Übernahme besser noch einmal frisch prüfen.",
       helperText: "Check zuerst lokal ausfuehren.",
@@ -37,6 +38,7 @@ describe("buildOfferMiniPilotActionState", () => {
       title: "Manuelle Uebernahme ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
       reasonLabel: "Grund: Mini-Pilot-Rahmen ist gruen.",
+      trustLabel: "Vertrauenslage: frisch lokal gesetzt.",
       provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
       cautionLabel: undefined,
       helperText: "Draft nur manuell pruefen.",
@@ -56,6 +58,7 @@ describe("buildOfferMiniPilotActionState", () => {
     ).toMatchObject({
       title: "Vor der manuellen Uebernahme Mini-Pilot-Check besser neu ausfuehren",
       statusLabel: "Status: ready, aber neu pruefen",
+      trustLabel: "Vertrauenslage: älterer übernommener Stand.",
       cautionLabel: "Übernommener lokaler Stand ist älter als 30 Minuten: vor der manuellen Übernahme bitte neu prüfen."
     });
   });
