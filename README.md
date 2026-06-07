@@ -57,6 +57,8 @@ Fuer den freigegebenen engen Mini-Pilot gibt es seit PA63 zusaetzlich `npm run l
 
 Seit PA64 gibt es dazu auch den zusammenhaengenden Operator-Einstieg `npm run llm:synthetic-live:check:mini-pilot`: ein lokaler Evidence-Check, der Preflight und guarded Probe als ein gemeinsames JSON-Ergebnis ausgibt und bei fehlendem Mini-Pilot-Rahmen, Probe-Fehler oder Eval-Drift hart scheitert.
 
+Seit PA65 traegt derselbe Check zusaetzlich ein kleines `summary`-Signal mit `ready` oder `blocked`, dem dominanten Grund und dem naechsten sicheren Schritt. Damit ist der lokale Mini-Pilot-Check besser als Operator-Einstieg lesbar, ohne die Runtime zu verbreitern.
+
 Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage. Der C8-Rahmen bleibt ein interner Demo-/Abnahmeweg, keine Produktionsfreigabe und keine externe Freigabe.
 
 Standardmaessig speichern die Services ihre Laufzeitdaten unter `./data`.
@@ -118,6 +120,7 @@ Fuehrender Produktzielanker fuer weitere Arbeit:
 - [docs/architecture/PA62_SYNTHETIC_LIVE_MINI_PILOT_POLICY.md](docs/architecture/PA62_SYNTHETIC_LIVE_MINI_PILOT_POLICY.md) codiert den beschlossenen Option-2-Mini-Pilot als kleine Preflight-Policy-Schicht: enger Nutzerrahmen, enger Datenrahmen, nur Draft-Outputs, Human Approval bleibt Pflicht und Write-Effects bleiben verboten.
 - [docs/architecture/PA63_SYNTHETIC_LIVE_MINI_PILOT_PROBE_GUARD.md](docs/architecture/PA63_SYNTHETIC_LIVE_MINI_PILOT_PROBE_GUARD.md) bindet den ersten dedizierten Mini-Pilot-Probe-Befehl hart an den vorhandenen PA62-Rahmen, ohne die Runtime zu verbreitern.
 - [docs/architecture/PA64_SYNTHETIC_LIVE_MINI_PILOT_CHECK_ENTRY.md](docs/architecture/PA64_SYNTHETIC_LIVE_MINI_PILOT_CHECK_ENTRY.md) buendelt Preflight und guarded Probe zu einem einzigen lokalen Mini-Pilot-Check-Einstieg, ohne neue Runtime oder Produktwirkung einzufuehren.
+- [docs/architecture/PA65_SYNTHETIC_LIVE_MINI_PILOT_SUMMARY_SIGNAL.md](docs/architecture/PA65_SYNTHETIC_LIVE_MINI_PILOT_SUMMARY_SIGNAL.md) gibt demselben Mini-Pilot-Check ein klares Status-/Grund-/Next-Step-Signal fuer den menschlichen Operator.
 - [docs/architecture/PA53_SYNTHETIC_LIVE_PREFLIGHT_POLICY_HINTS.md](docs/architecture/PA53_SYNTHETIC_LIVE_PREFLIGHT_POLICY_HINTS.md) spiegelt diesen lokalen Bedienrahmen als weiche Policy-Hinweise in den bestehenden Preflight: Operatorname und Budgetnotiz werden sichtbar, ohne neue harte Deployment-, Daten- oder Runtime-Gates einzufuehren.
 - [docs/architecture/PA54_LLM_DATA_PII_DECISION_FRAME.md](docs/architecture/PA54_LLM_DATA_PII_DECISION_FRAME.md) zieht die naechste LLM-Gate-Frage nach PA53 scharf: ob ueber `synthetic_live` hinaus ueberhaupt nur anonymisierte Draft-Inputs denkbar sind oder der Korridor strikt synthetisch bleiben muss.
 - [docs/architecture/PA55_LLM_TRUSTED_OPERATOR_AUTH_DECISION_FRAME.md](docs/architecture/PA55_LLM_TRUSTED_OPERATOR_AUTH_DECISION_FRAME.md) zieht die Schwesterfrage zu PA54 nach: unter welchem Trusted-Operator-/Auth-Kontext ein spaeterer providerfaehiger Draft-Pfad ueberhaupt denkbar waere, ohne B8/B9 schon in Runtime-Code zu verwandeln.
