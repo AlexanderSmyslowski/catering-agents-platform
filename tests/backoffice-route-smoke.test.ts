@@ -544,6 +544,11 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("Quelle: offer_service: offer-draft-buffet");
     expect(offer).toContain("aktive Spezifikation: offer-draft-buffet-spec (teilweise vollständig)");
     expect(offer).toContain("Export: Angebots-HTML für offer-draft-buffet bereit");
+    expect(offer).toContain("Interner Draft-Pilot");
+    expect(offer).toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
+    expect(offer).toContain("npm run llm:synthetic-live:check:mini-pilot");
+    expect(offer).toContain("Nur bei ready weiterarbeiten; blocked bleibt Stop statt stiller Freigabe.");
+    expect(offer).toContain("Draft nur manuell prüfen, fachlich bewerten und bewusst übernehmen.");
     expect(offer).toContain("offer-draft-buffet");
     expect(offer).toContain("Entwurfs-Spec: offer-draft-buffet-spec (teilweise vollständig)");
     expect(offer).toContain("Entwurfs-Quelle: offer_service: offer-draft-buffet");
@@ -567,6 +572,8 @@ describe("backoffice route smoke", () => {
     expect(offer.text).toContain("Nächster Angebotsschritt: Anfrage einfügen oder Demo über Start nutzen, dann Entwurf prüfen.");
     expect(offer.text).toContain("Noch kein Angebotsentwurf vorhanden.");
     expect(offer.text).toContain("Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden.");
+    expect(offer.text).toContain("Interner Draft-Pilot");
+    expect(offer.text).toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
     expect(offer.text).toContain(
       "Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten, keine externe Freigabe, keine Produktions- oder Compliance-Freigabe."
     );
