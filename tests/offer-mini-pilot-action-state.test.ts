@@ -55,6 +55,7 @@ describe("buildOfferMiniPilotActionState", () => {
       }, "Lokaler Stand übernommen · zuletzt aktualisiert 07.06.26, 18:20 · älter als 30 Minuten")
     ).toMatchObject({
       title: "Vor der manuellen Uebernahme Mini-Pilot-Check besser neu ausfuehren",
+      statusLabel: "Status: ready, aber neu pruefen",
       cautionLabel: "Übernommener lokaler Stand ist älter als 30 Minuten: vor der manuellen Übernahme bitte neu prüfen."
     });
   });

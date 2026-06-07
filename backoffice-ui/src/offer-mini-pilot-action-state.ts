@@ -43,7 +43,7 @@ export function buildOfferMiniPilotActionState(
       title: staleCarryover
         ? "Vor der manuellen Uebernahme Mini-Pilot-Check besser neu ausfuehren"
         : "Manuelle Uebernahme ist jetzt fachlich pruefbar",
-      statusLabel: "Status: ready",
+      statusLabel: staleCarryover ? "Status: ready, aber neu pruefen" : "Status: ready",
       reasonLabel: `Grund: ${reportState.reasonLabel}`,
       provenanceLabel: storageHintLabel,
       cautionLabel: buildMiniPilotCarryoverCautionLabel(storageHintLabel),

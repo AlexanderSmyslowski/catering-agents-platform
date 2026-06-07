@@ -43,7 +43,7 @@ export function buildProductionMiniPilotActionState(
       title: staleCarryover
         ? "Vor dem Export Mini-Pilot-Check besser neu ausfuehren"
         : "Produktions-Export ist jetzt fachlich pruefbar",
-      statusLabel: "Status: ready",
+      statusLabel: staleCarryover ? "Status: ready, aber neu pruefen" : "Status: ready",
       reasonLabel: `Grund: ${reportState.reasonLabel}`,
       provenanceLabel: storageHintLabel,
       cautionLabel: buildMiniPilotCarryoverCautionLabel(storageHintLabel),
