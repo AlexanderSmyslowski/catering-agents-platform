@@ -5,6 +5,7 @@ import {
   formatLatestAuditOverviewLabel,
   translateHealthStatus
 } from "./app-shell-state.js";
+import { buildHomeMiniPilotCardState } from "./home-mini-pilot-card-state.js";
 
 type ReviewCounts = {
   approved: number;
@@ -35,6 +36,8 @@ export function HomeRoute({
   latestIntakeRequestSummary,
   filteredAuditEvents
 }: HomeRouteProps) {
+  const miniPilotCard = buildHomeMiniPilotCardState();
+
   return (
     <>
       <section className="metrics-grid">
@@ -152,6 +155,22 @@ export function HomeRoute({
             ))}
             {isInitialHomeLoading ? <li>Änderungen werden geladen.</li> : null}
             {!isInitialHomeLoading && filteredAuditEvents.length === 0 ? <li>Noch keine Änderungen vorhanden.</li> : null}
+          </ul>
+        </article>
+
+        <article className="panel">
+          <header>
+            <p className="eyebrow">{miniPilotCard.eyebrow}</p>
+            <h3>{miniPilotCard.title}</h3>
+            <p className="helper-text">{miniPilotCard.helperText}</p>
+          </header>
+          <ul className="item-list compact">
+            {miniPilotCard.steps.map((step) => (
+              <li key={step.title}>
+                <strong>{step.title}</strong>
+                <p className="helper-text">{step.body}</p>
+              </li>
+            ))}
           </ul>
         </article>
       </section>

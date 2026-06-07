@@ -245,6 +245,11 @@ describe("backoffice route smoke", () => {
     expect(home).toContain(
       "Pilot-Preflight: lokal mit Demo-/synthetischen oder nachweisbar anonymisierten Daten prüfen; kein Pilot-Go, kein Deployment und keine echten Daten."
     );
+    expect(home).toContain("Interner Mini-Pilot");
+    expect(home).toContain("Draft-Probe lokal und kontrolliert prüfen");
+    expect(home).toContain("npm run llm:synthetic-live:check:mini-pilot");
+    expect(home).toContain("ready oder blocked mit Grund und nächstem sicheren Schritt direkt im JSON-Ergebnis.");
+    expect(home).toContain("Ergebnisse nur manuell prüfen und bewusst übernehmen; keine automatische Schreibwirkung.");
     expect(home).toContain("Nächster Einstieg: zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.");
     expect(home).toContain("Demo, Erfassung, Angebot, Produktion, Export und Audit aus bestehenden Daten prüfen.");
 
