@@ -29,6 +29,7 @@ export function MiniPilotCheckPanel({
     }
     setInternalRawResult(value);
   };
+  const showClearAction = effectiveRawResult.trim().length > 0;
 
   return (
     <div className="search-trace" aria-label="Mini-Pilot-Check-Ergebnis">
@@ -45,6 +46,13 @@ export function MiniPilotCheckPanel({
         onChange={(event) => handleResultInput(event.currentTarget.value)}
         placeholder='{"ok":true,"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"..."}}'
       />
+      {showClearAction ? (
+        <div className="quiet-action-row">
+          <button type="button" className="secondary-button" onClick={() => handleResultInput("")}>
+            Ergebnis leeren
+          </button>
+        </div>
+      ) : null}
       <p className="helper-text">Status: {effectiveReportState.statusLabel}</p>
       <p className="helper-text">Grund: {effectiveReportState.reasonLabel}</p>
       <p className="helper-text">Naechster Schritt: {effectiveReportState.nextStepLabel}</p>
