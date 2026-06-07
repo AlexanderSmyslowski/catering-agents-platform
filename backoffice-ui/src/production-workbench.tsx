@@ -28,6 +28,7 @@ type ProductionConversationalWorkbenchProps = {
   miniPilotRawResult: string;
   setMiniPilotRawResult: (value: string) => void;
   miniPilotReportState: MiniPilotCheckReportState;
+  miniPilotStorageHintLabel?: string;
   children: ReactNode;
 };
 
@@ -58,6 +59,7 @@ export function ProductionConversationalWorkbench({
   miniPilotRawResult,
   setMiniPilotRawResult,
   miniPilotReportState,
+  miniPilotStorageHintLabel,
   children
 }: ProductionConversationalWorkbenchProps) {
   const miniPilotCard = buildProductionMiniPilotCardState();
@@ -149,6 +151,7 @@ export function ProductionConversationalWorkbench({
           rawResult={miniPilotRawResult}
           onRawResultChange={setMiniPilotRawResult}
           reportState={miniPilotReportState}
+          storageHintLabel={miniPilotStorageHintLabel}
         />
       </aside>
 

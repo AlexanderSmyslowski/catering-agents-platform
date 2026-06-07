@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { persistMiniPilotRawResult, readMiniPilotRawResult } from "../backoffice-ui/src/api.js";
+import {
+  persistMiniPilotRawResult,
+  persistMiniPilotStoredResult,
+  readMiniPilotRawResult,
+  readMiniPilotStoredResult
+} from "../backoffice-ui/src/api.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -37,6 +42,7 @@ describe("mini pilot result storage", () => {
 
     expect(value).toBe('{"ok":true,"summary":{"status":"ready"}}');
     expect(readMiniPilotRawResult()).toBe('{"ok":true,"summary":{"status":"ready"}}');
+    expect(readMiniPilotStoredResult().updatedAt).toBeTypeOf("string");
   });
 
   it("clears stored mini-pilot JSON when the result is emptied", () => {
@@ -47,5 +53,19 @@ describe("mini pilot result storage", () => {
 
     expect(persistMiniPilotRawResult("   ")).toBe("");
     expect(readMiniPilotRawResult()).toBe("");
+  });
+
+  it("keeps reading legacy raw storage while writing the new structured format", () => {
+    installStorage();
+
+    window.localStorage.setItem("catering.miniPilotRawResult", '{"ok":true,"summary":{"status":"ready"}}');
+    expect(readMiniPilotStoredResult()).toEqual({
+      rawResult: '{"ok":true,"summary":{"status":"ready"}}'
+    });
+
+    const stored = persistMiniPilotStoredResult('{"ok":false}');
+    expect(stored.rawResult).toBe('{"ok":false}');
+    expect(stored.updatedAt).toBeTypeOf("string");
+    expect(readMiniPilotStoredResult().rawResult).toBe('{"ok":false}');
   });
 });

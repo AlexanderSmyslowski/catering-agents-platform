@@ -105,4 +105,35 @@ describe("MiniPilotCheckPanel", () => {
       root.unmount();
     });
   });
+
+  it("shows an optional storage hint when a carried-over local result is present", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(MiniPilotCheckPanel as never, {
+          rawResult:
+            '{"ok":true,"errors":[],"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell pruefen."}}',
+          onRawResultChange: () => undefined,
+          reportState: {
+            statusLabel: "ready",
+            reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
+            nextStepLabel: "Draft nur manuell pruefen.",
+            commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+            errorLabels: []
+          },
+          storageHintLabel: "Lokaler Stand übernommen · zuletzt aktualisiert 07.06.26, 18:20"
+        })
+      );
+    });
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Lokaler Stand übernommen · zuletzt aktualisiert 07.06.26, 18:20");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });

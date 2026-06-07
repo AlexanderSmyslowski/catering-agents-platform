@@ -8,12 +8,14 @@ interface MiniPilotCheckPanelProps {
   rawResult?: string;
   onRawResultChange?: (value: string) => void;
   reportState?: MiniPilotCheckReportState;
+  storageHintLabel?: string;
 }
 
 export function MiniPilotCheckPanel({
   rawResult,
   onRawResultChange,
-  reportState
+  reportState,
+  storageHintLabel
 }: MiniPilotCheckPanelProps = {}) {
   const [internalRawResult, setInternalRawResult] = useState("");
   const isControlled = typeof rawResult === "string" && typeof onRawResultChange === "function";
@@ -39,6 +41,7 @@ export function MiniPilotCheckPanel({
         JSON-Ausgabe von <code>{effectiveReportState.commandLabel}</code> einfuegen; die Oberflaeche fasst Status, Grund und
         naechsten sicheren Schritt lokal zusammen.
       </p>
+      {storageHintLabel ? <p className="helper-text">{storageHintLabel}</p> : null}
       <textarea
         aria-label="Mini-Pilot-Check JSON"
         value={effectiveRawResult}

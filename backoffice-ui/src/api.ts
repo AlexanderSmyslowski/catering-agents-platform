@@ -354,26 +354,66 @@ export function persistOperatorName(name: string): string {
 }
 
 export function readMiniPilotRawResult(): string {
+  return readMiniPilotStoredResult().rawResult;
+}
+
+export type MiniPilotStoredResult = {
+  rawResult: string;
+  updatedAt?: string;
+};
+
+export function readMiniPilotStoredResult(): MiniPilotStoredResult {
   if (typeof window === "undefined") {
-    return "";
+    return { rawResult: "" };
   }
 
-  return window.localStorage.getItem(MINI_PILOT_RESULT_STORAGE_KEY) ?? "";
+  const stored = window.localStorage.getItem(MINI_PILOT_RESULT_STORAGE_KEY);
+  if (!stored) {
+    return { rawResult: "" };
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as { rawResult?: unknown; updatedAt?: unknown };
+    if (typeof parsed.rawResult === "string") {
+      return {
+        rawResult: parsed.rawResult,
+        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : undefined
+      };
+    }
+  } catch {
+    // Legacy raw storage remains readable as-is.
+  }
+
+  return { rawResult: stored };
 }
 
 export function persistMiniPilotRawResult(rawResult: string): string {
+  return persistMiniPilotStoredResult(rawResult).rawResult;
+}
+
+export function persistMiniPilotStoredResult(rawResult: string): MiniPilotStoredResult {
   const normalized = typeof rawResult === "string" ? rawResult : "";
   if (typeof window === "undefined") {
-    return normalized;
+    return { rawResult: normalized };
   }
 
   if (!normalized.trim()) {
     window.localStorage.removeItem(MINI_PILOT_RESULT_STORAGE_KEY);
-    return "";
+    return { rawResult: "" };
   }
 
-  window.localStorage.setItem(MINI_PILOT_RESULT_STORAGE_KEY, normalized);
-  return normalized;
+  const updatedAt = new Date().toISOString();
+  window.localStorage.setItem(
+    MINI_PILOT_RESULT_STORAGE_KEY,
+    JSON.stringify({
+      rawResult: normalized,
+      updatedAt
+    })
+  );
+  return {
+    rawResult: normalized,
+    updatedAt
+  };
 }
 
 export async function reviewRecipe(

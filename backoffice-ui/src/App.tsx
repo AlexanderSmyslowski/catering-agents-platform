@@ -82,7 +82,11 @@ export function App() {
   const [offerText, setOfferText] = useState(
     "Besprechung am 2026-06-25 für 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
   );
-  const { miniPilotRawResult, setMiniPilotRawResult } = useMiniPilotResultState();
+  const {
+    miniPilotRawResult,
+    setMiniPilotRawResult,
+    miniPilotStorageHintLabel
+  } = useMiniPilotResultState();
   const {
     recipeName,
     setRecipeName,
@@ -540,7 +544,8 @@ export function App() {
     recipeActions: productionRecipeControls,
     miniPilotRawResult,
     setMiniPilotRawResult,
-    miniPilotReportState
+    miniPilotReportState,
+    miniPilotStorageHintLabel
   });
   const { offerWorkbenchState } = buildAppOfferRouteAppBoundary({
     createOfferFromText,
@@ -575,6 +580,7 @@ export function App() {
     miniPilotRawResult,
     setMiniPilotRawResult,
     miniPilotReportState,
+    miniPilotStorageHintLabel,
     editingSpecId,
     eventType: editingEventType,
     eventDate: editingEventDate,
