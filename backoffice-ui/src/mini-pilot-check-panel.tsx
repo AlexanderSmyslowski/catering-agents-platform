@@ -11,6 +11,26 @@ interface MiniPilotCheckPanelProps {
   storageHintLabel?: string;
 }
 
+function buildStorageTrustLabel(storageHintLabel?: string): string | undefined {
+  if (!storageHintLabel) {
+    return undefined;
+  }
+
+  if (/^Lokal gespeichert/i.test(storageHintLabel)) {
+    return "Vertrauenslage: frisch lokal gesetzt.";
+  }
+
+  if (!/^Lokaler Stand (übernommen|uebernommen)/i.test(storageHintLabel)) {
+    return undefined;
+  }
+
+  if (/älter als 30 Minuten/i.test(storageHintLabel)) {
+    return "Vertrauenslage: älterer übernommener Stand.";
+  }
+
+  return "Vertrauenslage: übernommener lokaler Stand.";
+}
+
 function buildStorageWarningLabel(storageHintLabel?: string): string | undefined {
   if (!storageHintLabel || !/^Lokaler Stand (übernommen|uebernommen)/i.test(storageHintLabel)) {
     return undefined;
@@ -40,6 +60,10 @@ export function MiniPilotCheckPanel({
     () => buildStorageWarningLabel(storageHintLabel),
     [storageHintLabel]
   );
+  const storageTrustLabel = useMemo(
+    () => buildStorageTrustLabel(storageHintLabel),
+    [storageHintLabel]
+  );
   const handleResultInput = (value: string) => {
     if (isControlled) {
       onRawResultChange(value);
@@ -58,6 +82,7 @@ export function MiniPilotCheckPanel({
         naechsten sicheren Schritt lokal zusammen.
       </p>
       {storageHintLabel ? <p className="helper-text">{storageHintLabel}</p> : null}
+      {storageTrustLabel ? <p className="helper-text">{storageTrustLabel}</p> : null}
       {storageWarningLabel ? <p className="helper-text">{storageWarningLabel}</p> : null}
       <textarea
         aria-label="Mini-Pilot-Check JSON"
