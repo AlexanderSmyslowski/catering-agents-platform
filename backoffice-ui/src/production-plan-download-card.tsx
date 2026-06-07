@@ -85,6 +85,9 @@ export function ProductionPlanDownloadCard({
             <p className="helper-text">{miniPilotActionState.provenanceLabel}</p>
           ) : null}
           <p className="helper-text">{miniPilotActionState.helperText}</p>
+          <p className="helper-text">
+            Lokaler Check: <code>{miniPilotActionState.commandLabel}</code>
+          </p>
         </div>
       ) : null}
       {unresolvedItems.length > 0 ? (

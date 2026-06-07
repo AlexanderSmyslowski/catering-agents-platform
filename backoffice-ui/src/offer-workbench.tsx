@@ -295,6 +295,9 @@ export function OfferConversationalWorkbench({
                   <p className="helper-text">{miniPilotActionState.provenanceLabel}</p>
                 ) : null}
                 <p className="helper-text">{miniPilotActionState.helperText}</p>
+                <p className="helper-text">
+                  Lokaler Check: <code>{miniPilotActionState.commandLabel}</code>
+                </p>
               </div>
               <div className="quiet-action-row">
                 {focusedVariants.map((variant) => (

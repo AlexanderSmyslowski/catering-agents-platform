@@ -6,6 +6,7 @@ export interface ProductionMiniPilotActionState {
   statusLabel: string;
   provenanceLabel?: string;
   helperText: string;
+  commandLabel: string;
 }
 
 export function buildProductionMiniPilotActionState(
@@ -18,7 +19,8 @@ export function buildProductionMiniPilotActionState(
       title: "Produktions-Export ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
       provenanceLabel: storageHintLabel,
-      helperText: reportState.nextStepLabel
+      helperText: reportState.nextStepLabel,
+      commandLabel: reportState.commandLabel
     };
   }
 
@@ -27,6 +29,7 @@ export function buildProductionMiniPilotActionState(
     title: "Export erst nach gruenem Mini-Pilot-Check",
     statusLabel: `Status: ${reportState.statusLabel}`,
     provenanceLabel: storageHintLabel,
-    helperText: reportState.nextStepLabel
+    helperText: reportState.nextStepLabel,
+    commandLabel: reportState.commandLabel
   };
 }
