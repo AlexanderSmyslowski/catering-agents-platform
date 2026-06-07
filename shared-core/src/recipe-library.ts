@@ -644,11 +644,12 @@ export function parseUploadedRecipeText(input: {
       originType: "approved_import",
       reference: input.sourceRef ?? `upload:${input.filename ?? slugify(name)}`,
       retrievedAt: new Date().toISOString(),
-      approvalState: "approved_internal",
+      approvalState: "review_required",
       qualityScore: coverageScore >= 0.8 ? 0.9 : 0.78,
       fitScore: 1,
       extractionCompleteness: coverageScore,
-      licenseNote: "Menschlich hochgeladene interne Rezeptquelle.",
+      licenseNote:
+        "Menschlich hochgeladene interne Rezeptquelle. Automatisch extrahierte Zutaten, Allergene und Diet-Tags erfordern Review vor operativer Nutzung.",
       ...(input.sourceMetadata ? { sourceMetadata: input.sourceMetadata } : {})
     },
     baseYield: {

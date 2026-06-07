@@ -31,6 +31,17 @@ class FakeWebProvider implements WebRecipeSearchProvider {
   }
 }
 
+type UploadedRecipeInput = Parameters<typeof parseUploadedRecipeText>[0];
+
+async function saveReviewedUploadedRecipe(
+  repository: Pick<InMemoryRecipeRepository, "save" | "reviewRecipe">,
+  input: UploadedRecipeInput
+) {
+  const recipe = parseUploadedRecipeText(input);
+  await repository.save(recipe);
+  return repository.reviewRecipe(recipe.recipeId, { decision: "approve" });
+}
+
 function baseEventRequest(text: string): EventRequest {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -300,6 +311,31 @@ describe("catering agents platform", () => {
     ]);
   });
 
+  it("keeps uploaded recipe extraction in review before operational use", () => {
+    const recipe = parseUploadedRecipeText({
+      recipeName: "Spinach Feta Quiche",
+      filename: "Spinach Feta Quiche.pdf",
+      sourceRef: "test:recipe-parser-zero-trust-review",
+      text: [
+        "Spinach Feta Quiche",
+        "Ingredients",
+        "1 kg spinach",
+        "500 g feta",
+        "12 eggs",
+        "1 l cream",
+        "Preparation",
+        "1. Mix everything.",
+        "2. Bake until set."
+      ].join("\n")
+    });
+
+    expect(recipe.source.approvalState).toBe("review_required");
+    expect(recipe.source.licenseNote).toContain(
+      "Automatisch extrahierte Zutaten, Allergene und Diet-Tags erfordern Review"
+    );
+    expect(recipe.allergens).toEqual(expect.arrayContaining(["milk", "egg"]));
+  });
+
   it("builds a synthetic Quick Lunch production plan across the core buffet anchors", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
@@ -434,7 +470,7 @@ describe("catering agents platform", () => {
     ];
 
     for (const upload of recipeUploads) {
-      await repository.save(parseUploadedRecipeText(upload));
+      await saveReviewedUploadedRecipe(repository, upload);
     }
 
     const app = buildProductionApp({
@@ -607,7 +643,7 @@ describe("catering agents platform", () => {
     ];
 
     for (const upload of recipeUploads) {
-      await repository.save(parseUploadedRecipeText(upload));
+      await saveReviewedUploadedRecipe(repository, upload);
     }
 
     const app = buildProductionApp({
@@ -753,7 +789,7 @@ describe("catering agents platform", () => {
     ];
 
     for (const upload of recipeUploads) {
-      await repository.save(parseUploadedRecipeText(upload));
+      await saveReviewedUploadedRecipe(repository, upload);
     }
 
     const app = buildProductionApp({
@@ -1312,7 +1348,7 @@ describe("catering agents platform", () => {
     ];
 
     for (const upload of recipeUploads) {
-      await repository.save(parseUploadedRecipeText(upload));
+      await saveReviewedUploadedRecipe(repository, upload);
     }
 
     const app = buildProductionApp({
@@ -1905,8 +1941,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Quiche Spinat Schafskäse 1:1 GN",
         filename: "Quiche Spinat Schafskaese 1:1 GN.pdf",
         sourceRef: "test:quiche-spinat-schafskaese",
@@ -1921,7 +1958,7 @@ describe("catering agents platform", () => {
           "1. Alles mischen.",
           "2. Backen."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -1954,8 +1991,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Mandel-Orangen-Kuchen (vegan)",
         filename: "Mandel-Orangen-Kuchen (vegan).pages",
         sourceRef: "test:mandel-orangen-kuchen-vegan",
@@ -1971,7 +2009,7 @@ describe("catering agents platform", () => {
           "1. Alles mischen.",
           "2. Backen."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -2007,8 +2045,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Ananas Salat",
         filename: "Ananas Salat.pdf",
         sourceRef: "test:ananas-salat",
@@ -2022,7 +2061,7 @@ describe("catering agents platform", () => {
           "1. Alles klein schneiden.",
           "2. Marinieren."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -2053,8 +2092,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Krautsalat mit Apfel",
         filename: "Krautsalat mit Apfel.pages",
         sourceRef: "test:krautsalat-mit-apfel",
@@ -2069,11 +2109,12 @@ describe("catering agents platform", () => {
           "1. Kohl hobeln.",
           "2. Mit Karotten und Apfel mischen."
         ].join("\n")
-      })
+      }
     );
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Winterlicher Karotten-Apfel-Fenchel-Radicchio-Salat",
         filename: "Winterlicher Karotten-Apfel-Fenchel-Radicchio-Salat.pages",
         sourceRef: "test:wintersalat",
@@ -2088,7 +2129,7 @@ describe("catering agents platform", () => {
           "1. Gemüse fein schneiden.",
           "2. Alles mischen."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -2124,8 +2165,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Pasta-Salat mit frischem Gemüse",
         filename: "Pasta-Salat mit frischem Gemuese.pages",
         sourceRef: "test:pasta-salat-frisch",
@@ -2140,7 +2182,7 @@ describe("catering agents platform", () => {
           "1. Pasta kochen.",
           "2. Mit Gemüse und Dressing mischen."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -2179,8 +2221,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Potato Salad with Herbs",
         filename: "Potato Salad with Herbs.pdf",
         sourceRef: "test:potato-salad-herbs",
@@ -2195,7 +2238,7 @@ describe("catering agents platform", () => {
           "1. Boil potatoes.",
           "2. Mix with herbs and vinaigrette."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -2234,8 +2277,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Veal Meatballs with Braised Onions",
         filename: "Veal Meatballs with Braised Onions.pdf",
         sourceRef: "test:veal-meatballs-braised-onions",
@@ -2250,7 +2294,7 @@ describe("catering agents platform", () => {
           "1. Mix veal with breadcrumbs and eggs.",
           "2. Shape meatballs and fry with onions."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -2292,8 +2336,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Eggplant Ricotta Rolls",
         filename: "Eggplant Ricotta Rolls.pdf",
         sourceRef: "test:eggplant-ricotta-rolls",
@@ -2308,7 +2353,7 @@ describe("catering agents platform", () => {
           "1. Grill eggplant slices.",
           "2. Fill with ricotta and roll tightly."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -2349,8 +2394,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Humus Tahini Dip vegan",
         filename: "Humus Tahini Dip vegan.pdf",
         sourceRef: "test:humus-tahini-dip-vegan",
@@ -2364,7 +2410,7 @@ describe("catering agents platform", () => {
           "1. Humus vegan mixen.",
           "2. Mit Tahini und Zitronensaft abschmecken."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -2399,8 +2445,9 @@ describe("catering agents platform", () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
 
-    await repository.save(
-      parseUploadedRecipeText({
+    await saveReviewedUploadedRecipe(
+      repository,
+      {
         recipeName: "Gemüsepfanne Zucchini Pilze Pak Choi vegan",
         filename: "internes-rezept-482.pdf",
         sourceRef: "test:vegetable-pan-vegan",
@@ -2415,7 +2462,7 @@ describe("catering agents platform", () => {
           "1. Gemüse schneiden.",
           "2. Gemüsepfanne vegan braten."
         ].join("\n")
-      })
+      }
     );
 
     const app = buildProductionApp({
@@ -3489,6 +3536,19 @@ describe("catering agents platform", () => {
     const uploadedRecipe = uploadResponse.json().recipe;
     expect(uploadedRecipe.name).toBe("Humus Bowl");
     expect(uploadedRecipe.source.tier).toBe("internal_approved");
+    expect(uploadedRecipe.source.approvalState).toBe("review_required");
+    const reviewResponse = await offerApp.inject({
+      method: "PATCH",
+      url: `/v1/offers/recipes/${uploadedRecipe.recipeId}/review`,
+      headers: {
+        "x-actor-name": "Angebots-Mitarbeiter"
+      },
+      payload: {
+        decision: "approve"
+      }
+    });
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(reviewResponse.json().recipe.source.approvalState).toBe("approved_internal");
     await offerApp.close();
 
     const productionApp = buildProductionApp({
@@ -3550,6 +3610,7 @@ describe("catering agents platform", () => {
     const uploadedRecipe = uploadResponse.json().recipe;
     expect(uploadedRecipe.ingredients.length).toBeGreaterThan(0);
     expect(uploadedRecipe.steps.length).toBeGreaterThan(0);
+    expect(uploadedRecipe.source.approvalState).toBe("review_required");
     await productionApp.close();
 
     const offerApp = buildOfferApp({

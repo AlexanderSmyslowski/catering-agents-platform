@@ -353,6 +353,7 @@ describe("production recipe alias parity", () => {
         text
       });
       await repository.save(recipe);
+      await repository.reviewRecipe(recipe.recipeId, { decision: "approve" });
 
       const spec = singleComponentSpec(componentLabel, category);
       const component = spec.menuPlan[0];
