@@ -30,6 +30,7 @@ export function buildOfferWorkbenchState({
   miniPilotRawResult,
   setMiniPilotRawResult,
   miniPilotReportState,
+  miniPilotStorageHintLabel,
   specEdit,
   specEditActions
 }: OfferWorkbenchStateInput): OfferWorkbenchProps {
@@ -61,6 +62,7 @@ export function buildOfferWorkbenchState({
     miniPilotRawResult,
     setMiniPilotRawResult,
     miniPilotReportState,
+    miniPilotStorageHintLabel,
     specEdit,
     specEditActions
   };

@@ -77,6 +77,7 @@ export type OfferWorkbenchProps = {
   miniPilotRawResult: string;
   setMiniPilotRawResult: (value: string) => void;
   miniPilotReportState: MiniPilotCheckReportState;
+  miniPilotStorageHintLabel?: string;
   specEdit: SpecEditInput;
   specEditActions: SpecEditActions;
 };
@@ -175,6 +176,7 @@ export function OfferConversationalWorkbench({
   miniPilotRawResult,
   setMiniPilotRawResult,
   miniPilotReportState,
+  miniPilotStorageHintLabel,
   specEdit,
   specEditActions
 }: OfferWorkbenchProps) {
@@ -254,6 +256,7 @@ export function OfferConversationalWorkbench({
           rawResult={miniPilotRawResult}
           onRawResultChange={setMiniPilotRawResult}
           reportState={miniPilotReportState}
+          storageHintLabel={miniPilotStorageHintLabel}
         />
       </aside>
 

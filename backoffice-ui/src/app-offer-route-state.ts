@@ -74,6 +74,7 @@ export function buildAppOfferRouteState(input: AppOfferRouteStateInput): AppOffe
       miniPilotRawResult: input.miniPilotRawResult,
       setMiniPilotRawResult: input.setMiniPilotRawResult,
       miniPilotReportState: input.miniPilotReportState,
+      miniPilotStorageHintLabel: input.miniPilotStorageHintLabel,
       specEdit: offerSpecEdit,
       specEditActions: offerSpecEditActions
     })

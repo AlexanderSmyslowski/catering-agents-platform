@@ -30,6 +30,7 @@ export type ProductionRouteMainLayoutStateInput = {
   miniPilotRawResult: string;
   setMiniPilotRawResult: (value: string) => void;
   miniPilotReportState: MiniPilotCheckReportState;
+  miniPilotStorageHintLabel?: string;
 };
 
 export function buildProductionRouteMainLayoutState({
@@ -46,7 +47,8 @@ export function buildProductionRouteMainLayoutState({
   recipeActions,
   miniPilotRawResult,
   setMiniPilotRawResult,
-  miniPilotReportState
+  miniPilotReportState,
+  miniPilotStorageHintLabel
 }: ProductionRouteMainLayoutStateInput): ProductionRouteMainLayoutProps {
   return {
     ...viewState,
@@ -62,6 +64,7 @@ export function buildProductionRouteMainLayoutState({
     recipeActions,
     miniPilotRawResult,
     setMiniPilotRawResult,
-    miniPilotReportState
+    miniPilotReportState,
+    miniPilotStorageHintLabel
   };
 }

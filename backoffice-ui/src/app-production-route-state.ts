@@ -73,7 +73,8 @@ export function buildAppProductionRouteState(
       recipeActions: input.recipeActions,
       miniPilotRawResult: input.miniPilotRawResult,
       setMiniPilotRawResult: input.setMiniPilotRawResult,
-      miniPilotReportState: input.miniPilotReportState
+      miniPilotReportState: input.miniPilotReportState,
+      miniPilotStorageHintLabel: input.miniPilotStorageHintLabel
     })
   };
 }

@@ -65,6 +65,7 @@ export type ProductionRouteMainLayoutProps = {
   miniPilotRawResult: string;
   setMiniPilotRawResult: (value: string) => void;
   miniPilotReportState: MiniPilotCheckReportState;
+  miniPilotStorageHintLabel?: string;
 };
 
 export function ProductionRouteMainLayout({
@@ -90,7 +91,8 @@ export function ProductionRouteMainLayout({
   recipeActions,
   miniPilotRawResult,
   setMiniPilotRawResult,
-  miniPilotReportState
+  miniPilotReportState,
+  miniPilotStorageHintLabel
 }: ProductionRouteMainLayoutProps) {
   const miniPilotActionState = buildProductionMiniPilotActionState(miniPilotReportState);
 
@@ -101,6 +103,7 @@ export function ProductionRouteMainLayout({
       miniPilotRawResult={miniPilotRawResult}
       setMiniPilotRawResult={setMiniPilotRawResult}
       miniPilotReportState={miniPilotReportState}
+      miniPilotStorageHintLabel={miniPilotStorageHintLabel}
     >
       <div className="production-column">
         <ProductionInputPanel
