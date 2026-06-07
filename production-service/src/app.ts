@@ -15,9 +15,12 @@ import {
   validateUploadedDocument,
   validateUploadedDocumentMetadata,
   type AcceptedEventSpec,
-  type Queryable
+  type Queryable,
+  type RecipeSearchQuery,
+  type WebRecipeCandidate
 } from "@catering/shared-core";
 import { DuckDuckGoRecipeSearchProvider } from "./recipe-discovery/duckduckgo-provider.js";
+import type { WebRecipeSearchProvider } from "./recipe-discovery/provider.js";
 import { RecipeDiscoveryService } from "./recipe-discovery/service.js";
 import { InMemoryRecipeRepository } from "./repositories/in-memory-recipe-repository.js";
 import { ProductionStore } from "./repositories/production-store.js";
@@ -111,6 +114,26 @@ export interface ProductionAppOptions {
   databaseUrl?: string;
   pgPool?: Queryable;
   trustedActorSecret?: string;
+  env?: Record<string, string | undefined>;
+}
+
+class DisabledWebRecipeSearchProvider implements WebRecipeSearchProvider {
+  async searchRecipes(_query: RecipeSearchQuery): Promise<WebRecipeCandidate[]> {
+    return [];
+  }
+}
+
+export function isWebRecipeSearchEnabled(env: Record<string, string | undefined>): boolean {
+  const value = env.CATERING_ENABLE_WEB_RECIPE_SEARCH?.trim().toLowerCase();
+  return value === "1" || value === "true";
+}
+
+function defaultWebRecipeSearchProvider(env: Record<string, string | undefined>): WebRecipeSearchProvider {
+  if (isWebRecipeSearchEnabled(env)) {
+    return new DuckDuckGoRecipeSearchProvider();
+  }
+
+  return new DisabledWebRecipeSearchProvider();
 }
 
 function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string) {
@@ -139,7 +162,8 @@ function requireProductionOperator(
 }
 
 export function buildProductionApp(options: ProductionAppOptions = {}) {
-  const trustedActorSecret = options.trustedActorSecret ?? process.env.CATERING_TRUSTED_ACTOR_SECRET;
+  const env = options.env ?? process.env;
+  const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const repository =
     options.repository ??
     new InMemoryRecipeRepository(undefined, {
@@ -149,7 +173,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     });
   const discoveryService =
     options.discoveryService ??
-    new RecipeDiscoveryService(repository, new DuckDuckGoRecipeSearchProvider());
+    new RecipeDiscoveryService(repository, defaultWebRecipeSearchProvider(env));
   const store =
     options.store ??
     new ProductionStore({
