@@ -17,6 +17,7 @@ describe("buildProductionMiniPilotActionState", () => {
       statusLabel: "Status: ready",
       reasonLabel: "Grund: Mini-Pilot-Rahmen ist gruen.",
       provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
+      cautionLabel: undefined,
       helperText: "Draft nur manuell pruefen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
     });
@@ -37,6 +38,7 @@ describe("buildProductionMiniPilotActionState", () => {
       statusLabel: "Status: blocked",
       reasonLabel: "Grund: Mini-Pilot-Rahmen ist noch nicht vollstaendig markiert.",
       provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
+      cautionLabel: "Übernommener lokaler Stand: vor dem Export besser noch einmal frisch prüfen.",
       helperText: "PA62-Markierungen korrigieren.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
     });

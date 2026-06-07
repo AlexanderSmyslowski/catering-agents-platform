@@ -6,8 +6,17 @@ export interface OfferMiniPilotActionState {
   statusLabel: string;
   reasonLabel: string;
   provenanceLabel?: string;
+  cautionLabel?: string;
   helperText: string;
   commandLabel: string;
+}
+
+function buildMiniPilotCarryoverCautionLabel(storageHintLabel?: string): string | undefined {
+  if (!storageHintLabel || !/^Lokaler Stand (übernommen|uebernommen)/i.test(storageHintLabel)) {
+    return undefined;
+  }
+
+  return "Übernommener lokaler Stand: vor der manuellen Übernahme besser noch einmal frisch prüfen.";
 }
 
 export function buildOfferMiniPilotActionState(
@@ -21,6 +30,7 @@ export function buildOfferMiniPilotActionState(
       statusLabel: "Status: ready",
       reasonLabel: `Grund: ${reportState.reasonLabel}`,
       provenanceLabel: storageHintLabel,
+      cautionLabel: buildMiniPilotCarryoverCautionLabel(storageHintLabel),
       helperText: reportState.nextStepLabel,
       commandLabel: reportState.commandLabel
     };
@@ -32,6 +42,7 @@ export function buildOfferMiniPilotActionState(
     statusLabel: `Status: ${reportState.statusLabel}`,
     reasonLabel: `Grund: ${reportState.reasonLabel}`,
     provenanceLabel: storageHintLabel,
+    cautionLabel: buildMiniPilotCarryoverCautionLabel(storageHintLabel),
     helperText: reportState.nextStepLabel,
     commandLabel: reportState.commandLabel
   };

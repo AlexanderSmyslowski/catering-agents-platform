@@ -6,8 +6,17 @@ export interface ProductionMiniPilotActionState {
   statusLabel: string;
   reasonLabel: string;
   provenanceLabel?: string;
+  cautionLabel?: string;
   helperText: string;
   commandLabel: string;
+}
+
+function buildMiniPilotCarryoverCautionLabel(storageHintLabel?: string): string | undefined {
+  if (!storageHintLabel || !/^Lokaler Stand (übernommen|uebernommen)/i.test(storageHintLabel)) {
+    return undefined;
+  }
+
+  return "Übernommener lokaler Stand: vor dem Export besser noch einmal frisch prüfen.";
 }
 
 export function buildProductionMiniPilotActionState(
@@ -21,6 +30,7 @@ export function buildProductionMiniPilotActionState(
       statusLabel: "Status: ready",
       reasonLabel: `Grund: ${reportState.reasonLabel}`,
       provenanceLabel: storageHintLabel,
+      cautionLabel: buildMiniPilotCarryoverCautionLabel(storageHintLabel),
       helperText: reportState.nextStepLabel,
       commandLabel: reportState.commandLabel
     };
@@ -32,6 +42,7 @@ export function buildProductionMiniPilotActionState(
     statusLabel: `Status: ${reportState.statusLabel}`,
     reasonLabel: `Grund: ${reportState.reasonLabel}`,
     provenanceLabel: storageHintLabel,
+    cautionLabel: buildMiniPilotCarryoverCautionLabel(storageHintLabel),
     helperText: reportState.nextStepLabel,
     commandLabel: reportState.commandLabel
   };
