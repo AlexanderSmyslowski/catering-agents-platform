@@ -1,11 +1,33 @@
 import { useMemo, useState } from "react";
-import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
+import {
+  buildMiniPilotCheckReportState,
+  type MiniPilotCheckReportState
+} from "./mini-pilot-check-report-state.js";
 
-export function MiniPilotCheckPanel() {
-  const [rawResult, setRawResult] = useState("");
-  const reportState = useMemo(() => buildMiniPilotCheckReportState(rawResult), [rawResult]);
+interface MiniPilotCheckPanelProps {
+  rawResult?: string;
+  onRawResultChange?: (value: string) => void;
+  reportState?: MiniPilotCheckReportState;
+}
+
+export function MiniPilotCheckPanel({
+  rawResult,
+  onRawResultChange,
+  reportState
+}: MiniPilotCheckPanelProps = {}) {
+  const [internalRawResult, setInternalRawResult] = useState("");
+  const isControlled = typeof rawResult === "string" && typeof onRawResultChange === "function";
+  const effectiveRawResult = isControlled ? rawResult : internalRawResult;
+  const effectiveReportState = useMemo(
+    () => reportState ?? buildMiniPilotCheckReportState(effectiveRawResult),
+    [effectiveRawResult, reportState]
+  );
   const handleResultInput = (value: string) => {
-    setRawResult(value);
+    if (isControlled) {
+      onRawResultChange(value);
+      return;
+    }
+    setInternalRawResult(value);
   };
 
   return (
@@ -13,22 +35,22 @@ export function MiniPilotCheckPanel() {
       <p className="eyebrow">Mini-Pilot-Check</p>
       <strong>Ready oder blocked direkt im Arbeitsfluss lesen</strong>
       <p className="helper-text">
-        JSON-Ausgabe von <code>{reportState.commandLabel}</code> einfuegen; die Oberflaeche fasst Status, Grund und
+        JSON-Ausgabe von <code>{effectiveReportState.commandLabel}</code> einfuegen; die Oberflaeche fasst Status, Grund und
         naechsten sicheren Schritt lokal zusammen.
       </p>
       <textarea
         aria-label="Mini-Pilot-Check JSON"
-        value={rawResult}
+        value={effectiveRawResult}
         onInput={(event) => handleResultInput(event.currentTarget.value)}
         onChange={(event) => handleResultInput(event.currentTarget.value)}
         placeholder='{"ok":true,"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"..."}}'
       />
-      <p className="helper-text">Status: {reportState.statusLabel}</p>
-      <p className="helper-text">Grund: {reportState.reasonLabel}</p>
-      <p className="helper-text">Naechster Schritt: {reportState.nextStepLabel}</p>
-      {reportState.errorLabels.length > 0 ? (
+      <p className="helper-text">Status: {effectiveReportState.statusLabel}</p>
+      <p className="helper-text">Grund: {effectiveReportState.reasonLabel}</p>
+      <p className="helper-text">Naechster Schritt: {effectiveReportState.nextStepLabel}</p>
+      {effectiveReportState.errorLabels.length > 0 ? (
         <ul className="item-list compact trace-list">
-          {reportState.errorLabels.map((error) => (
+          {effectiveReportState.errorLabels.map((error) => (
             <li key={error}>
               <p className="helper-text">{error}</p>
             </li>

@@ -559,6 +559,8 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("Nur bei ready weiterarbeiten; blocked bleibt Stop statt stiller Freigabe.");
     expect(offer).toContain("Mini-Pilot-Check");
     expect(offer).toContain("Status: noch kein Ergebnis");
+    expect(offer).toContain("Mini-Pilot-Status vor Uebernahme");
+    expect(offer).toContain("Uebernahme erst nach gruenem Mini-Pilot-Check");
     expect(offer).toContain("Draft nur manuell prüfen, fachlich bewerten und bewusst übernehmen.");
     expect(offer).toContain("offer-draft-buffet");
     expect(offer).toContain("Entwurfs-Spec: offer-draft-buffet-spec (teilweise vollständig)");
