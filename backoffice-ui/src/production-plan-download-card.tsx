@@ -85,6 +85,9 @@ export function ProductionPlanDownloadCard({
           {miniPilotActionState.provenanceLabel ? (
             <p className="helper-text">{miniPilotActionState.provenanceLabel}</p>
           ) : null}
+          {miniPilotActionState.cautionLabel ? (
+            <p className="helper-text">{miniPilotActionState.cautionLabel}</p>
+          ) : null}
           <p className="helper-text">{miniPilotActionState.helperText}</p>
           <p className="helper-text">
             Lokaler Check: <code>{miniPilotActionState.commandLabel}</code>
