@@ -1,4 +1,5 @@
 import { Children, type ReactNode } from "react";
+import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import { buildProductionMiniPilotCardState } from "./production-mini-pilot-card-state.js";
 import { buildProductionWorkbenchOutputAnchorState } from "./production-workbench-output-anchor-state.js";
 
@@ -137,6 +138,7 @@ export function ProductionConversationalWorkbench({
             ))}
           </ul>
         </div>
+        <MiniPilotCheckPanel />
       </aside>
 
       <div className="production-progressive-zone">
