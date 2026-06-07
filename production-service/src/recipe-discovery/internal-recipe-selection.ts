@@ -10,7 +10,15 @@ import {
   primaryMatchScore,
   specificPrimaryMatchScore
 } from "./recipe-candidate-scoring.js";
-import { recipeSearchText } from "./recipe-query-builder.js";
+import {
+  primarySearchSegment,
+  recipeSearchText,
+  specificPrimaryFocusTokens
+} from "./recipe-query-builder.js";
+import {
+  normalizeComparableText,
+  rawComparableTokens
+} from "./recipe-text-normalization.js";
 
 const tierWeight: Record<Recipe["source"]["tier"], number> = {
   internal_verified: 4,
@@ -26,7 +34,27 @@ export type InternalRecipeCandidate = {
   primaryScore: number;
   specificPrimaryScore: number;
   leadNameScore: number;
+  specificPrimaryFocusTokenCount: number;
+  exactPrimaryNameScore: number;
+  genericPrimaryOnly: boolean;
 };
+
+const genericInternalPrimaryTokens = new Set([
+  "bowl",
+  "bowls",
+  "salat",
+  "salad",
+  "suppe",
+  "soup",
+  "kuchen",
+  "cake",
+  "station"
+]);
+
+function isGenericInternalPrimaryOnly(label: string): boolean {
+  const tokens = rawComparableTokens(primarySearchSegment(label));
+  return tokens.length > 0 && tokens.every((token) => genericInternalPrimaryTokens.has(token));
+}
 
 export function buildInternalRecipeCandidate(input: {
   recipe: Recipe;
@@ -35,6 +63,13 @@ export function buildInternalRecipeCandidate(input: {
   eventSpec: AcceptedEventSpec;
 }): InternalRecipeCandidate {
   const recipeText = recipeSearchText(input.recipe);
+  const focusTokens = specificPrimaryFocusTokens(input.component);
+  const exactPrimaryNameScore =
+    normalizeComparableText(input.recipe.name) ===
+    normalizeComparableText(primarySearchSegment(input.component.label))
+      ? 1
+      : 0;
+  const genericPrimaryOnly = isGenericInternalPrimaryOnly(input.component.label);
 
   return {
     recipe: input.recipe,
@@ -42,13 +77,23 @@ export function buildInternalRecipeCandidate(input: {
     fitScore: fitScoreForRecipe(recipeText, input.component, input.eventSpec),
     primaryScore: primaryMatchScore(recipeText, input.component),
     specificPrimaryScore: specificPrimaryMatchScore(recipeText, input.component),
-    leadNameScore: leadNameMatchScore(input.recipe.name, input.component)
+    leadNameScore: leadNameMatchScore(input.recipe.name, input.component),
+    specificPrimaryFocusTokenCount: focusTokens.length,
+    exactPrimaryNameScore,
+    genericPrimaryOnly
   };
 }
 
 export function internalRecipeCandidatePassesThresholds(
   candidate: InternalRecipeCandidate
 ): boolean {
+  if (
+    candidate.genericPrimaryOnly &&
+    candidate.exactPrimaryNameScore !== 1
+  ) {
+    return false;
+  }
+
   return (
     (candidate.fitScore >= 0.75 ||
       (candidate.repositoryRank === 0 &&

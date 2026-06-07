@@ -115,6 +115,9 @@ describe("internal recipe selection", () => {
     expect(candidate.primaryScore).toBeGreaterThanOrEqual(0.5);
     expect(candidate.specificPrimaryScore).toBeGreaterThanOrEqual(0.34);
     expect(candidate.leadNameScore).toBe(1);
+    expect(candidate.specificPrimaryFocusTokenCount).toBeGreaterThan(0);
+    expect(candidate.exactPrimaryNameScore).toBe(0);
+    expect(candidate.genericPrimaryOnly).toBe(false);
   });
 
   it("keeps candidate thresholds explicit for the normal and lead-name fallback paths", () => {
@@ -139,7 +142,10 @@ describe("internal recipe selection", () => {
         fitScore: 0.54,
         primaryScore: 0.49,
         specificPrimaryScore: 0.33,
-        leadNameScore: 0
+        leadNameScore: 0,
+        specificPrimaryFocusTokenCount: 1,
+        exactPrimaryNameScore: 0,
+        genericPrimaryOnly: false
       })
     ).toBe(false);
     expect(
@@ -149,9 +155,59 @@ describe("internal recipe selection", () => {
         fitScore: 0.55,
         primaryScore: 0,
         specificPrimaryScore: 0,
-        leadNameScore: 1
+        leadNameScore: 1,
+        specificPrimaryFocusTokenCount: 1,
+        exactPrimaryNameScore: 0,
+        genericPrimaryOnly: false
       })
     ).toBe(true);
+  });
+
+  it("rejects generic form-only internal matches unless the recipe name is exact", () => {
+    const component = buildComponent({
+      componentId: "component-bowl",
+      label: "Bowl",
+      menuCategory: "vegan"
+    });
+    const eventSpec = buildEventSpec();
+    const genericBowlBase = buildRecipe({
+      recipeId: "recipe-bowl-base",
+      name: "Bowl Base",
+      tier: "internal_verified",
+      ingredients: ["Reis", "Brokkoli"],
+      dietTags: ["vegan"]
+    });
+    const exactBowl = buildRecipe({
+      recipeId: "recipe-bowl",
+      name: "Bowl",
+      tier: "internal_verified",
+      ingredients: ["Reis", "Brokkoli"],
+      dietTags: ["vegan"]
+    });
+
+    const genericCandidate = buildInternalRecipeCandidate({
+      recipe: genericBowlBase,
+      repositoryRank: 0,
+      component,
+      eventSpec
+    });
+    const exactCandidate = buildInternalRecipeCandidate({
+      recipe: exactBowl,
+      repositoryRank: 1,
+      component,
+      eventSpec
+    });
+
+    expect(genericCandidate.specificPrimaryFocusTokenCount).toBe(1);
+    expect(genericCandidate.exactPrimaryNameScore).toBe(0);
+    expect(genericCandidate.genericPrimaryOnly).toBe(true);
+    expect(genericCandidate.fitScore).toBe(1);
+    expect(internalRecipeCandidatePassesThresholds(genericCandidate)).toBe(false);
+    expect(exactCandidate.exactPrimaryNameScore).toBe(1);
+    expect(exactCandidate.genericPrimaryOnly).toBe(true);
+    expect(internalRecipeCandidatePassesThresholds(exactCandidate)).toBe(true);
+    expect(selectInternalRecipeCandidate([genericBowlBase], component, eventSpec)).toBeUndefined();
+    expect(selectInternalRecipeCandidate([genericBowlBase, exactBowl], component, eventSpec)?.recipe).toBe(exactBowl);
   });
 
   it("keeps internal tier priority ahead of repository rank when candidates pass the existing thresholds", () => {
