@@ -1,4 +1,5 @@
 import { Children, type ReactNode } from "react";
+import { buildProductionMiniPilotCardState } from "./production-mini-pilot-card-state.js";
 import { buildProductionWorkbenchOutputAnchorState } from "./production-workbench-output-anchor-state.js";
 
 export type ProductionWorkbenchSummary = {
@@ -51,6 +52,7 @@ export function ProductionConversationalWorkbench({
   nextStep,
   children
 }: ProductionConversationalWorkbenchProps) {
+  const miniPilotCard = buildProductionMiniPilotCardState();
   const {
     activeSpecLabel,
     readinessLabel,
@@ -122,6 +124,19 @@ export function ProductionConversationalWorkbench({
           Planstatus: {planStatusLabel} · Einkaufstatus: {purchaseStatusLabel}
         </p>
         <p className="helper-text">Ergebnisobjekte: {productionObjectStatusLabel}</p>
+        <div className="search-trace" aria-label="Interner Draft-Pilot">
+          <p className="eyebrow">{miniPilotCard.eyebrow}</p>
+          <strong>{miniPilotCard.title}</strong>
+          <p className="helper-text">{miniPilotCard.helperText}</p>
+          <ul className="item-list trace-list">
+            {miniPilotCard.steps.map((step) => (
+              <li key={step.title}>
+                <strong>{step.title}</strong>
+                <p className="helper-text">{step.body}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
       </aside>
 
       <div className="production-progressive-zone">
