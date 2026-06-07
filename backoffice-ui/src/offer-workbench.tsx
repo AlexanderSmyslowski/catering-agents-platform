@@ -1,6 +1,8 @@
-import type { ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
+import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
+import { buildOfferMiniPilotActionState } from "./offer-mini-pilot-action-state.js";
 import { buildOfferMiniPilotCardState } from "./offer-mini-pilot-card-state.js";
 import { getSpecLabel } from "./production-language.js";
 
@@ -170,6 +172,9 @@ export function OfferConversationalWorkbench({
   specEdit,
   specEditActions
 }: OfferWorkbenchProps) {
+  const [miniPilotRawResult, setMiniPilotRawResult] = useState("");
+  const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
+  const miniPilotActionState = buildOfferMiniPilotActionState(miniPilotReportState);
   const focusedDraft = selectedDraft ?? activeDraft;
   const miniPilotCard = buildOfferMiniPilotCardState();
   const focusedDraftId = getDraftId(focusedDraft);
@@ -241,7 +246,11 @@ export function OfferConversationalWorkbench({
             ))}
           </ul>
         </div>
-        <MiniPilotCheckPanel />
+        <MiniPilotCheckPanel
+          rawResult={miniPilotRawResult}
+          onRawResultChange={setMiniPilotRawResult}
+          reportState={miniPilotReportState}
+        />
       </aside>
 
       <div className="offer-progressive-zone">
@@ -271,6 +280,12 @@ export function OfferConversationalWorkbench({
               ) : (
                 <p className="helper-text">Offene Punkte: keine</p>
               )}
+              <div className="search-trace" aria-label="Mini-Pilot-Status vor Uebernahme">
+                <p className="eyebrow">{miniPilotActionState.eyebrow}</p>
+                <strong>{miniPilotActionState.title}</strong>
+                <p className="helper-text">{miniPilotActionState.statusLabel}</p>
+                <p className="helper-text">{miniPilotActionState.helperText}</p>
+              </div>
               <div className="quiet-action-row">
                 {focusedVariants.map((variant) => (
                   <button

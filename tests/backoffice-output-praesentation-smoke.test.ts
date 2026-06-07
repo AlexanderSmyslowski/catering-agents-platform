@@ -383,6 +383,8 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("npm run llm:synthetic-live:check:mini-pilot");
     expect(content).toContain("Mini-Pilot-Check");
     expect(content).toContain("Status: noch kein Ergebnis");
+    expect(content).toContain("Mini-Pilot-Status vor Uebernahme");
+    expect(content).toContain("Uebernahme erst nach gruenem Mini-Pilot-Check");
     expect(content).not.toContain("Angebots-Workbench-Projektion");
     expect(content).not.toContain("Angebotsdienst");
   });
