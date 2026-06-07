@@ -78,6 +78,7 @@ describe("recipe discovery service", () => {
       ].join("\n")
     });
     await repository.save(recipe);
+    await repository.reviewRecipe(recipe.recipeId, { decision: "approve" });
 
     const menuComponent = component();
     const discovery = new RecipeDiscoveryService(repository, provider);
