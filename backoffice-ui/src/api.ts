@@ -57,6 +57,7 @@ export interface ServiceHealthState {
 }
 
 const OPERATOR_NAME_STORAGE_KEY = "catering.operatorName";
+const MINI_PILOT_RESULT_STORAGE_KEY = "catering.miniPilotRawResult";
 const AUDIT_OPERATOR_NAME = "Betriebs-/Audit-Operator";
 const GENERIC_OPERATOR_NAME = "Mitarbeiter";
 const DEFAULT_MUTATION_ACTOR_NAMES = {
@@ -350,6 +351,29 @@ export function persistOperatorName(name: string): string {
     window.localStorage.setItem(OPERATOR_NAME_STORAGE_KEY, trimmed);
   }
   return trimmed;
+}
+
+export function readMiniPilotRawResult(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.localStorage.getItem(MINI_PILOT_RESULT_STORAGE_KEY) ?? "";
+}
+
+export function persistMiniPilotRawResult(rawResult: string): string {
+  const normalized = typeof rawResult === "string" ? rawResult : "";
+  if (typeof window === "undefined") {
+    return normalized;
+  }
+
+  if (!normalized.trim()) {
+    window.localStorage.removeItem(MINI_PILOT_RESULT_STORAGE_KEY);
+    return "";
+  }
+
+  window.localStorage.setItem(MINI_PILOT_RESULT_STORAGE_KEY, normalized);
+  return normalized;
 }
 
 export async function reviewRecipe(

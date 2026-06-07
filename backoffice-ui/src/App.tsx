@@ -44,6 +44,7 @@ import { buildProductionConversationState } from "./production-conversation-stat
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
+import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { buildAppProductionRouteAppBoundary } from "./app-production-route-app-boundary.js";
 import { buildAppOfferRouteAppBoundary } from "./app-offer-route-app-boundary.js";
@@ -61,6 +62,7 @@ import { useProductionIntakeRequestDetail } from "./use-production-intake-reques
 import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
+import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useOperatorNameState } from "./use-operator-name-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 
@@ -80,6 +82,7 @@ export function App() {
   const [offerText, setOfferText] = useState(
     "Besprechung am 2026-06-25 für 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
   );
+  const { miniPilotRawResult, setMiniPilotRawResult } = useMiniPilotResultState();
   const {
     recipeName,
     setRecipeName,
@@ -128,6 +131,7 @@ export function App() {
   } = useProductionPlanProgress();
   const manualSpecForm = useProductionManualSpecForm();
   const deferredSearch = useDeferredValue(search);
+  const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDashboard = useEffectEvent(async () => {
@@ -533,7 +537,10 @@ export function App() {
     createPlan: handleCreatePlan,
     resetSpecEdit,
     setSelectedPlanId,
-    recipeActions: productionRecipeControls
+    recipeActions: productionRecipeControls,
+    miniPilotRawResult,
+    setMiniPilotRawResult,
+    miniPilotReportState
   });
   const { offerWorkbenchState } = buildAppOfferRouteAppBoundary({
     createOfferFromText,
@@ -565,6 +572,9 @@ export function App() {
     activeSpec: activeOfferSpec,
     completeSpecCount: offerHandoffCounts.complete,
     partialSpecCount: offerHandoffCounts.partial,
+    miniPilotRawResult,
+    setMiniPilotRawResult,
+    miniPilotReportState,
     editingSpecId,
     eventType: editingEventType,
     eventDate: editingEventDate,

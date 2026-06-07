@@ -162,6 +162,15 @@ function input(
     resetSpecEdit: vi.fn(),
     setSelectedPlanId: vi.fn(),
     recipeActions,
+    miniPilotRawResult: "",
+    setMiniPilotRawResult: vi.fn(),
+    miniPilotReportState: {
+      statusLabel: "noch kein Ergebnis",
+      reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+      nextStepLabel: "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+      commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+      errorLabels: []
+    },
     ...overrides
   };
 }
@@ -192,6 +201,7 @@ describe("app production route app boundary", () => {
     expect(boundary.productionRouteMainLayoutState.editorState).toBe(boundary.productionQuestionEditorState);
     expect(boundary.productionRouteMainLayoutState.manualInput).toBe(boundaryInput.manualInput);
     expect(boundary.productionRouteMainLayoutState.manualInputActions).toBe(boundaryInput.manualInputActions);
+    expect(boundary.productionRouteMainLayoutState.setMiniPilotRawResult).toBe(boundaryInput.setMiniPilotRawResult);
     expect(boundary.productionRecipeActions).toBe(boundaryInput.recipeActions);
     expect(boundary.productionQuestionEditorActions.saveSpecEdit).toBe(boundaryInput.saveSpecEdit);
     expect(boundary.productionObjectsActions.setSelectedPlanId).toBe(boundaryInput.setSelectedPlanId);

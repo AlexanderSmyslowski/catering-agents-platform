@@ -70,7 +70,10 @@ export function buildAppProductionRouteState(
       editorState: input.editorState,
       editorActions: productionQuestionEditorActions,
       objectPanelActions: productionObjectsActions,
-      recipeActions: input.recipeActions
+      recipeActions: input.recipeActions,
+      miniPilotRawResult: input.miniPilotRawResult,
+      setMiniPilotRawResult: input.setMiniPilotRawResult,
+      miniPilotReportState: input.miniPilotReportState
     })
   };
 }

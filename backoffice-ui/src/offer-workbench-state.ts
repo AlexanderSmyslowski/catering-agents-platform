@@ -27,6 +27,9 @@ export function buildOfferWorkbenchState({
   activeSpec,
   completeSpecCount,
   partialSpecCount,
+  miniPilotRawResult,
+  setMiniPilotRawResult,
+  miniPilotReportState,
   specEdit,
   specEditActions
 }: OfferWorkbenchStateInput): OfferWorkbenchProps {
@@ -55,6 +58,9 @@ export function buildOfferWorkbenchState({
     activeSpec,
     completeSpecCount,
     partialSpecCount,
+    miniPilotRawResult,
+    setMiniPilotRawResult,
+    miniPilotReportState,
     specEdit,
     specEditActions
   };

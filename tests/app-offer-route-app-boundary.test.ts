@@ -59,6 +59,15 @@ function input(
     activeSpec: { specId: "spec-active" },
     completeSpecCount: 2,
     partialSpecCount: 1,
+    miniPilotRawResult: "",
+    setMiniPilotRawResult: vi.fn(),
+    miniPilotReportState: {
+      statusLabel: "noch kein Ergebnis",
+      reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+      nextStepLabel: "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+      commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+      errorLabels: []
+    },
     editingSpecId: "spec-edit-1",
     eventType: "meeting",
     eventDate: "2026-06-02",
@@ -108,6 +117,7 @@ describe("app offer route app boundary", () => {
     expect(boundaryInput.setError).not.toHaveBeenCalled();
     expect(state.offerWorkbenchState.manualInput).toBe(boundaryInput.manualInput);
     expect(state.offerWorkbenchState.filteredOfferDrafts).toBe(boundaryInput.filteredOfferDrafts);
+    expect(state.offerWorkbenchState.setMiniPilotRawResult).toBe(boundaryInput.setMiniPilotRawResult);
     expect(calls).toEqual([
       "setSubmitting:true",
       "clearMessages",

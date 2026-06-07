@@ -71,6 +71,9 @@ export function buildAppOfferRouteState(input: AppOfferRouteStateInput): AppOffe
       activeSpec: input.activeSpec,
       completeSpecCount: input.completeSpecCount,
       partialSpecCount: input.partialSpecCount,
+      miniPilotRawResult: input.miniPilotRawResult,
+      setMiniPilotRawResult: input.setMiniPilotRawResult,
+      miniPilotReportState: input.miniPilotReportState,
       specEdit: offerSpecEdit,
       specEditActions: offerSpecEditActions
     })

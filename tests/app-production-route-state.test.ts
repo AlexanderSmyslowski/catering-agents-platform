@@ -159,7 +159,17 @@ describe("app production route state", () => {
       createPlan: async (_spec) => undefined,
       resetSpecEdit: (_markDismissed) => undefined,
       setSelectedPlanId: (_planId) => undefined,
-      recipeActions
+      recipeActions,
+      miniPilotRawResult: "",
+      setMiniPilotRawResult: (_value) => undefined,
+      miniPilotReportState: {
+        statusLabel: "noch kein Ergebnis",
+        reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+        nextStepLabel:
+          "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+        commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+        errorLabels: []
+      }
     };
 
     const state = buildAppProductionRouteState(input);
@@ -178,5 +188,6 @@ describe("app production route state", () => {
     expect(state.productionRouteMainLayoutState.editorActions).toBe(state.productionQuestionEditorActions);
     expect(state.productionRouteMainLayoutState.objectPanelActions).toBe(state.productionObjectsActions);
     expect(state.productionRouteMainLayoutState.recipeActions).toBe(recipeActions);
+    expect(state.productionRouteMainLayoutState.setMiniPilotRawResult).toBe(input.setMiniPilotRawResult);
   });
 });
