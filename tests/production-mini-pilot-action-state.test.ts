@@ -1,0 +1,38 @@
+import { describe, expect, it } from "vitest";
+import { buildProductionMiniPilotActionState } from "../backoffice-ui/src/production-mini-pilot-action-state.js";
+
+describe("buildProductionMiniPilotActionState", () => {
+  it("marks the export review as ready when the mini-pilot check is green", () => {
+    expect(
+      buildProductionMiniPilotActionState({
+        statusLabel: "ready",
+        reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
+        nextStepLabel: "Draft nur manuell pruefen.",
+        commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+        errorLabels: []
+      })
+    ).toEqual({
+      eyebrow: "Mini-Pilot-Status vor Export",
+      title: "Produktions-Export ist jetzt fachlich pruefbar",
+      statusLabel: "Status: ready",
+      helperText: "Draft nur manuell pruefen."
+    });
+  });
+
+  it("keeps the export review blocked until the check is green", () => {
+    expect(
+      buildProductionMiniPilotActionState({
+        statusLabel: "blocked",
+        reasonLabel: "Mini-Pilot-Rahmen ist noch nicht vollstaendig markiert.",
+        nextStepLabel: "PA62-Markierungen korrigieren.",
+        commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+        errorLabels: []
+      })
+    ).toEqual({
+      eyebrow: "Mini-Pilot-Status vor Export",
+      title: "Export erst nach gruenem Mini-Pilot-Check",
+      statusLabel: "Status: blocked",
+      helperText: "PA62-Markierungen korrigieren."
+    });
+  });
+});

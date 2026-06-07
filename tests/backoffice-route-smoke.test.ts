@@ -461,6 +461,8 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("npm run llm:synthetic-live:check:mini-pilot");
     expect(production.text).toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
     expect(production.text).toContain("Status: noch kein Ergebnis");
+    expect(production.text).toContain("Mini-Pilot-Status vor Export");
+    expect(production.text).toContain("Export erst nach gruenem Mini-Pilot-Check");
     expect(production.text).toContain(
       "Produktionsblatt exportieren für Plan corridor-plan-1 · Spezifikation corridor-spec-1"
     );
@@ -998,6 +1000,7 @@ describe("backoffice route smoke", () => {
 
     expect(production.text).toContain("Downloadbereich");
     expect(production.text).toContain("Plan-Kontext: planId b23-plan-detail · specId b23-spec-detail");
+    expect(production.text).toContain("Mini-Pilot-Status vor Export");
     expect(production.text).toContain("Einzelheiten zu Plan b23-plan-detail · Spezifikation b23-spec-detail");
     expect(production.text).toContain(
       "Produktionsblatt exportieren für Plan b23-plan-detail · Spezifikation b23-spec-detail"

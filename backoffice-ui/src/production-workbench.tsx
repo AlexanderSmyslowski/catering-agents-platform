@@ -1,5 +1,6 @@
 import { Children, type ReactNode } from "react";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
+import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { buildProductionMiniPilotCardState } from "./production-mini-pilot-card-state.js";
 import { buildProductionWorkbenchOutputAnchorState } from "./production-workbench-output-anchor-state.js";
 
@@ -24,6 +25,9 @@ export type ProductionWorkbenchNextStep = {
 type ProductionConversationalWorkbenchProps = {
   summary: ProductionWorkbenchSummary;
   nextStep: ProductionWorkbenchNextStep;
+  miniPilotRawResult: string;
+  setMiniPilotRawResult: (value: string) => void;
+  miniPilotReportState: MiniPilotCheckReportState;
   children: ReactNode;
 };
 
@@ -51,6 +55,9 @@ function countOpenVisibleQuestions(
 export function ProductionConversationalWorkbench({
   summary,
   nextStep,
+  miniPilotRawResult,
+  setMiniPilotRawResult,
+  miniPilotReportState,
   children
 }: ProductionConversationalWorkbenchProps) {
   const miniPilotCard = buildProductionMiniPilotCardState();
@@ -138,7 +145,11 @@ export function ProductionConversationalWorkbench({
             ))}
           </ul>
         </div>
-        <MiniPilotCheckPanel />
+        <MiniPilotCheckPanel
+          rawResult={miniPilotRawResult}
+          onRawResultChange={setMiniPilotRawResult}
+          reportState={miniPilotReportState}
+        />
       </aside>
 
       <div className="production-progressive-zone">

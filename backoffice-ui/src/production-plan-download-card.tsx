@@ -1,10 +1,12 @@
 import { productionExportUrl } from "./api.js";
 import { getSpecLabel, translateServiceForm } from "./production-language.js";
+import type { ProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
 import { formatProductionContextId } from "./production-route-state.js";
 
 type ProductionPlanDownloadCardProps = {
   selectedPlan?: Record<string, unknown>;
   selectedPlanSpec?: Record<string, unknown>;
+  miniPilotActionState?: ProductionMiniPilotActionState;
 };
 
 function translateReadiness(value?: string): string {
@@ -18,7 +20,8 @@ function translateReadiness(value?: string): string {
 
 export function ProductionPlanDownloadCard({
   selectedPlan,
-  selectedPlanSpec
+  selectedPlanSpec,
+  miniPilotActionState
 }: ProductionPlanDownloadCardProps) {
   if (!selectedPlan) {
     return null;
@@ -73,6 +76,14 @@ export function ProductionPlanDownloadCard({
           </span>
         </a>
       </div>
+      {miniPilotActionState ? (
+        <div className="search-trace" aria-label="Mini-Pilot-Status vor Export">
+          <p className="eyebrow">{miniPilotActionState.eyebrow}</p>
+          <strong>{miniPilotActionState.title}</strong>
+          <p className="helper-text">{miniPilotActionState.statusLabel}</p>
+          <p className="helper-text">{miniPilotActionState.helperText}</p>
+        </div>
+      ) : null}
       {unresolvedItems.length > 0 ? (
         <>
           <p>Offene Punkte:</p>
