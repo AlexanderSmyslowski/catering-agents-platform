@@ -54,6 +54,7 @@ describe("buildProductionMiniPilotActionState", () => {
         errorLabels: []
       }, "Lokaler Stand übernommen · zuletzt aktualisiert 07.06.26, 18:20 · älter als 30 Minuten")
     ).toMatchObject({
+      title: "Vor dem Export Mini-Pilot-Check besser neu ausfuehren",
       cautionLabel: "Übernommener lokaler Stand ist älter als 30 Minuten: vor dem Export bitte neu prüfen."
     });
   });

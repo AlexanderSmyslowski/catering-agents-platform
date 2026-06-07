@@ -23,14 +23,26 @@ function buildMiniPilotCarryoverCautionLabel(storageHintLabel?: string): string 
   return "Übernommener lokaler Stand: vor dem Export besser noch einmal frisch prüfen.";
 }
 
+function isStaleCarryover(storageHintLabel?: string): boolean {
+  return Boolean(
+    storageHintLabel &&
+      /^Lokaler Stand (übernommen|uebernommen)/i.test(storageHintLabel) &&
+      /älter als 30 Minuten/i.test(storageHintLabel)
+  );
+}
+
 export function buildProductionMiniPilotActionState(
   reportState: MiniPilotCheckReportState,
   storageHintLabel?: string
 ): ProductionMiniPilotActionState {
   if (reportState.statusLabel === "ready") {
+    const staleCarryover = isStaleCarryover(storageHintLabel);
+
     return {
       eyebrow: "Mini-Pilot-Status vor Export",
-      title: "Produktions-Export ist jetzt fachlich pruefbar",
+      title: staleCarryover
+        ? "Vor dem Export Mini-Pilot-Check besser neu ausfuehren"
+        : "Produktions-Export ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
       reasonLabel: `Grund: ${reportState.reasonLabel}`,
       provenanceLabel: storageHintLabel,
