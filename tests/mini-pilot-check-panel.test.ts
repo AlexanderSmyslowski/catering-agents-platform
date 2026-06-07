@@ -56,4 +56,53 @@ describe("MiniPilotCheckPanel", () => {
       root.unmount();
     });
   });
+
+  it("clears the pasted result and falls back to the waiting state", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(MiniPilotCheckPanel));
+    });
+
+    const textarea = document.querySelector('textarea[aria-label="Mini-Pilot-Check JSON"]') as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+
+    await act(async () => {
+      setNativeValue(
+        textarea!,
+        JSON.stringify({
+          ok: true,
+          errors: [],
+          summary: {
+            status: "ready",
+            reason: "mini_pilot_ready",
+            nextStep: "Draft nur manuell pruefen."
+          },
+          preflight: {
+            preferredMiniPilotCommand: "npm run llm:synthetic-live:check:mini-pilot"
+          }
+        })
+      );
+    });
+
+    const clearButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      (button.textContent ?? "").includes("Ergebnis leeren")
+    ) as HTMLButtonElement | undefined;
+    expect(clearButton).toBeDefined();
+
+    await act(async () => {
+      clearButton?.click();
+    });
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Status: noch kein Ergebnis");
+    expect(text).toContain("Grund: JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.");
+    expect(document.body.textContent ?? "").not.toContain("Status: ready");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });
