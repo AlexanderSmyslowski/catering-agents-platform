@@ -94,7 +94,10 @@ export function ProductionRouteMainLayout({
   miniPilotReportState,
   miniPilotStorageHintLabel
 }: ProductionRouteMainLayoutProps) {
-  const miniPilotActionState = buildProductionMiniPilotActionState(miniPilotReportState);
+  const miniPilotActionState = buildProductionMiniPilotActionState(
+    miniPilotReportState,
+    miniPilotStorageHintLabel
+  );
 
   return (
     <ProductionConversationalWorkbench
