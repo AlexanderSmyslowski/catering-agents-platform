@@ -5,6 +5,7 @@ import type {
   Recipe
 } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
+import { recipeMenuCategoryConflictReason } from "../recipe-discovery/menu-category-compatibility.js";
 import { isBlockingPlanningIssue } from "./planning-readiness.js";
 import { normalizeRecipeResolution } from "./planning-recipe-resolution.js";
 import { productionConstraintConflictReason } from "./production-constraint-conflicts.js";
@@ -59,25 +60,28 @@ export async function buildRecipeComponentPlanningArtifacts({
     ? await discoveryService.resolveRecipeOverride(component.recipeOverrideId, component)
     : await discoveryService.resolveRecipe(component, eventSpec);
   const resolution = normalizeRecipeResolution(rawResolution, component.label);
+  const resolvedRecipe = resolution.recipe as Recipe | undefined;
   const issues = resolutionIssues(resolution.unresolvedItems);
   const constraintConflict = productionConstraintConflictReason(
-    resolution.recipe,
+    resolvedRecipe,
     eventSpec.productionConstraints
   );
-  const selection = constraintConflict
+  const categoryConflict = recipeMenuCategoryConflictReason(resolvedRecipe, component);
+  const hardConflict = constraintConflict ?? categoryConflict;
+  const selection = hardConflict
     ? {
         ...resolution.selection,
-        selectionReason: constraintConflict,
+        selectionReason: hardConflict,
         autoUsedInternetRecipe: false
       }
     : resolution.selection;
 
-  if (constraintConflict) {
+  if (hardConflict) {
     const artifacts = buildUnresolvedComponentArtifacts({
       component,
       eventSpec,
       servings,
-      reason: constraintConflict,
+      reason: hardConflict,
       timelineLabel: `${component.label} Rezeptklärung`
     });
     return {
@@ -89,7 +93,7 @@ export async function buildRecipeComponentPlanningArtifacts({
     };
   }
 
-  if (!resolution.recipe || servings <= 0) {
+  if (!resolvedRecipe || servings <= 0) {
     const reason = resolution.selection.selectionReason || "Für diese Komponente wurde noch kein belastbares Rezept gefunden.";
     const artifacts = buildUnresolvedComponentArtifacts({
       component,
@@ -111,7 +115,7 @@ export async function buildRecipeComponentPlanningArtifacts({
   const artifacts = buildResolvedRecipePlanningArtifacts({
     eventSpec,
     component,
-    recipe: resolution.recipe as Recipe,
+    recipe: resolvedRecipe,
     servings
   });
   return {

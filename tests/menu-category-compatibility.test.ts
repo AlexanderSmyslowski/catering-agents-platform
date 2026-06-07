@@ -5,6 +5,7 @@ import {
   categoryBoostForText,
   evaluateMenuCategoryCompatibility,
   hasCategoryCue,
+  recipeMenuCategoryConflictReason,
   recipeSupportsMenuCategory
 } from "../production-service/src/recipe-discovery/menu-category-compatibility.js";
 
@@ -159,6 +160,13 @@ describe("menu category compatibility", () => {
   it("rejects vegetarian recipes with meat ingredients", () => {
     expect(recipeSupportsMenuCategory(internalRecipe(["Huhn", "Zucchini"]), component("vegetarian"))).toBe(false);
     expect(recipeSupportsMenuCategory(internalRecipe(["Pilze", "Zucchini"]), component("vegetarian"))).toBe(true);
+  });
+
+  it("explains category conflicts for already selected internal recipes", () => {
+    expect(
+      recipeMenuCategoryConflictReason(internalRecipe(["Sahne", "Ei"]), component("vegan"))
+    ).toBe("Harte Menükategorie vegan blockiert die Rezeptwahl für Gemuesepfanne.");
+    expect(recipeMenuCategoryConflictReason(internalRecipe(["Pilze", "Zucchini"]), component("vegan"))).toBeUndefined();
   });
 
   it("applies the existing category boost and penalty values", () => {
