@@ -16,7 +16,8 @@ describe("buildOfferMiniPilotActionState", () => {
       title: "Uebernahme erst nach gruenem Mini-Pilot-Check",
       statusLabel: "Status: noch kein Ergebnis",
       provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
-      helperText: "Check zuerst lokal ausfuehren."
+      helperText: "Check zuerst lokal ausfuehren.",
+      commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
     });
   });
 
@@ -34,7 +35,8 @@ describe("buildOfferMiniPilotActionState", () => {
       title: "Manuelle Uebernahme ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
       provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
-      helperText: "Draft nur manuell pruefen."
+      helperText: "Draft nur manuell pruefen.",
+      commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
     });
   });
 });

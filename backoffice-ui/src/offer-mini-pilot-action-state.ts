@@ -6,6 +6,7 @@ export interface OfferMiniPilotActionState {
   statusLabel: string;
   provenanceLabel?: string;
   helperText: string;
+  commandLabel: string;
 }
 
 export function buildOfferMiniPilotActionState(
@@ -18,7 +19,8 @@ export function buildOfferMiniPilotActionState(
       title: "Manuelle Uebernahme ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
       provenanceLabel: storageHintLabel,
-      helperText: reportState.nextStepLabel
+      helperText: reportState.nextStepLabel,
+      commandLabel: reportState.commandLabel
     };
   }
 
@@ -27,6 +29,7 @@ export function buildOfferMiniPilotActionState(
     title: "Uebernahme erst nach gruenem Mini-Pilot-Check",
     statusLabel: `Status: ${reportState.statusLabel}`,
     provenanceLabel: storageHintLabel,
-    helperText: reportState.nextStepLabel
+    helperText: reportState.nextStepLabel,
+    commandLabel: reportState.commandLabel
   };
 }
