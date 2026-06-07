@@ -563,6 +563,14 @@ export function parseUploadedRecipeText(input) {
         ]
     });
 }
+export function isRecipeEligibleForOperationalPlanning(recipe) {
+    if (recipe.source.approvalState !== "approved_internal" &&
+        recipe.source.approvalState !== "auto_usable") {
+        return false;
+    }
+    return recipe.source.tier !== "internal_verified" ||
+        recipe.source.approvalState === "approved_internal";
+}
 export class RecipeLibrary {
     recipes;
     constructor(seed = internalRecipes, options) {
@@ -586,8 +594,7 @@ export class RecipeLibrary {
             !genericPrimarySearchTokens.has(token)));
         const normalizedLabel = normalizeSearchText(label.label);
         return (await this.recipes.list())
-            .filter((recipe) => recipe.source.approvalState === "approved_internal" ||
-            recipe.source.approvalState === "auto_usable")
+            .filter(isRecipeEligibleForOperationalPlanning)
             .filter((recipe) => !ignoredImportedRecipePattern.test(recipe.name) &&
             !ignoredImportedRecipePattern.test(recipe.source.reference))
             .map((recipe) => {
