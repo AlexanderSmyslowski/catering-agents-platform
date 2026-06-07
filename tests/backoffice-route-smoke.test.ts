@@ -331,6 +331,8 @@ describe("backoffice route smoke", () => {
     const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
     expect(production).toContain("Produktionsagent");
     expect(production).toContain("Was braucht die Produktion als Nächstes?");
+    expect(production).toContain("Interner Draft-Pilot");
+    expect(production).toContain("Produktions-Draft lokal gegen den Mini-Pilot-Rahmen prüfen");
   });
 
   it("keeps the synthetic core corridor visible from start through offer handoff to production exports", async () => {
@@ -452,6 +454,9 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("requestId: corridor-request-1");
     expect(production.text).toContain("production-objects-zone");
     expect(production.text).toContain("Produktionsobjekte");
+    expect(production.text).toContain("Interner Draft-Pilot");
+    expect(production.text).toContain("Produktions-Draft lokal gegen den Mini-Pilot-Rahmen prüfen");
+    expect(production.text).toContain("npm run llm:synthetic-live:check:mini-pilot");
     expect(production.text).toContain(
       "Produktionsblatt exportieren für Plan corridor-plan-1 · Spezifikation corridor-spec-1"
     );

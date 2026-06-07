@@ -398,6 +398,9 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Klärbereich");
     expect(content).toContain("production-objects-zone");
     expect(content).toContain("Produktionsobjekte");
+    expect(content).toContain("Interner Draft-Pilot");
+    expect(content).toContain("Produktions-Draft lokal gegen den Mini-Pilot-Rahmen prüfen");
+    expect(content).toContain("npm run llm:synthetic-live:check:mini-pilot");
     expect(content).toContain("Vorhandene Pläne, Einkaufslisten und Exportlinks");
     expect(content).toContain("Produktionsblatt exportieren");
     expect(content).toContain("Einkaufsliste exportieren");
