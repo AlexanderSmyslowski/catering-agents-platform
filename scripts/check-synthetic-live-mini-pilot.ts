@@ -10,8 +10,60 @@ import { pathToFileURL } from "node:url";
 export interface SyntheticLiveMiniPilotCheckCliResult {
   ok: boolean;
   errors: string[];
+  summary: {
+    status: "ready" | "blocked";
+    reason:
+      | "mini_pilot_ready"
+      | "preflight_failed"
+      | "mini_pilot_policy_incomplete"
+      | "probe_failed"
+      | "eval_mismatch";
+    nextStep: string;
+  };
   preflight: ReturnType<typeof runLlmReadinessSyntheticLivePreflight>;
   probe?: Awaited<ReturnType<typeof runSyntheticLiveProbeCli>>;
+}
+
+function buildSyntheticLiveMiniPilotSummary(
+  result: Pick<SyntheticLiveMiniPilotCheckCliResult, "ok" | "preflight" | "probe">
+): SyntheticLiveMiniPilotCheckCliResult["summary"] {
+  if (result.ok) {
+    return {
+      status: "ready",
+      reason: "mini_pilot_ready",
+      nextStep: "Mini-Pilot-Rahmen ist gruen. Draft-Ergebnis nur manuell pruefen und bewusst uebernehmen."
+    };
+  }
+
+  if (!result.preflight.ok) {
+    return {
+      status: "blocked",
+      reason: "preflight_failed",
+      nextStep: "Zuerst den lokalen Preflight korrigieren und den Mini-Pilot-Check erneut ausfuehren."
+    };
+  }
+
+  if (!result.preflight.miniPilotReady) {
+    return {
+      status: "blocked",
+      reason: "mini_pilot_policy_incomplete",
+      nextStep: "Fehlende PA62-Mini-Pilot-Markierungen setzen und dann den Check erneut ausfuehren."
+    };
+  }
+
+  if (result.probe?.evalMatched === false) {
+    return {
+      status: "blocked",
+      reason: "eval_mismatch",
+      nextStep: "Provider-Output driftet gegen die Fixture. Draft nicht uebernehmen und zuerst die Abweichung pruefen."
+    };
+  }
+
+  return {
+    status: "blocked",
+    reason: "probe_failed",
+    nextStep: "Probe-Lauffehler pruefen, keine Uebernahme vor erneutem grueneem Mini-Pilot-Check."
+  };
 }
 
 export async function runSyntheticLiveMiniPilotCheckCli(
@@ -42,6 +94,11 @@ export async function runSyntheticLiveMiniPilotCheckCli(
   return {
     ok,
     errors,
+    summary: buildSyntheticLiveMiniPilotSummary({
+      ok,
+      preflight,
+      probe
+    }),
     preflight,
     probe
   };
