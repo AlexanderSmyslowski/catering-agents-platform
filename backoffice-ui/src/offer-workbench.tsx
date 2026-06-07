@@ -181,6 +181,7 @@ export function OfferConversationalWorkbench({
   specEditActions
 }: OfferWorkbenchProps) {
   const miniPilotActionState = buildOfferMiniPilotActionState(miniPilotReportState, miniPilotStorageHintLabel);
+  const showMiniPilotActionClear = miniPilotRawResult.trim().length > 0;
   const focusedDraft = selectedDraft ?? activeDraft;
   const miniPilotCard = buildOfferMiniPilotCardState();
   const focusedDraftId = getDraftId(focusedDraft);
@@ -305,6 +306,17 @@ export function OfferConversationalWorkbench({
                 <p className="helper-text">
                   Lokaler Check: <code>{miniPilotActionState.commandLabel}</code>
                 </p>
+                {showMiniPilotActionClear ? (
+                  <div className="quiet-action-row">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setMiniPilotRawResult("")}
+                    >
+                      Mini-Pilot-Stand leeren
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div className="quiet-action-row">
                 {focusedVariants.map((variant) => (

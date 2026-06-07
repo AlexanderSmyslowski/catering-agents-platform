@@ -36,6 +36,7 @@ type ProductionObjectsPanelProps = {
   objectsActions: ProductionObjectsActions;
   submitting: boolean;
   miniPilotActionState: ProductionMiniPilotActionState;
+  clearMiniPilotResult: () => void;
 };
 
 export function ProductionObjectsPanel({
@@ -43,7 +44,8 @@ export function ProductionObjectsPanel({
   objectsState,
   objectsActions,
   submitting,
-  miniPilotActionState
+  miniPilotActionState,
+  clearMiniPilotResult
 }: ProductionObjectsPanelProps) {
   const panelState = buildProductionObjectsPanelState({
     progressState,
@@ -136,6 +138,7 @@ export function ProductionObjectsPanel({
             selectedPlan={selectedPlan}
             selectedPlanSpec={selectedPlanSpec}
             miniPilotActionState={miniPilotActionState}
+            onClearMiniPilotResult={clearMiniPilotResult}
           />
 
           <ProductionPlanSecondaryDetails
