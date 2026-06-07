@@ -12,6 +12,7 @@ import {
   SCHEMA_VERSION,
   normalizeEventRequestToSpec,
   type AcceptedEventSpec,
+  type Recipe,
   type RecipeSearchQuery,
   type WebRecipeCandidate
 } from "@catering/shared-core";
@@ -103,6 +104,59 @@ function baseCandidate(): WebRecipeCandidate {
       stepCount: 2,
       mappedIngredientRatio: 0.9
     }
+  };
+}
+
+function dairyQuicheRecipe(): Recipe {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    recipeId: "recipe-dairy-quiche",
+    name: "Quiche mit Sahne und Ei",
+    source: {
+      tier: "internal_verified",
+      originType: "internal_db",
+      reference: "house:dairy-quiche",
+      retrievedAt: "2026-06-01T10:00:00.000Z",
+      approvalState: "approved_internal",
+      qualityScore: 0.95,
+      fitScore: 0.95,
+      extractionCompleteness: 1
+    },
+    baseYield: {
+      servings: 12,
+      unit: "servings"
+    },
+    ingredients: [
+      {
+        ingredientId: "cream",
+        name: "Sahne",
+        quantity: {
+          amount: 1,
+          unit: "l"
+        },
+        group: "dairy"
+      },
+      {
+        ingredientId: "eggs",
+        name: "Eier",
+        quantity: {
+          amount: 12,
+          unit: "pcs"
+        },
+        group: "protein"
+      }
+    ],
+    steps: [
+      {
+        index: 1,
+        instruction: "Quiche backen."
+      }
+    ],
+    scalingRules: {
+      defaultLossFactor: 1.05
+    },
+    allergens: ["milk", "egg"],
+    dietTags: ["vegetarian"]
   };
 }
 
@@ -342,5 +396,44 @@ describe("production planning fallbacks", () => {
     expect(artifacts.productionPlan.productionBatches).toHaveLength(0);
     expect(artifacts.purchaseList.items).toHaveLength(0);
     expect(artifacts.purchaseList.totals.itemCount).toBe(0);
+  });
+
+  it("blocks manual recipe overrides that violate the component menu category", async () => {
+    const dataRoot = createDataRoot();
+    const spec = baseSpec("Konferenz am 2026-06-01 fuer 40 Teilnehmer. Buffet mit Quiche.");
+    const recipe = dairyQuicheRecipe();
+    spec.productionConstraints = [];
+    spec.menuPlan = [
+      {
+        ...spec.menuPlan[0],
+        label: "Vegan Quiche",
+        menuCategory: "vegan",
+        recipeOverrideId: recipe.recipeId,
+        productionDecision: {
+          mode: "scratch"
+        }
+      }
+    ];
+
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    await repository.save(recipe);
+    const discovery = new RecipeDiscoveryService(repository, new FakeWebProvider([]));
+
+    try {
+      const artifacts = await buildProductionArtifacts(spec, discovery);
+
+      expect(artifacts.productionPlan.isFallback).toBe(true);
+      expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
+      expect(artifacts.productionPlan.productionBatches).toHaveLength(0);
+      expect(artifacts.productionPlan.recipeSelections[0].recipeId).toBe(recipe.recipeId);
+      expect(artifacts.productionPlan.recipeSelections[0].selectionReason).toContain("Harte Menükategorie vegan");
+      expect(artifacts.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
+      expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Harte Menükategorie vegan");
+      expect(artifacts.productionPlan.fallbackReason).toContain("Harte Menükategorie vegan");
+      expect(artifacts.purchaseList.items).toHaveLength(0);
+      expect(artifacts.purchaseList.totals.itemCount).toBe(0);
+    } finally {
+      rmSync(dataRoot, { recursive: true, force: true });
+    }
   });
 });

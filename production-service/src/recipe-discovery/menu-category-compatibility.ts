@@ -125,7 +125,7 @@ export function recipeSupportsMenuCategory(recipe: Recipe, component: MenuCompon
     return true;
   }
 
-  const text = `${recipe.name} ${recipe.source.reference} ${(recipe.dietTags ?? []).join(" ")}`;
+  const text = `${recipe.name} ${recipe.source?.reference ?? ""} ${(recipe.dietTags ?? []).join(" ")}`;
   if (hasCategoryCue(text, component.menuCategory)) {
     return true;
   }
@@ -144,4 +144,15 @@ export function recipeSupportsMenuCategory(recipe: Recipe, component: MenuCompon
   }
 
   return true;
+}
+
+export function recipeMenuCategoryConflictReason(
+  recipe: Recipe | undefined,
+  component: MenuComponent
+): string | undefined {
+  if (!recipe || !component.menuCategory || recipeSupportsMenuCategory(recipe, component)) {
+    return undefined;
+  }
+
+  return `Harte Menükategorie ${component.menuCategory} blockiert die Rezeptwahl für ${recipe.name || component.label}.`;
 }
