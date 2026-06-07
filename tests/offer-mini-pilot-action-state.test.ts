@@ -10,11 +10,12 @@ describe("buildOfferMiniPilotActionState", () => {
         nextStepLabel: "Check zuerst lokal ausfuehren.",
         commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
         errorLabels: []
-      })
+      }, "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20")
     ).toEqual({
       eyebrow: "Mini-Pilot-Status vor Uebernahme",
       title: "Uebernahme erst nach gruenem Mini-Pilot-Check",
       statusLabel: "Status: noch kein Ergebnis",
+      provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
       helperText: "Check zuerst lokal ausfuehren."
     });
   });
@@ -27,11 +28,12 @@ describe("buildOfferMiniPilotActionState", () => {
         nextStepLabel: "Draft nur manuell pruefen.",
         commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
         errorLabels: []
-      })
+      }, "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20")
     ).toEqual({
       eyebrow: "Mini-Pilot-Status vor Uebernahme",
       title: "Manuelle Uebernahme ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
+      provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
       helperText: "Draft nur manuell pruefen."
     });
   });
