@@ -16,6 +16,10 @@ function buildMiniPilotCarryoverCautionLabel(storageHintLabel?: string): string 
     return undefined;
   }
 
+  if (/älter als 30 Minuten/i.test(storageHintLabel)) {
+    return "Übernommener lokaler Stand ist älter als 30 Minuten: vor dem Export bitte neu prüfen.";
+  }
+
   return "Übernommener lokaler Stand: vor dem Export besser noch einmal frisch prüfen.";
 }
 

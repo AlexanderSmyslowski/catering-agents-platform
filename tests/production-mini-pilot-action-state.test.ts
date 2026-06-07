@@ -43,4 +43,18 @@ describe("buildProductionMiniPilotActionState", () => {
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
     });
   });
+
+  it("strengthens the export caution when the carried-over result is stale", () => {
+    expect(
+      buildProductionMiniPilotActionState({
+        statusLabel: "ready",
+        reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
+        nextStepLabel: "Draft nur manuell pruefen.",
+        commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+        errorLabels: []
+      }, "Lokaler Stand übernommen · zuletzt aktualisiert 07.06.26, 18:20 · älter als 30 Minuten")
+    ).toMatchObject({
+      cautionLabel: "Übernommener lokaler Stand ist älter als 30 Minuten: vor dem Export bitte neu prüfen."
+    });
+  });
 });
