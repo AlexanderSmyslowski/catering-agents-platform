@@ -1,5 +1,6 @@
 import type { ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
+import { buildOfferMiniPilotCardState } from "./offer-mini-pilot-card-state.js";
 import { getSpecLabel } from "./production-language.js";
 
 type ManualSpecInput = {
@@ -169,6 +170,7 @@ export function OfferConversationalWorkbench({
   specEditActions
 }: OfferWorkbenchProps) {
   const focusedDraft = selectedDraft ?? activeDraft;
+  const miniPilotCard = buildOfferMiniPilotCardState();
   const focusedDraftId = getDraftId(focusedDraft);
   const focusedDraftSpec = getDraftProposedSpec(focusedDraft);
   const focusedDraftSource = formatDraftSourceLineage(focusedDraftSpec);
@@ -225,6 +227,19 @@ export function OfferConversationalWorkbench({
             ? `Export: Angebots-HTML für ${focusedDraftId} bereit`
             : "Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden."}
         </p>
+        <div className="search-trace" aria-label="Interner Draft-Pilot">
+          <p className="eyebrow">{miniPilotCard.eyebrow}</p>
+          <strong>{miniPilotCard.title}</strong>
+          <p className="helper-text">{miniPilotCard.helperText}</p>
+          <ul className="item-list trace-list">
+            {miniPilotCard.steps.map((step) => (
+              <li key={step.title}>
+                <strong>{step.title}</strong>
+                <p className="helper-text">{step.body}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
       </aside>
 
       <div className="offer-progressive-zone">
