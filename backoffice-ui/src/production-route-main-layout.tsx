@@ -1,3 +1,6 @@
+import { useMemo, useState } from "react";
+import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
+import { buildProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
 import {
   ProductionHandoffPanel,
   type ProductionHandoffState
@@ -84,10 +87,17 @@ export function ProductionRouteMainLayout({
   recipeLibrary,
   recipeActions
 }: ProductionRouteMainLayoutProps) {
+  const [miniPilotRawResult, setMiniPilotRawResult] = useState("");
+  const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
+  const miniPilotActionState = buildProductionMiniPilotActionState(miniPilotReportState);
+
   return (
     <ProductionConversationalWorkbench
       summary={workbenchSummary}
       nextStep={workbenchNextStep}
+      miniPilotRawResult={miniPilotRawResult}
+      setMiniPilotRawResult={setMiniPilotRawResult}
+      miniPilotReportState={miniPilotReportState}
     >
       <div className="production-column">
         <ProductionInputPanel
@@ -113,6 +123,7 @@ export function ProductionRouteMainLayout({
           objectsState={objectPanelState}
           objectsActions={objectPanelActions}
           submitting={submitting}
+          miniPilotActionState={miniPilotActionState}
         />
       </div>
       <div className="production-column">

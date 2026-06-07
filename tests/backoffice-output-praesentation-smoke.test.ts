@@ -407,6 +407,8 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("npm run llm:synthetic-live:check:mini-pilot");
     expect(content).toContain("Mini-Pilot-Check");
     expect(content).toContain("Status: noch kein Ergebnis");
+    expect(content).toContain("Mini-Pilot-Status vor Export");
+    expect(content).toContain("Export erst nach gruenem Mini-Pilot-Check");
     expect(content).toContain("Vorhandene Pläne, Einkaufslisten und Exportlinks");
     expect(content).toContain("Produktionsblatt exportieren");
     expect(content).toContain("Einkaufsliste exportieren");

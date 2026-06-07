@@ -1409,6 +1409,16 @@ describe("backoffice production acceptance smoke", () => {
               title: "Rückfragen klären",
               description: "Offene Rückfragen prüfen."
             },
+            miniPilotRawResult: "",
+            setMiniPilotRawResult: () => undefined,
+            miniPilotReportState: {
+              statusLabel: "noch kein Ergebnis",
+              reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+              nextStepLabel:
+                "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+              commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+              errorLabels: []
+            },
             children: [
               createElement("div", { key: "input" }, "input"),
               createElement("div", { key: "fragen" }, "fragen"),

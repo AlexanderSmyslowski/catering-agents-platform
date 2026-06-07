@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import type { ProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
 import {
   buildProductionObjectsPanelState,
   formatProductionObjectsEta
@@ -34,13 +35,15 @@ type ProductionObjectsPanelProps = {
   objectsState: ProductionObjectsState;
   objectsActions: ProductionObjectsActions;
   submitting: boolean;
+  miniPilotActionState: ProductionMiniPilotActionState;
 };
 
 export function ProductionObjectsPanel({
   progressState,
   objectsState,
   objectsActions,
-  submitting
+  submitting,
+  miniPilotActionState
 }: ProductionObjectsPanelProps) {
   const panelState = buildProductionObjectsPanelState({
     progressState,
@@ -129,7 +132,11 @@ export function ProductionObjectsPanel({
       ) : null}
       {panelState.showSelectedPlanDetails ? (
         <>
-          <ProductionPlanDownloadCard selectedPlan={selectedPlan} selectedPlanSpec={selectedPlanSpec} />
+          <ProductionPlanDownloadCard
+            selectedPlan={selectedPlan}
+            selectedPlanSpec={selectedPlanSpec}
+            miniPilotActionState={miniPilotActionState}
+          />
 
           <ProductionPlanSecondaryDetails
             selectedPlan={selectedPlan}
