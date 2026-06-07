@@ -227,6 +227,9 @@ describe("local ops check contract", () => {
     expect(packageJson.scripts["llm:synthetic-live:probe:mini-pilot"]).toBe(
       "tsx scripts/run-synthetic-live-llm-readiness.ts --fail-on-eval-mismatch --require-mini-pilot-ready"
     );
+    expect(packageJson.scripts["llm:synthetic-live:check:mini-pilot"]).toBe(
+      "tsx scripts/check-synthetic-live-mini-pilot.ts"
+    );
     expect(packageJson.scripts.test).toBe("vitest run");
     expect(packageJson.scripts.build).toContain("tsc --noEmit");
 
