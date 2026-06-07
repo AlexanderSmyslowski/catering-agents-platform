@@ -50,6 +50,15 @@ describe("app offer route state", () => {
       activeSpec: { specId: "spec-active" },
       completeSpecCount: 2,
       partialSpecCount: 1,
+      miniPilotRawResult: "",
+      setMiniPilotRawResult: (_value) => undefined,
+      miniPilotReportState: {
+        statusLabel: "noch kein Ergebnis",
+        reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+        nextStepLabel: "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+        commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+        errorLabels: []
+      },
       editingSpecId: "spec-edit-1",
       eventType: "meeting",
       eventDate: "2026-06-02",
@@ -86,5 +95,7 @@ describe("app offer route state", () => {
     expect(state.offerWorkbenchState.filteredSpecs).toBe(input.filteredSpecs);
     expect(state.offerWorkbenchState.setOfferText).toBe(input.setOfferText);
     expect(state.offerWorkbenchState.promoteDraft).toBe(input.promoteDraft);
+    expect(state.offerWorkbenchState.setMiniPilotRawResult).toBe(input.setMiniPilotRawResult);
+    expect(state.offerWorkbenchState.miniPilotReportState).toBe(input.miniPilotReportState);
   });
 });

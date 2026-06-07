@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
+import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { buildProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
 import {
   ProductionHandoffPanel,
@@ -63,6 +62,9 @@ export type ProductionRouteMainLayoutProps = {
   recipeUpload: ProductionRecipeUploadState;
   recipeLibrary: ProductionRecipeLibraryState;
   recipeActions: ProductionRecipeActions;
+  miniPilotRawResult: string;
+  setMiniPilotRawResult: (value: string) => void;
+  miniPilotReportState: MiniPilotCheckReportState;
 };
 
 export function ProductionRouteMainLayout({
@@ -85,10 +87,11 @@ export function ProductionRouteMainLayout({
   recipeStatus,
   recipeUpload,
   recipeLibrary,
-  recipeActions
+  recipeActions,
+  miniPilotRawResult,
+  setMiniPilotRawResult,
+  miniPilotReportState
 }: ProductionRouteMainLayoutProps) {
-  const [miniPilotRawResult, setMiniPilotRawResult] = useState("");
-  const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const miniPilotActionState = buildProductionMiniPilotActionState(miniPilotReportState);
 
   return (

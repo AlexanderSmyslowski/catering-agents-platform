@@ -13,6 +13,7 @@ import type {
 import type { ProductionRecipeActions } from "./production-recipe-library-panel.js";
 import type { ProductionRouteMainLayoutProps } from "./production-route-main-layout.js";
 import type { ProductionRouteViewState } from "./production-route-view-state.js";
+import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 
 export type ProductionRouteMainLayoutStateInput = {
   viewState: ProductionRouteViewState;
@@ -26,6 +27,9 @@ export type ProductionRouteMainLayoutStateInput = {
   editorActions: ProductionQuestionEditorActions;
   objectPanelActions: ProductionObjectsActions;
   recipeActions: ProductionRecipeActions;
+  miniPilotRawResult: string;
+  setMiniPilotRawResult: (value: string) => void;
+  miniPilotReportState: MiniPilotCheckReportState;
 };
 
 export function buildProductionRouteMainLayoutState({
@@ -39,7 +43,10 @@ export function buildProductionRouteMainLayoutState({
   editorState,
   editorActions,
   objectPanelActions,
-  recipeActions
+  recipeActions,
+  miniPilotRawResult,
+  setMiniPilotRawResult,
+  miniPilotReportState
 }: ProductionRouteMainLayoutStateInput): ProductionRouteMainLayoutProps {
   return {
     ...viewState,
@@ -52,6 +59,9 @@ export function buildProductionRouteMainLayoutState({
     editorState,
     editorActions,
     objectPanelActions,
-    recipeActions
+    recipeActions,
+    miniPilotRawResult,
+    setMiniPilotRawResult,
+    miniPilotReportState
   };
 }

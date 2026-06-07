@@ -1,7 +1,7 @@
-import { useMemo, useState, type ChangeEvent } from "react";
+import type { ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
-import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
+import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { buildOfferMiniPilotActionState } from "./offer-mini-pilot-action-state.js";
 import { buildOfferMiniPilotCardState } from "./offer-mini-pilot-card-state.js";
 import { getSpecLabel } from "./production-language.js";
@@ -74,6 +74,9 @@ export type OfferWorkbenchProps = {
   activeSpec?: Record<string, unknown>;
   completeSpecCount: number;
   partialSpecCount: number;
+  miniPilotRawResult: string;
+  setMiniPilotRawResult: (value: string) => void;
+  miniPilotReportState: MiniPilotCheckReportState;
   specEdit: SpecEditInput;
   specEditActions: SpecEditActions;
 };
@@ -169,11 +172,12 @@ export function OfferConversationalWorkbench({
   activeSpec,
   completeSpecCount,
   partialSpecCount,
+  miniPilotRawResult,
+  setMiniPilotRawResult,
+  miniPilotReportState,
   specEdit,
   specEditActions
 }: OfferWorkbenchProps) {
-  const [miniPilotRawResult, setMiniPilotRawResult] = useState("");
-  const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const miniPilotActionState = buildOfferMiniPilotActionState(miniPilotReportState);
   const focusedDraft = selectedDraft ?? activeDraft;
   const miniPilotCard = buildOfferMiniPilotCardState();

@@ -161,7 +161,17 @@ describe("production route main layout state", () => {
       editorState,
       editorActions,
       objectPanelActions,
-      recipeActions
+      recipeActions,
+      miniPilotRawResult: "",
+      setMiniPilotRawResult: (_value: string) => undefined,
+      miniPilotReportState: {
+        statusLabel: "noch kein Ergebnis",
+        reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+        nextStepLabel:
+          "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+        commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+        errorLabels: []
+      }
     });
 
     expect(state.workbenchSummary).toBe(viewState.workbenchSummary);
@@ -176,6 +186,7 @@ describe("production route main layout state", () => {
     expect(state.editorActions).toBe(editorActions);
     expect(state.objectPanelActions).toBe(objectPanelActions);
     expect(state.recipeActions).toBe(recipeActions);
+    expect(state.miniPilotReportState.commandLabel).toBe("npm run llm:synthetic-live:check:mini-pilot");
     expect(state.submitting).toBe(true);
   });
 });

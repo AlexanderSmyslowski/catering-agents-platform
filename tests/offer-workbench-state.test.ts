@@ -68,6 +68,15 @@ describe("offer workbench state", () => {
       activeSpec: { specId: "spec-active" },
       completeSpecCount: 2,
       partialSpecCount: 1,
+      miniPilotRawResult: "",
+      setMiniPilotRawResult: (_value) => undefined,
+      miniPilotReportState: {
+        statusLabel: "noch kein Ergebnis",
+        reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+        nextStepLabel: "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+        commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+        errorLabels: []
+      },
       specEdit,
       specEditActions
     };
