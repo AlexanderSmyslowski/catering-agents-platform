@@ -72,7 +72,10 @@ describe("internal recipe resolution", () => {
         fitScore: 0.88,
         primaryScore: 1,
         specificPrimaryScore: 1,
-        leadNameScore: 1
+        leadNameScore: 1,
+        specificPrimaryFocusTokenCount: 1,
+        exactPrimaryNameScore: 0,
+        genericPrimaryOnly: false
       },
       searchTrace: trace
     });
