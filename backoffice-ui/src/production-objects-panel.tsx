@@ -36,7 +36,7 @@ type ProductionObjectsPanelProps = {
   objectsActions: ProductionObjectsActions;
   submitting: boolean;
   miniPilotActionState: ProductionMiniPilotActionState;
-  clearMiniPilotResult: () => void;
+  clearMiniPilotResult?: () => void;
 };
 
 export function ProductionObjectsPanel({

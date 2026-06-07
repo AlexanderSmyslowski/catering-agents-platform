@@ -173,4 +173,37 @@ describe("mini-pilot action clear controls", () => {
       root.unmount();
     });
   });
+
+  it("hides the production clear control when no clear action is wired", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProductionPlanDownloadCard, {
+        selectedPlan: {
+          planId: "plan-1",
+          eventSpecId: "spec-1",
+          readiness: { status: "complete" },
+          productionBatches: [],
+          kitchenSheets: [],
+          recipeSelections: [],
+          unresolvedItems: []
+        },
+        selectedPlanSpec: {
+          specId: "spec-1",
+          event: { type: "lunch", date: "2026-06-18" },
+          attendees: { expected: 40 },
+          readiness: { status: "complete" },
+          servicePlan: { serviceForm: "buffet" }
+        },
+        miniPilotActionState: {
+          eyebrow: "Mini-Pilot-Status vor Export",
+          title: "Export erst nach gruenem Mini-Pilot-Check",
+          statusLabel: "Status: noch kein Ergebnis",
+          reasonLabel: "Grund: JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+          helperText: "Check lokal ausfuehren und dann weiterarbeiten.",
+          commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
+        }
+      })
+    );
+
+    expect(markup).not.toContain("Mini-Pilot-Stand leeren");
+  });
 });

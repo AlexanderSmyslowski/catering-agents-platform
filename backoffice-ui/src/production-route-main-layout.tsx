@@ -98,6 +98,7 @@ export function ProductionRouteMainLayout({
     miniPilotReportState,
     miniPilotStorageHintLabel
   );
+  const canClearMiniPilotResult = miniPilotRawResult.trim().length > 0;
 
   return (
     <ProductionConversationalWorkbench
@@ -133,7 +134,7 @@ export function ProductionRouteMainLayout({
           objectsActions={objectPanelActions}
           submitting={submitting}
           miniPilotActionState={miniPilotActionState}
-          clearMiniPilotResult={() => setMiniPilotRawResult("")}
+          clearMiniPilotResult={canClearMiniPilotResult ? () => setMiniPilotRawResult("") : undefined}
         />
       </div>
       <div className="production-column">
