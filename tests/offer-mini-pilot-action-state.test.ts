@@ -15,6 +15,7 @@ describe("buildOfferMiniPilotActionState", () => {
       eyebrow: "Mini-Pilot-Status vor Uebernahme",
       title: "Uebernahme erst nach gruenem Mini-Pilot-Check",
       statusLabel: "Status: noch kein Ergebnis",
+      reasonLabel: "Grund: JSON-Ausgabe fehlt.",
       provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
       helperText: "Check zuerst lokal ausfuehren.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
@@ -34,6 +35,7 @@ describe("buildOfferMiniPilotActionState", () => {
       eyebrow: "Mini-Pilot-Status vor Uebernahme",
       title: "Manuelle Uebernahme ist jetzt fachlich pruefbar",
       statusLabel: "Status: ready",
+      reasonLabel: "Grund: Mini-Pilot-Rahmen ist gruen.",
       provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
       helperText: "Draft nur manuell pruefen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
