@@ -11,6 +11,18 @@ interface MiniPilotCheckPanelProps {
   storageHintLabel?: string;
 }
 
+function buildStorageWarningLabel(storageHintLabel?: string): string | undefined {
+  if (!storageHintLabel || !/^Lokaler Stand (übernommen|uebernommen)/i.test(storageHintLabel)) {
+    return undefined;
+  }
+
+  if (/älter als 30 Minuten/i.test(storageHintLabel)) {
+    return "Übernommener lokaler Stand ist älter als 30 Minuten: den Check besser noch einmal frisch ausführen.";
+  }
+
+  return "Übernommener lokaler Stand: bei Unsicherheit den Check lokal noch einmal frisch ausführen.";
+}
+
 export function MiniPilotCheckPanel({
   rawResult,
   onRawResultChange,
@@ -23,6 +35,10 @@ export function MiniPilotCheckPanel({
   const effectiveReportState = useMemo(
     () => reportState ?? buildMiniPilotCheckReportState(effectiveRawResult),
     [effectiveRawResult, reportState]
+  );
+  const storageWarningLabel = useMemo(
+    () => buildStorageWarningLabel(storageHintLabel),
+    [storageHintLabel]
   );
   const handleResultInput = (value: string) => {
     if (isControlled) {
@@ -42,6 +58,7 @@ export function MiniPilotCheckPanel({
         naechsten sicheren Schritt lokal zusammen.
       </p>
       {storageHintLabel ? <p className="helper-text">{storageHintLabel}</p> : null}
+      {storageWarningLabel ? <p className="helper-text">{storageWarningLabel}</p> : null}
       <textarea
         aria-label="Mini-Pilot-Check JSON"
         value={effectiveRawResult}
