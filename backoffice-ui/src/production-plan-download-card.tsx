@@ -7,6 +7,7 @@ type ProductionPlanDownloadCardProps = {
   selectedPlan?: Record<string, unknown>;
   selectedPlanSpec?: Record<string, unknown>;
   miniPilotActionState?: ProductionMiniPilotActionState;
+  onClearMiniPilotResult?: () => void;
 };
 
 function translateReadiness(value?: string): string {
@@ -21,7 +22,8 @@ function translateReadiness(value?: string): string {
 export function ProductionPlanDownloadCard({
   selectedPlan,
   selectedPlanSpec,
-  miniPilotActionState
+  miniPilotActionState,
+  onClearMiniPilotResult
 }: ProductionPlanDownloadCardProps) {
   if (!selectedPlan) {
     return null;
@@ -95,6 +97,17 @@ export function ProductionPlanDownloadCard({
           <p className="helper-text">
             Lokaler Check: <code>{miniPilotActionState.commandLabel}</code>
           </p>
+          {onClearMiniPilotResult ? (
+            <div className="quiet-action-row">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onClearMiniPilotResult}
+              >
+                Mini-Pilot-Stand leeren
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {unresolvedItems.length > 0 ? (

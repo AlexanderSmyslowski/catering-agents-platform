@@ -133,6 +133,7 @@ export function ProductionRouteMainLayout({
           objectsActions={objectPanelActions}
           submitting={submitting}
           miniPilotActionState={miniPilotActionState}
+          clearMiniPilotResult={() => setMiniPilotRawResult("")}
         />
       </div>
       <div className="production-column">
