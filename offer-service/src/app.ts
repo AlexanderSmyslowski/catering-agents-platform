@@ -2,14 +2,13 @@ import Fastify, { type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import {
   AuditLogStore,
-  createEventRequestFromText,
   createOfferDraft,
   createUploadSourceMetadata,
   extractTextFromDocument,
   getDemoOfferRequests,
   parseUploadedRecipeText,
+  isDevAuthEnabled,
   RecipeLibrary,
-  promoteOfferVariant,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
   multipartLimitsForUpload,
@@ -18,12 +17,10 @@ import {
   validateUploadedDocument,
   validateUploadedDocumentMetadata,
   type CollectionStorageOptions,
-  validateAcceptedEventSpec,
-  validateEventRequest,
-  validateOfferDraft,
-  type EventRequest
+  validateOfferDraft
 } from "@catering/shared-core";
 import { OfferStore } from "./store.js";
+import { registerOfferDraftRoutes } from "./routes/draft-routes.js";
 
 interface RecipeTextImportBody {
   text: string;
@@ -43,22 +40,30 @@ export interface OfferAppOptions extends CollectionStorageOptions {
   recipeLibrary?: RecipeLibrary;
   auditLog?: AuditLogStore;
   trustedActorSecret?: string;
+  env?: Record<string, string | undefined>;
 }
 
 function isOfferStore(value: OfferStore | OfferAppOptions | undefined): value is OfferStore {
   return value instanceof OfferStore;
 }
 
-function isOfferOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "offer_operator";
+function isOfferOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(
+    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+  ) === "offer_operator";
 }
 
 function requireOfferOperator(
   request: { headers: Record<string, string | string[] | undefined> },
   reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
 ): unknown | undefined {
-  if (!isOfferOperator(request, trustedActorSecret)) {
+  if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
     return reply.code(403).send({
       message: "Angebots-Operator erforderlich."
     });
@@ -67,8 +72,14 @@ function requireOfferOperator(
   return undefined;
 }
 
-function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "operations_audit_operator";
+function isOperationsAuditOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(
+    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+  ) === "operations_audit_operator";
 }
 
 function multipartFieldValue(
@@ -133,16 +144,23 @@ async function recipeImportFromMultipart(
   };
 }
 
-function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string) {
+function actorForRequest(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName: "Angebots-Mitarbeiter",
-    trustedActorSecret
+    trustedActorSecret,
+    allowDevActorHeader
   });
 }
 
 export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   const options = isOfferStore(input) ? { store: input } : input;
-  const trustedActorSecret = options.trustedActorSecret ?? process.env.CATERING_TRUSTED_ACTOR_SECRET;
+  const env = options.env ?? process.env;
+  const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const allowDevActorHeader = isDevAuthEnabled(env);
   const storageOptions = isOfferStore(input) ? input.storageOptions : options;
   const store =
     options.store ??
@@ -190,62 +208,18 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     });
   });
 
-  app.post<{ Body: EventRequest }>("/v1/offers/drafts", async (request, reply) => {
-    if (!isOfferOperator(request, trustedActorSecret)) {
-      return reply.code(403).send({
-        message: "Angebots-Operator erforderlich."
-      });
-    }
-
-    const eventRequest = validateEventRequest(request.body);
-    const draft = validateOfferDraft(createOfferDraft(eventRequest));
-    await store.saveDraft(draft);
-    await auditLog.log({
-      action: "offer.draft_created",
-      entityType: "OfferDraft",
-      entityId: draft.draftId,
-      actor: actorForRequest(request, trustedActorSecret),
-      summary: "Angebotsentwurf aus strukturierter Event-Anfrage erstellt.",
-      details: {
-        requestId: eventRequest.requestId,
-        readiness: draft.proposedEventSpec.readiness.status,
-        variants: draft.variantSet.length
-      }
-    });
-    return reply.code(201).send(draft);
-  });
-
-  app.post<{ Body: { text: string; requestId?: string } }>("/v1/offers/from-text", async (request, reply) => {
-    if (!isOfferOperator(request, trustedActorSecret)) {
-      return reply.code(403).send({
-        message: "Angebots-Operator erforderlich."
-      });
-    }
-
-    const eventRequest = createEventRequestFromText({
-      requestId: request.body.requestId ?? `request-${Date.now()}`,
-      channel: "text",
-      rawText: request.body.text
-    });
-    const draft = validateOfferDraft(createOfferDraft(eventRequest));
-    await store.saveDraft(draft);
-    await auditLog.log({
-      action: "offer.draft_created_from_text",
-      entityType: "OfferDraft",
-      entityId: draft.draftId,
-      actor: actorForRequest(request, trustedActorSecret),
-      summary: "Angebotsentwurf aus Freitext erstellt.",
-      details: {
-        requestId: eventRequest.requestId,
-        readiness: draft.proposedEventSpec.readiness.status,
-        variants: draft.variantSet.length
-      }
-    });
-    return reply.code(201).send(draft);
+  registerOfferDraftRoutes(app, {
+    store,
+    auditLog,
+    trustedActorSecret,
+    allowDevActorHeader,
+    isOfferOperator,
+    requireOfferOperator,
+    actorForRequest
   });
 
   app.post("/v1/offers/seed-demo", async (request, reply) => {
-    if (!isOperationsAuditOperator(request, trustedActorSecret)) {
+    if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Betriebs-/Audit-Operator erforderlich."
       });
@@ -264,7 +238,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       action: "offer.seed_demo",
       entityType: "SeedBatch",
       entityId: `offer-demo-${Date.now()}`,
-      actor: actorForRequest(request, trustedActorSecret),
+      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
       summary: `${seeded.length} Angebotsentwuerfe als Demo angelegt.`,
       details: {
         seededCount: seeded.length
@@ -279,19 +253,8 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     });
   });
 
-  app.get("/v1/offers/drafts", async (request, reply) => {
-    const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    return reply.send({
-      items: await store.listDrafts()
-    });
-  });
-
   app.get("/v1/offers/recipes", async (request, reply) => {
-    const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
+    const forbidden = requireOfferOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
@@ -302,7 +265,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.get<{ Params: { recipeId: string } }>("/v1/offers/recipes/:recipeId", async (request, reply) => {
-    const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
+    const forbidden = requireOfferOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
@@ -316,7 +279,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post<{ Body: RecipeTextImportBody }>("/v1/offers/recipes/import-text", async (request, reply) => {
-    if (!isOfferOperator(request, trustedActorSecret)) {
+    if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
       });
@@ -328,7 +291,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       action: "recipe.imported_text",
       entityType: "Recipe",
       entityId: recipe.recipeId,
-      actor: actorForRequest(request, trustedActorSecret),
+      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
       summary: `Rezepttext in gemeinsame Bibliothek importiert: ${recipe.name}.`,
       details: {
         recipeName: recipe.name,
@@ -340,7 +303,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   app.post("/v1/offers/recipes/upload", async (request, reply) => {
-    if (!isOfferOperator(request, trustedActorSecret)) {
+    if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
       });
@@ -354,7 +317,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         action: "recipe.uploaded_file",
         entityType: "Recipe",
         entityId: recipe.recipeId,
-        actor: actorForRequest(request, trustedActorSecret),
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
         summary: `Rezeptdatei in gemeinsame Bibliothek hochgeladen: ${recipe.name}.`,
         details: {
           recipeName: recipe.name,
@@ -373,7 +336,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   app.patch<{ Params: { recipeId: string }; Body: RecipeReviewBody }>(
     "/v1/offers/recipes/:recipeId/review",
     async (request, reply) => {
-      if (!isOfferOperator(request, trustedActorSecret)) {
+      if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
         return reply.code(403).send({
           message: "Angebots-Operator erforderlich."
         });
@@ -384,7 +347,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         action: "recipe.reviewed",
         entityType: "Recipe",
         entityId: recipe.recipeId,
-        actor: actorForRequest(request, trustedActorSecret),
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
         summary: `Rezept ${recipe.name} ueber den Angebots-Workflow geprueft.`,
         details: {
           decision: request.body.decision,
@@ -393,48 +356,6 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         }
       });
       return reply.send({ recipe });
-    }
-  );
-
-  app.get<{ Params: { draftId: string } }>("/v1/offers/drafts/:draftId", async (request, reply) => {
-    const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    const draft = await store.getDraft(request.params.draftId);
-    if (!draft) {
-      return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
-    }
-
-    return reply.send(draft);
-  });
-
-  app.post<{ Params: { draftId: string }; Body: { variantId?: string } }>(
-    "/v1/offers/drafts/:draftId/promote",
-    async (request, reply) => {
-      const draft = await store.getDraft(request.params.draftId);
-      if (!draft) {
-        return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
-      }
-
-      const promoted = validateAcceptedEventSpec(
-        promoteOfferVariant(draft, request.body?.variantId)
-      );
-      await auditLog.log({
-        action: "offer.promoted_variant",
-        entityType: "AcceptedEventSpec",
-        entityId: promoted.specId,
-        actor: actorForRequest(request, trustedActorSecret),
-        summary: `Angebotsvariante in operative Event-Spezifikation uebernommen.`,
-        details: {
-          draftId: draft.draftId,
-          variantId: request.body?.variantId ?? draft.variantSet[0]?.variantId,
-          readiness: promoted.readiness.status
-        }
-      });
-
-      return reply.code(201).send(promoted);
     }
   );
 

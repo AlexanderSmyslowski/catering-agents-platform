@@ -7,6 +7,7 @@ import {
   MINIMAL_MVP_ROLE_LABELS,
   MINIMAL_MVP_ROLES,
   resolveMinimalMvpRoleFromActorName,
+  resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders
 } from "../shared-core/src/access-control.js";
 
@@ -78,6 +79,53 @@ describe("minimal MVP roles convention", () => {
       source: "untrusted",
       trusted: false
     });
+  });
+
+  it("fails closed without trusted secret unless dev auth is explicitly enabled", () => {
+    const defaultActor = trustedActorFromHeaders(
+      {
+        "x-actor-name": "Produktions-Mitarbeiter"
+      },
+      {
+        fallbackActorName: "Produktions-Mitarbeiter"
+      }
+    );
+    expect(defaultActor).toEqual({
+      name: "Produktions-Mitarbeiter",
+      source: "service-default",
+      trusted: false
+    });
+    expect(resolveMinimalMvpRoleFromTrustedActor(defaultActor)).toBeUndefined();
+
+    const devActor = trustedActorFromHeaders(
+      {
+        "x-actor-name": "Produktions-Mitarbeiter"
+      },
+      {
+        fallbackActorName: "Produktions-Mitarbeiter",
+        allowDevActorHeader: true
+      }
+    );
+    expect(devActor).toEqual({
+      name: "Produktions-Mitarbeiter",
+      source: "dev-header:x-actor-name",
+      trusted: false
+    });
+    expect(resolveMinimalMvpRoleFromTrustedActor(devActor)).toBe("production_operator");
+
+    const devDefaultActor = trustedActorFromHeaders(
+      {},
+      {
+        fallbackActorName: "Produktions-Mitarbeiter",
+        allowDevActorHeader: true
+      }
+    );
+    expect(devDefaultActor).toEqual({
+      name: "Produktions-Mitarbeiter",
+      source: "dev-default",
+      trusted: false
+    });
+    expect(resolveMinimalMvpRoleFromTrustedActor(devDefaultActor)).toBe("production_operator");
   });
 
   it("accepts actor identity from the trusted proxy header when the shared secret matches", () => {

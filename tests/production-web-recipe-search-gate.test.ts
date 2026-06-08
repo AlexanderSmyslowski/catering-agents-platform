@@ -67,7 +67,7 @@ describe("production web recipe search gate", () => {
     const dataRoot = createDataRoot();
     const app = buildProductionApp({
       dataRoot,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {

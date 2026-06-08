@@ -93,6 +93,7 @@ start_service() {
   loop_command=$(cat <<EOF
 cd "${ROOT_DIR}"
 export CATERING_DATA_ROOT="${DATA_ROOT}"
+export CATERING_DEV_AUTH=1
 while true; do
   ${command} >>"${log_file}" 2>&1
   code=\$?

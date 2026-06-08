@@ -5,16 +5,15 @@ import {
   createUploadSourceMetadata,
   extractTextFromDocument,
   getDemoProductionSpecs,
+  isDevAuthEnabled,
   parseUploadedRecipeText,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
   multipartLimitsForUpload,
   readLimitedUploadBuffer,
   uploadErrorResponse,
-  validateAcceptedEventSpec,
   validateUploadedDocument,
   validateUploadedDocumentMetadata,
-  type AcceptedEventSpec,
   type Queryable,
   type RecipeSearchQuery,
   type WebRecipeCandidate
@@ -25,6 +24,7 @@ import { RecipeDiscoveryService } from "./recipe-discovery/service.js";
 import { InMemoryRecipeRepository } from "./repositories/in-memory-recipe-repository.js";
 import { ProductionStore } from "./repositories/production-store.js";
 import { buildProductionArtifacts } from "./rules/planning.js";
+import { registerProductionArtifactRoutes } from "./routes/artifact-routes.js";
 
 interface RecipeTextImportBody {
   text: string;
@@ -39,8 +39,14 @@ interface RecipeReviewBody {
   note?: string;
 }
 
-function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "operations_audit_operator";
+function isOperationsAuditOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(
+    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+  ) === "operations_audit_operator";
 }
 
 function multipartFieldValue(
@@ -136,23 +142,35 @@ function defaultWebRecipeSearchProvider(env: Record<string, string | undefined>)
   return new DisabledWebRecipeSearchProvider();
 }
 
-function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string) {
+function actorForRequest(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName: "Produktions-Mitarbeiter",
-    trustedActorSecret
+    trustedActorSecret,
+    allowDevActorHeader
   });
 }
 
-function isProductionOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "production_operator";
+function isProductionOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(
+    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+  ) === "production_operator";
 }
 
 function requireProductionOperator(
   request: { headers: Record<string, string | string[] | undefined> },
   reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
 ): unknown | undefined {
-  if (!isProductionOperator(request, trustedActorSecret)) {
+  if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
     return reply.code(403).send({
       message: "Produktions-Operator erforderlich."
     });
@@ -164,6 +182,7 @@ function requireProductionOperator(
 export function buildProductionApp(options: ProductionAppOptions = {}) {
   const env = options.env ?? process.env;
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const allowDevActorHeader = isDevAuthEnabled(env);
   const repository =
     options.repository ??
     new InMemoryRecipeRepository(undefined, {
@@ -216,35 +235,19 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     });
   });
 
-  app.post<{ Body: { eventSpec: AcceptedEventSpec } }>("/v1/production/plans", async (request, reply) => {
-    if (!isProductionOperator(request, trustedActorSecret)) {
-      return reply.code(403).send({
-        message: "Produktions-Operator erforderlich."
-      });
-    }
-
-    const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
-    const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
-    await store.savePlan(artifacts.productionPlan);
-    await store.savePurchaseList(artifacts.purchaseList);
-    await auditLog.log({
-      action: "production.plan_created",
-      entityType: "ProductionPlan",
-      entityId: artifacts.productionPlan.planId,
-      actor: actorForRequest(request, trustedActorSecret),
-      summary: `Produktionsplan fuer ${eventSpec.specId} erstellt.`,
-      details: {
-        specId: eventSpec.specId,
-        purchaseListId: artifacts.purchaseList.purchaseListId,
-        readiness: artifacts.productionPlan.readiness.status,
-        recipeSelections: artifacts.productionPlan.recipeSelections.length
-      }
-    });
-    return reply.code(201).send(artifacts);
+  registerProductionArtifactRoutes(app, {
+    store,
+    discoveryService,
+    auditLog,
+    trustedActorSecret,
+    allowDevActorHeader,
+    isProductionOperator,
+    requireProductionOperator,
+    actorForRequest
   });
 
   app.post("/v1/production/seed-demo", async (request, reply) => {
-    if (!isOperationsAuditOperator(request, trustedActorSecret)) {
+    if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Betriebs-/Audit-Operator erforderlich."
       });
@@ -265,7 +268,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       action: "production.seed_demo",
       entityType: "SeedBatch",
       entityId: `production-demo-${Date.now()}`,
-      actor: actorForRequest(request, trustedActorSecret),
+      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
       summary: `${seeded.length} Produktions-Demoplaene angelegt.`,
       details: {
         seededCount: seeded.length
@@ -281,61 +284,8 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     });
   });
 
-  app.get("/v1/production/plans", async (request, reply) => {
-    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    return reply.send({
-      items: await store.listPlans()
-    });
-  });
-
-  app.get<{ Params: { planId: string } }>("/v1/production/plans/:planId", async (request, reply) => {
-    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    const plan = await store.getPlan(request.params.planId);
-    if (!plan) {
-      return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
-    }
-
-    return reply.send(plan);
-  });
-
-  app.get<{ Params: { purchaseListId: string } }>(
-    "/v1/production/purchase-lists/:purchaseListId",
-    async (request, reply) => {
-      const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
-      if (forbidden) {
-        return forbidden;
-      }
-
-      const list = await store.getPurchaseList(request.params.purchaseListId);
-      if (!list) {
-        return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
-      }
-
-      return reply.send(list);
-    }
-  );
-
-  app.get("/v1/production/purchase-lists", async (request, reply) => {
-    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    return reply.send({
-      items: await store.listPurchaseLists()
-    });
-  });
-
   app.get<{ Querystring: { limit?: string } }>("/v1/production/audit/events", async (request, reply) => {
-    if (!isOperationsAuditOperator(request, trustedActorSecret)) {
+    if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Betriebs-/Audit-Operator erforderlich."
       });
@@ -351,7 +301,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.get("/v1/production/recipes", async (request, reply) => {
-    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
@@ -362,7 +312,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.get<{ Params: { recipeId: string } }>("/v1/production/recipes/:recipeId", async (request, reply) => {
-    const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
@@ -376,7 +326,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.post<{ Body: RecipeTextImportBody }>("/v1/production/recipes/import-text", async (request, reply) => {
-    if (!isProductionOperator(request, trustedActorSecret)) {
+    if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Produktions-Operator erforderlich."
       });
@@ -388,7 +338,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       action: "recipe.imported_text",
       entityType: "Recipe",
       entityId: recipe.recipeId,
-      actor: actorForRequest(request, trustedActorSecret),
+      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
       summary: `Rezepttext in gemeinsame Bibliothek importiert: ${recipe.name}.`,
       details: {
         recipeName: recipe.name,
@@ -400,7 +350,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.post("/v1/production/recipes/upload", async (request, reply) => {
-    if (!isProductionOperator(request, trustedActorSecret)) {
+    if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Produktions-Operator erforderlich."
       });
@@ -414,7 +364,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
         action: "recipe.uploaded_file",
         entityType: "Recipe",
         entityId: recipe.recipeId,
-        actor: actorForRequest(request, trustedActorSecret),
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
         summary: `Rezeptdatei in gemeinsame Bibliothek hochgeladen: ${recipe.name}.`,
         details: {
           recipeName: recipe.name,
@@ -433,7 +383,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   app.patch<{ Params: { recipeId: string }; Body: RecipeReviewBody }>(
     "/v1/production/recipes/:recipeId/review",
     async (request, reply) => {
-      if (!isProductionOperator(request, trustedActorSecret)) {
+      if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
         return reply.code(403).send({
           message: "Produktions-Operator erforderlich."
         });
@@ -444,7 +394,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
         action: "recipe.reviewed",
         entityType: "Recipe",
         entityId: recipe.recipeId,
-        actor: actorForRequest(request, trustedActorSecret),
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
         summary: `Rezept ${recipe.name} ueber den Produktions-Workflow geprueft.`,
         details: {
           decision: request.body.decision,

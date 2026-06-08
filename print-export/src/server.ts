@@ -7,10 +7,11 @@ const app = buildPrintExportApp({
   databaseUrl
 });
 const port = Number(process.env.PORT ?? process.env.PRINT_EXPORT_PORT ?? 3104);
+const host = process.env.HOST ?? process.env.PRINT_EXPORT_HOST ?? "127.0.0.1";
 
 app.listen({
   port,
-  host: "0.0.0.0"
+  host
 }).catch((error) => {
   app.log.error(error);
   process.exit(1);

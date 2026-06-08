@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
 DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
 START_COMMAND="npm run local:start --seed-demo"
+DEV_AUTH_HINT="CATERING_DEV_AUTH=1"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 
 required_sessions=(
@@ -132,6 +133,7 @@ fi
 data_root="${requested_data_root:-${recorded_data_root:-${ROOT_DIR}/data}}"
 
 echo "Startweg vorhanden: ${START_COMMAND}"
+echo "Lokaler Dev-Auth-Modus: ${DEV_AUTH_HINT} in local:start-Serviceprozessen erwartet"
 echo "Lokale Datenwurzel: ${data_root}"
 echo ""
 echo "Statuspruefung:"

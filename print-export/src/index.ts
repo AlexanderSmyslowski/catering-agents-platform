@@ -8,6 +8,7 @@ import type {
   PurchaseList
 } from "@catering/shared-core";
 import {
+  isDevAuthEnabled,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders
 } from "@catering/shared-core";
@@ -180,37 +181,49 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
 
 export interface PrintExportAppOptions extends CollectionStorageOptions {
   trustedActorSecret?: string;
+  env?: Record<string, string | undefined>;
 }
 
 function actorForRequest(
   request: { headers: Record<string, string | string[] | undefined> },
   fallbackActorName: string,
-  trustedActorSecret?: string
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
 ) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName,
-    trustedActorSecret
+    trustedActorSecret,
+    allowDevActorHeader
   });
 }
 
-function isOfferOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
+function isOfferOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+): boolean {
   return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, "Angebots-Mitarbeiter", trustedActorSecret)
+    actorForRequest(request, "Angebots-Mitarbeiter", trustedActorSecret, allowDevActorHeader)
   ) === "offer_operator";
 }
 
-function isProductionOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
+function isProductionOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+): boolean {
   return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, "Produktions-Mitarbeiter", trustedActorSecret)
+    actorForRequest(request, "Produktions-Mitarbeiter", trustedActorSecret, allowDevActorHeader)
   ) === "production_operator";
 }
 
 function requireOfferOperator(
   request: { headers: Record<string, string | string[] | undefined> },
   reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
 ): unknown | undefined {
-  if (!isOfferOperator(request, trustedActorSecret)) {
+  if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
     return reply.code(403).send({
       message: "Angebots-Operator erforderlich."
     });
@@ -222,9 +235,10 @@ function requireOfferOperator(
 function requireProductionOperator(
   request: { headers: Record<string, string | string[] | undefined> },
   reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
 ): unknown | undefined {
-  if (!isProductionOperator(request, trustedActorSecret)) {
+  if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
     return reply.code(403).send({
       message: "Produktions-Operator erforderlich."
     });
@@ -234,7 +248,9 @@ function requireProductionOperator(
 }
 
 export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
-  const trustedActorSecret = options.trustedActorSecret ?? process.env.CATERING_TRUSTED_ACTOR_SECRET;
+  const env = options.env ?? process.env;
+  const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const allowDevActorHeader = isDevAuthEnabled(env);
   const app = Fastify({
     logger: false
   });
@@ -271,7 +287,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   app.get<{ Params: { draftId: string } }>(
     "/v1/exports/offers/:draftId/html",
     async (request, reply) => {
-      const forbidden = requireOfferOperator(request, reply, trustedActorSecret);
+      const forbidden = requireOfferOperator(request, reply, trustedActorSecret, allowDevActorHeader);
       if (forbidden) {
         return forbidden;
       }
@@ -294,7 +310,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   app.get<{ Params: { planId: string } }>(
     "/v1/exports/production-plans/:planId/html",
     async (request, reply) => {
-      const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
       if (forbidden) {
         return forbidden;
       }
@@ -317,7 +333,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   app.get<{ Params: { purchaseListId: string } }>(
     "/v1/exports/purchase-lists/:purchaseListId/csv",
     async (request, reply) => {
-      const forbidden = requireProductionOperator(request, reply, trustedActorSecret);
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
       if (forbidden) {
         return forbidden;
       }
