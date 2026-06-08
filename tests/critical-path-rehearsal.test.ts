@@ -343,7 +343,11 @@ describe("critical path rehearsal", () => {
         ])
       );
     } finally {
-      await Promise.all([offerApp.close(), productionApp.close(), exportApp.close()]);
+      await Promise.all([
+        offerApp.close(),
+        productionApp.close(),
+        exportApp.close()
+      ]);
     }
   });
 });

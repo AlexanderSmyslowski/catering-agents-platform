@@ -8,7 +8,8 @@ The critical path is:
 
 Intake -> EventSpec -> Offer Draft -> Promote -> Production Plan -> Purchase List -> Export/Audit evidence.
 
-This goal proves that the platform can perform its core internal job once, using synthetic data only.
+This goal proves that the platform can perform its core internal job once,
+using synthetic data only.
 
 ## Hard constraints
 
@@ -84,7 +85,8 @@ Find the smallest existing deterministic path that can produce:
 
 Prefer an HTTP-level test if the existing app builders and routes make it stable.
 
-If the full HTTP path is not currently expressible without large fixture complexity, use the smallest service/domain-level rehearsal that still proves the same business flow.
+If the full HTTP path is not currently expressible without large fixture complexity,
+use the smallest service/domain-level rehearsal that still proves the same business flow.
 
 Do not create broad new endpoints just to make the test pass.
 
