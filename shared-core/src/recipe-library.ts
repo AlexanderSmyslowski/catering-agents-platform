@@ -6,6 +6,7 @@ import {
   type PersistentCollection
 } from "./persistence.js";
 import { internalRecipes } from "./fixtures/sample-data.js";
+import { isTrustedProductionRecipe } from "./recipe-research-calculation-boundary.js";
 import { ingredientGroupHints, unitNormalization } from "./taxonomies/defaults.js";
 import {
   SCHEMA_VERSION,
@@ -672,15 +673,7 @@ export function parseUploadedRecipeText(input: {
 }
 
 export function isRecipeEligibleForOperationalPlanning(recipe: Recipe): boolean {
-  if (
-    recipe.source.approvalState !== "approved_internal" &&
-    recipe.source.approvalState !== "auto_usable"
-  ) {
-    return false;
-  }
-
-  return recipe.source.tier !== "internal_verified" ||
-    recipe.source.approvalState === "approved_internal";
+  return isTrustedProductionRecipe(recipe);
 }
 
 export class RecipeLibrary {

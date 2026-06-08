@@ -5,6 +5,16 @@ function fakeRecipe(schemaVersion: string) {
     schemaVersion,
     recipeId: "recipe-tomato-soup",
     name: "Tomatensuppe",
+    source: {
+      tier: "internal_verified",
+      originType: "internal_db",
+      reference: "internal:recipe-tomato-soup",
+      retrievedAt: "2026-06-01T10:00:00.000Z",
+      approvalState: "approved_internal",
+      qualityScore: 1,
+      fitScore: 1,
+      extractionCompleteness: 1
+    },
     baseYield: {
       servings: 10,
       unit: "servings"
