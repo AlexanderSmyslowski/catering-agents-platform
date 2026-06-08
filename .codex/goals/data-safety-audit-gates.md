@@ -25,7 +25,7 @@ customer data, external LLM providers, or external recipe/web research are allow
 - Local runtime smoke exists.
 - Docker Compose runtime smoke exists.
 - Critical path rehearsal exists and uses synthetic data.
-- LLM and web recipe search must remain gated.
+- LLM provider calls and web recipe search must remain gated.
 - The platform is an internal controlled MVP, not public SaaS.
 
 ## Tasks
@@ -85,4 +85,5 @@ customer data, external LLM providers, or external recipe/web research are allow
 - Stop and report if audit expectations conflict with current design.
 - Stop and report if a real-data gate requires a product decision.
 - Stop and report if fixing a gap requires broad architecture changes.
-- Stop and report if LLM or web-provider safety cannot be tested without new product behavior.
+- Stop and report if LLM or web-provider safety cannot be tested without new
+  product behavior.

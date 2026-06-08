@@ -111,6 +111,7 @@ describe("data safety and audit gates", () => {
     expect(llmReadinessForbiddenBoundaries).toEqual(
       expect.arrayContaining(["noProvider", "noModelCalls", "noRealData", "noProductObjectWrites"])
     );
+
     expect(llmReadinessDraftContracts.every((contract) => contract.providerCalls === "disabled")).toBe(true);
     expect(llmReadinessDraftContracts.every((contract) => contract.dataMode === "synthetic_or_demo_only")).toBe(true);
     expect(llmReadinessDraftContracts.every((contract) => contract.writesProductObject === false)).toBe(true);

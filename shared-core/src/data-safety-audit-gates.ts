@@ -16,6 +16,7 @@ export type ExternalExposure = "none" | "disabled_by_default" | "blocked_until_d
 
 export type ProductApprovalEffect = "none" | "draft_only" | "product_mutation";
 
+
 export interface DataIngressPath {
   id: string;
   service: DataSafetyService;
