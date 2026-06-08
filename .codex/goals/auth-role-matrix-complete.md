@@ -4,7 +4,7 @@
 
 Make the MVP authorization boundary explicit and testable for all mutating MVP routes.
 
-Every mutating MVP route must have role coverage for:
+Every mutating MVP route must include role coverage for:
 - no actor -> 403
 - wrong role -> 403
 - correct role -> passes auth boundary
@@ -13,7 +13,7 @@ Every mutating MVP route must have role coverage for:
 
 ## Hard constraints
 
-Do not:
+Do not do any of the following:
 - add product behavior
 - add UI behavior
 - change persistence behavior
@@ -24,7 +24,7 @@ Do not:
 - refactor unrelated routes
 - create broad architectural changes
 
-Prefer:
+Prefer the following:
 - table-driven tests
 - explicit route-to-role mapping
 - minimal fixtures
