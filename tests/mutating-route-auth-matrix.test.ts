@@ -4,6 +4,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createEventRequestFromText,
+  MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES,
+  type MinimalMvpRole,
   normalizeEventRequestToSpec
 } from "@catering/shared-core";
 import { buildIntakeApp } from "../intake-service/src/app.js";
@@ -13,124 +15,191 @@ import { buildProductionApp } from "../production-service/src/app.js";
 type MutableRoute = {
   service: "intake" | "offer" | "production";
   method: "POST" | "PATCH";
-  url: string;
-  payload?: unknown;
+  pathTemplate: string;
+  requiredRole: MinimalMvpRole;
+  url?: string;
+  payload?: unknown | (() => unknown);
+  prepareCorrectRoleCase?: (
+    app: unknown,
+    headers: Record<string, string>
+  ) => Promise<{
+    url?: string;
+    payload?: unknown;
+  }>;
 };
 
 const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "intake",
     method: "POST",
-    url: "/v1/intake/normalize",
+    pathTemplate: "/v1/intake/normalize",
+    requiredRole: "intake_operator",
     payload: { text: "Lunch fuer 20 Personen.", requestId: "matrix-intake-1" }
   },
   {
     service: "intake",
     method: "POST",
-    url: "/v1/intake/documents",
+    pathTemplate: "/v1/intake/documents",
+    requiredRole: "intake_operator",
     payload: { documents: [] }
   },
   {
     service: "intake",
     method: "POST",
-    url: "/v1/intake/documents/upload"
+    pathTemplate: "/v1/intake/documents/upload",
+    requiredRole: "intake_operator"
   },
   {
     service: "intake",
     method: "POST",
-    url: "/v1/intake/specs/manual",
+    pathTemplate: "/v1/intake/specs/manual",
+    requiredRole: "intake_operator",
     payload: { eventType: "Lunch", attendeeCount: 20 }
   },
   {
     service: "intake",
     method: "POST",
-    url: "/v1/intake/seed-demo"
+    pathTemplate: "/v1/intake/seed-demo",
+    requiredRole: "operations_audit_operator"
   },
   {
     service: "intake",
     method: "POST",
+    pathTemplate: "/v1/intake/requests/:requestId/archive",
+    requiredRole: "intake_operator",
     url: "/v1/intake/requests/matrix-request/archive",
     payload: { reasonCode: "wrong_upload" }
   },
   {
     service: "intake",
     method: "PATCH",
+    pathTemplate: "/v1/intake/specs/:specId",
+    requiredRole: "intake_operator",
     url: "/v1/intake/specs/matrix-spec",
     payload: { attendeeCount: 22 }
   },
   {
     service: "intake",
     method: "POST",
-    url: "/v1/intake/spec-governance/finalize",
+    pathTemplate: "/v1/intake/spec-governance/finalize",
+    requiredRole: "operations_audit_operator",
     payload: { specId: "matrix-spec", confirmCriticalFinalize: true }
   },
   {
     service: "offer",
     method: "POST",
-    url: "/v1/offers/drafts",
-    payload: { schemaVersion: "1.0.0" }
+    pathTemplate: "/v1/offers/drafts",
+    requiredRole: "offer_operator",
+    payload: () =>
+      createEventRequestFromText({
+        requestId: "matrix-offer-drafts-1",
+        channel: "text",
+        rawText: "Business Lunch fuer 35 Personen."
+      })
   },
   {
     service: "offer",
     method: "POST",
-    url: "/v1/offers/from-text",
+    pathTemplate: "/v1/offers/from-text",
+    requiredRole: "offer_operator",
     payload: { text: "Business Lunch fuer 35 Personen." }
   },
   {
     service: "offer",
     method: "POST",
-    url: "/v1/offers/seed-demo"
+    pathTemplate: "/v1/offers/seed-demo",
+    requiredRole: "operations_audit_operator"
   },
   {
     service: "offer",
     method: "POST",
-    url: "/v1/offers/recipes/import-text",
+    pathTemplate: "/v1/offers/recipes/import-text",
+    requiredRole: "offer_operator",
     payload: { recipeName: "Matrix Rezept", text: "Zutaten\n1 kg Wasser" }
   },
   {
     service: "offer",
     method: "POST",
-    url: "/v1/offers/recipes/upload"
+    pathTemplate: "/v1/offers/recipes/upload",
+    requiredRole: "offer_operator"
   },
   {
     service: "offer",
     method: "PATCH",
+    pathTemplate: "/v1/offers/recipes/:recipeId/review",
+    requiredRole: "offer_operator",
     url: "/v1/offers/recipes/matrix-recipe/review",
-    payload: { decision: "verify" }
+    payload: { decision: "verify" },
+    prepareCorrectRoleCase: async (app, headers) => {
+      const imported = await inject(app, {
+        method: "POST",
+        url: "/v1/offers/recipes/import-text",
+        headers,
+        payload: recipeImportPayload("offer-review")
+      });
+      expect(imported.statusCode).toBe(201);
+      const recipeId = imported.json<{ recipe: { recipeId: string } }>().recipe.recipeId;
+      return {
+        url: `/v1/offers/recipes/${recipeId}/review`,
+        payload: { decision: "verify" }
+      };
+    }
   },
   {
     service: "offer",
     method: "POST",
+    pathTemplate: "/v1/offers/drafts/:draftId/promote",
+    requiredRole: "offer_operator",
     url: "/v1/offers/drafts/matrix-draft/promote",
     payload: { variantId: "variant-2" }
   },
   {
     service: "production",
     method: "POST",
-    url: "/v1/production/plans",
-    payload: { eventSpec: {} }
+    pathTemplate: "/v1/production/plans",
+    requiredRole: "production_operator",
+    payload: () => ({ eventSpec: productionEventSpec() })
   },
   {
     service: "production",
     method: "POST",
-    url: "/v1/production/seed-demo"
+    pathTemplate: "/v1/production/seed-demo",
+    requiredRole: "operations_audit_operator"
   },
   {
     service: "production",
     method: "POST",
-    url: "/v1/production/recipes/import-text",
-    payload: { recipeName: "Matrix Rezept", text: "Zutaten\n1 kg Wasser" }
+    pathTemplate: "/v1/production/recipes/import-text",
+    requiredRole: "production_operator",
+    payload: recipeImportPayload("production-import")
   },
   {
     service: "production",
     method: "POST",
-    url: "/v1/production/recipes/upload"
+    pathTemplate: "/v1/production/recipes/upload",
+    requiredRole: "production_operator"
   },
   {
     service: "production",
     method: "PATCH",
+    pathTemplate: "/v1/production/recipes/:recipeId/review",
+    requiredRole: "production_operator",
     url: "/v1/production/recipes/matrix-recipe/review",
-    payload: { decision: "verify" }
+    payload: { decision: "verify" },
+    prepareCorrectRoleCase: async (app, headers) => {
+      const imported = await inject(app, {
+        method: "POST",
+        url: "/v1/production/recipes/import-text",
+        headers,
+        payload: recipeImportPayload("production-review")
+      });
+      expect(imported.statusCode).toBe(201);
+      const recipeId = imported.json<{ recipe: { recipeId: string } }>().recipe.recipeId;
+      return {
+        url: `/v1/production/recipes/${recipeId}/review`,
+        payload: { decision: "verify" }
+      };
+    }
   }
 ];
 
@@ -144,6 +213,34 @@ const trustedHeaders = (actorName: string) => ({
   "x-catering-actor-name": actorName,
   "x-catering-trusted-secret": TRUSTED_SECRET
 });
+
+const actorNameForRole = (role: MinimalMvpRole) => MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES[role];
+
+const wrongActorNameForRole = (role: MinimalMvpRole) =>
+  role === "operations_audit_operator"
+    ? actorNameForRole("production_operator")
+    : actorNameForRole("operations_audit_operator");
+
+function routeUrl(route: MutableRoute): string {
+  return route.url ?? route.pathTemplate;
+}
+
+function routePayload(route: MutableRoute): unknown {
+  return typeof route.payload === "function" ? route.payload() : route.payload;
+}
+
+function recipeImportPayload(label: string) {
+  return {
+    recipeName: `Matrix Rezept ${label}`,
+    text: [
+      "Zutaten",
+      "1 kg Wasser",
+      "500 g Tomaten",
+      "Zubereitung",
+      "1. Alles erhitzen und abschmecken."
+    ].join("\n")
+  };
+}
 
 async function inject(
   app: unknown,
@@ -169,6 +266,38 @@ function productionEventSpec() {
   );
 }
 
+function buildAppForRoute(route: MutableRoute, dataRoot: string) {
+  return route.service === "intake"
+    ? buildIntakeApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} })
+    : route.service === "offer"
+      ? buildOfferApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} })
+      : buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+}
+
+function discoverRegisteredMutatingRoutes(): string[] {
+  const routeSources = [
+    "intake-service/src/app.ts",
+    "intake-service/src/routes/work-item-routes.ts",
+    "offer-service/src/app.ts",
+    "offer-service/src/routes/draft-routes.ts",
+    "production-service/src/app.ts",
+    "production-service/src/routes/artifact-routes.ts",
+    "print-export/src/index.ts"
+  ];
+  const routePattern = /app\.(post|put|patch|delete)(?:<[\s\S]{0,500}?>)?\(\s*["']([^"']+)["']/g;
+  const routes = new Set<string>();
+
+  for (const routeSource of routeSources) {
+    const source = readFileSync(routeSource, "utf8");
+    let match: RegExpExecArray | null;
+    while ((match = routePattern.exec(source)) !== null) {
+      routes.add(`${match[1].toUpperCase()} ${match[2]}`);
+    }
+  }
+
+  return [...routes].sort();
+}
+
 describe("mutating MVP route auth matrix", () => {
   const dataRoots: string[] = [];
 
@@ -178,8 +307,16 @@ describe("mutating MVP route auth matrix", () => {
     }
   });
 
+  it("keeps the mutating route inventory aligned with service registrations", () => {
+    expect(discoverRegisteredMutatingRoutes()).toEqual(
+      mutatingMvpRoutes
+        .map((route) => `${route.method} ${route.pathTemplate}`)
+        .sort()
+    );
+  });
+
   it.each(mutatingMvpRoutes)(
-    "fails closed for $method $url without trusted actor or CATERING_DEV_AUTH",
+    "fails closed for $method $pathTemplate without trusted actor or CATERING_DEV_AUTH",
     async (route) => {
       const dataRoot = createDataRoot();
       dataRoots.push(dataRoot);
@@ -193,8 +330,8 @@ describe("mutating MVP route auth matrix", () => {
       try {
         const response = await inject(app, {
           method: route.method,
-          url: route.url,
-          payload: route.payload as object | string | Buffer | undefined
+          url: routeUrl(route),
+          payload: routePayload(route) as object | string | Buffer | undefined
         });
 
         expect(response.statusCode).toBe(403);
@@ -204,177 +341,54 @@ describe("mutating MVP route auth matrix", () => {
     }
   );
 
-  it("rejects wrong roles and accepts the correct role for critical intake mutations", async () => {
-    const dataRoot = createDataRoot();
-    dataRoots.push(dataRoot);
-    const app = buildIntakeApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+  it.each(mutatingMvpRoutes)(
+    "rejects the wrong trusted role for $method $pathTemplate",
+    async (route) => {
+      const dataRoot = createDataRoot();
+      dataRoots.push(dataRoot);
+      const app = buildAppForRoute(route, dataRoot);
 
-    try {
-      const wrongNormalize = await inject(app, {
-        method: "POST",
-        url: "/v1/intake/normalize",
-        headers: trustedHeaders("Angebots-Mitarbeiter"),
-        payload: { text: "Lunch fuer 20 Personen.", requestId: "matrix-intake-positive" }
-      });
-      expect(wrongNormalize.statusCode).toBe(403);
+      try {
+        const response = await inject(app, {
+          method: route.method,
+          url: routeUrl(route),
+          headers: trustedHeaders(wrongActorNameForRole(route.requiredRole)),
+          payload: routePayload(route) as object | string | Buffer | undefined
+        });
 
-      const correctNormalize = await inject(app, {
-        method: "POST",
-        url: "/v1/intake/normalize",
-        headers: trustedHeaders("Intake-Mitarbeiter"),
-        payload: { text: "Lunch fuer 20 Personen.", requestId: "matrix-intake-positive" }
-      });
-      expect(correctNormalize.statusCode).toBe(201);
-      const requestId = correctNormalize.json<{ eventRequest: { requestId: string } }>().eventRequest.requestId;
-
-      const wrongArchive = await inject(app, {
-        method: "POST",
-        url: `/v1/intake/requests/${requestId}/archive`,
-        headers: trustedHeaders("Angebots-Mitarbeiter"),
-        payload: { reasonCode: "wrong_upload" }
-      });
-      expect(wrongArchive.statusCode).toBe(403);
-
-      const correctArchive = await inject(app, {
-        method: "POST",
-        url: `/v1/intake/requests/${requestId}/archive`,
-        headers: trustedHeaders("Intake-Mitarbeiter"),
-        payload: { reasonCode: "wrong_upload" }
-      });
-      expect(correctArchive.statusCode).toBe(200);
-
-      const wrongFinalize = await inject(app, {
-        method: "POST",
-        url: "/v1/intake/spec-governance/finalize",
-        headers: trustedHeaders("Intake-Mitarbeiter"),
-        payload: { specId: "matrix-spec", confirmCriticalFinalize: true }
-      });
-      expect(wrongFinalize.statusCode).toBe(403);
-
-      const correctFinalize = await inject(app, {
-        method: "POST",
-        url: "/v1/intake/spec-governance/finalize",
-        headers: trustedHeaders("Betriebs-/Audit-Operator"),
-        payload: { specId: "matrix-spec", confirmCriticalFinalize: true }
-      });
-      expect(correctFinalize.statusCode).toBe(200);
-    } finally {
-      await app.close();
+        expect(response.statusCode).toBe(403);
+      } finally {
+        await app.close();
+      }
     }
-  });
+  );
 
-  it("rejects wrong roles and accepts the correct role for critical offer mutations", async () => {
-    const dataRoot = createDataRoot();
-    dataRoots.push(dataRoot);
-    const app = buildOfferApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+  it.each(mutatingMvpRoutes)(
+    "lets the correct trusted role pass the auth boundary for $method $pathTemplate",
+    async (route) => {
+      const dataRoot = createDataRoot();
+      dataRoots.push(dataRoot);
+      const app = buildAppForRoute(route, dataRoot);
+      const headers = trustedHeaders(actorNameForRole(route.requiredRole));
 
-    try {
-      const wrongDraft = await inject(app, {
-        method: "POST",
-        url: "/v1/offers/from-text",
-        headers: trustedHeaders("Produktions-Mitarbeiter"),
-        payload: { text: "Business Lunch fuer 35 Personen.", requestId: "matrix-offer-positive" }
-      });
-      expect(wrongDraft.statusCode).toBe(403);
+      try {
+        const prepared = route.prepareCorrectRoleCase
+          ? await route.prepareCorrectRoleCase(app, headers)
+          : {};
+        const response = await inject(app, {
+          method: route.method,
+          url: prepared.url ?? routeUrl(route),
+          headers,
+          payload: (prepared.payload ?? routePayload(route)) as object | string | Buffer | undefined
+        });
 
-      const correctDraft = await inject(app, {
-        method: "POST",
-        url: "/v1/offers/from-text",
-        headers: trustedHeaders("Angebots-Mitarbeiter"),
-        payload: { text: "Business Lunch fuer 35 Personen.", requestId: "matrix-offer-positive" }
-      });
-      expect(correctDraft.statusCode).toBe(201);
-      const draftId = correctDraft.json<{ draftId: string }>().draftId;
-
-      const wrongPromote = await inject(app, {
-        method: "POST",
-        url: `/v1/offers/drafts/${draftId}/promote`,
-        headers: trustedHeaders("Produktions-Mitarbeiter"),
-        payload: { variantId: "variant-2" }
-      });
-      expect(wrongPromote.statusCode).toBe(403);
-
-      const correctPromote = await inject(app, {
-        method: "POST",
-        url: `/v1/offers/drafts/${draftId}/promote`,
-        headers: trustedHeaders("Angebots-Mitarbeiter"),
-        payload: { variantId: "variant-2" }
-      });
-      expect(correctPromote.statusCode).toBe(201);
-
-      const wrongSeed = await inject(app, {
-        method: "POST",
-        url: "/v1/offers/seed-demo",
-        headers: trustedHeaders("Angebots-Mitarbeiter")
-      });
-      expect(wrongSeed.statusCode).toBe(403);
-
-      const correctSeed = await inject(app, {
-        method: "POST",
-        url: "/v1/offers/seed-demo",
-        headers: trustedHeaders("Betriebs-/Audit-Operator")
-      });
-      expect(correctSeed.statusCode).toBe(201);
-    } finally {
-      await app.close();
+        expect(response.statusCode).not.toBe(401);
+        expect(response.statusCode).not.toBe(403);
+      } finally {
+        await app.close();
+      }
     }
-  });
-
-  it("rejects wrong roles and accepts the correct role for critical production mutations", async () => {
-    const dataRoot = createDataRoot();
-    dataRoots.push(dataRoot);
-    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
-
-    try {
-      const wrongPlan = await inject(app, {
-        method: "POST",
-        url: "/v1/production/plans",
-        headers: trustedHeaders("Angebots-Mitarbeiter"),
-        payload: { eventSpec: productionEventSpec() }
-      });
-      expect(wrongPlan.statusCode).toBe(403);
-
-      const correctPlan = await inject(app, {
-        method: "POST",
-        url: "/v1/production/plans",
-        headers: trustedHeaders("Produktions-Mitarbeiter"),
-        payload: { eventSpec: productionEventSpec() }
-      });
-      expect(correctPlan.statusCode).toBe(201);
-
-      const wrongRecipeImport = await inject(app, {
-        method: "POST",
-        url: "/v1/production/recipes/import-text",
-        headers: trustedHeaders("Angebots-Mitarbeiter"),
-        payload: { recipeName: "Matrix Rezept", text: "Zutaten\n1 kg Wasser\nZubereitung\n1. Kochen." }
-      });
-      expect(wrongRecipeImport.statusCode).toBe(403);
-
-      const correctRecipeImport = await inject(app, {
-        method: "POST",
-        url: "/v1/production/recipes/import-text",
-        headers: trustedHeaders("Produktions-Mitarbeiter"),
-        payload: { recipeName: "Matrix Rezept", text: "Zutaten\n1 kg Wasser\nZubereitung\n1. Kochen." }
-      });
-      expect(correctRecipeImport.statusCode).toBe(201);
-
-      const wrongSeed = await inject(app, {
-        method: "POST",
-        url: "/v1/production/seed-demo",
-        headers: trustedHeaders("Produktions-Mitarbeiter")
-      });
-      expect(wrongSeed.statusCode).toBe(403);
-
-      const correctSeed = await inject(app, {
-        method: "POST",
-        url: "/v1/production/seed-demo",
-        headers: trustedHeaders("Betriebs-/Audit-Operator")
-      });
-      expect(correctSeed.statusCode).toBe(201);
-    } finally {
-      await app.close();
-    }
-  });
+  );
 
   it("keeps service server defaults bound to localhost", () => {
     const serverFiles = [
