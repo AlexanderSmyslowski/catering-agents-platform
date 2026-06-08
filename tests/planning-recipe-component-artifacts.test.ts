@@ -45,12 +45,14 @@ function buildRecipe(overrides: Partial<Recipe> = {}): Recipe {
     recipeId: "recipe-tomato-soup",
     name: "Tomatensuppe Bankett",
     source: {
-      tier: "internal",
-      originType: "curated",
+      tier: "internal_verified",
+      originType: "internal_db",
       reference: "internal:tomato-soup",
-      approvalState: "approved",
+      retrievedAt: "2026-06-01T10:00:00.000Z",
+      approvalState: "approved_internal",
       qualityScore: 1,
-      fitScore: 1
+      fitScore: 1,
+      extractionCompleteness: 1
     },
     baseYield: {
       servings: 10,

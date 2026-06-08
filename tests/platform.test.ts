@@ -1079,6 +1079,7 @@ describe("catering agents platform", () => {
 
     expect(uploadResponse.statusCode).toBe(201);
     const recipeId = String(uploadResponse.json().recipe.recipeId);
+    await repository.reviewRecipe(recipeId, { decision: "approve" });
 
     const createResponse = await intakeApp.inject({
       method: "POST",
@@ -1572,7 +1573,7 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
-  it("falls back to internet recipes and auto-uses high confidence results", async () => {
+  it("keeps high confidence internet recipes review-required before production use", async () => {
     const dataRoot = createDataRoot();
     const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
     const provider = new FakeWebProvider([
@@ -1656,8 +1657,11 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internet_fallback");
-    expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(true);
-    expect(body.productionPlan.unresolvedItems).toHaveLength(0);
+    expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
+    expect(body.productionPlan.readiness.status).toBe("insufficient");
+    expect(body.productionPlan.unresolvedItems[0]).toContain(
+      "manuell geprueft"
+    );
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1731,7 +1735,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
-    expect(body.productionPlan.readiness.status).toBe("partial");
+    expect(body.productionPlan.readiness.status).toBe("insufficient");
     expect(body.productionPlan.unresolvedItems[0]).toContain("manuell geprueft");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1932,7 +1936,8 @@ describe("catering agents platform", () => {
     const storedRecipe = await repository.get(recipeId);
     expect(storedRecipe?.name).toBe("Vegan Chocolate Cake");
     expect(storedRecipe?.dietTags).toContain("vegan");
-    expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(true);
+    expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
+    expect(body.productionPlan.readiness.status).toBe("insufficient");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -3108,7 +3113,7 @@ describe("catering agents platform", () => {
       }
     });
 
-    expect(firstPlanResponse.json().productionPlan.readiness.status).toBe("partial");
+    expect(firstPlanResponse.json().productionPlan.readiness.status).toBe("insufficient");
 
     const reviewedRecipeId = firstPlanResponse.json().productionPlan.recipeSelections[0].recipeId;
     const offerApp = buildOfferApp({

@@ -4,6 +4,7 @@ import type {
   RecipeSearchQuery,
   RecipeSelection
 } from "@catering/shared-core";
+import { classifyRecipeProductionTrust } from "@catering/shared-core";
 
 export type WebRecipeResolution = {
   recipe?: Recipe;
@@ -78,15 +79,16 @@ export function buildWebRecipeWinnerResolution(input: {
     searchTrace
   } = input;
   const { recipe } = winner;
-  const autoUsedInternetRecipe = recipe.source.approvalState === "auto_usable";
+  const trust = classifyRecipeProductionTrust(recipe);
+  const autoUsedInternetRecipe = false;
 
   return {
     recipe,
     selection: {
       componentId: component.componentId,
       recipeId: recipe.recipeId,
-      selectionReason: autoUsedInternetRecipe
-        ? "Internet-Ausweichrezept mit ausreichender Qualität automatisch ausgewählt."
+      selectionReason: trust.trustedProductionInput
+        ? "Geprüftes Internet-Ausweichrezept ausgewählt."
         : "Internet-Ausweichrezept ausgewählt, aber zur Prüfung markiert.",
       searchQuery: winner.query.query,
       searchTrace,
@@ -95,7 +97,7 @@ export function buildWebRecipeWinnerResolution(input: {
       qualityScore: recipe.source.qualityScore,
       fitScore: recipe.source.fitScore
     },
-    unresolvedItems: autoUsedInternetRecipe
+    unresolvedItems: trust.trustedProductionInput
       ? []
       : [`Rezept ${recipe.name} muss vor der finalen Produktion manuell geprueft werden.`]
   };

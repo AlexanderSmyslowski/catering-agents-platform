@@ -47,6 +47,7 @@ export const recipeResearchCalculationBoundaryPolicy = {
   },
   recipeTrust: {
     trustedInternalApprovalState: "approved_internal",
+    trustedReviewedTiers: ["internal_verified", "internal_approved"],
     webCandidateTrustStatus: "candidate_review_required",
     humanReviewRequiredForWebCandidates: true
   },
@@ -82,9 +83,24 @@ export const recipeResearchCalculationBoundaryPolicy = {
 export function recipeResearchBoundaryForRecipe(
   recipe: Recipe
 ): RecipeResearchBoundaryDecision {
+  const isReviewedProductionRecipe =
+    recipe.source.approvalState === "approved_internal" &&
+    (recipe.source.tier === "internal_verified" ||
+      recipe.source.tier === "internal_approved");
   const isWebCandidate =
     recipe.source.originType === "web" ||
     recipe.source.tier === "internet_fallback";
+
+  if (isReviewedProductionRecipe) {
+    return {
+      sourceKind: isWebCandidate ? "web_recipe_candidate" : "internal_recipe_library",
+      trustStatus: "trusted_production_input",
+      trustedProductionInput: true,
+      humanReviewRequired: false,
+      reason:
+        "Recipe is explicitly reviewed and represented as trusted production input."
+    };
+  }
 
   if (isWebCandidate) {
     return {
@@ -99,9 +115,7 @@ export function recipeResearchBoundaryForRecipe(
 
   if (
     recipe.source.approvalState === "approved_internal" &&
-    (recipe.source.tier === "internal_verified" ||
-      recipe.source.tier === "internal_approved" ||
-      recipe.source.originType === "internal_db" ||
+    (recipe.source.originType === "internal_db" ||
       recipe.source.originType === "approved_import")
   ) {
     return {
@@ -128,6 +142,20 @@ export function assertTrustedRecipeForDeterministicProduction(
   recipe: Recipe
 ): RecipeResearchBoundaryDecision {
   return recipeResearchBoundaryForRecipe(recipe);
+}
+
+export function classifyRecipeProductionTrust(
+  recipe: Recipe
+): RecipeResearchBoundaryDecision {
+  return recipeResearchBoundaryForRecipe(recipe);
+}
+
+export function isTrustedProductionRecipe(recipe: Recipe): boolean {
+  return classifyRecipeProductionTrust(recipe).trustedProductionInput;
+}
+
+export function requiresRecipeOperatorReview(recipe: Recipe): boolean {
+  return classifyRecipeProductionTrust(recipe).humanReviewRequired;
 }
 
 export function validateLlmRecipeResearchDraft(

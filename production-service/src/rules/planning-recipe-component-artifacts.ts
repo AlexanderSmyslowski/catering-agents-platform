@@ -4,6 +4,7 @@ import type {
   ProductionPlan,
   Recipe
 } from "@catering/shared-core";
+import { classifyRecipeProductionTrust } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import { recipeMenuCategoryConflictReason } from "../recipe-discovery/menu-category-compatibility.js";
 import { isBlockingPlanningIssue } from "./planning-readiness.js";
@@ -91,6 +92,38 @@ export async function buildRecipeComponentPlanningArtifacts({
       timelineItem: artifacts.timelineItem,
       issues: [...issues, { issue: artifacts.issue, blocking: artifacts.blocking }]
     };
+  }
+
+  if (resolvedRecipe) {
+    const trust = classifyRecipeProductionTrust(resolvedRecipe);
+    if (!trust.trustedProductionInput) {
+      const reason = `Rezept ${resolvedRecipe.name} erfordert Operator-Review vor operativer Produktionsplanung.`;
+      const artifacts = buildUnresolvedComponentArtifacts({
+        component,
+        eventSpec,
+        servings,
+        reason,
+        blocking: true,
+        timelineLabel: `${component.label} Rezeptprüfung`
+      });
+      return {
+        kind: "unresolved",
+        selection: {
+          ...selection,
+          selectionReason: reason,
+          autoUsedInternetRecipe: false
+        },
+        kitchenSheet: artifacts.kitchenSheet,
+        timelineItem: artifacts.timelineItem,
+        issues: [
+          ...issues,
+          {
+            issue: artifacts.issue,
+            blocking: artifacts.blocking
+          }
+        ]
+      };
+    }
   }
 
   if (!resolvedRecipe || servings <= 0) {

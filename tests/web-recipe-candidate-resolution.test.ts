@@ -95,7 +95,7 @@ function providerReturning(candidates: WebRecipeCandidate[]): WebRecipeSearchPro
 }
 
 describe("web recipe candidate resolution flow", () => {
-  it("saves the selected web winner and appends the winner trace", async () => {
+  it("saves the selected web winner as a review-required candidate and appends the winner trace", async () => {
     const menuComponent = component();
     const provider = providerReturning([webCandidate()]);
     const repository = {
@@ -116,8 +116,11 @@ describe("web recipe candidate resolution flow", () => {
     expect(resolution.selection).toMatchObject({
       componentId: "component-tomato-soup",
       sourceTier: "internet_fallback",
-      autoUsedInternetRecipe: true
+      autoUsedInternetRecipe: false
     });
+    expect(resolution.unresolvedItems).toEqual([
+      "Rezept Tomatensuppe Bankett muss vor der finalen Produktion manuell geprueft werden."
+    ]);
     expect(searchTrace.entries).toContain("Webtreffer gewählt: Tomatensuppe Bankett.");
   });
 

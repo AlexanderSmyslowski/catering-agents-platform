@@ -136,7 +136,7 @@ describe("web recipe resolution", () => {
     ]);
   });
 
-  it("maps auto-usable web winners without adding unresolved items", () => {
+  it("maps auto-usable web winners into manual review unresolved items", () => {
     const resolution = buildWebRecipeWinnerResolution({
       component: buildComponent(),
       winner: {
@@ -147,9 +147,11 @@ describe("web recipe resolution", () => {
     });
 
     expect(resolution.selection.selectionReason).toBe(
-      "Internet-Ausweichrezept mit ausreichender Qualität automatisch ausgewählt."
+      "Internet-Ausweichrezept ausgewählt, aber zur Prüfung markiert."
     );
-    expect(resolution.selection.autoUsedInternetRecipe).toBe(true);
-    expect(resolution.unresolvedItems).toEqual([]);
+    expect(resolution.selection.autoUsedInternetRecipe).toBe(false);
+    expect(resolution.unresolvedItems).toEqual([
+      "Rezept Tomatensuppe Web muss vor der finalen Produktion manuell geprueft werden."
+    ]);
   });
 });
