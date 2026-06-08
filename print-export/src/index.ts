@@ -8,7 +8,10 @@ import type {
   PurchaseList
 } from "@catering/shared-core";
 import {
+  formatRecipeSourceEvidenceLabel,
   isDevAuthEnabled,
+  recipeSourceOriginLabel,
+  recipeSourceReferenceLabel,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders
 } from "@catering/shared-core";
@@ -140,10 +143,19 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
     ...unresolvedSection,
     ...plan.productionBatches.map(
-      (batch) =>
-        `<section><h2>${escapeHtml(batch.componentId)}</h2><p>Station: ${escapeHtml(batch.station)}</p><ol>${batch.steps
+      (batch) => {
+        const kitchenSheet = plan.kitchenSheets.find((sheet) =>
+          sheet.componentId === batch.componentId && sheet.recipeId === batch.recipeId
+        );
+        const sourceLabel = formatRecipeSourceEvidenceLabel(
+          batch.recipeSource ?? kitchenSheet?.recipeSource,
+          batch.recipeId
+        );
+
+        return `<section><h2>${escapeHtml(batch.componentId)}</h2><p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
           .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)
-          .join("")}</ol></section>`
+          .join("")}</ol></section>`;
+      }
     ),
     "</body></html>"
   ].join("");
@@ -157,7 +169,10 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
     "normalizedUnit",
     "purchaseQty",
     "purchaseUnit",
-    "supplierHint"
+    "supplierHint",
+    "source_recipes",
+    "source_recipe_origins",
+    "source_recipe_references"
   ]
     .map(escapeCsv)
     .join(",");
@@ -170,7 +185,16 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
       item.normalizedUnit,
       item.purchaseQty,
       item.purchaseUnit,
-      item.supplierHint ?? ""
+      item.supplierHint ?? "",
+      item.sourceRecipes.join("; "),
+      (item.sourceRecipeMetadata && item.sourceRecipeMetadata.length > 0
+        ? item.sourceRecipeMetadata.map(recipeSourceOriginLabel)
+        : ["source unknown"]
+      ).join("; "),
+      (item.sourceRecipeMetadata && item.sourceRecipeMetadata.length > 0
+        ? item.sourceRecipeMetadata.map(recipeSourceReferenceLabel)
+        : ["source unknown"]
+      ).join("; ")
     ]
       .map(escapeCsv)
       .join(",")

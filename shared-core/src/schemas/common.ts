@@ -65,6 +65,44 @@ export const commonSchema = {
         }
       }
     },
+    recipeSourceExportMetadata: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "recipeId",
+        "recipeName",
+        "sourceTier",
+        "originType",
+        "approvalState",
+        "reference"
+      ],
+      properties: {
+        recipeId: { type: "string" },
+        recipeName: { type: "string" },
+        sourceTier: {
+          enum: [
+            "internal_verified",
+            "digitized_cookbook",
+            "internal_approved",
+            "internet_fallback"
+          ]
+        },
+        originType: {
+          enum: ["internal_db", "cookbook", "approved_import", "web"]
+        },
+        approvalState: {
+          enum: [
+            "approved_internal",
+            "auto_usable",
+            "review_required",
+            "rejected"
+          ]
+        },
+        reference: { type: "string" },
+        url: { type: "string" },
+        publisher: { type: "string" }
+      }
+    },
     operationalArchive: {
       type: "object",
       additionalProperties: false,

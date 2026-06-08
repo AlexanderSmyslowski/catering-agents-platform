@@ -55,6 +55,7 @@ export function buildResolvedRecipePlanningArtifacts({
       prepWindow: batch.prepWindow,
       ingredients: batch.ingredients,
       steps: batch.steps,
+      recipeSource: batch.recipeSource,
       allergens: recipe.allergens ?? [],
       dietTags: recipe.dietTags ?? [],
       gnPlan: batch.gnPlan,

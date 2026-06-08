@@ -231,7 +231,7 @@ describe("recipe research and calculation boundary", () => {
     ]);
   });
 
-  it("makes current source metadata preservation and CSV loss explicit", () => {
+  it("makes current source metadata preservation and CSV export explicit", () => {
     const purchaseList = aggregatePurchaseList("spec-boundary", [
       productionBatchFor(approvedInternalRecipe())
     ]);
@@ -241,10 +241,10 @@ describe("recipe research and calculation boundary", () => {
       recipeResearchCalculationBoundaryPolicy.sourceMetadata
     ).toEqual({
       purchaseListObjectPreservesSourceRecipes: true,
-      purchaseListCsvExportsSourceRecipes: false
+      purchaseListCsvExportsSourceRecipes: true
     });
     expect(purchaseList.items.every((item) => item.sourceRecipes.length > 0)).toBe(true);
-    expect(csv.split("\n")[0]).not.toContain("sourceRecipes");
-    expect(csv).not.toContain("recipe-tomato-salad");
+    expect(csv.split("\n")[0]).toContain("source_recipes");
+    expect(csv).toContain("recipe-tomato-salad");
   });
 });

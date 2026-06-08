@@ -371,6 +371,17 @@ export interface RecipeSelection {
   fitScore?: number;
 }
 
+export interface RecipeSourceExportMetadata {
+  recipeId: string;
+  recipeName: string;
+  sourceTier: RecipeTier;
+  originType: RecipeSource["originType"];
+  approvalState: RecipeApprovalState;
+  reference: string;
+  url?: string;
+  publisher?: string;
+}
+
 export interface ProductionBatch {
   batchId: string;
   componentId: string;
@@ -386,6 +397,7 @@ export interface ProductionBatch {
   prepWindow: string;
   ingredients: IngredientLine[];
   steps: RecipeStep[];
+  recipeSource?: RecipeSourceExportMetadata;
 }
 
 export interface KitchenSheet {
@@ -398,6 +410,7 @@ export interface KitchenSheet {
   ingredients: IngredientLine[];
   steps: RecipeStep[];
   recipeId?: string;
+  recipeSource?: RecipeSourceExportMetadata;
   allergens?: string[];
   dietTags?: string[];
   procurementNotes?: string[];
@@ -453,6 +466,7 @@ export interface PurchaseItem {
   group: string;
   supplierHint?: string;
   sourceRecipes: string[];
+  sourceRecipeMetadata?: RecipeSourceExportMetadata[];
   mappingConfidence: number;
 }
 

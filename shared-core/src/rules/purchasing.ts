@@ -1,6 +1,7 @@
 import { ingredientGroupHints } from "../taxonomies/defaults.js";
 import type { ProductionBatch, ProductionPlan, PurchaseItem, PurchaseList } from "../types.js";
 import { SCHEMA_VERSION } from "../types.js";
+import { mergeRecipeSourceMetadata } from "../export-source-metadata.js";
 
 export type PurchaseCoverageStatus = "passed" | "blocked";
 
@@ -66,6 +67,10 @@ function aggregatePurchaseItem(
     group: item.group,
     supplierHint: item.supplierHint ?? existing?.supplierHint,
     sourceRecipes: [...new Set([...(existing?.sourceRecipes ?? []), ...item.sourceRecipes])],
+    sourceRecipeMetadata: mergeRecipeSourceMetadata(
+      existing?.sourceRecipeMetadata,
+      item.sourceRecipeMetadata
+    ),
     mappingConfidence: Math.max(item.mappingConfidence, existing?.mappingConfidence ?? 0)
   });
 }
@@ -114,6 +119,7 @@ export function aggregatePurchaseList(
         group: ingredient.group,
         supplierHint: ingredient.group === "beverages" ? "Metro Drinks" : "Metro Fresh",
         sourceRecipes: [batch.recipeId],
+        sourceRecipeMetadata: batch.recipeSource ? [batch.recipeSource] : [],
         mappingConfidence: 0.95
       });
     }

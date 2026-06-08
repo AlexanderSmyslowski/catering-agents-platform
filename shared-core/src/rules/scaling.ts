@@ -1,4 +1,5 @@
 import type { IngredientLine, ProductionBatch, Quantity, Recipe, RecipeStep } from "../types.js";
+import { recipeSourceExportMetadataForRecipe } from "../export-source-metadata.js";
 
 function roundQuantity(amount: number): number {
   return Number(amount.toFixed(2));
@@ -52,7 +53,7 @@ export function toProductionBatch(
     batchCount: scaled.batchCount,
     lossFactor: recipe.scalingRules.defaultLossFactor,
     ingredients: scaled.ingredients,
-    steps: scaled.steps
+    steps: scaled.steps,
+    recipeSource: recipeSourceExportMetadataForRecipe(recipe)
   };
 }
-

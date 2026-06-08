@@ -43,6 +43,9 @@ export const productionPlanSchema = {
           batchId: { type: "string" },
           componentId: { type: "string" },
           recipeId: { type: "string" },
+          recipeSource: {
+            $ref: "https://schemas.catering.local/common.json#/$defs/recipeSourceExportMetadata"
+          },
           scaledYield: {
             $ref: "https://schemas.catering.local/common.json#/$defs/quantity"
           },
@@ -129,6 +132,9 @@ export const productionPlanSchema = {
             }
           },
           recipeId: { type: "string" },
+          recipeSource: {
+            $ref: "https://schemas.catering.local/common.json#/$defs/recipeSourceExportMetadata"
+          },
           allergens: {
             type: "array",
             items: { type: "string" }
