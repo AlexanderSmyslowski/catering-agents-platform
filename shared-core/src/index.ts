@@ -24,6 +24,7 @@ export * from "./llm-readiness.js";
 
 export * from "./persistence.js";
 export * from "./production-clarification.js";
+export * from "./recipe-research-calculation-boundary.js";
 export * from "./recipe-library.js";
 export * from "./request-factory.js";
 export * from "./rules/normalization.js";
