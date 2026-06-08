@@ -7,10 +7,11 @@ const app = buildOfferApp({
   databaseUrl
 });
 const port = Number(process.env.PORT ?? process.env.OFFER_PORT ?? 3102);
+const host = process.env.HOST ?? process.env.OFFER_HOST ?? "127.0.0.1";
 
 app.listen({
   port,
-  host: "0.0.0.0"
+  host
 }).catch((error) => {
   app.log.error(error);
   process.exit(1);

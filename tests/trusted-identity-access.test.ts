@@ -52,9 +52,9 @@ describe("trusted identity access guards", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
-  it("keeps explicit dev/test x-actor-name compatibility when no trusted secret is configured", async () => {
+  it("keeps explicit dev/test x-actor-name compatibility only when dev auth is enabled", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot });
+    const app = buildProductionApp({ dataRoot, env: { CATERING_DEV_AUTH: "1" } });
 
     const response = await app.inject({
       method: "POST",
@@ -65,6 +65,24 @@ describe("trusted identity access guards", () => {
     });
 
     expect(response.statusCode).toBe(201);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("fails closed for x-actor-name when no trusted secret and no dev auth are configured", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildProductionApp({ dataRoot, env: {} });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/production/seed-demo",
+      headers: {
+        "x-actor-name": "Betriebs-/Audit-Operator"
+      }
+    });
+
+    expect(response.statusCode).toBe(403);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });

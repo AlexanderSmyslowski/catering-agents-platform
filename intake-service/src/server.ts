@@ -10,10 +10,11 @@ const app = buildIntakeApp(
   })
 );
 const port = Number(process.env.PORT ?? process.env.INTAKE_PORT ?? 3101);
+const host = process.env.HOST ?? process.env.INTAKE_HOST ?? "127.0.0.1";
 
 app.listen({
   port,
-  host: "0.0.0.0"
+  host
 }).catch((error) => {
   app.log.error(error);
   process.exit(1);

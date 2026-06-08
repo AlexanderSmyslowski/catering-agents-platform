@@ -9,7 +9,12 @@ export type MinimalMvpRole = (typeof MINIMAL_MVP_ROLES)[number];
 
 export interface TrustedActor {
   name: string;
-  source: "trusted-proxy:x-catering-actor-name" | "dev-header:x-actor-name" | "service-default" | "untrusted";
+  source:
+    | "trusted-proxy:x-catering-actor-name"
+    | "dev-header:x-actor-name"
+    | "dev-default"
+    | "service-default"
+    | "untrusted";
   trusted: boolean;
 }
 
@@ -166,7 +171,7 @@ export function trustedActorFromHeaders(
   }
 
   const devActorName = firstHeaderValue(headers["x-actor-name"])?.trim();
-  if (!expectedSecret && options.allowDevActorHeader !== false && devActorName) {
+  if (!expectedSecret && options.allowDevActorHeader === true && devActorName) {
     return {
       name: devActorName,
       source: "dev-header:x-actor-name",
@@ -182,6 +187,14 @@ export function trustedActorFromHeaders(
     };
   }
 
+  if (options.allowDevActorHeader === true) {
+    return {
+      name: options.fallbackActorName,
+      source: "dev-default",
+      trusted: false
+    };
+  }
+
   return {
     name: options.fallbackActorName,
     source: "service-default",
@@ -190,11 +203,16 @@ export function trustedActorFromHeaders(
 }
 
 export function resolveMinimalMvpRoleFromTrustedActor(actor: TrustedActor): MinimalMvpRole | undefined {
-  if (!actor.trusted && actor.source === "untrusted") {
+  if (!actor.trusted && actor.source !== "dev-header:x-actor-name" && actor.source !== "dev-default") {
     return undefined;
   }
 
   return resolveMinimalMvpRoleFromActorName(actor.name);
+}
+
+export function isDevAuthEnabled(env: Record<string, string | undefined>): boolean {
+  const value = env.CATERING_DEV_AUTH?.trim().toLowerCase();
+  return value === "1" || value === "true";
 }
 
 export function isMinimalMvpProtectedPath(path: string): boolean {

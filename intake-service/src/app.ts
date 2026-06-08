@@ -8,6 +8,7 @@ import {
   getDemoIntakeRequests,
   getDemoProductionAnsweredClarificationAnchor,
   ingestDocument,
+  isDevAuthEnabled,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
@@ -27,6 +28,10 @@ import {
 } from "@catering/shared-core";
 import { buildEventRequestFromText } from "./extraction.js";
 import { IntakeStore } from "./store.js";
+import {
+  registerIntakeWorkItemRoutes,
+  type SpecUpdateBody
+} from "./routes/work-item-routes.js";
 
 interface DocumentBody {
   documents: {
@@ -38,22 +43,6 @@ interface DocumentBody {
   requestId?: string;
 }
 
-interface SpecUpdateBody {
-  eventDate?: string;
-  attendeeCount?: number;
-  serviceForm?: string;
-  eventType?: string;
-  menuItems?: string[];
-  componentUpdates?: Array<{
-    componentId: string;
-    menuCategory?: "classic" | "vegetarian" | "vegan";
-    productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
-    purchasedElements?: string[];
-    recipeOverrideId?: string;
-    notes?: string;
-  }>;
-}
-
 interface ManualSpecBody {
   eventType?: string;
   eventDate?: string;
@@ -63,16 +52,6 @@ interface ManualSpecBody {
   customerName?: string;
   venueName?: string;
   notes?: string;
-}
-
-interface FinalizeSpecGovernanceBody {
-  specId?: string;
-  changeSetId?: string;
-  confirmCriticalFinalize?: boolean;
-}
-
-interface ArchiveIntakeRequestBody {
-  reasonCode?: OperationalArchiveReasonCode;
 }
 
 interface MultipartDocumentUpload {
@@ -255,29 +234,42 @@ export interface IntakeAppOptions extends CollectionStorageOptions {
   store?: IntakeStore;
   auditLog?: AuditLogStore;
   trustedActorSecret?: string;
+  env?: Record<string, string | undefined>;
 }
 
 function isIntakeStore(value: IntakeStore | IntakeAppOptions | undefined): value is IntakeStore {
   return value instanceof IntakeStore;
 }
 
-function actorForRequest(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string) {
+function actorForRequest(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName: "Intake-Mitarbeiter",
-    trustedActorSecret
+    trustedActorSecret,
+    allowDevActorHeader
   });
 }
 
-function isIntakeOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "intake_operator";
+function isIntakeOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(
+    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+  ) === "intake_operator";
 }
 
 function requireIntakeOperator(
   request: { headers: Record<string, string | string[] | undefined> },
   reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
 ): unknown | undefined {
-  if (!isIntakeOperator(request, trustedActorSecret)) {
+  if (!isIntakeOperator(request, trustedActorSecret, allowDevActorHeader)) {
     return reply.code(403).send({
       message: "Intake-Operator erforderlich."
     });
@@ -286,8 +278,14 @@ function requireIntakeOperator(
   return undefined;
 }
 
-function isOperationsAuditOperator(request: { headers: Record<string, string | string[] | undefined> }, trustedActorSecret?: string): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request, trustedActorSecret)) === "operations_audit_operator";
+function isOperationsAuditOperator(
+  request: { headers: Record<string, string | string[] | undefined> },
+  trustedActorSecret?: string,
+  allowDevActorHeader = false
+): boolean {
+  return resolveMinimalMvpRoleFromTrustedActor(
+    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+  ) === "operations_audit_operator";
 }
 
 function multipartFieldValue(
@@ -429,7 +427,9 @@ async function normalizeUploadedDocuments(
 
 export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   const options = isIntakeStore(input) ? { store: input } : input;
-  const trustedActorSecret = options.trustedActorSecret ?? process.env.CATERING_TRUSTED_ACTOR_SECRET;
+  const env = options.env ?? process.env;
+  const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const allowDevActorHeader = isDevAuthEnabled(env);
   const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
   const store =
     options.store ??
@@ -473,7 +473,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   app.post<{ Body: EventRequest | { text: string; channel?: EventRequest["source"]["channel"]; requestId?: string } }>(
     "/v1/intake/normalize",
     async (request, reply) => {
-      if (!isIntakeOperator(request, trustedActorSecret)) {
+      if (!isIntakeOperator(request, trustedActorSecret, allowDevActorHeader)) {
         return reply.code(403).send({
           message: "Intake-Operator erforderlich."
         });
@@ -508,7 +508,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         action: "intake.normalized",
         entityType: "AcceptedEventSpec",
         entityId: spec.specId,
-        actor: actorForRequest(request, trustedActorSecret),
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
         summary: `Intake aus ${eventRequest.source.channel} in AcceptedEventSpec normalisiert.`,
         details: {
           requestId: eventRequest.requestId,
@@ -524,7 +524,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   );
 
   app.post<{ Body: DocumentBody }>("/v1/intake/documents", async (request, reply) => {
-    if (!isIntakeOperator(request, trustedActorSecret)) {
+    if (!isIntakeOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Intake-Operator erforderlich."
       });
@@ -560,7 +560,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         action: "intake.documents_normalized",
         entityType: "AcceptedEventSpec",
         entityId: normalized.acceptedEventSpec.specId,
-        actor: actorForRequest(request, trustedActorSecret),
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
         summary: `${documents.length} hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert.`,
         details: {
           requestId: normalized.eventRequest.requestId,
@@ -580,7 +580,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   });
 
   app.post("/v1/intake/documents/upload", async (request, reply) => {
-    if (!isIntakeOperator(request, trustedActorSecret)) {
+    if (!isIntakeOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Intake-Operator erforderlich."
       });
@@ -596,7 +596,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         action: "intake.documents_normalized",
         entityType: "AcceptedEventSpec",
         entityId: normalized.acceptedEventSpec.specId,
-        actor: actorForRequest(request, trustedActorSecret),
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
         summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload in AcceptedEventSpec normalisiert.`,
         details: {
           requestId: normalized.eventRequest.requestId,
@@ -616,7 +616,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   });
 
   app.post<{ Body: ManualSpecBody }>("/v1/intake/specs/manual", async (request, reply) => {
-    if (!isIntakeOperator(request, trustedActorSecret)) {
+    if (!isIntakeOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Intake-Operator erforderlich."
       });
@@ -643,7 +643,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       action: "intake.manual_spec_created",
       entityType: "AcceptedEventSpec",
       entityId: spec.specId,
-      actor: actorForRequest(request, trustedActorSecret),
+      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
       summary: "AcceptedEventSpec aus manuellem Formular erstellt.",
       details: {
         requestId: eventRequest.requestId,
@@ -659,7 +659,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   });
 
   app.post("/v1/intake/seed-demo", async (request, reply) => {
-    if (!isOperationsAuditOperator(request, trustedActorSecret)) {
+    if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Betriebs-/Audit-Operator erforderlich."
       });
@@ -698,7 +698,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       action: "intake.seed_demo",
       entityType: "SeedBatch",
       entityId: `intake-demo-${Date.now()}`,
-      actor: actorForRequest(request, trustedActorSecret),
+      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
       summary: `${seeded.length} Intake-Demodatensaetze angelegt.`,
       details: {
         seededCount: seeded.length
@@ -714,183 +714,18 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
   });
 
-  app.get("/v1/intake/requests", async (request, reply) => {
-    const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    return reply.send({
-      items: await store.listRequests({
-        includeArchived: includeArchivedFromQuery(request.query)
-      })
-    });
-  });
-
-  app.post<{ Params: { requestId: string }; Body: ArchiveIntakeRequestBody }>(
-    "/v1/intake/requests/:requestId/archive",
-    async (request, reply) => {
-      if (!isIntakeOperator(request, trustedActorSecret)) {
-        return reply.code(403).send({
-          message: "Intake-Operator erforderlich."
-        });
-      }
-
-      const reasonCode = parseArchiveReasonCode(request.body?.reasonCode);
-      if (!reasonCode) {
-        return reply.code(400).send({
-          message:
-            "reasonCode muss wrong_upload, duplicate_test_data oder operator_rehearsal_cleanup sein."
-        });
-      }
-
-      const actor = actorForRequest(request, trustedActorSecret);
-      const archived = await store.archiveRequestContext({
-        requestId: request.params.requestId,
-        reasonCode,
-        archivedAt: new Date().toISOString(),
-        archivedBy: actor.name
-      });
-      if (!archived.request) {
-        return reply.code(404).send({ message: "EventRequest nicht gefunden." });
-      }
-
-      await auditLog.log({
-        action: "intake.request_soft_archived",
-        entityType: "EventRequest",
-        entityId: archived.request.requestId,
-        actor,
-        summary: "Intake-Kontext per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.",
-        details: {
-          requestId: archived.request.requestId,
-          reasonCode,
-          archivedSpecCount: archived.specs.length,
-          alreadyArchived: archived.alreadyArchived,
-          hardDeleted: false
-        }
-      });
-
-      return reply.send({
-        eventRequest: archived.request,
-        archivedSpecIds: archived.specs.map((spec) => spec.specId),
-        alreadyArchived: archived.alreadyArchived,
-        hardDeleted: false
-      });
-    }
-  );
-
-  app.get<{ Params: { requestId: string } }>("/v1/intake/requests/:requestId", async (request, reply) => {
-    const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    const intakeRequest = await store.getRequest(request.params.requestId);
-    if (!intakeRequest) {
-      return reply.code(404).send({ message: "EventRequest nicht gefunden." });
-    }
-
-    return reply.send(intakeRequest);
-  });
-
-  app.get("/v1/intake/specs", async (request, reply) => {
-    const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    return reply.send({
-      items: await store.listSpecs({
-        includeArchived: includeArchivedFromQuery(request.query)
-      })
-    });
-  });
-
-  app.get<{ Params: { specId: string } }>("/v1/intake/specs/:specId", async (request, reply) => {
-    const forbidden = requireIntakeOperator(request, reply, trustedActorSecret);
-    if (forbidden) {
-      return forbidden;
-    }
-
-    const spec = await store.getSpec(request.params.specId);
-    if (!spec) {
-      return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
-    }
-
-    return reply.send(spec);
-  });
-
-  app.patch<{ Params: { specId: string }; Body: SpecUpdateBody }>(
-    "/v1/intake/specs/:specId",
-    async (request, reply) => {
-      if (!isIntakeOperator(request, trustedActorSecret)) {
-        return reply.code(403).send({
-          message: "Intake-Operator erforderlich."
-        });
-      }
-
-      const spec = await store.getSpec(request.params.specId);
-      if (!spec) {
-        return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
-      }
-
-      const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
-      await store.saveSpec(updatedSpec);
-      await auditLog.log({
-        action: "intake.spec_updated",
-        entityType: "AcceptedEventSpec",
-        entityId: updatedSpec.specId,
-        actor: actorForRequest(request, trustedActorSecret),
-        summary: "AcceptedEventSpec manuell nachbearbeitet.",
-        details: {
-          eventDate: updatedSpec.event.date,
-          attendeeCount: updatedSpec.attendees.expected,
-          serviceForm: updatedSpec.servicePlan.serviceForm,
-          readiness: updatedSpec.readiness.status
-        }
-      });
-
-      return reply.send({
-        acceptedEventSpec: updatedSpec
-      });
-    }
-  );
-
-  app.post<{ Body: FinalizeSpecGovernanceBody }>("/v1/intake/spec-governance/finalize", async (request, reply) => {
-    if (!isOperationsAuditOperator(request, trustedActorSecret)) {
-      return reply.code(403).send({
-        message: "Betriebs-/Audit-Operator erforderlich."
-      });
-    }
-
-    const specId = request.body.specId?.trim();
-    const changeSetId = request.body.changeSetId?.trim();
-
-    if (!specId && !changeSetId) {
-      return reply.code(400).send({
-        message: "Es muss eine specId oder changeSetId uebergeben werden."
-      });
-    }
-
-    await auditLog.log({
-      action: "intake.spec_governance_finalized",
-      entityType: "AcceptedEventSpec",
-      entityId: specId ?? changeSetId ?? "unknown",
-      actor: actorForRequest(request, trustedActorSecret),
-      summary: "Spec-Governance im Intake-Finalize-Pfad bestaetigt.",
-      details: {
-        specId,
-        changeSetId,
-        confirmCriticalFinalize: request.body.confirmCriticalFinalize === true
-      }
-    });
-
-    return reply.send({
-      ok: true,
-      specId,
-      changeSetId,
-      confirmCriticalFinalize: request.body.confirmCriticalFinalize === true
-    });
+  registerIntakeWorkItemRoutes(app, {
+    store,
+    auditLog,
+    trustedActorSecret,
+    allowDevActorHeader,
+    includeArchivedFromQuery,
+    parseArchiveReasonCode,
+    applySpecUpdates,
+    isIntakeOperator,
+    isOperationsAuditOperator,
+    requireIntakeOperator,
+    actorForRequest
   });
 
   return app;

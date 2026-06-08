@@ -129,7 +129,7 @@ export function trustedActorFromHeaders(headers, options) {
         };
     }
     const devActorName = firstHeaderValue(headers["x-actor-name"])?.trim();
-    if (!expectedSecret && options.allowDevActorHeader !== false && devActorName) {
+    if (!expectedSecret && options.allowDevActorHeader === true && devActorName) {
         return {
             name: devActorName,
             source: "dev-header:x-actor-name",
@@ -143,6 +143,13 @@ export function trustedActorFromHeaders(headers, options) {
             trusted: false
         };
     }
+    if (options.allowDevActorHeader === true) {
+        return {
+            name: options.fallbackActorName,
+            source: "dev-default",
+            trusted: false
+        };
+    }
     return {
         name: options.fallbackActorName,
         source: "service-default",
@@ -150,10 +157,14 @@ export function trustedActorFromHeaders(headers, options) {
     };
 }
 export function resolveMinimalMvpRoleFromTrustedActor(actor) {
-    if (!actor.trusted && actor.source === "untrusted") {
+    if (!actor.trusted && actor.source !== "dev-header:x-actor-name" && actor.source !== "dev-default") {
         return undefined;
     }
     return resolveMinimalMvpRoleFromActorName(actor.name);
+}
+export function isDevAuthEnabled(env) {
+    const value = env.CATERING_DEV_AUTH?.trim().toLowerCase();
+    return value === "1" || value === "true";
 }
 export function isMinimalMvpProtectedPath(path) {
     return PROTECTED_PATH_TEMPLATES.some((template) => pathMatchesProtectedTemplate(path, template));
