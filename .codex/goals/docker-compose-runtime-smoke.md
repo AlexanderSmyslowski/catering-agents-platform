@@ -16,7 +16,7 @@ Do not:
 - change BYO-LLM or recipe behavior
 - perform broad infra refactors
 
-Keep the patch minimal.
+Keep the patch small and focused.
 
 ## Current context
 

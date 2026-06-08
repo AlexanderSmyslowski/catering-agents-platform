@@ -53,7 +53,7 @@ if (!webPorts.some((port) => String(port.published) === process.env.HTTP_PORT)) 
   throw new Error(`web does not publish expected HTTP_PORT ${process.env.HTTP_PORT}`);
 }
 
-console.log("Compose config keeps runtime services internal and web-published only.");
+console.log("Compose config keeps runtime services internal and publishes only web ports.");
 '
 }
 
@@ -105,7 +105,7 @@ main() {
   verify_proxy_reachability
   verify_internal_reachability
 
-  echo "Docker Compose runtime smoke passed for ${BASE_URL}."
+  echo "Docker Compose runtime smoke passed: ${BASE_URL}."
 }
 
 main "$@"
