@@ -68,7 +68,7 @@ export const recipeResearchCalculationBoundaryPolicy = {
   },
   sourceMetadata: {
     purchaseListObjectPreservesSourceRecipes: true,
-    purchaseListCsvExportsSourceRecipes: false
+    purchaseListCsvExportsSourceRecipes: true
   },
   outOfAuthority: [
     "allergen_approval",

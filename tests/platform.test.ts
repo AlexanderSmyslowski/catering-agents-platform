@@ -3707,7 +3707,7 @@ describe("catering agents platform", () => {
     expect(purchaseExportResponse.statusCode).toBe(200);
     expect(purchaseExportResponse.headers["content-type"]).toContain("text/csv");
     expect(purchaseExportResponse.body).toContain(
-      '"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"'
+      '"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint","source_recipes","source_recipe_origins","source_recipe_references"'
     );
 
     await exportApp.close();

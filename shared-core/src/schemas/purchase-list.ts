@@ -44,6 +44,12 @@ export const purchaseListSchema = {
             type: "array",
             items: { type: "string" }
           },
+          sourceRecipeMetadata: {
+            type: "array",
+            items: {
+              $ref: "https://schemas.catering.local/common.json#/$defs/recipeSourceExportMetadata"
+            }
+          },
           mappingConfidence: { type: "number", minimum: 0, maximum: 1 }
         }
       }
@@ -63,4 +69,3 @@ export const purchaseListSchema = {
     }
   }
 } as const;
-
