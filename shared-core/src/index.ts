@@ -1,6 +1,7 @@
 export * from "./access-control.js";
 export * from "./audit-log.js";
 export * from "./conversation-projection.js";
+export * from "./data-safety-audit-gates.js";
 export * from "./document-ingestion.js";
 export * from "./document-text.js";
 export * from "./fixtures/sample-data.js";
@@ -19,6 +20,7 @@ export * from "./llm-readiness-synthetic-live-slice.js";
 export * from "./llm-readiness-synthetic-live-probe.js";
 export * from "./llm-readiness-synthetic-live-preflight.js";
 export * from "./llm-readiness.js";
+
 export * from "./persistence.js";
 export * from "./production-clarification.js";
 export * from "./recipe-library.js";
