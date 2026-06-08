@@ -258,6 +258,41 @@ export interface OfferVariant {
   proposedEventSpec: AcceptedEventSpec;
 }
 
+export type OfferReviewStatusValue = "verified" | "review_required";
+
+export interface OfferReviewStatus {
+  priceReviewStatus: OfferReviewStatusValue;
+  taxReviewStatus: OfferReviewStatusValue;
+  allergenReviewStatus: OfferReviewStatusValue;
+  hygieneTemperatureReviewStatus: OfferReviewStatusValue;
+  sourceSecured: boolean;
+  publishApproved: boolean;
+}
+
+export interface OfferPortfolioMapping {
+  packageId: string;
+  packageName: string;
+  source: "curated_app_transfer";
+  minPax?: number;
+  workingBandPerPerson: {
+    from: number;
+    to: number;
+    currency: string;
+  };
+  evidenceSummary?: string;
+}
+
+export interface ProductionHandoff {
+  handoffId: string;
+  draftId: string;
+  specId: string;
+  status: "review_required" | "ready_for_production";
+  sourcePackageId?: string;
+  reviewStatus: OfferReviewStatus;
+  customerOfferVisible: boolean;
+  internalCalculationVisible: boolean;
+}
+
 export interface OfferDraft {
   schemaVersion: string;
   draftId: string;
@@ -270,6 +305,9 @@ export interface OfferDraft {
   customerFacingText: string;
   internalWorkingText: string;
   proposedEventSpec: AcceptedEventSpec;
+  portfolioMapping?: OfferPortfolioMapping;
+  reviewStatus?: OfferReviewStatus;
+  productionHandoff?: ProductionHandoff;
 }
 
 export interface IngredientLine {
