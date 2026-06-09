@@ -112,49 +112,60 @@ export function ProductionRouteMainLayout({
       setMiniPilotRawResult={setMiniPilotRawResult}
       miniPilotReportState={miniPilotReportState}
       miniPilotStorageHintLabel={miniPilotStorageHintLabel}
-    >
-      <div className="production-column">
-        <ProductionInputPanel
-          submitting={submitting}
-          sourceInput={sourceInput}
-          sourceInputActions={sourceInputActions}
-          manualInput={manualInput}
-          manualInputActions={manualInputActions}
-        />
-      </div>
-      <div className="production-column">
-        <ProductionQuestionPanel
-          questionState={questionState}
-          questionActions={questionActions}
-          submitting={submitting}
-          editorState={editorState}
-          editorActions={editorActions}
-        />
-      </div>
-      <div className="production-column">
-        <ProductionObjectsPanel
-          progressState={objectPanelProgress}
-          objectsState={objectPanelState}
-          objectsActions={objectPanelActions}
-          submitting={submitting}
-          miniPilotActionState={miniPilotActionState}
-          clearMiniPilotResult={showMiniPilotPanel && canClearMiniPilotResult ? () => setMiniPilotRawResult("") : undefined}
-        />
-      </div>
-      <div className="production-column">
-        <ProductionPurchaseListPanel purchaseListState={purchaseListState} />
-      </div>
-      <div className="production-column">
-        <ProductionHandoffPanel handoffState={handoffState} />
+      slots={{
+        inputSlot: (
+          <div className="production-column production-column--input">
+            <ProductionInputPanel
+              submitting={submitting}
+              sourceInput={sourceInput}
+              sourceInputActions={sourceInputActions}
+              manualInput={manualInput}
+              manualInputActions={manualInputActions}
+            />
+          </div>
+        ),
+        questionsSlot: (
+          <div className="production-column production-column--questions">
+            <ProductionQuestionPanel
+              questionState={questionState}
+              questionActions={questionActions}
+              submitting={submitting}
+              editorState={editorState}
+              editorActions={editorActions}
+            />
+          </div>
+        ),
+        productionObjectsSlot: (
+          <div className="production-column production-column--objects">
+            <ProductionObjectsPanel
+              progressState={objectPanelProgress}
+              objectsState={objectPanelState}
+              objectsActions={objectPanelActions}
+              submitting={submitting}
+              miniPilotActionState={miniPilotActionState}
+              clearMiniPilotResult={showMiniPilotPanel && canClearMiniPilotResult ? () => setMiniPilotRawResult("") : undefined}
+            />
+          </div>
+        ),
+        purchaseListSlot: (
+          <div className="production-column production-column--purchase">
+            <ProductionPurchaseListPanel purchaseListState={purchaseListState} />
+          </div>
+        ),
+        lowerSlots: (
+          <div className="production-column production-column--handoff">
+            <ProductionHandoffPanel handoffState={handoffState} />
 
-        <ProductionRecipeLibraryPanel
-          statusState={recipeStatus}
-          uploadState={recipeUpload}
-          libraryState={recipeLibrary}
-          recipeActions={recipeActions}
-          submitting={submitting}
-        />
-      </div>
-    </ProductionConversationalWorkbench>
+            <ProductionRecipeLibraryPanel
+              statusState={recipeStatus}
+              uploadState={recipeUpload}
+              libraryState={recipeLibrary}
+              recipeActions={recipeActions}
+              submitting={submitting}
+            />
+          </div>
+        )
+      }}
+    />
   );
 }
