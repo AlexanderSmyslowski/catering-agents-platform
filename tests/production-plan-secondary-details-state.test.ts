@@ -130,6 +130,43 @@ describe("production plan secondary details state", () => {
     });
   });
 
+  it("normalizes malformed secondary detail entries to explicit UI fallbacks", () => {
+    expect(
+      buildProductionPlanSecondaryDetailsState({
+        selectedPlan: {
+          productionBatches: ["not-a-batch"],
+          recipeSelections: ["not-a-selection"],
+          kitchenSheets: ["not-a-sheet"]
+        },
+        selectedPlanComponentsById: new Map(),
+        archivedPlans: [],
+        showArchivedPlans: false
+      })
+    ).toEqual({
+      showArchivedPlansSection: false,
+      recipeSelections: [
+        {
+          key: "selection-0",
+          componentLabel: "-",
+          selectionReasonLabel: "-",
+          componentDetailLabel: undefined,
+          sourceLabel: "source unknown",
+          scoreLabel: undefined,
+          searchTrace: []
+        }
+      ],
+      showKitchenSheetsSection: true,
+      kitchenSheets: [
+        {
+          key: "Arbeitsblatt-0",
+          title: "Arbeitsblatt",
+          sourceLabel: "source unknown",
+          instructions: []
+        }
+      ]
+    });
+  });
+
   it("keeps reviewed web recipe source evidence visible without treating it as final truth", () => {
     const state = buildProductionPlanSecondaryDetailsState({
       selectedPlan: {
