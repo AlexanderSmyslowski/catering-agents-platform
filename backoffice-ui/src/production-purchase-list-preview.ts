@@ -46,13 +46,41 @@ function readPurchaseListItems(purchaseList: Record<string, unknown>): unknown[]
   return [];
 }
 
-function readFirstSourceMetadata(itemRecord: Record<string, unknown>): RecipeSourceExportMetadata | undefined {
+function readSourceMetadata(itemRecord: Record<string, unknown>): RecipeSourceExportMetadata[] {
   const sourceRecipeMetadata = itemRecord.sourceRecipeMetadata;
   if (!Array.isArray(sourceRecipeMetadata)) {
-    return undefined;
+    return [];
   }
 
-  return asRecord(sourceRecipeMetadata[0]) as RecipeSourceExportMetadata | undefined;
+  return sourceRecipeMetadata.flatMap((source) => {
+    const record = asRecord(source);
+    return record ? [record as unknown as RecipeSourceExportMetadata] : [];
+  });
+}
+
+function readSourceRecipeIds(itemRecord: Record<string, unknown>): string[] {
+  const sourceRecipes = itemRecord.sourceRecipes;
+  if (!Array.isArray(sourceRecipes)) {
+    return [];
+  }
+
+  return sourceRecipes
+    .map((recipeId) => String(recipeId).trim())
+    .filter(Boolean);
+}
+
+function formatSourceLabel(itemRecord: Record<string, unknown>): string {
+  const sourceMetadata = readSourceMetadata(itemRecord);
+  const metadataRecipeIds = new Set(sourceMetadata.map((source) => source.recipeId).filter(Boolean));
+  const labels = [
+    ...sourceMetadata.map((source) => formatRecipeSourceEvidenceLabel(source)),
+    ...readSourceRecipeIds(itemRecord)
+      .filter((recipeId) => !metadataRecipeIds.has(recipeId))
+      .map((recipeId) => formatRecipeSourceEvidenceLabel(undefined, recipeId))
+  ];
+  const uniqueLabels = [...new Set(labels)];
+
+  return uniqueLabels.length > 0 ? uniqueLabels.join("; ") : "source unknown";
 }
 
 function looksLikeRecipeInstruction(value: string): boolean {
@@ -88,18 +116,12 @@ export function getPurchaseListPreviewItems(
       readStringOrNumber(itemRecord, ["purchaseUnit", "normalizedUnit", "unit"]) ??
       readStringOrNumber(quantityRecord, ["unit"]) ??
       "-";
-    const fallbackRecipeId = Array.isArray(itemRecord.sourceRecipes)
-      ? String(itemRecord.sourceRecipes[0] ?? "")
-      : "";
 
     return [{
       articleName,
       quantity,
       unit,
-      sourceLabel: formatRecipeSourceEvidenceLabel(
-        readFirstSourceMetadata(itemRecord),
-        fallbackRecipeId
-      )
+      sourceLabel: formatSourceLabel(itemRecord)
     }];
   });
 }

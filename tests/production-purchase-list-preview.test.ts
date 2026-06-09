@@ -103,6 +103,129 @@ describe("production purchase list preview", () => {
     ]);
   });
 
+  it("shows all source metadata entries for shared aggregated ingredients", () => {
+    const preview = getPurchaseListPreviewItems({
+      items: [
+        {
+          articleName: "Tomaten",
+          purchaseQty: 12,
+          purchaseUnit: "kg",
+          sourceRecipes: ["recipe-tomato-soup", "recipe-bruschetta"],
+          sourceRecipeMetadata: [
+            {
+              recipeId: "recipe-tomato-soup",
+              recipeName: "Tomatensuppe",
+              sourceTier: "internal_verified",
+              originType: "internal_db",
+              approvalState: "approved_internal",
+              reference: "internal:tomato-soup"
+            },
+            {
+              recipeId: "recipe-bruschetta",
+              recipeName: "Bruschetta",
+              sourceTier: "internal_verified",
+              originType: "internal_db",
+              approvalState: "approved_internal",
+              reference: "internal:bruschetta"
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(preview).toEqual([
+      {
+        articleName: "Tomaten",
+        quantity: "12",
+        unit: "kg",
+        sourceLabel:
+          "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup; " +
+          "Bruschetta | recipe-bruschetta | internal recipe, approved | internal_verified | approved_internal | internal:bruschetta"
+      }
+    ]);
+    expect(preview[0]?.sourceLabel).toContain("Tomatensuppe");
+    expect(preview[0]?.sourceLabel).toContain("Bruschetta");
+  });
+
+  it("keeps mixed source metadata and source recipe fallbacks deterministic", () => {
+    expect(
+      getPurchaseListPreviewItems({
+        items: [
+          {
+            articleName: "Tomaten",
+            purchaseQty: 10,
+            purchaseUnit: "kg",
+            sourceRecipes: [
+              "recipe-tomato-soup",
+              "recipe-bruschetta",
+              "recipe-tomato-soup"
+            ],
+            sourceRecipeMetadata: [
+              {
+                recipeId: "recipe-tomato-soup",
+                recipeName: "Tomatensuppe",
+                sourceTier: "internal_verified",
+                originType: "internal_db",
+                approvalState: "approved_internal",
+                reference: "internal:tomato-soup"
+              },
+              "invalid"
+            ]
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        articleName: "Tomaten",
+        quantity: "10",
+        unit: "kg",
+        sourceLabel:
+          "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup; " +
+          "source unknown (recipe-bruschetta)"
+      }
+    ]);
+  });
+
+  it("deduplicates exact duplicate source labels without hiding distinct sources", () => {
+    expect(
+      getPurchaseListPreviewItems({
+        items: [
+          {
+            articleName: "Tomaten",
+            purchaseQty: 8,
+            purchaseUnit: "kg",
+            sourceRecipeMetadata: [
+              {
+                recipeId: "recipe-tomato-soup",
+                recipeName: "Tomatensuppe",
+                sourceTier: "internal_verified",
+                originType: "internal_db",
+                approvalState: "approved_internal",
+                reference: "internal:tomato-soup"
+              },
+              {
+                recipeId: "recipe-tomato-soup",
+                recipeName: "Tomatensuppe",
+                sourceTier: "internal_verified",
+                originType: "internal_db",
+                approvalState: "approved_internal",
+                reference: "internal:tomato-soup"
+              }
+            ]
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        articleName: "Tomaten",
+        quantity: "8",
+        unit: "kg",
+        sourceLabel:
+          "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup"
+      }
+    ]);
+  });
+
   it("flags recipe instructions that leaked into purchase list item names", () => {
     expect(
       getPurchaseListQualityWarnings({
