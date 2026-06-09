@@ -99,26 +99,16 @@ export function RouteMasthead({
             ))}
           </div>
           <p className="helper-text">
-            <strong>Internes Beta-Kontrollzentrum:</strong> Demo, Erfassung, Angebot, Produktion, Export und Audit
-            aus bestehenden Daten prüfen.
+            <strong>Interner Arbeitsstand:</strong> Anfrage, Angebot, Produktion, Einkauf und Export gemeinsam prüfen.
           </p>
           <p className="helper-text">
-            <strong>Beta-Weg:</strong> Start → Angebot → Produktion → Rückfragen → Exporte/Audit.
+            <strong>Arbeitsweg:</strong> Start → Angebot → Produktion → Rückfragen → Exporte.
           </p>
           <p className="helper-text">
-            <strong>Grenze:</strong> nur synthetischer interner Beta-Durchlauf; keine echten Daten, keine Produktionsfreigabe.
+            <strong>Grenze:</strong> nur interne Demo- oder Testdaten; keine externe Freigabe und keine Produktionsfreigabe.
           </p>
           <p className="helper-text">
-            <strong>Reviewer-Hinweis:</strong> P7-Szenariokarte nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.
-          </p>
-          <p className="helper-text">
-            <strong>Rehearsal-Go:</strong> erst nach grünem Status, lokalem Check, manueller UI-Evidenz und Reibungslog.
-          </p>
-          <p className="helper-text">
-            <strong>Pilot-Preflight:</strong> lokal mit Demo-/synthetischen oder nachweisbar anonymisierten Daten prüfen; kein Pilot-Go, kein Deployment und keine echten Daten.
-          </p>
-          <p className="helper-text">
-            <strong>Nächster Einstieg:</strong> zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.
+            <strong>Prüfung:</strong> Quellen, offene Punkte und Exporte sichtbar halten; keine automatische Allergen-, Preis- oder Margenfreigabe.
           </p>
         </>
       ) : null}

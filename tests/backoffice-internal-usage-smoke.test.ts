@@ -413,7 +413,7 @@ describe("backoffice internal usage smoke", () => {
 
     const homeRoute = await renderAppRoute("/");
 
-    expect(document.body.textContent ?? "").toContain("Internes Beta-Kontrollzentrum");
+    expect(document.body.textContent ?? "").toContain("Interner Arbeitsstand");
     expect(document.body.textContent ?? "").toContain("Angebotsagent öffnen");
     expect(document.body.textContent ?? "").toContain("Produktionsagent öffnen");
     const offerStartLink = findAnchorByText("Angebotsagent öffnen");

@@ -1,6 +1,7 @@
 import { Children, type ReactNode } from "react";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
+import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildProductionMiniPilotCardState } from "./production-mini-pilot-card-state.js";
 import { buildProductionWorkbenchOutputAnchorState } from "./production-workbench-output-anchor-state.js";
 
@@ -63,6 +64,7 @@ export function ProductionConversationalWorkbench({
   children
 }: ProductionConversationalWorkbenchProps) {
   const miniPilotCard = buildProductionMiniPilotCardState();
+  const showMiniPilotPanel = shouldShowMiniPilotPanel();
   const {
     activeSpecLabel,
     readinessLabel,
@@ -112,47 +114,41 @@ export function ProductionConversationalWorkbench({
           Rückfragenstatus: offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}
         </p>
         <p className="helper-text">
-          Interner Beta-Schritt: Produktion, Einkaufsliste, Exporte, Herkunft und offene Rückfragen bleiben nachvollziehbar.
+          Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.
         </p>
         <p className="helper-text">
-          Synthetische Beta-Grenze: Produktionsobjekte nur intern prüfen; keine echten Einsatzdaten und keine Produktionsfreigabe.
+          Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.
         </p>
         <p className="helper-text">
-          Beta-Pfad: Rückfragen -&gt; Ergebnisobjekte -&gt; Exporte/Audit.
-        </p>
-        <p className="helper-text">
-          Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.
-        </p>
-        <p className="helper-text">
-          Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar
-          sind; offene Stop-Punkte bleiben Stop statt Freigabe.
-        </p>
-        <p className="helper-text">
-          Option-A-Zeitfenster: verbindliches Zeitfenster manuell klären und nur als Rehearsal-Notiz festhalten; keine automatische event.schedule-Übernahme.
+          Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.
         </p>
         <p className="helper-text">
           Planstatus: {planStatusLabel} · Einkaufstatus: {purchaseStatusLabel}
         </p>
         <p className="helper-text">Ergebnisobjekte: {productionObjectStatusLabel}</p>
-        <div className="search-trace" aria-label="Interner Draft-Pilot">
-          <p className="eyebrow">{miniPilotCard.eyebrow}</p>
-          <strong>{miniPilotCard.title}</strong>
-          <p className="helper-text">{miniPilotCard.helperText}</p>
-          <ul className="item-list trace-list">
-            {miniPilotCard.steps.map((step) => (
-              <li key={step.title}>
-                <strong>{step.title}</strong>
-                <p className="helper-text">{step.body}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <MiniPilotCheckPanel
-          rawResult={miniPilotRawResult}
-          onRawResultChange={setMiniPilotRawResult}
-          reportState={miniPilotReportState}
-          storageHintLabel={miniPilotStorageHintLabel}
-        />
+        {showMiniPilotPanel ? (
+          <>
+            <div className="search-trace" aria-label="Interner Draft-Pilot">
+              <p className="eyebrow">{miniPilotCard.eyebrow}</p>
+              <strong>{miniPilotCard.title}</strong>
+              <p className="helper-text">{miniPilotCard.helperText}</p>
+              <ul className="item-list trace-list">
+                {miniPilotCard.steps.map((step) => (
+                  <li key={step.title}>
+                    <strong>{step.title}</strong>
+                    <p className="helper-text">{step.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <MiniPilotCheckPanel
+              rawResult={miniPilotRawResult}
+              onRawResultChange={setMiniPilotRawResult}
+              reportState={miniPilotReportState}
+              storageHintLabel={miniPilotStorageHintLabel}
+            />
+          </>
+        ) : null}
       </aside>
 
       <div className="production-progressive-zone">

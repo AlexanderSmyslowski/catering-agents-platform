@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildMiniPilotCheckReportState } from "../backoffice-ui/src/mini-pilot-check-report-state.js";
 import { OfferConversationalWorkbench } from "../backoffice-ui/src/offer-workbench.js";
 import { ProductionRouteMainLayout } from "../backoffice-ui/src/production-route-main-layout.js";
@@ -288,11 +288,30 @@ function MiniPilotFlowHarness() {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   document.body.innerHTML = "";
 });
 
 describe("shared mini pilot workbench flow", () => {
+  it("hides the mini-pilot editor panel by default in workbench routes", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(MiniPilotFlowHarness));
+    });
+
+    expect(document.querySelector('textarea[aria-label="Mini-Pilot-Check JSON"]')).toBeNull();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("keeps one ready mini-pilot result across offer and production views", async () => {
+    vi.stubEnv("VITE_SHOW_MINI_PILOT_PANEL", "1");
+
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
