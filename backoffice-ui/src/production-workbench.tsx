@@ -1,4 +1,4 @@
-import { Children, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
@@ -23,6 +23,14 @@ export type ProductionWorkbenchNextStep = {
   description: string;
 };
 
+export type ProductionWorkbenchSlots = {
+  inputSlot: ReactNode;
+  questionsSlot: ReactNode;
+  productionObjectsSlot: ReactNode;
+  purchaseListSlot: ReactNode;
+  lowerSlots: ReactNode;
+};
+
 type ProductionConversationalWorkbenchProps = {
   summary: ProductionWorkbenchSummary;
   nextStep: ProductionWorkbenchNextStep;
@@ -30,7 +38,7 @@ type ProductionConversationalWorkbenchProps = {
   setMiniPilotRawResult: (value: string) => void;
   miniPilotReportState: MiniPilotCheckReportState;
   miniPilotStorageHintLabel?: string;
-  children: ReactNode;
+  slots: ProductionWorkbenchSlots;
 };
 
 function formatQuestionStatus(questionCount: number): string {
@@ -61,7 +69,7 @@ export function ProductionConversationalWorkbench({
   setMiniPilotRawResult,
   miniPilotReportState,
   miniPilotStorageHintLabel,
-  children
+  slots
 }: ProductionConversationalWorkbenchProps) {
   const miniPilotCard = buildProductionMiniPilotCardState();
   const showMiniPilotPanel = shouldShowMiniPilotPanel();
@@ -77,7 +85,6 @@ export function ProductionConversationalWorkbench({
     productionObjectStatusLabel,
     purchaseListCount
   } = summary;
-  const [inputPanel, questionsPanel, productionObjectsPanel, purchasePanel, lowerPanels] = Children.toArray(children);
   const openVisibleQuestionCount = countOpenVisibleQuestions(
     questionCount,
     answeredQuestionCount,
@@ -100,7 +107,7 @@ export function ProductionConversationalWorkbench({
             <p className="helper-text">{nextStep.description}</p>
           </div>
         </header>
-        {inputPanel}
+        {slots.inputSlot}
       </article>
 
       <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
@@ -157,7 +164,7 @@ export function ProductionConversationalWorkbench({
             <span>Rückfragen und Antworten</span>
             <strong>offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}</strong>
           </summary>
-          <div className="progressive-panel__body">{questionsPanel}</div>
+          <div className="progressive-panel__body">{slots.questionsSlot}</div>
         </details>
       </div>
 
@@ -174,7 +181,7 @@ export function ProductionConversationalWorkbench({
             <span>Produktionsobjekte</span>
             <strong>{productionObjectStatusLabel}</strong>
           </summary>
-          <div className="progressive-panel__body">{productionObjectsPanel}</div>
+          <div className="progressive-panel__body">{slots.productionObjectsSlot}</div>
         </details>
       </div>
 
@@ -185,11 +192,11 @@ export function ProductionConversationalWorkbench({
             <span>Einkaufsliste</span>
             <strong>{purchaseStatusLabel}</strong>
           </summary>
-          <div className="progressive-panel__body">{purchasePanel}</div>
+          <div className="progressive-panel__body">{slots.purchaseListSlot}</div>
         </details>
       </div>
 
-      <div className="production-lower-zones">{lowerPanels}</div>
+      <div className="production-lower-zones">{slots.lowerSlots}</div>
     </section>
   );
 }

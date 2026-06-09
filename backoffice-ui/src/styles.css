@@ -296,25 +296,25 @@ select {
   align-content: start;
 }
 
-.app-shell--production-route .production-column:first-child,
-.app-shell--production-route .production-column:last-child {
+.app-shell--production-route .production-column--input,
+.app-shell--production-route .production-column--handoff {
   opacity: 0.9;
 }
 
-.app-shell--production-route .production-column:nth-child(1) {
+.app-shell--production-route .production-column--input {
   order: 2;
 }
 
-.app-shell--production-route .production-column:nth-child(2) {
+.app-shell--production-route .production-column--questions {
   order: 1;
 }
 
-.app-shell--production-route .production-column:nth-child(3) {
+.app-shell--production-route .production-column--objects {
   order: 3;
 }
 
-.app-shell--production-route .production-column:first-child .panel,
-.app-shell--production-route .production-column:last-child .panel {
+.app-shell--production-route .production-column--input .panel,
+.app-shell--production-route .production-column--handoff .panel {
   background: rgba(255, 255, 255, 0.52);
   box-shadow: none;
 }
@@ -1063,8 +1063,8 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .app-shell--production-route .production-column:first-child,
-  .app-shell--production-route .production-column:last-child {
+  .app-shell--production-route .production-column--input,
+  .app-shell--production-route .production-column--handoff {
     opacity: 1;
   }
 }

@@ -1418,13 +1418,29 @@ describe("backoffice production acceptance smoke", () => {
               commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
               errorLabels: []
             },
-            children: [
-              createElement("div", { key: "input" }, "input"),
-              createElement("div", { key: "fragen" }, "fragen"),
-              createElement("div", { key: "objekte" }, "objekte"),
-              createElement("div", { key: "einkauf" }, "einkauf"),
-              createElement("div", { key: "unten" }, "unten")
-            ]
+            slots: {
+              inputSlot: createElement("div", { className: "production-column production-column--input" }, "input"),
+              questionsSlot: createElement(
+                "div",
+                { className: "production-column production-column--questions" },
+                "fragen"
+              ),
+              productionObjectsSlot: createElement(
+                "div",
+                { className: "production-column production-column--objects" },
+                "objekte"
+              ),
+              purchaseListSlot: createElement(
+                "div",
+                { className: "production-column production-column--purchase" },
+                "einkauf"
+              ),
+              lowerSlots: createElement(
+                "div",
+                { className: "production-column production-column--handoff" },
+                "unten"
+              )
+            }
           }
         )
       );
@@ -1436,6 +1452,11 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
     expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
+    expect(document.querySelector(".production-composer .production-column--input")?.textContent).toContain("input");
+    expect(document.querySelector(".production-progressive-zone .production-column--questions")?.textContent).toContain("fragen");
+    expect(document.querySelector(".production-objects-zone .production-column--objects")?.textContent).toContain("objekte");
+    expect(document.querySelector(".production-purchase-zone .production-column--purchase")?.textContent).toContain("einkauf");
+    expect(document.querySelector(".production-lower-zones .production-column--handoff")?.textContent).toContain("unten");
 
     await act(async () => {
       root.unmount();
