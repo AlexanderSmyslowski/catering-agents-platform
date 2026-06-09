@@ -55,6 +55,7 @@ export function ProductionPurchaseListPanel({
                       <strong>{item.articleName}</strong>
                       <p>{item.quantityLabel}</p>
                       <p>{item.unitLabel}</p>
+                      <p>{item.sourceLabel}</p>
                     </li>
                   ))}
                 </ul>

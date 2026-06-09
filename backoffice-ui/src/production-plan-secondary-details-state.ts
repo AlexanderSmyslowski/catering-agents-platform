@@ -1,3 +1,5 @@
+import { formatRecipeSourceEvidenceLabel } from "../../shared-core/src/export-source-metadata.js";
+import type { RecipeSourceExportMetadata } from "../../shared-core/src/types.js";
 import {
   translateMenuCategory,
   translateProductionMode
@@ -8,6 +10,7 @@ export type ProductionPlanSecondaryRecipeSelectionState = {
   componentLabel: string;
   selectionReasonLabel: string;
   componentDetailLabel?: string;
+  sourceLabel: string;
   scoreLabel?: string;
   searchTrace: string[];
 };
@@ -15,6 +18,7 @@ export type ProductionPlanSecondaryRecipeSelectionState = {
 export type ProductionPlanSecondaryKitchenSheetState = {
   key: string;
   title: string;
+  sourceLabel: string;
   instructions: string[];
 };
 
@@ -33,6 +37,37 @@ function formatPercent(value?: unknown): string | undefined {
   return `${Math.round(numeric * 100)} %`;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asRecipeSourceExportMetadata(value: unknown): RecipeSourceExportMetadata | undefined {
+  const record = asRecord(value);
+  return record as RecipeSourceExportMetadata | undefined;
+}
+
+function buildRecipeSourceByComponentId(
+  selectedPlan: Record<string, unknown>
+): Map<string, RecipeSourceExportMetadata> {
+  const batches = Array.isArray(selectedPlan.productionBatches)
+    ? selectedPlan.productionBatches
+    : [];
+  const byComponentId = new Map<string, RecipeSourceExportMetadata>();
+
+  for (const batch of batches) {
+    const batchRecord = asRecord(batch);
+    const componentId = String(batchRecord?.componentId ?? "").trim();
+    const recipeSource = asRecipeSourceExportMetadata(batchRecord?.recipeSource);
+    if (componentId && recipeSource) {
+      byComponentId.set(componentId, recipeSource);
+    }
+  }
+
+  return byComponentId;
+}
+
 export function buildProductionPlanSecondaryDetailsState(input: {
   selectedPlan?: Record<string, unknown>;
   selectedPlanComponentsById: Map<string, Record<string, unknown>>;
@@ -43,6 +78,7 @@ export function buildProductionPlanSecondaryDetailsState(input: {
     return undefined;
   }
 
+  const recipeSourceByComponentId = buildRecipeSourceByComponentId(input.selectedPlan);
   const recipeSelections = Array.isArray(input.selectedPlan.recipeSelections)
     ? input.selectedPlan.recipeSelections.map((selection, index) => {
         const selectionRecord = selection as Record<string, unknown>;
@@ -61,6 +97,10 @@ export function buildProductionPlanSecondaryDetailsState(input: {
                 String((component.productionDecision as Record<string, unknown> | undefined)?.mode ?? "")
               )}`
             : undefined,
+          sourceLabel: formatRecipeSourceEvidenceLabel(
+            recipeSourceByComponentId.get(componentId),
+            String(selectionRecord.recipeId ?? "")
+          ),
           scoreLabel:
             qualityScore || fitScore
               ? `${qualityScore ? `Qualität ${qualityScore}` : "Qualität offen"}${fitScore ? ` · Passung ${fitScore}` : ""}`
@@ -78,6 +118,10 @@ export function buildProductionPlanSecondaryDetailsState(input: {
         return {
           key: `${String(sheetRecord.title ?? "Arbeitsblatt")}-${sheetIndex}`,
           title: String(sheetRecord.title ?? "Arbeitsblatt"),
+          sourceLabel: formatRecipeSourceEvidenceLabel(
+            asRecipeSourceExportMetadata(sheetRecord.recipeSource),
+            String(sheetRecord.recipeId ?? "")
+          ),
           instructions: Array.isArray(sheetRecord.instructions)
             ? sheetRecord.instructions.map((entry) => String(entry))
             : []

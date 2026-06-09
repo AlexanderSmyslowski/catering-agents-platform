@@ -407,6 +407,9 @@ describe("UI critical path rehearsal", () => {
       expect(productionText).toContain("Produktionsblatt exportieren");
       expect(productionText).toContain("Einkaufsliste exportieren");
       expect(productionText).toContain("Tomaten");
+      expect(productionText).toContain("Rezeptquelle:");
+      expect(productionText).toContain("internal recipe, approved");
+      expect(productionText).toContain("internal/ui-critical-path-tomato-soup");
       expect(productionText).toContain("Audit-Spur");
       expect(productionText).toContain("production.plan_created");
       expect(productionText).toContain("Beta-Endpunkt");

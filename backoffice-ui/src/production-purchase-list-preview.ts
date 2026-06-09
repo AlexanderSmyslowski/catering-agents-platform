@@ -1,7 +1,11 @@
+import { formatRecipeSourceEvidenceLabel } from "../../shared-core/src/export-source-metadata.js";
+import type { RecipeSourceExportMetadata } from "../../shared-core/src/types.js";
+
 export type PurchaseListPreviewItem = {
   articleName: string;
   quantity: string;
   unit: string;
+  sourceLabel: string;
 };
 
 export type PurchaseListQualityWarning = {
@@ -42,6 +46,15 @@ function readPurchaseListItems(purchaseList: Record<string, unknown>): unknown[]
   return [];
 }
 
+function readFirstSourceMetadata(itemRecord: Record<string, unknown>): RecipeSourceExportMetadata | undefined {
+  const sourceRecipeMetadata = itemRecord.sourceRecipeMetadata;
+  if (!Array.isArray(sourceRecipeMetadata)) {
+    return undefined;
+  }
+
+  return asRecord(sourceRecipeMetadata[0]) as RecipeSourceExportMetadata | undefined;
+}
+
 function looksLikeRecipeInstruction(value: string): boolean {
   const normalized = value.trim();
   const instructionStartPattern =
@@ -75,8 +88,19 @@ export function getPurchaseListPreviewItems(
       readStringOrNumber(itemRecord, ["purchaseUnit", "normalizedUnit", "unit"]) ??
       readStringOrNumber(quantityRecord, ["unit"]) ??
       "-";
+    const fallbackRecipeId = Array.isArray(itemRecord.sourceRecipes)
+      ? String(itemRecord.sourceRecipes[0] ?? "")
+      : "";
 
-    return [{ articleName, quantity, unit }];
+    return [{
+      articleName,
+      quantity,
+      unit,
+      sourceLabel: formatRecipeSourceEvidenceLabel(
+        readFirstSourceMetadata(itemRecord),
+        fallbackRecipeId
+      )
+    }];
   });
 }
 

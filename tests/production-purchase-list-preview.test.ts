@@ -20,7 +20,8 @@ describe("production purchase list preview", () => {
       {
         articleName: "Tomaten",
         quantity: "8",
-        unit: "kg"
+        unit: "kg",
+        sourceLabel: "source unknown"
       }
     ]);
   });
@@ -42,7 +43,8 @@ describe("production purchase list preview", () => {
       {
         articleName: "Baguette",
         quantity: "40",
-        unit: "Stück"
+        unit: "Stück",
+        sourceLabel: "source unknown"
       }
     ]);
   });
@@ -61,10 +63,43 @@ describe("production purchase list preview", () => {
     });
 
     expect(preview).toEqual([
-      { articleName: "Linsen", quantity: "5", unit: "kg" },
-      { articleName: "Karotten", quantity: "3", unit: "kg" },
-      { articleName: "Sellerie", quantity: "2", unit: "Bund" },
-      { articleName: "Petersilie", quantity: "-", unit: "-" }
+      { articleName: "Linsen", quantity: "5", unit: "kg", sourceLabel: "source unknown" },
+      { articleName: "Karotten", quantity: "3", unit: "kg", sourceLabel: "source unknown" },
+      { articleName: "Sellerie", quantity: "2", unit: "Bund", sourceLabel: "source unknown" },
+      { articleName: "Petersilie", quantity: "-", unit: "-", sourceLabel: "source unknown" }
+    ]);
+  });
+
+  it("shows source metadata for purchase preview items when available", () => {
+    expect(
+      getPurchaseListPreviewItems({
+        items: [
+          {
+            articleName: "Tomaten",
+            purchaseQty: 8,
+            purchaseUnit: "kg",
+            sourceRecipes: ["recipe-tomato-soup"],
+            sourceRecipeMetadata: [
+              {
+                recipeId: "recipe-tomato-soup",
+                recipeName: "Tomatensuppe",
+                sourceTier: "internal_verified",
+                originType: "internal_db",
+                approvalState: "approved_internal",
+                reference: "internal:tomato-soup"
+              }
+            ]
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        articleName: "Tomaten",
+        quantity: "8",
+        unit: "kg",
+        sourceLabel:
+          "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup"
+      }
     ]);
   });
 

@@ -20,6 +20,7 @@ export type ProductionPurchaseListPanelPreviewItemState = {
   articleName: string;
   quantityLabel: string;
   unitLabel: string;
+  sourceLabel: string;
 };
 
 export type ProductionPurchaseListPanelCurrentListState = {
@@ -92,7 +93,8 @@ export function buildProductionPurchaseListPanelState(
           key: `${String(purchaseList.purchaseListId)}-${itemIndex}`,
           articleName: item.articleName,
           quantityLabel: `Menge: ${item.quantity}`,
-          unitLabel: `Einheit: ${item.unit}`
+          unitLabel: `Einheit: ${item.unit}`,
+          sourceLabel: `Rezeptquelle: ${item.sourceLabel}`
         }))
       };
     }),

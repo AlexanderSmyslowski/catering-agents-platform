@@ -17,9 +17,23 @@ describe("production plan secondary details state", () => {
     expect(
       buildProductionPlanSecondaryDetailsState({
         selectedPlan: {
+          productionBatches: [
+            {
+              componentId: "starter",
+              recipeSource: {
+                recipeId: "recipe-starter",
+                recipeName: "Vorspeise Rezept",
+                sourceTier: "internal_verified",
+                originType: "internal_db",
+                approvalState: "approved_internal",
+                reference: "internal:starter"
+              }
+            }
+          ],
           recipeSelections: [
             {
               componentId: "starter",
+              recipeId: "recipe-starter",
               selectionReason: "Internes Rezept passt am besten.",
               qualityScore: 0.91,
               fitScore: 0.87,
@@ -29,6 +43,15 @@ describe("production plan secondary details state", () => {
           kitchenSheets: [
             {
               title: "Küchenblatt Vorspeise",
+              recipeId: "recipe-starter",
+              recipeSource: {
+                recipeId: "recipe-starter",
+                recipeName: "Vorspeise Rezept",
+                sourceTier: "internal_verified",
+                originType: "internal_db",
+                approvalState: "approved_internal",
+                reference: "internal:starter"
+              },
               instructions: ["30 Portionen vorbereiten", "Kühl lagern"]
             }
           ]
@@ -54,6 +77,8 @@ describe("production plan secondary details state", () => {
           componentLabel: "Vorspeise",
           selectionReasonLabel: "Internes Rezept passt am besten.",
           componentDetailLabel: "Kategorie: klassisch · Herstellungsart: Eigenproduktion",
+          sourceLabel:
+            "Vorspeise Rezept | recipe-starter | internal recipe, approved | internal_verified | approved_internal | internal:starter",
           scoreLabel: "Qualität 91 % · Passung 87 %",
           searchTrace: ["Interner Treffer", "kein Fallback"]
         }
@@ -63,6 +88,8 @@ describe("production plan secondary details state", () => {
         {
           key: "Küchenblatt Vorspeise-0",
           title: "Küchenblatt Vorspeise",
+          sourceLabel:
+            "Vorspeise Rezept | recipe-starter | internal recipe, approved | internal_verified | approved_internal | internal:starter",
           instructions: ["30 Portionen vorbereiten", "Kühl lagern"]
         }
       ]
@@ -93,6 +120,7 @@ describe("production plan secondary details state", () => {
           componentLabel: "-",
           selectionReasonLabel: "-",
           componentDetailLabel: undefined,
+          sourceLabel: "source unknown",
           scoreLabel: undefined,
           searchTrace: []
         }
@@ -100,5 +128,67 @@ describe("production plan secondary details state", () => {
       showKitchenSheetsSection: false,
       kitchenSheets: []
     });
+  });
+
+  it("keeps reviewed web recipe source evidence visible without treating it as final truth", () => {
+    const state = buildProductionPlanSecondaryDetailsState({
+      selectedPlan: {
+        productionBatches: [
+          {
+            componentId: "starter",
+            recipeSource: {
+              recipeId: "recipe-web-starter",
+              recipeName: "Web Starter",
+              sourceTier: "internal_approved",
+              originType: "web",
+              approvalState: "approved_internal",
+              reference: "web:starter",
+              publisher: "Example Recipes",
+              url: "https://example.test/starter"
+            }
+          }
+        ],
+        recipeSelections: [
+          {
+            componentId: "starter",
+            recipeId: "recipe-web-starter"
+          }
+        ],
+        kitchenSheets: [
+          {
+            title: "Küchenblatt Web Starter",
+            recipeId: "recipe-web-starter",
+            recipeSource: {
+              recipeId: "recipe-web-starter",
+              recipeName: "Web Starter",
+              sourceTier: "internal_approved",
+              originType: "web",
+              approvalState: "approved_internal",
+              reference: "web:starter",
+              publisher: "Example Recipes",
+              url: "https://example.test/starter"
+            },
+            instructions: []
+          }
+        ]
+      },
+      selectedPlanComponentsById: new Map([
+        [
+          "starter",
+          {
+            label: "Starter",
+            menuCategory: "classic",
+            productionDecision: { mode: "scratch" }
+          }
+        ]
+      ]),
+      archivedPlans: [],
+      showArchivedPlans: false
+    });
+
+    expect(state?.recipeSelections[0]?.sourceLabel).toContain("web recipe, reviewed");
+    expect(state?.recipeSelections[0]?.sourceLabel).toContain("Example Recipes");
+    expect(state?.recipeSelections[0]?.sourceLabel).toContain("https://example.test/starter");
+    expect(state?.kitchenSheets[0]?.sourceLabel).toContain("web recipe, reviewed");
   });
 });
