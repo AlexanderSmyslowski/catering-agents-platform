@@ -63,7 +63,8 @@ describe("production purchase list panel state", () => {
               key: " purchase-lunch -0",
               articleName: "Glutenfreies Baguette",
               quantityLabel: "Menge: 3",
-              unitLabel: "Einheit: Stk"
+              unitLabel: "Einheit: Stk",
+              sourceLabel: "Rezeptquelle: source unknown"
             }
           ]
         }

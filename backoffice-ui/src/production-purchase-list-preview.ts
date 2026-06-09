@@ -1,7 +1,11 @@
+import { formatRecipeSourceEvidenceLabel } from "../../shared-core/src/export-source-metadata.js";
+import type { RecipeSourceExportMetadata } from "../../shared-core/src/types.js";
+
 export type PurchaseListPreviewItem = {
   articleName: string;
   quantity: string;
   unit: string;
+  sourceLabel: string;
 };
 
 export type PurchaseListQualityWarning = {
@@ -42,6 +46,43 @@ function readPurchaseListItems(purchaseList: Record<string, unknown>): unknown[]
   return [];
 }
 
+function readSourceMetadata(itemRecord: Record<string, unknown>): RecipeSourceExportMetadata[] {
+  const sourceRecipeMetadata = itemRecord.sourceRecipeMetadata;
+  if (!Array.isArray(sourceRecipeMetadata)) {
+    return [];
+  }
+
+  return sourceRecipeMetadata.flatMap((source) => {
+    const record = asRecord(source);
+    return record ? [record as unknown as RecipeSourceExportMetadata] : [];
+  });
+}
+
+function readSourceRecipeIds(itemRecord: Record<string, unknown>): string[] {
+  const sourceRecipes = itemRecord.sourceRecipes;
+  if (!Array.isArray(sourceRecipes)) {
+    return [];
+  }
+
+  return sourceRecipes
+    .map((recipeId) => String(recipeId).trim())
+    .filter(Boolean);
+}
+
+function formatSourceLabel(itemRecord: Record<string, unknown>): string {
+  const sourceMetadata = readSourceMetadata(itemRecord);
+  const metadataRecipeIds = new Set(sourceMetadata.map((source) => source.recipeId).filter(Boolean));
+  const labels = [
+    ...sourceMetadata.map((source) => formatRecipeSourceEvidenceLabel(source)),
+    ...readSourceRecipeIds(itemRecord)
+      .filter((recipeId) => !metadataRecipeIds.has(recipeId))
+      .map((recipeId) => formatRecipeSourceEvidenceLabel(undefined, recipeId))
+  ];
+  const uniqueLabels = [...new Set(labels)];
+
+  return uniqueLabels.length > 0 ? uniqueLabels.join("; ") : "source unknown";
+}
+
 function looksLikeRecipeInstruction(value: string): boolean {
   const normalized = value.trim();
   const instructionStartPattern =
@@ -76,7 +117,12 @@ export function getPurchaseListPreviewItems(
       readStringOrNumber(quantityRecord, ["unit"]) ??
       "-";
 
-    return [{ articleName, quantity, unit }];
+    return [{
+      articleName,
+      quantity,
+      unit,
+      sourceLabel: formatSourceLabel(itemRecord)
+    }];
   });
 }
 

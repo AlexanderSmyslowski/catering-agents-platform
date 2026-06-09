@@ -65,6 +65,7 @@ export function ProductionPlanSecondaryDetails({
               {selection.componentDetailLabel ? (
                 <p className="helper-text">{selection.componentDetailLabel}</p>
               ) : null}
+              <p className="helper-text">Rezeptquelle: {selection.sourceLabel}</p>
               {selection.scoreLabel ? <p className="helper-text">{selection.scoreLabel}</p> : null}
               {selection.searchTrace.length > 0 ? (
                 <div className="search-trace">
@@ -91,6 +92,7 @@ export function ProductionPlanSecondaryDetails({
               {state.kitchenSheets.map((sheet) => (
                 <li key={sheet.key}>
                   <strong>{sheet.title}</strong>
+                  <p className="helper-text">Rezeptquelle: {sheet.sourceLabel}</p>
                   <ul className="item-list compact trace-list">
                     {sheet.instructions.map((instruction) => (
                       <li key={`${sheet.key}-${instruction}`}>{instruction}</li>
