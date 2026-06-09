@@ -282,6 +282,7 @@ function discoverRegisteredMutatingRoutes(): string[] {
     "offer-service/src/routes/draft-routes.ts",
     "production-service/src/app.ts",
     "production-service/src/routes/artifact-routes.ts",
+    "production-service/src/routes/recipe-routes.ts",
     "print-export/src/index.ts"
   ];
   const routePattern = /app\.(post|put|patch|delete)(?:<[\s\S]{0,500}?>)?\(\s*["']([^"']+)["']/g;
