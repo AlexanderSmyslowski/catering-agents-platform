@@ -1,4 +1,5 @@
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
+import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
 import {
   ProductionHandoffPanel,
@@ -94,10 +95,13 @@ export function ProductionRouteMainLayout({
   miniPilotReportState,
   miniPilotStorageHintLabel
 }: ProductionRouteMainLayoutProps) {
-  const miniPilotActionState = buildProductionMiniPilotActionState(
-    miniPilotReportState,
-    miniPilotStorageHintLabel
-  );
+  const showMiniPilotPanel = shouldShowMiniPilotPanel();
+  const miniPilotActionState = showMiniPilotPanel
+    ? buildProductionMiniPilotActionState(
+        miniPilotReportState,
+        miniPilotStorageHintLabel
+      )
+    : undefined;
   const canClearMiniPilotResult = miniPilotRawResult.trim().length > 0;
 
   return (
@@ -134,7 +138,7 @@ export function ProductionRouteMainLayout({
           objectsActions={objectPanelActions}
           submitting={submitting}
           miniPilotActionState={miniPilotActionState}
-          clearMiniPilotResult={canClearMiniPilotResult ? () => setMiniPilotRawResult("") : undefined}
+          clearMiniPilotResult={showMiniPilotPanel && canClearMiniPilotResult ? () => setMiniPilotRawResult("") : undefined}
         />
       </div>
       <div className="production-column">

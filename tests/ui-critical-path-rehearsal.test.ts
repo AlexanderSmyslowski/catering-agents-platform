@@ -345,7 +345,7 @@ describe("UI critical path rehearsal", () => {
 
     try {
       const homeRoute = await renderAppRoute("/");
-      expect(document.body.textContent ?? "").toContain("Internes Beta-Kontrollzentrum");
+      expect(document.body.textContent ?? "").toContain("Interner Arbeitsstand");
       expect(findAnchorByText("Angebotsagent \u00f6ffnen").getAttribute("href")).toBe("/angebot");
       expect(findAnchorByText("Produktionsagent \u00f6ffnen").getAttribute("href")).toBe("/produktion");
 
@@ -363,7 +363,7 @@ describe("UI critical path rehearsal", () => {
       expect(offerText).toContain("Export: Angebots-HTML");
       expect(offerText).toContain("Entwurfs-Spec");
       expect(offerText).toContain("manual_input");
-      expect(offerText).toContain("Synthetische Beta-Grenze");
+      expect(offerText).toContain("Grenze: nur interne Demo- oder Testdaten");
       expect(findAnchorByText("Angebot exportieren").getAttribute("href")).toBe(
         `/api/exports/v1/exports/offers/${offerDraft.draftId}/html`
       );

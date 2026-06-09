@@ -3,8 +3,8 @@
   const missing = [
     "Angebotsagent",
     "Kundenanfrage einfügen und ruhigen Entwurf erzeugen",
-    "Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.",
-    "Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen",
+    "Interner Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.",
+    "Grenze: nur interne Demo- oder Testdaten",
     "Zur Produktion"
   ].filter((marker) => !text.includes(marker));
   const hasProductionHandoff = [...document.querySelectorAll("a")]

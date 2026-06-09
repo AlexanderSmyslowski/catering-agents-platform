@@ -2,6 +2,7 @@ import type { ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
+import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildOfferMiniPilotActionState } from "./offer-mini-pilot-action-state.js";
 import { buildOfferMiniPilotCardState } from "./offer-mini-pilot-card-state.js";
 import { getSpecLabel } from "./production-language.js";
@@ -182,6 +183,7 @@ export function OfferConversationalWorkbench({
 }: OfferWorkbenchProps) {
   const miniPilotActionState = buildOfferMiniPilotActionState(miniPilotReportState, miniPilotStorageHintLabel);
   const showMiniPilotActionClear = miniPilotRawResult.trim().length > 0;
+  const showMiniPilotPanel = shouldShowMiniPilotPanel();
   const focusedDraft = selectedDraft ?? activeDraft;
   const miniPilotCard = buildOfferMiniPilotCardState();
   const focusedDraftId = getDraftId(focusedDraft);
@@ -222,13 +224,12 @@ export function OfferConversationalWorkbench({
         <p className="eyebrow">Zusammenfassung</p>
         <strong>{renderDraftSummary(focusedDraft)}</strong>
         <p className="helper-text">Quelle: {summarySourceLabel}</p>
-        <p className="helper-text">Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.</p>
+        <p className="helper-text">Interner Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.</p>
         <p className="helper-text">
-          Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten,
-          keine externe Freigabe, keine Produktions- oder Compliance-Freigabe.
+          Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.
         </p>
         <p className="helper-text">
-          Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.
+          Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.
         </p>
         <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
         <p className="helper-text">
@@ -240,25 +241,29 @@ export function OfferConversationalWorkbench({
             ? `Export: Angebots-HTML für ${focusedDraftId} bereit`
             : "Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden."}
         </p>
-        <div className="search-trace" aria-label="Interner Draft-Pilot">
-          <p className="eyebrow">{miniPilotCard.eyebrow}</p>
-          <strong>{miniPilotCard.title}</strong>
-          <p className="helper-text">{miniPilotCard.helperText}</p>
-          <ul className="item-list trace-list">
-            {miniPilotCard.steps.map((step) => (
-              <li key={step.title}>
-                <strong>{step.title}</strong>
-                <p className="helper-text">{step.body}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <MiniPilotCheckPanel
-          rawResult={miniPilotRawResult}
-          onRawResultChange={setMiniPilotRawResult}
-          reportState={miniPilotReportState}
-          storageHintLabel={miniPilotStorageHintLabel}
-        />
+        {showMiniPilotPanel ? (
+          <>
+            <div className="search-trace" aria-label="Interner Draft-Pilot">
+              <p className="eyebrow">{miniPilotCard.eyebrow}</p>
+              <strong>{miniPilotCard.title}</strong>
+              <p className="helper-text">{miniPilotCard.helperText}</p>
+              <ul className="item-list trace-list">
+                {miniPilotCard.steps.map((step) => (
+                  <li key={step.title}>
+                    <strong>{step.title}</strong>
+                    <p className="helper-text">{step.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <MiniPilotCheckPanel
+              rawResult={miniPilotRawResult}
+              onRawResultChange={setMiniPilotRawResult}
+              reportState={miniPilotReportState}
+              storageHintLabel={miniPilotStorageHintLabel}
+            />
+          </>
+        ) : null}
       </aside>
 
       <div className="offer-progressive-zone">
@@ -288,36 +293,38 @@ export function OfferConversationalWorkbench({
               ) : (
                 <p className="helper-text">Offene Punkte: keine</p>
               )}
-              <div className="search-trace" aria-label="Mini-Pilot-Status vor Uebernahme">
-                <p className="eyebrow">{miniPilotActionState.eyebrow}</p>
-                <strong>{miniPilotActionState.title}</strong>
-                <p className="helper-text">{miniPilotActionState.statusLabel}</p>
-                <p className="helper-text">{miniPilotActionState.reasonLabel}</p>
-                {miniPilotActionState.trustLabel ? (
-                  <p className="helper-text">{miniPilotActionState.trustLabel}</p>
-                ) : null}
-                {miniPilotActionState.provenanceLabel ? (
-                  <p className="helper-text">{miniPilotActionState.provenanceLabel}</p>
-                ) : null}
-                {miniPilotActionState.cautionLabel ? (
-                  <p className="helper-text">{miniPilotActionState.cautionLabel}</p>
-                ) : null}
-                <p className="helper-text">{miniPilotActionState.helperText}</p>
-                <p className="helper-text">
-                  Lokaler Check: <code>{miniPilotActionState.commandLabel}</code>
-                </p>
-                {showMiniPilotActionClear ? (
-                  <div className="quiet-action-row">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => setMiniPilotRawResult("")}
-                    >
-                      Mini-Pilot-Stand leeren
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              {showMiniPilotPanel ? (
+                <div className="search-trace" aria-label="Mini-Pilot-Status vor Uebernahme">
+                  <p className="eyebrow">{miniPilotActionState.eyebrow}</p>
+                  <strong>{miniPilotActionState.title}</strong>
+                  <p className="helper-text">{miniPilotActionState.statusLabel}</p>
+                  <p className="helper-text">{miniPilotActionState.reasonLabel}</p>
+                  {miniPilotActionState.trustLabel ? (
+                    <p className="helper-text">{miniPilotActionState.trustLabel}</p>
+                  ) : null}
+                  {miniPilotActionState.provenanceLabel ? (
+                    <p className="helper-text">{miniPilotActionState.provenanceLabel}</p>
+                  ) : null}
+                  {miniPilotActionState.cautionLabel ? (
+                    <p className="helper-text">{miniPilotActionState.cautionLabel}</p>
+                  ) : null}
+                  <p className="helper-text">{miniPilotActionState.helperText}</p>
+                  <p className="helper-text">
+                    Lokaler Check: <code>{miniPilotActionState.commandLabel}</code>
+                  </p>
+                  {showMiniPilotActionClear ? (
+                    <div className="quiet-action-row">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => setMiniPilotRawResult("")}
+                      >
+                        Mini-Pilot-Stand leeren
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="quiet-action-row">
                 {focusedVariants.map((variant) => (
                   <button

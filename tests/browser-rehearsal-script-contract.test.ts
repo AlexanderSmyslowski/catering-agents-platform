@@ -88,13 +88,13 @@ describe("browser rehearsal script contract", () => {
     const rehearsalBundle = `${script}\n${browserRehearsalScripts}`;
 
     for (const marker of [
-      "Internes Beta-Kontrollzentrum",
-      "Beta-Weg: Start → Angebot → Produktion → Rückfragen → Exporte/Audit.",
+      "Interner Arbeitsstand",
+      "Arbeitsweg: Start → Angebot → Produktion → Rückfragen → Exporte.",
       "Kundenanfrage einfügen und ruhigen Entwurf erzeugen",
       "Angebotsagent öffnen",
       "Zur Produktion",
       "Was braucht die Produktion als Nächstes?",
-      "Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar",
+      "keine automatische Allergen-, Preis- oder Margenfreigabe",
       "Rückfragenstatus:",
       "Rückfragen und Antworten",
       "Produktionsobjekte und Downloads prüfen",

@@ -111,11 +111,14 @@ function offerWorkbenchProps(overrides: Partial<OfferWorkbenchProps> = {}): Offe
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   document.body.innerHTML = "";
 });
 
 describe("mini-pilot action clear controls", () => {
   it("shows the clear control at the offer takeover anchor when a mini-pilot result is present", () => {
+    vi.stubEnv("VITE_SHOW_MINI_PILOT_PANEL", "1");
+
     const markup = renderToStaticMarkup(
       createElement(OfferConversationalWorkbench, offerWorkbenchProps())
     );
@@ -124,6 +127,8 @@ describe("mini-pilot action clear controls", () => {
   });
 
   it("clears the offer takeover anchor via the dedicated clear control", async () => {
+    vi.stubEnv("VITE_SHOW_MINI_PILOT_PANEL", "1");
+
     const setMiniPilotRawResult = vi.fn();
     const container = document.createElement("div");
     document.body.appendChild(container);

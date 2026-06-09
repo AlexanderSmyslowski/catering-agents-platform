@@ -237,21 +237,16 @@ describe("backoffice route smoke", () => {
     const home = (await renderRoute("/")).text;
     expect(home).toContain("Catering-Agenten");
     expect(home).toMatch(/gemeinsam.*regelkern/i);
-    expect(home).toContain("Internes Beta-Kontrollzentrum");
-    expect(home).toContain("Beta-Weg: Start → Angebot → Produktion → Rückfragen → Exporte/Audit.");
-    expect(home).toContain("Grenze: nur synthetischer interner Beta-Durchlauf; keine echten Daten, keine Produktionsfreigabe.");
-    expect(home).toContain("Reviewer-Hinweis: P7-Szenariokarte nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
-    expect(home).toContain("Rehearsal-Go: erst nach grünem Status, lokalem Check, manueller UI-Evidenz und Reibungslog.");
-    expect(home).toContain(
-      "Pilot-Preflight: lokal mit Demo-/synthetischen oder nachweisbar anonymisierten Daten prüfen; kein Pilot-Go, kein Deployment und keine echten Daten."
-    );
-    expect(home).toContain("Interner Mini-Pilot");
-    expect(home).toContain("Draft-Probe lokal und kontrolliert prüfen");
-    expect(home).toContain("npm run llm:synthetic-live:check:mini-pilot");
-    expect(home).toContain("ready oder blocked mit Grund und nächstem sicheren Schritt direkt im JSON-Ergebnis.");
-    expect(home).toContain("Ergebnisse nur manuell prüfen und bewusst übernehmen; keine automatische Schreibwirkung.");
-    expect(home).toContain("Nächster Einstieg: zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären.");
-    expect(home).toContain("Demo, Erfassung, Angebot, Produktion, Export und Audit aus bestehenden Daten prüfen.");
+    expect(home).toContain("Interner Arbeitsstand");
+    expect(home).toContain("Arbeitsweg: Start → Angebot → Produktion → Rückfragen → Exporte.");
+    expect(home).toContain("Grenze: nur interne Demo- oder Testdaten; keine externe Freigabe und keine Produktionsfreigabe.");
+    expect(home).toContain("Prüfung: Quellen, offene Punkte und Exporte sichtbar halten; keine automatische Allergen-, Preis- oder Margenfreigabe.");
+    expect(home).not.toContain("Reviewer-Hinweis");
+    expect(home).not.toContain("Rehearsal-Go");
+    expect(home).not.toContain("Interner Mini-Pilot");
+    expect(home).not.toContain("Draft-Probe lokal und kontrolliert prüfen");
+    expect(home).not.toContain("ready oder blocked mit Grund und nächstem sicheren Schritt direkt im JSON-Ergebnis.");
+    expect(home).toContain("Anfrage, Angebot, Produktion, Einkauf und Export gemeinsam prüfen.");
 
     const offer = await renderRoute("/angebot");
     expect(offer.text).toContain("Angebotsagent");
@@ -331,10 +326,9 @@ describe("backoffice route smoke", () => {
     const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
     expect(production).toContain("Produktionsagent");
     expect(production).toContain("Was braucht die Produktion als Nächstes?");
-    expect(production).toContain("Interner Draft-Pilot");
-    expect(production).toContain("Produktions-Draft lokal gegen den Mini-Pilot-Rahmen prüfen");
-    expect(production).toContain("Mini-Pilot-Check");
-    expect(production).toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
+    expect(production).toContain("Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.");
+    expect(production).toContain("Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.");
+    expect(production).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
   });
 
   it("keeps the synthetic core corridor visible from start through offer handoff to production exports", async () => {
@@ -428,7 +422,7 @@ describe("backoffice route smoke", () => {
     });
 
     const home = (await renderRoute("/")).text;
-    expect(home).toContain("Beta-Weg: Start → Angebot → Produktion → Rückfragen → Exporte/Audit.");
+    expect(home).toContain("Arbeitsweg: Start → Angebot → Produktion → Rückfragen → Exporte.");
     expect(home).toContain("1 operative Datensätze stehen dienstübergreifend bereit.");
     expect(home).toContain("1 kaufmännische Entwürfe können direkt übernommen werden.");
     expect(home).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
@@ -456,13 +450,10 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("requestId: corridor-request-1");
     expect(production.text).toContain("production-objects-zone");
     expect(production.text).toContain("Produktionsobjekte");
-    expect(production.text).toContain("Interner Draft-Pilot");
-    expect(production.text).toContain("Produktions-Draft lokal gegen den Mini-Pilot-Rahmen prüfen");
-    expect(production.text).toContain("npm run llm:synthetic-live:check:mini-pilot");
-    expect(production.text).toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
-    expect(production.text).toContain("Status: noch kein Ergebnis");
-    expect(production.text).toContain("Mini-Pilot-Status vor Export");
-    expect(production.text).toContain("Export erst nach gruenem Mini-Pilot-Check");
+    expect(production.text).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
+    expect(production.text).not.toContain("Status: noch kein Ergebnis");
+    expect(production.text).not.toContain("Mini-Pilot-Status vor Export");
+    expect(production.text).not.toContain("Export erst nach gruenem Mini-Pilot-Check");
     expect(production.text).toContain(
       "Produktionsblatt exportieren für Plan corridor-plan-1 · Spezifikation corridor-spec-1"
     );
@@ -544,26 +535,21 @@ describe("backoffice route smoke", () => {
     const offer = (await renderRoute("/angebot")).text;
 
     expect(offer).toContain("Zusammenfassung");
-    expect(offer).toContain("Interner Beta-Schritt: Anfrage, Entwurf, Export und Übergabe bleiben nachvollziehbar.");
-    expect(offer).toContain(
-      "Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten, keine externe Freigabe, keine Produktions- oder Compliance-Freigabe."
-    );
-    expect(offer).toContain("Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
+    expect(offer).toContain("Interner Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.");
+    expect(offer).toContain("Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.");
+    expect(offer).toContain("Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.");
+    expect(offer).not.toContain("Reviewer-Hinweis");
     expect(offer).toContain("Nächster Angebotsschritt: Entwurf offer-draft-buffet prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.");
     expect(offer).toContain("Sommerfest mit Buffet · 1 Varianten · 1 offene Punkte");
     expect(offer).toContain("Übergabe: 1 vollständig · 1 teilweise");
     expect(offer).toContain("Quelle: offer_service: offer-draft-buffet");
     expect(offer).toContain("aktive Spezifikation: offer-draft-buffet-spec (teilweise vollständig)");
     expect(offer).toContain("Export: Angebots-HTML für offer-draft-buffet bereit");
-    expect(offer).toContain("Interner Draft-Pilot");
-    expect(offer).toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
-    expect(offer).toContain("npm run llm:synthetic-live:check:mini-pilot");
-    expect(offer).toContain("Nur bei ready weiterarbeiten; blocked bleibt Stop statt stiller Freigabe.");
-    expect(offer).toContain("Mini-Pilot-Check");
-    expect(offer).toContain("Status: noch kein Ergebnis");
-    expect(offer).toContain("Mini-Pilot-Status vor Uebernahme");
-    expect(offer).toContain("Uebernahme erst nach gruenem Mini-Pilot-Check");
-    expect(offer).toContain("Draft nur manuell prüfen, fachlich bewerten und bewusst übernehmen.");
+    expect(offer).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
+    expect(offer).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
+    expect(offer).not.toContain("Status: noch kein Ergebnis");
+    expect(offer).not.toContain("Mini-Pilot-Status vor Uebernahme");
+    expect(offer).not.toContain("Uebernahme erst nach gruenem Mini-Pilot-Check");
     expect(offer).toContain("offer-draft-buffet");
     expect(offer).toContain("Entwurfs-Spec: offer-draft-buffet-spec (teilweise vollständig)");
     expect(offer).toContain("Entwurfs-Quelle: offer_service: offer-draft-buffet");
@@ -587,13 +573,10 @@ describe("backoffice route smoke", () => {
     expect(offer.text).toContain("Nächster Angebotsschritt: Anfrage einfügen oder Demo über Start nutzen, dann Entwurf prüfen.");
     expect(offer.text).toContain("Noch kein Angebotsentwurf vorhanden.");
     expect(offer.text).toContain("Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden.");
-    expect(offer.text).toContain("Interner Draft-Pilot");
-    expect(offer.text).toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
-    expect(offer.text).toContain("Mini-Pilot-Check");
-    expect(offer.text).toContain("Status: noch kein Ergebnis");
-    expect(offer.text).toContain(
-      "Synthetische Beta-Grenze: Entwürfe und Exporte nur intern prüfen; keine echten Kunden-/Produktionsdaten, keine externe Freigabe, keine Produktions- oder Compliance-Freigabe."
-    );
+    expect(offer.text).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
+    expect(offer.text).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
+    expect(offer.text).not.toContain("Status: noch kein Ergebnis");
+    expect(offer.text).toContain("Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.");
     expect(offer.text).not.toContain("Angebots-HTML für");
     expect(offer.text).not.toContain("Angebot exportieren");
     expect(offer.text).not.toContain("Produktionsfreigabe erteilt");
@@ -1000,7 +983,7 @@ describe("backoffice route smoke", () => {
 
     expect(production.text).toContain("Downloadbereich");
     expect(production.text).toContain("Plan-Kontext: planId b23-plan-detail · specId b23-spec-detail");
-    expect(production.text).toContain("Mini-Pilot-Status vor Export");
+    expect(production.text).not.toContain("Mini-Pilot-Status vor Export");
     expect(production.text).toContain("Einzelheiten zu Plan b23-plan-detail · Spezifikation b23-spec-detail");
     expect(production.text).toContain(
       "Produktionsblatt exportieren für Plan b23-plan-detail · Spezifikation b23-spec-detail"

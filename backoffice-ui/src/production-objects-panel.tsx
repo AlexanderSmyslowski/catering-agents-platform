@@ -35,7 +35,7 @@ type ProductionObjectsPanelProps = {
   objectsState: ProductionObjectsState;
   objectsActions: ProductionObjectsActions;
   submitting: boolean;
-  miniPilotActionState: ProductionMiniPilotActionState;
+  miniPilotActionState?: ProductionMiniPilotActionState;
   clearMiniPilotResult?: () => void;
 };
 

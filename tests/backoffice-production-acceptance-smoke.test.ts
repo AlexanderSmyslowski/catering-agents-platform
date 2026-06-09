@@ -735,12 +735,11 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Angebot hier ablegen");
     expect(content).toContain("Downloadbereich");
     expect(content).toContain("production-calm-summary");
-    expect(content).toContain("Interner Beta-Schritt: Produktion, Einkaufsliste, Exporte, Herkunft und offene Rückfragen bleiben nachvollziehbar.");
-    expect(content).toContain("Synthetische Beta-Grenze: Produktionsobjekte nur intern prüfen; keine echten Einsatzdaten und keine Produktionsfreigabe.");
-    expect(content).toContain("Beta-Pfad: Rückfragen -> Ergebnisobjekte -> Exporte/Audit");
-    expect(content).toContain("Reviewer-Hinweis: nur fiktive P7-Szenarioangaben nutzen; Evidenz als Route, Erwartung, Beobachtung und Beleg notieren.");
-    expect(content).toContain("Beta-Prüfpunkt: prüfbar, wenn Rückfragenstatus, Produktionsobjekte und Export-/Auditanker sichtbar sind; offene Stop-Punkte bleiben Stop statt Freigabe.");
-    expect(content).toContain("Option-A-Zeitfenster: verbindliches Zeitfenster manuell klären und nur als Rehearsal-Notiz festhalten; keine automatische event.schedule-Übernahme.");
+    expect(content).toContain("Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.");
+    expect(content).toContain("Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.");
+    expect(content).toContain("Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.");
+    expect(content).not.toContain("Reviewer-Hinweis");
+    expect(content).not.toContain("Option-A-Zeitfenster");
     expect(content).toContain("production-objects-zone");
     expect(content).toContain("Nächster Agent-Schritt");
     expect(content).toContain("Produktionsplan, Rezepte/Objektübersicht, Einkaufsliste und Downloads");
