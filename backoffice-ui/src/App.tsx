@@ -1,8 +1,5 @@
 import {
-  startTransition,
   useDeferredValue,
-  useEffect,
-  useEffectEvent,
   useMemo,
   useRef,
   useState
@@ -10,8 +7,6 @@ import {
 import { DashboardShell } from "../components/dashboard-shell.js";
 import {
   detectRoute,
-  emptyDashboardState,
-  emptyServiceHealthState,
   getBaseUrl,
   getPathname
 } from "./app-shell-state.js";
@@ -21,7 +16,6 @@ import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
 import { AppRouteContent } from "./app-route-content.js";
 import { buildAppRouteContentState } from "./app-route-content-state.js";
 import { RouteMasthead } from "./route-masthead.js";
-import { refreshAppDashboardState } from "./app-dashboard-refresh.js";
 import { buildAppSeedDemoAction } from "./app-seed-demo-action.js";
 import {
   archiveIntakeRequest,
@@ -30,15 +24,11 @@ import {
   createAcceptedSpecFromText,
   createOfferFromText,
   createProductionPlan,
-  loadDashboardState,
-  loadServiceHealth,
   promoteOfferDraft,
   reviewRecipe,
   seedDemoData,
   updateAcceptedSpec,
-  uploadRecipeFile,
-  type DashboardState,
-  type ServiceHealthState
+  uploadRecipeFile
 } from "./api.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
@@ -54,6 +44,7 @@ import { buildProductionRecipeControls } from "./production-recipe-controls.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import { buildProductionWorkspaceAppBoundary } from "./production-workspace-app-boundary.js";
 import { buildProductionPlanningControls } from "./production-planning-controls.js";
+import { useAppDashboardData } from "./use-app-dashboard-data.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionQuestionAutoOpen } from "./use-production-question-auto-open.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
@@ -69,12 +60,15 @@ import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
   const baseUrl = useMemo(() => getBaseUrl(), []);
-  const [dashboard, setDashboard] = useState<DashboardState>(emptyDashboardState);
-  const [serviceHealth, setServiceHealth] = useState<ServiceHealthState>(emptyServiceHealthState);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const {
+    dashboard,
+    serviceHealth,
+    loading,
+    refreshDashboard
+  } = useAppDashboardData({ setError });
   const {
     operatorName,
     handleOperatorNameChange
@@ -137,22 +131,6 @@ export function App() {
   const deferredSearch = useDeferredValue(search);
   const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
-
-  const refreshDashboard = useEffectEvent(async () => {
-    await refreshAppDashboardState({
-      loadDashboardState,
-      loadServiceHealth,
-      setDashboard,
-      setServiceHealth,
-      setLoading,
-      setError,
-      transition: startTransition
-    });
-  });
-
-  useEffect(() => {
-    void refreshDashboard();
-  }, []);
 
   const {
     filteredOfferDrafts,
