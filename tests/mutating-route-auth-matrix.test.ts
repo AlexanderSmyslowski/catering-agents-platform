@@ -277,6 +277,7 @@ function buildAppForRoute(route: MutableRoute, dataRoot: string) {
 function discoverRegisteredMutatingRoutes(): string[] {
   const routeSources = [
     "intake-service/src/app.ts",
+    "intake-service/src/routes/document-routes.ts",
     "intake-service/src/routes/work-item-routes.ts",
     "offer-service/src/app.ts",
     "offer-service/src/routes/draft-routes.ts",
