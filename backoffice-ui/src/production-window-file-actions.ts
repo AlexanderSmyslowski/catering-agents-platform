@@ -8,7 +8,10 @@ import {
 
 type ProductionWindowFileActionsInput = {
   setDragActive: (active: boolean) => void;
-  setIntakeFile: (file: File) => void;
+  setIntakeFile: (file: File | null) => void;
+  resetDocumentProgress?: () => void;
+  clearMessages?: () => void;
+  setError?: (message: string) => void;
   processIncomingProductionFile: (file: File, channel: IntakeDocumentChannel) => void | Promise<void>;
 };
 
@@ -21,11 +24,17 @@ export type ProductionWindowFileActions = {
 export function buildProductionWindowFileActions({
   setDragActive,
   setIntakeFile,
+  resetDocumentProgress,
+  clearMessages,
+  setError,
   processIncomingProductionFile
 }: ProductionWindowFileActionsInput): ProductionWindowFileActions {
   const uploadActions = {
     setDragActive,
     setIntakeFile,
+    resetDocumentProgress,
+    clearMessages,
+    setError,
     processIncomingProductionFile
   };
 

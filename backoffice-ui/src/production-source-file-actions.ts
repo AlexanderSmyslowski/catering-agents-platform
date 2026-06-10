@@ -12,7 +12,10 @@ import {
 type ProductionSourceFileUploadActionsInput = {
   uploadInputRef: { current: HTMLInputElement | null };
   setDragActive: (active: boolean) => void;
-  setIntakeFile: (file: File) => void;
+  setIntakeFile: (file: File | null) => void;
+  resetDocumentProgress?: () => void;
+  clearMessages?: () => void;
+  setError?: (message: string) => void;
   processIncomingProductionFile: (file: File, channel: IntakeDocumentChannel) => void | Promise<void>;
 };
 
@@ -26,11 +29,17 @@ export function buildProductionSourceFileUploadActions({
   uploadInputRef,
   setDragActive,
   setIntakeFile,
+  resetDocumentProgress,
+  clearMessages,
+  setError,
   processIncomingProductionFile
 }: ProductionSourceFileUploadActionsInput): ProductionSourceFileUploadActions {
   const uploadActions = {
     setDragActive,
     setIntakeFile,
+    resetDocumentProgress,
+    clearMessages,
+    setError,
     processIncomingProductionFile
   };
 

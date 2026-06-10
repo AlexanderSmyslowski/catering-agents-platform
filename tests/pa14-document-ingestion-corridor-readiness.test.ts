@@ -122,8 +122,8 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
 
     for (const document of [testingGuide, c8DemoPath]) {
       expect(document).toContain("P3-B37 Upload-Grenzen als Beta-Risiko");
-      expect(document).toContain("Intake-Dokumentuploads: maximal 8 MiB pro Datei und bis zu 3 Dateien pro Multipart-Request");
-      expect(document).toContain("Rezeptuploads in Angebot und Produktion: maximal 5 MiB und genau eine Datei pro Upload");
+      expect(document).toContain("Intake-Dokumentuploads: maximal 25 MB pro Datei und bis zu 3 Dateien pro Multipart-Request");
+      expect(document).toContain("Rezeptuploads in Angebot und Produktion: maximal 5 MB und genau eine Datei pro Upload");
       expect(document).toContain("PDF/TXT/MD/EML/Pages");
       expect(document).toContain("Produktionsnahe Verarbeitung echter oder beliebiger Uploads bleibt ohne Sandbox/Worker/AV-Gate `blocked`");
       expect(document).toContain("Warnungen bleiben sichere Status-/Warnkey-Marker ohne Rohtext- oder Vollhash-Spiegelung");

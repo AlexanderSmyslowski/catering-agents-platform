@@ -328,7 +328,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       });
       return reply.code(201).send({ recipe });
     } catch (error) {
-      const uploadError = uploadErrorResponse(error);
+      const uploadError = uploadErrorResponse(error, "recipe");
       return reply.code(uploadError.statusCode).send({ message: uploadError.message });
     }
   });

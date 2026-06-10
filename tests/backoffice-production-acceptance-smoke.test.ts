@@ -729,7 +729,11 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsagent-Chat");
     expect(content).toContain("Was braucht die Produktion als Nächstes?");
-    expect(content).toContain("Angebotsdatei auswählen");
+    expect(content).toContain("Anfrageeingang");
+    expect(content).toContain("Kundenanfrage übernehmen");
+    expect(content).toContain("Maximal 25 MB");
+    expect(content).toContain("Der Inhalt wird als Catering-Anfrage erfasst.");
+    expect(content).not.toContain("Intake-Pfad");
     expect(content).toContain("Datei auswählen");
     expect(content).toContain("Demo-/Wartungsaktionen");
     expect(content).toContain("Demo-Arbeitsstand zurücksetzen");

@@ -3,6 +3,7 @@ import {
   buildProductionDocumentSubmitActions,
   type ProductionDocumentSubmitActionInput
 } from "../backoffice-ui/src/production-document-submit-action.js";
+import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_BYTES } from "../backoffice-ui/src/production-document-upload-limit.js";
 
 function file(name = "kundenangebot.pdf") {
   return new File(["Lunch fuer 40 Personen"], name, { type: "application/pdf" });
@@ -112,7 +113,17 @@ describe("production document submit action", () => {
 
   it("resets stale production state after a failed document upload", async () => {
     const failedFile = file("falsches-angebot.txt");
+    const calls: string[] = [];
     const actionsInput = input({
+      clearMessages: vi.fn(() => {
+        calls.push("clearMessages");
+      }),
+      setNotice: vi.fn((message) => {
+        calls.push(`setNotice:${message}`);
+      }),
+      setError: vi.fn((message) => {
+        calls.push(`setError:${message}`);
+      }),
       createAcceptedSpecFromDocument: vi.fn(async () => {
         throw new Error("Dokument leer");
       })
@@ -130,6 +141,45 @@ describe("production document submit action", () => {
     expect(actionsInput.resetIntakeRequestDetail).toHaveBeenCalledTimes(1);
     expect(actionsInput.resetSpecEdit).toHaveBeenCalledWith(false);
     expect(actionsInput.setError).toHaveBeenCalledWith("Dokument leer");
+    expect(calls).toEqual([
+      "clearMessages",
+      "setNotice:Dokument falsches-angebot.txt wird analysiert...",
+      "clearMessages",
+      "setError:Dokument leer"
+    ]);
     expect(actionsInput.setSubmitting).toHaveBeenLastCalledWith(false);
+  });
+
+  it("normalizes oversized upload errors and clears the analysing notice", async () => {
+    const oversizedFile = file("zu-gross.pdf");
+    const calls: string[] = [];
+    const actionsInput = input({
+      clearMessages: vi.fn(() => {
+        calls.push("clearMessages");
+      }),
+      setNotice: vi.fn((message) => {
+        calls.push(`setNotice:${message}`);
+      }),
+      setError: vi.fn((message) => {
+        calls.push(`setError:${message}`);
+      }),
+      createAcceptedSpecFromDocument: vi.fn(async () => {
+        throw new Error(`Datei ist zu gross. Maximal erlaubt sind ${PRODUCTION_DOCUMENT_UPLOAD_LIMIT_BYTES} Bytes.`);
+      })
+    });
+    const { processIncomingProductionFile } = buildProductionDocumentSubmitActions(actionsInput);
+
+    await processIncomingProductionFile(oversizedFile, "pdf_upload");
+
+    expect(actionsInput.failDocumentProgress).toHaveBeenCalledTimes(1);
+    expect(actionsInput.setError).toHaveBeenCalledWith(
+      "Die Datei ist zu groß. Maximal erlaubt sind 25 MB."
+    );
+    expect(calls).toEqual([
+      "clearMessages",
+      "setNotice:Dokument zu-gross.pdf wird analysiert...",
+      "clearMessages",
+      "setError:Die Datei ist zu groß. Maximal erlaubt sind 25 MB."
+    ]);
   });
 });

@@ -20,7 +20,7 @@ afterEach(() => {
 function renderWindowFileDrop(input: {
   route?: AppRoute;
   setDragActive?: (active: boolean) => void;
-  setIntakeFile?: (file: File) => void;
+  setIntakeFile?: (file: File | null) => void;
   processIncomingProductionFile?: (file: File, channel: "pdf_upload" | "email" | "text") => void | Promise<void>;
 }) {
   const container = document.createElement("div");

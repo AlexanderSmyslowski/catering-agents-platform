@@ -91,6 +91,7 @@ export function buildProductionDocumentSubmitActions({
         resetIntakeRequestDetail,
         resetSpecEdit
       });
+      clearMessages();
       setError(formatSubmitErrorMessage(submitError, "Dokument konnte nicht normalisiert werden."));
     } finally {
       setSubmitting(false);

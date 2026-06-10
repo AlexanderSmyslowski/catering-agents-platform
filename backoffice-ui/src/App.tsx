@@ -429,6 +429,9 @@ export function App() {
     route,
     setDragActive,
     setIntakeFile,
+    resetDocumentProgress,
+    clearMessages,
+    setError,
     processIncomingProductionFile
   });
 
@@ -481,6 +484,9 @@ export function App() {
     setIntakeChannel,
     setIntakeText,
     setIntakeFile,
+    resetDocumentProgress,
+    clearMessages,
+    setError,
     processIncomingProductionFile,
     clearWorkspace: clearProductionWorkspace,
     archiveCurrentIntake: handleArchiveCurrentIntake,

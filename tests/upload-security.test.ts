@@ -6,9 +6,12 @@ import { buildIntakeApp } from "@catering/intake-service";
 import { buildOfferApp } from "@catering/offer-service";
 import { buildProductionApp } from "@catering/production-service";
 import {
+  base64EncodedLength,
   createUploadSourceMetadata,
-  DOCUMENT_UPLOAD_LIMITS
+  DOCUMENT_UPLOAD_LIMITS,
+  validateUploadedDocumentSize
 } from "@catering/shared-core";
+import { intakeDocumentJsonRouteOptions } from "../intake-service/src/routes/document-routes.js";
 
 const dataRoots: string[] = [];
 
@@ -47,6 +50,30 @@ afterEach(() => {
 });
 
 describe("upload security limits", () => {
+  it("keeps the shared intake document limit viable for ordinary request files", () => {
+    expect(DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes).toBe(25 * 1024 * 1024);
+    expect(DOCUMENT_UPLOAD_LIMITS.intake.maxJsonBodyBytes).toBe(
+      base64EncodedLength(DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes) + 2 * 1024 * 1024
+    );
+    expect(DOCUMENT_UPLOAD_LIMITS.recipe.maxFileSizeBytes).toBe(5 * 1024 * 1024);
+
+    expect(() => {
+      validateUploadedDocumentSize(DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes - 1, "intake");
+    }).not.toThrow();
+
+    expect(() => {
+      validateUploadedDocumentSize(DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes + 1, "intake");
+    }).toThrow(/Maximal erlaubt/);
+  });
+
+  it("keeps the JSON/base64 intake route body limit above the valid 25 MB file envelope", () => {
+    const validFileBase64Length = base64EncodedLength(DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes);
+    const conservativeJsonEnvelopeBytes = validFileBase64Length + 1024 * 1024;
+
+    expect(DOCUMENT_UPLOAD_LIMITS.intake.maxJsonBodyBytes).toBeGreaterThan(conservativeJsonEnvelopeBytes);
+    expect(intakeDocumentJsonRouteOptions.bodyLimit).toBe(DOCUMENT_UPLOAD_LIMITS.intake.maxJsonBodyBytes);
+  });
+
   it("creates deterministic upload source metadata", () => {
     const metadata = createUploadSourceMetadata({
       filename: "Angebot.txt",
@@ -79,7 +106,7 @@ describe("upload security limits", () => {
     );
 
     expect(response.status).toBe(413);
-    expect((await response.json()).message).toMatch(/gross|large/i);
+    expect((await response.json()).message).toBe("Die Datei ist zu groß. Maximal erlaubt sind 26214400 Bytes.");
     await app.close();
   });
 

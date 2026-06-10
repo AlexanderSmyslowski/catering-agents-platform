@@ -1,23 +1,15 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import type { DocumentInput, UploadSourceMetadata } from "./types.js";
+import {
+  DOCUMENT_UPLOAD_LIMITS,
+  type UploadKind
+} from "./upload-limits.js";
 
-export const DOCUMENT_UPLOAD_LIMITS = {
-  intake: {
-    maxFileSizeBytes: 8 * 1024 * 1024,
-    maxFiles: 3,
-    maxFields: 4,
-    maxParts: 7
-  },
-  recipe: {
-    maxFileSizeBytes: 5 * 1024 * 1024,
-    maxFiles: 1,
-    maxFields: 3,
-    maxParts: 4
-  }
-} as const;
-
-type UploadKind = keyof typeof DOCUMENT_UPLOAD_LIMITS;
+export {
+  DOCUMENT_UPLOAD_LIMITS,
+  type UploadKind
+} from "./upload-limits.js";
 export type UploadContext = "intake" | "offer" | "production";
 
 const ALLOWED_DOCUMENT_TYPES = [
@@ -91,7 +83,7 @@ export function validateUploadedDocumentSize(sizeBytes: number, kind: UploadKind
   const maxFileSizeBytes = DOCUMENT_UPLOAD_LIMITS[kind].maxFileSizeBytes;
   if (sizeBytes > maxFileSizeBytes) {
     throw new UploadValidationError(
-      `Datei ist zu gross. Maximal erlaubt sind ${maxFileSizeBytes} Bytes.`,
+      `Die Datei ist zu groß. Maximal erlaubt sind ${maxFileSizeBytes} Bytes.`,
       413
     );
   }
@@ -128,7 +120,7 @@ export function isUploadValidationError(error: unknown): error is UploadValidati
   return error instanceof UploadValidationError;
 }
 
-export function uploadErrorResponse(error: unknown): { statusCode: number; message: string } {
+export function uploadErrorResponse(error: unknown, kind?: UploadKind): { statusCode: number; message: string } {
   if (isUploadValidationError(error)) {
     return {
       statusCode: error.statusCode,
@@ -140,7 +132,9 @@ export function uploadErrorResponse(error: unknown): { statusCode: number; messa
   if (maybeError?.code === "FST_REQ_FILE_TOO_LARGE" || maybeError?.statusCode === 413) {
     return {
       statusCode: 413,
-      message: "Datei ist zu gross. Upload wurde abgelehnt."
+      message: kind
+        ? `Die Datei ist zu groß. Maximal erlaubt sind ${DOCUMENT_UPLOAD_LIMITS[kind].maxFileSizeBytes} Bytes.`
+        : "Die Datei ist zu groß. Upload wurde abgelehnt."
     };
   }
 

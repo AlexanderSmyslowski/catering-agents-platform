@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   createUploadSourceMetadata,
+  DOCUMENT_UPLOAD_LIMITS,
   ingestDocument,
   multipartLimitsForUpload,
   normalizeEventRequestToSpec,
@@ -204,6 +205,10 @@ async function normalizeUploadedDocuments(
   };
 }
 
+export const intakeDocumentJsonRouteOptions = {
+  bodyLimit: DOCUMENT_UPLOAD_LIMITS.intake.maxJsonBodyBytes
+} as const;
+
 export function registerIntakeDocumentRoutes(
   app: FastifyInstance,
   deps: IntakeDocumentRouteDependencies
@@ -217,7 +222,7 @@ export function registerIntakeDocumentRoutes(
     actorForRequest
   } = deps;
 
-  app.post<{ Body: DocumentBody }>("/v1/intake/documents", async (request, reply) => {
+  app.post<{ Body: DocumentBody }>("/v1/intake/documents", intakeDocumentJsonRouteOptions, async (request, reply) => {
     if (!isIntakeOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Intake-Operator erforderlich."
@@ -268,7 +273,7 @@ export function registerIntakeDocumentRoutes(
 
       return reply.code(201).send(normalized);
     } catch (error) {
-      const uploadError = uploadErrorResponse(error);
+      const uploadError = uploadErrorResponse(error, "intake");
       return reply.code(uploadError.statusCode).send({ message: uploadError.message });
     }
   });
@@ -304,7 +309,7 @@ export function registerIntakeDocumentRoutes(
 
       return reply.code(201).send(normalized);
     } catch (error) {
-      const uploadError = uploadErrorResponse(error);
+      const uploadError = uploadErrorResponse(error, "intake");
       return reply.code(uploadError.statusCode).send({ message: uploadError.message });
     }
   });
