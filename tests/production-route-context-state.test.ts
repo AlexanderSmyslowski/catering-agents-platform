@@ -28,7 +28,7 @@ describe("production route context state", () => {
       })
     ).toEqual({
       title: "Produktionsarbeit prüfen",
-      description: "Produktionsplan, Einkaufsliste und Exporte liegen bereit. Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen."
+      description: "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen."
     });
   });
 

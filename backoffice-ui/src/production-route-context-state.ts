@@ -46,7 +46,7 @@ export function selectProductionNextStep(input: {
   return {
     title: "Produktionsarbeit prüfen",
     description:
-      "Produktionsplan, Einkaufsliste und Exporte liegen bereit. Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen."
+      "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen."
   };
 }
 

@@ -122,7 +122,10 @@ export function ProductionConversationalWorkbench({
     answeredQuestionCount,
     unansweredQuestionCount
   );
-  const productionOutputAnchor = buildProductionWorkbenchOutputAnchorState({ productionObjectCount });
+  const productionOutputAnchor = buildProductionWorkbenchOutputAnchorState({
+    productionObjectCount,
+    purchaseListCount
+  });
 
   return (
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">

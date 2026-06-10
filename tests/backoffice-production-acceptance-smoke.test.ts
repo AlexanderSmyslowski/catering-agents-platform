@@ -748,8 +748,9 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Option-A-Zeitfenster");
     expect(content).toContain("production-objects-zone");
     expect(content).toContain("Nächster Arbeitsschritt");
-    expect(content).toContain("Produktionsplan, Einkaufsliste und Exporte liegen bereit.");
+    expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Produktionsplan");
+    expect(content).not.toContain("Produktionsplan und Einkaufsliste liegen vor.");
     expect(content).not.toContain("Nächster Agent-Schritt");
     expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).not.toContain("prüfbare Ergebniszonen");
@@ -1329,7 +1330,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste offen");
     expect(content).toContain("Einkaufsliste noch offen");
     expect(content).toContain("Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch.");
+    expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
+    expect(content).not.toContain("Produktionsplan, Einkaufsliste und Exporte liegen bereit.");
+    expect(content).not.toContain("Produktionsplan und Einkaufsliste liegen vor.");
   });
 
   it("shows the next step to inspect downloads when production objects already exist", async () => {
@@ -1338,7 +1342,8 @@ describe("backoffice production acceptance smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Produktionsarbeit prüfen");
-    expect(content).toContain("Produktionsplan, Einkaufsliste und Exporte liegen bereit. Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen.");
+    expect(content).toContain("Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.");
+    expect(content).not.toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Produktionsergebnis: 1 Plan(e) · vollständig");
   });
 
