@@ -53,6 +53,7 @@ export function buildProductionRouteViewAppBoundary(
     productionRouteViewState: buildProductionRouteViewState({
       ...input,
       activeProductionContextLabel: productionStatusSummary.activeProductionContextLabel,
+      activeProductionTechnicalContextLabel: productionStatusSummary.activeProductionTechnicalContextLabel,
       focusedSpecReadinessLabel: productionStatusSummary.focusedSpecReadinessLabel,
       selectedPlanReadinessLabel: productionStatusSummary.selectedPlanReadinessLabel,
       productionPlanStatusLabel: productionStatusSummary.productionPlanStatusLabel,

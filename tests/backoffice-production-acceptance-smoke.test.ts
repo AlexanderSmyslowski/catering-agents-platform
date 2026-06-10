@@ -1156,7 +1156,13 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-fallback-1");
+    expect(content).toContain("Aktiver Produktionsauftrag");
+    expect(content).toContain("Produktionsplan aus gespeicherter Spezifikation");
+    expect(content).toContain("Status: Prüfung nötig");
+    expect(content).toContain("Freigabe: nicht erteilt.");
+    expect(content).toContain("Technische Details");
+    expect(content).toContain("Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1");
+    expect(content).not.toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-fallback-1");
     expect(content).toContain(
       "Einzelheiten zu Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1"
     );
@@ -1171,7 +1177,9 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
+    expect(content).toContain("Produktionsplan aus gespeicherter Spezifikation");
+    expect(content).toContain("Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1");
+    expect(content).not.toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
     expect(content).toContain(
       "Einzelheiten zu Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1"
     );
@@ -1194,7 +1202,10 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
+    expect(content).toContain("Produktionsplan aus gespeicherter Spezifikation");
+    expect(content).toContain("Technische Details");
+    expect(content).toContain("Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1");
+    expect(content).not.toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
     expect(content).toContain("1 Liste · 2 Positionen");
     expect(content).toContain("purchaseListId: purchase-production-current-1 · specId: spec-production-plan-only-1");
     expect(content).toContain(
@@ -1321,7 +1332,7 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
-    expect(content).toContain("Ergebnisobjekte: 1 Plan(e) · vollständig");
+    expect(content).toContain("Produktionsobjekte: 1 Plan(e) · vollständig");
   });
 
   it("shows a synthetic Quick Lunch plan with internal recipe hits and baker purchase as one current result", async () => {

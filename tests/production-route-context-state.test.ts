@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatActiveProductionContextLabel,
+  formatProductionTechnicalContextLabel,
   selectProductionNextStep
 } from "../backoffice-ui/src/production-route-context-state.js";
 
@@ -48,6 +49,12 @@ describe("production route context state", () => {
         selectedPlan: { planId: "plan-1", eventSpecId: "spec-1" },
         productionWorkspaceCleared: false
       })
-    ).toBe("Plan-Kontext geladen: plan-1 · Spezifikation: spec-1");
+    ).toBe("Produktionsplan aus gespeicherter Spezifikation");
+    expect(
+      formatProductionTechnicalContextLabel({
+        selectedPlan: { planId: "plan-1", eventSpecId: "spec-1" },
+        productionWorkspaceCleared: false
+      })
+    ).toBe("Plan plan-1 · Spezifikation spec-1");
   });
 });

@@ -7,6 +7,7 @@ type ClarificationStatusCounts = {
 
 export type ProductionWorkbenchSummaryStateInput = {
   activeProductionContextLabel: string;
+  activeProductionTechnicalContextLabel?: string;
   focusedSpecReadinessLabel: string;
   productionPlanStatusLabel: string;
   purchaseZoneStatusLabel: string;
@@ -19,6 +20,7 @@ export type ProductionWorkbenchSummaryStateInput = {
 
 export function buildProductionWorkbenchSummaryState({
   activeProductionContextLabel,
+  activeProductionTechnicalContextLabel,
   focusedSpecReadinessLabel,
   productionPlanStatusLabel,
   purchaseZoneStatusLabel,
@@ -30,6 +32,7 @@ export function buildProductionWorkbenchSummaryState({
 }: ProductionWorkbenchSummaryStateInput): ProductionWorkbenchSummary {
   return {
     activeSpecLabel: activeProductionContextLabel,
+    activeTechnicalContextLabel: activeProductionTechnicalContextLabel,
     readinessLabel: focusedSpecReadinessLabel,
     planStatusLabel: productionPlanStatusLabel,
     purchaseStatusLabel: purchaseZoneStatusLabel,
