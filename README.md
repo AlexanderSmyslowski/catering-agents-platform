@@ -195,7 +195,7 @@ Echte Login-, OIDC-/SSO- und Session-Mechanik bleibt bewusst offen und ist nicht
 
 Die Web-App nutzt diese Pfade jetzt direkt fuer Service-Status und Demo-Befuellung.
 Zusatzlich kann sie nun PDF-, TXT-, MD- und E-Mail-Dateien ueber den Intake-Pfad hochladen und daraus direkt `AcceptedEventSpec`-Datensaetze erzeugen.
-Dokument-Uploads sind bewusst eng limitiert: Intake akzeptiert maximal 8 MiB pro Datei und bis zu 3 Dateien pro Multipart-Request; Rezeptuploads in Angebot und Produktion akzeptieren maximal 5 MiB und genau den vorhandenen Dokumentkorridor PDF/TXT/MD/EML/Pages mit passender MIME-/Extension-Kombination. Andere Dateitypen werden kontrolliert abgelehnt.
+Dokument-Uploads sind bewusst limitiert: Intake akzeptiert maximal 25 MB pro Datei und bis zu 3 Dateien pro Multipart-Request; Rezeptuploads in Angebot und Produktion akzeptieren maximal 5 MB und genau den vorhandenen Dokumentkorridor PDF/TXT/MD/EML/Pages mit passender MIME-/Extension-Kombination. Andere Dateitypen werden kontrolliert abgelehnt.
 Angebotsvarianten koennen ausserdem direkt aus der UI in operative `AcceptedEventSpec`-Datensaetze promoted werden.
 Unvollstaendige `AcceptedEventSpec`-Datensaetze lassen sich im Intake-Bereich nun direkt im Backoffice nachbearbeiten und erneut validieren.
 Zusatzlich gibt es jetzt einen strukturierten manuellen Intake-Pfad, der ohne Freitext direkt ein `AcceptedEventSpec` aus Formularfeldern erzeugt.

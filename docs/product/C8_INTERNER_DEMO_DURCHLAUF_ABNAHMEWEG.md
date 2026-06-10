@@ -119,8 +119,8 @@ In `/produktion` wird fuer die interne Demo geprueft:
    - keine vollen SHA-256-Hashes,
    - kontrollierte Servermeldungen statt generischer HTTP-Statuszeilen, soweit vorhanden.
 4. P3-B37 Upload-Grenzen als Beta-Risiko bleibt fuer interne Beta-Nutzer sichtbar:
-   - Intake-Dokumentuploads: maximal 8 MiB pro Datei und bis zu 3 Dateien pro Multipart-Request,
-   - Rezeptuploads in Angebot und Produktion: maximal 5 MiB und genau eine Datei pro Upload,
+   - Intake-Dokumentuploads: maximal 25 MB pro Datei und bis zu 3 Dateien pro Multipart-Request,
+   - Rezeptuploads in Angebot und Produktion: maximal 5 MB und genau eine Datei pro Upload,
    - erlaubt bleibt nur der vorhandene Dokumentkorridor PDF/TXT/MD/EML/Pages mit passender MIME-/Extension-Kombination,
    - zu grosse oder nicht erlaubte Dateien bleiben kontrolliert abgewiesen,
    - erlaubte Demo-Dateien laufen im internen Korridor weiter,

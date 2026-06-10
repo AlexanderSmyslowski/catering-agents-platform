@@ -10,6 +10,7 @@ import {
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
+  DOCUMENT_UPLOAD_LIMITS,
   withEvaluatedReadiness,
   validateAcceptedEventSpec,
   validateEventRequest,
@@ -258,7 +259,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
   const app = Fastify({
     logger: false,
-    bodyLimit: 25 * 1024 * 1024
+    bodyLimit: DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes
   });
 
   app.register(multipart);

@@ -10,7 +10,10 @@ import {
 
 export type ProductionSourceInputAppBoundaryInput =
   Omit<ProductionSourceInputBundleInput, "openFilePicker" | "handleDrop" | "handleFileSelection"> & {
-    setIntakeFile: (file: File) => void;
+    setIntakeFile: (file: File | null) => void;
+    resetDocumentProgress?: () => void;
+    clearMessages?: () => void;
+    setError?: (message: string) => void;
     processIncomingProductionFile: (file: File, channel: IntakeDocumentChannel) => void | Promise<void>;
   };
 
@@ -25,6 +28,9 @@ export function buildProductionSourceInputAppBoundary(
     uploadInputRef: input.uploadInputRef,
     setDragActive: input.setDragActive,
     setIntakeFile: input.setIntakeFile,
+    resetDocumentProgress: input.resetDocumentProgress,
+    clearMessages: input.clearMessages,
+    setError: input.setError,
     processIncomingProductionFile: input.processIncomingProductionFile
   });
 

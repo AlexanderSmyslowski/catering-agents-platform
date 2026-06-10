@@ -6,7 +6,10 @@ import { buildProductionWindowFileActions } from "./production-window-file-actio
 type UseProductionWindowFileDropInput = {
   route: AppRoute;
   setDragActive: (active: boolean) => void;
-  setIntakeFile: (file: File) => void;
+  setIntakeFile: (file: File | null) => void;
+  resetDocumentProgress?: () => void;
+  clearMessages?: () => void;
+  setError?: (message: string) => void;
   processIncomingProductionFile: (file: File, channel: IntakeDocumentChannel) => void | Promise<void>;
 };
 
@@ -14,6 +17,9 @@ export function useProductionWindowFileDrop({
   route,
   setDragActive,
   setIntakeFile,
+  resetDocumentProgress,
+  clearMessages,
+  setError,
   processIncomingProductionFile
 }: UseProductionWindowFileDropInput) {
   useEffect(() => {
@@ -28,6 +34,9 @@ export function useProductionWindowFileDrop({
     } = buildProductionWindowFileActions({
       setDragActive,
       setIntakeFile,
+      resetDocumentProgress,
+      clearMessages,
+      setError,
       processIncomingProductionFile
     });
 
@@ -40,5 +49,5 @@ export function useProductionWindowFileDrop({
       window.removeEventListener("drop", handleWindowDrop);
       window.removeEventListener("dragleave", handleWindowDragLeave);
     };
-  }, [processIncomingProductionFile, route, setDragActive, setIntakeFile]);
+  }, [clearMessages, processIncomingProductionFile, resetDocumentProgress, route, setDragActive, setError, setIntakeFile]);
 }

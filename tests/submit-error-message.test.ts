@@ -16,4 +16,19 @@ describe("submit error message", () => {
       "Rezept konnte nicht hochgeladen werden."
     );
   });
+
+  it("normalizes oversized upload errors for German operator copy", () => {
+    expect(
+      formatSubmitErrorMessage(
+        new Error("Datei ist zu gross. Maximal erlaubt sind 26214400 Bytes."),
+        "Dokument konnte nicht normalisiert werden."
+      )
+    ).toBe("Die Datei ist zu groß. Maximal erlaubt sind 25 MB.");
+    expect(
+      formatSubmitErrorMessage(
+        new Error("Datei ist zu gross. Upload wurde abgelehnt."),
+        "Dokument konnte nicht normalisiert werden."
+      )
+    ).toBe("Die Datei ist zu groß. Maximal erlaubt sind 25 MB.");
+  });
 });

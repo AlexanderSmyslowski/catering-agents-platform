@@ -4,6 +4,7 @@ import {
   type DragEvent
 } from "react";
 import type { IntakeDocumentChannel } from "./api.js";
+import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
 import { buildProductionInputPanelState } from "./production-input-panel-state.js";
 
 export type ProductionManualInputValues = {
@@ -84,10 +85,10 @@ export function ProductionInputPanel({
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
       <div className="upload-shortcut-bar">
         <div>
-          <p className="eyebrow">Chat-Eingang</p>
-          <strong>Angebotsdatei auswählen</strong>
+          <p className="eyebrow">Anfrageeingang</p>
+          <strong>Kundenanfrage übernehmen</strong>
           <p className="helper-text">
-            PDF, E-Mail oder Textdatei über den bestehenden Intake-Pfad übernehmen. Alternativ unten Text direkt einfügen.
+            PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der Inhalt wird als Catering-Anfrage erfasst. Alternativ kannst du den Text unten direkt einfügen.
           </p>
         </div>
         <div className="action-row">
@@ -98,7 +99,7 @@ export function ProductionInputPanel({
       </div>
       <header>
         <p className="eyebrow">Eingabequelle</p>
-        <h3>Angebot als Datei übernehmen</h3>
+        <h3>Anfrage als Datei übernehmen</h3>
       </header>
       <label
         className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
@@ -119,7 +120,7 @@ export function ProductionInputPanel({
         <span className="eyebrow">Drag & Drop</span>
         <strong>Datei hier ablegen oder Dateiauswahl öffnen</strong>
         <p className="helper-text">
-          Unterstützt PDF, E-Mail und Textdateien. Nach der Auswahl erscheint der Dateiname hier, danach bewusst verarbeiten.
+          Unterstützt PDF, E-Mail und Textdateien bis {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Nach der Auswahl erscheint der Dateiname hier, danach bewusst verarbeiten.
         </p>
         <span className="drag-drop-zone__cta">Datei auswählen</span>
       </label>
@@ -175,7 +176,7 @@ export function ProductionInputPanel({
           value={sourceInput.intakeChannel}
           onChange={(event) => sourceInputActions.setIntakeChannel(event.target.value as IntakeDocumentChannel)}
         >
-          <option value="pdf_upload">PDF / Angebot</option>
+          <option value="pdf_upload">PDF / Anfrage</option>
           <option value="email">E-Mail</option>
           <option value="text">Textdatei</option>
         </select>
@@ -186,7 +187,7 @@ export function ProductionInputPanel({
       <div className="divider" />
       <header>
         <p className="eyebrow">Texteingabe</p>
-        <h3>Angebot oder Produktionskontext direkt einfügen</h3>
+        <h3>Kundenanfrage oder Produktionskontext direkt einfügen</h3>
       </header>
       <textarea value={sourceInput.intakeText} onChange={(event) => sourceInputActions.setIntakeText(event.target.value)} />
       <div className="action-row">

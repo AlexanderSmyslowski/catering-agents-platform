@@ -830,7 +830,9 @@ describe("backoffice route smoke", () => {
     });
 
     const text = document.body.textContent ?? "";
-    expect(text).toContain("Datei ist zu gross fuer den Import.");
+    expect(text).toContain("Die Datei ist zu groß. Maximal erlaubt sind 25 MB.");
+    expect(text).not.toContain("Datei ist zu gross fuer den Import.");
+    expect(text).not.toContain("Dokument zu-gross.txt wird analysiert");
     expect(text).not.toContain("Dokument zu-gross.txt wurde übernommen und analysiert.");
 
     await act(async () => {

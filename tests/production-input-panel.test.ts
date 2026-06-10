@@ -78,14 +78,48 @@ function renderPanel(sourceInput: ProductionSourceInputValues): string {
 }
 
 describe("production input panel", () => {
-  it("keeps primary offer entry actions tied to the existing file import path", () => {
+  it("uses operator-facing request copy for the file import card", () => {
     const markup = renderPanel(buildSourceInput());
 
-    expect(markup).toContain("Angebotsdatei auswählen");
+    expect(markup).toContain("Anfrageeingang");
+    expect(markup).toContain("Kundenanfrage übernehmen");
+    expect(markup).toContain("Maximal 25 MB");
+    expect(markup).toContain("Der Inhalt wird als Catering-Anfrage erfasst.");
     expect(markup).toContain("Datei auswählen");
     expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
+    expect(markup).toContain("Anfrage als Datei übernehmen");
+    expect(markup).toContain("PDF / Anfrage");
+    expect(markup).not.toContain("Intake-Pfad");
+    expect(markup).not.toContain("Chat-Eingang");
+    expect(markup).not.toContain("Angebotsdatei auswählen");
     expect(markup).not.toContain("+ Angebot hinzufügen");
     expect(markup).not.toContain("+ Angebot auswählen");
+  });
+
+  it("keeps progress visible only for accepted processing states", () => {
+    const rejectedMarkup = renderPanel(
+      buildSourceInput({
+        intakeFile: { name: "zu-gross.pdf" } as File,
+        documentPhase: "idle",
+        activeDocumentName: undefined,
+        documentProgress: 0
+      })
+    );
+    const analysingMarkup = renderPanel(
+      buildSourceInput({
+        intakeFile: { name: "anfrage.pdf" } as File,
+        documentPhase: "analysing",
+        activeDocumentName: "anfrage.pdf",
+        documentProgress: 32,
+        documentEtaSeconds: 4
+      })
+    );
+
+    expect(rejectedMarkup).toContain("Ausgewählt: zu-gross.pdf");
+    expect(rejectedMarkup).not.toContain("Analyse läuft");
+    expect(rejectedMarkup).not.toContain("Analyse abgeschlossen");
+    expect(analysingMarkup).toContain("Ausgewählt: anfrage.pdf");
+    expect(analysingMarkup).toContain("Analyse läuft für anfrage.pdf");
   });
 
   it("keeps workspace actions separated as local demo maintenance", () => {

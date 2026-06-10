@@ -3,6 +3,7 @@ import {
   buildProductionSourceInputAppBoundary,
   type ProductionSourceInputAppBoundaryInput
 } from "../backoffice-ui/src/production-source-input-app-boundary.js";
+import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_BYTES } from "../backoffice-ui/src/production-document-upload-limit.js";
 
 function input(
   overrides: Partial<ProductionSourceInputAppBoundaryInput> = {}
@@ -100,6 +101,47 @@ describe("production source input app boundary", () => {
     expect(processIncomingProductionFile).toHaveBeenNthCalledWith(1, droppedFile, "pdf_upload");
     expect(setIntakeFile).toHaveBeenNthCalledWith(2, selectedFile);
     expect(processIncomingProductionFile).toHaveBeenNthCalledWith(2, selectedFile, "email");
+    expect(target.value).toBe("");
+  });
+
+  it("rejects oversized file selections without starting document processing", () => {
+    const oversizedFile = {
+      name: "kundenanfrage.pdf",
+      type: "application/pdf",
+      size: PRODUCTION_DOCUMENT_UPLOAD_LIMIT_BYTES + 1
+    } as File;
+    const calls: string[] = [];
+    const bundle = buildProductionSourceInputAppBoundary(
+      input({
+        setDragActive: vi.fn((active) => {
+          calls.push(`setDragActive:${active}`);
+        }),
+        setIntakeFile: vi.fn((file) => {
+          calls.push(`setIntakeFile:${file?.name ?? "none"}`);
+        }),
+        resetDocumentProgress: vi.fn(() => {
+          calls.push("resetDocumentProgress");
+        }),
+        clearMessages: vi.fn(() => {
+          calls.push("clearMessages");
+        }),
+        setError: vi.fn((message) => {
+          calls.push(`setError:${message}`);
+        }),
+        processIncomingProductionFile: vi.fn()
+      })
+    );
+    const target = { files: [oversizedFile], value: "C:\\fakepath\\kundenanfrage.pdf" };
+
+    bundle.productionSourceInputActions.handleFileSelection({ target } as never);
+
+    expect(calls).toEqual([
+      "setDragActive:false",
+      "setIntakeFile:none",
+      "resetDocumentProgress",
+      "clearMessages",
+      "setError:Die Datei ist zu groß. Maximal erlaubt sind 25 MB."
+    ]);
     expect(target.value).toBe("");
   });
 });
