@@ -395,7 +395,8 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsagent-Chat");
     expect(content).toContain("Chat-Eingang");
-    expect(content).toContain("+ Angebot hinzufügen");
+    expect(content).toContain("Angebotsdatei auswählen");
+    expect(content).toContain("Datei auswählen");
     expect(content).toContain("Workbench-Projektion");
     expect(content).toContain("Klärbereich");
     expect(content).toContain("production-objects-zone");
