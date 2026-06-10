@@ -27,8 +27,8 @@ describe("production route context state", () => {
         purchaseListCount: 1
       })
     ).toEqual({
-      title: "Produktionsobjekte und Downloads prüfen",
-      description: "Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar."
+      title: "Produktionsarbeit prüfen",
+      description: "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen."
     });
   });
 

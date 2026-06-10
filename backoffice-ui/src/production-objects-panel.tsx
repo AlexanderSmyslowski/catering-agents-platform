@@ -65,8 +65,8 @@ export function ProductionObjectsPanel({
   return (
     <article className="panel production-step-card">
       <header>
-        <p className="eyebrow">Produktionsobjekte</p>
-        <h3>Plan und Ergebnis leise prüfen</h3>
+        <p className="eyebrow">Produktionsplan</p>
+        <h3>Plan, Mengen und Rezeptquellen prüfen</h3>
       </header>
       <div className="activity-slot">
         {panelState.showPlanningProgress ? (

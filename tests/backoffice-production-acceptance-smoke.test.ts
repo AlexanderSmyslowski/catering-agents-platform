@@ -747,9 +747,13 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Reviewer-Hinweis");
     expect(content).not.toContain("Option-A-Zeitfenster");
     expect(content).toContain("production-objects-zone");
-    expect(content).toContain("Nächster Agent-Schritt");
-    expect(content).toContain("Produktionsplan, Rezepte/Objektübersicht, Einkaufsliste und Downloads");
-    expect(content).toContain("Produktionsobjekte");
+    expect(content).toContain("Nächster Arbeitsschritt");
+    expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
+    expect(content).toContain("Produktionsplan");
+    expect(content).not.toContain("Produktionsplan und Einkaufsliste liegen vor.");
+    expect(content).not.toContain("Nächster Agent-Schritt");
+    expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");
+    expect(content).not.toContain("prüfbare Ergebniszonen");
     expect(content).not.toContain("Schritt 3");
     expect(content).toContain("Workbench-Projektion");
     expect(content).toContain("ConversationSession-Projektion");
@@ -1048,7 +1052,7 @@ describe("backoffice production acceptance smoke", () => {
         filterDetails.open = true;
       }
       const searchInput = container.querySelector(
-        "input[placeholder='Produktion ruhig filtern']"
+        "input[placeholder='Plan, Einkaufsliste oder Rezept suchen']"
       ) as HTMLInputElement | null;
 
       expect(searchInput).toBeTruthy();
@@ -1187,7 +1191,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain(
       "Einzelheiten zu Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1"
     );
-    expect(content).toContain("Produktionsobjekte und Downloads prüfen");
+    expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).toContain(
       "Produktionsblatt exportieren für Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1"
     );
@@ -1305,12 +1309,12 @@ describe("backoffice production acceptance smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Produktionsplan berechnen");
-    expect(content).toContain("Die vorhandene Spezifikation kann nun in vorhandene Produktionsobjekte überführt werden.");
+    expect(content).toContain("Aus der Spezifikation kann jetzt ein Produktionsplan mit Einkaufsliste vorbereitet werden.");
     expect(content).toContain("Noch kein Produktionsplan für den aktuellen Vorgang. Nächster Schritt: Berechnung starten.");
     expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
     expect(content).toContain("Exportlinks erscheinen erst, wenn Produktionsplan und Einkaufsliste vorhanden sind.");
-    expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");
-    expect(content).not.toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
+    expect(content).not.toContain("Produktionsarbeit prüfen");
+    expect(content).not.toContain("Produktionsplan, Einkaufsliste und Exporte liegen bereit. Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen.");
     expect(content).not.toContain("Produktionsblatt exportieren");
     expect(content).not.toContain("Einkaufsliste exportieren");
     expect(content).not.toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
@@ -1326,7 +1330,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste offen");
     expect(content).toContain("Einkaufsliste noch offen");
     expect(content).toContain("Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch.");
+    expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
+    expect(content).not.toContain("Produktionsplan, Einkaufsliste und Exporte liegen bereit.");
+    expect(content).not.toContain("Produktionsplan und Einkaufsliste liegen vor.");
   });
 
   it("shows the next step to inspect downloads when production objects already exist", async () => {
@@ -1334,9 +1341,10 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Produktionsobjekte und Downloads prüfen");
-    expect(content).toContain("Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar.");
-    expect(content).toContain("Produktionsobjekte: 1 Plan(e) · vollständig");
+    expect(content).toContain("Produktionsarbeit prüfen");
+    expect(content).toContain("Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.");
+    expect(content).not.toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
+    expect(content).toContain("Produktionsergebnis: 1 Plan(e) · vollständig");
   });
 
   it("shows a synthetic Quick Lunch plan with internal recipe hits and baker purchase as one current result", async () => {
@@ -1344,7 +1352,7 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Produktionsobjekte und Downloads prüfen");
+    expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).toContain("Plan-Kontext: planId plan-quick-lunch-mixed-1 · specId spec-production-fallback-1");
     expect(content).toContain("Status: vollständig · Serviceform: Buffet · Arbeitsblätter: 9 · Rezeptblätter: 8 · Rezeptauswahl: 9");
     expect(content).toContain("Offene Punkte: keine");

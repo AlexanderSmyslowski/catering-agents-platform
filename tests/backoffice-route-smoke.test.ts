@@ -262,7 +262,7 @@ describe("backoffice route smoke", () => {
     expect(production).toContain("Was braucht die Produktion als Nächstes?");
     expect(production).toContain("Auftrag einfügen oder Datei ablegen");
     expect(production).toContain("production-calm-summary");
-    expect(production).toContain("Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.");
+    expect(production).toContain("Bestehende Aufträge, Pläne, Einkaufslisten und Rezepte durchsuchen.");
   });
 
   it("keeps the home initial loading state from looking like an empty data set", async () => {
@@ -287,7 +287,7 @@ describe("backoffice route smoke", () => {
     const production = (await renderRoute("/produktion")).text;
 
     expect(production).toContain("Produktionsdaten werden geladen; noch kein Vorgang bewertet.");
-    expect(production).toContain("Produktionsbestand wird geladen · Produktionsdienst wird geprüft");
+    expect(production).toContain("Arbeitsstand wird geladen · Dienststatus wird geprüft");
     expect(production).toContain("Produktionsdaten laden");
     expect(production).toContain("Produktionspläne werden geladen; noch keine Planbewertung.");
     expect(production).toContain("Einkaufslisten werden geladen; noch keine Beschaffungsbewertung.");
@@ -449,7 +449,8 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Rückfragen beantworten");
     expect(production.text).toContain("requestId: corridor-request-1");
     expect(production.text).toContain("production-objects-zone");
-    expect(production.text).toContain("Produktionsobjekte");
+    expect(production.text).toContain("Produktionsplan");
+    expect(production.text).not.toContain("Produktionsobjekte und Downloads prüfen");
     expect(production.text).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
     expect(production.text).not.toContain("Status: noch kein Ergebnis");
     expect(production.text).not.toContain("Mini-Pilot-Status vor Export");
@@ -791,7 +792,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Intake-Ursprungoffer · 2026-08-20T09:00:00.000Z · c3-request-promoted");
     expect(production.text).not.toContain("Die ursprüngliche Intake-Anfrage konnte nicht geladen werden");
     expect(production.text).toContain("Nächster SchrittRückfragen beantworten");
-    expect(production.text).toContain("Produktionsobjektenoch kein Plan");
+    expect(production.text).toContain("Produktionsplannoch kein Plan");
   });
 
   it("keeps production upload limit errors visible in the workbench", async () => {
