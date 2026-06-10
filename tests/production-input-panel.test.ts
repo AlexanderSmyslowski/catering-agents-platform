@@ -78,7 +78,17 @@ function renderPanel(sourceInput: ProductionSourceInputValues): string {
 }
 
 describe("production input panel", () => {
-  it("keeps workspace actions contextual for rehearsal cleanup", () => {
+  it("keeps primary offer entry actions tied to the existing file import path", () => {
+    const markup = renderPanel(buildSourceInput());
+
+    expect(markup).toContain("Angebotsdatei auswählen");
+    expect(markup).toContain("Datei auswählen");
+    expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
+    expect(markup).not.toContain("+ Angebot hinzufügen");
+    expect(markup).not.toContain("+ Angebot auswählen");
+  });
+
+  it("keeps workspace actions separated as local demo maintenance", () => {
     const markup = renderPanel(
       buildSourceInput({
         canClearWorkspace: true,
@@ -91,9 +101,11 @@ describe("production input panel", () => {
       })
     );
 
-    expect(markup).toContain("Arbeitsbereich lokal leeren");
+    expect(markup).toContain("Demo-/Wartungsaktionen");
+    expect(markup).toContain("Diese Aktionen sind nur für lokale Demo- und Korrekturfälle.");
+    expect(markup).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(markup).toContain("für Lunch · 30 Teilnehmer · 2026-06-18");
-    expect(markup).toContain("Fehlupload archivieren");
+    expect(markup).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
     expect(markup).toContain("für Intake-Anfrage request-123");
     expect(markup).toContain('title="Lokalen Arbeitsbereich leeren: Lunch · 30 Teilnehmer · 2026-06-18"');
     expect(markup).toContain(
@@ -106,8 +118,8 @@ describe("production input panel", () => {
 
     expect(markup).toContain('title="Kein aktiver Produktionsarbeitsbereich zum lokalen Leeren."');
     expect(markup).toContain('title="Kein aktiver Intake-Kontext für ein Fehlupload-Archiv."');
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Arbeitsbereich lokal leeren<\/button>/);
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Fehlupload archivieren<\/button>/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Demo-Arbeitsstand zurücksetzen<\/button>/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Fehlgeschlagenen Demo-Upload ausblenden<\/button>/);
   });
 
   it("keeps the document retry action inactive until a file is available", () => {

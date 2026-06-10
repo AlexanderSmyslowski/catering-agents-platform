@@ -729,10 +729,12 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsagent-Chat");
     expect(content).toContain("Was braucht die Produktion als Nächstes?");
-    expect(content).toContain("+ Angebot hinzufügen");
-    expect(content).toContain("Arbeitsbereich lokal leeren");
-    expect(content).toContain("Fehlupload archivieren");
-    expect(content).toContain("Angebot hier ablegen");
+    expect(content).toContain("Angebotsdatei auswählen");
+    expect(content).toContain("Datei auswählen");
+    expect(content).toContain("Demo-/Wartungsaktionen");
+    expect(content).toContain("Demo-Arbeitsstand zurücksetzen");
+    expect(content).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
+    expect(content).toContain("Datei hier ablegen");
     expect(content).toContain("Downloadbereich");
     expect(content).toContain("production-calm-summary");
     expect(content).toContain("Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.");
@@ -842,7 +844,7 @@ describe("backoffice production acceptance smoke", () => {
 
       const content = document.body.textContent ?? "";
       const archiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
-        (button.textContent ?? "").includes("Fehlupload archivieren")
+        (button.textContent ?? "").includes("Fehlgeschlagenen Demo-Upload ausblenden")
       ) as HTMLButtonElement | undefined;
 
       expect(content).toContain("Upload passt nicht zum Angebot.");
@@ -874,13 +876,13 @@ describe("backoffice production acceptance smoke", () => {
       expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren");
 
       const archiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
-        (button.textContent ?? "").includes("Fehlupload archivieren")
+        (button.textContent ?? "").includes("Fehlgeschlagenen Demo-Upload ausblenden")
       ) as HTMLButtonElement | undefined;
 
       expect(archiveButton).toBeTruthy();
       expect(archiveButton?.disabled).toBe(false);
       expect(archiveButton?.textContent).toContain(
-        "Fehlupload archivieren für Intake-Anfrage request-production-fallback-1"
+        "Fehlgeschlagenen Demo-Upload ausblenden für Intake-Anfrage request-production-fallback-1"
       );
       expect(archiveButton?.getAttribute("title")).toBe(
         "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-production-fallback-1"
@@ -947,12 +949,12 @@ describe("backoffice production acceptance smoke", () => {
 
     try {
       const clearButton = Array.from(container.querySelectorAll("button")).find((button) =>
-        (button.textContent ?? "").includes("Arbeitsbereich lokal leeren")
+        (button.textContent ?? "").includes("Demo-Arbeitsstand zurücksetzen")
       ) as HTMLButtonElement | undefined;
 
       expect(clearButton).toBeTruthy();
       expect(clearButton?.disabled).toBe(false);
-      expect(clearButton?.textContent).toContain("Arbeitsbereich lokal leeren für Konferenz · 36 Teilnehmer · 2026-07-13");
+      expect(clearButton?.textContent).toContain("Demo-Arbeitsstand zurücksetzen für Konferenz · 36 Teilnehmer · 2026-07-13");
       expect(clearButton?.getAttribute("title")).toBe(
         "Lokalen Arbeitsbereich leeren: Konferenz · 36 Teilnehmer · 2026-07-13"
       );
@@ -993,10 +995,10 @@ describe("backoffice production acceptance smoke", () => {
       );
 
       const clearedClearButton = Array.from(container.querySelectorAll("button")).find((button) =>
-        (button.textContent ?? "").includes("Arbeitsbereich lokal leeren")
+        (button.textContent ?? "").includes("Demo-Arbeitsstand zurücksetzen")
       ) as HTMLButtonElement | undefined;
       const clearedArchiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
-        (button.textContent ?? "").includes("Fehlupload archivieren")
+        (button.textContent ?? "").includes("Fehlgeschlagenen Demo-Upload ausblenden")
       ) as HTMLButtonElement | undefined;
 
       expect(clearedClearButton).toBeTruthy();
@@ -1058,13 +1060,13 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).not.toContain("requestId: request-production-fallback-1");
 
       const archiveButton = Array.from(container.querySelectorAll("button")).find((button) =>
-        (button.textContent ?? "").includes("Fehlupload archivieren")
+        (button.textContent ?? "").includes("Fehlgeschlagenen Demo-Upload ausblenden")
       ) as HTMLButtonElement | undefined;
 
       expect(archiveButton).toBeTruthy();
       expect(archiveButton?.disabled).toBe(false);
       expect(archiveButton?.textContent).toContain(
-        "Fehlupload archivieren für Intake-Anfrage request-production-search-target-1"
+        "Fehlgeschlagenen Demo-Upload ausblenden für Intake-Anfrage request-production-search-target-1"
       );
       expect(archiveButton?.getAttribute("title")).toBe(
         "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-production-search-target-1"
@@ -1211,13 +1213,13 @@ describe("backoffice production acceptance smoke", () => {
 
     const route = await renderProductionRouteMarkup();
 
-    expect(route.text).toContain("Arbeitsbereich lokal leeren");
-    expect(route.text).toContain("Fehlupload archivieren");
+    expect(route.text).toContain("Demo-Arbeitsstand zurücksetzen");
+    expect(route.text).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
     expect(route.text).toContain("Rückfragen: keine offenen Rückfragen");
     expect(route.text).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
-    expect(route.html).toContain("Arbeitsbereich lokal leeren");
-    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Arbeitsbereich lokal leeren/);
-    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlupload archivieren/);
+    expect(route.html).toContain("Demo-Arbeitsstand zurücksetzen");
+    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Demo-Arbeitsstand zurücksetzen/);
+    expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlgeschlagenen Demo-Upload ausblenden/);
     expect(route.text).not.toContain("Löschen");
   });
 

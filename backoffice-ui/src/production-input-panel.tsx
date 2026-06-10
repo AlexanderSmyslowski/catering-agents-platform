@@ -85,38 +85,14 @@ export function ProductionInputPanel({
       <div className="upload-shortcut-bar">
         <div>
           <p className="eyebrow">Chat-Eingang</p>
-          <strong>+ Angebot hinzufügen</strong>
+          <strong>Angebotsdatei auswählen</strong>
           <p className="helper-text">
-            Ronak-Angebot per Datei, Drag & Drop oder Text in den Produktionsagenten geben. Bestehende Spezifikationspfade bleiben führend.
+            PDF, E-Mail oder Textdatei über den bestehenden Intake-Pfad übernehmen. Alternativ unten Text direkt einfügen.
           </p>
         </div>
         <div className="action-row">
           <button type="button" disabled={submitting} onClick={sourceInputActions.openFilePicker}>
-            + Angebot hinzufügen
-          </button>
-          <button
-            type="button"
-            className="secondary-button destructive-button"
-            disabled={panelState.clearWorkspaceDisabled}
-            title={sourceInput.clearWorkspaceTitle}
-            onClick={sourceInputActions.clearWorkspace}
-          >
-            Arbeitsbereich lokal leeren
-            {sourceInput.clearWorkspaceContextLabel ? (
-              <span className="visually-hidden"> für {sourceInput.clearWorkspaceContextLabel}</span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            className="secondary-button destructive-button"
-            disabled={panelState.archiveCurrentIntakeDisabled}
-            title={sourceInput.archiveCurrentIntakeTitle}
-            onClick={() => void sourceInputActions.archiveCurrentIntake()}
-          >
-            Fehlupload archivieren
-            {sourceInput.archiveCurrentIntakeContextLabel ? (
-              <span className="visually-hidden"> für {sourceInput.archiveCurrentIntakeContextLabel}</span>
-            ) : null}
+            Datei auswählen
           </button>
         </div>
       </div>
@@ -141,11 +117,11 @@ export function ProductionInputPanel({
           onChange={sourceInputActions.handleFileSelection}
         />
         <span className="eyebrow">Drag & Drop</span>
-        <strong>Angebot hier ablegen oder über + auswählen</strong>
+        <strong>Datei hier ablegen oder Dateiauswahl öffnen</strong>
         <p className="helper-text">
-          Sichtbarer Import-Anker für PDF, E-Mail und Textdateien; Verarbeitung erfolgt über die bestehenden Intake- und Spezifikationspfade.
+          Unterstützt PDF, E-Mail und Textdateien. Nach der Auswahl erscheint der Dateiname hier, danach bewusst verarbeiten.
         </p>
-        <span className="drag-drop-zone__cta">+ Angebot auswählen</span>
+        <span className="drag-drop-zone__cta">Datei auswählen</span>
       </label>
       <div className="activity-slot">
         {panelState.selectedFileName ? <p className="helper-text">Ausgewählt: {panelState.selectedFileName}</p> : null}
@@ -218,6 +194,43 @@ export function ProductionInputPanel({
           Erfassungstext normalisieren
         </button>
       </div>
+      <details className="maintenance-actions">
+        <summary>
+          <span>Demo-/Wartungsaktionen</span>
+          <strong>lokaler Arbeitsstand</strong>
+        </summary>
+        <div className="maintenance-actions__body">
+          <p className="helper-text">
+            Diese Aktionen sind nur für lokale Demo- und Korrekturfälle. Sie erstellen kein Angebot und geben nichts frei.
+          </p>
+          <div className="action-row">
+            <button
+              type="button"
+              className="secondary-button destructive-button"
+              disabled={panelState.clearWorkspaceDisabled}
+              title={sourceInput.clearWorkspaceTitle}
+              onClick={sourceInputActions.clearWorkspace}
+            >
+              Demo-Arbeitsstand zurücksetzen
+              {sourceInput.clearWorkspaceContextLabel ? (
+                <span className="visually-hidden"> für {sourceInput.clearWorkspaceContextLabel}</span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              className="secondary-button destructive-button"
+              disabled={panelState.archiveCurrentIntakeDisabled}
+              title={sourceInput.archiveCurrentIntakeTitle}
+              onClick={() => void sourceInputActions.archiveCurrentIntake()}
+            >
+              Fehlgeschlagenen Demo-Upload ausblenden
+              {sourceInput.archiveCurrentIntakeContextLabel ? (
+                <span className="visually-hidden"> für {sourceInput.archiveCurrentIntakeContextLabel}</span>
+              ) : null}
+            </button>
+          </div>
+        </div>
+      </details>
       <div className="divider" />
       <header>
         <p className="eyebrow">Strukturierte Eingabe</p>
