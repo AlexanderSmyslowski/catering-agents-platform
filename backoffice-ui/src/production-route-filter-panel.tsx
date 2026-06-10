@@ -28,24 +28,24 @@ export function ProductionRouteFilterPanel({
   return (
     <details className="panel secondary-workspace production-filter-details">
       <summary>
-        <span className="eyebrow">Suche und Bestand</span>
-        <span className="subsection-title">Produktionsobjekte leise filtern</span>
+        <span className="eyebrow">Bestand und Suche</span>
+        <span className="subsection-title">Pläne, Einkaufslisten und Rezepte finden</span>
         <span className="helper-text">
           {isInitialProductionLoading
-            ? "Produktionsbestand wird geladen · Produktionsdienst wird geprüft"
-            : `${productionPlanCount} Pläne · ${purchaseListCount} Einkaufslisten · ${recipeCount} Rezepte · Produktionsdienst ${productionServiceStatusLabel}`}
+            ? "Arbeitsstand wird geladen · Dienststatus wird geprüft"
+            : `${productionPlanCount} Pläne · ${purchaseListCount} Einkaufslisten · ${recipeCount} Rezepte`}
         </span>
       </summary>
       <div className="secondary-workspace__content">
         <section className="toolbar toolbar--production">
           <input
             className="search"
-            placeholder="Produktion ruhig filtern"
+            placeholder="Plan, Einkaufsliste oder Rezept suchen"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <p className="helper-text toolbar-note">
-            Bestehende Spezifikationen, Pläne und Rezepte durchsuchen.
+            Bestehende Aufträge, Pläne, Einkaufslisten und Rezepte durchsuchen.
           </p>
         </section>
         <section className="metrics-grid metrics-grid--compact-route">
@@ -74,7 +74,7 @@ export function ProductionRouteFilterPanel({
             }
           />
           <StatusCard
-            title="Produktionsdienst"
+            title="Dienststatus"
             body={
               isInitialProductionLoading
                 ? "Healthcheck läuft · Produktionszähler werden geladen"

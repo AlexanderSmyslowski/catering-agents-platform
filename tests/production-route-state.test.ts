@@ -335,7 +335,7 @@ describe("production route state", () => {
         hasSelectedPlan: true,
         purchaseListCount: 1
       }).title
-    ).toBe("Produktionsobjekte und Downloads prüfen");
+    ).toBe("Produktionsarbeit prüfen");
     expect(
       selectProductionNextStep({
         hasFocusedProductionSpec: false,
@@ -375,7 +375,7 @@ describe("production route state", () => {
         hasSelectedPlan: true,
         purchaseListCount: 1
       }).title
-    ).toBe("Produktionsobjekte und Downloads prüfen");
+    ).toBe("Produktionsarbeit prüfen");
   });
 
   it("formats the existing active production context labels", () => {

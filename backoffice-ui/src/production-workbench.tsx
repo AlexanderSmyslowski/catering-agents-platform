@@ -88,7 +88,7 @@ function formatOperatorPlanStatus(planStatusLabel: string): string {
 
 function formatOperatorProductionObjects(productionObjectStatusLabel: string): string {
   if (productionObjectStatusLabel === "noch kein Plan") {
-    return "noch keine Produktionsobjekte";
+    return "noch kein Produktionsplan";
   }
   return productionObjectStatusLabel.replace("unzureichend", "Prüfung nötig");
 }
@@ -131,7 +131,7 @@ export function ProductionConversationalWorkbench({
           <p className="eyebrow">Produktionsagent-Chat</p>
           <h3>Was braucht die Produktion als Nächstes?</h3>
           <p className="helper-text">
-            Angebot als Datei oder Text in den Chatbereich geben; der Agent zeigt Rückfragen, Status und druckbare Ergebnisse als prüfbare Zonen.
+            Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.
           </p>
           <div className="production-next-step" aria-label="Nächster Produktionsschritt">
             <p className="eyebrow">Nächster Schritt</p>
@@ -164,7 +164,7 @@ export function ProductionConversationalWorkbench({
         <p className="helper-text">
           Plan: {formatOperatorPlanStatus(planStatusLabel)} · Einkaufsliste: {purchaseStatusLabel}
         </p>
-        <p className="helper-text">Produktionsobjekte: {formatOperatorProductionObjects(productionObjectStatusLabel)}</p>
+        <p className="helper-text">Produktionsergebnis: {formatOperatorProductionObjects(productionObjectStatusLabel)}</p>
         <p className="helper-text">Freigabe: nicht erteilt.</p>
         {activeTechnicalContextLabel ? (
           <details className="technical-context-details">
@@ -209,15 +209,15 @@ export function ProductionConversationalWorkbench({
 
       <div className="production-objects-zone">
         <span className="visually-hidden">production-objects-zone</span>
-        <article className="production-output-anchor" aria-label="Nächster Agent-Schritt zu Produktionsobjekten">
-          <p className="eyebrow">Nächster Agent-Schritt</p>
+        <article className="production-output-anchor" aria-label="Nächster Schritt zur Produktionsarbeit">
+          <p className="eyebrow">Nächster Arbeitsschritt</p>
           <h3>{productionOutputAnchor.title}</h3>
           <p className="helper-text">{productionOutputAnchor.description}</p>
           <p className="helper-text">{productionOutputAnchor.grouping}</p>
         </article>
         <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
           <summary>
-            <span>Produktionsobjekte</span>
+            <span>Produktionsplan</span>
             <strong>{productionObjectStatusLabel}</strong>
           </summary>
           <div className="progressive-panel__body">{slots.productionObjectsSlot}</div>

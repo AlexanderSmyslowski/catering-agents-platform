@@ -18,7 +18,7 @@ describe("production route main layout state", () => {
         purchaseListCount: 1
       },
       workbenchNextStep: {
-        title: "Produktionsobjekte prüfen",
+        title: "Produktionsarbeit prüfen",
         description: "Plan, Einkaufsliste und Exporte prüfen."
       },
       questionState: {

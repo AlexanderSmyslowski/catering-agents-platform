@@ -530,7 +530,7 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Arbeitsblätter: 1");
     expect(document.body.textContent ?? "").toContain("Rezeptblätter: 1");
     expect(document.body.textContent ?? "").toContain("Rezeptauswahl: 1");
-    expect(document.body.textContent ?? "").toContain("Produktionsobjekte und Downloads prüfen");
+    expect(document.body.textContent ?? "").toContain("Produktionsarbeit prüfen");
     expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
     expect(document.body.textContent ?? "").toContain("Einkaufsliste");
     expect(document.body.textContent ?? "").toContain(

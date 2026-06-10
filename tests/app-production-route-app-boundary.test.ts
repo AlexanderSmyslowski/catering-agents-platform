@@ -20,7 +20,7 @@ function viewState(): ProductionRouteMainLayoutStateInput["viewState"] {
       purchaseListCount: 1
     },
     workbenchNextStep: {
-      title: "Produktionsobjekte prüfen",
+      title: "Produktionsarbeit prüfen",
       description: "Plan, Einkaufsliste und Exporte prüfen."
     },
     questionState: {

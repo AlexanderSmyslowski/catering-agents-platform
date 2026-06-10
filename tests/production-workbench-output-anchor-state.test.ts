@@ -8,11 +8,11 @@ describe("production workbench output anchor state", () => {
         productionObjectCount: 2
       })
     ).toEqual({
-      title: "Produktionsobjekte und Downloads prüfen",
+      title: "Produktionsarbeit prüfen",
       description:
-        "Nach den strukturierten Antworten liegen oder entstehen hier Produktionsplan, Rezepte/Objektübersicht, Einkaufsliste und Downloads. Der Bereich nutzt nur vorhandene Pläne, Einkaufslisten und Exportlinks.",
+        "Produktionsplan, Einkaufsliste und Exporte liegen bereit. Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen.",
       grouping:
-        "Vorhandene Pläne, Einkaufslisten und Exportlinks sind getrennt gruppiert und bleiben read-only prüfbar."
+        "Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar; ältere Vorgänge bleiben eingeklappt."
     });
   });
 
@@ -24,7 +24,7 @@ describe("production workbench output anchor state", () => {
     ).toEqual({
       title: "Produktionsplan berechnen",
       description:
-        "Noch keine Produktionsobjekte bereit: Zuerst Berechnung starten; Einkaufsliste und Exportlinks bleiben bis dahin offen.",
+        "Noch kein Produktionsplan bereit: Zuerst Berechnung starten; Einkaufsliste und Exportlinks bleiben bis dahin offen.",
       grouping: "Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden."
     });
   });

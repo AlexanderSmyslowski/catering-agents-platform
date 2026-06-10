@@ -133,7 +133,7 @@ function MiniPilotFlowHarness() {
             purchaseListCount: 1
           }}
           workbenchNextStep={{
-            title: "Produktionsobjekte prüfen",
+            title: "Produktionsarbeit prüfen",
             description: "Plan, Einkaufsliste und Exporte prüfen."
           }}
           submitting={false}

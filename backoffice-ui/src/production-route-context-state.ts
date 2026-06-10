@@ -34,7 +34,7 @@ export function selectProductionNextStep(input: {
   if (!input.hasSelectedPlan) {
     return {
       title: "Produktionsplan berechnen",
-      description: "Die vorhandene Spezifikation kann nun in vorhandene Produktionsobjekte überführt werden."
+      description: "Aus der Spezifikation kann jetzt ein Produktionsplan mit Einkaufsliste vorbereitet werden."
     };
   }
   if (input.purchaseListCount === 0) {
@@ -44,8 +44,9 @@ export function selectProductionNextStep(input: {
     };
   }
   return {
-    title: "Produktionsobjekte und Downloads prüfen",
-    description: "Plan, Einkaufsliste und Exporte sind als prüfbare Ergebniszonen verfügbar."
+    title: "Produktionsarbeit prüfen",
+    description:
+      "Produktionsplan, Einkaufsliste und Exporte liegen bereit. Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen."
   };
 }
 

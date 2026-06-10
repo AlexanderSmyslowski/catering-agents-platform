@@ -97,7 +97,7 @@ describe("browser rehearsal script contract", () => {
       "keine automatische Allergen-, Preis- oder Margenfreigabe",
       "Rückfragenstatus:",
       "Rückfragen und Antworten",
-      "Produktionsobjekte und Downloads prüfen",
+      "Produktionsarbeit prüfen",
       "Produktionsblatt exportieren",
       "Einkaufsliste exportieren",
       "Plan-Kontext: planId",
