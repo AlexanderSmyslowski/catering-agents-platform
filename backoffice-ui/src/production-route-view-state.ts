@@ -43,6 +43,7 @@ export type ProductionRouteViewState = {
 
 export type ProductionRouteViewStateInput = {
   activeProductionContextLabel: string;
+  activeProductionTechnicalContextLabel?: string;
   focusedSpecReadinessLabel: string;
   productionPlanStatusLabel: string;
   purchaseZoneStatusLabel: string;
@@ -87,6 +88,7 @@ export type ProductionRouteViewStateInput = {
 
 export function buildProductionRouteViewState({
   activeProductionContextLabel,
+  activeProductionTechnicalContextLabel,
   focusedSpecReadinessLabel,
   productionPlanStatusLabel,
   purchaseZoneStatusLabel,
@@ -142,6 +144,7 @@ export function buildProductionRouteViewState({
   return {
     workbenchSummary: buildProductionWorkbenchSummaryState({
       activeProductionContextLabel,
+      activeProductionTechnicalContextLabel,
       focusedSpecReadinessLabel,
       productionPlanStatusLabel,
       purchaseZoneStatusLabel,

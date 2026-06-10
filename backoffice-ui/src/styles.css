@@ -1437,6 +1437,17 @@ button:disabled {
   margin: 0.25rem 0 0;
 }
 
+.technical-context-details {
+  margin-top: 0.55rem;
+  color: rgba(15, 23, 34, 0.66);
+  font-size: 0.86rem;
+}
+
+.technical-context-details > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .production-progressive-zone,
 .production-purchase-zone,
 .production-lower-zones {

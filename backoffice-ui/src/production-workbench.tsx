@@ -7,6 +7,7 @@ import { buildProductionWorkbenchOutputAnchorState } from "./production-workbenc
 
 export type ProductionWorkbenchSummary = {
   activeSpecLabel: string;
+  activeTechnicalContextLabel?: string;
   readinessLabel: string;
   planStatusLabel: string;
   purchaseStatusLabel: string;
@@ -62,6 +63,36 @@ function countOpenVisibleQuestions(
   return Math.max(0, fallbackUnansweredQuestionCount);
 }
 
+function formatOperatorReadiness(readinessLabel: string): string {
+  if (readinessLabel === "-" || readinessLabel === "unzureichend") {
+    return "Prüfung nötig";
+  }
+  if (readinessLabel === "teilweise vollständig") {
+    return "teilweise geklärt";
+  }
+  return readinessLabel;
+}
+
+function formatOperatorPlanStatus(planStatusLabel: string): string {
+  if (planStatusLabel === "wird geladen") {
+    return "wird geladen";
+  }
+  if (planStatusLabel === "offen") {
+    return "noch nicht vorhanden";
+  }
+  if (planStatusLabel === "unzureichend") {
+    return "vorhanden, Prüfung nötig";
+  }
+  return `vorhanden, ${planStatusLabel}`;
+}
+
+function formatOperatorProductionObjects(productionObjectStatusLabel: string): string {
+  if (productionObjectStatusLabel === "noch kein Plan") {
+    return "noch keine Produktionsobjekte";
+  }
+  return productionObjectStatusLabel.replace("unzureichend", "Prüfung nötig");
+}
+
 export function ProductionConversationalWorkbench({
   summary,
   nextStep,
@@ -75,6 +106,7 @@ export function ProductionConversationalWorkbench({
   const showMiniPilotPanel = shouldShowMiniPilotPanel();
   const {
     activeSpecLabel,
+    activeTechnicalContextLabel,
     readinessLabel,
     planStatusLabel,
     purchaseStatusLabel,
@@ -112,10 +144,10 @@ export function ProductionConversationalWorkbench({
 
       <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
         <span className="visually-hidden">production-calm-summary</span>
-        <p className="eyebrow">Aktiver Vorgang</p>
+        <p className="eyebrow">Aktiver Produktionsauftrag</p>
         <strong>{activeSpecLabel}</strong>
         <p className="helper-text">
-          Klarheit: {readinessLabel} · Rückfragen: {formatQuestionStatus(questionCount)}
+          Status: {formatOperatorReadiness(readinessLabel)} · Rückfragen: {formatQuestionStatus(questionCount)}
         </p>
         <p className="helper-text">
           Rückfragenstatus: offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}
@@ -130,9 +162,16 @@ export function ProductionConversationalWorkbench({
           Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.
         </p>
         <p className="helper-text">
-          Planstatus: {planStatusLabel} · Einkaufstatus: {purchaseStatusLabel}
+          Plan: {formatOperatorPlanStatus(planStatusLabel)} · Einkaufsliste: {purchaseStatusLabel}
         </p>
-        <p className="helper-text">Ergebnisobjekte: {productionObjectStatusLabel}</p>
+        <p className="helper-text">Produktionsobjekte: {formatOperatorProductionObjects(productionObjectStatusLabel)}</p>
+        <p className="helper-text">Freigabe: nicht erteilt.</p>
+        {activeTechnicalContextLabel ? (
+          <details className="technical-context-details">
+            <summary>Technische Details</summary>
+            <p className="helper-text">{activeTechnicalContextLabel}</p>
+          </details>
+        ) : null}
         {showMiniPilotPanel ? (
           <>
             <div className="search-trace" aria-label="Interner Draft-Pilot">

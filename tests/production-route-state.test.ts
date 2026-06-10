@@ -11,6 +11,7 @@ import {
   formatProductionHandoffExportLabel,
   formatProductionIntakeOriginLabel,
   formatProductionContextId,
+  formatProductionTechnicalContextLabel,
   formatProductionObjectStatusLabel,
   formatProductionPlanStatusLabel,
   formatProductionReadinessLabel,
@@ -390,25 +391,38 @@ describe("production route state", () => {
         selectedPlanSpecLabel: "Lunch · 80 Teilnehmer · 2026-03-04",
         productionWorkspaceCleared: false
       })
-    ).toBe("Plan-Kontext geladen: plan-123 · Spezifikation: Lunch · 80 Teilnehmer · 2026-03-04");
+    ).toBe("Lunch · 80 Teilnehmer · 2026-03-04");
     expect(
       formatActiveProductionContextLabel({
         selectedPlan: { planId: "plan-123", eventSpecId: "spec-123" },
         productionWorkspaceCleared: false
       })
-    ).toBe("Plan-Kontext geladen: plan-123 · Spezifikation: spec-123");
+    ).toBe("Produktionsplan aus gespeicherter Spezifikation");
     expect(
       formatActiveProductionContextLabel({
         selectedPlan: { planId: " plan-123 ", eventSpecId: " spec-123 " },
         productionWorkspaceCleared: false
       })
-    ).toBe("Plan-Kontext geladen: plan-123 · Spezifikation: spec-123");
+    ).toBe("Produktionsplan aus gespeicherter Spezifikation");
     expect(
       formatActiveProductionContextLabel({
         selectedPlan: { planId: "plan-123", eventSpecId: "   " },
         productionWorkspaceCleared: false
       })
-    ).toBe("Plan-Kontext geladen: plan-123 · Spezifikation noch nicht im Fokus");
+    ).toBe("Produktionsplan ohne fokussierte Spezifikation");
+    expect(
+      formatProductionTechnicalContextLabel({
+        selectedPlan: { planId: "plan-123", eventSpecId: "spec-123" },
+        productionWorkspaceCleared: false
+      })
+    ).toBe("Plan plan-123 · Spezifikation spec-123");
+    expect(
+      formatProductionTechnicalContextLabel({
+        selectedPlan: { planId: "plan-123" },
+        selectedPlanSpecLabel: "Lunch · 80 Teilnehmer · 2026-03-04",
+        productionWorkspaceCleared: false
+      })
+    ).toBe("Plan plan-123 · Spezifikation Lunch · 80 Teilnehmer · 2026-03-04");
     expect(
       formatActiveProductionContextLabel({
         productionWorkspaceCleared: true

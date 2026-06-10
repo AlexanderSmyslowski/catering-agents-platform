@@ -6,6 +6,7 @@ import {
   formatProductionHandoffContextLabel,
   formatProductionHandoffExportLabel,
   formatProductionIntakeOriginLabel,
+  formatProductionTechnicalContextLabel,
   formatProductionObjectStatusLabel,
   formatProductionPlanStatusLabel,
   formatProductionReadinessLabel,
@@ -16,6 +17,7 @@ import {
 
 export type ProductionStatusSummaryState = {
   activeProductionContextLabel: string;
+  activeProductionTechnicalContextLabel?: string;
   focusedSpecReadinessLabel: string;
   selectedPlanReadinessLabel?: string;
   productionPlanStatusLabel: string;
@@ -78,6 +80,11 @@ export function buildProductionStatusSummaryState(
       focusedProductionSpecLabel: focusedProductionSpec
         ? getSpecLabel(focusedProductionSpec)
         : undefined,
+      selectedPlan,
+      selectedPlanSpecLabel: selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : undefined,
+      productionWorkspaceCleared: input.productionWorkspaceCleared
+    }),
+    activeProductionTechnicalContextLabel: formatProductionTechnicalContextLabel({
       selectedPlan,
       selectedPlanSpecLabel: selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : undefined,
       productionWorkspaceCleared: input.productionWorkspaceCleared

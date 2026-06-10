@@ -64,19 +64,37 @@ export function formatActiveProductionContextLabel(input: {
   }
 
   if (input.selectedPlan) {
-    const planId = formatProductionContextId(input.selectedPlan.planId);
     if (input.selectedPlanSpecLabel) {
-      return `Plan-Kontext geladen: ${planId} · Spezifikation: ${input.selectedPlanSpecLabel}`;
+      return input.selectedPlanSpecLabel;
     }
 
     const eventSpecId = formatProductionContextId(input.selectedPlan.eventSpecId);
     if (eventSpecId !== "-") {
-      return `Plan-Kontext geladen: ${planId} · Spezifikation: ${eventSpecId}`;
+      return "Produktionsplan aus gespeicherter Spezifikation";
     }
 
-    return `Plan-Kontext geladen: ${planId} · Spezifikation noch nicht im Fokus`;
+    return "Produktionsplan ohne fokussierte Spezifikation";
   }
   return "Noch kein aktiver Vorgang";
+}
+
+export function formatProductionTechnicalContextLabel(input: {
+  selectedPlan?: Record<string, unknown>;
+  selectedPlanSpecLabel?: string;
+  productionWorkspaceCleared: boolean;
+}): string | undefined {
+  if (input.productionWorkspaceCleared || !input.selectedPlan) {
+    return undefined;
+  }
+
+  const planId = formatProductionContextId(input.selectedPlan.planId);
+  const eventSpecId = formatProductionContextId(input.selectedPlan.eventSpecId);
+  const specPart = input.selectedPlanSpecLabel
+    ? `Spezifikation ${input.selectedPlanSpecLabel}`
+    : eventSpecId !== "-"
+      ? `Spezifikation ${eventSpecId}`
+      : "Spezifikation nicht im Fokus";
+  return `Plan ${planId} · ${specPart}`;
 }
 
 export function canClearProductionWorkspace(input: {

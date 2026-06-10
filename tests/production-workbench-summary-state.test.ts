@@ -17,6 +17,7 @@ describe("production workbench summary state", () => {
 
     expect(summary).toEqual({
       activeSpecLabel: "Lunch · 42 Pax",
+      activeTechnicalContextLabel: undefined,
       readinessLabel: "teilweise vollständig",
       planStatusLabel: "1 aktueller Plan",
       purchaseStatusLabel: "1 aktuelle Liste",
