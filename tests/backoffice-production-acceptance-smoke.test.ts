@@ -1476,6 +1476,66 @@ describe("backoffice production acceptance smoke", () => {
     });
   });
 
+  it("does not claim an existing production plan while the summary is loading", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ProductionConversationalWorkbench,
+          {
+            summary: {
+              activeSpecLabel: "Produktionsdaten werden geladen; noch kein Vorgang bewertet.",
+              readinessLabel: "wird geladen",
+              planStatusLabel: "wird geladen",
+              purchaseStatusLabel: "Einkaufslisten werden geladen",
+              questionCount: 0,
+              answeredQuestionCount: 0,
+              unansweredQuestionCount: 0,
+              productionObjectCount: 0,
+              productionObjectStatusLabel: "Produktionspläne werden geladen",
+              purchaseListCount: 0
+            },
+            nextStep: {
+              title: "Produktionsdaten laden",
+              description: "Bestehende Vorgänge, Pläne, Einkaufslisten und Rückfragen werden gerade geladen."
+            },
+            miniPilotRawResult: "",
+            setMiniPilotRawResult: () => undefined,
+            miniPilotReportState: {
+              statusLabel: "noch kein Ergebnis",
+              reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+              nextStepLabel:
+                "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+              commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+              errorLabels: []
+            },
+            slots: {
+              inputSlot: createElement("div", null),
+              questionsSlot: createElement("div", null),
+              productionObjectsSlot: createElement("div", null),
+              purchaseListSlot: createElement("div", null),
+              lowerSlots: createElement("div", null)
+            }
+          }
+        )
+      );
+    });
+
+    const content = document.body.textContent ?? "";
+
+    expect(content).toContain("Aktiver Produktionsauftrag");
+    expect(content).toContain("Plan: wird geladen · Einkaufsliste: Einkaufslisten werden geladen");
+    expect(content).toContain("Freigabe: nicht erteilt.");
+    expect(content).not.toContain("Plan: vorhanden, wird geladen");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("keeps recipe review and library states visible on the production route", async () => {
     installProductionAcceptanceMocks({ withRecipeReviewStates: true });
 

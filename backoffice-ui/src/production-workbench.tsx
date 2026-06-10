@@ -74,8 +74,11 @@ function formatOperatorReadiness(readinessLabel: string): string {
 }
 
 function formatOperatorPlanStatus(planStatusLabel: string): string {
+  if (planStatusLabel === "wird geladen") {
+    return "wird geladen";
+  }
   if (planStatusLabel === "offen") {
-    return "noch offen";
+    return "noch nicht vorhanden";
   }
   if (planStatusLabel === "unzureichend") {
     return "vorhanden, Prüfung nötig";
