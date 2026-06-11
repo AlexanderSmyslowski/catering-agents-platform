@@ -113,6 +113,6 @@ B36 ist erfuellt, wenn:
 - 7 Tage, 14 Tage und 30 Tage kurz verglichen sind,
 - 14 Tage als Pilot-Default empfohlen sind, sofern Alexander nichts anderes entscheidet,
 - B36 nicht als Backup-Aktivierung, Deployment-Go oder Echtdaten-Go gelesen werden kann,
-- `tests/b36-backup-retention-decision-contract.test.ts` gruen ist,
+- `entfernter Doku-Contract-Test` gruen ist,
 - `TESTING.md` und `memory.md` fortgeschrieben sind,
 - `git diff --check` gruen ist.

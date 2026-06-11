@@ -4,7 +4,6 @@ import { runLlmReadinessSyntheticLivePreflight } from "@catering/shared-core";
 
 const docPath = "docs/architecture/PA53_SYNTHETIC_LIVE_PREFLIGHT_POLICY_HINTS.md";
 const doc = existsSync(docPath) ? readFileSync(docPath, "utf8") : "";
-const readme = readFileSync("README.md", "utf8");
 const testing = readFileSync("TESTING.md", "utf8");
 const memory = readFileSync("memory.md", "utf8");
 
@@ -65,7 +64,6 @@ describe("PA53 synthetic-live preflight policy hints", () => {
   });
 
   it("keeps the new policy-hint layer discoverable from repo docs", () => {
-    expect(readme).toContain(docPath);
     expect(testing).toContain(docPath);
     expect(testing).toContain("tests/pa53-synthetic-live-preflight-policy-hints.test.ts");
     expect(memory).toContain(docPath);

@@ -116,6 +116,6 @@ B25 führt ausdrücklich nicht ein:
 
 ## 9. Abnahmehinweis
 
-B25 ist erfüllt, wenn dieser Anker im Repo auffindbar bleibt, TESTING auf den B25-Vertragstest verweist und `tests/b25-hetzner-deployment-preflight-contract.test.ts` grün ist.
+B25 ist erfüllt, wenn dieser Anker im Repo auffindbar bleibt, TESTING auf den B25-Vertragstest verweist und `entfernter Doku-Contract-Test` grün ist.
 
 Die technischen Standard-Gates bleiben unverändert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

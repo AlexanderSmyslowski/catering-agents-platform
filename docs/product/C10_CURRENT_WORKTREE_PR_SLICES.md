@@ -63,9 +63,9 @@ Git-relevante Aenderungen im Arbeitsbaum:
 - `docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md`
 - `docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md`
 - `docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md`
-- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts`
-- `tests/product-goal-anchor-contract.test.ts`
-- `tests/production-agent-10-10-coding-architecture-contract.test.ts`
+- `entfernter Doku-Contract-Test`
+- `entfernter Doku-Contract-Test`
+- `entfernter Doku-Contract-Test`
 
 Nicht stagen:
 
@@ -96,12 +96,12 @@ Diese Reihenfolge ist ein Review-/Commit-Vorschlag, kein automatisches Commit-Go
 Enthaelt:
 
 - `docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md`
-- `tests/product-goal-anchor-contract.test.ts`
+- `entfernter Doku-Contract-Test`
 - `scripts/check-local-ops.sh`
 - `tests/local-ops-check-contract.test.ts`
 - `docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md`
 - `docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md`
-- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts`
+- `entfernter Doku-Contract-Test`
 - passende README-/TESTING-/memory-Anker
 
 Staging-Hinweis:
@@ -220,7 +220,7 @@ Weitere gruene Checks:
 - `npm run build`
 - `git diff --check`
 - `npm test -- tests/backoffice-production-acceptance-smoke.test.ts tests/backoffice-route-smoke.test.ts`
-- `npm test -- tests/backoffice-production-acceptance-smoke.test.ts tests/backoffice-route-smoke.test.ts tests/production-agent-10-10-coding-architecture-contract.test.ts`
+- `npm test -- tests/backoffice-production-acceptance-smoke.test.ts tests/backoffice-route-smoke.test.ts entfernter Doku-Contract-Test`
 
 Aktuelle App.tsx-Wartbarkeitsmarke:
 

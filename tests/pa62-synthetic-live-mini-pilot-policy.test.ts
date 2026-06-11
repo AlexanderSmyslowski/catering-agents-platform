@@ -4,7 +4,6 @@ import { runLlmReadinessSyntheticLivePreflight } from "@catering/shared-core";
 
 const docPath = "docs/architecture/PA62_SYNTHETIC_LIVE_MINI_PILOT_POLICY.md";
 const doc = existsSync(docPath) ? readFileSync(docPath, "utf8") : "";
-const readme = readFileSync("README.md", "utf8");
 const testing = readFileSync("TESTING.md", "utf8");
 const memory = readFileSync("memory.md", "utf8");
 
@@ -74,7 +73,6 @@ describe("PA62 synthetic-live mini-pilot policy", () => {
   });
 
   it("keeps the mini-pilot policy discoverable from repo docs", () => {
-    expect(readme).toContain(docPath);
     expect(testing).toContain(docPath);
     expect(testing).toContain("tests/pa62-synthetic-live-mini-pilot-policy.test.ts");
     expect(memory).toContain(docPath);

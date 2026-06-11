@@ -21,8 +21,8 @@ Ein B11-Durchlauf nutzt die vorhandenen Kommandos in dieser Reihenfolge:
 ```bash
 npm run local:status
 npm run local:check
-npm test -- tests/b11-local-demo-pilot-acceptance-contract.test.ts
-npm test -- tests/local-ops-check-contract.test.ts tests/b10-pilot-preflight-runbook-contract.test.ts tests/backoffice-route-smoke.test.ts tests/backoffice-production-acceptance-smoke.test.ts tests/backoffice-internal-usage-smoke.test.ts tests/pa8-read-path-auth.test.ts tests/pa14-document-ingestion-corridor-readiness.test.ts
+npm test -- entfernter Doku-Contract-Test
+npm test -- tests/local-ops-check-contract.test.ts entfernter Doku-Contract-Test tests/backoffice-route-smoke.test.ts tests/backoffice-production-acceptance-smoke.test.ts tests/backoffice-internal-usage-smoke.test.ts tests/pa8-read-path-auth.test.ts tests/pa14-document-ingestion-corridor-readiness.test.ts
 npm test
 npm run build
 npm audit --omit=dev
@@ -110,6 +110,6 @@ Ein Ergebnisvermerk fuer B11 enthaelt knapp:
 
 ## 8. Abnahmehinweis
 
-B11 ist erfuellt, wenn dieses Dokument im Repo auffindbar bleibt, C8 und TESTING auf den B11-Anker verweisen und `tests/b11-local-demo-pilot-acceptance-contract.test.ts` gruen ist.
+B11 ist erfuellt, wenn dieses Dokument im Repo auffindbar bleibt, C8 und TESTING auf den B11-Anker verweisen und `entfernter Doku-Contract-Test` gruen ist.
 
-B12 ist erfuellt, wenn `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` auffindbar bleibt und der fokussierte Vertragstest `tests/b12-local-demo-result-note-contract.test.ts` den konkreten lokalen Ergebnisvermerk schuetzt.
+B12 ist erfuellt, wenn `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` auffindbar bleibt und der fokussierte Vertragstest `entfernter Doku-Contract-Test` den konkreten lokalen Ergebnisvermerk schuetzt.

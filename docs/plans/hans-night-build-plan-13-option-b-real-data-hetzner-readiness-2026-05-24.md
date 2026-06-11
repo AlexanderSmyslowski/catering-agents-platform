@@ -172,5 +172,5 @@ Plan 13 ist erledigt, wenn:
 Starte P13-N1:
 
 - Datei erstellen: `docs/deployment/B32_OPTION_B_REAL_DATA_HETZNER_READINESS.md`
-- Test erstellen: `tests/b32-option-b-real-data-hetzner-readiness-contract.test.ts`
+- Test erstellen: `entfernter Doku-Contract-Test`
 - Nur Doku-/Contract-Guards, kein Deployment, keine echten Daten, keine Secrets.

@@ -261,11 +261,11 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
     "Serviceform";
   const eventSummary = `${eventTypeLabel} für ${
     proposedEventSpec.attendees.expected ?? "offene"
-  } Teilnehmer in ${serviceFormLabel}.`;
+  } Teilnehmer als ${serviceFormLabel}.`;
 
   const customerFacingText = [
     `Vielen Dank für Ihre Anfrage: ${eventTypeLabel}.`,
-    `Wir schlagen ${serviceFormLabel} mit folgenden Leistungsbausteinen vor:`,
+    `Wir schlagen eine ${serviceFormLabel} mit folgenden Leistungsbausteinen vor:`,
     ...modules.map((module) => `- ${module.label}`),
     `Gesamtschätzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
   ].join("\n");

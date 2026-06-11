@@ -105,6 +105,6 @@ B31 führt ausdrücklich nicht ein:
 
 ## 8. Abnahmehinweis
 
-B31 ist erfüllt, wenn diese Management-Entscheidungsliste im Repo auffindbar bleibt, TESTING auf den B31-Vertragstest verweist und `tests/b31-hetzner-management-decision-list-contract.test.ts` grün ist.
+B31 ist erfüllt, wenn diese Management-Entscheidungsliste im Repo auffindbar bleibt, TESTING auf den B31-Vertragstest verweist und `entfernter Doku-Contract-Test` grün ist.
 
 Die technischen Standard-Gates bleiben unverändert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

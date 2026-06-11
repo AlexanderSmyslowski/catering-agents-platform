@@ -89,6 +89,6 @@ B28 führt ausdrücklich nicht ein:
 
 ## 7. Abnahmehinweis
 
-B28 ist erfüllt, wenn dieses Entscheidungspaket im Repo auffindbar bleibt, TESTING auf den B28-Vertragstest verweist und `tests/b28-hetzner-preflight-decision-packet-contract.test.ts` grün ist.
+B28 ist erfüllt, wenn dieses Entscheidungspaket im Repo auffindbar bleibt, TESTING auf den B28-Vertragstest verweist und `entfernter Doku-Contract-Test` grün ist.
 
 Die technischen Standard-Gates bleiben unverändert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

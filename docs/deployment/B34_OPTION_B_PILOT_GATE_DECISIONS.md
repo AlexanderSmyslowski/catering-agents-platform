@@ -155,5 +155,5 @@ B34 ist erfuellt, wenn:
 - Backup-Retention als einziges engeres Folgeentscheidungsfeld sichtbar bleibt,
 - echte Uploads bis B14 `blocked until B14 go` bleiben,
 - der naechste Schritt nur Vorbereitung ohne Serverzugriff/Secrets/echte Daten erlaubt,
-- `tests/b34-option-b-pilot-gate-decisions-contract.test.ts` gruen ist,
+- `entfernter Doku-Contract-Test` gruen ist,
 - die Standard-Gates gruen sind: `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check`.

@@ -90,6 +90,6 @@ B27 führt ausdrücklich nicht ein:
 
 ## 7. Abnahmehinweis
 
-B27 ist erfüllt, wenn diese Statusvorlage im Repo auffindbar bleibt, TESTING auf den B27-Vertragstest verweist und `tests/b27-hetzner-preflight-status-template-contract.test.ts` grün ist.
+B27 ist erfüllt, wenn diese Statusvorlage im Repo auffindbar bleibt, TESTING auf den B27-Vertragstest verweist und `entfernter Doku-Contract-Test` grün ist.
 
 Die technischen Standard-Gates bleiben unverändert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

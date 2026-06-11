@@ -60,7 +60,7 @@ Sie macht sichtbar, was im bestehenden Repo bereits intern nutzbar ist, was nur 
 - `tests/backoffice-production-acceptance-smoke.test.ts` schuetzt Produktionsroute, Rueckfragenstatus, Ergebnisobjekte, Einkauf/Downloads, Rezeptstatus und Herkunft/Audit.
 - `tests/backoffice-internal-usage-smoke.test.ts` schuetzt einen schmalen internen Nutzpfad bis zur Produktionssicht.
 - `tests/local-ops-check-contract.test.ts` schuetzt lokale Demo-/Export-/Audit-Anker und die C8-Auffindbarkeit.
-- `tests/p5-b49-beta-flow-map-contract.test.ts` schuetzt diese Ist-Karte als repo-verankerten P5-B49-Durchlaufanker.
+- `entfernter Doku-Contract-Test` schuetzt diese Ist-Karte als repo-verankerten P5-B49-Durchlaufanker.
 
 ## 7. P5-B49-Ergebnis
 

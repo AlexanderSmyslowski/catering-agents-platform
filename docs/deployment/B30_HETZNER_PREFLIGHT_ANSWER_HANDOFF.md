@@ -91,6 +91,6 @@ B30 führt ausdrücklich nicht ein:
 
 ## 7. Abnahmehinweis
 
-B30 ist erfüllt, wenn diese Antwortübergabe im Repo auffindbar bleibt, TESTING auf den B30-Vertragstest verweist und `tests/b30-hetzner-preflight-answer-handoff-contract.test.ts` grün ist.
+B30 ist erfüllt, wenn diese Antwortübergabe im Repo auffindbar bleibt, TESTING auf den B30-Vertragstest verweist und `entfernter Doku-Contract-Test` grün ist.
 
 Die technischen Standard-Gates bleiben unverändert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

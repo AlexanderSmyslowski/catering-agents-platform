@@ -1189,10 +1189,11 @@ describe("catering agents platform", () => {
     expect(draft.customerFacingText).toContain("Vielen Dank");
     expect(draft.customerFacingText).toContain("Besprechung");
     expect(draft.customerFacingText).toContain("Kaffeepause");
+    expect(draft.customerFacingText).toContain("eine Kaffeepause");
     expect(draft.customerFacingText).not.toContain("meeting");
     expect(draft.customerFacingText).not.toContain("coffee_break");
     expect(draft.customerFacingText).not.toContain("fuer");
-    expect(draft.eventSummary).toContain("Besprechung für 35 Teilnehmer in Kaffeepause");
+    expect(draft.eventSummary).toContain("Besprechung für 35 Teilnehmer als Kaffeepause");
 
     const promoteResponse = await app.inject({
       method: "POST",

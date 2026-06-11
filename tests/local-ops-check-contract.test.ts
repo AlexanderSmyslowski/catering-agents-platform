@@ -78,7 +78,7 @@ describe("local ops check contract", () => {
     expect(freshStartScript).toContain("export CATERING_DATA_ROOT");
     expect(freshStartScript).toContain("scripts/start-local-stack.sh");
     expect(freshStartScript).toContain("--seed-demo");
-    expect(readmeDoc).toContain("`npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert");
+    expect(readmeDoc).toContain("`npm run local:start:fresh` stoppt den laufenden Stack");
     expect(testingDoc).toContain("`npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert");
     expect(testingDoc).toContain("loescht keine Repo-Daten unter `./data`");
     expect(testingDoc).toContain("bevorzugte Startweg");
@@ -113,7 +113,7 @@ describe("local ops check contract", () => {
   });
 
   it("keeps Demo-Seed, local checks, and audit evidence narratively bounded across docs", () => {
-    for (const doc of [readmeDoc, testingDoc, c8AcceptanceDoc]) {
+    for (const doc of [testingDoc, c8AcceptanceDoc]) {
       expect(doc).toContain("`npm run local:status` ist");
       expect(doc).toContain("`npm run local:check` ist");
       expect(doc).toContain("Demo-Seed ist eine interne Verifikationshilfe");
@@ -130,8 +130,13 @@ describe("local ops check contract", () => {
       expect(doc).toContain("`npm run llm:synthetic-live:check`");
       expect(doc).toContain("`npm run llm:synthetic-live:probe`");
       expect(doc).toContain("`npm run llm:synthetic-live:probe:strict`");
-      expect(doc).toContain("produktfreie Draft-Ausgaben");
     }
+
+    expect(testingDoc).toContain("produktfreie Draft-Ausgaben");
+    expect(readmeDoc).toContain("prueft lokale Env-, Flag- und Fixture-Voraussetzungen");
+    expect(readmeDoc).toContain("fuehrt den synthetischen Clarification-Probe-Lauf aus");
+    expect(readmeDoc).toContain("bricht bei Probe-Fehler oder Eval-Drift hart ab");
+    expect(readmeDoc).toContain("buendelt Preflight und Strict-Probe");
   });
 
   it("keeps the expected demo fixture anchors discoverable and covered by the local check", () => {
@@ -244,7 +249,7 @@ describe("local ops check contract", () => {
     expect(existsSync("tests/pa14-document-ingestion-corridor-readiness.test.ts")).toBe(true);
     expect(existsSync("tests/pa8-read-path-auth.test.ts")).toBe(true);
 
-    for (const doc of [c8AcceptanceDoc, readmeDoc, testingDoc]) {
+    for (const doc of [c8AcceptanceDoc, testingDoc]) {
       expect(doc).toContain("docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md");
     }
 
