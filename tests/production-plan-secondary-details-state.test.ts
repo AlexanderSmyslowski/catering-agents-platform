@@ -76,7 +76,7 @@ describe("production plan secondary details state", () => {
           key: "starter-0",
           componentLabel: "Vorspeise",
           selectionReasonLabel: "Internes Rezept passt am besten.",
-          componentDetailLabel: "Kategorie: klassisch · Herstellungsart: Eigenproduktion",
+          componentDetailLabel: "Kategorie: Klassisch · Herstellungsart: Eigenproduktion",
           sourceLabel:
             "Vorspeise Rezept | recipe-starter | internal recipe, approved | internal_verified | approved_internal | internal:starter",
           scoreLabel: "Qualität 91 % · Passung 87 %",

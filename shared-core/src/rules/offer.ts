@@ -1,4 +1,5 @@
 import { moduleCatalog, eventTypeDefaults } from "../taxonomies/defaults.js";
+import { formatEventTypeLabel, formatServiceFormLabel } from "../taxonomies/labels.js";
 import type {
   AcceptedEventSpec,
   EventRequest,
@@ -134,7 +135,7 @@ function packagePricingSummary(
     },
     notes: [
       `Arbeitsband aus kuratiertem App-Transfer-Paket: ${from.toFixed(2)}-${to.toFixed(2)} EUR p.P.`,
-      "Preisband, Netto/Brutto und MwSt. sind pruefpflichtig."
+      "Preisband, Netto/Brutto und MwSt. sind prüfpflichtig."
     ]
   };
 }
@@ -254,15 +255,19 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
     )
   ];
 
-  const eventSummary = `${proposedEventSpec.servicePlan.eventType} fuer ${
+  const eventTypeLabel = formatEventTypeLabel(proposedEventSpec.servicePlan.eventType) ?? "Veranstaltung";
+  const serviceFormLabel =
+    formatServiceFormLabel(proposedEventSpec.event.serviceForm ?? proposedEventSpec.servicePlan.serviceForm) ??
+    "Serviceform";
+  const eventSummary = `${eventTypeLabel} für ${
     proposedEventSpec.attendees.expected ?? "offene"
-  } Teilnehmer in ${proposedEventSpec.event.serviceForm ?? proposedEventSpec.servicePlan.serviceForm}.`;
+  } Teilnehmer in ${serviceFormLabel}.`;
 
   const customerFacingText = [
-    `Vielen Dank fuer Ihre Anfrage fuer ein ${proposedEventSpec.servicePlan.eventType}.`,
-    `Wir schlagen ein ${proposedEventSpec.servicePlan.serviceForm} mit folgenden Leistungsbausteinen vor:`,
+    `Vielen Dank für Ihre Anfrage: ${eventTypeLabel}.`,
+    `Wir schlagen ${serviceFormLabel} mit folgenden Leistungsbausteinen vor:`,
     ...modules.map((module) => `- ${module.label}`),
-    `Gesamtschaetzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
+    `Gesamtschätzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
   ].join("\n");
 
   const internalWorkingText = [
@@ -315,7 +320,7 @@ export function createCuratedOfferDraft(
     },
     productionConstraints: [
       ...(baseDraft.proposedEventSpec.productionConstraints ?? []),
-      "Angebotspreise, MwSt., Allergene, Hygiene/Temperaturfuehrung und Logistik vor Produktion pruefen."
+      "Angebotspreise, MwSt., Allergene, Hygiene/Temperaturführung und Logistik vor Produktion prüfen."
     ]
   };
   const variants: OfferVariant[] = [
@@ -353,7 +358,7 @@ export function createCuratedOfferDraft(
 
   return {
     ...baseDraft,
-    eventSummary: `${packagePreset.name} fuer ${attendeeCount} Teilnehmer.`,
+    eventSummary: `${packagePreset.name} für ${attendeeCount} Teilnehmer.`,
     serviceModules: modules,
     pricingSummary,
     assumptions: [
@@ -366,26 +371,26 @@ export function createCuratedOfferDraft(
     ],
     openQuestions: [
       ...baseDraft.openQuestions,
-      "Preisband, Netto/Brutto und MwSt. fachlich pruefen.",
-      "Allergene, Hygiene, Temperaturfuehrung und Standzeiten pruefen.",
-      "Logistik, Equipment und Personalumfang pruefen."
+      "Preisband, Netto/Brutto und MwSt. fachlich prüfen.",
+      "Allergene, Hygiene, Temperaturführung und Standzeiten prüfen.",
+      "Logistik, Equipment und Personalumfang prüfen."
     ],
     variantSet: variants,
     customerFacingText: [
-      `Vielen Dank fuer Ihre Anfrage. Wir schlagen ${packagePreset.name} vor.`,
+      `Vielen Dank für Ihre Anfrage. Wir schlagen ${packagePreset.name} vor.`,
       `Leistungsrahmen:`,
       ...modules.map((module) => `- ${module.label}`),
       `Arbeitsband: ${packagePreset.price_band_pp[0].toFixed(2)}-${packagePreset.price_band_pp[1].toFixed(2)} EUR p.P.`,
-      `Voraussichtliche Gesamtschaetzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
+      `Voraussichtliche Gesamtschätzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
     ].join("\n"),
     internalWorkingText: [
       `Draft-ID: ${draftId}`,
       `Portfolio-Paket: ${packagePreset.id}`,
       "Quelle: kuratierter App-Transfer-Ordner",
-      `Pruefstatus Preis: ${reviewStatus.priceReviewStatus}`,
-      `Pruefstatus MwSt.: ${reviewStatus.taxReviewStatus}`,
-      `Pruefstatus Allergene: ${reviewStatus.allergenReviewStatus}`,
-      `Pruefstatus Hygiene/Temperatur: ${reviewStatus.hygieneTemperatureReviewStatus}`,
+      `Prüfstatus Preis: ${reviewStatus.priceReviewStatus}`,
+      `Prüfstatus MwSt.: ${reviewStatus.taxReviewStatus}`,
+      `Prüfstatus Allergene: ${reviewStatus.allergenReviewStatus}`,
+      `Prüfstatus Hygiene/Temperatur: ${reviewStatus.hygieneTemperatureReviewStatus}`,
       "Publish-Freigabe: false"
     ].join("\n"),
     proposedEventSpec,

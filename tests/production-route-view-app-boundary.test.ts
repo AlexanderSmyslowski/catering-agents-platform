@@ -104,7 +104,7 @@ describe("production route view app boundary", () => {
       focusedSpecReadinessLabel: "teilweise vollständig",
       selectedPlanReadinessLabel: "vollständig",
       productionPlanStatusLabel: "vollständig",
-      productionObjectStatusLabel: "1 Plan(e) · vollständig",
+      productionObjectStatusLabel: "1 Plan · vollständig",
       purchaseZoneStatusLabel: "1 Liste · 7 Positionen",
       productionIntakeOriginLabel: "text · 2026-05-26T01:00:00.000Z · request-1",
       productionHandoffContextLabel: "planId plan-1 · specId spec-1 · purchaseListId purchase-1"

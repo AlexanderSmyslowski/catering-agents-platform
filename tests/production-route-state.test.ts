@@ -543,8 +543,14 @@ describe("production route state", () => {
         currentSpecPlanCount: 2,
         selectedPlan: { readiness: { status: "complete" } }
       })
-    ).toBe("2 Plan(e) · vollständig");
-    expect(formatProductionObjectStatusLabel({ currentSpecPlanCount: 2 })).toBe("2 Plan(e)");
+    ).toBe("2 Pläne · vollständig");
+    expect(
+      formatProductionObjectStatusLabel({
+        currentSpecPlanCount: 1,
+        selectedPlan: { readiness: { status: "complete" } }
+      })
+    ).toBe("1 Plan · vollständig");
+    expect(formatProductionObjectStatusLabel({ currentSpecPlanCount: 2 })).toBe("2 Pläne");
     expect(formatProductionObjectStatusLabel({ currentSpecPlanCount: 0 })).toBe("noch kein Plan");
 
     expect(formatProductionTimingWindow()).toBe("Terminfenster: noch zu bestätigen");

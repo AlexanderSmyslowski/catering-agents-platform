@@ -129,7 +129,7 @@ function MiniPilotFlowHarness() {
             answeredQuestionCount: 0,
             unansweredQuestionCount: 0,
             productionObjectCount: 1,
-            productionObjectStatusLabel: "1 Plan(e) · vollständig",
+            productionObjectStatusLabel: "1 Plan · vollständig",
             purchaseListCount: 1
           }}
           workbenchNextStep={{
