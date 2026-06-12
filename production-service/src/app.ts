@@ -2,14 +2,17 @@ import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import {
   AuditLogStore,
+  buildByoLlmAdapterFromEnv,
   getDemoProductionSpecs,
   isDevAuthEnabled,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
+  type LlmReadinessProviderAdapter,
   type Queryable,
   type RecipeSearchQuery,
   type WebRecipeCandidate
 } from "@catering/shared-core";
+import { IntakeStore } from "@catering/intake-service";
 import { DuckDuckGoRecipeSearchProvider } from "./recipe-discovery/duckduckgo-provider.js";
 import type { WebRecipeSearchProvider } from "./recipe-discovery/provider.js";
 import { RecipeDiscoveryService } from "./recipe-discovery/service.js";
@@ -33,7 +36,10 @@ export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
   discoveryService?: RecipeDiscoveryService;
   store?: ProductionStore;
+  intakeStore?: IntakeStore;
   auditLog?: AuditLogStore;
+  llmAdapter?: LlmReadinessProviderAdapter;
+  buildLlmAdapter?: () => LlmReadinessProviderAdapter;
   dataRoot?: string;
   databaseUrl?: string;
   pgPool?: Queryable;
@@ -118,6 +124,13 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
+  const intakeStore =
+    options.intakeStore ??
+    new IntakeStore({
+      rootDir: options.dataRoot,
+      databaseUrl: options.databaseUrl,
+      pgPool: options.pgPool
+    });
   const auditLog =
     options.auditLog ??
     new AuditLogStore({
@@ -125,6 +138,11 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
+  const buildLlmAdapter =
+    options.buildLlmAdapter ??
+    (options.llmAdapter
+      ? () => options.llmAdapter as LlmReadinessProviderAdapter
+      : () => buildByoLlmAdapterFromEnv(env));
 
   const app = Fastify({
     logger: false
@@ -155,8 +173,10 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   registerProductionArtifactRoutes(app, {
     store,
+    intakeStore,
     discoveryService,
     auditLog,
+    buildLlmAdapter,
     trustedActorSecret,
     allowDevActorHeader,
     isProductionOperator,

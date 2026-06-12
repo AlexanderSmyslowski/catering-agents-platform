@@ -7,6 +7,7 @@ import { ProductionQuestionThread } from "./production-question-thread.js";
 import { buildProductionSpecSwitchItems } from "./production-spec-switch-list-state.js";
 import { buildProductionQuestionPanelActionState } from "./production-question-panel-action-state.js";
 import { buildProductionQuestionPanelVisibilityState } from "./production-question-panel-visibility-state.js";
+import { ProductionClarificationDraftPanel } from "./production-clarification-draft-panel.js";
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
@@ -57,6 +58,7 @@ export type ProductionQuestionPanelState = {
 
 export type ProductionQuestionPanelActions = {
   openSpecForQuestions: (specId: string) => void;
+  refreshAfterDraftDecision?: () => Promise<void>;
 };
 
 type ProductionQuestionPanelProps = {
@@ -90,7 +92,7 @@ export function ProductionQuestionPanel({
     documentPhase,
     productionWorkspaceCleared
   } = questionState;
-  const { openSpecForQuestions } = questionActions;
+  const { openSpecForQuestions, refreshAfterDraftDecision } = questionActions;
   const {
     editingSpecId,
     editingEventType,
@@ -188,6 +190,11 @@ export function ProductionQuestionPanel({
               </p>
             ) : null}
             {intakeRequestDetail ? <ProductionIntakeOriginCard intakeRequestDetail={intakeRequestDetail} /> : null}
+            <ProductionClarificationDraftPanel
+              specId={String(focusedProductionSpec.specId ?? "")}
+              submitting={submitting}
+              onDraftChanged={refreshAfterDraftDecision}
+            />
           </div>
           <div className="action-row">
             <button

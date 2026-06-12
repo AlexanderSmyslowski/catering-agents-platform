@@ -344,6 +344,14 @@ export function buildProductionClarificationQuestions(input: ProductionClarifica
   const missingFields = Array.isArray(input.spec?.missingFields)
     ? input.spec.missingFields.filter((field): field is string => typeof field === "string" && field.trim().length > 0)
     : [];
+  const uncertainties = Array.isArray(input.spec?.uncertainties)
+    ? input.spec.uncertainties.filter((uncertainty): uncertainty is {
+        field?: string;
+        message?: string;
+        severity?: string;
+        suggestedQuestion?: string;
+      } => typeof uncertainty === "object" && uncertainty !== null)
+    : [];
 
   missingFields.forEach((field) => {
     const cleanField = field.trim();
@@ -386,6 +394,33 @@ export function buildProductionClarificationQuestions(input: ProductionClarifica
       sourceAnchors: [],
       suggestedAnswerType: "short_text",
       sortKey: cleanReason
+    });
+  });
+
+  uncertainties.forEach((uncertainty) => {
+    const field = typeof uncertainty.field === "string" && uncertainty.field.trim()
+      ? uncertainty.field.trim()
+      : "uncertainty";
+    const prompt = typeof uncertainty.suggestedQuestion === "string" && uncertainty.suggestedQuestion.trim()
+      ? uncertainty.suggestedQuestion.trim()
+      : typeof uncertainty.message === "string" && uncertainty.message.trim()
+        ? withSentenceEnd(uncertainty.message.trim())
+        : undefined;
+    if (!prompt) {
+      return;
+    }
+
+    questions.push({
+      questionId: `${specId}-uncertainty-${slug(field)}-${slug(prompt)}`,
+      ...(context ? { context } : {}),
+      reason: "readiness.reasons",
+      reasonCode: field,
+      severity: uncertainty.severity === "high" ? "blocking" : "warning",
+      blocking: uncertainty.severity === "high",
+      prompt,
+      sourceAnchors: [],
+      suggestedAnswerType: "short_text",
+      sortKey: `${field}-${prompt}`
     });
   });
 
