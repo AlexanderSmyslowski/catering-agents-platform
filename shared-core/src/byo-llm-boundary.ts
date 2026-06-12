@@ -8,7 +8,7 @@ import { isLlmReadinessSyntheticLiveSliceEnabled } from "./llm-readiness-synthet
 
 export const byoLlmBoundaryPolicyVersion = "byo-llm-boundary-v0" as const;
 
-export type ByoLlmProviderKind = "fixture" | "openai" | "custom_byo_provider";
+export type ByoLlmProviderKind = "fixture" | "openai" | "codex_cli" | "custom_byo_provider";
 
 export type ByoLlmDraftUseCase =
   | "clarification_question_draft"
@@ -30,10 +30,11 @@ export interface ByoLlmDraftUseCaseBoundary {
 export interface ByoLlmProviderBoundary {
   providerKind: ByoLlmProviderKind;
   adapterId: string;
-  status: "fixture_only" | "synthetic_live_transport" | "future_provider_boundary";
+  status: "fixture_only" | "synthetic_live_transport" | "local_operator_transport" | "future_provider_boundary";
   explicitOptInRequired: boolean;
   realCustomerDataAllowed: false;
   writeEffectsAllowed: false;
+  operationalNote?: string;
 }
 
 export interface ByoLlmBoundaryPolicy {
@@ -122,6 +123,15 @@ export const byoLlmBoundaryPolicy = {
       explicitOptInRequired: true,
       realCustomerDataAllowed: false,
       writeEffectsAllowed: false
+    },
+    {
+      providerKind: "codex_cli",
+      adapterId: "codex-cli",
+      status: "local_operator_transport",
+      explicitOptInRequired: true,
+      realCustomerDataAllowed: false,
+      writeEffectsAllowed: false,
+      operationalNote: "Nur fuer lokalen Operator-Betrieb; Server- und Batch-Nutzung gehoeren auf die API-Schiene."
     },
     {
       providerKind: "custom_byo_provider",
