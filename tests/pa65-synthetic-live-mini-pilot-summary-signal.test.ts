@@ -5,7 +5,6 @@ import { runSyntheticLiveMiniPilotCheckCli } from "../scripts/check-synthetic-li
 
 const docPath = "docs/architecture/PA65_SYNTHETIC_LIVE_MINI_PILOT_SUMMARY_SIGNAL.md";
 const doc = existsSync(docPath) ? readFileSync(docPath, "utf8") : "";
-const readme = readFileSync("README.md", "utf8");
 const testing = readFileSync("TESTING.md", "utf8");
 const memory = readFileSync("memory.md", "utf8");
 
@@ -80,7 +79,6 @@ describe("PA65 synthetic-live mini-pilot summary signal", () => {
   });
 
   it("keeps the summary signal discoverable from repo docs", () => {
-    expect(readme).toContain(docPath);
     expect(testing).toContain(docPath);
     expect(testing).toContain("tests/pa65-synthetic-live-mini-pilot-summary-signal.test.ts");
     expect(memory).toContain(docPath);

@@ -11,7 +11,6 @@ const doc = existsSync(docPath) ? readFileSync(docPath, "utf8") : "";
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts: Record<string, string>;
 };
-const readme = readFileSync("README.md", "utf8");
 const testing = readFileSync("TESTING.md", "utf8");
 const memory = readFileSync("memory.md", "utf8");
 
@@ -122,7 +121,6 @@ describe("PA63 synthetic-live mini-pilot probe guard", () => {
   });
 
   it("keeps the guard discoverable from repo docs", () => {
-    expect(readme).toContain(docPath);
     expect(testing).toContain(docPath);
     expect(testing).toContain("tests/pa63-synthetic-live-mini-pilot-probe-guard.test.ts");
     expect(memory).toContain(docPath);

@@ -466,7 +466,7 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Ursprüngliche Intake-Anfrage");
     expect(document.body.textContent ?? "").toContain("requestId: usage-manual-1");
     expect(document.body.textContent ?? "").toContain("channel: manual_form");
-    expect(document.body.textContent ?? "").toContain("Eventtyp: conference");
+    expect(document.body.textContent ?? "").toContain("Eventtyp: Konferenz");
     expect(document.body.textContent ?? "").toContain("Datum: 2026-07-12");
     expect(document.body.textContent ?? "").toContain("Teilnehmerzahl: 24 · Serviceform: Buffet · Readiness: vollständig");
     expect(document.body.textContent ?? "").toContain("Status: vollständig");

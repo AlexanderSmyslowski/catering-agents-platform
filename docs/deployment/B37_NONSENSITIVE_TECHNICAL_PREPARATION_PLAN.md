@@ -136,6 +136,6 @@ B37 ist erfuellt, wenn:
 - die Arbeitsreihenfolge aus Gate-Konsistenz, Zugriffsschutz-Typ, Nicht-Exposition, Trusted-Header-Grenze, Evidence-Regeln, Backup-Retention, Upload-Blockade und Stop-/Rollback-/Incident-Notizen dokumentiert ist,
 - keine sensiblen Infrastrukturwerte oder echten Daten dokumentiert sind,
 - B37 nicht als Deployment-, SSH-, Secret-, Echtdaten-, Backup-, Upload-, API-, Persistenz-, Migrations-, Compliance-, DSGVO- oder AVV-Go gelesen werden kann,
-- `tests/b37-nonsensitive-technical-preparation-plan-contract.test.ts` gruen ist,
+- `entfernter Doku-Contract-Test` gruen ist,
 - `TESTING.md` und `memory.md` fortgeschrieben sind,
 - die beauftragten Checks gruen sind.

@@ -38,7 +38,7 @@ Es trennt hart zwischen:
 | --- | --- | --- | --- |
 | Interner synthetischer Rehearsal-Kern | umgesetzt und getestet | `npm run browser:rehearsal:full-fresh`, `npm test`, `npm run build`, Main-CI | kein echter Daten-, Pilot- oder Produktionsbeleg |
 | Start -> Angebot -> Produktion -> Rueckfragen -> Produktionsplan -> Einkaufsliste -> Export | umgesetzt und getestet | Browser-Rehearsal, Route-Smokes, Produktions-Smokes | bleibt synthetisch/lokal; keine externe Freigabe |
-| Fehlupload, Soft-Archiv, Reload, Clear, stale Ergebniszonen | umgesetzt und getestet | Browser-Rehearsal-Modi, `tests/backoffice-production-acceptance-smoke.test.ts`, `tests/browser-rehearsal-script-contract.test.ts` | keine Retention-/Backup-/Echtdaten-Aussage |
+| Fehlupload, Soft-Archiv, Reload, Clear, stale Ergebniszonen | umgesetzt und getestet | Browser-Rehearsal-Modi, `tests/backoffice-production-acceptance-smoke.test.ts`, `entfernter Doku-Contract-Test` | keine Retention-/Backup-/Echtdaten-Aussage |
 | Ruhiges Arbeitsfenster / Produktions-UX | umgesetzt fuer internen MVP-Korridor, weiter verbesserbar | UI-Komponenten, Route-Smokes, Workbench-Smokes | echtes chatzentriertes Agentenfenster bleibt Zielbild, keine grosse UI-Neugestaltung ohne Entscheidung |
 | Codeklarheit im Produktionskern | fortgeschritten, aber nicht final | extrahierte `App.tsx`-Boundaries, kleine Planning-/RecipeDiscovery-Module, viele fokussierte Tests | weitere kleine Boundaries sind moeglich; kein Big-Bang-Refactor |
 | Deterministische Planung, Rezeptsuche, Einkaufsliste | umgesetzt und breit getestet | `production-service/src/rules/*`, `recipe-discovery/*`, Produktions-/Recipe-/Purchase-Tests | weitere synthetische Catering-Faelle und Qualitaetschecks koennen autonom nachziehen |

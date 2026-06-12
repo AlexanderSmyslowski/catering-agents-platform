@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getSpecLabel } from "../backoffice-ui/src/production-language.js";
+import {
+  getSpecLabel,
+  translateEventType,
+  translateMenuCategory,
+  translateServiceForm
+} from "../backoffice-ui/src/production-language.js";
 
 describe("production language helpers", () => {
   it("builds German labels for specs with lunch events", () => {
@@ -14,5 +19,12 @@ describe("production language helpers", () => {
     });
 
     expect(label).toBe("Lunch · 120 Teilnehmer · 2026-03-04");
+  });
+
+  it("uses central taxonomy labels and keeps unknown values unchanged", () => {
+    expect(translateEventType("meeting")).toBe("Besprechung");
+    expect(translateServiceForm("coffee_break")).toBe("Kaffeepause");
+    expect(translateMenuCategory("vegetarian")).toBe("Vegetarisch");
+    expect(translateEventType("custom_event")).toBe("custom_event");
   });
 });

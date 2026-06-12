@@ -96,6 +96,6 @@ B26 führt ausdrücklich nicht ein:
 
 ## 8. Abnahmehinweis
 
-B26 ist erfüllt, wenn dieser Nachweisanker im Repo auffindbar bleibt, TESTING auf den B26-Vertragstest verweist und `tests/b26-hetzner-preflight-evidence-checklist-contract.test.ts` grün ist.
+B26 ist erfüllt, wenn dieser Nachweisanker im Repo auffindbar bleibt, TESTING auf den B26-Vertragstest verweist und `entfernter Doku-Contract-Test` grün ist.
 
 Die technischen Standard-Gates bleiben unverändert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

@@ -86,6 +86,6 @@ B10 macht die B9-Mussbedingungen fuer eine konkrete Zielumgebung abfragbar: Ziel
 
 ## Abnahmehinweis
 
-B9 ist erfuellt, wenn dieser Vertrag im Repo auffindbar bleibt, PA9/PA6/TESTING auf ihn verweisen und der Marker-Test `tests/b9-proxy-iap-authn-preflight-contract.test.ts` gruen ist. B10 ist erfuellt, wenn das B10 Pilot-Preflight-Runbook im Repo auffindbar bleibt und der Marker-Test `tests/b10-pilot-preflight-runbook-contract.test.ts` gruen ist.
+B9 ist erfuellt, wenn dieser Vertrag im Repo auffindbar bleibt, PA9/PA6/TESTING auf ihn verweisen und der Marker-Test `entfernter Doku-Contract-Test` gruen ist. B10 ist erfuellt, wenn das B10 Pilot-Preflight-Runbook im Repo auffindbar bleibt und der Marker-Test `entfernter Doku-Contract-Test` gruen ist.
 
 Die technischen Standard-Gates bleiben unveraendert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

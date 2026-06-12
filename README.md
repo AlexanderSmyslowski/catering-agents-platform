@@ -1,9 +1,11 @@
 # Catering Agents Platform
 
-MVP-Monorepo fuer zwei spezialisierte Catering-Agenten:
+MVP-Monorepo fuer eine interne Catering-Plattform mit zwei spezialisierten Agenten: Angebotsagent fuer Angebotserstellung und Produktionsagent fuer Rezepte, Produktionsplanung und Einkaufslisten.
+
+## Workspaces
 
 - `offer-service`: Angebots-CoPilot
-- `intake-service`: Intake, Parsing, Normalisierung
+- `intake-service`: Intake, Parsing und Normalisierung
 - `production-service`: Produktions-/Kuechen-CoPilot
 - `shared-core`: kanonische Schemata, Regeln und Taxonomien
 - `print-export`: HTML-/CSV-Exportservice fuer Angebote, Produktionsplaene und Einkaufslisten
@@ -27,42 +29,27 @@ npm run dev:exports
 npm run dev:ui
 ```
 
-Fuer den kompletten lokalen Stack mit Demo-Daten:
+Die interne Web-App laeuft im Dev-Modus ueber Vite auf Port `3200`.
+
+## Lokaler Stack
 
 ```bash
 npm run local:start
 npm run local:start:fresh
-```
-
-Der lokale Stack laeuft dabei bewusst in getrennten `screen`-Sitzungen mit automatischem Neustart pro Dienst. Dadurch bleiben UI und Agenten auch dann erreichbar, wenn das startende Terminal oder die Codex-Sitzung endet.
-
-Status und Stop:
-
-```bash
 npm run local:status
 npm run local:check
 npm run local:stop
 ```
 
-`npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht fuer die erwarteten `screen`-Sitzungen und Service-Ports. `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack: UI-Routen, Health-Endpunkte, read-only Exportpfade und Demo-Start-/Auditbeleg.
-`npm run local:start` startet diesen lokalen Stack mit Demo-Seeding; `npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert und startet mit einer temporaeren synthetischen Datenwurzel neu, damit Browser-Rehearsals nicht gegen Repo-Altlasten laufen. `npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse wieder. Dieser lokale Runbook-Weg bleibt interne Demo-/Abnahmeverifikation und ist kein Deployment, keine Produktionsfreigabe und keine rechtssichere Audit-/Compliance-Aussage.
-`npm run local:start` zeichnet die wirksame lokale Datenwurzel auf. `npm run local:check` nutzt diese Aufzeichnung, damit isolierte Frischlaeufe mit `CATERING_DATA_ROOT=/tmp/...` nicht versehentlich gegen Repo-Altlasten bewertet werden; eine abweichende Check-Env ist ein lokales Konsistenzsignal und verlangt einen kontrollierten Stop/Neustart.
-Wenn `local:check` einen aufgefuellten lokalen Datenbestand erkennt, meldet der Check nur einen Rehearsal-Datenhinweis: kein rotes Gate, aber auch kein sauberer Frischlauf. Wenn lokale Einkaufslisten moegliche Rezept-Arbeitsschritte als Einkaufspositionen enthalten, meldet der Check ebenfalls nur einen lokalen Stale-Datenbefund. Der Check loescht, bereinigt oder archiviert lokale Daten nicht automatisch; einzelne falsche interne/synthetische Intake-Kontexte koennen nach C9 in `/produktion` bewusst per Soft-Archiv aus aktiven Listen genommen werden.
+- `npm run local:start` startet den lokalen Stack mit Demo-Seeding.
+- `npm run local:start:fresh` stoppt den laufenden Stack und startet mit temporaerer synthetischer Datenwurzel neu.
+- `npm run local:status` zeigt lokale Prozess- und Erreichbarkeitsdaten fuer die erwarteten Services.
+- `npm run local:check` prueft UI-Routen, Health-Endpunkte, read-only Exportpfade und lokale Auditbelege gegen den laufenden Stack.
+- `npm run local:stop` beendet die lokalen `screen`-Sitzungen und zugehoerigen Repo-Prozesse.
 
-Browser-Rehearsals sind optional lokale Prueflaeufe gegen den laufenden Stack: `npm run browser:rehearsal` prueft den nicht-mutierenden Kernpfad `Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit`. Mutierende Browser-Rehearsals muessen nach `npm run local:start:fresh` laufen: `npm run browser:rehearsal:answer-submit` speichert synthetische Rueckfragenantworten und berechnet den aktuellen Produktionskontext, `npm run browser:rehearsal:archive-intake` klickt den Soft-Archiv-Pfad fuer den synthetischen Fehlupload-/Intake-Kontext, `npm run browser:rehearsal:failed-upload` prueft einen synthetischen nicht erlaubten Dokumentupload ohne aktive Altlasten. `npm run browser:rehearsal:full-fresh` fuehrt die vier Browser-Rehearsal-Modi jeweils mit kontrolliert frischer temporaerer synthetischer Datenwurzel hintereinander aus. Die Browser-Rehearsals veraendern nur synthetische lokale Fresh-Datenwurzeln und sind kein Echte-Daten-, Deployment-, Compliance- oder Produktionsfreigabe-Beleg.
-
-Synthetische Live-Probes sind ein getrennter, produktfreier Readiness-Korridor fuer den ersten echten `synthetic_live`-Providerpfad. `npm run llm:synthetic-live:preflight` ist der vorgeschaltete Operator-/Env-Check fuer denselben Korridor: Er prueft Feature-Flag, benoetigte Env-Werte, Prompt-Artefakte und vorhandene Clarification-Fixtures lokal vor jedem echten Probe-Lauf und gibt seit PA53 zusaetzliche lokale Policy-Hinweise fuer benannten Operator und Budgetnotiz aus. `npm run llm:synthetic-live:probe` fuehrt den synthetischen Clarification-Probe-Lauf aus und gibt `response`, `evaluation`, `AgentAudit` und `RunResult` als lokales JSON zurueck. `npm run llm:synthetic-live:probe:strict` nutzt denselben Korridor, beendet den Prozess aber mit Fehlercode, wenn der Probe-Lauf selbst fehlschlaegt oder der echte Provider-Output gegen die synthetische Fixture-Erwartung driftet. `npm run llm:synthetic-live:check` buendelt Preflight und Strict-Probe als einen lokalen Evidence-Check. Alle vier Befehle bleiben strikt auf synthetische Fixtures, Feature-Flag, lokale Secrets ausserhalb des Repos und produktfreie Draft-Ausgaben begrenzt; Human Approval bleibt Pflicht und Raw Prompt-/Response-Logging bleibt verboten. Sie sind kein UI-Test, kein Deployment, keine Produktionsfreigabe und kein Echte-Daten-Korridor.
-
-Fuer den freigegebenen engen Mini-Pilot gibt es seit PA63 zusaetzlich `npm run llm:synthetic-live:probe:mini-pilot`. Dieser lokale Entry nutzt weiter denselben `synthetic_live`-Korridor, bricht aber hart ab, wenn der vorhandene Preflight nicht auch den PA62-Mini-Pilot-Rahmen bestaetigt. Damit bleibt der erste echte Pilotbefehl auf benannte interne Nutzer, erlaubten Datenrahmen, Draft-only und Human Approval begrenzt, ohne neue Runtime, Deployment oder Schreibwirkung einzufuehren.
-
-Seit PA64 gibt es dazu auch den zusammenhaengenden Operator-Einstieg `npm run llm:synthetic-live:check:mini-pilot`: ein lokaler Evidence-Check, der Preflight und guarded Probe als ein gemeinsames JSON-Ergebnis ausgibt und bei fehlendem Mini-Pilot-Rahmen, Probe-Fehler oder Eval-Drift hart scheitert.
-
-Seit PA65 traegt derselbe Check zusaetzlich ein kleines `summary`-Signal mit `ready` oder `blocked`, dem dominanten Grund und dem naechsten sicheren Schritt. Damit ist der lokale Mini-Pilot-Check besser als Operator-Einstieg lesbar, ohne die Runtime zu verbreitern.
-
-Demo-Seed ist eine interne Verifikationshilfe fuer den lokalen MVP-Korridor und kein Produktionsdatenmodell. Der Auditbeleg ist ein interner Betriebs-/Kontrollnachweis fuer den Demo-Startweg und keine rechtssichere Audit-/Compliance-Aussage. Der C8-Rahmen bleibt ein interner Demo-/Abnahmeweg, keine Produktionsfreigabe und keine externe Freigabe.
+## Datenhaltung
 
 Standardmaessig speichern die Services ihre Laufzeitdaten unter `./data`.
-Auf Servern sollte dafuer ein persistentes Verzeichnis gesetzt werden:
 
 ```bash
 export CATERING_DATA_ROOT=/var/lib/catering-agents
@@ -74,183 +61,26 @@ Fuer PostgreSQL statt Dateispeicher:
 export CATERING_DATABASE_URL=postgresql://user:password@localhost:5432/catering_agents
 ```
 
-Die interne Web-App laeuft im Dev-Modus ueber Vite auf Port `3200` und proxied standardmaessig auf:
+## Ports und Proxies
+
+Die UI proxied standardmaessig auf:
 
 - `http://localhost:3101` fuer Intake
 - `http://localhost:3102` fuer Offers
 - `http://localhost:3103` fuer Production
 - `http://localhost:3104` fuer Exporte
 
-Optional konfigurierbar ueber:
+Optional konfigurierbar ueber `VITE_INTAKE_PROXY_TARGET`, `VITE_OFFERS_PROXY_TARGET`, `VITE_PRODUCTION_PROXY_TARGET` und `VITE_EXPORTS_PROXY_TARGET`.
 
-- `VITE_INTAKE_PROXY_TARGET`
-- `VITE_OFFERS_PROXY_TARGET`
-- `VITE_PRODUCTION_PROXY_TARGET`
-- `VITE_EXPORTS_PROXY_TARGET`
+Die getrennten Arbeitsflaechen liegen lokal unter `http://localhost:3200/`, `/angebot` und `/produktion`.
 
-Die Oberflaeche hat jetzt drei Einstiege:
+## LLM-Skripte
 
-- `http://localhost:3200/` als Startseite mit Agentenwahl
-- `http://localhost:3200/angebot` fuer den Angebotsagenten
-- `http://localhost:3200/produktion` fuer den Produktionsagenten
-
-Fuehrender Produktzielanker fuer weitere Arbeit:
-
-- [docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md](docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md) beschreibt die interne Catering-Arbeitsplattform, den aktuellen kontrollierten MVP-/Beta-Korridor und die Grenzen gegen externe Nutzung, echte Multi-Tenant-Plattform, produktionsnahe echte Daten, Auth/OIDC, neue Persistenz/API und Deployment ohne gesonderte Gates.
-- [docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md](docs/architecture/PRODUCTION_AGENT_10_10_CODING_ARCHITECTURE.md) beschreibt die Coding-Architektur bis zum internen 10/10-ProductionAgent: deterministischer Kern zuerst, LLM-Readiness ohne Provider, danach LLM nur hinter Gates, Schemas, Tool-Allowlist, Kostenlimit, Audit und Human Approval.
-- [docs/product/C11_10_10_GAP_AUDIT.md](docs/product/C11_10_10_GAP_AUDIT.md) trennt den aktuellen 9/10-Rehearsal-Stand von echter 10/10-Produktreife und markiert PA26-PA50 als abgeschlossenen lokalen synthetic-live Vorbereitungskorridor vor den naechsten echten Operator-/Kosten-/Datenentscheidungen.
-- [docs/architecture/PA26_LLM_READINESS_CONTRACT.md](docs/architecture/PA26_LLM_READINESS_CONTRACT.md) verankert den ersten LLM-Readiness-Vertrag im `shared-core`: Model-Input/-Output-Drafts, Tool-Effektklassen und harte Verbote ohne Provider, Secrets, Modellaufrufe, API, Persistenz, echte Daten oder Schreibwirkung.
-- [docs/architecture/PA27_LLM_READINESS_EVAL_FIXTURES.md](docs/architecture/PA27_LLM_READINESS_EVAL_FIXTURES.md) legt erste synthetische Eval-Fixtures fuer den PA26-Vertrag an, damit spaetere Prompts/Provider nur gegen sichere Erwartungsanker vorbereitet werden.
-- [docs/architecture/PA28_LLM_READINESS_DRAFT_REGISTRY.md](docs/architecture/PA28_LLM_READINESS_DRAFT_REGISTRY.md) verbindet PA26 und PA27 ueber schema-only Draft-Kontrakte ohne Prompttext, Provider, API, Persistenz, echte Daten oder Schreibwirkung.
-- [docs/architecture/PA29_LLM_READINESS_INPUT_VALIDATION.md](docs/architecture/PA29_LLM_READINESS_INPUT_VALIDATION.md) macht die Input-Seite des LLM-Readiness-Vertrags validierbar und blockiert Provider-, Echtdaten-, Write-Tool- und Rohpayload-Kandidaten.
-- [docs/architecture/PA30_LLM_READINESS_EVAL_FIXTURE_VALIDATION.md](docs/architecture/PA30_LLM_READINESS_EVAL_FIXTURE_VALIDATION.md) validiert synthetische Eval-Fixtures zentral gegen Input-/Output-Vertrag, Draft-Registry und Forbidden-Payload-Grenzen.
-- [docs/architecture/PA31_LLM_READINESS_SOURCE_REF_VALIDATION.md](docs/architecture/PA31_LLM_READINESS_SOURCE_REF_VALIDATION.md) macht SourceRefs runtime-seitig allowlist-basiert, damit nur bekannte sichere Arbeitsbelegtypen referenziert werden.
-- [docs/architecture/PA32_LLM_READINESS_STRUCTURED_CANDIDATE_VALIDATION.md](docs/architecture/PA32_LLM_READINESS_STRUCTURED_CANDIDATE_VALIDATION.md) haertet strukturierte Draft-Outputs als flache Scalar-Maps ohne verschachtelte Payloads oder verbotene Schluessel.
-- [docs/architecture/PA33_LLM_READINESS_OUTPUT_SOURCE_REF_VALIDATION.md](docs/architecture/PA33_LLM_READINESS_OUTPUT_SOURCE_REF_VALIDATION.md) bindet erwartete Eval-Outputs an dieselben Required-SourceRefs wie ihre Draft-Contracts.
-- [docs/architecture/PA34_LLM_READINESS_SOURCE_REF_IDENTITY_PARITY.md](docs/architecture/PA34_LLM_READINESS_SOURCE_REF_IDENTITY_PARITY.md) stellt sicher, dass erwartete Eval-Outputs dieselben erforderlichen SourceRef-IDs tragen wie ihre Inputs.
-- [docs/architecture/PA35_LLM_READINESS_DRAFT_REGISTRY_COVERAGE.md](docs/architecture/PA35_LLM_READINESS_DRAFT_REGISTRY_COVERAGE.md) stellt sicher, dass jeder Draft-Registry-Kontrakt mindestens eine gueltige synthetische Eval-Fixture hat.
-- [docs/architecture/PA36_LLM_READINESS_EVAL_HARNESS.md](docs/architecture/PA36_LLM_READINESS_EVAL_HARNESS.md) verankert einen providerlosen Eval-Harness fuer synthetische Output-Kandidaten gegen gueltige Fixture-Erwartungen.
-- [docs/architecture/PA37_LLM_READINESS_PROMPT_SCHEMA_REGISTRY.md](docs/architecture/PA37_LLM_READINESS_PROMPT_SCHEMA_REGISTRY.md) verankert eine schema-only Prompt-/Policy-/Schema-Registry pro Draft-Kontrakt ohne Prompttext oder Provider.
-- [docs/architecture/PA38_LLM_READINESS_FIXTURE_PROVIDER_ADAPTER.md](docs/architecture/PA38_LLM_READINESS_FIXTURE_PROVIDER_ADAPTER.md) verankert einen rein synthetischen Fixture-ProviderAdapter ohne Prompt-Ausfuehrung oder echten Modellprovider.
-- [docs/architecture/PA39_LLM_READINESS_AGENT_AUDIT.md](docs/architecture/PA39_LLM_READINESS_AGENT_AUDIT.md) verankert einen providerlosen AgentAudit-Anker fuer synthetische Draft-Laeufe, der Prompt-/Policy-/Schema-Metadaten, Adapter-Modus, Approval-Grenze und Fehlerstatus ohne Runtime oder Schreibwirkung festhaelt.
-- [docs/architecture/PA40_LLM_READINESS_RUN_RESULT.md](docs/architecture/PA40_LLM_READINESS_RUN_RESULT.md) verankert einen providerlosen synthetic-only Run-Result-Anker, der Request, Adapter-Response und AgentAudit in ein validiertes Ergebnisartefakt ohne Runtime oder Schreibwirkung verdichtet.
-- [docs/architecture/PA41_LLM_PROVIDER_DATA_RUNTIME_DECISION_FRAME.md](docs/architecture/PA41_LLM_PROVIDER_DATA_RUNTIME_DECISION_FRAME.md) macht den naechsten echten Gate-Schritt fuer Alexander entscheidungsreif: erster echter synthetic-only Provider-Slice oder bewusst weiter providerlos bleiben.
-- [docs/architecture/PA51_LLM_OPERATOR_COST_APPROVAL_DECISION_FRAME.md](docs/architecture/PA51_LLM_OPERATOR_COST_APPROVAL_DECISION_FRAME.md) zieht die naechste Gate-Frage nach PA50 scharf: welcher lokale Operatorrahmen, welches Kostenlimit und welche Human-Approval-Grenze fuer den vorhandenen synthetic-live Korridor gelten sollen.
-- [docs/architecture/PA52_SYNTHETIC_LIVE_LOCAL_OPERATOR_RUNBOOK.md](docs/architecture/PA52_SYNTHETIC_LIVE_LOCAL_OPERATOR_RUNBOOK.md) operationalisiert PA51 als kleinsten lokalen Bedienrahmen: nur benannte interne Operatoren, nur lokale Secrets ausserhalb des Repos, nur synthetische Fixtures, klarer Kostenrahmen, kein Raw Prompt-/Response-Logging und Human Approval vor jeder manuellen Uebernahme.
-- [docs/architecture/PA62_SYNTHETIC_LIVE_MINI_PILOT_POLICY.md](docs/architecture/PA62_SYNTHETIC_LIVE_MINI_PILOT_POLICY.md) codiert den beschlossenen Option-2-Mini-Pilot als kleine Preflight-Policy-Schicht: enger Nutzerrahmen, enger Datenrahmen, nur Draft-Outputs, Human Approval bleibt Pflicht und Write-Effects bleiben verboten.
-- [docs/architecture/PA63_SYNTHETIC_LIVE_MINI_PILOT_PROBE_GUARD.md](docs/architecture/PA63_SYNTHETIC_LIVE_MINI_PILOT_PROBE_GUARD.md) bindet den ersten dedizierten Mini-Pilot-Probe-Befehl hart an den vorhandenen PA62-Rahmen, ohne die Runtime zu verbreitern.
-- [docs/architecture/PA64_SYNTHETIC_LIVE_MINI_PILOT_CHECK_ENTRY.md](docs/architecture/PA64_SYNTHETIC_LIVE_MINI_PILOT_CHECK_ENTRY.md) buendelt Preflight und guarded Probe zu einem einzigen lokalen Mini-Pilot-Check-Einstieg, ohne neue Runtime oder Produktwirkung einzufuehren.
-- [docs/architecture/PA65_SYNTHETIC_LIVE_MINI_PILOT_SUMMARY_SIGNAL.md](docs/architecture/PA65_SYNTHETIC_LIVE_MINI_PILOT_SUMMARY_SIGNAL.md) gibt demselben Mini-Pilot-Check ein klares Status-/Grund-/Next-Step-Signal fuer den menschlichen Operator.
-- [docs/architecture/PA53_SYNTHETIC_LIVE_PREFLIGHT_POLICY_HINTS.md](docs/architecture/PA53_SYNTHETIC_LIVE_PREFLIGHT_POLICY_HINTS.md) spiegelt diesen lokalen Bedienrahmen als weiche Policy-Hinweise in den bestehenden Preflight: Operatorname und Budgetnotiz werden sichtbar, ohne neue harte Deployment-, Daten- oder Runtime-Gates einzufuehren.
-- [docs/architecture/PA54_LLM_DATA_PII_DECISION_FRAME.md](docs/architecture/PA54_LLM_DATA_PII_DECISION_FRAME.md) zieht die naechste LLM-Gate-Frage nach PA53 scharf: ob ueber `synthetic_live` hinaus ueberhaupt nur anonymisierte Draft-Inputs denkbar sind oder der Korridor strikt synthetisch bleiben muss.
-- [docs/architecture/PA55_LLM_TRUSTED_OPERATOR_AUTH_DECISION_FRAME.md](docs/architecture/PA55_LLM_TRUSTED_OPERATOR_AUTH_DECISION_FRAME.md) zieht die Schwesterfrage zu PA54 nach: unter welchem Trusted-Operator-/Auth-Kontext ein spaeterer providerfaehiger Draft-Pfad ueberhaupt denkbar waere, ohne B8/B9 schon in Runtime-Code zu verwandeln.
-- [docs/architecture/PA56_LLM_RETENTION_EVIDENCE_DECISION_FRAME.md](docs/architecture/PA56_LLM_RETENTION_EVIDENCE_DECISION_FRAME.md) zieht die naechste Schwesterfrage nach: welcher Prompt-/Response-Retention- und Evidence-Rahmen fuer spaetere providerfaehige Draft-Laeufe ueberhaupt denkbar ist, ohne Raw-Logging, Backup-Retention oder allgemeine Artefaktpfade still zu oeffnen.
-- [docs/architecture/PA57_LLM_DEPLOYMENT_TARGET_ENVIRONMENT_DECISION_FRAME.md](docs/architecture/PA57_LLM_DEPLOYMENT_TARGET_ENVIRONMENT_DECISION_FRAME.md) zieht die naechste Schwesterfrage nach: unter welchem Deployment-/Zielumgebungs-Kontext ein spaeterer nicht-lokaler providerfaehiger Draft-Pfad ueberhaupt denkbar ist, ohne B25-B37 oder PA9 still in Infrastruktur- oder Runtime-Arbeit zu kippen.
-- [docs/architecture/PA58_LLM_HUMAN_APPROVAL_OPERATOR_HANDOVER_DECISION_FRAME.md](docs/architecture/PA58_LLM_HUMAN_APPROVAL_OPERATOR_HANDOVER_DECISION_FRAME.md) zieht die naechste Schwesterfrage nach: wie Human Approval, Operator-Handover und manuelle Draft-Uebernahme fuer spaetere nicht-lokale providerfaehige Draft-Pfade aussehen muessen, ohne eine neue Approval-Runtime oder stilles Self-Approval zu normalisieren.
-- [docs/architecture/PA59_LLM_TOOL_WRITE_EFFECT_DECISION_FRAME.md](docs/architecture/PA59_LLM_TOOL_WRITE_EFFECT_DECISION_FRAME.md) zieht die naechste Schwesterfrage nach: welche Tool-Klassen ein spaeterer providerfaehiger Draft-Pfad ueberhaupt sehen darf und wo die harte Grenze gegen Write-Effects, Tool-Orchestrierung und produktwirksame Uebergaben bleibt.
-- [docs/architecture/PA60_LLM_RUNTIME_CONVERSATION_SESSION_DECISION_FRAME.md](docs/architecture/PA60_LLM_RUNTIME_CONVERSATION_SESSION_DECISION_FRAME.md) zieht die naechste Schwesterfrage nach: ob ein spaeterer providerfaehiger Draft-Pfad ueberhaupt eine echte Runtime-`ConversationSession` brauchen darf oder fuer den ersten freigegebenen Korridor bewusst projektionsbasiert bleiben muss.
-- [docs/architecture/PA61_LLM_DOCUMENT_UPLOAD_SOURCE_SAFETY_DECISION_FRAME.md](docs/architecture/PA61_LLM_DOCUMENT_UPLOAD_SOURCE_SAFETY_DECISION_FRAME.md) zieht die naechste Schwesterfrage nach: ob ein spaeterer providerfaehiger Draft-Pfad direkte Uploads, Rohdokumente oder Rohtext-nahe Dokumentquellen jemals sehen darf oder bewusst auf reduzierte, nicht-dateinahe Arbeitsausschnitte begrenzt bleiben muss.
-- Die aktualisierte Autonomiegrenze erlaubt kleine lokale, testbare und reversible Slices fuer synthetische Smokes, Rezept-/Import-/Einkaufslisten-/UI-Haertung und Doku-/Contract-Klaerungen autonom; echte Daten, Auth/OIDC/IAP, Deployment, neue API/Persistenz/Migration, echte ConversationSession-Runtime und LLM-Provider bleiben Gates.
-- [docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md](docs/product/C10_CURRENT_WORKTREE_PR_SLICES.md) sortiert den aktuellen uncommitted Arbeitsbaum in reviewbare Slices; es ist kein Commit-, PR-, LLM-, Deployment-, API-, Persistenz- oder Echtdaten-Go.
-
-Fuehrendes Architektur-Gate vor weiterem Produktionsagent-v1-Featurebau:
-
-- [docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md](docs/architecture/PRODUCTION_AGENT_V1_ARCHITECTURE_GATE.md)
-- [docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md](docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md) fasst die interne Beta-/Abnahme-Readiness aus bestehenden Status-, Test-, Export-, Audit- und Gate-Signalen zusammen; externe Nutzung und echte Produktionsagent-v1-Faehigkeiten bleiben gesperrt, bis die benannten Gates bewusst entschieden sind.
-- [docs/product/P5_BETA_DURCHLAUF_IST_KARTE.md](docs/product/P5_BETA_DURCHLAUF_IST_KARTE.md) kartiert den aktuellen internen Beta-Durchlauf Start -> Angebot -> Produktion -> Exporte/Audit aus Nutzersicht und trennt intern nutzbar, nur dokumentiert, blockiert und schon testbar.
-- [docs/product/P5_B54_MANUELLE_BETA_TEST_CHECKLISTE.md](docs/product/P5_B54_MANUELLE_BETA_TEST_CHECKLISTE.md) fuehrt Alexander manuell durch den lokalen Beta-Weg Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit, inklusive URLs, sichtbarer Marker, Stop-Gates und Nicht-Freigaben.
-- [docs/product/P6_B56_BETA_ONBOARDING_ISTSTAND_LUECKENKARTE.md](docs/product/P6_B56_BETA_ONBOARDING_ISTSTAND_LUECKENKARTE.md) kartiert fuer Plan 6 den lokalen Beta-Onboarding-Iststand Starten -> Durchlaufen -> Reibung notieren -> Stop-Gates und trennt intern testbar, nur synthetisch, blockiert und verboten.
-- [docs/product/P6_B57_LOKALER_START_STATUS_KORRIDOR.md](docs/product/P6_B57_LOKALER_START_STATUS_KORRIDOR.md) buendelt fuer Plan 6 den lokalen Beta-Start-/Status-Korridor Starten -> Status pruefen -> Betriebscheck -> UI-Routen oeffnen -> kontrolliert stoppen mit relevanten lokalen URLs, Health-Endpunkten und Reaktion auf rote Status-/Check-Signale.
-- [docs/product/P6_B58_BETA_REIBUNGSLOG_VORLAGE.md](docs/product/P6_B58_BETA_REIBUNGSLOG_VORLAGE.md) strukturiert fuer Plan 6 sichere Reibungsnotizen ohne echte Daten mit Beobachtung, Route, Erwartung, tatsaechlichem Verhalten, Schweregrad, Screenshot-Hinweis ohne personenbezogene Daten und naechster Entscheidung.
-- [docs/product/P6_B61_BETA_MANAGEMENT_ENTSCHEIDUNGSVORLAGE.md](docs/product/P6_B61_BETA_MANAGEMENT_ENTSCHEIDUNGSVORLAGE.md) verdichtet P6-B61 als Management-Entscheidungsvorlage: sofort testbar, Stop-Gates, No-go und naechster enger Produktwertblock nur nach beobachteter Reibung.
-- [docs/product/P7_B63_REVIEWER_REHEARSAL_STARTKARTE.md](docs/product/P7_B63_REVIEWER_REHEARSAL_STARTKARTE.md) buendelt P7-B63 als Reviewer-Rehearsal-Startkarte: fiktive Testrolle, synthetisches Ziel, erlaubte Daten, Stop-Gates und den fuehrenden Pfad Start -> Angebot -> Produktion -> Rueckfragen -> Exporte/Audit.
-- [docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md](docs/product/P7_B64_SYNTHETISCHE_SZENARIO_UND_DATENKARTE.md) konkretisiert P7-B64 als synthetische Szenario- und Datenkarte: fiktive Beispielwerte fuer Kunde, Kontakt, Ort, Termin, Anlass und Testdokument, ohne echte Kunden-, Personen- oder Einsatzdaten.
-- [docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md](docs/product/P7_B65_EXPORT_AUDIT_ROUTE_EVIDENZPAKET.md) strukturiert P7-B65 als Evidence-Checklist fuer Route, Erwartung, Beobachtung, read-only Export-/Auditbeleg, Reibung und naechste Entscheidung ohne externe Ablage, Upload oder echte Dateien mit personenbezogenen Daten.
-- [docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md](docs/product/P7_B67_REIBUNG_ZU_BACKLOG_TRIAGE.md) ordnet P7-B67 als Triage-Matrix ein: beobachtete Reibung aus Reibungslog und Evidenzpaket wird in sofort kleiner Fix, spaeter, Entscheidung noetig oder out of scope/verboten uebersetzt.
-- [docs/product/P9_N1_LOKALER_REHEARSAL_NACHWEISRAHMEN.md](docs/product/P9_N1_LOKALER_REHEARSAL_NACHWEISRAHMEN.md) konsolidiert den lokalen Rehearsal-Nachweisrahmen aus C8, P6-B57, P6-B58, P7-B63/B64/B65/B67 und der Plan-8-Option-A-Grenze; lokal/synthetisch gruene Signale bleiben von echten Daten, Produktionsfreigabe und Compliance blocked getrennt.
-- [docs/product/P11_N1_LIMITED_INTERNAL_PILOT_PREFLIGHT_INDEX.md](docs/product/P11_N1_LIMITED_INTERNAL_PILOT_PREFLIGHT_INDEX.md) uebersetzt den B24-Korridor `begrenzter interner Pilot mit anonymisierten Daten: not assessed` in nicht-sensitive Preflight-Pruefpunkte fuer Zielumgebung, Nutzerkreis, Datenumfang, Betreiber-/Zugriffskontext und Anonymisierungsnachweis; lokaler Demo-/Rehearsal-Go bleibt getrennt von Pilot-Go und produktionsnah blocked.
-- [docs/product/P11_N3_INTERNER_PILOT_PREFLIGHT_RUNBOOK.md](docs/product/P11_N3_INTERNER_PILOT_PREFLIGHT_RUNBOOK.md) ordnet Starten -> Status pruefen -> UI-Routen -> Reibungslog -> Export-/Auditbelege -> kontrolliert stoppen und konkretisiert fuer Plan 11 die Entscheidungspunkte fuer Nutzerkreis, Betreiber, Trusted-Actor-Kontext und Zugriffskontrollfragen; Auth-/Proxy-/Deployment-/Secret-Umsetzungsideen bleiben Stop-Gates und lokales Rehearsal-Go bleibt kein Pilot-/Auth-Go.
-- [docs/product/P12_N2_MANAGEMENT_GO_NO_GO_ENTSCHEIDUNGSPAKET.md](docs/product/P12_N2_MANAGEMENT_GO_NO_GO_ENTSCHEIDUNGSPAKET.md) verdichtet Plan-11-Preflight, B24, PA7/PA8/PA9, B8/B9, P6/P7/P9/C8 und R4 in ein nicht-sensitives Management-Go/No-Go-Paket fuer Nutzerkreis, Betreiber, Zugriffskontext, Datenrahmen, Nachweis, Stop-Verantwortung und finale Bewertung; lokaler Preflight bleibt `go`, echter begrenzter Pilot bleibt bis zur bewussten Entscheidung `not assessed`, echte/produktive Daten bleiben `blocked`.
-- [docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md](docs/product/C8_INTERNER_DEMO_DURCHLAUF_ABNAHMEWEG.md) beschreibt den reproduzierbaren internen Demo-/Abnahmeweg ueber bestehende lokale Scripts, UI-Routen, Angebot-zu-Produktion-Handoff, Upload-/Warnanker, Exporte und Full Gates; er ist keine Produktionsfreigabe und keine rechtssichere Audit- oder Compliance-Aussage.
-- [docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md](docs/product/C9_FEHLUPLOAD_ARCHIV_LOESCH_ENTSCHEIDUNG.md) dokumentiert den nach Alexander-Go umgesetzten Fehlupload-Pfad: `POST /v1/intake/requests/:requestId/archive` markiert interne/synthetische Intake-Kontexte per Soft-Archiv; `/produktion` bietet dafuer beim fokussierten Intake-Kontext `Fehlupload archivieren`, filtert aktive Intake-Listen und haelt Detail-/Audit-Nachvollziehbarkeit ohne Hard-Delete, Retention-Freigabe oder echte-Daten-Go.
-
-Die Web-App bietet Exportlinks fuer:
-
-- Angebots-HTML
-- Produktionsblatt-HTML
-- Einkaufslisten-CSV
-- einen sichtbaren Audit-Trail der letzten Operator-Aktionen
-
-Die Rezeptbibliothek kann jetzt von beiden Agenten aus erweitert werden:
-
-- `POST /v1/offers/recipes/upload` fuer Datei-Uploads ueber den Angebotsagenten
-- `POST /v1/production/recipes/upload` fuer Datei-Uploads ueber den Produktionsagenten
-- beide Pfade schreiben in dieselbe persistierte Rezeptbibliothek
-- `.pages`-Rezeptdateien werden beim Import jetzt ueber Quick-Look-Preview-PDFs textlich ausgelesen
-- fuer Tests und interne Automationen existieren zusaetzlich die JSON-Endpunkte `.../recipes/import-text`
-- `PATCH /v1/offers/recipes/:recipeId/review` und `PATCH /v1/production/recipes/:recipeId/review` erlauben Freigabe, Verifizierung oder Ablehnung
-- `review_required` und `rejected` Rezepte werden nicht still weiter als interne Kandidaten verwendet
-
-Fuer einen Bulk-Import eures bestehenden Catering-Rezeptbestands:
-
-```bash
-npm run import:recipes:caterings -- "/Users/alexandersmyslowski/Library/Mobile Documents/com~apple~CloudDocs/Dateien/THE ONE von Alexander/Buchhaltung/Caterings"
-```
-
-Der Import scannt bevorzugt Rezeptdateien in `Rezepte`-Ordnern, bevorzugt PDF vor `.pages`, schreibt in dieselbe persistierte Rezeptbibliothek und verbessert dadurch direkt die internen Treffer fuer Agent 2.
-
-Fuer frische Deployments stehen ausserdem Admin-Endpunkte bereit:
-
-- `GET /health` auf Intake, Offer, Production und Export
-- `POST /v1/intake/seed-demo`
-- `POST /v1/offers/seed-demo`
-- `POST /v1/production/seed-demo`
-- `GET /v1/production/audit/events?limit=30` fuer den gemeinsamen Audit-Feed
-
-Operator-Namen koennen im lokalen Dev-/Testbetrieb weiterhin ueber den Header `x-actor-name` mitgegeben werden.
-Sobald `CATERING_TRUSTED_ACTOR_SECRET` gesetzt ist, zaehlt `x-actor-name` nicht mehr als Sicherheitskontext: Services akzeptieren Rollen dann nur aus dem Trusted-Proxy-Kontext `x-catering-actor-name` plus passendem `x-catering-trusted-secret`.
-Die Backoffice-UI speichert den lokalen Operatornamen weiterhin lokal und sendet ihn bei mutierenden Dev-/Test-Aktionen automatisch mit; produktionsnah muss der Reverse Proxy die Trusted-Header setzen.
-Die verbindlichen Proxy-/Deployment-Annahmen fuer Header-Stripping, Trusted-Header-Injektion, Secret-Setzung und Health-Grenzen sind in [docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md](docs/architecture/PA9_PROXY_DEPLOYMENT_READINESS_ADR.md) dokumentiert.
-Echte Login-, OIDC-/SSO- und Session-Mechanik bleibt bewusst offen und ist nicht Teil dieses Hardening-Blocks.
-
-Die Web-App nutzt diese Pfade jetzt direkt fuer Service-Status und Demo-Befuellung.
-Zusatzlich kann sie nun PDF-, TXT-, MD- und E-Mail-Dateien ueber den Intake-Pfad hochladen und daraus direkt `AcceptedEventSpec`-Datensaetze erzeugen.
-Dokument-Uploads sind bewusst limitiert: Intake akzeptiert maximal 25 MB pro Datei und bis zu 3 Dateien pro Multipart-Request; Rezeptuploads in Angebot und Produktion akzeptieren maximal 5 MB und genau den vorhandenen Dokumentkorridor PDF/TXT/MD/EML/Pages mit passender MIME-/Extension-Kombination. Andere Dateitypen werden kontrolliert abgelehnt.
-Angebotsvarianten koennen ausserdem direkt aus der UI in operative `AcceptedEventSpec`-Datensaetze promoted werden.
-Unvollstaendige `AcceptedEventSpec`-Datensaetze lassen sich im Intake-Bereich nun direkt im Backoffice nachbearbeiten und erneut validieren.
-Zusatzlich gibt es jetzt einen strukturierten manuellen Intake-Pfad, der ohne Freitext direkt ein `AcceptedEventSpec` aus Formularfeldern erzeugt.
-Die Web-App zeigt ausserdem Detailansichten fuer Angebotsentwuerfe und Produktionsplaene, damit operative Inhalte direkt lesbar sind.
-Bei Produktionslaeufen ist nun auch eine Suchspur je Gericht sichtbar: interne Kandidaten, ausgefuehrte Websuchen und Verwerfungsgruende werden direkt an der Rezeptauswahl angezeigt.
-
-## Docker / Hetzner-MVP
-
-Fuer einen zentralen Serverbetrieb liegt unter [platform-infra/README.md](platform-infra/README.md) eine Compose-Basis mit:
-
-- PostgreSQL
-- Intake-, Offer-, Production- und Export-Service
-- Caddy-Web-Frontend mit Reverse-Proxy auf die APIs und optionaler automatischer HTTPS-Terminierung
-
-Start:
-
-```bash
-cd platform-infra
-cp .env.example .env
-docker compose up --build -d
-```
-
-Fuer eine echte Hetzner-Domain wird in `platform-infra/.env` z. B. gesetzt:
-
-```bash
-CATERING_SITE_ADDRESS=app.example.com
-CADDY_EMAIL=ops@example.com
-HTTP_PORT=80
-HTTPS_PORT=443
-```
-
-Danach ist die Web-App unter `https://app.example.com` vorgesehen.
-Die getrennten Arbeitsflaechen liegen dann unter:
-
-- `https://app.example.com/angebot`
-- `https://app.example.com/produktion`
-
-## Checkpoints
-
-Einen reproduzierbaren Zwischenstand erzeugst du mit:
-
-```bash
-npm run checkpoint -- <kurzname>
-```
-
-Optional direkt mit Push:
-
-```bash
-npm run checkpoint -- <kurzname> --push
-```
-
-## Betrieb und Versionierung
-
-- Deployment-Empfehlung fuer den MVP: Hetzner-VM als interne Plattform mit HTTPS-Reverse-Proxy, Web-App fuer Mitarbeiter und getrennten API-Services.
-- Zugriff fuer Angebots-Ersteller und Kuechenplanung erfolgt ueber die interne Web-App, nicht direkt per Shell auf dem Server.
-- Intake-, Angebots-, Produktions- und Rezeptdaten werden im MVP entweder dateibasiert oder ueber PostgreSQL persistiert und ueberstehen Server-Neustarts.
-- Nutzeraktionen aus Intake, Angebot, Produktion und Rezept-Review landen in einem gemeinsamen Audit-Log und sind in der Web-App sichtbar.
-- GitHub- und Checkpoint-Strategie siehe [docs/deployment-and-versioning.md](docs/deployment-and-versioning.md).
+| Befehl | Zweck |
+| --- | --- |
+| `npm run llm:synthetic-live:preflight` | prueft lokale Env-, Flag- und Fixture-Voraussetzungen. |
+| `npm run llm:synthetic-live:probe` | fuehrt den synthetischen Clarification-Probe-Lauf aus. |
+| `npm run llm:synthetic-live:probe:strict` | bricht bei Probe-Fehler oder Eval-Drift hart ab. |
+| `npm run llm:synthetic-live:check` | buendelt Preflight und Strict-Probe. |
+| `npm run llm:synthetic-live:probe:mini-pilot` | fuehrt den guarded Mini-Pilot-Probe aus. |
+| `npm run llm:synthetic-live:check:mini-pilot` | buendelt Mini-Pilot-Preflight und guarded Probe. |

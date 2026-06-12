@@ -361,7 +361,7 @@ describe("UI critical path rehearsal", () => {
       expect(offerText).toContain(offerDraft.draftId);
       expect(offerText).toContain("42 Personen");
       expect(offerText).toContain("Export: Angebots-HTML");
-      expect(offerText).toContain("Entwurfs-Spec");
+      expect(offerText).toContain("Entwurfs-Spezifikation");
       expect(offerText).toContain("manual_input");
       expect(offerText).toContain("Grenze: nur interne Demo- oder Testdaten");
       expect(findAnchorByText("Angebot exportieren").getAttribute("href")).toBe(

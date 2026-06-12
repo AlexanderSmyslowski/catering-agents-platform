@@ -105,6 +105,6 @@ B14 fuehrt ausdruecklich nicht ein:
 
 ## 9. Abnahmehinweis
 
-B14 ist erfuellt, wenn dieser Gate-Anker im Repo auffindbar ist, B10, B11, B12 und TESTING auf `docs/architecture/B14_SANDBOX_WORKER_AV_GATE.md` verweisen und `tests/b14-sandbox-worker-av-gate-contract.test.ts` gruen ist.
+B14 ist erfuellt, wenn dieser Gate-Anker im Repo auffindbar ist, B10, B11, B12 und TESTING auf `docs/architecture/B14_SANDBOX_WORKER_AV_GATE.md` verweisen und `entfernter Doku-Contract-Test` gruen ist.
 
 Die technischen Standard-Gates bleiben unveraendert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

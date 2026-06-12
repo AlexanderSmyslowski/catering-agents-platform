@@ -95,5 +95,5 @@ B33 ist erfuellt, wenn:
 - das Ergebnis `decision needed` nicht als Produktabbruch und nicht als Go missverstanden werden kann,
 - die offenen Mussgruppen aus B32 sichtbar bleiben,
 - der naechste Schritt vor Serverzugriff/Secrets/echten Daten liegt,
-- `tests/b33-option-b-followup-decision-contract.test.ts` gruen ist,
+- `entfernter Doku-Contract-Test` gruen ist,
 - die Standard-Gates gruen sind: `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check`.

@@ -136,12 +136,19 @@ function renderDraftSummary(draft?: Record<string, unknown>): string {
   return `${String(draft.eventSummary ?? "Unbenannter Entwurf")} · ${variants} Varianten · ${questions} offene Punkte`;
 }
 
+function renderDraftFocusLabel(draft?: Record<string, unknown>): string {
+  if (!draft) {
+    return "kein Entwurf";
+  }
+  return String(draft.eventSummary ?? "Unbenannter Entwurf");
+}
+
 function renderOfferNextStep(draft?: Record<string, unknown>): string {
   if (!draft) {
     return "Nächster Angebotsschritt: Anfrage einfügen oder Demo über Start nutzen, dann Entwurf prüfen.";
   }
 
-  return `Nächster Angebotsschritt: Entwurf ${getDraftId(draft)} prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.`;
+  return "Nächster Angebotsschritt: Entwurf prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.";
 }
 
 function getSpecRequestId(spec: Record<string, unknown>): string {
@@ -187,9 +194,9 @@ export function OfferConversationalWorkbench({
   const focusedDraft = selectedDraft ?? activeDraft;
   const miniPilotCard = buildOfferMiniPilotCardState();
   const focusedDraftId = getDraftId(focusedDraft);
+  const focusedDraftLabel = renderDraftFocusLabel(focusedDraft);
   const focusedDraftSpec = getDraftProposedSpec(focusedDraft);
   const focusedDraftSource = formatDraftSourceLineage(focusedDraftSpec);
-  const summarySourceLabel = focusedDraftSource ?? latestSourceLabel;
   const summaryActiveSpec = focusedDraftSpec ?? activeSpec;
   const focusedVariants = getDraftVariants(focusedDraft);
   const focusedOpenQuestions = Array.isArray(focusedDraft?.openQuestions)
@@ -216,14 +223,13 @@ export function OfferConversationalWorkbench({
           <button disabled={submitting} onClick={() => void submitOfferText()}>
             Angebotsentwurf erzeugen
           </button>
-          <span>{focusedDraft ? `Aktueller Fokus: ${focusedDraftId}` : "Nächster Schritt: Anfrage einfügen"}</span>
+          <span>{focusedDraft ? `Aktueller Fokus: ${focusedDraftLabel}` : "Nächster Schritt: Anfrage einfügen"}</span>
         </div>
       </article>
 
       <aside className="offer-calm-summary" aria-label="Kompakte Ergebniszusammenfassung">
         <p className="eyebrow">Zusammenfassung</p>
         <strong>{renderDraftSummary(focusedDraft)}</strong>
-        <p className="helper-text">Quelle: {summarySourceLabel}</p>
         <p className="helper-text">Interner Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.</p>
         <p className="helper-text">
           Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.
@@ -234,13 +240,26 @@ export function OfferConversationalWorkbench({
         <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
         <p className="helper-text">
           Übergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktive Spezifikation:{" "}
-          {summaryActiveSpec ? `${String(summaryActiveSpec.specId ?? "-")} (${getReadinessLabel(summaryActiveSpec)})` : "keine"}
+          {summaryActiveSpec ? `${getSpecLabel(summaryActiveSpec)} (${getReadinessLabel(summaryActiveSpec)})` : "keine"}
         </p>
         <p className="helper-text">
           {focusedDraft
-            ? `Export: Angebots-HTML für ${focusedDraftId} bereit`
+            ? "Export: Angebots-HTML für den aktuellen Entwurf bereit"
             : "Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden."}
         </p>
+        {focusedDraft || summaryActiveSpec || focusedDraftSource || latestSourceLabel ? (
+          <details className="technical-context-details">
+            <summary>Technische Details</summary>
+            <p className="helper-text">Entwurf: {focusedDraftId}</p>
+            {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
+            <p className="helper-text">Quelle: {focusedDraftSource ?? latestSourceLabel}</p>
+            {summaryActiveSpec ? (
+              <p className="helper-text">
+                Aktive Spezifikation: {String(summaryActiveSpec.specId ?? "-")} ({getReadinessLabel(summaryActiveSpec)})
+              </p>
+            ) : null}
+          </details>
+        ) : null}
         {showMiniPilotPanel ? (
           <>
             <div className="search-trace" aria-label="Interner Draft-Pilot">
@@ -280,10 +299,20 @@ export function OfferConversationalWorkbench({
               </p>
               {focusedDraftSpec ? (
                 <p className="helper-text">
-                  Entwurfs-Spec: {String(focusedDraftSpec.specId ?? "-")} ({getReadinessLabel(focusedDraftSpec)})
+                  Entwurfs-Spezifikation: {getSpecLabel(focusedDraftSpec)} ({getReadinessLabel(focusedDraftSpec)})
                 </p>
               ) : null}
-              {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
+              {focusedDraftSpec || focusedDraftSource ? (
+                <details className="technical-context-details">
+                  <summary>Technische Details</summary>
+                  {focusedDraftSpec ? (
+                    <p className="helper-text">
+                      Entwurfs-Spec: {String(focusedDraftSpec.specId ?? "-")} ({getReadinessLabel(focusedDraftSpec)})
+                    </p>
+                  ) : null}
+                  {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
+                </details>
+              ) : null}
               {focusedOpenQuestions.length > 0 ? (
                 <ul className="item-list compact">
                   {focusedOpenQuestions.map((question) => (
@@ -437,8 +466,11 @@ export function OfferConversationalWorkbench({
                 <div>
                   <strong>{getSpecLabel(spec)}</strong>
                   <span>Status: {getReadinessLabel(spec)}</span>
-                  <span>specId: {String(spec.specId ?? "-")}</span>
-                  <span>requestId: {getSpecRequestId(spec)}</span>
+                  <details className="technical-context-details">
+                    <summary>Technische Details</summary>
+                    <span>specId: {String(spec.specId ?? "-")}</span>
+                    <span>requestId: {getSpecRequestId(spec)}</span>
+                  </details>
                 </div>
                 <div className="quiet-action-row">
                   <button className="secondary-button" disabled={submitting} onClick={() => specEditActions.beginSpecEdit(spec)}>

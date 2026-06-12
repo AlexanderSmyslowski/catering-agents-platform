@@ -1,0 +1,198 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-grillgemuese-raukepesto-schafskaesequader",
+  "name": "Grillgemüse | Raukepesto | Schafskäsequader",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-01-zucchini",
+      "name": "Zucchini",
+      "quantity": {
+        "amount": 850,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-02-aubergine",
+      "name": "Aubergine",
+      "quantity": {
+        "amount": 700,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-03-paprika-gemischt",
+      "name": "Paprika gemischt",
+      "quantity": {
+        "amount": 800,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-04-fenchel",
+      "name": "Fenchel",
+      "quantity": {
+        "amount": 400,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-05-rote-zwiebeln",
+      "name": "rote Zwiebeln",
+      "quantity": {
+        "amount": 300,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-06-olivenol-mild",
+      "name": "Olivenöl mild",
+      "quantity": {
+        "amount": 180,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-07-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 35,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-08-pfeffer",
+      "name": "Pfeffer",
+      "quantity": {
+        "amount": 6,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-09-rauke-rucola",
+      "name": "Rauke / Rucola",
+      "quantity": {
+        "amount": 220,
+        "unit": "g"
+      },
+      "group": "kraeuter_salate"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-10-olivenol-mild",
+      "name": "Olivenöl mild",
+      "quantity": {
+        "amount": 220,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-11-sonnenblumenkerne",
+      "name": "Sonnenblumenkerne",
+      "quantity": {
+        "amount": 60,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-12-knoblauch",
+      "name": "Knoblauch",
+      "quantity": {
+        "amount": 10,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-13-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 30,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-14-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 8,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-grillgemuese-raukepesto-schafskaesequader-15-schafskase-feta",
+      "name": "Schafskäse / Feta",
+      "quantity": {
+        "amount": 810,
+        "unit": "g"
+      },
+      "group": "kaese"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Gemüse waschen, putzen und gleichmäßig schneiden."
+    },
+    {
+      "index": 2,
+      "instruction": "Mit Olivenöl, Salz und Pfeffer marinieren."
+    },
+    {
+      "index": 3,
+      "instruction": "Auf Grillplatte oder im heißen Ofen rösten, bis Röstaromen entstehen, aber das Gemüse noch Struktur hat."
+    },
+    {
+      "index": 4,
+      "instruction": "Gemüse auf Blechen auskühlen lassen und abtropfen."
+    },
+    {
+      "index": 5,
+      "instruction": "Sonnenblumenkerne rösten und abkühlen lassen."
+    },
+    {
+      "index": 6,
+      "instruction": "Rauke, Öl, Sonnenblumenkerne, Knoblauch, Zitronensaft und Salz kurz zu Pesto mixen."
+    },
+    {
+      "index": 7,
+      "instruction": "Schafskäse in 45 gleichmäßige Quader schneiden."
+    },
+    {
+      "index": 8,
+      "instruction": "Gemüse portionieren, Pesto setzen, Schafskäsequader sichtbar auflegen."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1.13,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

@@ -102,5 +102,5 @@ B35 ist erfuellt, wenn:
 - die erlaubten Vorbereitungspunkte von den verbotenen Umsetzungs-/Betriebspunkten getrennt sind,
 - Backup-Retention als offene Folgeentscheidung sichtbar bleibt,
 - echte Uploads bis B14 `blocked until B14 go` bleiben,
-- `tests/b35-option-b-preparation-boundary-contract.test.ts` gruen ist,
+- `entfernter Doku-Contract-Test` gruen ist,
 - die Standard-Gates gruen sind: `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check`.

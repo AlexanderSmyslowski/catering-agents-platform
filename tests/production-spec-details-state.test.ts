@@ -35,7 +35,7 @@ describe("production spec details state", () => {
         {
           key: "starter",
           label: "Vorspeise",
-          detailLabel: "klassisch · Eigenproduktion"
+          detailLabel: "Klassisch · Eigenproduktion"
         }
       ]
     });

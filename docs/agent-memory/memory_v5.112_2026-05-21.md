@@ -613,5 +613,5 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Der Korridor ist kein rechtssicherer Audit und keine Vollständigkeitsgarantie für spaetere LLM-/Rezept-/Allergen-Outputs; keine neue Runtime-Funktion, API, Persistenz, LLM-/Tool-Use-/PDF-Parser-/OCR-/Rezept-/Allergenlogik wurde eingefuehrt.
 
 ### 5.112 - 2026-05-21
-- PA6 Interne Beta-/Abnahme-Readiness ist als Doku-only-Slice in `docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md` umgesetzt und mit `tests/pa6-beta-readiness-summary.test.ts` gegen die zentralen Readiness-/Gate-Aussagen abgesichert.
+- PA6 Interne Beta-/Abnahme-Readiness ist als Doku-only-Slice in `docs/product/PA6_INTERNAL_BETA_READINESS_SUMMARY.md` umgesetzt und mit `entfernter Doku-Contract-Test` gegen die zentralen Readiness-/Gate-Aussagen abgesichert.
 - Der Slice fuehrt keine neue Runtime-Funktion, UI, API, Persistenz, Monitoring-Engine, LLM-/Tool-Use-/PDF-Parser-/OCR-/Rezept-/Allergenlogik ein; externe oder echte produktive Nutzung bleibt ohne OIDC/SSO, read-path Auth, Sandbox/AV, Retention/PII und Human-Approval-/Architekturentscheidungen nicht freigegeben.

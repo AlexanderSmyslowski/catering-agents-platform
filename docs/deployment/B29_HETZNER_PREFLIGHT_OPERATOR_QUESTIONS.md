@@ -90,6 +90,6 @@ B29 führt ausdrücklich nicht ein:
 
 ## 7. Abnahmehinweis
 
-B29 ist erfüllt, wenn dieses Operatorfragenpaket im Repo auffindbar bleibt, TESTING auf den B29-Vertragstest verweist und `tests/b29-hetzner-preflight-operator-questions-contract.test.ts` grün ist.
+B29 ist erfüllt, wenn dieses Operatorfragenpaket im Repo auffindbar bleibt, TESTING auf den B29-Vertragstest verweist und `entfernter Doku-Contract-Test` grün ist.
 
 Die technischen Standard-Gates bleiben unverändert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

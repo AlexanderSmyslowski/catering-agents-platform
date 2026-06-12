@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-kaesegebaeck-zum-wein",
+  "name": "Käsegebäck zum Wein",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-kaesegebaeck-zum-wein-01-kasegeback-fertig-zugekauft",
+      "name": "Käsegebäck, fertig zugekauft",
+      "quantity": {
+        "amount": 1125,
+        "unit": "g"
+      },
+      "group": "backwaren_zukauf"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Ware annehmen, Gebinde und MHD prüfen."
+    },
+    {
+      "index": 2,
+      "instruction": "Trocken und luftdicht lagern."
+    },
+    {
+      "index": 3,
+      "instruction": "Kurz vor Welcome auf Etagere oder in Schalen legen."
+    },
+    {
+      "index": 4,
+      "instruction": "Nicht neben feuchte Komponenten stellen."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

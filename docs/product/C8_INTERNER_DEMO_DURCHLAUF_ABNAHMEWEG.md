@@ -219,4 +219,4 @@ Nach einem internen Demo-Durchlauf genuegt ein knapper Vermerk mit:
 - bekannte Blocker oder Risiken,
 - klare Aussage, dass keine externe/produktive Freigabe behauptet wird.
 
-Fuer B12 wird dieser Vermerk durch `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` konkretisiert und durch `tests/b12-local-demo-result-note-contract.test.ts` als Doku-Vertrag abgesichert.
+Fuer B12 wird dieser Vermerk durch `docs/product/B12_LOCAL_DEMO_RESULT_NOTE.md` konkretisiert und durch `entfernter Doku-Contract-Test` als Doku-Vertrag abgesichert.

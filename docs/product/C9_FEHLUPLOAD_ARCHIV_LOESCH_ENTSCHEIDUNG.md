@@ -256,6 +256,6 @@ C9 ist erfuellt, wenn:
 - Option A, Option B und Option C entscheidungsreif verglichen sind;
 - Option B als Empfehlung und Option A als sicherer Default festgehalten sind;
 - C9 nicht als Hard-Delete-, Retention-, echte-Daten-, Sandbox-/AV- oder Deployment-Go gelesen werden kann;
-- `tests/c9-fehlupload-archive-delete-decision-contract.test.ts`, `tests/intake-soft-archive.test.ts` und `tests/backoffice-production-acceptance-smoke.test.ts` gruen sind;
+- `entfernter Doku-Contract-Test`, `tests/intake-soft-archive.test.ts` und `tests/backoffice-production-acceptance-smoke.test.ts` gruen sind;
 - README, TESTING und memory fortgeschrieben sind;
 - Full Gates weiterhin gruen bleiben.

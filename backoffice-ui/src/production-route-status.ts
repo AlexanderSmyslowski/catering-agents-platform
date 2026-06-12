@@ -1,4 +1,4 @@
-import { translateServiceForm } from "./production-language.js";
+import { translateEventType, translateServiceForm } from "./production-language.js";
 
 export type WorkbenchSpecFact = {
   label: string;
@@ -41,15 +41,19 @@ export function formatProductionPlanStatusLabel(selectedPlan?: Record<string, un
   return selectedPlan ? formatProductionReadinessLabel(selectedPlan) : "offen";
 }
 
+function formatPlanCount(count: number): string {
+  return count === 1 ? "1 Plan" : `${count} Pläne`;
+}
+
 export function formatProductionObjectStatusLabel(input: {
   currentSpecPlanCount: number;
   selectedPlan?: Record<string, unknown>;
 }): string {
   if (input.selectedPlan) {
-    return `${input.currentSpecPlanCount} Plan(e) · ${formatProductionReadinessLabel(input.selectedPlan)}`;
+    return `${formatPlanCount(input.currentSpecPlanCount)} · ${formatProductionReadinessLabel(input.selectedPlan)}`;
   }
 
-  return input.currentSpecPlanCount > 0 ? `${input.currentSpecPlanCount} Plan(e)` : "noch kein Plan";
+  return input.currentSpecPlanCount > 0 ? formatPlanCount(input.currentSpecPlanCount) : "noch kein Plan";
 }
 
 export function formatStructuredProductionAnswerSummary(spec?: Record<string, unknown>): string | undefined {
@@ -62,7 +66,7 @@ export function formatStructuredProductionAnswerSummary(spec?: Record<string, un
   const servicePlan = asRecord(spec.servicePlan);
   const parts = [
     readStringOrNumber(event, ["type"])
-      ? `Veranstaltung: ${String(readStringOrNumber(event, ["type"]))}`
+      ? `Veranstaltung: ${translateEventType(String(readStringOrNumber(event, ["type"])))}`
       : undefined,
     readStringOrNumber(event, ["date"]) ? `Datum: ${String(readStringOrNumber(event, ["date"]))}` : undefined,
     readStringOrNumber(attendees, ["expected"])

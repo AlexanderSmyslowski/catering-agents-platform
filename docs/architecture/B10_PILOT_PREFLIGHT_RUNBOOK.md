@@ -92,6 +92,6 @@ B10 fuehrt ausdruecklich nicht ein:
 
 ## Abnahmehinweis
 
-B10 ist erfuellt, wenn dieses Runbook im Repo auffindbar bleibt, B9/TESTING auf den Runbookanker verweisen und der Marker-Test `tests/b10-pilot-preflight-runbook-contract.test.ts` gruen ist.
+B10 ist erfuellt, wenn dieses Runbook im Repo auffindbar bleibt, B9/TESTING auf den Runbookanker verweisen und der Marker-Test `entfernter Doku-Contract-Test` gruen ist.
 
 Die technischen Standard-Gates bleiben unveraendert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

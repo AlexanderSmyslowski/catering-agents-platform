@@ -138,4 +138,4 @@ Ein konkreter Arbeitsbericht zu B12 enthaelt knapp:
 
 ## 10. Abnahmehinweis
 
-B12 ist erfuellt, wenn dieser Ergebnisvermerk im Repo auffindbar ist, B11, C8 und TESTING auf den B12-Anker verweisen und `tests/b12-local-demo-result-note-contract.test.ts` gruen ist.
+B12 ist erfuellt, wenn dieser Ergebnisvermerk im Repo auffindbar ist, B11, C8 und TESTING auf den B12-Anker verweisen und `entfernter Doku-Contract-Test` gruen ist.

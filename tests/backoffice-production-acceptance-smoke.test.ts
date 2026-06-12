@@ -724,7 +724,8 @@ describe("backoffice production acceptance smoke", () => {
   it("shows a blocking fallback plan and the linked intake request on the production route", async () => {
     installProductionAcceptanceMocks();
 
-    const content = await renderProductionRoute();
+    const rendered = await renderProductionRouteMarkup();
+    const content = rendered.text;
 
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsagent-Chat");
@@ -740,7 +741,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
     expect(content).toContain("Datei hier ablegen");
     expect(content).toContain("Downloadbereich");
-    expect(content).toContain("production-calm-summary");
+    expect(content).toContain("Aktiver Produktionsauftrag");
+    expect(rendered.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
     expect(content).toContain("Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.");
     expect(content).toContain("Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.");
     expect(content).toContain("Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.");
@@ -1344,7 +1346,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).toContain("Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.");
     expect(content).not.toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
-    expect(content).toContain("Produktionsergebnis: 1 Plan(e) · vollständig");
+    expect(content).toContain("Produktionsergebnis: 1 Plan · vollständig");
   });
 
   it("shows a synthetic Quick Lunch plan with internal recipe hits and baker purchase as one current result", async () => {

@@ -4,6 +4,7 @@ import {
 } from "./production-route-state.js";
 import {
   translateMenuCategory,
+  translateEventType,
   translateProductionMode,
   translateServiceForm
 } from "./production-language.js";
@@ -41,7 +42,7 @@ export function buildProductionSpecDetailsState(
 
   return {
     specIdLabel: `specId: ${String(spec.specId ?? "-")}`,
-    eventLabel: `Eventtyp: ${String(event?.type ?? servicePlan?.eventType ?? "-")} · ${formatProductionTimingWindow(spec)}`,
+    eventLabel: `Eventtyp: ${translateEventType(String(event?.type ?? servicePlan?.eventType ?? ""))} · ${formatProductionTimingWindow(spec)}`,
     summaryLabel: `Teilnehmerzahl: ${String(attendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
       String(servicePlan?.serviceForm ?? "")
     )} · Readiness: ${translateReadiness(String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "-"))}`,

@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven",
+  "name": "Tortilla-Tarte | getrocknete Tomaten & Oliven",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-01-mini-tarteboden-gekuhlt",
+      "name": "Mini-Tarteböden, gekühlt",
+      "quantity": {
+        "amount": 45,
+        "unit": "Stück"
+      },
+      "group": "backwaren_zukauf"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-02-frische-eier",
+      "name": "frische Eier",
+      "quantity": {
+        "amount": 12,
+        "unit": "Stück"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-03-festkochende-kartoffeln-roh",
+      "name": "festkochende Kartoffeln, roh",
+      "quantity": {
+        "amount": 550,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-04-getrocknete-tomaten-abgetropft",
+      "name": "getrocknete Tomaten, abgetropft",
+      "quantity": {
+        "amount": 200,
+        "unit": "g"
+      },
+      "group": "feinkost_antipasti"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-05-oliven-entsteint",
+      "name": "Oliven, entsteint",
+      "quantity": {
+        "amount": 180,
+        "unit": "g"
+      },
+      "group": "feinkost_antipasti"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-06-zwiebeln-gelb",
+      "name": "Zwiebeln gelb",
+      "quantity": {
+        "amount": 100,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-07-sahne",
+      "name": "Sahne",
+      "quantity": {
+        "amount": 80,
+        "unit": "ml"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-08-olivenol-mild",
+      "name": "Olivenöl mild",
+      "quantity": {
+        "amount": 40,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-09-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 15,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-tortilla-tarte-getrocknete-tomaten-oliven-10-pfeffer",
+      "name": "Pfeffer",
+      "quantity": {
+        "amount": 4,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Tarteböden prüfen und gekühlt bereitstellen."
+    },
+    {
+      "index": 2,
+      "instruction": "Kartoffeln garen, ausdampfen lassen, kalt stellen und fein würfeln."
+    },
+    {
+      "index": 3,
+      "instruction": "Zwiebelwürfel in Olivenöl glasig anschwitzen und abkühlen lassen."
+    },
+    {
+      "index": 4,
+      "instruction": "Getrocknete Tomaten und Oliven fein schneiden."
+    },
+    {
+      "index": 5,
+      "instruction": "Eier mit Sahne, Salz und Pfeffer verquirlen."
+    },
+    {
+      "index": 6,
+      "instruction": "Kartoffeln, Tomaten, Oliven und Zwiebeln in die Eiermasse geben."
+    },
+    {
+      "index": 7,
+      "instruction": "Tarteböden gleichmäßig füllen; nicht überfüllen, damit sie stabil bleiben."
+    },
+    {
+      "index": 8,
+      "instruction": "Backen, bis die Füllung gestockt ist."
+    },
+    {
+      "index": 9,
+      "instruction": "Ausformen/abkühlen und bis Service gekühlt lagern oder lauwarm ausgeben."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1.22,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

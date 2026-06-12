@@ -154,5 +154,5 @@ B32 ist erfuellt, wenn:
 - Alexanders bekannte Option-B-Entscheidungen nicht-sensitiv dokumentiert sind,
 - die Mussgruppen B13, B14, B25-B31, PA9/B9 und P12 weiter fuehrend bleiben,
 - der Gesamtstatus ohne vollstaendige Mussgruppen nicht als Go gelesen werden kann,
-- `tests/b32-option-b-real-data-hetzner-readiness-contract.test.ts` gruen ist,
+- `entfernter Doku-Contract-Test` gruen ist,
 - die Standard-Gates gruen sind: `npm test`, `npm run build`, `npm audit --omit=dev`, `git diff --check`.

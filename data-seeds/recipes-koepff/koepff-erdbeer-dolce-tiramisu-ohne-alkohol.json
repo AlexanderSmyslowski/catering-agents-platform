@@ -1,0 +1,196 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol",
+  "name": "Erdbeer Dolce | Tiramisu ohne Alkohol",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-01-mascarpone",
+      "name": "Mascarpone",
+      "quantity": {
+        "amount": 1500,
+        "unit": "g"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-02-frische-eier",
+      "name": "frische Eier",
+      "quantity": {
+        "amount": 12,
+        "unit": "Stück"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-03-zucker",
+      "name": "Zucker",
+      "quantity": {
+        "amount": 300,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-04-kalte-sahne",
+      "name": "kalte Sahne",
+      "quantity": {
+        "amount": 750,
+        "unit": "ml"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-05-vanillepaste",
+      "name": "Vanillepaste",
+      "quantity": {
+        "amount": 20,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-06-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 2,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-07-bio-zitronenabrieb",
+      "name": "Bio-Zitronenabrieb",
+      "quantity": {
+        "amount": 1,
+        "unit": "Zitrone"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-08-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 20,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-09-frische-erdbeeren",
+      "name": "frische Erdbeeren",
+      "quantity": {
+        "amount": 2400,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-10-puderzucker",
+      "name": "Puderzucker",
+      "quantity": {
+        "amount": 65,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-11-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 40,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-12-loffelbiskuit",
+      "name": "Löffelbiskuit",
+      "quantity": {
+        "amount": 850,
+        "unit": "g"
+      },
+      "group": "backwaren_zukauf"
+    },
+    {
+      "ingredientId": "koepff-erdbeer-dolce-tiramisu-ohne-alkohol-13-orangensaft",
+      "name": "Orangensaft",
+      "quantity": {
+        "amount": 600,
+        "unit": "ml"
+      },
+      "group": "getraenke_als_zutat"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Erdbeeren waschen, putzen; ca. 1,7 kg würfeln und mit Puderzucker und Zitronensaft marinieren."
+    },
+    {
+      "index": 2,
+      "instruction": "Ca. 0,5 kg Erdbeeren pürieren; schöne Erdbeeren aus der Gesamtmenge für Dekor zurückhalten."
+    },
+    {
+      "index": 3,
+      "instruction": "Eigelb, Zucker, Vanille, Salz und Zitronenabrieb über dem Wasserbad auf 65-70 °C hell-cremig aufschlagen."
+    },
+    {
+      "index": 4,
+      "instruction": "Vom Wasserbad nehmen und lauwarm weiterschlagen."
+    },
+    {
+      "index": 5,
+      "instruction": "Mascarpone glatt rühren und die Eigelbmasse nach und nach einarbeiten."
+    },
+    {
+      "index": 6,
+      "instruction": "Sahne steif schlagen und vorsichtig unterheben."
+    },
+    {
+      "index": 7,
+      "instruction": "GN 1/1 vorbereiten und erste Lage Löffelbiskuit einlegen."
+    },
+    {
+      "index": 8,
+      "instruction": "Mit Orangensaft beträufeln; nicht schwimmen lassen."
+    },
+    {
+      "index": 9,
+      "instruction": "Hälfte der Creme auftragen, Erdbeerwürfel und etwas Püree verteilen."
+    },
+    {
+      "index": 10,
+      "instruction": "Zweite Biskuitlage auflegen, leicht tränken und restliche Creme glatt auftragen."
+    },
+    {
+      "index": 11,
+      "instruction": "Abgedeckt bei 4-6 °C mindestens 4 Stunden, besser über Nacht kühlen."
+    },
+    {
+      "index": 12,
+      "instruction": "Kurz vor Ausgabe dekorieren und in 45 Buffetportionen portionieren."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

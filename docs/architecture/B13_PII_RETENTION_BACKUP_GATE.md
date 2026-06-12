@@ -90,6 +90,6 @@ B13 fuehrt ausdruecklich nicht ein:
 
 ## 8. Abnahmehinweis
 
-B13 ist erfuellt, wenn dieser Gate-Anker im Repo auffindbar ist, B10, B12 und TESTING auf `docs/architecture/B13_PII_RETENTION_BACKUP_GATE.md` verweisen und `tests/b13-pii-retention-backup-gate-contract.test.ts` gruen ist.
+B13 ist erfuellt, wenn dieser Gate-Anker im Repo auffindbar ist, B10, B12 und TESTING auf `docs/architecture/B13_PII_RETENTION_BACKUP_GATE.md` verweisen und `entfernter Doku-Contract-Test` gruen ist.
 
 Die technischen Standard-Gates bleiben unveraendert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.

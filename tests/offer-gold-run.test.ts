@@ -92,7 +92,7 @@ describe("offer gold run", () => {
         currency: "EUR"
       }
     });
-    expect(draft.pricingSummary.notes?.join(" ")).toContain("pruefpflichtig");
+    expect(draft.pricingSummary.notes?.join(" ")).toContain("prüfpflichtig");
 
     expect(draft.reviewStatus).toEqual({
       priceReviewStatus: "review_required",
@@ -110,16 +110,16 @@ describe("offer gold run", () => {
       expect.arrayContaining(["Lunch-Buffet kompakt", "Salate", "vegetarische/vegane Komponente"])
     );
     expect(draft.proposedEventSpec.productionConstraints?.join(" ")).toContain(
-      "vor Produktion pruefen"
+      "vor Produktion prüfen"
     );
 
     expect(draft.customerFacingText).toContain("Business Lunch Basic");
     expect(draft.customerFacingText).toContain("Arbeitsband: 16.00-24.00 EUR p.P.");
     expect(draft.customerFacingText).not.toContain("Portfolio-Paket");
-    expect(draft.customerFacingText).not.toContain("Pruefstatus");
+    expect(draft.customerFacingText).not.toContain("Prüfstatus");
     expect(draft.customerFacingText).not.toContain("Publish-Freigabe");
     expect(draft.internalWorkingText).toContain("Portfolio-Paket: business_lunch_basic");
-    expect(draft.internalWorkingText).toContain("Pruefstatus Preis: review_required");
+    expect(draft.internalWorkingText).toContain("Prüfstatus Preis: review_required");
     expect(draft.internalWorkingText).toContain("Publish-Freigabe: false");
 
     expect(draft.productionHandoff).toMatchObject({

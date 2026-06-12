@@ -15,6 +15,8 @@
     "test": "vitest run",
     "checkpoint": "bash ./scripts/create-checkpoint.sh",
     "import:recipes:caterings": "tsx scripts/import-catering-recipes.ts",
+    "import:recipes:koepff": "tsx scripts/import-koepff-recipes.ts",
+    "import:offer-portfolio": "tsx scripts/import-offer-portfolio.ts",
     "local:start": "bash ./scripts/start-local-stack.sh --seed-demo",
     "local:start:fresh": "bash ./scripts/start-fresh-local-stack.sh",
     "local:stop": "bash ./scripts/stop-local-stack.sh",

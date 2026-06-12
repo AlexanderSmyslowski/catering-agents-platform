@@ -135,6 +135,6 @@ B24 ist ein Entscheidungsanker, kein Implementierungsauftrag für Infrastruktur,
 
 ## 9. Abnahmehinweis
 
-B24 ist erfüllt, wenn dieser Entscheidungsanker im Repo auffindbar bleibt, TESTING auf den B24-Vertragstest verweist und `tests/b24-pilot-corridor-decision-contract.test.ts` grün ist.
+B24 ist erfüllt, wenn dieser Entscheidungsanker im Repo auffindbar bleibt, TESTING auf den B24-Vertragstest verweist und `entfernter Doku-Contract-Test` grün ist.
 
 Die technischen Standard-Gates bleiben unverändert: `npm test`, `npm run build`, `npm audit --omit=dev` und `git diff --check`.
