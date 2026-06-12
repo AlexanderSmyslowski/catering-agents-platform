@@ -1,0 +1,232 @@
+[
+  {
+    "id": "uni_conference_drinks_allday",
+    "name": "Conference-Getränke ganztägig",
+    "price_band_pp": [
+      7,
+      12
+    ],
+    "min_pax": 15,
+    "food_modules": [
+      "Kaffee frisch gebrüht mit Milch-/Zuckerbar",
+      "Ronnefeldt-Tee",
+      "Säfte 0,2l Glas",
+      "Wasser",
+      "Kekse & Saisonobst"
+    ],
+    "service_modules": [
+      "Thermoskannen/Dispenser",
+      "Auf- & Abbau",
+      "ganztägige Verfügbarkeit"
+    ],
+    "event_types": [
+      "Tagung",
+      "Seminar",
+      "Workshop",
+      "Prüfung/Begutachtung"
+    ],
+    "cluster": "Uni-Rahmenvertrag",
+    "source_evidence": {
+      "records_2025_2026": 20,
+      "institute": [
+        "Herzchirurgie",
+        "Studierendenadministration",
+        "Urologie",
+        "Mathematikon",
+        "CAPAS",
+        "HCTS"
+      ]
+    }
+  },
+  {
+    "id": "uni_coffee_breaks",
+    "name": "Kaffeepausen-Paket (Coffee Break I & II)",
+    "price_band_pp": [
+      12.5,
+      19.9
+    ],
+    "min_pax": 15,
+    "food_modules": [
+      "Conference-Getränke (U1 inkludiert)",
+      "vormittags: Viennoiserie/Laugengebäck/Focaccia",
+      "nachmittags: Minisweets/hausgemachte Kuchen",
+      "Saisonobst"
+    ],
+    "service_modules": [
+      "Buffetaufbau Pausenstation",
+      "alternierend bei Mehrtagesveranstaltung"
+    ],
+    "event_types": [
+      "Tagung",
+      "Konferenz",
+      "Vollversammlung"
+    ],
+    "cluster": "Uni-Rahmenvertrag",
+    "source_evidence": {
+      "records_2026": 9,
+      "institute": [
+        "Kirchhoff Physik",
+        "Med. Fakultät Datenethik",
+        "Mathematikon",
+        "Theoretische Physik",
+        "Juristen-Strafrecht",
+        "Office Structures",
+        "Urologie"
+      ]
+    }
+  },
+  {
+    "id": "uni_quick_lunch",
+    "name": "Quick Lunch",
+    "price_band_pp": [
+      6.5,
+      18
+    ],
+    "min_pax": 12,
+    "food_modules": [
+      "Suppen/Eintöpfe/Wraps (Basis)",
+      "Bowls/Salate/Petite Baguettes (Standard)",
+      "vegan/vegetarisch-Quote standardmäßig ~50 %"
+    ],
+    "service_modules": [
+      "Anlieferung & Anrichten",
+      "Buffetinfrastruktur klein"
+    ],
+    "event_types": [
+      "Mittagsseminar",
+      "Besprechung",
+      "Sommerschule"
+    ],
+    "cluster": "Uni-Rahmenvertrag",
+    "source_evidence": {
+      "records_2026": 14,
+      "institute": [
+        "HCTS",
+        "BZH",
+        "Urologie",
+        "Alfred Weber",
+        "ZEGK",
+        "NAR",
+        "Landessternwarte"
+      ]
+    }
+  },
+  {
+    "id": "uni_lunch_buffet_warm",
+    "name": "Lunch-Buffet warm",
+    "price_band_pp": [
+      19,
+      29
+    ],
+    "min_pax": 30,
+    "food_modules": [
+      "Salat-Vorspeise",
+      "warme Hauptgerichte (50 % Fleisch / 50 % vegan)",
+      "Dessert",
+      "optional Kuchenbuffet/Tea Time"
+    ],
+    "service_modules": [
+      "Buffetinfrastruktur",
+      "Servicepersonal nach Aufwand",
+      "Geschirr & Besteck"
+    ],
+    "event_types": [
+      "Tagung mit Mittagessen",
+      "Begutachtung",
+      "Festakt mittags"
+    ],
+    "cluster": "Uni-Rahmenvertrag",
+    "source_evidence": {
+      "records_2026": 8,
+      "institute": [
+        "BZH",
+        "Biochemie",
+        "Chirurgie",
+        "Herzchirurgie",
+        "Musikwissenschaften"
+      ]
+    }
+  },
+  {
+    "id": "uni_reception_gettogether",
+    "name": "Empfang / Get-Together",
+    "price_band_pp": [
+      12,
+      40
+    ],
+    "min_pax": 20,
+    "food_modules": [
+      "Fingerfood/Tapas",
+      "Aperitifsnacks",
+      "vegetarisch/vegan-Anteil"
+    ],
+    "service_modules": [
+      "Stehtisch-/Empfangsaufbau",
+      "Getränkeservice",
+      "optional Sekt/Prosecco"
+    ],
+    "event_types": [
+      "Poster Session",
+      "Antrittsvorlesung",
+      "Get-Together nach Tagung",
+      "Apéro"
+    ],
+    "cluster": "Uni-Rahmenvertrag",
+    "source_evidence": {
+      "records_2025_2026": 9,
+      "institute": [
+        "UniKT",
+        "Urologie",
+        "Med. Fakultät Datenethik",
+        "Theoretische Physik",
+        "Exzellenzcluster Structures",
+        "Rektorat Bel Etage",
+        "Dezernat 7",
+        "Umweltphysik"
+      ]
+    }
+  },
+  {
+    "id": "uni_dinner_buffet",
+    "name": "Abendessen / Dinner-Buffet",
+    "price_band_pp": [
+      22,
+      49
+    ],
+    "min_pax": 24,
+    "food_modules": [
+      "warmes Dinner-Buffet",
+      "Dessert"
+    ],
+    "service_modules": [
+      "Getränkepaket abends (5–30 €/P)",
+      "Servicepersonal",
+      "Abbau spät"
+    ],
+    "premium_variant": {
+      "name": "Dinner-Buffet Premium (Tapas/Klassisch)",
+      "price_band_pp": [
+        45,
+        65
+      ]
+    },
+    "event_types": [
+      "Conference Dinner",
+      "Abendveranstaltung",
+      "Kuratoriumssitzung"
+    ],
+    "cluster": "Uni-Rahmenvertrag",
+    "source_evidence": {
+      "records_2025_2026": 10,
+      "institute": [
+        "NAR Altersforschung",
+        "Biochemie",
+        "Kuratorium Stiftung Chirurgie",
+        "Theologisches Institut",
+        "Jüdische Hochschule",
+        "Radio-Onkologie",
+        "Physikalisches Institut"
+      ]
+    }
+  }
+]

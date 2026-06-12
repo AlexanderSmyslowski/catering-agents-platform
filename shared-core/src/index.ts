@@ -34,6 +34,7 @@ export * from "./rules/offer.js";
 export * from "./rules/purchasing.js";
 export * from "./rules/readiness.js";
 export * from "./rules/scaling.js";
+export * from "./rules/uni-packages.js";
 export * from "./schemas/index.js";
 export * from "./taxonomies/defaults.js";
 export * from "./taxonomies/labels.js";
