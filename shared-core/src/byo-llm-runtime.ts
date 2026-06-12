@@ -1,4 +1,8 @@
 import {
+  CodexCliLlmReadinessProviderAdapter,
+  type CodexCliExec
+} from "./byo-llm-codex-cli-transport.js";
+import {
   createOpenAiSyntheticLiveTransportFromEnv
 } from "./llm-readiness-openai-transport.js";
 import {
@@ -9,20 +13,34 @@ import {
 } from "./llm-readiness-provider-adapter.js";
 import { SyntheticLiveLlmReadinessSlice } from "./llm-readiness-synthetic-live-slice.js";
 
-export type ByoLlmRuntimeProvider = "fixture" | "openai";
+export type ByoLlmRuntimeProvider = "fixture" | "openai" | "codex_cli";
 
 export interface BuildByoLlmAdapterOptions {
   fetchImpl?: typeof fetch;
+  codexCliExec?: CodexCliExec;
   providerRunIdPrefix?: string;
 }
 
 function normalizedProvider(value: string | undefined): ByoLlmRuntimeProvider {
   const provider = value?.trim().toLowerCase() || "fixture";
-  if (provider === "fixture" || provider === "openai") {
+  if (provider === "fixture" || provider === "openai" || provider === "codex_cli") {
     return provider;
   }
 
-  throw new Error(`Unsupported CATERING_LLM_PROVIDER "${value}". Expected "fixture" or "openai".`);
+  throw new Error(`Unsupported CATERING_LLM_PROVIDER "${value}". Expected "fixture", "openai" or "codex_cli".`);
+}
+
+function parseOptionalPositiveInteger(value: string | undefined, envName: string): number | undefined {
+  if (value === undefined || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${envName} must be a positive integer.`);
+  }
+
+  return parsed;
 }
 
 class OpenAiByoLlmReadinessProviderAdapter implements LlmReadinessProviderAdapter {
@@ -51,6 +69,16 @@ export function buildByoLlmAdapterFromEnv(
 
   if (provider === "fixture") {
     return new FixtureOnlyLlmReadinessProviderAdapter();
+  }
+
+  if (provider === "codex_cli") {
+    return new CodexCliLlmReadinessProviderAdapter({
+      cliBin: env.CATERING_LLM_CLI_BIN,
+      model: env.CATERING_LLM_MODEL,
+      timeoutMs: parseOptionalPositiveInteger(env.CATERING_LLM_CLI_TIMEOUT_MS, "CATERING_LLM_CLI_TIMEOUT_MS"),
+      execImpl: options.codexCliExec,
+      providerRunIdPrefix: options.providerRunIdPrefix
+    });
   }
 
   const apiKey = env.CATERING_LLM_API_KEY ?? env.OPENAI_API_KEY;
