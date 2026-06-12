@@ -42,6 +42,20 @@ export type IntakeArchiveReasonCode =
   | "duplicate_test_data"
   | "operator_rehearsal_cleanup";
 
+export interface ClarificationDraft {
+  draftId: string;
+  specId: string;
+  questions: Array<{
+    text: string;
+    reason: string;
+    reasonCode: string;
+  }>;
+  status: "pending_review" | "approved" | "rejected";
+  createdAt: string;
+  updatedAt: string;
+  modelMetadata?: Record<string, unknown>;
+}
+
 export interface ServiceHealth {
   service: string;
   status: string;
@@ -306,6 +320,36 @@ export async function createProductionPlan(eventSpec: Record<string, unknown>) {
     method: "POST",
     body: JSON.stringify({ eventSpec })
   }, DEFAULT_MUTATION_ACTOR_NAMES.production);
+}
+
+export async function loadClarificationDrafts(specId: string) {
+  return fetchJson<{ items: ClarificationDraft[] }>(
+    `/api/production/v1/production/specs/${encodeURIComponent(specId)}/clarification-drafts`,
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function createClarificationDraft(specId: string) {
+  return fetchJson<{ draft: ClarificationDraft }>(
+    `/api/production/v1/production/specs/${encodeURIComponent(specId)}/clarification-drafts`,
+    {
+      method: "POST",
+      body: "{}"
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function decideClarificationDraft(draftId: string, approve: boolean) {
+  return fetchJson<{ draft: ClarificationDraft; acceptedEventSpec?: Record<string, unknown> }>(
+    `/api/production/v1/production/clarification-drafts/${encodeURIComponent(draftId)}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify({ approve })
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
 }
 
 export async function uploadRecipeFile(

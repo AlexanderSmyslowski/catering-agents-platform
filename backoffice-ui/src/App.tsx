@@ -514,6 +514,7 @@ export function App() {
     manualInput: manualSpecInput,
     manualInputActions: manualSpecActions,
     openSpecForQuestions,
+    refreshAfterDraftDecision: refreshDashboard,
     setEditingEventType,
     setEditingEventDate,
     setEditingAttendeeCount,

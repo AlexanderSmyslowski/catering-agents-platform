@@ -163,6 +163,21 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "production",
     method: "POST",
+    pathTemplate: "/v1/production/specs/:specId/clarification-drafts",
+    requiredRole: "production_operator",
+    url: "/v1/production/specs/matrix-spec/clarification-drafts"
+  },
+  {
+    service: "production",
+    method: "POST",
+    pathTemplate: "/v1/production/clarification-drafts/:draftId/decision",
+    requiredRole: "production_operator",
+    url: "/v1/production/clarification-drafts/matrix-draft/decision",
+    payload: { approve: false }
+  },
+  {
+    service: "production",
+    method: "POST",
     pathTemplate: "/v1/production/seed-demo",
     requiredRole: "operations_audit_operator"
   },

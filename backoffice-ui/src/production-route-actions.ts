@@ -14,7 +14,8 @@ export function buildProductionQuestionActions(
   actions: ProductionQuestionActionsInput
 ): ProductionQuestionPanelActions {
   return {
-    openSpecForQuestions: actions.openSpecForQuestions
+    openSpecForQuestions: actions.openSpecForQuestions,
+    refreshAfterDraftDecision: actions.refreshAfterDraftDecision
   };
 }
 

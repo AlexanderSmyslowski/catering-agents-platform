@@ -2,11 +2,51 @@ import {
   createPersistentCollection,
   productionClarificationAnswerTextMaxLength,
   type CollectionStorageOptions,
+  type LlmReadinessAgentAuditRecord,
+  type LlmReadinessProviderAdapterMode,
   type PersistentCollection,
   type ProductionClarificationAnswer,
   type ProductionPlan,
   type PurchaseList
 } from "@catering/shared-core";
+
+export type ClarificationDraftStatus = "pending_review" | "approved" | "rejected";
+
+export interface ClarificationDraftQuestion {
+  text: string;
+  reason: string;
+  reasonCode: string;
+}
+
+export interface ClarificationDraft {
+  draftId: string;
+  specId: string;
+  questions: ClarificationDraftQuestion[];
+  status: ClarificationDraftStatus;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: {
+    name: string;
+    source: string;
+  };
+  decisionBy?: {
+    name: string;
+    source: string;
+  };
+  decidedAt?: string;
+  modelMetadata: {
+    adapterId: string;
+    adapterMode: LlmReadinessProviderAdapterMode;
+    inputId: string;
+    outputId?: string;
+    outputKind?: string;
+    promptSchemaId?: string;
+    fixtureId?: string;
+    providerId?: string;
+    providerRequestId?: string;
+  };
+  agentAudit?: LlmReadinessAgentAuditRecord;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -55,6 +95,7 @@ export class ProductionStore {
   private readonly plans: PersistentCollection<ProductionPlan>;
   private readonly purchaseLists: PersistentCollection<PurchaseList>;
   private readonly clarificationAnswers: PersistentCollection<ProductionClarificationAnswer>;
+  private readonly clarificationDrafts: PersistentCollection<ClarificationDraft>;
 
   constructor(options?: CollectionStorageOptions) {
     this.plans = createPersistentCollection<ProductionPlan>({
@@ -74,6 +115,13 @@ export class ProductionStore {
     this.clarificationAnswers = createPersistentCollection<ProductionClarificationAnswer>({
       collectionName: "production/clarification-answers",
       getId: (answer) => answer.answerId,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    });
+    this.clarificationDrafts = createPersistentCollection<ClarificationDraft>({
+      collectionName: "production/clarification-drafts",
+      getId: (draft) => draft.draftId,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
@@ -119,4 +167,54 @@ export class ProductionStore {
   async listClarificationAnswers(): Promise<ProductionClarificationAnswer[]> {
     return this.clarificationAnswers.list();
   }
+
+  async saveClarificationDraft(draft: ClarificationDraft): Promise<void> {
+    if (!isClarificationDraft(draft)) {
+      throw new Error("Ungültiger Rückfragen-Entwurf.");
+    }
+
+    await this.clarificationDrafts.set(draft);
+  }
+
+  async getClarificationDraft(draftId: string): Promise<ClarificationDraft | undefined> {
+    return this.clarificationDrafts.get(draftId);
+  }
+
+  async listClarificationDrafts(specId?: string): Promise<ClarificationDraft[]> {
+    const drafts = await this.clarificationDrafts.list();
+    return drafts
+      .filter((draft) => !specId || draft.specId === specId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isClarificationDraftQuestion(question: unknown): question is ClarificationDraftQuestion {
+  return typeof question === "object" &&
+    question !== null &&
+    isNonEmptyString((question as ClarificationDraftQuestion).text) &&
+    isNonEmptyString((question as ClarificationDraftQuestion).reason) &&
+    isNonEmptyString((question as ClarificationDraftQuestion).reasonCode);
+}
+
+function isClarificationDraft(draft: unknown): draft is ClarificationDraft {
+  const candidate = draft as ClarificationDraft;
+  return typeof draft === "object" &&
+    draft !== null &&
+    isNonEmptyString(candidate.draftId) &&
+    isNonEmptyString(candidate.specId) &&
+    Array.isArray(candidate.questions) &&
+    candidate.questions.length > 0 &&
+    candidate.questions.every(isClarificationDraftQuestion) &&
+    (candidate.status === "pending_review" || candidate.status === "approved" || candidate.status === "rejected") &&
+    isNonEmptyString(candidate.createdAt) &&
+    isNonEmptyString(candidate.updatedAt) &&
+    isNonEmptyString(candidate.createdBy?.name) &&
+    isNonEmptyString(candidate.createdBy?.source) &&
+    isNonEmptyString(candidate.modelMetadata?.adapterId) &&
+    (candidate.modelMetadata.adapterMode === "fixture_only" || candidate.modelMetadata.adapterMode === "synthetic_live") &&
+    isNonEmptyString(candidate.modelMetadata.inputId);
 }
