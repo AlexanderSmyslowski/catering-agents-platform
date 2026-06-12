@@ -463,6 +463,10 @@ export function productionExportUrl(planId: string): string {
   return `/api/exports/v1/exports/production-plans/${planId}/html`;
 }
 
+export function productionFolderExportUrl(planId: string): string {
+  return `/api/exports/v1/exports/production-folders/${planId}/html`;
+}
+
 export function purchaseListExportUrl(purchaseListId: string): string {
   return `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
 }

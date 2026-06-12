@@ -1,4 +1,4 @@
-import { productionExportUrl } from "./api.js";
+import { productionExportUrl, productionFolderExportUrl } from "./api.js";
 import { getSpecLabel, translateServiceForm } from "./production-language.js";
 import type { ProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
 import { formatProductionContextId } from "./production-route-state.js";
@@ -72,6 +72,18 @@ export function ProductionPlanDownloadCard({
           rel="noreferrer"
         >
           Produktionsblatt exportieren
+          <span className="visually-hidden">
+            {" "}
+            für Plan {planId} · Spezifikation {specId}
+          </span>
+        </a>
+        <a
+          className="ghost-link"
+          href={productionFolderExportUrl(planId)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Produktionsmappe (HTML)
           <span className="visually-hidden">
             {" "}
             für Plan {planId} · Spezifikation {specId}
