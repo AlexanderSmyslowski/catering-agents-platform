@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import {
   createEventRequestFromText,
+  createCuratedOfferDraft,
   createOfferDraft,
+  normalizeEventRequestToSpec,
   promoteOfferVariant,
   validateAcceptedEventSpec,
   validateEventRequest,
@@ -10,6 +12,7 @@ import {
   type EventRequest,
   type TrustedActor
 } from "@catering/shared-core";
+import { selectCuratedPackage } from "../../../shared-core/src/rules/curated-offer-selection.js";
 import type { OfferStore } from "../store.js";
 
 export interface OfferDraftRouteDependencies {
@@ -49,6 +52,16 @@ export function registerOfferDraftRoutes(
     actorForRequest
   } = deps;
 
+  function createPortfolioAwareOfferDraft(eventRequest: EventRequest) {
+    const spec = normalizeEventRequestToSpec(eventRequest, {
+      sourceType: "offer_service",
+      reference: eventRequest.requestId,
+      commercialState: "quoted"
+    });
+    const packagePreset = selectCuratedPackage(spec);
+    return packagePreset ? createCuratedOfferDraft(eventRequest, packagePreset) : createOfferDraft(eventRequest);
+  }
+
   app.post<{ Body: EventRequest }>("/v1/offers/drafts", async (request, reply) => {
     if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
@@ -57,7 +70,7 @@ export function registerOfferDraftRoutes(
     }
 
     const eventRequest = validateEventRequest(request.body);
-    const draft = validateOfferDraft(createOfferDraft(eventRequest));
+    const draft = validateOfferDraft(createPortfolioAwareOfferDraft(eventRequest));
     await store.saveDraft(draft);
     await auditLog.log({
       action: "offer.draft_created",
@@ -86,7 +99,7 @@ export function registerOfferDraftRoutes(
       channel: "text",
       rawText: request.body.text
     });
-    const draft = validateOfferDraft(createOfferDraft(eventRequest));
+    const draft = validateOfferDraft(createPortfolioAwareOfferDraft(eventRequest));
     await store.saveDraft(draft);
     await auditLog.log({
       action: "offer.draft_created_from_text",

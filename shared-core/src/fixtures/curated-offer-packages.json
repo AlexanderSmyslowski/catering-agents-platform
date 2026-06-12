@@ -1,0 +1,492 @@
+[
+  {
+    "id": "brunch_buffet",
+    "name": "Brunch Buffet",
+    "price_band_pp": [
+      24,
+      39
+    ],
+    "min_pax": 20,
+    "food_modules": [
+      "Frühstückskomponenten",
+      "Salate",
+      "warme/kalte Brunchkomponenten",
+      "Kuchen/Dessert optional"
+    ],
+    "service_modules": [
+      "Buffetinfrastruktur",
+      "Getränke",
+      "Equipment",
+      "Personal optional"
+    ],
+    "event_types": [
+      "Brunch",
+      "private Feier vormittags",
+      "Business Brunch"
+    ],
+    "cluster": "Frühstück / Brunch",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 29,
+      "records_cluster_2025_2026": 13
+    }
+  },
+  {
+    "id": "business_breakfast",
+    "name": "Business Breakfast",
+    "price_band_pp": [
+      14,
+      22
+    ],
+    "min_pax": 10,
+    "food_modules": [
+      "Gebäck/Brot",
+      "Aufstriche/Belag",
+      "Obst/Joghurt optional",
+      "Kaffee/Getränke optional"
+    ],
+    "service_modules": [
+      "Lieferung",
+      "Aufbau",
+      "Table Top optional",
+      "Kaffeeequipment optional"
+    ],
+    "event_types": [
+      "Frühstück",
+      "Morgenmeeting",
+      "Seminarstart"
+    ],
+    "cluster": "Frühstück / Brunch",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 29,
+      "records_cluster_2025_2026": 13
+    }
+  },
+  {
+    "id": "business_lunch_basic",
+    "name": "Business Lunch Basic",
+    "price_band_pp": [
+      16,
+      24
+    ],
+    "min_pax": 15,
+    "food_modules": [
+      "Lunch-Buffet kompakt",
+      "Salate",
+      "vegetarische/vegane Komponente",
+      "Brot/Baguette",
+      "kleines Dessert optional"
+    ],
+    "service_modules": [
+      "Lieferung",
+      "Aufbau Buffet",
+      "Abbau/Abholung",
+      "Table Top optional",
+      "Getränke optional"
+    ],
+    "event_types": [
+      "Business Lunch",
+      "Workshop",
+      "Institutsmeeting"
+    ],
+    "cluster": "Business / Institution / Tagung",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 482,
+      "records_cluster_2025_2026": 268
+    }
+  },
+  {
+    "id": "christmas_season_buffet",
+    "name": "Saison-/Weihnachtsbuffet",
+    "price_band_pp": [
+      35,
+      58
+    ],
+    "min_pax": 25,
+    "food_modules": [
+      "saisonale Vorspeisen",
+      "warme Buffetkomponenten",
+      "Dessert/Kuchen",
+      "Käse optional"
+    ],
+    "service_modules": [
+      "Lieferung",
+      "Aufbau",
+      "Equipment/Table Top",
+      "Getränke",
+      "Personal nach Bedarf"
+    ],
+    "event_types": [
+      "Weihnachtsfeier",
+      "Saisonfest"
+    ],
+    "cluster": "Buffet / private Feier / Saisonfest",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 188,
+      "records_cluster_2025_2026": 74
+    }
+  },
+  {
+    "id": "conference_day_catering",
+    "name": "Conference Day Catering",
+    "price_band_pp": [
+      24,
+      42
+    ],
+    "min_pax": 15,
+    "food_modules": [
+      "Coffee Break",
+      "Lunch Buffet",
+      "Snacks",
+      "Kuchen/Gebäck",
+      "vegetarisch/vegan markiert zu prüfen"
+    ],
+    "service_modules": [
+      "Transport",
+      "Aufbau/Abbau",
+      "Buffetinfrastruktur",
+      "Table Top",
+      "Getränke",
+      "Personal nach Bedarf"
+    ],
+    "event_types": [
+      "Tagung",
+      "Konferenz",
+      "mehrtägiger Workshop"
+    ],
+    "cluster": "Business / Institution / Tagung",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 482,
+      "records_cluster_2025_2026": 268
+    }
+  },
+  {
+    "id": "crew_catering_day",
+    "name": "Crew Catering Tagespaket",
+    "price_band_pp": [
+      18,
+      32
+    ],
+    "min_pax": 15,
+    "food_modules": [
+      "Lunch/warme Komponente",
+      "Snacks",
+      "vegetarisch/vegan zu prüfen",
+      "Getränke optional"
+    ],
+    "service_modules": [
+      "Lieferung/Timing",
+      "Warmhalte-/Ausgabeform prüfen",
+      "Abholung",
+      "Mehrtagelogik"
+    ],
+    "event_types": [
+      "Produktion",
+      "Crew Catering",
+      "Teamversorgung"
+    ],
+    "cluster": "Crew-/Produktionscatering",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 0,
+      "records_cluster_2025_2026": 0
+    }
+  },
+  {
+    "id": "flying_buffet_premium",
+    "name": "Flying Buffet Premium",
+    "price_band_pp": [
+      42,
+      75
+    ],
+    "min_pax": 40,
+    "food_modules": [
+      "Gläschen/Platten/Etageren",
+      "kalte und warme Kleinteile",
+      "Dessert im Glas",
+      "vegetarisch/vegan zu prüfen"
+    ],
+    "service_modules": [
+      "Servicepersonal",
+      "Buffetinfrastruktur",
+      "Table Top",
+      "Getränke",
+      "Menüschilder/Deko optional"
+    ],
+    "event_types": [
+      "Premiumempfang",
+      "Abendevent",
+      "Kundenveranstaltung"
+    ],
+    "cluster": "Empfang / Flying Buffet / Fingerfood",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 137,
+      "records_cluster_2025_2026": 61
+    }
+  },
+  {
+    "id": "institution_framework_catering",
+    "name": "Rahmenvertrags-Catering Institution",
+    "price_band_pp": [
+      18,
+      35
+    ],
+    "min_pax": 10,
+    "food_modules": [
+      "Buffet/Lunch nach Anlass",
+      "Coffee Break optional",
+      "Getränke optional"
+    ],
+    "service_modules": [
+      "Transportpauschale",
+      "Personalstunden",
+      "Infrastruktur",
+      "Equipment nach Bedarf"
+    ],
+    "event_types": [
+      "wiederkehrender Lunch",
+      "Antrittsvorlesung",
+      "Institutsformat"
+    ],
+    "cluster": "Business / Institution / Tagung",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 482,
+      "records_cluster_2025_2026": 268
+    }
+  },
+  {
+    "id": "private_buffet_classic",
+    "name": "Private Feier Buffet Classic",
+    "price_band_pp": [
+      24,
+      39
+    ],
+    "min_pax": 25,
+    "food_modules": [
+      "Antipasti/Salate",
+      "Hauptkomponenten",
+      "vegetarische Option",
+      "Dessert",
+      "Brot"
+    ],
+    "service_modules": [
+      "Lieferung",
+      "Buffetaufbau",
+      "Equipment optional",
+      "Personal optional"
+    ],
+    "event_types": [
+      "Geburtstag",
+      "private Feier",
+      "Familienfest"
+    ],
+    "cluster": "Buffet / private Feier / Saisonfest",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 188,
+      "records_cluster_2025_2026": 74
+    }
+  },
+  {
+    "id": "reception_fingerfood_basic",
+    "name": "Empfang Fingerfood Basic",
+    "price_band_pp": [
+      26,
+      38
+    ],
+    "min_pax": 30,
+    "food_modules": [
+      "Fingerfood herzhaft",
+      "kleine vegetarische/vegane Auswahl",
+      "Käse/Antipasti Marker",
+      "kleines Süßes optional"
+    ],
+    "service_modules": [
+      "Lieferung",
+      "Aufbau auf Platten/Etageren",
+      "Abholung",
+      "Getränke optional",
+      "Service optional"
+    ],
+    "event_types": [
+      "Empfang",
+      "Get-together",
+      "Vernissage",
+      "Antrittsvorlesung"
+    ],
+    "cluster": "Empfang / Flying Buffet / Fingerfood",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 137,
+      "records_cluster_2025_2026": 61
+    }
+  },
+  {
+    "id": "summer_bbq_buffet",
+    "name": "Sommerfest / BBQ Buffet",
+    "price_band_pp": [
+      29,
+      49
+    ],
+    "min_pax": 30,
+    "food_modules": [
+      "Grill/BBQ",
+      "Salate",
+      "Antipasti",
+      "vegetarisch/vegan zu prüfen",
+      "Dessert optional"
+    ],
+    "service_modules": [
+      "Grill-/Kochpersonal optional",
+      "Buffetinfrastruktur",
+      "Getränke optional",
+      "Aufbau/Abbau"
+    ],
+    "event_types": [
+      "Sommerfest",
+      "Gartenfest",
+      "Firmenfeier locker"
+    ],
+    "cluster": "Buffet / private Feier / Saisonfest",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 188,
+      "records_cluster_2025_2026": 74
+    }
+  },
+  {
+    "id": "wedding_buffet_premium",
+    "name": "Hochzeit Buffet Premium",
+    "price_band_pp": [
+      95,
+      155
+    ],
+    "min_pax": 50,
+    "food_modules": [
+      "Antipasti/Vorspeisenbuffet",
+      "Hauptbuffet oder Stationen",
+      "Dessert/Tarte/Kuchen",
+      "Late Snack optional"
+    ],
+    "service_modules": [
+      "umfangreiche Abstimmung",
+      "Personal",
+      "Buffetdesign",
+      "Table Top/Gläser",
+      "Logistik",
+      "Deko/Menu-Schilder optional"
+    ],
+    "event_types": [
+      "Hochzeit",
+      "private Premiumfeier"
+    ],
+    "cluster": "Hochzeit / private Premiumfeier",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 71,
+      "records_cluster_2025_2026": 4
+    }
+  },
+  {
+    "id": "wedding_reception_addon",
+    "name": "Hochzeit Empfang Add-on",
+    "price_band_pp": [
+      18,
+      38
+    ],
+    "min_pax": 50,
+    "food_modules": [
+      "Canapés/Fingerfood",
+      "Getränke/Wasser/Sekt optional",
+      "kleine süße Komponente optional"
+    ],
+    "service_modules": [
+      "Servicepersonal",
+      "Gläser",
+      "Stehtische optional",
+      "Aufbau/Abbau"
+    ],
+    "event_types": [
+      "Sektempfang",
+      "Welcome",
+      "Zwischenempfang"
+    ],
+    "cluster": "Hochzeit / private Premiumfeier",
+    "review_status": {
+      "allergens": "zu prüfen",
+      "hygiene_temperature": "zu prüfen",
+      "quantity_logic": "plausibel markiert, nicht fachlich final geprüft",
+      "commercial_pricing": "zu prüfen"
+    },
+    "source_evidence": {
+      "records_cluster_total": 71,
+      "records_cluster_2025_2026": 4
+    }
+  }
+]
