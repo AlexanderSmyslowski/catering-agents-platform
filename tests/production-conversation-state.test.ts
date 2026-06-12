@@ -18,7 +18,7 @@ describe("production conversation state", () => {
     assumptions: [
       {
         code: "service_form_defaulted",
-        message: "Service form inferred as buffet.",
+        message: "Serviceform aus dem Anfragetext abgeleitet: Buffet.",
         applied: true
       }
     ],

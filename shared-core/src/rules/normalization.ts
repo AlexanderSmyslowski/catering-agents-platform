@@ -1,5 +1,6 @@
 import { analyzeIntakeText } from "../intake-signals.js";
 import { eventTypeDefaults, eventTypeKeywords, infrastructureCatalog, serviceFormKeywords } from "../taxonomies/defaults.js";
+import { formatEventTypeLabel, formatServiceFormLabel } from "../taxonomies/labels.js";
 import type {
   AcceptedEventSpec,
   Assumption,
@@ -346,7 +347,7 @@ export function normalizeEventRequestToSpec(
   if (!request.event?.type) {
     assumptions.push({
       code: "event_type_defaulted",
-      message: `Event type inferred as ${eventType}.`,
+      message: `Eventtyp aus dem Anfragetext abgeleitet: ${formatEventTypeLabel(eventType) ?? eventType}.`,
       applied: true
     });
   }
@@ -354,7 +355,7 @@ export function normalizeEventRequestToSpec(
   if (!request.event?.serviceForm) {
     assumptions.push({
       code: "service_form_defaulted",
-      message: `Service form inferred as ${serviceForm}.`,
+      message: `Serviceform aus dem Anfragetext abgeleitet: ${formatServiceFormLabel(serviceForm) ?? serviceForm}.`,
       applied: true
     });
   }
@@ -374,7 +375,7 @@ export function normalizeEventRequestToSpec(
   ) {
     assumptions.push({
       code: "attendees_expected_approximate",
-      message: "Participant count was only inferred approximately from the intake text.",
+      message: "Teilnehmerzahl nur näherungsweise aus dem Anfragetext abgeleitet.",
       applied: true
     });
   }

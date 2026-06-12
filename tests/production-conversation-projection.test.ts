@@ -17,7 +17,7 @@ const acceptedSpec = {
   assumptions: [
     {
       code: "service_form_defaulted",
-      message: "Service form inferred as buffet.",
+      message: "Serviceform aus dem Anfragetext abgeleitet: Buffet.",
       applied: true
     }
   ],

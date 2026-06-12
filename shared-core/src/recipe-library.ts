@@ -185,7 +185,7 @@ function deriveArchetypeTokens(label: string): string[] {
   const normalized = normalizeSearchText(label);
 
   if (/quiche|tarte/.test(normalized)) {
-    return ["quiche"];
+    return ["quiche", "tarte"];
   }
   if (/curry/.test(normalized)) {
     return ["curry"];

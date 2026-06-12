@@ -194,5 +194,7 @@
     "batchSize": 45
   },
   "allergens": [],
-  "dietTags": []
+  "dietTags": [
+    "vegetarian"
+  ]
 }

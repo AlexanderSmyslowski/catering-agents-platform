@@ -1,21 +1,27 @@
 import Fastify from "fastify";
+import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "@catering/offer-service";
 import { ProductionStore } from "@catering/production-service";
 import type {
   CollectionStorageOptions,
   OfferDraft,
   ProductionPlan,
-  PurchaseList
+  PurchaseList,
+  Recipe
 } from "@catering/shared-core";
 import {
   formatMetroGroupLabel,
   formatRecipeSourceEvidenceLabel,
   isDevAuthEnabled,
+  RecipeLibrary,
   recipeSourceOriginLabel,
   recipeSourceReferenceLabel,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders
 } from "@catering/shared-core";
+import { renderProductionFolderHtml } from "./production-folder.js";
+
+export { renderProductionFolderHtml } from "./production-folder.js";
 
 function escapeCsv(value: string | number): string {
   return `"${String(value).replace(/"/g, '""')}"`;
@@ -284,7 +290,17 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     databaseUrl: options.databaseUrl,
     pgPool: options.pgPool
   });
+  const intakeStore = new IntakeStore({
+    rootDir: options.rootDir,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
   const productionStore = new ProductionStore({
+    rootDir: options.rootDir,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
+  const recipeLibrary = new RecipeLibrary(undefined, {
     rootDir: options.rootDir,
     databaseUrl: options.databaseUrl,
     pgPool: options.pgPool
@@ -352,6 +368,53 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       return reply
         .type("text/html; charset=utf-8")
         .send(renderProductionPlanHtml(plan));
+    }
+  );
+
+  app.get<{ Params: { planId: string } }>(
+    "/v1/exports/production-folders/:planId/html",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) {
+        return forbidden;
+      }
+
+      const plan = await productionStore.getPlan(request.params.planId);
+      if (!plan) {
+        return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
+      }
+
+      const spec = await intakeStore.getSpec(plan.eventSpecId);
+      if (!spec) {
+        return reply.code(404).send({ message: "AcceptedEventSpec zum ProductionPlan nicht gefunden." });
+      }
+
+      const recipeIds = [
+        ...new Set([
+          ...plan.kitchenSheets.flatMap((sheet) => sheet.recipeId ?? []),
+          ...plan.recipeSelections.flatMap((selection) => selection.recipeId ?? [])
+        ])
+      ];
+      const [purchaseLists, recipes, clarificationAnswers] = await Promise.all([
+        productionStore.listPurchaseLists(),
+        Promise.all(recipeIds.map((recipeId) => recipeLibrary.get(recipeId))),
+        productionStore.listClarificationAnswers()
+      ]);
+      const linkedRecipes = recipes.filter((recipe): recipe is Recipe => Boolean(recipe));
+
+      reply.header(
+        "content-disposition",
+        `inline; filename="${request.params.planId}-produktionsmappe.html"`
+      );
+      return reply
+        .type("text/html; charset=utf-8")
+        .send(renderProductionFolderHtml({
+          plan,
+          spec,
+          purchaseLists: purchaseLists.filter((list) => list.eventSpecId === spec.specId),
+          recipes: linkedRecipes,
+          clarificationAnswers: clarificationAnswers.filter((answer) => answer.context.specId === spec.specId)
+        }));
     }
   );
 

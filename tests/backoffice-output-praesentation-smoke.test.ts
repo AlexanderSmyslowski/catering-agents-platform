@@ -56,12 +56,12 @@ function createDashboardResponse(
       : [
           {
             code: "event_type_defaulted",
-            message: "Event type inferred as lunch.",
+            message: "Eventtyp aus dem Anfragetext abgeleitet: Lunch.",
             applied: true
           },
           {
             code: "service_form_defaulted",
-            message: "Service form inferred as buffet.",
+            message: "Serviceform aus dem Anfragetext abgeleitet: Buffet.",
             applied: true
           }
         ],
