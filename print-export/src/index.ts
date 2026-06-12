@@ -8,6 +8,7 @@ import type {
   PurchaseList
 } from "@catering/shared-core";
 import {
+  formatMetroGroupLabel,
   formatRecipeSourceEvidenceLabel,
   isDevAuthEnabled,
   recipeSourceOriginLabel,
@@ -179,7 +180,7 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
 
   const rows = list.items.map((item) =>
     [
-      item.group,
+      formatMetroGroupLabel(item.group),
       item.displayName,
       item.normalizedQty,
       item.normalizedUnit,

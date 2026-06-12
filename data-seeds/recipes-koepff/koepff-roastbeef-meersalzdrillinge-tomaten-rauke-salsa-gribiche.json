@@ -1,0 +1,350 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche",
+  "name": "Roastbeef | Meersalzdrillinge | Tomaten-Rauke-Salsa | Gribiche",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-01-roastbeef-roh",
+      "name": "Roastbeef, roh",
+      "quantity": {
+        "amount": 3100,
+        "unit": "g"
+      },
+      "group": "fleisch"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-02-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 45,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-03-pfeffer-schwarz-weiss",
+      "name": "Pfeffer schwarz/weiß",
+      "quantity": {
+        "amount": 8,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-04-rapsol-neutrales-ol",
+      "name": "Rapsöl / neutrales Öl",
+      "quantity": {
+        "amount": 80,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-05-dijon-senf",
+      "name": "Dijon-Senf",
+      "quantity": {
+        "amount": 80,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-06-drillinge-kleine-kartoffeln",
+      "name": "Drillinge / kleine Kartoffeln",
+      "quantity": {
+        "amount": 3150,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-07-meersalz",
+      "name": "Meersalz",
+      "quantity": {
+        "amount": 35,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-08-olivenol-mild",
+      "name": "Olivenöl mild",
+      "quantity": {
+        "amount": 120,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-09-pfeffer",
+      "name": "Pfeffer",
+      "quantity": {
+        "amount": 5,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-10-tomaten",
+      "name": "Tomaten",
+      "quantity": {
+        "amount": 700,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-11-rauke-rucola",
+      "name": "Rauke / Rucola",
+      "quantity": {
+        "amount": 150,
+        "unit": "g"
+      },
+      "group": "kraeuter_salate"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-12-schalotten",
+      "name": "Schalotten",
+      "quantity": {
+        "amount": 100,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-13-olivenol-mild",
+      "name": "Olivenöl mild",
+      "quantity": {
+        "amount": 120,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-14-weissweinessig-balsamico-bianco",
+      "name": "Weißweinessig / Balsamico bianco",
+      "quantity": {
+        "amount": 50,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-15-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 30,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-16-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 15,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-17-pfeffer",
+      "name": "Pfeffer",
+      "quantity": {
+        "amount": 4,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-18-frische-eier-hart-gekocht",
+      "name": "frische Eier, hart gekocht",
+      "quantity": {
+        "amount": 12,
+        "unit": "Stück"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-19-dijon-senf",
+      "name": "Dijon-Senf",
+      "quantity": {
+        "amount": 30,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-20-weissweinessig",
+      "name": "Weißweinessig",
+      "quantity": {
+        "amount": 90,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-21-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 15,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-22-rapsol-neutrales-ol",
+      "name": "Rapsöl / neutrales Öl",
+      "quantity": {
+        "amount": 450,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-23-olivenol-mild",
+      "name": "Olivenöl mild",
+      "quantity": {
+        "amount": 150,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-24-cornichons",
+      "name": "Cornichons",
+      "quantity": {
+        "amount": 150,
+        "unit": "g"
+      },
+      "group": "feinkost_antipasti"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-25-kapern-klein",
+      "name": "Kapern klein",
+      "quantity": {
+        "amount": 90,
+        "unit": "g"
+      },
+      "group": "feinkost_antipasti"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-26-schalotten",
+      "name": "Schalotten",
+      "quantity": {
+        "amount": 90,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-27-glatte-petersilie",
+      "name": "glatte Petersilie",
+      "quantity": {
+        "amount": 45,
+        "unit": "g"
+      },
+      "group": "kraeuter_salate"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-28-schnittlauch",
+      "name": "Schnittlauch",
+      "quantity": {
+        "amount": 30,
+        "unit": "g"
+      },
+      "group": "kraeuter_salate"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-29-zucker",
+      "name": "Zucker",
+      "quantity": {
+        "amount": 6,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-30-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 12,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-31-pfeffer",
+      "name": "Pfeffer",
+      "quantity": {
+        "amount": 3,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Roastbeef parieren, würzen, dünn mit Senf einreiben und in Öl anbraten."
+    },
+    {
+      "index": 2,
+      "instruction": "Schonend rosa garen, vollständig auskühlen und kalt stellen."
+    },
+    {
+      "index": 3,
+      "instruction": "Drillinge in Salzwasser garen, ausdampfen lassen und mit Olivenöl, Meersalz und Pfeffer marinieren."
+    },
+    {
+      "index": 4,
+      "instruction": "Tomaten entkernen und würfeln; Rauke schneiden; Schalotten fein würfeln."
+    },
+    {
+      "index": 5,
+      "instruction": "Salsa aus Tomaten, Rauke, Schalotten, Öl, Essig, Zitronensaft, Salz und Pfeffer frisch mischen."
+    },
+    {
+      "index": 6,
+      "instruction": "Für Gribiche Eier hart kochen, kalt abschrecken, pellen; Eigelb und Eiweiß trennen."
+    },
+    {
+      "index": 7,
+      "instruction": "Eigelb mit Senf, Essig, Zitronensaft, Salz, Pfeffer und Zucker glatt rühren."
+    },
+    {
+      "index": 8,
+      "instruction": "Rapsöl und Olivenöl langsam einrühren, bis die Sauce cremig gebunden ist."
+    },
+    {
+      "index": 9,
+      "instruction": "Eiweiß, Cornichons, Kapern, Schalotten und Kräuter einarbeiten und kalt abschmecken."
+    },
+    {
+      "index": 10,
+      "instruction": "Roastbeef dünn schneiden und mit Drillingen, Salsa und Gribiche in 45 Portionen anrichten."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1.25,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

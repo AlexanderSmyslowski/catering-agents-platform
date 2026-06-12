@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-rotgarnelen-avocado-wasabi-creme",
+  "name": "Rotgarnelen | Avocado-Wasabi-Creme",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-01-rotgarnelen-roh-geschalt-entdarmt",
+      "name": "Rotgarnelen, roh geschält/entdarmt",
+      "quantity": {
+        "amount": 45,
+        "unit": "Stück"
+      },
+      "group": "fisch_meeresfruechte"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-02-olivenol-mild",
+      "name": "Olivenöl mild",
+      "quantity": {
+        "amount": 60,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-03-limettensaft",
+      "name": "Limettensaft",
+      "quantity": {
+        "amount": 80,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-04-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 15,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-05-pfeffer",
+      "name": "Pfeffer",
+      "quantity": {
+        "amount": 3,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-06-avocado-brutto",
+      "name": "Avocado, brutto",
+      "quantity": {
+        "amount": 1000,
+        "unit": "g",
+        "approx": true
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-07-creme-fraiche",
+      "name": "Crème fraîche",
+      "quantity": {
+        "amount": 180,
+        "unit": "g"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-08-wasabi",
+      "name": "Wasabi",
+      "quantity": {
+        "amount": 25,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-09-limettensaft",
+      "name": "Limettensaft",
+      "quantity": {
+        "amount": 50,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-rotgarnelen-avocado-wasabi-creme-10-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 10,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Garnelen prüfen, ggf. restlichen Darm entfernen und trocken tupfen."
+    },
+    {
+      "index": 2,
+      "instruction": "Kurz in Olivenöl garen/anbraten, mit Salz und Pfeffer würzen."
+    },
+    {
+      "index": 3,
+      "instruction": "Mit Limettensaft abschmecken, flach abkühlen und kalt stellen."
+    },
+    {
+      "index": 4,
+      "instruction": "Avocado-Fruchtfleisch mit Crème fraîche, Wasabi, Limettensaft und Salz fein mixen."
+    },
+    {
+      "index": 5,
+      "instruction": "Creme unmittelbar abdecken, in Spritzbeutel füllen und kalt stellen."
+    },
+    {
+      "index": 6,
+      "instruction": "Je Portion einen sauberen Cremepunkt setzen und eine Garnele auflegen."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1.33,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

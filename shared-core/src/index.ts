@@ -36,6 +36,7 @@ export * from "./rules/scaling.js";
 export * from "./schemas/index.js";
 export * from "./taxonomies/defaults.js";
 export * from "./taxonomies/labels.js";
+export * from "./taxonomies/metro-groups.js";
 export * from "./types.js";
 export * from "./upload-limits.js";
 export * from "./upload-security.js";

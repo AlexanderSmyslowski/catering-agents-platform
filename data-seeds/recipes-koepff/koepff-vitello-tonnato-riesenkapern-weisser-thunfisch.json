@@ -1,0 +1,193 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch",
+  "name": "Vitello Tonnato | Riesenkapern | weißer Thunfisch",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-01-kalbsnuss-roh",
+      "name": "Kalbsnuss, roh",
+      "quantity": {
+        "amount": 3200,
+        "unit": "g"
+      },
+      "group": "fleisch"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-02-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 45,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-03-pfeffer-schwarz-weiss",
+      "name": "Pfeffer schwarz/weiß",
+      "quantity": {
+        "amount": 8,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-04-rapsol-neutrales-ol",
+      "name": "Rapsöl / neutrales Öl",
+      "quantity": {
+        "amount": 80,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-05-weisser-thunfisch-abgetropft",
+      "name": "weißer Thunfisch, abgetropft",
+      "quantity": {
+        "amount": 500,
+        "unit": "g"
+      },
+      "group": "fisch_meeresfruechte"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-06-pasteurisiertes-eigelb",
+      "name": "pasteurisiertes Eigelb",
+      "quantity": {
+        "amount": 90,
+        "unit": "g"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-07-rapsol-neutrales-ol",
+      "name": "Rapsöl / neutrales Öl",
+      "quantity": {
+        "amount": 300,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-08-dijon-senf",
+      "name": "Dijon-Senf",
+      "quantity": {
+        "amount": 30,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-09-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 80,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-10-kapern-klein",
+      "name": "Kapern klein",
+      "quantity": {
+        "amount": 80,
+        "unit": "g"
+      },
+      "group": "feinkost_antipasti"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-11-sardellenfilets",
+      "name": "Sardellenfilets",
+      "quantity": {
+        "amount": 30,
+        "unit": "g"
+      },
+      "group": "fisch_meeresfruechte"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-12-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 10,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-13-pfeffer-weiss",
+      "name": "Pfeffer weiß",
+      "quantity": {
+        "amount": 2,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch-14-riesenkapern",
+      "name": "Riesenkapern",
+      "quantity": {
+        "amount": 135,
+        "unit": "g"
+      },
+      "group": "feinkost_antipasti"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Kalbsnuss parieren, trocken tupfen, mit Salz und Pfeffer würzen."
+    },
+    {
+      "index": 2,
+      "instruction": "In Rapsöl rundum kurz anbraten."
+    },
+    {
+      "index": 3,
+      "instruction": "Bei niedriger Temperatur schonend rosa garen; Kerntemperatur nach interner Vorgabe festlegen."
+    },
+    {
+      "index": 4,
+      "instruction": "Sofort flach auskühlen lassen und vollständig durchkühlen, ideal über Nacht."
+    },
+    {
+      "index": 5,
+      "instruction": "Für die Sauce Thunfisch, Eigelb, Dijon, Zitronensaft, Kapern und Sardellen fein mixen."
+    },
+    {
+      "index": 6,
+      "instruction": "Rapsöl langsam einlaufen lassen, bis eine stabile, glatte Sauce entsteht."
+    },
+    {
+      "index": 7,
+      "instruction": "Mit kaltem Wasser auf nappierende Konsistenz bringen und kalt abschmecken."
+    },
+    {
+      "index": 8,
+      "instruction": "Kalb sehr dünn aufschneiden und 45 Portionen bilden."
+    },
+    {
+      "index": 9,
+      "instruction": "Sauce anteilig auftragen oder separat punktuell nappieren, mit Riesenkapern garnieren."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1.29,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

@@ -1,0 +1,193 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips",
+  "name": "Grüner Spargel | Trüffel-Hollandaise | Parmesan-Chips",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-01-gruner-spargel-brutto",
+      "name": "grüner Spargel, brutto",
+      "quantity": {
+        "amount": 2700,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-02-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 30,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-03-olivenol-mild",
+      "name": "Olivenöl mild",
+      "quantity": {
+        "amount": 80,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-04-butter",
+      "name": "Butter",
+      "quantity": {
+        "amount": 400,
+        "unit": "g"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-05-pasteurisiertes-eigelb",
+      "name": "pasteurisiertes Eigelb",
+      "quantity": {
+        "amount": 200,
+        "unit": "g"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-06-weisswein-trocken",
+      "name": "Weißwein trocken",
+      "quantity": {
+        "amount": 100,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-07-weissweinessig-balsamico-bianco",
+      "name": "Weißweinessig / Balsamico bianco",
+      "quantity": {
+        "amount": 40,
+        "unit": "ml"
+      },
+      "group": "oele_essige_kochwein"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-08-schalotten",
+      "name": "Schalotten",
+      "quantity": {
+        "amount": 80,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-09-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 20,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-10-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 8,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-11-weisser-pfeffer",
+      "name": "weißer Pfeffer",
+      "quantity": {
+        "amount": 2,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-12-cayennepfeffer",
+      "name": "Cayennepfeffer",
+      "quantity": {
+        "amount": 0.5,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-13-truffelpaste",
+      "name": "Trüffelpaste",
+      "quantity": {
+        "amount": 25,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips-14-parmesan",
+      "name": "Parmesan",
+      "quantity": {
+        "amount": 225,
+        "unit": "g"
+      },
+      "group": "kaese"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Spargelenden entfernen, Stangen ggf. im unteren Drittel schälen."
+    },
+    {
+      "index": 2,
+      "instruction": "Spargel kurz blanchieren oder schonend garen, abschrecken, gut trocknen und leicht mit Olivenöl marinieren."
+    },
+    {
+      "index": 3,
+      "instruction": "Parmesan fein reiben, in 45 kleinen Häufchen auf Backpapier setzen, flach drücken und knusprig backen; trocken auskühlen lassen."
+    },
+    {
+      "index": 4,
+      "instruction": "Butter schmelzen, klären und bei 55-60 °C warm halten."
+    },
+    {
+      "index": 5,
+      "instruction": "Weißwein, Wasser, Essig und Schalotten auf ca. 70-80 ml reduzieren und passieren."
+    },
+    {
+      "index": 6,
+      "instruction": "Eigelb mit warmer Reduktion über heißem, nicht kochendem Wasserbad auf 62-65 °C aufschlagen."
+    },
+    {
+      "index": 7,
+      "instruction": "Geklärte Butter zuerst tropfenweise, dann im dünnen Strahl einarbeiten."
+    },
+    {
+      "index": 8,
+      "instruction": "Mit Zitronensaft, Salz, weißem Pfeffer, Cayenne und Trüffelpaste abschmecken."
+    },
+    {
+      "index": 9,
+      "instruction": "Spargel portionieren, Sauce setzen, Parmesan-Chip erst zuletzt auflegen."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1.09,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-kleine-brezeln",
+  "name": "Kleine Brezeln",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-kleine-brezeln-01-kleine-brezeln-fertig-zugekauft",
+      "name": "kleine Brezeln, fertig zugekauft",
+      "quantity": {
+        "amount": 45,
+        "unit": "Stück"
+      },
+      "group": "backwaren_zukauf"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Ware annehmen und zählen."
+    },
+    {
+      "index": 2,
+      "instruction": "Nach Produktvorgabe lagern bzw. temperieren."
+    },
+    {
+      "index": 3,
+      "instruction": "Kurz vor Service auf Etagere/Platte legen."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

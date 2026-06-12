@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere",
+  "name": "Kokos-Cheesecake / Kokos-Zitronen-Panna-Cotta-Törtchen | Brombeere",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-01-coconut-cream-kokoscreme",
+      "name": "Coconut Cream / Kokoscreme",
+      "quantity": {
+        "amount": 3000,
+        "unit": "g"
+      },
+      "group": "molkerei_eier"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-02-zucker",
+      "name": "Zucker",
+      "quantity": {
+        "amount": 510,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-03-abrieb-bio-zitronen",
+      "name": "Abrieb Bio-Zitronen",
+      "quantity": {
+        "amount": 8,
+        "unit": "Zitronen"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-04-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 225,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-05-salz",
+      "name": "Salz",
+      "quantity": {
+        "amount": 6,
+        "unit": "g"
+      },
+      "group": "gewuerze_wuerzmittel"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-06-vanillepaste",
+      "name": "Vanillepaste",
+      "quantity": {
+        "amount": 15,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-07-gelatine",
+      "name": "Gelatine",
+      "quantity": {
+        "amount": 26.25,
+        "unit": "Blatt"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-08-brombeeren",
+      "name": "Brombeeren",
+      "quantity": {
+        "amount": 1200,
+        "unit": "g"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-09-zucker",
+      "name": "Zucker",
+      "quantity": {
+        "amount": 120,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-10-zitronensaft",
+      "name": "Zitronensaft",
+      "quantity": {
+        "amount": 35,
+        "unit": "ml"
+      },
+      "group": "obst_gemuese"
+    },
+    {
+      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-11-speisestarke",
+      "name": "Speisestärke",
+      "quantity": {
+        "amount": 8,
+        "unit": "g"
+      },
+      "group": "trockenlager"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Gelatine 5-8 Minuten in kaltem Wasser einweichen."
+    },
+    {
+      "index": 2,
+      "instruction": "Silikonformen dünn neutral ölen, falls nötig."
+    },
+    {
+      "index": 3,
+      "instruction": "Kokoscreme, Zucker, Zitronenabrieb, Salz und Vanille auf ca. 60-70 °C erwärmen; nicht stark kochen."
+    },
+    {
+      "index": 4,
+      "instruction": "Topf vom Herd nehmen und ausgedrückte Gelatine vollständig einrühren."
+    },
+    {
+      "index": 5,
+      "instruction": "Masse 10-15 Minuten abkühlen lassen."
+    },
+    {
+      "index": 6,
+      "instruction": "Zitronensaft zuletzt einrühren."
+    },
+    {
+      "index": 7,
+      "instruction": "45 Mulden mit ca. 70-80 g Kokosmasse füllen."
+    },
+    {
+      "index": 8,
+      "instruction": "Mindestens 4 Stunden, besser über Nacht bei 4-6 °C kühlen."
+    },
+    {
+      "index": 9,
+      "instruction": "Zum sicheren Ausformen 45-60 Minuten anfrieren."
+    },
+    {
+      "index": 10,
+      "instruction": "Für das Topping ca. 900 g Brombeeren mit Zucker und Zitronensaft kurz erhitzen; mit angerührter Speisestärke leicht binden und vollständig kühlen."
+    },
+    {
+      "index": 11,
+      "instruction": "Restliche Brombeeren für sichtbare Garnitur zurückhalten."
+    },
+    {
+      "index": 12,
+      "instruction": "Kokos-Törtchen ausformen, Brombeer-Topping und frische Brombeere kurz vor Ausgabe aufsetzen."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}

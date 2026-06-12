@@ -1,4 +1,5 @@
 import { ingredientGroupHints } from "../taxonomies/defaults.js";
+import { metroGroupSortIndex } from "../taxonomies/metro-groups.js";
 import type { ProductionBatch, ProductionPlan, PurchaseItem, PurchaseList } from "../types.js";
 import { SCHEMA_VERSION } from "../types.js";
 import { mergeRecipeSourceMetadata } from "../export-source-metadata.js";
@@ -117,7 +118,7 @@ export function aggregatePurchaseList(
         purchaseQty: purchaseQtyFor(ingredient.quantity.amount, ingredient.quantity.unit),
         purchaseUnit: purchaseUnitFor(ingredient.quantity.unit),
         group: ingredient.group,
-        supplierHint: ingredient.group === "beverages" ? "Metro Drinks" : "Metro Fresh",
+        supplierHint: ingredient.group === "getraenke_als_zutat" ? "Metro Drinks" : "Metro Fresh",
         sourceRecipes: [batch.recipeId],
         sourceRecipeMetadata: batch.recipeSource ? [batch.recipeSource] : [],
         mappingConfidence: 0.95
@@ -129,8 +130,11 @@ export function aggregatePurchaseList(
     aggregatePurchaseItem(aggregate, item);
   }
 
-  const items = [...aggregate.values()].sort((left, right) =>
-    left.group.localeCompare(right.group) || left.displayName.localeCompare(right.displayName)
+  const items = [...aggregate.values()].sort(
+    (left, right) =>
+      metroGroupSortIndex(left.group) - metroGroupSortIndex(right.group) ||
+      left.group.localeCompare(right.group) ||
+      left.displayName.localeCompare(right.displayName)
   );
 
   return {

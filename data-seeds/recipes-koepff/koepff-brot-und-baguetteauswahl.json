@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "recipeId": "koepff-brot-und-baguetteauswahl",
+  "name": "Brot- und Baguetteauswahl",
+  "source": {
+    "tier": "internal_approved",
+    "originType": "approved_import",
+    "reference": "Produktionsmappe Köpff 2026-06-14",
+    "publisher": "THE ONE",
+    "retrievedAt": "2026-06-14T00:00:00.000Z",
+    "approvalState": "review_required",
+    "qualityScore": 0.95,
+    "fitScore": 1,
+    "extractionCompleteness": 1,
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+  },
+  "baseYield": {
+    "servings": 45,
+    "unit": "Portionen"
+  },
+  "ingredients": [
+    {
+      "ingredientId": "koepff-brot-und-baguetteauswahl-01-brot-und-baguetteauswahl-fertig-zugekauft",
+      "name": "Brot- und Baguetteauswahl, fertig zugekauft",
+      "quantity": {
+        "amount": 2025,
+        "unit": "g"
+      },
+      "group": "backwaren_zukauf"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Ware annehmen, Frische prüfen und trocken lagern."
+    },
+    {
+      "index": 2,
+      "instruction": "Erst service-nah schneiden oder aufbacken/temperieren."
+    },
+    {
+      "index": 3,
+      "instruction": "Brot/Baguette sortieren und in Brotkörben oder auf Platten auslegen."
+    }
+  ],
+  "scalingRules": {
+    "defaultLossFactor": 1,
+    "batchSize": 45
+  },
+  "allergens": [],
+  "dietTags": []
+}
