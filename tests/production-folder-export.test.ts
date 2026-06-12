@@ -367,6 +367,26 @@ describe("production folder export", () => {
     expect(html).not.toContain("<th>Zielbudget</th>");
   });
 
+  it("uses kitchen-facing quantity labels and hides internal unit names", () => {
+    const input = fixture();
+    input.plan.productionBatches[0].scaledYield.unit = "servings";
+    input.plan.kitchenSheets[0].productionQty.unit = "servings";
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain("45 Personen");
+    expect(html).toContain("1,2 Portionen p. P.");
+    expect(html).toContain("54 Portionen");
+    expect(html).toContain("Verlustfaktor 1,2");
+    expect(html).not.toContain("defaultLossFactor");
+    expect(html).not.toContain("servings");
+    expect(html).not.toContain("PAX");
+  });
+
   it("returns 404 for an unknown production plan", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

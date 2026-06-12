@@ -111,8 +111,16 @@ describe("production question language state", () => {
         serviceForm: "buffet"
       },
       assumptions: [
-        { code: "event_type_defaulted", message: "Event type inferred as lunch.", applied: true },
-        { code: "service_form_defaulted", message: "Service form inferred as buffet.", applied: true }
+        {
+          code: "event_type_defaulted",
+          message: "Eventtyp aus dem Anfragetext abgeleitet: Lunch.",
+          applied: true
+        },
+        {
+          code: "service_form_defaulted",
+          message: "Serviceform aus dem Anfragetext abgeleitet: Buffet.",
+          applied: true
+        }
       ]
     });
 

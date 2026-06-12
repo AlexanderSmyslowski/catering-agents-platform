@@ -39,12 +39,16 @@ function formatNumber(value: number): string {
     : value.toLocaleString("de-DE", { maximumFractionDigits: 2 });
 }
 
+function formatUnit(unit: string): string {
+  return unit === "servings" ? "Portionen" : unit;
+}
+
 function formatQuantity(quantity?: { amount: number; unit: string }): string {
   if (!quantity) {
     return "offen";
   }
 
-  return `${formatNumber(quantity.amount)} ${quantity.unit}`;
+  return `${formatNumber(quantity.amount)} ${formatUnit(quantity.unit)}`;
 }
 
 function formatMoney(value?: { amount: number; currency: string }): string | undefined {
@@ -232,7 +236,7 @@ function renderSection5(spec: AcceptedEventSpec): string {
     : "";
 
   return `<section><h2>5. Kalkulationsübersicht</h2><table class="facts"><tbody>${[
-    row("PAX", spec.attendees.expected ? String(spec.attendees.expected) : "offen"),
+    row("Personen", spec.attendees.expected ? String(spec.attendees.expected) : "offen"),
     priceRows,
     row("Wirtschaftliche Plausibilität", "manuell zu bewerten — prüfbedürftig")
   ].join("")}</tbody></table></section>`;
@@ -257,10 +261,10 @@ function renderSection6(input: RenderProductionFolderInput, recipeById: Map<stri
     const recipe = source.recipeId ? recipeById.get(source.recipeId) : undefined;
     const total = productionQuantityFor("productionQty" in source ? source : undefined, batch);
     const perPerson = pax && total
-      ? `${formatNumber(total.amount / pax)} ${total.unit} / PAX`
+      ? `${formatNumber(total.amount / pax)} ${formatUnit(total.unit)} p. P.`
       : "offen";
     const lossFactor = recipe?.scalingRules.defaultLossFactor ?? batch?.lossFactor ?? 1;
-    const lossNote = lossFactor > 1 ? `defaultLossFactor ${formatNumber(lossFactor)}` : "";
+    const lossNote = lossFactor > 1 ? `Verlustfaktor ${formatNumber(lossFactor)}` : "";
 
     return `<tr><td>${escapeHtml(componentLabel(input.spec, source.componentId))}</td><td>${escapeHtml(linkedRecipeLabel(recipeById, source.recipeId))}</td><td>${escapeHtml(perPerson)}</td><td>${escapeHtml(formatQuantity(total))}</td><td>${escapeHtml(lossNote)}</td></tr>`;
   });
@@ -446,7 +450,7 @@ function headerMeta(spec: AcceptedEventSpec): string {
     spec.customer?.name,
     spec.venue?.name ?? spec.venue?.address,
     spec.event.date,
-    spec.attendees.expected ? `${spec.attendees.expected} PAX` : undefined
+    spec.attendees.expected ? `${spec.attendees.expected} Personen` : undefined
   ]
     .filter(Boolean)
     .join(" | ");
