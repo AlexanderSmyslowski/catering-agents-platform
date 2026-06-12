@@ -43,7 +43,7 @@ export class RecipeDiscoveryService {
     eventSpec: AcceptedEventSpec
   ): Promise<RecipeResolution> {
     const searchTrace = createRecipeSearchTrace();
-    const repositoryCandidates = await this.findInternalCandidates(component);
+    const repositoryCandidates = await this.repository.findCandidates(component);
     const internalResolution = resolveInternalRecipeCandidate({
       repositoryCandidates,
       component,
@@ -62,23 +62,5 @@ export class RecipeDiscoveryService {
       repository: this.repository,
       searchTrace
     });
-  }
-
-  private async findInternalCandidates(component: MenuComponent): Promise<Recipe[]> {
-    const candidates = await this.repository.findCandidates(component);
-    if (candidates.length > 0) {
-      return candidates;
-    }
-
-    const tarteFallbackLabel = component.label
-      .replace(/\btarte\b/gi, " ")
-      .replace(/[-–—|]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!/\btarte\b/i.test(component.label) || !tarteFallbackLabel || tarteFallbackLabel === component.label) {
-      return candidates;
-    }
-
-    return this.repository.findCandidates({ label: tarteFallbackLabel });
   }
 }

@@ -174,9 +174,7 @@ describe("internal recipe candidate resolution flow", () => {
 
     const resolution = await discovery.resolveRecipe(menuComponent, eventSpec(menuComponent));
 
-    // Regression diagnosis: RecipeLibrary.findCandidates derives the required archetype "quiche" for
-    // every Tarte label. The Köpff recipe is a valid vegetarian Tortilla-Tarte, but contains no quiche
-    // token, so it was filtered out before internal score thresholds or the hybrid path could apply.
+    // Regression diagnosis: fixed in the archetype layer; quiche now accepts tarte tokens.
     expect(resolution.recipe?.recipeId).toBe("koepff-tortilla-tarte-getrocknete-tomaten-oliven");
     expect(resolution.selection).toMatchObject({
       componentId: "component-tortilla-tarte",
