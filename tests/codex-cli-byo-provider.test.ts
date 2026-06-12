@@ -132,8 +132,6 @@ describe("Codex CLI BYO LLM provider", () => {
       "exec",
       "--sandbox",
       "read-only",
-      "--ask-for-approval",
-      "never",
       "--ephemeral",
       "--ignore-rules",
       "--skip-git-repo-check",
