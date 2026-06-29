@@ -53,11 +53,11 @@ describe("production status summary state", () => {
       productionPlanStatusLabel: "vollständig",
       productionObjectStatusLabel: "1 Plan · vollständig",
       purchaseZoneStatusLabel: "1 Liste · 7 Positionen",
-      productionIntakeOriginLabel: "text · 2026-05-26T01:00:00.000Z · request-1",
+      productionIntakeOriginLabel: "Text · 2026-05-26T01:00:00.000Z · Intake-Anfrage verknüpft",
       productionAuditTrailLabel:
         "Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T10:00:00.000Z",
       productionHandoffExportLabel: "Produktionsblatt vorhanden · Einkaufsliste vorhanden",
-      productionHandoffContextLabel: "planId plan-1 · specId spec-1 · purchaseListId purchase-1"
+      productionHandoffContextLabel: "Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden"
     });
     expect(state.productionNextStep.title).toBe("Rückfragen beantworten");
   });

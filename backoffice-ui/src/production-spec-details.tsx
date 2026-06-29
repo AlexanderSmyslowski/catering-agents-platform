@@ -14,7 +14,7 @@ export function ProductionSpecDetailsCard({ spec }: ProductionSpecDetailsCardPro
   return (
     <div className="component-answer-card">
       <p className="eyebrow">Spezifikationsdetails</p>
-      <p className="helper-text">{detailsState.specIdLabel}</p>
+      <p className="helper-text">{detailsState.contextLabel}</p>
       <p className="helper-text">{detailsState.eventLabel}</p>
       <p className="helper-text">{detailsState.summaryLabel}</p>
       <p className="helper-text">Menüpunkte / Komponenten:</p>

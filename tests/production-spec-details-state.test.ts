@@ -28,7 +28,7 @@ describe("production spec details state", () => {
         ]
       })
     ).toEqual({
-      specIdLabel: "specId: spec-1",
+      contextLabel: "Spezifikation im Fokus",
       eventLabel: "Eventtyp: Lunch · Datum: 2026-06-12 · Terminfenster: Service 12:00–14:00",
       summaryLabel: "Teilnehmerzahl: 48 · Serviceform: Buffet · Readiness: teilweise vollständig",
       menuItems: [
@@ -50,7 +50,7 @@ describe("production spec details state", () => {
         menuPlan: [{ componentId: "component-1" }]
       })
     ).toEqual({
-      specIdLabel: "specId: spec-2",
+      contextLabel: "Spezifikation im Fokus",
       eventLabel: "Eventtyp: Konferenz · Terminfenster: noch zu bestätigen",
       summaryLabel: "Teilnehmerzahl: - · Serviceform: offen · Readiness: vollständig",
       menuItems: [

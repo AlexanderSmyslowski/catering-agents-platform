@@ -52,6 +52,31 @@ describe("offer draft promote action", () => {
     ]);
   });
 
+  it("focuses the promoted spec for the production route before refreshing", async () => {
+    const calls: string[] = [];
+    const actionInput = input({
+      promoteOfferDraft: vi.fn(async () => {
+        calls.push("promoteOfferDraft");
+        return { specId: " spec-promoted " };
+      }),
+      setFocusedProductionSpecId: vi.fn((specId) => {
+        calls.push(`setFocusedProductionSpecId:${specId}`);
+      }),
+      refreshDashboard: vi.fn(async () => {
+        calls.push("refreshDashboard");
+      })
+    });
+    const promoteDraft = buildOfferDraftPromoteAction(actionInput);
+
+    await promoteDraft("draft-1", "balanced");
+
+    expect(calls).toEqual([
+      "promoteOfferDraft",
+      "setFocusedProductionSpecId:spec-promoted",
+      "refreshDashboard"
+    ]);
+  });
+
   it("passes through an omitted variant id for default promotion", async () => {
     const actionInput = input();
     const promoteDraft = buildOfferDraftPromoteAction(actionInput);

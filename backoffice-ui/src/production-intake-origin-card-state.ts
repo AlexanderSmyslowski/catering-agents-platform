@@ -64,6 +64,17 @@ function formatSourceMetadataSummary(input: Record<string, unknown>): string | u
     .join(" · ");
 }
 
+function formatSourceChannelLabel(value: unknown): string {
+  const channel = String(value ?? "").trim();
+  const labels: Record<string, string> = {
+    manual_form: "manuelle Eingabe",
+    offer: "Angebotsagent",
+    text: "Text",
+    pdf_upload: "Dateiupload"
+  };
+  return channel ? labels[channel] ?? channel : "-";
+}
+
 export function formatDocumentIngestionSummary(input: Record<string, unknown>): string | undefined {
   const marker = asRecord(input.documentIngestion);
   const status = readStringOrNumber(marker, ["status"]);
@@ -87,9 +98,9 @@ export function buildProductionIntakeOriginCardState(
   const rawInputs = Array.isArray(intakeRequestDetail.rawInputs) ? intakeRequestDetail.rawInputs : [];
 
   return {
-    requestSummaryLabel: `requestId: ${String(intakeRequestDetail.requestId ?? "-")} · channel: ${String(
-      source?.channel ?? "-"
-    )} · receivedAt: ${String(source?.receivedAt ?? "-")}`,
+    requestSummaryLabel: `Intake-Ursprung: ${formatSourceChannelLabel(source?.channel)} · erhalten ${String(
+      source?.receivedAt ?? "-"
+    )}`,
     rawInputs: rawInputs.map((rawInput, index) => {
       const rawInputRecord = rawInput as Record<string, unknown>;
       const documentId = readStringOrNumber(rawInputRecord, ["documentId"]);

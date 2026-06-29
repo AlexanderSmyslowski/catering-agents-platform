@@ -461,7 +461,7 @@ export function renderProductionFolderHtml(input: RenderProductionFolderInput): 
   const recipeById = new Map(recipes.map((recipe) => [recipe.recipeId, recipe]));
   const purchaseList = primaryPurchaseListFor(input.spec, input.purchaseLists ?? []);
 
-  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Produktionsmappe ${escapeHtml(input.plan.planId)}</title><style>
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</title><style>
 @page { size: A4; margin: 18mm; }
 body { color: #1f2933; font-family: Inter, Arial, sans-serif; font-size: 12px; line-height: 1.45; margin: 0; }
 header.document-header { border-bottom: 1px solid #cbd5df; margin-bottom: 18px; padding-bottom: 10px; }

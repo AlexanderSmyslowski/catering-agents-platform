@@ -49,7 +49,7 @@ export function formatArchiveCurrentIntakeContextLabel(input: {
 }): string | undefined {
   const requestId = input.currentIntakeRequestId?.trim();
 
-  return requestId ? `Intake-Anfrage ${requestId}` : undefined;
+  return requestId ? "Intake-Anfrage im Fokus" : undefined;
 }
 
 export function buildProductionSourceInputState({

@@ -162,8 +162,9 @@ describe("backoffice intake request detail", () => {
     });
 
     expect(document.body.textContent).toContain("Ursprüngliche Intake-Anfrage");
-    expect(document.body.textContent).toContain("requestId: request-detail-1");
-    expect(document.body.textContent).toContain("channel: text");
+    expect(document.body.textContent).toContain("Intake-Ursprung: Text · erhalten 2026-04-10T09:30:00.000Z");
+    expect(document.body.textContent).not.toContain("requestId: request-detail-1");
+    expect(document.body.textContent).not.toContain("channel: text");
     expect(document.body.textContent).toContain("2026-04-10T09:30:00.000Z");
     expect(document.body.textContent).toContain("Herkunft und Übergabe");
     expect(document.body.textContent).toContain("Intake-Ursprung");

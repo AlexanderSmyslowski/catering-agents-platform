@@ -489,12 +489,12 @@ describe("production route state", () => {
           source: { channel: "text", receivedAt: "2026-05-26T01:00:00.000Z" }
         }
       })
-    ).toBe("text · 2026-05-26T01:00:00.000Z · request-1");
+    ).toBe("Text · 2026-05-26T01:00:00.000Z · Intake-Anfrage verknüpft");
     expect(formatProductionIntakeOriginLabel({ currentIntakeRequestId: "request-2" })).toBe(
-      "Intake-Anfrage request-2"
+      "Intake-Anfrage verknüpft"
     );
     expect(formatProductionIntakeOriginLabel({ currentIntakeRequestId: " request-2 " })).toBe(
-      "Intake-Anfrage request-2"
+      "Intake-Anfrage verknüpft"
     );
     expect(formatProductionIntakeOriginLabel({ currentIntakeRequestId: "   " })).toBe(
       "kein Intake-Ursprung verknüpft"
@@ -507,21 +507,21 @@ describe("production route state", () => {
         selectedPlanSpec: { specId: "spec-fallback" },
         purchaseLists: [{ purchaseListId: "purchase-1" }]
       })
-    ).toBe("planId plan-1 · specId spec-1 · purchaseListId purchase-1");
+    ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden");
     expect(
       formatProductionHandoffContextLabel({
         selectedPlan: { planId: "plan-2" },
         selectedPlanSpec: { specId: "spec-fallback" },
         purchaseLists: []
       })
-    ).toBe("planId plan-2 · specId spec-fallback");
+    ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste offen");
     expect(
       formatProductionHandoffContextLabel({
         selectedPlan: { planId: " plan-3 ", eventSpecId: "   " },
         selectedPlanSpec: { specId: " spec-fallback " },
         purchaseLists: [{ purchaseListId: " purchase-3 " }]
       })
-    ).toBe("planId plan-3 · specId spec-fallback · purchaseListId purchase-3");
+    ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden");
     expect(formatProductionHandoffContextLabel({ purchaseLists: [] })).toBeUndefined();
   });
 

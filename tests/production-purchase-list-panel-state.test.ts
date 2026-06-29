@@ -54,9 +54,9 @@ describe("production purchase list panel state", () => {
           key: " purchase-lunch ",
           title: "Lunch · 40 Teilnehmer · 2026-06-18",
           itemCountLabel: "Positionen: 2",
-          contextLabel: "purchaseListId: purchase-lunch · specId: spec-lunch",
+          contextLabel: "Aktueller Vorgang",
           exportUrl: "/api/exports/v1/exports/purchase-lists/purchase-lunch/csv",
-          exportContextLabel: "für aktuellen Vorgang purchase-lunch · Spezifikation spec-lunch",
+          exportContextLabel: "für aktuellen Vorgang",
           warnings: [],
           previewItems: [
             {
@@ -76,7 +76,7 @@ describe("production purchase list panel state", () => {
           helperLabel: "Ältere Einkaufsliste aus anderem Vorgang - nicht aktueller Vorgang.",
           itemCountLabel: "Positionen: 3",
           exportUrl: "/api/exports/v1/exports/purchase-lists/purchase-dinner/csv",
-          exportContextLabel: "aus älterem Vorgang purchase-dinner · Spezifikation spec-dinner"
+          exportContextLabel: "aus älterem Vorgang"
         }
       ],
       showArchivedLists: true
@@ -128,9 +128,9 @@ describe("production purchase list panel state", () => {
           key: "",
           title: "Einkaufsliste",
           itemCountLabel: "Positionen: -",
-          contextLabel: "purchaseListId: - · specId: -",
+          contextLabel: "Aktueller Vorgang",
           exportUrl: "/api/exports/v1/exports/purchase-lists/-/csv",
-          exportContextLabel: "für aktuellen Vorgang - · Spezifikation -",
+          exportContextLabel: "für aktuellen Vorgang",
           warnings: [],
           previewItems: []
         }

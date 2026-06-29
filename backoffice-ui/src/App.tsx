@@ -57,6 +57,26 @@ import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useOperatorNameState } from "./use-operator-name-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 
+const PROMOTED_PRODUCTION_SPEC_FOCUS_KEY = "catering.promotedProductionSpecFocus";
+
+function rememberPromotedProductionSpecFocus(specId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(PROMOTED_PRODUCTION_SPEC_FOCUS_KEY, specId);
+}
+
+function consumePromotedProductionSpecFocus(route: string): string | undefined {
+  if (route !== "production" || typeof window === "undefined") {
+    return undefined;
+  }
+
+  const specId = window.sessionStorage.getItem(PROMOTED_PRODUCTION_SPEC_FOCUS_KEY)?.trim();
+  window.sessionStorage.removeItem(PROMOTED_PRODUCTION_SPEC_FOCUS_KEY);
+  return specId || undefined;
+}
+
 export function App() {
   const route = useMemo(() => detectRoute(getPathname()), []);
   const baseUrl = useMemo(() => getBaseUrl(), []);
@@ -91,7 +111,9 @@ export function App() {
   const [search, setSearch] = useState("");
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
-  const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string>();
+  const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string | undefined>(
+    () => consumePromotedProductionSpecFocus(route)
+  );
   const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(false);
   const {
     intakeText,
@@ -459,6 +481,11 @@ export function App() {
     setError
   });
 
+  const focusPromotedProductionSpec = (specId: string) => {
+    rememberPromotedProductionSpecFocus(specId);
+    setFocusedProductionSpecId(specId);
+  };
+
   const {
     productionRouteFilterState,
     productionRouteMainLayoutState
@@ -538,6 +565,7 @@ export function App() {
     submitting,
     setSubmitting,
     clearMessages,
+    setFocusedProductionSpecId: focusPromotedProductionSpec,
     refreshDashboard,
     setNotice,
     setError,

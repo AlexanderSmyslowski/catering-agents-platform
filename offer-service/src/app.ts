@@ -19,6 +19,7 @@ import {
   type CollectionStorageOptions,
   validateOfferDraft
 } from "@catering/shared-core";
+import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "./store.js";
 import { registerOfferDraftRoutes } from "./routes/draft-routes.js";
 
@@ -37,6 +38,7 @@ interface RecipeReviewBody {
 
 export interface OfferAppOptions extends CollectionStorageOptions {
   store?: OfferStore;
+  intakeStore?: IntakeStore;
   recipeLibrary?: RecipeLibrary;
   auditLog?: AuditLogStore;
   trustedActorSecret?: string;
@@ -169,6 +171,13 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
+  const intakeStore =
+    options.intakeStore ??
+    new IntakeStore({
+      rootDir: storageOptions?.rootDir,
+      databaseUrl: storageOptions?.databaseUrl,
+      pgPool: storageOptions?.pgPool
+    });
   const recipeLibrary =
     options.recipeLibrary ??
     new RecipeLibrary(undefined, {
@@ -210,6 +219,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
 
   registerOfferDraftRoutes(app, {
     store,
+    intakeStore,
     auditLog,
     trustedActorSecret,
     allowDevActorHeader,
@@ -348,7 +358,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         entityType: "Recipe",
         entityId: recipe.recipeId,
         actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-        summary: `Rezept ${recipe.name} ueber den Angebots-Workflow geprueft.`,
+        summary: `Rezept ${recipe.name} über den Angebots-Workflow geprüft.`,
         details: {
           decision: request.body.decision,
           approvalState: recipe.source.approvalState,

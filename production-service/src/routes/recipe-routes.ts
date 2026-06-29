@@ -220,7 +220,7 @@ export function registerProductionRecipeRoutes(
         entityType: "Recipe",
         entityId: recipe.recipeId,
         actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-        summary: `Rezept ${recipe.name} ueber den Produktions-Workflow geprueft.`,
+        summary: `Rezept ${recipe.name} über den Produktions-Workflow geprüft.`,
         details: {
           decision: request.body.decision,
           approvalState: recipe.source.approvalState,

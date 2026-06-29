@@ -1,5 +1,3 @@
-import { formatProductionContextId } from "./production-route-context-state.js";
-
 export function countPurchaseListItems(purchaseLists: Array<Record<string, unknown>>): number {
   return purchaseLists.reduce((sum, purchaseList) => {
     const totals = purchaseList.totals as Record<string, unknown> | undefined;
@@ -29,13 +27,24 @@ export function formatProductionIntakeOriginLabel(input: {
 }): string {
   if (input.intakeRequestDetail) {
     const source = input.intakeRequestDetail.source as Record<string, unknown> | undefined;
-    return `${String(source?.channel ?? "-")} · ${String(source?.receivedAt ?? "-")} · ${String(
-      input.intakeRequestDetail.requestId ?? "-"
+    return `${formatIntakeSourceChannelLabel(source?.channel)} · ${String(source?.receivedAt ?? "-")} · ${String(
+      input.intakeRequestDetail.requestId ? "Intake-Anfrage verknüpft" : "Intake-Anfrage ohne Kennung"
     )}`;
   }
 
   const requestId = input.currentIntakeRequestId?.trim();
-  return requestId ? `Intake-Anfrage ${requestId}` : "kein Intake-Ursprung verknüpft";
+  return requestId ? "Intake-Anfrage verknüpft" : "kein Intake-Ursprung verknüpft";
+}
+
+function formatIntakeSourceChannelLabel(value: unknown): string {
+  const channel = String(value ?? "").trim();
+  const labels: Record<string, string> = {
+    manual_form: "manuelle Eingabe",
+    offer: "Angebotsagent",
+    text: "Text",
+    pdf_upload: "Dateiupload"
+  };
+  return channel ? labels[channel] ?? channel : "-";
 }
 
 export function formatProductionHandoffExportLabel(input: {
@@ -58,9 +67,9 @@ export function formatProductionHandoffContextLabel(input: {
   }
 
   return [
-    `planId ${formatProductionContextId(input.selectedPlan.planId)}`,
-    `specId ${formatProductionContextId(input.selectedPlan.eventSpecId, input.selectedPlanSpec?.specId)}`,
-    input.purchaseLists[0] ? `purchaseListId ${formatProductionContextId(input.purchaseLists[0].purchaseListId)}` : undefined
+    "Produktionsplan im Fokus",
+    input.selectedPlanSpec ? "Spezifikation im Fokus" : "Spezifikation aus Planbezug",
+    input.purchaseLists[0] ? "Einkaufsliste vorhanden" : "Einkaufsliste offen"
   ]
     .filter(Boolean)
     .join(" · ");

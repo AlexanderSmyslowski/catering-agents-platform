@@ -18,6 +18,7 @@ export type AppOfferRouteAppBoundaryInput =
     promoteOfferDraft: OfferDraftPromoteActionInput["promoteOfferDraft"];
     setSubmitting: OfferTextSubmitActionInput["setSubmitting"];
     clearMessages: OfferTextSubmitActionInput["clearMessages"];
+    setFocusedProductionSpecId?: OfferDraftPromoteActionInput["setFocusedProductionSpecId"];
     refreshDashboard: OfferTextSubmitActionInput["refreshDashboard"];
     setNotice: OfferTextSubmitActionInput["setNotice"];
     setError: OfferTextSubmitActionInput["setError"];
@@ -40,6 +41,7 @@ export function buildAppOfferRouteAppBoundary(
     promoteOfferDraft: input.promoteOfferDraft,
     setSubmitting: input.setSubmitting,
     clearMessages: input.clearMessages,
+    setFocusedProductionSpecId: input.setFocusedProductionSpecId,
     refreshDashboard: input.refreshDashboard,
     setNotice: input.setNotice,
     setError: input.setError

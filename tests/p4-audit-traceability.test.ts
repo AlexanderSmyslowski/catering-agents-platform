@@ -111,7 +111,7 @@ describe("P4 audit and review traceability", () => {
       expect(reviewEntry?.actor && typeof reviewEntry.actor === "object" ? (reviewEntry.actor as Record<string, unknown>).name : undefined).toBe(
         "Produktions-Mitarbeiter"
       );
-      expect(String(reviewEntry?.summary ?? "")).toContain("ueber den Produktions-Workflow geprueft");
+      expect(String(reviewEntry?.summary ?? "")).toContain("über den Produktions-Workflow geprüft");
     } finally {
       await app.close();
       rmSync(dataRoot, { recursive: true, force: true });
@@ -206,7 +206,7 @@ describe("P4 audit and review traceability", () => {
       expect(reviewEntry).toBeDefined();
       expect(reviewEntry?.entityType).toBe("Recipe");
       expect(reviewEntry?.actor.name).toBe(offerOperatorName);
-      expect(String(reviewEntry?.summary ?? "")).toContain("ueber den Angebots-Workflow geprueft");
+      expect(String(reviewEntry?.summary ?? "")).toContain("über den Angebots-Workflow geprüft");
     } finally {
       await app.close();
       rmSync(dataRoot, { recursive: true, force: true });

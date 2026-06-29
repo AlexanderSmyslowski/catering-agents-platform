@@ -464,8 +464,9 @@ describe("backoffice internal usage smoke", () => {
     });
 
     expect(document.body.textContent ?? "").toContain("Ursprüngliche Intake-Anfrage");
-    expect(document.body.textContent ?? "").toContain("requestId: usage-manual-1");
-    expect(document.body.textContent ?? "").toContain("channel: manual_form");
+    expect(document.body.textContent ?? "").toContain("Intake-Ursprung: manuelle Eingabe");
+    expect(document.body.textContent ?? "").not.toContain("requestId: usage-manual-1");
+    expect(document.body.textContent ?? "").not.toContain("channel: manual_form");
     expect(document.body.textContent ?? "").toContain("Eventtyp: Konferenz");
     expect(document.body.textContent ?? "").toContain("Datum: 2026-07-12");
     expect(document.body.textContent ?? "").toContain("Teilnehmerzahl: 24 · Serviceform: Buffet · Readiness: vollständig");
@@ -533,8 +534,9 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Produktionsarbeit prüfen");
     expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
     expect(document.body.textContent ?? "").toContain("Einkaufsliste");
-    expect(document.body.textContent ?? "").toContain(
-      `Einkaufsliste exportieren für aktuellen Vorgang ${artifacts.purchaseList.purchaseListId} · Spezifikation ${fixture.plannedSpec.specId}`
+    expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren für aktuellen Vorgang");
+    expect(document.body.textContent ?? "").not.toContain(
+      `Einkaufsliste exportieren für aktuellen Vorgang ${artifacts.purchaseList.purchaseListId}`
     );
     expect(document.body.textContent ?? "").toContain("Tomaten");
     expect(findAnchorByText("Produktionsblatt exportieren").href).toContain(

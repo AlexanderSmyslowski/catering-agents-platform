@@ -298,7 +298,8 @@ describe("critical path rehearsal", () => {
       });
       expect(offerExport.statusCode).toBe(200);
       expect(offerExport.headers["content-type"]).toContain("text/html");
-      expect(offerExport.body).toContain(draft.draftId);
+      expect(offerExport.body).toContain("<h1>Angebot</h1>");
+      expect(offerExport.body).not.toContain(draft.draftId);
 
       const planExport = await exportApp.inject({
         method: "GET",

@@ -106,8 +106,8 @@ describe("production route view app boundary", () => {
       productionPlanStatusLabel: "vollständig",
       productionObjectStatusLabel: "1 Plan · vollständig",
       purchaseZoneStatusLabel: "1 Liste · 7 Positionen",
-      productionIntakeOriginLabel: "text · 2026-05-26T01:00:00.000Z · request-1",
-      productionHandoffContextLabel: "planId plan-1 · specId spec-1 · purchaseListId purchase-1"
+      productionIntakeOriginLabel: "Text · 2026-05-26T01:00:00.000Z · Intake-Anfrage verknüpft",
+      productionHandoffContextLabel: "Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden"
     });
     expect(boundary.productionRouteViewState.workbenchSummary).toMatchObject({
       activeSpecLabel: "Lunch · 80 Teilnehmer · 2026-06-01",

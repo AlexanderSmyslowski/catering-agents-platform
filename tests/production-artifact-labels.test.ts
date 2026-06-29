@@ -53,7 +53,7 @@ describe("production artifact labels", () => {
     expect(markup).not.toContain("<strong>Produktionsplan</strong>");
   });
 
-  it("uses normalized plan and spec ids for the production download context", () => {
+  it("keeps ids in export URLs but not in the production download context label", () => {
     const markup = renderToStaticMarkup(
       createElement(ProductionPlanDownloadCard, {
         selectedPlan: {
@@ -69,12 +69,12 @@ describe("production artifact labels", () => {
       })
     );
 
-    expect(markup).toContain("Plan-Kontext: planId plan-lunch · specId spec-lunch");
+    expect(markup).toContain("Plan-Kontext: aktueller Produktionsplan");
     expect(markup).toContain("Produktionsblatt exportieren");
-    expect(markup).toContain("für Plan plan-lunch · Spezifikation spec-lunch");
+    expect(markup).toContain("für aktuellen Produktionsplan");
     expect(markup).toContain('href="/api/exports/v1/exports/production-plans/plan-lunch/html"');
-    expect(markup).not.toContain("Plan-Kontext: planId  plan-lunch ");
-    expect(markup).not.toContain("Spezifikation  spec-lunch ");
+    expect(markup).not.toContain("Plan-Kontext: planId");
+    expect(markup).not.toContain("Spezifikation spec-lunch");
   });
 
   it("uses normalized spec ids for current and archived purchase list labels", () => {

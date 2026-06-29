@@ -47,7 +47,7 @@ describe("production source input bundle", () => {
         canClearWorkspace: true,
         canArchiveCurrentIntake: true,
         clearWorkspaceContextLabel: "Plan-Kontext plan-1",
-        archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1",
+        archiveCurrentIntakeContextLabel: "Intake-Anfrage im Fokus",
         uploadInputRef,
         openFilePicker,
         submitText
@@ -63,7 +63,7 @@ describe("production source input bundle", () => {
       intakeText: "Kaffeepause fuer 20 Personen",
       clearWorkspaceTitle: "Lokalen Arbeitsbereich leeren: Plan-Kontext plan-1",
       archiveCurrentIntakeTitle:
-        "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-1"
+        "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage im Fokus"
     });
     expect(bundle.productionSourceInputActions.uploadInputRef).toBe(uploadInputRef);
     expect(bundle.productionSourceInputActions.openFilePicker).toBe(openFilePicker);

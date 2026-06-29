@@ -83,7 +83,7 @@ export function registerProductionArtifactRoutes(
       entityType: "ProductionPlan",
       entityId: artifacts.productionPlan.planId,
       actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-      summary: `Produktionsplan fuer ${eventSpec.specId} erstellt.`,
+      summary: "Produktionsplan erstellt.",
       details: {
         specId: eventSpec.specId,
         purchaseListId: artifacts.purchaseList.purchaseListId,

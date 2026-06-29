@@ -134,7 +134,10 @@ describe("app offer route app boundary", () => {
     const boundaryInput = input({
       promoteOfferDraft: vi.fn(async (draftId, variantId) => {
         calls.push(`promoteOfferDraft:${draftId}:${variantId}`);
-        return {};
+        return { specId: "spec-promoted" };
+      }),
+      setFocusedProductionSpecId: vi.fn((specId) => {
+        calls.push(`setFocusedProductionSpecId:${specId}`);
       }),
       refreshDashboard: vi.fn(async () => {
         calls.push("refreshDashboard");
@@ -150,6 +153,7 @@ describe("app offer route app boundary", () => {
     expect(boundaryInput.setError).not.toHaveBeenCalled();
     expect(calls).toEqual([
       "promoteOfferDraft:draft-1:balanced",
+      "setFocusedProductionSpecId:spec-promoted",
       "refreshDashboard",
       "setNotice:Angebotsvariante wurde als operative Spezifikation übernommen."
     ]);

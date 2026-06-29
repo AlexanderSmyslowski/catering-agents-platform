@@ -74,9 +74,9 @@ export function ProductionQuestionThread({
         questionCount={questionCount}
         readinessLabel={readinessLabel}
       />
-      <div className="component-answer-card" aria-label="ConversationSession-Projektion">
-        <p className="eyebrow">ConversationSession-Projektion</p>
-        <strong>{productionConversationProjection.sessionId}</strong>
+      <div className="component-answer-card" aria-label="Arbeitsverlauf">
+        <p className="eyebrow">Arbeitsverlauf</p>
+        <strong>Aktueller Vorgang</strong>
         <p className="helper-text">
           Read-only Session-Verlauf aus vorhandenen Spezifikations-, Rückfrage- und Output-Daten.
         </p>

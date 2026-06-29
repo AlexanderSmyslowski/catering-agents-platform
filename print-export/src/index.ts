@@ -121,7 +121,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
 
   return [
     "<html><body>",
-    `<h1>Angebot ${escapeHtml(draft.draftId)}</h1>`,
+    "<h1>Angebot</h1>",
     `<p>${escapeHtml(draft.eventSummary)}</p>`,
     `<p>Varianten: ${draft.variantSet.length}</p>`,
     `<p>Offene Punkte: ${draft.openQuestions.length}</p>`,
@@ -144,7 +144,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
       : [];
   return [
     "<html><body>",
-    `<h1>Produktionsplan ${escapeHtml(plan.planId)}</h1>`,
+    "<h1>Produktionsplan</h1>",
     `<p>Status: ${escapeHtml(plan.readiness.status)}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
