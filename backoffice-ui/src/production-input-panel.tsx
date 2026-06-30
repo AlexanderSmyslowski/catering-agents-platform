@@ -71,6 +71,60 @@ type ProductionInputPanelProps = {
   analysisResult?: ProductionAnalysisResult;
 };
 
+function ProductionAnalysisResultCard({
+  analysisResult,
+  documentName
+}: {
+  analysisResult: ProductionAnalysisResult;
+  documentName?: string;
+}) {
+  return (
+    <section className="production-analysis-result-card production-analysis-result-card--primary" aria-label="Erkannte Produktionsdaten">
+      <div className="production-analysis-result-card__header">
+        <div>
+          <p className="eyebrow">Analyse abgeschlossen</p>
+          <h3>Erkannte Produktionsdaten</h3>
+        </div>
+        {documentName ? <span className="production-analysis-file-badge">{documentName}</span> : null}
+      </div>
+      <strong>{analysisResult.title}</strong>
+      <p className="helper-text">{analysisResult.statusLine}</p>
+      <p className="helper-text">{analysisResult.planLine}</p>
+      <div className="production-analysis-result-grid">
+        <div>
+          <p className="eyebrow">Verständnis des Angebots</p>
+          {analysisResult.menuItems.length > 0 ? (
+            <ul className="item-list compact production-analysis-menu-list">
+              {analysisResult.menuItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="helper-text">Noch keine Gerichte oder Komponenten erkannt.</p>
+          )}
+        </div>
+        <div>
+          <p className="eyebrow">Pflichtprüfung</p>
+          <ul className="item-list compact production-analysis-checklist">
+            {analysisResult.checklistItems.map((item) => (
+              <li
+                key={item.label}
+                className={`production-analysis-checklist__item production-analysis-checklist__item--${item.status}`}
+              >
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <p className="helper-text production-analysis-next-step">
+        Nächster Produktionsschritt: {analysisResult.nextStepTitle}
+      </p>
+    </section>
+  );
+}
+
 export function ProductionInputPanel({
   submitting,
   sourceInput,
@@ -83,9 +137,16 @@ export function ProductionInputPanel({
     submitting,
     sourceInput
   });
+  const showPrimaryAnalysisResult = Boolean(panelState.showCompletedProgress && analysisResult);
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
+      {showPrimaryAnalysisResult && analysisResult ? (
+        <ProductionAnalysisResultCard
+          analysisResult={analysisResult}
+          documentName={sourceInput.activeDocumentName}
+        />
+      ) : null}
       <div className="upload-shortcut-bar">
         <div>
           <p className="eyebrow">Anfrageeingang</p>
@@ -153,7 +214,7 @@ export function ProductionInputPanel({
             </div>
           </div>
         ) : null}
-        {panelState.showCompletedProgress ? (
+        {panelState.showCompletedProgress && !showPrimaryAnalysisResult ? (
           <div className="progress-panel">
             <div
               className="progress-ring progress-ring--done"
@@ -169,43 +230,6 @@ export function ProductionInputPanel({
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
               </div>
               <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
-              {analysisResult ? (
-                <div className="production-analysis-result-card" aria-label="Erkannte Produktionsdaten">
-                  <p className="eyebrow">Erkannte Produktionsdaten</p>
-                  <strong>{analysisResult.title}</strong>
-                  <p className="helper-text">{analysisResult.statusLine}</p>
-                  <p className="helper-text">{analysisResult.planLine}</p>
-                  <div className="production-analysis-result-grid">
-                    <div>
-                      <p className="eyebrow">Verständnis des Angebots</p>
-                      {analysisResult.menuItems.length > 0 ? (
-                        <ul className="item-list compact production-analysis-menu-list">
-                          {analysisResult.menuItems.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="helper-text">Noch keine Gerichte oder Komponenten erkannt.</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="eyebrow">Pflichtprüfung</p>
-                      <ul className="item-list compact production-analysis-checklist">
-                        {analysisResult.checklistItems.map((item) => (
-                          <li
-                            key={item.label}
-                            className={`production-analysis-checklist__item production-analysis-checklist__item--${item.status}`}
-                          >
-                            <span>{item.label}</span>
-                            <strong>{item.value}</strong>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                  <p className="helper-text">Nächster Schritt: {analysisResult.nextStepTitle}</p>
-                </div>
-              ) : null}
             </div>
           </div>
         ) : null}

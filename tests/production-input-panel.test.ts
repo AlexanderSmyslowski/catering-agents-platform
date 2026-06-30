@@ -144,7 +144,8 @@ describe("production input panel", () => {
       }
     );
 
-    expect(markup).toContain("Analyse abgeschlossen für angebot.pdf");
+    expect(markup).toContain("Analyse abgeschlossen");
+    expect(markup).toContain("angebot.pdf");
     expect(markup).toContain("Erkannte Produktionsdaten");
     expect(markup).toContain("Empfang · 45 Teilnehmer · 2026-06-14");
     expect(markup).toContain("Rückfragen: offen 11 · beantwortet 0");
@@ -154,7 +155,10 @@ describe("production input panel", () => {
     expect(markup).toContain("Tortilla-Tarte");
     expect(markup).toContain("Pflichtprüfung");
     expect(markup).toContain("Preisrahmen");
-    expect(markup).toContain("Nächster Schritt: Rückfragen klären");
+    expect(markup).toContain("Nächster Produktionsschritt: Rückfragen klären");
+    expect(markup.indexOf("Erkannte Produktionsdaten")).toBeLessThan(markup.indexOf("Kundenanfrage übernehmen"));
+    expect(markup.indexOf("Erkannte Produktionsdaten")).toBeLessThan(markup.indexOf("Datei hier ablegen"));
+    expect(markup).not.toContain("<span>100%</span>");
   });
 
   it("keeps workspace actions separated as local demo maintenance", () => {
