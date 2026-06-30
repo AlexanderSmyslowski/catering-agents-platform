@@ -84,6 +84,8 @@ describe("print export HTML escaping", () => {
     const html = renderProductionPlanHtml(minimalProductionPlan());
 
     expect(html).toContain("<h1>Produktionsplan</h1>");
+    expect(html).toContain("Status: teilweise vollständig");
+    expect(html).not.toContain("Status: partial");
     expect(html).not.toContain("Produktionsplan plan-");
     expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;");

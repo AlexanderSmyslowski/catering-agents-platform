@@ -44,6 +44,18 @@ function formatBytes(sizeBytes: number): string {
   return `${(sizeBytes / 1024).toFixed(1)} KB`;
 }
 
+function formatReadinessStatus(value: string | undefined): string {
+  const labels: Record<string, string> = {
+    complete: "vollständig",
+    partial: "teilweise vollständig",
+    insufficient: "Prüfung nötig",
+    ready: "bereit",
+    draft: "Entwurf"
+  };
+
+  return value ? labels[value] ?? value : "offen";
+}
+
 function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
   const sourceAnchors = Array.isArray(record.sourceAnchors) ? record.sourceAnchors : [];
   const rows = sourceAnchors.flatMap((item) => {
@@ -145,7 +157,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
   return [
     "<html><body>",
     "<h1>Produktionsplan</h1>",
-    `<p>Status: ${escapeHtml(plan.readiness.status)}</p>`,
+    `<p>Status: ${escapeHtml(formatReadinessStatus(plan.readiness.status))}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
     ...unresolvedSection,
