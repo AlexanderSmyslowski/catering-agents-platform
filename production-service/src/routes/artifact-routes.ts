@@ -4,6 +4,7 @@ import {
   createLlmReadinessAgentAuditRecord,
   findLlmReadinessPromptSchemaEntryByInputKind,
   llmReadinessContractVersion,
+  buildProductionClarificationQuestions,
   validateAcceptedEventSpec,
   validateLlmReadinessModelOutputCandidate,
   type AcceptedEventSpec,
@@ -13,6 +14,7 @@ import {
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterRequest,
   type LlmReadinessProviderAdapterResponse,
+  type ProductionClarificationQuestion,
   type TrustedActor
 } from "@catering/shared-core";
 import type { IntakeStore } from "@catering/intake-service";
@@ -50,6 +52,21 @@ export interface ProductionArtifactRouteDependencies {
   ) => TrustedActor;
 }
 
+function blockingProductionClarificationQuestions(eventSpec: AcceptedEventSpec): ProductionClarificationQuestion[] {
+  return buildProductionClarificationQuestions({
+    spec: eventSpec as unknown as Record<string, unknown>
+  }).filter((question) => question.blocking);
+}
+
+function responseQuestion(question: ProductionClarificationQuestion) {
+  return {
+    questionId: question.questionId,
+    prompt: question.prompt,
+    reason: question.reason,
+    reasonCode: question.reasonCode
+  };
+}
+
 export function registerProductionArtifactRoutes(
   app: FastifyInstance,
   deps: ProductionArtifactRouteDependencies
@@ -75,6 +92,27 @@ export function registerProductionArtifactRoutes(
     }
 
     const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
+    const blockingQuestions = blockingProductionClarificationQuestions(eventSpec);
+    if (blockingQuestions.length > 0) {
+      await auditLog.log({
+        action: "production.plan_blocked_by_clarification",
+        entityType: "AcceptedEventSpec",
+        entityId: eventSpec.specId,
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+        summary: "Produktionsplanung wegen blockierender Rückfragen gestoppt.",
+        details: {
+          specId: eventSpec.specId,
+          blockingQuestionCount: blockingQuestions.length,
+          blockingQuestionIds: blockingQuestions.map((question) => question.questionId).join(",")
+        }
+      });
+      return reply.code(409).send({
+        message: "Blockierende Rückfragen müssen vor der Produktionsplanung geklärt werden.",
+        specId: eventSpec.specId,
+        blockingQuestions: blockingQuestions.map(responseQuestion)
+      });
+    }
+
     const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
     await store.savePlan(artifacts.productionPlan);
     await store.savePurchaseList(artifacts.purchaseList);
