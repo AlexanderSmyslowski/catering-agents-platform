@@ -142,6 +142,11 @@ describe("production input panel", () => {
           "Welche Convenience-Stufe ist gewünscht?"
         ],
         questionPreviewOverflowCount: 2,
+        artifactItems: [
+          { label: "Kalkulationsübersicht", value: "Preisrahmen offen", status: "open" },
+          { label: "Produktionsplan / Mengen", value: "noch nicht vorhanden", status: "open" },
+          { label: "Einkaufsliste", value: "noch nicht erstellt", status: "open" }
+        ],
         checklistItems: [
           { label: "Anlass", value: "Empfang", status: "ok" },
           { label: "Preisrahmen", value: "offen", status: "open" }
@@ -162,6 +167,10 @@ describe("production input panel", () => {
     expect(markup).toContain("Zwingende Rückfragen");
     expect(markup).toContain("Welche Komponenten werden fertig zugekauft?");
     expect(markup).toContain("+ 2 weitere Rückfragen im Rückfragenbereich.");
+    expect(markup).toContain("Produktionsartefakte");
+    expect(markup).toContain("Kalkulationsübersicht");
+    expect(markup).toContain("Produktionsplan / Mengen");
+    expect(markup).toContain("noch nicht erstellt");
     expect(markup).toContain("Pflichtprüfung");
     expect(markup).toContain("Preisrahmen");
     expect(markup).toContain("Nächster Produktionsschritt: Rückfragen klären");

@@ -1046,10 +1046,12 @@ button:disabled {
 
 .production-analysis-menu-list,
 .production-analysis-question-list,
+.production-analysis-artifact-list,
 .production-analysis-checklist {
   margin-top: 0.45rem;
 }
 
+.production-analysis-artifact-list__item,
 .production-analysis-checklist__item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1057,6 +1059,7 @@ button:disabled {
   align-items: center;
 }
 
+.production-analysis-artifact-list__item strong,
 .production-analysis-checklist__item strong {
   padding: 0.18rem 0.5rem;
   border-radius: 999px;
@@ -1064,11 +1067,13 @@ button:disabled {
   background: rgba(255, 255, 255, 0.7);
 }
 
+.production-analysis-artifact-list__item--ok strong,
 .production-analysis-checklist__item--ok strong {
   color: #155c31;
   border: 1px solid rgba(32, 112, 61, 0.18);
 }
 
+.production-analysis-artifact-list__item--open strong,
 .production-analysis-checklist__item--open strong {
   color: #8a5a10;
   border: 1px solid rgba(169, 111, 21, 0.22);

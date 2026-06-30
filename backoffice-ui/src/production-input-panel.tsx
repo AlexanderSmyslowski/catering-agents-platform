@@ -123,6 +123,20 @@ function ProductionAnalysisResultCard({
           )}
         </div>
         <div>
+          <p className="eyebrow">Produktionsartefakte</p>
+          <ul className="item-list compact production-analysis-artifact-list">
+            {analysisResult.artifactItems.map((item) => (
+              <li
+                key={item.label}
+                className={`production-analysis-artifact-list__item production-analysis-artifact-list__item--${item.status}`}
+              >
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
           <p className="eyebrow">Pflichtprüfung</p>
           <ul className="item-list compact production-analysis-checklist">
             {analysisResult.checklistItems.map((item) => (

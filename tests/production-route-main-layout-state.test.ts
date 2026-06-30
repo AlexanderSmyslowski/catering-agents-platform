@@ -70,6 +70,11 @@ describe("production route main layout state", () => {
     expect(result?.questionPreviewItems).toEqual(["Welche Komponenten werden fertig zugekauft?"]);
     expect(result?.questionPreviewOverflowCount).toBe(0);
     expect(result?.nextStepTitle).toBe("Rückfragen klären");
+    expect(result?.artifactItems).toEqual([
+      { label: "Kalkulationsübersicht", value: "Preisrahmen offen", status: "open" },
+      { label: "Produktionsplan / Mengen", value: "noch nicht vorhanden", status: "open" },
+      { label: "Einkaufsliste", value: "noch nicht erstellt", status: "open" }
+    ]);
     expect(result?.checklistItems).toEqual([
       { label: "Anlass", value: "Konferenz", status: "ok" },
       { label: "Datum", value: "2026-06-18", status: "ok" },

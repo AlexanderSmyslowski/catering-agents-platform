@@ -20,6 +20,11 @@ export type ProductionAnalysisResult = {
   menuItems: string[];
   questionPreviewItems: string[];
   questionPreviewOverflowCount: number;
+  artifactItems: Array<{
+    label: string;
+    value: string;
+    status: "ok" | "open";
+  }>;
   checklistItems: Array<{
     label: string;
     value: string;
@@ -87,6 +92,13 @@ function hasConvenienceDecision(spec?: Record<string, unknown>): boolean {
   });
 }
 
+function hasCompletePlan(summary: ProductionWorkbenchSummary): boolean {
+  return (
+    summary.productionObjectCount > 0 &&
+    !["offen", "wird geladen", "unzureichend"].includes(summary.planStatusLabel)
+  );
+}
+
 export function buildDocumentAnalysisResult(
   sourceInput: ProductionSourceInputValues,
   summary: ProductionWorkbenchSummary,
@@ -124,6 +136,23 @@ export function buildDocumentAnalysisResult(
     menuItems,
     questionPreviewItems,
     questionPreviewOverflowCount,
+    artifactItems: [
+      {
+        label: "Kalkulationsübersicht",
+        value: hasBudgetContext ? "Preisrahmen vorhanden" : "Preisrahmen offen",
+        status: hasBudgetContext ? "ok" : "open"
+      },
+      {
+        label: "Produktionsplan / Mengen",
+        value: formatOperatorPlanStatus(summary.planStatusLabel),
+        status: hasCompletePlan(summary) ? "ok" : "open"
+      },
+      {
+        label: "Einkaufsliste",
+        value: summary.purchaseListCount > 0 ? summary.purchaseStatusLabel : "noch nicht erstellt",
+        status: summary.purchaseListCount > 0 ? "ok" : "open"
+      }
+    ],
     checklistItems: [
       {
         label: "Anlass",
