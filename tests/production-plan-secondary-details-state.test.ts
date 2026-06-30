@@ -120,7 +120,7 @@ describe("production plan secondary details state", () => {
           componentLabel: "-",
           selectionReasonLabel: "-",
           componentDetailLabel: undefined,
-          sourceLabel: "source unknown",
+          sourceLabel: "Herkunft nicht dokumentiert",
           scoreLabel: undefined,
           searchTrace: []
         }
@@ -150,7 +150,7 @@ describe("production plan secondary details state", () => {
           componentLabel: "-",
           selectionReasonLabel: "-",
           componentDetailLabel: undefined,
-          sourceLabel: "source unknown",
+          sourceLabel: "Herkunft nicht dokumentiert",
           scoreLabel: undefined,
           searchTrace: []
         }
@@ -160,7 +160,7 @@ describe("production plan secondary details state", () => {
         {
           key: "Arbeitsblatt-0",
           title: "Arbeitsblatt",
-          sourceLabel: "source unknown",
+          sourceLabel: "Herkunft nicht dokumentiert",
           instructions: []
         }
       ]

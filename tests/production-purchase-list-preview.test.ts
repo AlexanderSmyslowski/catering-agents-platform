@@ -21,7 +21,7 @@ describe("production purchase list preview", () => {
         articleName: "Tomaten",
         quantity: "8",
         unit: "kg",
-        sourceLabel: "source unknown"
+        sourceLabel: "Herkunft nicht dokumentiert"
       }
     ]);
   });
@@ -44,7 +44,7 @@ describe("production purchase list preview", () => {
         articleName: "Baguette",
         quantity: "40",
         unit: "Stück",
-        sourceLabel: "source unknown"
+        sourceLabel: "Herkunft nicht dokumentiert"
       }
     ]);
   });
@@ -63,10 +63,10 @@ describe("production purchase list preview", () => {
     });
 
     expect(preview).toEqual([
-      { articleName: "Linsen", quantity: "5", unit: "kg", sourceLabel: "source unknown" },
-      { articleName: "Karotten", quantity: "3", unit: "kg", sourceLabel: "source unknown" },
-      { articleName: "Sellerie", quantity: "2", unit: "Bund", sourceLabel: "source unknown" },
-      { articleName: "Petersilie", quantity: "-", unit: "-", sourceLabel: "source unknown" }
+      { articleName: "Linsen", quantity: "5", unit: "kg", sourceLabel: "Herkunft nicht dokumentiert" },
+      { articleName: "Karotten", quantity: "3", unit: "kg", sourceLabel: "Herkunft nicht dokumentiert" },
+      { articleName: "Sellerie", quantity: "2", unit: "Bund", sourceLabel: "Herkunft nicht dokumentiert" },
+      { articleName: "Petersilie", quantity: "-", unit: "-", sourceLabel: "Herkunft nicht dokumentiert" }
     ]);
   });
 
@@ -181,7 +181,7 @@ describe("production purchase list preview", () => {
         unit: "kg",
         sourceLabel:
           "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup; " +
-          "source unknown (recipe-bruschetta)"
+          "Herkunft nicht dokumentiert (recipe-bruschetta)"
       }
     ]);
   });

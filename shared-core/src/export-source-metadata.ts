@@ -3,6 +3,9 @@ import type {
   RecipeSourceExportMetadata
 } from "./types.js";
 
+const MISSING_SOURCE_ORIGIN_LABEL = "Herkunft nicht dokumentiert";
+const MISSING_SOURCE_REFERENCE_LABEL = "Referenz nicht dokumentiert";
+
 function compactParts(parts: Array<string | undefined>): string[] {
   return parts
     .map((part) => part?.trim())
@@ -28,7 +31,7 @@ export function recipeSourceOriginLabel(
   metadata?: RecipeSourceExportMetadata
 ): string {
   if (!metadata) {
-    return "source unknown";
+    return MISSING_SOURCE_ORIGIN_LABEL;
   }
 
   if (metadata.originType === "web") {
@@ -52,21 +55,21 @@ export function recipeSourceOriginLabel(
       : "cookbook recipe, review required";
   }
 
-  return "source unknown";
+  return MISSING_SOURCE_ORIGIN_LABEL;
 }
 
 export function recipeSourceReferenceLabel(
   metadata?: RecipeSourceExportMetadata
 ): string {
   if (!metadata) {
-    return "source unknown";
+    return MISSING_SOURCE_REFERENCE_LABEL;
   }
 
   return compactParts([
     metadata.publisher,
     metadata.url,
     metadata.reference
-  ]).join(" | ") || "source unknown";
+  ]).join(" | ") || MISSING_SOURCE_REFERENCE_LABEL;
 }
 
 export function formatRecipeSourceEvidenceLabel(
@@ -74,7 +77,7 @@ export function formatRecipeSourceEvidenceLabel(
   fallbackRecipeId?: string
 ): string {
   if (!metadata) {
-    return `source unknown${fallbackRecipeId ? ` (${fallbackRecipeId})` : ""}`;
+    return `${MISSING_SOURCE_ORIGIN_LABEL}${fallbackRecipeId ? ` (${fallbackRecipeId})` : ""}`;
   }
 
   return compactParts([
