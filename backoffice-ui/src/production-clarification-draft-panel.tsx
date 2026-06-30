@@ -17,6 +17,15 @@ function shouldShowLlmDraftsPanel(): boolean {
   return env?.VITE_SHOW_LLM_DRAFTS === "1";
 }
 
+export function formatClarificationDraftStatusLabel(status: ClarificationDraft["status"]): string {
+  const labels: Record<ClarificationDraft["status"], string> = {
+    pending_review: "Prüfung offen",
+    approved: "übernommen",
+    rejected: "verworfen"
+  };
+  return labels[status];
+}
+
 export function ProductionClarificationDraftPanel({
   specId,
   submitting,
@@ -119,7 +128,7 @@ export function ProductionClarificationDraftPanel({
               <strong>{draft.questions[0]?.text ?? "Rückfragen-Entwurf"}</strong>
               <p className="helper-text">
                 {draft.modelMetadata?.adapterMode === "synthetic_live" ? "Provider-Entwurf" : "Fixture-Entwurf"} ·
-                pending review
+                {formatClarificationDraftStatusLabel(draft.status)}
               </p>
               <div className="action-row">
                 <button
