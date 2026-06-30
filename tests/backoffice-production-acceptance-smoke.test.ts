@@ -728,8 +728,8 @@ describe("backoffice production acceptance smoke", () => {
     const content = rendered.text;
 
     expect(content).toContain("Produktionsagent");
-    expect(content).toContain("Produktionsagent-Chat");
-    expect(content).toContain("Was braucht die Produktion als Nächstes?");
+    expect(content).toContain("Produktionsarbeitsstand");
+    expect(content).toContain("Produktionsdaten aus der Analyse");
     expect(content).toContain("Anfrageeingang");
     expect(content).toContain("Kundenanfrage übernehmen");
     expect(content).toContain("Maximal 25 MB");
@@ -1464,7 +1464,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
     expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
-    expect(document.querySelector(".production-composer .production-column--input")?.textContent).toContain("input");
+    expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
+    expect(document.querySelector(".production-input-collapse summary")?.textContent).toContain("Neue Eingabe oder Korrektur");
     expect(document.querySelector(".production-progressive-zone .production-column--questions")?.textContent).toContain("fragen");
     expect(document.querySelector(".production-objects-zone .production-column--objects")?.textContent).toContain("objekte");
     expect(document.querySelector(".production-purchase-zone .production-column--purchase")?.textContent).toContain("einkauf");
@@ -1512,7 +1513,7 @@ describe("backoffice production acceptance smoke", () => {
               errorLabels: []
             },
             slots: {
-              inputSlot: createElement("div", null),
+              inputSlot: createElement("div", { className: "production-column production-column--input" }, "input"),
               questionsSlot: createElement("div", null),
               productionObjectsSlot: createElement("div", null),
               purchaseListSlot: createElement("div", null),
@@ -1529,6 +1530,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Plan: wird geladen · Einkaufsliste: Einkaufslisten werden geladen");
     expect(content).toContain("Freigabe: nicht erteilt.");
     expect(content).not.toContain("Plan: vorhanden, wird geladen");
+    expect(document.querySelector(".production-composer .production-column--input")?.textContent).toContain("input");
+    expect(document.querySelector(".production-input-zone")).toBeNull();
 
     await act(async () => {
       root.unmount();

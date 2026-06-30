@@ -126,24 +126,73 @@ export function ProductionConversationalWorkbench({
     productionObjectCount,
     purchaseListCount
   });
+  const hasVisibleProductionWork =
+    questionCount > 0 || answeredQuestionCount > 0 || productionObjectCount > 0 || purchaseListCount > 0;
+  const inputSlot = hasVisibleProductionWork ? (
+    <details className="progressive-panel production-input-collapse">
+      <summary>
+        <span>Anfrageeingang</span>
+        <strong>Neue Eingabe oder Korrektur</strong>
+      </summary>
+      <div className="progressive-panel__body">{slots.inputSlot}</div>
+    </details>
+  ) : (
+    slots.inputSlot
+  );
+  const composerEyebrow = hasVisibleProductionWork ? "Produktionsarbeitsstand" : "Anfrageeingang";
+  const composerTitle = hasVisibleProductionWork
+    ? "Produktionsdaten aus der Analyse"
+    : "Was braucht die Produktion als Nächstes?";
+  const composerHelperText = hasVisibleProductionWork
+    ? "Plan, Einkaufsliste, Rückfragen und Exporte stehen im aktuellen Vorgang."
+    : "Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.";
 
   return (
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
-      <article className="production-composer" aria-label="Zentrale Produktionsarbeit">
+      <article
+        className={hasVisibleProductionWork ? "production-composer production-composer--compact" : "production-composer"}
+        aria-label="Zentrale Produktionsarbeit"
+      >
         <header className="production-composer__header">
-          <p className="eyebrow">Produktionsagent-Chat</p>
-          <h3>Was braucht die Produktion als Nächstes?</h3>
-          <p className="helper-text">
-            Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.
-          </p>
+          <p className="eyebrow">{composerEyebrow}</p>
+          <h3>{composerTitle}</h3>
+          <p className="helper-text">{composerHelperText}</p>
           <div className="production-next-step" aria-label="Nächster Produktionsschritt">
             <p className="eyebrow">Nächster Schritt</p>
             <strong>{nextStep.title}</strong>
             <p className="helper-text">{nextStep.description}</p>
           </div>
         </header>
-        {slots.inputSlot}
+        {hasVisibleProductionWork ? null : inputSlot}
       </article>
+
+      <div className="production-objects-zone">
+        <span className="visually-hidden">production-objects-zone</span>
+        <article className="production-output-anchor" aria-label="Nächster Schritt zur Produktionsarbeit">
+          <p className="eyebrow">Nächster Arbeitsschritt</p>
+          <h3>{productionOutputAnchor.title}</h3>
+          <p className="helper-text">{productionOutputAnchor.description}</p>
+          <p className="helper-text">{productionOutputAnchor.grouping}</p>
+        </article>
+        <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
+          <summary>
+            <span>Produktionsplan</span>
+            <strong>{productionObjectStatusLabel}</strong>
+          </summary>
+          <div className="progressive-panel__body">{slots.productionObjectsSlot}</div>
+        </details>
+      </div>
+
+      <div className="production-purchase-zone">
+        <span className="visually-hidden">production-purchase-zone</span>
+        <details className="progressive-panel production-purchase-panel" open={purchaseListCount > 0}>
+          <summary>
+            <span>Einkaufsliste</span>
+            <strong>{purchaseStatusLabel}</strong>
+          </summary>
+          <div className="progressive-panel__body">{slots.purchaseListSlot}</div>
+        </details>
+      </div>
 
       <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
         <p className="eyebrow">Aktiver Produktionsauftrag</p>
@@ -209,33 +258,7 @@ export function ProductionConversationalWorkbench({
         </details>
       </div>
 
-      <div className="production-objects-zone">
-        <span className="visually-hidden">production-objects-zone</span>
-        <article className="production-output-anchor" aria-label="Nächster Schritt zur Produktionsarbeit">
-          <p className="eyebrow">Nächster Arbeitsschritt</p>
-          <h3>{productionOutputAnchor.title}</h3>
-          <p className="helper-text">{productionOutputAnchor.description}</p>
-          <p className="helper-text">{productionOutputAnchor.grouping}</p>
-        </article>
-        <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
-          <summary>
-            <span>Produktionsplan</span>
-            <strong>{productionObjectStatusLabel}</strong>
-          </summary>
-          <div className="progressive-panel__body">{slots.productionObjectsSlot}</div>
-        </details>
-      </div>
-
-      <div className="production-purchase-zone">
-        <span className="visually-hidden">production-purchase-zone</span>
-        <details className="progressive-panel production-purchase-panel" open={purchaseListCount > 0}>
-          <summary>
-            <span>Einkaufsliste</span>
-            <strong>{purchaseStatusLabel}</strong>
-          </summary>
-          <div className="progressive-panel__body">{slots.purchaseListSlot}</div>
-        </details>
-      </div>
+      {hasVisibleProductionWork ? <div className="production-input-zone">{inputSlot}</div> : null}
 
       <div className="production-lower-zones">{slots.lowerSlots}</div>
     </section>

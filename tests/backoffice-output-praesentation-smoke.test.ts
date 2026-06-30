@@ -393,7 +393,7 @@ describe("backoffice production presentation smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Produktionsagent");
-    expect(content).toContain("Produktionsagent-Chat");
+    expect(content).toContain("Produktionsarbeitsstand");
     expect(content).toContain("Anfrageeingang");
     expect(content).toContain("Kundenanfrage übernehmen");
     expect(content).toContain("Maximal 25 MB");

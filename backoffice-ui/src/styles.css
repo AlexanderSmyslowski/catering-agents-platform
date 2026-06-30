@@ -1419,6 +1419,31 @@ button:disabled {
   margin: 0 auto;
 }
 
+.production-composer--compact {
+  gap: 0.7rem;
+  padding: 1rem 1.15rem;
+  border-radius: 1.35rem;
+}
+
+.production-composer--compact .production-composer__header {
+  text-align: left;
+}
+
+.production-composer--compact .production-composer__header h3 {
+  font-size: 1.2rem;
+}
+
+.production-composer--compact .production-composer__header .helper-text {
+  max-width: none;
+  margin: 0;
+}
+
+.production-composer--compact .production-next-step {
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.95rem;
+}
+
 .production-calm-summary {
   padding: 1rem 1.15rem;
   border-radius: 1.45rem;
@@ -1450,6 +1475,7 @@ button:disabled {
 
 .production-progressive-zone,
 .production-purchase-zone,
+.production-input-zone,
 .production-lower-zones {
   display: grid;
   gap: 0.9rem;
@@ -1503,6 +1529,18 @@ button:disabled {
 
 .production-purchase-panel .item-list {
   margin-bottom: 0;
+}
+
+.production-input-collapse {
+  background: rgba(255, 255, 255, 0.54);
+  border-color: rgba(15, 23, 34, 0.05);
+}
+
+.production-input-collapse .panel {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .production-next-step {

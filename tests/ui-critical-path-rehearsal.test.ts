@@ -393,7 +393,7 @@ describe("UI critical path rehearsal", () => {
 
       const productionRoute = await renderAppRoute("/produktion");
       const productionText = document.body.textContent ?? "";
-      expect(productionText).toContain("Was braucht die Produktion als N\u00e4chstes?");
+      expect(productionText).toContain("Produktionsdaten aus der Analyse");
       expect(productionText).toContain("Urspr\u00fcngliche Intake-Anfrage");
       expect(productionText).toContain("Intake-Ursprung: manuelle Eingabe");
       expect(productionText).not.toContain(`requestId: ${request.requestId}`);
