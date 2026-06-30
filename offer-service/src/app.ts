@@ -22,6 +22,7 @@ import {
 import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "./store.js";
 import { registerOfferDraftRoutes } from "./routes/draft-routes.js";
+import { registerOfferUniPackageRoutes } from "./routes/uni-package-routes.js";
 
 interface RecipeTextImportBody {
   text: string;
@@ -226,6 +227,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     isOfferOperator,
     requireOfferOperator,
     actorForRequest
+  });
+
+  registerOfferUniPackageRoutes(app, {
+    trustedActorSecret,
+    allowDevActorHeader,
+    requireOfferOperator
   });
 
   app.post("/v1/offers/seed-demo", async (request, reply) => {

@@ -47,6 +47,7 @@ describe("minimal MVP roles convention", () => {
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/intake/normalize");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/intake/requests/:requestId/archive");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/offers/drafts");
+    expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/offers/uni-packages");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/production/plans");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/production/specs/:specId/clarification-drafts");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/production/clarification-drafts/:draftId/decision");
