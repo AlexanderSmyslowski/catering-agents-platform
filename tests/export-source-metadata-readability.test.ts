@@ -254,9 +254,11 @@ describe("export source metadata readability", () => {
     const csv = renderPurchaseListCsv(purchaseList);
 
     expect(html).toContain("Rezeptquelle:");
-    expect(html).toContain("web recipe, reviewed");
+    expect(html).toContain("Web-Rezept, freigegeben");
     expect(html).toContain("Example Recipes");
     expect(html).toContain("https://example.test/tomato-soup");
+    expect(html).not.toContain("approved_internal");
+    expect(html).not.toContain("internal_approved");
     expect(csv).toContain("\"web recipe, reviewed\"");
     expect(csv).toContain(
       "\"Example Recipes | https://example.test/tomato-soup | web:tomato-soup\""
@@ -351,7 +353,7 @@ describe("export source metadata readability", () => {
     expect(validateProductionPlan(legacyPlan)).toBe(legacyPlan);
     expect(validatePurchaseList(legacyPurchaseList)).toBe(legacyPurchaseList);
     expect(renderProductionPlanHtml(legacyPlan)).toContain(
-      "source unknown (recipe-tomato-soup)"
+      "Quelle unbekannt (recipe-tomato-soup)"
     );
     expect(renderPurchaseListCsv(legacyPurchaseList)).toContain(
       "\"source unknown\""

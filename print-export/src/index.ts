@@ -7,11 +7,11 @@ import type {
   OfferDraft,
   ProductionPlan,
   PurchaseList,
-  Recipe
+  Recipe,
+  RecipeSourceExportMetadata
 } from "@catering/shared-core";
 import {
   formatMetroGroupLabel,
-  formatRecipeSourceEvidenceLabel,
   isDevAuthEnabled,
   RecipeLibrary,
   recipeSourceOriginLabel,
@@ -36,6 +36,12 @@ function escapeHtml(value: string | number): string {
     .replace(/'/g, "&#39;");
 }
 
+function compactParts(parts: Array<string | undefined>): string[] {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+}
+
 function formatBytes(sizeBytes: number): string {
   if (sizeBytes < 1024) {
     return `${sizeBytes} B`;
@@ -54,6 +60,52 @@ function formatReadinessStatus(value: string | undefined): string {
   };
 
   return value ? labels[value] ?? value : "offen";
+}
+
+function formatRecipeApprovalForPlanSource(value: string | undefined): string {
+  const labels: Record<string, string> = {
+    approved_internal: "freigegeben",
+    auto_usable: "Prüfung empfohlen",
+    review_required: "Prüfung nötig",
+    rejected: "abgelehnt"
+  };
+
+  return value ? labels[value] ?? value : "Prüfung nötig";
+}
+
+function formatRecipeSourceOriginForPlan(metadata: RecipeSourceExportMetadata): string {
+  const approval = formatRecipeApprovalForPlanSource(metadata.approvalState);
+
+  if (metadata.originType === "web") {
+    return `Web-Rezept, ${approval}`;
+  }
+
+  if (metadata.originType === "internal_db" || metadata.originType === "approved_import") {
+    return `internes Rezept, ${approval}`;
+  }
+
+  if (metadata.originType === "cookbook") {
+    return `Kochbuch-Rezept, ${approval}`;
+  }
+
+  return `Quelle unbekannt, ${approval}`;
+}
+
+function formatRecipeSourceForProductionPlan(
+  metadata: RecipeSourceExportMetadata | undefined,
+  fallbackRecipeId?: string
+): string {
+  if (!metadata) {
+    return `Quelle unbekannt${fallbackRecipeId ? ` (${fallbackRecipeId})` : ""}`;
+  }
+
+  const reference = recipeSourceReferenceLabel(metadata);
+
+  return compactParts([
+    metadata.recipeName || metadata.recipeId,
+    formatRecipeSourceOriginForPlan(metadata),
+    reference === "source unknown" ? undefined : reference
+  ]).join(" | ");
 }
 
 function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
@@ -166,7 +218,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
         const kitchenSheet = plan.kitchenSheets.find((sheet) =>
           sheet.componentId === batch.componentId && sheet.recipeId === batch.recipeId
         );
-        const sourceLabel = formatRecipeSourceEvidenceLabel(
+        const sourceLabel = formatRecipeSourceForProductionPlan(
           batch.recipeSource ?? kitchenSheet?.recipeSource,
           batch.recipeId
         );

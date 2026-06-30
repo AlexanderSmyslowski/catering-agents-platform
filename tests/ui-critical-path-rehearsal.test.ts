@@ -427,6 +427,9 @@ describe("UI critical path rehearsal", () => {
       const purchaseExport = await fetch(purchaseExportLink.getAttribute("href") ?? "");
       const productionExportHtml = await productionExport.text();
       expect(productionExportHtml).toContain("Rezeptquelle:");
+      expect(productionExportHtml).toContain("internes Rezept, freigegeben");
+      expect(productionExportHtml).not.toContain("approved_internal");
+      expect(productionExportHtml).not.toContain("internal_verified");
       expect(productionExportHtml).not.toContain("real customer");
       const purchaseCsv = await purchaseExport.text();
       expect(purchaseCsv).toContain("source_recipes");
