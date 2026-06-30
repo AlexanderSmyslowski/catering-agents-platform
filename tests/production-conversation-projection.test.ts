@@ -138,6 +138,42 @@ describe("production conversation projection", () => {
     expect(projection.messages[1].text).not.toContain("Interner Langtext");
   });
 
+  it("keeps typed clarification questions from being repeated as local UI questions", () => {
+    const projection = buildProductionConversationProjection({
+      spec: {
+        specId: "spec-time-window-dedupe",
+        readiness: { status: "complete", reasons: [] },
+        uncertainties: [
+          {
+            field: "event.schedule",
+            message: "Zeitfenster wurde nur aus einem Hinweis abgeleitet.",
+            suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?",
+            severity: "high"
+          }
+        ]
+      },
+      questions: [
+        "Wie lautet das verbindliche Zeitfenster?",
+        "Kaffeepause: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen."
+      ],
+      productionPlans: [],
+      purchaseLists: []
+    });
+
+    const questionTexts = projection.messages
+      .filter((message) => message.type === "structured_agent_question")
+      .map((message) => message.text);
+
+    expect(questionTexts).toEqual([
+      "Wie lautet das verbindliche Zeitfenster?",
+      "Kaffeepause: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen."
+    ]);
+    expect(projection.messages.find((message) => message.text === "Wie lautet das verbindliche Zeitfenster?"))
+      .toMatchObject({
+        clarificationAnswerStatus: "unanswered"
+      });
+  });
+
   it("keeps provenance anchors attached to the production output anchor without leaking raw source text", () => {
     const projection = buildProductionConversationProjection({
       spec: acceptedSpec,

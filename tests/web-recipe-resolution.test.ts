@@ -132,7 +132,7 @@ describe("web recipe resolution", () => {
       fitScore: 0.86
     });
     expect(resolution.unresolvedItems).toEqual([
-      "Rezept Tomatensuppe Web muss vor der finalen Produktion manuell geprueft werden."
+      "Rezept Tomatensuppe Web muss vor der finalen Produktion manuell geprüft werden."
     ]);
   });
 
@@ -151,7 +151,7 @@ describe("web recipe resolution", () => {
     );
     expect(resolution.selection.autoUsedInternetRecipe).toBe(false);
     expect(resolution.unresolvedItems).toEqual([
-      "Rezept Tomatensuppe Web muss vor der finalen Produktion manuell geprueft werden."
+      "Rezept Tomatensuppe Web muss vor der finalen Produktion manuell geprüft werden."
     ]);
   });
 });

@@ -36,7 +36,7 @@ describe("production handoff panel state", () => {
         intakeOriginLabel: "PDF-Upload",
         auditTrailLabel: "Audit geladen",
         exportLabel: "Plan und Einkaufsliste",
-        contextLabel: "planId plan-1 · specId spec-1 · purchaseListId purchase-1"
+        contextLabel: "Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden"
       }).facts
     ).toEqual([
       {
@@ -57,7 +57,7 @@ describe("production handoff panel state", () => {
       {
         key: "handoff-context",
         label: "Abschluss-Kontext",
-        value: "Abschluss-Kontext: planId plan-1 · specId spec-1 · purchaseListId purchase-1"
+        value: "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden"
       }
     ]);
   });

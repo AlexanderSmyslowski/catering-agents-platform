@@ -69,6 +69,8 @@ describe("print export HTML escaping", () => {
   it("escapes data-driven offer HTML text so tags, event attributes, and quotes are inert", () => {
     const html = renderOfferHtml(minimalOfferDraft());
 
+    expect(html).toContain("<h1>Angebot</h1>");
+    expect(html).not.toContain("Angebot draft-");
     expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;");
     expect(html).toContain("&lt;b data-x=&quot;1&quot;&gt;bold&lt;/b&gt; &quot;quoted&quot; &amp; &#39;single&#39;");
@@ -81,6 +83,8 @@ describe("print export HTML escaping", () => {
   it("escapes data-driven production HTML text so tags, event attributes, and quotes are inert", () => {
     const html = renderProductionPlanHtml(minimalProductionPlan());
 
+    expect(html).toContain("<h1>Produktionsplan</h1>");
+    expect(html).not.toContain("Produktionsplan plan-");
     expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;");
     expect(html).toContain("&lt;b data-x=&quot;1&quot;&gt;bold&lt;/b&gt; &quot;quoted&quot; &amp; &#39;single&#39;");

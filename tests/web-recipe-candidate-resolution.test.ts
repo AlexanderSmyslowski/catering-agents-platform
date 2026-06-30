@@ -119,7 +119,7 @@ describe("web recipe candidate resolution flow", () => {
       autoUsedInternetRecipe: false
     });
     expect(resolution.unresolvedItems).toEqual([
-      "Rezept Tomatensuppe Bankett muss vor der finalen Produktion manuell geprueft werden."
+      "Rezept Tomatensuppe Bankett muss vor der finalen Produktion manuell geprüft werden."
     ]);
     expect(searchTrace.entries).toContain("Webtreffer gewählt: Tomatensuppe Bankett.");
   });

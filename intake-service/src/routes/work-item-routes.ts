@@ -237,7 +237,7 @@ export function registerIntakeWorkItemRoutes(
 
     if (!specId && !changeSetId) {
       return reply.code(400).send({
-        message: "Es muss eine specId oder changeSetId uebergeben werden."
+        message: "Es muss eine specId oder changeSetId übergeben werden."
       });
     }
 

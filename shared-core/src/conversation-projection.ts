@@ -93,6 +93,24 @@ function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.trim())));
 }
 
+function normalizedQuestionText(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLocaleLowerCase("de-DE");
+}
+
+function dedupeStructuredQuestions(
+  questions: Array<{ text: string; clarificationQuestion?: ProductionClarificationQuestion }>
+): Array<{ text: string; clarificationQuestion?: ProductionClarificationQuestion }> {
+  const seen = new Set<string>();
+  return questions.filter((question) => {
+    const key = normalizedQuestionText(question.text);
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 function formatSize(sizeBytes: number): string {
   if (sizeBytes < 1024) {
     return `${sizeBytes} B`;
@@ -292,13 +310,13 @@ export function buildProductionConversationProjection(
     spec: input.spec,
     sourceInputs: input.sourceInputs
   });
-  const structuredQuestions: Array<{ text: string; clarificationQuestion?: ProductionClarificationQuestion }> = [
+  const structuredQuestions = dedupeStructuredQuestions([
     ...clarificationQuestions.map((clarificationQuestion) => ({
       text: clarificationQuestion.prompt,
       clarificationQuestion
     })),
     ...input.questions.map((question) => ({ text: question }))
-  ];
+  ]);
 
   structuredQuestions.forEach((question, index) => {
     const matchingAnswers = question.clarificationQuestion

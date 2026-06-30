@@ -260,7 +260,7 @@ fi
 echo ""
 echo "Exportpruefung:"
 export_url="http://127.0.0.1:3200/api/exports/v1/exports/production-plans/plan-spec-demo-production-coffee/html"
-export_anchor="Produktionsplan plan-spec-demo-production-coffee"
+export_anchor="<h1>Produktionsplan</h1>"
 export_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${export_url}")"
 if [[ "${export_body}" != *"${export_anchor}"* ]]; then
   echo "  Export-Check: unerwarteter Inhalt (${export_url})" >&2
@@ -270,11 +270,11 @@ printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${export_url}" "${expor
 
 offer_export_url="http://127.0.0.1:3200/api/exports/v1/exports/offers/draft-demo-offer-conference-buffet/html"
 offer_export_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${offer_export_url}")"
-if [[ "${offer_export_body}" != *"Angebot draft-demo-offer-conference-buffet"* ]]; then
+if [[ "${offer_export_body}" != *"<h1>Angebot</h1>"* ]]; then
   echo "  Export-Check: unerwarteter Inhalt (${offer_export_url})" >&2
   exit 1
 fi
-printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${offer_export_url}" "Angebot draft-demo-offer-conference-buffet"
+printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${offer_export_url}" "<h1>Angebot</h1>"
 
 purchase_list_export_url="http://127.0.0.1:3200/api/exports/v1/exports/purchase-lists/purchase-spec-demo-production-coffee/csv"
 purchase_list_export_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${purchase_list_export_url}")"

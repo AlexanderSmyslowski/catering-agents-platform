@@ -1207,6 +1207,16 @@ describe("catering agents platform", () => {
     const spec = promoteResponse.json();
     expect(spec.sourceLineage[0].sourceType).toBe("offer_service");
     expect(spec.servicePlan.modules.length).toBeGreaterThan(0);
+
+    const intakeApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+    const specsResponse = await intakeApp.inject({
+      method: "GET",
+      url: "/v1/intake/specs"
+    });
+
+    expect(specsResponse.statusCode).toBe(200);
+    expect(specsResponse.json().items.map((item: AcceptedEventSpec) => item.specId)).toContain(spec.specId);
+    await intakeApp.close();
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -1667,7 +1677,7 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
     expect(body.productionPlan.readiness.status).toBe("insufficient");
     expect(body.productionPlan.unresolvedItems[0]).toContain(
-      "manuell geprueft"
+      "manuell geprüft"
     );
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -1743,7 +1753,7 @@ describe("catering agents platform", () => {
     const body = response.json();
     expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
     expect(body.productionPlan.readiness.status).toBe("insufficient");
-    expect(body.productionPlan.unresolvedItems[0]).toContain("manuell geprueft");
+    expect(body.productionPlan.unresolvedItems[0]).toContain("manuell geprüft");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
   });
@@ -3690,7 +3700,8 @@ describe("catering agents platform", () => {
 
     expect(offerExportResponse.statusCode).toBe(200);
     expect(offerExportResponse.headers["content-type"]).toContain("text/html");
-    expect(offerExportResponse.body).toContain(String(draft.draftId));
+    expect(offerExportResponse.body).toContain("<h1>Angebot</h1>");
+    expect(offerExportResponse.body).not.toContain(String(draft.draftId));
     expect(offerExportResponse.body).toContain("Vielen Dank");
 
     const partialOfferExportResponse = await exportApp.inject({
@@ -3700,14 +3711,15 @@ describe("catering agents platform", () => {
 
     expect(partialOfferExportResponse.statusCode).toBe(200);
     expect(partialOfferExportResponse.headers["content-type"]).toContain("text/html");
-    expect(partialOfferExportResponse.body).toContain(String(partialDraft.draftId));
+    expect(partialOfferExportResponse.body).toContain("<h1>Angebot</h1>");
+    expect(partialOfferExportResponse.body).not.toContain(String(partialDraft.draftId));
     expect(partialOfferExportResponse.body).toContain("Varianten: 3");
     expect(partialOfferExportResponse.body).toContain("Offene Punkte:");
 
     expect(planExportResponse.statusCode).toBe(200);
     expect(planExportResponse.headers["content-type"]).toContain("text/html");
-    expect(planExportResponse.body).toContain(String(productionPayload.productionPlan.planId));
-    expect(planExportResponse.body).toContain("Produktionsplan");
+    expect(planExportResponse.body).toContain("<h1>Produktionsplan</h1>");
+    expect(planExportResponse.body).not.toContain(String(productionPayload.productionPlan.planId));
     expect(planExportResponse.body).toContain("Rezeptauswahl:");
     expect(planExportResponse.body).toContain("Status: complete");
 

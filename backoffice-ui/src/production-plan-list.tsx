@@ -32,7 +32,6 @@ export function ProductionPlanList({
       {plans.map((plan) => {
         const relatedSpec = lookupProductionSpecById(specById, plan.eventSpecId);
         const planId = formatProductionContextId(plan.planId);
-        const specId = formatProductionContextId(plan.eventSpecId);
         const unresolvedCount = Array.isArray(plan.unresolvedItems) ? plan.unresolvedItems.length : 0;
         const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
         const sheetCount = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets.length : 0;
@@ -56,7 +55,7 @@ export function ProductionPlanList({
                 Einzelheiten
                 <span className="visually-hidden">
                   {" "}
-                  zu Plan {planId} · Spezifikation {specId}
+                  zu diesem Produktionsplan
                 </span>
               </button>
             </div>
@@ -69,7 +68,7 @@ export function ProductionPlanList({
               Produktionsblatt exportieren
               <span className="visually-hidden">
                 {" "}
-                für Plan {planId} · Spezifikation {specId}
+                für diesen Produktionsplan
               </span>
             </a>
           </li>

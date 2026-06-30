@@ -448,7 +448,8 @@ describe("backoffice route smoke", () => {
     const production = await renderRoute(productionHandoffLink?.getAttribute("href") ?? "");
     expect(production.text).toContain("Lunch · 64 Teilnehmer · 2026-09-15");
     expect(production.text).toContain("Rückfragen beantworten");
-    expect(production.text).toContain("requestId: corridor-request-1");
+    expect(production.text).toContain("Intake-Ursprung: Dateiupload · erhalten 2026-08-20T09:00:00.000Z");
+    expect(production.text).not.toContain("requestId: corridor-request-1");
     expect(production.text).toContain("production-objects-zone");
     expect(production.text).toContain("Produktionsplan");
     expect(production.text).not.toContain("Produktionsobjekte und Downloads prüfen");
@@ -456,13 +457,9 @@ describe("backoffice route smoke", () => {
     expect(production.text).not.toContain("Status: noch kein Ergebnis");
     expect(production.text).not.toContain("Mini-Pilot-Status vor Export");
     expect(production.text).not.toContain("Export erst nach gruenem Mini-Pilot-Check");
-    expect(production.text).toContain(
-      "Produktionsblatt exportieren für Plan corridor-plan-1 · Spezifikation corridor-spec-1"
-    );
+    expect(production.text).toContain("Produktionsblatt exportieren für diesen Produktionsplan");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/corridor-plan-1/html");
-    expect(production.text).toContain(
-      "Einkaufsliste exportieren für aktuellen Vorgang corridor-purchase-1 · Spezifikation corridor-spec-1"
-    );
+    expect(production.text).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/corridor-purchase-1/csv");
     expect(production.text).toContain("Audit-Spur");
     expect(production.text).toContain("Korridor-Demo vorbereitet · Betriebs-/Audit-Operator · production.seed_demo");
@@ -787,10 +784,11 @@ describe("backoffice route smoke", () => {
 
     const production = await renderRoute("/produktion");
     expect(production.text).toContain("sommerfest · 80 Teilnehmer · 2026-08-20");
-    expect(production.text).toContain("specId: c3-spec-promoted");
-    expect(production.text).toContain("requestId: c3-request-promoted");
-    expect(production.text).toContain("Ursprüngliche Intake-AnfragerequestId: c3-request-promoted");
-    expect(production.text).toContain("Intake-Ursprungoffer · 2026-08-20T09:00:00.000Z · c3-request-promoted");
+    expect(production.text).toContain("Spezifikation im Fokus");
+    expect(production.text).not.toContain("specId: c3-spec-promoted");
+    expect(production.text).not.toContain("requestId: c3-request-promoted");
+    expect(production.text).toContain("Ursprüngliche Intake-AnfrageIntake-Ursprung: Angebotsagent · erhalten 2026-08-20T09:00:00.000Z");
+    expect(production.text).toContain("Intake-UrsprungAngebotsagent · 2026-08-20T09:00:00.000Z · Intake-Anfrage verknüpft");
     expect(production.text).not.toContain("Die ursprüngliche Intake-Anfrage konnte nicht geladen werden");
     expect(production.text).toContain("Nächster SchrittRückfragen beantworten");
     expect(production.text).toContain("Produktionsplannoch kein Plan");
@@ -935,19 +933,16 @@ describe("backoffice route smoke", () => {
     const production = await renderRoute("/produktion");
 
     expect(production.text).toContain("Lunch · 80 Teilnehmer · 2026-08-21");
-    expect(production.text).toContain("specId: c4-spec-handoff");
-    expect(production.text).toContain("requestId: c4-request-handoff");
+    expect(production.text).toContain("Spezifikation im Fokus");
+    expect(production.text).not.toContain("specId: c4-spec-handoff");
+    expect(production.text).not.toContain("requestId: c4-request-handoff");
     expect(production.text).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
     expect(production.text).toContain("Quellenmetadaten (gekürzt): c4-angebot.pdf · application/pdf · 2.0 KB · sha256:abcdef123456 · intake");
     expect(production.text).not.toContain("B5 Rohtext");
     expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
-    expect(production.text).toContain(
-      "Produktionsblatt exportieren für Plan c4-plan-handoff · Spezifikation c4-spec-handoff"
-    );
+    expect(production.text).toContain("Produktionsblatt exportieren für aktuellen Produktionsplan");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/c4-plan-handoff/html");
-    expect(production.text).toContain(
-      "Einkaufsliste exportieren für aktuellen Vorgang c4-purchase-handoff · Spezifikation c4-spec-handoff"
-    );
+    expect(production.text).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/c4-purchase-handoff/csv");
   });
 
@@ -986,12 +981,10 @@ describe("backoffice route smoke", () => {
     const production = await renderRoute("/produktion");
 
     expect(production.text).toContain("Downloadbereich");
-    expect(production.text).toContain("Plan-Kontext: planId b23-plan-detail · specId b23-spec-detail");
+    expect(production.text).toContain("Plan-Kontext: aktueller Produktionsplan");
     expect(production.text).not.toContain("Mini-Pilot-Status vor Export");
-    expect(production.text).toContain("Einzelheiten zu Plan b23-plan-detail · Spezifikation b23-spec-detail");
-    expect(production.text).toContain(
-      "Produktionsblatt exportieren für Plan b23-plan-detail · Spezifikation b23-spec-detail"
-    );
+    expect(production.text).toContain("Einzelheiten zu diesem Produktionsplan");
+    expect(production.text).toContain("Produktionsblatt exportieren für diesen Produktionsplan");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/b23-plan-detail/html");
   });
 

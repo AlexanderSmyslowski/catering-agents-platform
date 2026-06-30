@@ -34,7 +34,7 @@ describe("production intake origin card state", () => {
         ]
       })
     ).toEqual({
-      requestSummaryLabel: "requestId: request-1 · channel: pdf_upload · receivedAt: 2026-06-05T08:30:00.000Z",
+      requestSummaryLabel: "Intake-Ursprung: Dateiupload · erhalten 2026-06-05T08:30:00.000Z",
       rawInputs: [
         {
           key: "document-1-0",
@@ -55,7 +55,7 @@ describe("production intake origin card state", () => {
         rawInputs: [{ kind: "", mimeType: "", sourceMetadata: { filename: "angebot.pdf" } }]
       })
     ).toEqual({
-      requestSummaryLabel: "requestId: request-2 · channel: - · receivedAt: -",
+      requestSummaryLabel: "Intake-Ursprung: - · erhalten -",
       rawInputs: [
         {
           key: "--0",

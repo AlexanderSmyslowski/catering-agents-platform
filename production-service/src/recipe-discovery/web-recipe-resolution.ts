@@ -99,6 +99,6 @@ export function buildWebRecipeWinnerResolution(input: {
     },
     unresolvedItems: trust.trustedProductionInput
       ? []
-      : [`Rezept ${recipe.name} muss vor der finalen Produktion manuell geprueft werden.`]
+      : [`Rezept ${recipe.name} muss vor der finalen Produktion manuell geprüft werden.`]
   };
 }

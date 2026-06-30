@@ -128,10 +128,10 @@ describe("production input panel", () => {
         canClearWorkspace: true,
         canArchiveCurrentIntake: true,
         clearWorkspaceContextLabel: "Lunch · 30 Teilnehmer · 2026-06-18",
-        archiveCurrentIntakeContextLabel: "Intake-Anfrage request-123",
+        archiveCurrentIntakeContextLabel: "Intake-Anfrage im Fokus",
         clearWorkspaceTitle: "Lokalen Arbeitsbereich leeren: Lunch · 30 Teilnehmer · 2026-06-18",
         archiveCurrentIntakeTitle:
-          "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-123"
+          "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage im Fokus"
       })
     );
 
@@ -140,10 +140,10 @@ describe("production input panel", () => {
     expect(markup).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(markup).toContain("für Lunch · 30 Teilnehmer · 2026-06-18");
     expect(markup).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
-    expect(markup).toContain("für Intake-Anfrage request-123");
+    expect(markup).toContain("für Intake-Anfrage im Fokus");
     expect(markup).toContain('title="Lokalen Arbeitsbereich leeren: Lunch · 30 Teilnehmer · 2026-06-18"');
     expect(markup).toContain(
-      'title="Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-123"'
+      'title="Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage im Fokus"'
     );
   });
 

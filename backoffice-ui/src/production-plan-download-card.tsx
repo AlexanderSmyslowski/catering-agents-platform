@@ -38,7 +38,6 @@ export function ProductionPlanDownloadCard({
   const hasOperationalSheetsWithoutRecipeBatches =
     productionBatchCount === 0 && kitchenSheetCount > 0;
   const planId = formatProductionContextId(selectedPlan.planId);
-  const specId = formatProductionContextId(selectedPlan.eventSpecId, selectedPlanSpec?.specId);
 
   return (
     <>
@@ -48,7 +47,7 @@ export function ProductionPlanDownloadCard({
         <h3>{selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : "Produktionsplan"}</h3>
       </header>
       <p className="helper-text">
-        {`Plan-Kontext: planId ${planId} · specId ${specId}`}
+        Plan-Kontext: aktueller Produktionsplan
       </p>
       <p className="helper-text">
         Status: {translateReadiness(String(readiness?.status ?? "-"))}
@@ -74,7 +73,7 @@ export function ProductionPlanDownloadCard({
           Produktionsblatt exportieren
           <span className="visually-hidden">
             {" "}
-            für Plan {planId} · Spezifikation {specId}
+            für aktuellen Produktionsplan
           </span>
         </a>
         <a
@@ -86,7 +85,7 @@ export function ProductionPlanDownloadCard({
           Produktionsmappe (HTML)
           <span className="visually-hidden">
             {" "}
-            für Plan {planId} · Spezifikation {specId}
+            für aktuellen Produktionsplan
           </span>
         </a>
       </div>

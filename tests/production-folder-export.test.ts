@@ -347,6 +347,8 @@ describe("production folder export", () => {
       recipes: [input.recipe]
     });
 
+    expect(html).toContain("<title>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</title>");
+    expect(html).not.toContain("<title>Produktionsmappe plan-");
     expect(html.indexOf("<h3>Obst / Gemüse</h3>")).toBeLessThan(html.indexOf("<h3>Fleisch</h3>"));
     expect(html.indexOf("<h3>Fleisch</h3>")).toBeLessThan(html.indexOf("<h3>Käse</h3>"));
   });

@@ -38,9 +38,9 @@ describe("production route artifact status state", () => {
           source: { channel: "text", receivedAt: "2026-05-26T01:00:00.000Z" }
         }
       })
-    ).toBe("text · 2026-05-26T01:00:00.000Z · request-1");
+    ).toBe("Text · 2026-05-26T01:00:00.000Z · Intake-Anfrage verknüpft");
     expect(formatProductionIntakeOriginLabel({ currentIntakeRequestId: " request-2 " })).toBe(
-      "Intake-Anfrage request-2"
+      "Intake-Anfrage verknüpft"
     );
     expect(formatProductionIntakeOriginLabel({ currentIntakeRequestId: "   " })).toBe("kein Intake-Ursprung verknüpft");
 
@@ -50,6 +50,6 @@ describe("production route artifact status state", () => {
         selectedPlanSpec: { specId: "spec-fallback" },
         purchaseLists: [{ purchaseListId: "purchase-1" }]
       })
-    ).toBe("planId plan-1 · specId spec-1 · purchaseListId purchase-1");
+    ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden");
   });
 });

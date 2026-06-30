@@ -72,7 +72,7 @@ export function buildProductionPurchaseListPanelState(
 ): ProductionPurchaseListPanelRenderState {
   return {
     currentLists: purchaseListState.currentPurchaseLists.map((purchaseList) => {
-      const { purchaseListId, specId } = buildPurchaseListIds(purchaseList);
+      const { purchaseListId } = buildPurchaseListIds(purchaseList);
       const previewItems = getPurchaseListPreviewItems(purchaseList);
       const qualityWarnings = getPurchaseListQualityWarnings(purchaseList);
 
@@ -80,9 +80,9 @@ export function buildProductionPurchaseListPanelState(
         key: String(purchaseList.purchaseListId),
         title: buildPurchaseListTitle(purchaseList, purchaseListState.specById),
         itemCountLabel: `Positionen: ${String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}`,
-        contextLabel: `purchaseListId: ${purchaseListId} · specId: ${specId}`,
+        contextLabel: "Aktueller Vorgang",
         exportUrl: purchaseListExportUrl(purchaseListId),
-        exportContextLabel: `für aktuellen Vorgang ${purchaseListId} · Spezifikation ${specId}`,
+        exportContextLabel: "für aktuellen Vorgang",
         warnings: qualityWarnings.map((warning) => ({
           key: warning.code,
           label:
@@ -99,7 +99,7 @@ export function buildProductionPurchaseListPanelState(
       };
     }),
     archivedLists: purchaseListState.archivedPurchaseLists.map((purchaseList) => {
-      const { purchaseListId, specId } = buildPurchaseListIds(purchaseList);
+      const { purchaseListId } = buildPurchaseListIds(purchaseList);
 
       return {
         key: String(purchaseList.purchaseListId),
@@ -107,7 +107,7 @@ export function buildProductionPurchaseListPanelState(
         helperLabel: "Ältere Einkaufsliste aus anderem Vorgang - nicht aktueller Vorgang.",
         itemCountLabel: `Positionen: ${String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}`,
         exportUrl: purchaseListExportUrl(purchaseListId),
-        exportContextLabel: `aus älterem Vorgang ${purchaseListId} · Spezifikation ${specId}`
+        exportContextLabel: "aus älterem Vorgang"
       };
     }),
     showArchivedLists: purchaseListState.archivedPurchaseLists.length > 0

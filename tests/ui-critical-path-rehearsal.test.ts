@@ -395,7 +395,8 @@ describe("UI critical path rehearsal", () => {
       const productionText = document.body.textContent ?? "";
       expect(productionText).toContain("Was braucht die Produktion als N\u00e4chstes?");
       expect(productionText).toContain("Urspr\u00fcngliche Intake-Anfrage");
-      expect(productionText).toContain(`requestId: ${request.requestId}`);
+      expect(productionText).toContain("Intake-Ursprung: manuelle Eingabe");
+      expect(productionText).not.toContain(`requestId: ${request.requestId}`);
       expect(productionText).toContain("Eventtyp: Business Lunch");
       expect(productionText).toContain("Datum: 2026-09-18");
       expect(productionText).toContain("Teilnehmerzahl: 42");

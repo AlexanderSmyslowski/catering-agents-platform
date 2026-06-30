@@ -22,7 +22,7 @@ describe("production source input state", () => {
       canClearWorkspace: true,
       canArchiveCurrentIntake: false,
       clearWorkspaceContextLabel: "Lunch · 30 Teilnehmer",
-      archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1"
+      archiveCurrentIntakeContextLabel: "Intake-Anfrage im Fokus"
     });
 
     expect(state).toEqual({
@@ -37,7 +37,7 @@ describe("production source input state", () => {
       canClearWorkspace: true,
       canArchiveCurrentIntake: false,
       clearWorkspaceContextLabel: "Lunch · 30 Teilnehmer",
-      archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1",
+      archiveCurrentIntakeContextLabel: "Intake-Anfrage im Fokus",
       clearWorkspaceTitle: "Lokalen Arbeitsbereich leeren: Lunch · 30 Teilnehmer",
       archiveCurrentIntakeTitle: "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv."
     });
@@ -75,12 +75,12 @@ describe("production source input state", () => {
       canClearWorkspace: true,
       canArchiveCurrentIntake: true,
       clearWorkspaceContextLabel: "Plan-Kontext plan-1",
-      archiveCurrentIntakeContextLabel: "Intake-Anfrage request-1"
+      archiveCurrentIntakeContextLabel: "Intake-Anfrage im Fokus"
     });
 
     expect(state.clearWorkspaceTitle).toBe("Lokalen Arbeitsbereich leeren: Plan-Kontext plan-1");
     expect(state.archiveCurrentIntakeTitle).toBe(
-      "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage request-1"
+      "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage im Fokus"
     );
   });
 
@@ -89,7 +89,7 @@ describe("production source input state", () => {
       formatArchiveCurrentIntakeContextLabel({
         currentIntakeRequestId: " request-123 "
       })
-    ).toBe("Intake-Anfrage request-123");
+    ).toBe("Intake-Anfrage im Fokus");
     expect(formatArchiveCurrentIntakeContextLabel({ currentIntakeRequestId: "   " })).toBeUndefined();
     expect(formatArchiveCurrentIntakeContextLabel({})).toBeUndefined();
   });

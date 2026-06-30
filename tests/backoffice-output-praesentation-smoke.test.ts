@@ -429,11 +429,11 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Serviceform als Buffet abgeleitet.");
     expect(content).toContain("Terminfenster: Mittagsservice 12:30–14:00");
     expect(content).not.toContain("noch zu bestätigen");
-    expect(content).toContain("requestId: presentation-intake-success");
-    expect(content).toContain("channel: manual_form");
-    expect(content).toContain(
-      "Einkaufsliste exportieren für aktuellen Vorgang presentation-purchase-success · Spezifikation presentation-spec-success"
-    );
+    expect(content).toContain("Intake-Ursprung: manuelle Eingabe");
+    expect(content).not.toContain("requestId: presentation-intake-success");
+    expect(content).not.toContain("channel: manual_form");
+    expect(content).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
+    expect(content).not.toContain("Einkaufsliste exportieren für aktuellen Vorgang presentation-purchase-success");
     expect(content).toContain("production-purchase-zone");
     expect(content).toContain("Einkaufsliste");
     expect(content).toContain("1 Liste · 3 Positionen");

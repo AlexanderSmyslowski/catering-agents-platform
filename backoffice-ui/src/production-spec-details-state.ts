@@ -16,7 +16,7 @@ export type ProductionSpecDetailsMenuItemState = {
 };
 
 export type ProductionSpecDetailsState = {
-  specIdLabel: string;
+  contextLabel: string;
   eventLabel: string;
   summaryLabel: string;
   menuItems: ProductionSpecDetailsMenuItemState[];
@@ -41,7 +41,7 @@ export function buildProductionSpecDetailsState(
   const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
 
   return {
-    specIdLabel: `specId: ${String(spec.specId ?? "-")}`,
+    contextLabel: "Spezifikation im Fokus",
     eventLabel: `Eventtyp: ${translateEventType(String(event?.type ?? servicePlan?.eventType ?? ""))} · ${formatProductionTimingWindow(spec)}`,
     summaryLabel: `Teilnehmerzahl: ${String(attendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
       String(servicePlan?.serviceForm ?? "")

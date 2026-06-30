@@ -12,11 +12,13 @@ import {
   type EventRequest,
   type TrustedActor
 } from "@catering/shared-core";
+import type { IntakeStore } from "@catering/intake-service";
 import { selectCuratedPackage } from "../../../shared-core/src/rules/curated-offer-selection.js";
 import type { OfferStore } from "../store.js";
 
 export interface OfferDraftRouteDependencies {
   store: OfferStore;
+  intakeStore: IntakeStore;
   auditLog: AuditLogStore;
   trustedActorSecret?: string;
   allowDevActorHeader: boolean;
@@ -44,6 +46,7 @@ export function registerOfferDraftRoutes(
 ) {
   const {
     store,
+    intakeStore,
     auditLog,
     trustedActorSecret,
     allowDevActorHeader,
@@ -157,12 +160,13 @@ export function registerOfferDraftRoutes(
       const promoted = validateAcceptedEventSpec(
         promoteOfferVariant(draft, request.body?.variantId)
       );
+      await intakeStore.saveSpec(promoted);
       await auditLog.log({
         action: "offer.promoted_variant",
         entityType: "AcceptedEventSpec",
         entityId: promoted.specId,
         actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-        summary: `Angebotsvariante in operative Event-Spezifikation uebernommen.`,
+        summary: `Angebotsvariante in operative Event-Spezifikation übernommen.`,
         details: {
           draftId: draft.draftId,
           variantId: request.body?.variantId ?? draft.variantSet[0]?.variantId,
