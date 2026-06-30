@@ -305,4 +305,58 @@ describe("BYO LLM runtime clarification drafts", () => {
       await app.close();
     }
   });
+
+  it("preserves existing matching spec uncertainties when approving a duplicate draft question", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
+    await seedFixtureSpec(intakeStore);
+    const app = buildProductionApp({
+      dataRoot,
+      intakeStore,
+      store,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: { CATERING_LLM_PROVIDER: "fixture" }
+    });
+
+    try {
+      const draft = await createDraft(app);
+      const spec = await intakeStore.getSpec(fixtureSpecId);
+      if (!spec) {
+        throw new Error("Fixture spec missing");
+      }
+      await intakeStore.saveSpec({
+        ...spec,
+        uncertainties: [
+          {
+            field: draft.questions[0].reasonCode,
+            message: "Bestehende fachliche Klärung: Teilnehmerzahl blockiert die Planung.",
+            severity: "high",
+            suggestedQuestion: draft.questions[0].text
+          }
+        ]
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/production/clarification-drafts/${draft.draftId}/decision`,
+        headers: trustedProductionHeaders,
+        payload: { approve: true }
+      });
+      const specAfterApprove = await intakeStore.getSpec(fixtureSpecId);
+
+      expect(response.statusCode).toBe(200);
+      expect(specAfterApprove?.uncertainties).toEqual([
+        {
+          field: draft.questions[0].reasonCode,
+          message: "Bestehende fachliche Klärung: Teilnehmerzahl blockiert die Planung.",
+          severity: "high",
+          suggestedQuestion: draft.questions[0].text
+        }
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
 });
