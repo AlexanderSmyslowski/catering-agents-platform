@@ -67,6 +67,8 @@ describe("production route main layout state", () => {
     );
 
     expect(result?.menuItems).toEqual(["Lunchbuffet", "Kaffeestation"]);
+    expect(result?.questionPreviewItems).toEqual(["Welche Komponenten werden fertig zugekauft?"]);
+    expect(result?.questionPreviewOverflowCount).toBe(0);
     expect(result?.nextStepTitle).toBe("Rückfragen klären");
     expect(result?.checklistItems).toEqual([
       { label: "Anlass", value: "Konferenz", status: "ok" },

@@ -136,6 +136,12 @@ describe("production input panel", () => {
         statusLine: "Status: vollständig · Rückfragen: offen 11 · beantwortet 0",
         planLine: "Plan: offen · Einkaufsliste: noch keine Liste",
         menuItems: ["Vitello tonnato", "Tortilla-Tarte"],
+        questionPreviewItems: [
+          "Welche Komponenten werden fertig zugekauft?",
+          "Gilt der Gesamtpreis nur für Speisen?",
+          "Welche Convenience-Stufe ist gewünscht?"
+        ],
+        questionPreviewOverflowCount: 2,
         checklistItems: [
           { label: "Anlass", value: "Empfang", status: "ok" },
           { label: "Preisrahmen", value: "offen", status: "open" }
@@ -153,6 +159,9 @@ describe("production input panel", () => {
     expect(markup).toContain("Verständnis des Angebots");
     expect(markup).toContain("Vitello tonnato");
     expect(markup).toContain("Tortilla-Tarte");
+    expect(markup).toContain("Zwingende Rückfragen");
+    expect(markup).toContain("Welche Komponenten werden fertig zugekauft?");
+    expect(markup).toContain("+ 2 weitere Rückfragen im Rückfragenbereich.");
     expect(markup).toContain("Pflichtprüfung");
     expect(markup).toContain("Preisrahmen");
     expect(markup).toContain("Nächster Produktionsschritt: Rückfragen klären");

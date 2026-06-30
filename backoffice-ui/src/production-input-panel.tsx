@@ -104,6 +104,25 @@ function ProductionAnalysisResultCard({
           )}
         </div>
         <div>
+          <p className="eyebrow">Zwingende Rückfragen</p>
+          {analysisResult.questionPreviewItems.length > 0 ? (
+            <>
+              <ul className="item-list compact production-analysis-question-list">
+                {analysisResult.questionPreviewItems.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              {analysisResult.questionPreviewOverflowCount > 0 ? (
+                <p className="helper-text">
+                  + {analysisResult.questionPreviewOverflowCount} weitere Rückfragen im Rückfragenbereich.
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="helper-text">Keine blockierenden Rückfragen erkannt.</p>
+          )}
+        </div>
+        <div>
           <p className="eyebrow">Pflichtprüfung</p>
           <ul className="item-list compact production-analysis-checklist">
             {analysisResult.checklistItems.map((item) => (

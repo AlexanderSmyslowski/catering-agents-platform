@@ -18,6 +18,8 @@ export type ProductionAnalysisResult = {
   statusLine: string;
   planLine: string;
   menuItems: string[];
+  questionPreviewItems: string[];
+  questionPreviewOverflowCount: number;
   checklistItems: Array<{
     label: string;
     value: string;
@@ -68,6 +70,13 @@ function buildMenuItemLabels(spec?: Record<string, unknown>): string[] {
     .slice(0, 6);
 }
 
+function buildQuestionPreviewItems(questions: string[]): string[] {
+  return questions
+    .map((question) => question.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
 function hasConvenienceDecision(spec?: Record<string, unknown>): boolean {
   const menuPlan = Array.isArray(spec?.menuPlan) ? spec.menuPlan : [];
   return menuPlan.length > 0 && menuPlan.every((entry) => {
@@ -100,6 +109,9 @@ export function buildDocumentAnalysisResult(
   const hasBudgetContext = Boolean(asRecord(spec?.budgetContext));
   const hasConvenience = hasConvenienceDecision(spec);
   const openQuestionCount = countOpenVisibleQuestions(summary);
+  const visibleQuestions = questionState.productionQuestions.filter((question) => question.trim().length > 0);
+  const questionPreviewItems = buildQuestionPreviewItems(questionState.productionQuestions);
+  const questionPreviewOverflowCount = Math.max(0, visibleQuestions.length - questionPreviewItems.length);
 
   return {
     title: summary.activeSpecLabel,
@@ -110,6 +122,8 @@ export function buildDocumentAnalysisResult(
     ].join(" · "),
     planLine: `Plan: ${formatOperatorPlanStatus(summary.planStatusLabel)} · Einkaufsliste: ${summary.purchaseStatusLabel}`,
     menuItems,
+    questionPreviewItems,
+    questionPreviewOverflowCount,
     checklistItems: [
       {
         label: "Anlass",
