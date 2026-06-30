@@ -51,7 +51,7 @@ function translateRecipeTier(value?: string): string {
 function translateApprovalState(value?: string): string {
   const labels: Record<string, string> = {
     approved_internal: "intern freigegeben",
-    auto_usable: "automatisch nutzbar",
+    auto_usable: "Kandidat, Prüfung nötig",
     review_required: "Prüfung nötig",
     rejected: "abgelehnt"
   };
