@@ -4,6 +4,7 @@ import {
   type DragEvent
 } from "react";
 import type { IntakeDocumentChannel } from "./api.js";
+import type { ProductionAnalysisResult } from "./production-analysis-result-state.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
 import { buildProductionInputPanelState } from "./production-input-panel-state.js";
 
@@ -67,6 +68,7 @@ type ProductionInputPanelProps = {
   sourceInputActions: ProductionSourceInputActions;
   manualInput: ProductionManualInputValues;
   manualInputActions: ProductionManualInputActions;
+  analysisResult?: ProductionAnalysisResult;
 };
 
 export function ProductionInputPanel({
@@ -74,7 +76,8 @@ export function ProductionInputPanel({
   sourceInput,
   sourceInputActions,
   manualInput,
-  manualInputActions
+  manualInputActions,
+  analysisResult
 }: ProductionInputPanelProps) {
   const panelState = buildProductionInputPanelState({
     submitting,
@@ -166,6 +169,43 @@ export function ProductionInputPanel({
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
               </div>
               <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+              {analysisResult ? (
+                <div className="production-analysis-result-card" aria-label="Erkannte Produktionsdaten">
+                  <p className="eyebrow">Erkannte Produktionsdaten</p>
+                  <strong>{analysisResult.title}</strong>
+                  <p className="helper-text">{analysisResult.statusLine}</p>
+                  <p className="helper-text">{analysisResult.planLine}</p>
+                  <div className="production-analysis-result-grid">
+                    <div>
+                      <p className="eyebrow">Verständnis des Angebots</p>
+                      {analysisResult.menuItems.length > 0 ? (
+                        <ul className="item-list compact production-analysis-menu-list">
+                          {analysisResult.menuItems.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="helper-text">Noch keine Gerichte oder Komponenten erkannt.</p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="eyebrow">Pflichtprüfung</p>
+                      <ul className="item-list compact production-analysis-checklist">
+                        {analysisResult.checklistItems.map((item) => (
+                          <li
+                            key={item.label}
+                            className={`production-analysis-checklist__item production-analysis-checklist__item--${item.status}`}
+                          >
+                            <span>{item.label}</span>
+                            <strong>{item.value}</strong>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  <p className="helper-text">Nächster Schritt: {analysisResult.nextStepTitle}</p>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}

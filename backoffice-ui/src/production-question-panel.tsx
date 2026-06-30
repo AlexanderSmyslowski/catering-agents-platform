@@ -120,6 +120,7 @@ export function ProductionQuestionPanel({
   const actionState = buildProductionQuestionPanelActionState({
     focusedProductionSpec,
     editingSpecId,
+    questionCount: productionQuestions.length,
     submitting,
     hasFocusedSpecEditChanges
   });
@@ -213,10 +214,19 @@ export function ProductionQuestionPanel({
                 Antworten speichern
               </button>
             ) : null}
-            <button disabled={submitting} onClick={() => void createPlan(focusedProductionSpec)}>
+            <button
+              disabled={actionState.primaryActionDisabled}
+              title={actionState.primaryActionHint}
+              onClick={() => void createPlan(focusedProductionSpec)}
+            >
               {actionState.primaryActionLabel}
             </button>
           </div>
+          {actionState.primaryActionHint ? (
+            <p className="helper-text" role="status">
+              {actionState.primaryActionHint}
+            </p>
+          ) : null}
         </>
       ) : (
         <p className="helper-text">{visibilityState.emptyStateMessage}</p>

@@ -8,6 +8,7 @@ import {
   type ProductionSourceInputActions,
   type ProductionSourceInputValues
 } from "../backoffice-ui/src/production-input-panel.js";
+import type { ProductionAnalysisResult } from "../backoffice-ui/src/production-analysis-result-state.js";
 
 const noop = () => undefined;
 const noopAsync = async () => undefined;
@@ -65,14 +66,15 @@ function buildSourceInput(overrides?: Partial<ProductionSourceInputValues>): Pro
   };
 }
 
-function renderPanel(sourceInput: ProductionSourceInputValues): string {
+function renderPanel(sourceInput: ProductionSourceInputValues, analysisResult?: ProductionAnalysisResult): string {
   return renderToStaticMarkup(
     createElement(ProductionInputPanel, {
       submitting: false,
       sourceInput,
       sourceInputActions,
       manualInput,
-      manualInputActions
+      manualInputActions,
+      analysisResult
     })
   );
 }
@@ -120,6 +122,39 @@ describe("production input panel", () => {
     expect(rejectedMarkup).not.toContain("Analyse abgeschlossen");
     expect(analysingMarkup).toContain("Ausgewählt: anfrage.pdf");
     expect(analysingMarkup).toContain("Analyse läuft für anfrage.pdf");
+  });
+
+  it("surfaces recognised production data in the completed analysis state", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "angebot.pdf",
+        documentProgress: 100
+      }),
+      {
+        title: "Empfang · 45 Teilnehmer · 2026-06-14",
+        statusLine: "Status: vollständig · Rückfragen: offen 11 · beantwortet 0",
+        planLine: "Plan: offen · Einkaufsliste: noch keine Liste",
+        menuItems: ["Vitello tonnato", "Tortilla-Tarte"],
+        checklistItems: [
+          { label: "Anlass", value: "Empfang", status: "ok" },
+          { label: "Preisrahmen", value: "offen", status: "open" }
+        ],
+        nextStepTitle: "Rückfragen klären"
+      }
+    );
+
+    expect(markup).toContain("Analyse abgeschlossen für angebot.pdf");
+    expect(markup).toContain("Erkannte Produktionsdaten");
+    expect(markup).toContain("Empfang · 45 Teilnehmer · 2026-06-14");
+    expect(markup).toContain("Rückfragen: offen 11 · beantwortet 0");
+    expect(markup).toContain("Plan: offen · Einkaufsliste: noch keine Liste");
+    expect(markup).toContain("Verständnis des Angebots");
+    expect(markup).toContain("Vitello tonnato");
+    expect(markup).toContain("Tortilla-Tarte");
+    expect(markup).toContain("Pflichtprüfung");
+    expect(markup).toContain("Preisrahmen");
+    expect(markup).toContain("Nächster Schritt: Rückfragen klären");
   });
 
   it("keeps workspace actions separated as local demo maintenance", () => {

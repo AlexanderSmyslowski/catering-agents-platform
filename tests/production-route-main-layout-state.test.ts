@@ -1,8 +1,84 @@
 import { describe, expect, it } from "vitest";
+import { buildDocumentAnalysisResult } from "../backoffice-ui/src/production-analysis-result-state.js";
 import { buildProductionRouteMainLayoutState } from "../backoffice-ui/src/production-route-main-layout-state.js";
 import type { ProductionRouteMainLayoutStateInput } from "../backoffice-ui/src/production-route-main-layout-state.js";
 
 describe("production route main layout state", () => {
+  it("builds a prompt-style analysis result from the focused production spec after document analysis", () => {
+    const result = buildDocumentAnalysisResult(
+      {
+        dragActive: false,
+        intakeFile: null,
+        intakeChannel: "pdf_upload",
+        documentPhase: "done",
+        activeDocumentName: "angebot.pdf",
+        documentProgress: 100,
+        intakeText: "",
+        canClearWorkspace: false,
+        canArchiveCurrentIntake: false,
+        clearWorkspaceTitle: "",
+        archiveCurrentIntakeTitle: ""
+      },
+      {
+        activeSpecLabel: "Konferenz · 90 Teilnehmer · 2026-06-18",
+        readinessLabel: "vollständig",
+        planStatusLabel: "offen",
+        purchaseStatusLabel: "noch keine Liste",
+        questionCount: 1,
+        answeredQuestionCount: 0,
+        unansweredQuestionCount: 1,
+        productionObjectCount: 0,
+        productionObjectStatusLabel: "noch kein Plan",
+        purchaseListCount: 0
+      },
+      {
+        title: "Rückfragen klären",
+        description: "Zukauf und Convenience entscheiden."
+      },
+      {
+        focusedProductionSpec: {
+          event: { type: "conference", date: "2026-06-18" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          menuPlan: [
+            {
+              componentId: "component-1",
+              label: "Lunchbuffet",
+              productionDecision: { mode: "scratch" }
+            },
+            {
+              componentId: "component-2",
+              label: "Kaffeestation",
+              purchasedElements: ["Kaffeebohnen"]
+            }
+          ]
+        },
+        focusedSpecReadinessLabel: "vollständig",
+        currentSpecPurchaseLists: [],
+        productionQuestions: ["Welche Komponenten werden fertig zugekauft?"],
+        productionAssumptions: [],
+        productionConversationProjection: { sessionId: "session-test", messages: [] },
+        workbenchSpecFacts: [],
+        intakeRequestDetail: null,
+        filteredSpecs: [],
+        documentPhase: "done",
+        productionWorkspaceCleared: false
+      }
+    );
+
+    expect(result?.menuItems).toEqual(["Lunchbuffet", "Kaffeestation"]);
+    expect(result?.nextStepTitle).toBe("Rückfragen klären");
+    expect(result?.checklistItems).toEqual([
+      { label: "Anlass", value: "Konferenz", status: "ok" },
+      { label: "Datum", value: "2026-06-18", status: "ok" },
+      { label: "Personenzahl", value: "90 Personen", status: "ok" },
+      { label: "Serviceform", value: "Buffet", status: "ok" },
+      { label: "Gerichte", value: "2 Komponenten", status: "ok" },
+      { label: "Preisrahmen", value: "offen", status: "open" },
+      { label: "Zukauf/Convenience", value: "geklärt", status: "ok" }
+    ]);
+  });
+
   it("combines route view state and action props without changing references", () => {
     const viewState = {
       workbenchSummary: {

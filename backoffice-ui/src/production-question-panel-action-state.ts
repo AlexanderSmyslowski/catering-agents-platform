@@ -1,6 +1,7 @@
 export type ProductionQuestionPanelActionStateInput = {
   focusedProductionSpec?: Record<string, unknown>;
   editingSpecId?: string;
+  questionCount: number;
   submitting: boolean;
   hasFocusedSpecEditChanges: boolean;
 };
@@ -12,11 +13,14 @@ export type ProductionQuestionPanelActionState = {
   showSaveAnswersButton: boolean;
   saveAnswersDisabled: boolean;
   primaryActionLabel: string;
+  primaryActionDisabled: boolean;
+  primaryActionHint?: string;
 };
 
 export function buildProductionQuestionPanelActionState({
   focusedProductionSpec,
   editingSpecId,
+  questionCount,
   submitting,
   hasFocusedSpecEditChanges
 }: ProductionQuestionPanelActionStateInput): ProductionQuestionPanelActionState {
@@ -25,6 +29,14 @@ export function buildProductionQuestionPanelActionState({
       ? String(focusedProductionSpec.specId)
       : undefined;
   const isFocusedSpecEditing = focusedSpecId !== undefined && editingSpecId === focusedSpecId;
+  const hasOpenQuestions = questionCount > 0;
+  const blockCalculationForQuestions = hasOpenQuestions && !isFocusedSpecEditing;
+  const blockSaveAndRunForMissingChanges = isFocusedSpecEditing && !hasFocusedSpecEditChanges;
+  const primaryActionHint = blockCalculationForQuestions
+    ? "Bitte offene Rückfragen beantworten, bevor die Berechnung gestartet wird."
+    : blockSaveAndRunForMissingChanges
+      ? "Erst eine Antwort ändern oder das Antwortfenster schließen."
+      : undefined;
 
   return {
     focusedSpecId,
@@ -32,6 +44,12 @@ export function buildProductionQuestionPanelActionState({
     editAnswersDisabled: submitting || isFocusedSpecEditing,
     showSaveAnswersButton: isFocusedSpecEditing,
     saveAnswersDisabled: submitting || !hasFocusedSpecEditChanges,
-    primaryActionLabel: isFocusedSpecEditing ? "Speichern und Berechnung starten" : "Berechnung starten"
+    primaryActionLabel: blockCalculationForQuestions
+      ? "Rückfragen zuerst beantworten"
+      : isFocusedSpecEditing
+        ? "Speichern und Berechnung starten"
+        : "Berechnung starten",
+    primaryActionDisabled: submitting || blockCalculationForQuestions || blockSaveAndRunForMissingChanges,
+    ...(primaryActionHint ? { primaryActionHint } : {})
   };
 }

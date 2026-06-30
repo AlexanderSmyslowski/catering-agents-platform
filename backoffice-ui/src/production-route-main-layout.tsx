@@ -41,6 +41,7 @@ import {
   type ProductionWorkbenchNextStep,
   type ProductionWorkbenchSummary
 } from "./production-workbench.js";
+import { buildDocumentAnalysisResult } from "./production-analysis-result-state.js";
 
 export type ProductionRouteMainLayoutProps = {
   workbenchSummary: ProductionWorkbenchSummary;
@@ -103,6 +104,12 @@ export function ProductionRouteMainLayout({
       )
     : undefined;
   const canClearMiniPilotResult = miniPilotRawResult.trim().length > 0;
+  const documentAnalysisResult = buildDocumentAnalysisResult(
+    sourceInput,
+    workbenchSummary,
+    workbenchNextStep,
+    questionState
+  );
 
   return (
     <ProductionConversationalWorkbench
@@ -121,6 +128,7 @@ export function ProductionRouteMainLayout({
               sourceInputActions={sourceInputActions}
               manualInput={manualInput}
               manualInputActions={manualInputActions}
+              analysisResult={documentAnalysisResult}
             />
           </div>
         ),

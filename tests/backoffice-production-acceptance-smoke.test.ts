@@ -1464,6 +1464,12 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
     expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
+    expect(
+      document.querySelector(".production-conversation-layout")?.firstElementChild?.classList.contains(
+        "production-calm-summary"
+      )
+    ).toBe(true);
+    expect(document.querySelector(".production-boundary-details > summary")?.textContent).toBe("Arbeitsgrenzen");
     expect(document.querySelector(".production-composer .production-column--input")?.textContent).toContain("input");
     expect(document.querySelector(".production-progressive-zone .production-column--questions")?.textContent).toContain("fragen");
     expect(document.querySelector(".production-objects-zone .production-column--objects")?.textContent).toContain("objekte");

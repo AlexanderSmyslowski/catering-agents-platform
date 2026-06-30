@@ -63,7 +63,7 @@ function countOpenVisibleQuestions(
   return Math.max(0, fallbackUnansweredQuestionCount);
 }
 
-function formatOperatorReadiness(readinessLabel: string): string {
+export function formatOperatorReadiness(readinessLabel: string): string {
   if (readinessLabel === "-" || readinessLabel === "unzureichend") {
     return "Prüfung nötig";
   }
@@ -73,7 +73,7 @@ function formatOperatorReadiness(readinessLabel: string): string {
   return readinessLabel;
 }
 
-function formatOperatorPlanStatus(planStatusLabel: string): string {
+export function formatOperatorPlanStatus(planStatusLabel: string): string {
   if (planStatusLabel === "wird geladen") {
     return "wird geladen";
   }
@@ -129,22 +129,6 @@ export function ProductionConversationalWorkbench({
 
   return (
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
-      <article className="production-composer" aria-label="Zentrale Produktionsarbeit">
-        <header className="production-composer__header">
-          <p className="eyebrow">Produktionsagent-Chat</p>
-          <h3>Was braucht die Produktion als Nächstes?</h3>
-          <p className="helper-text">
-            Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.
-          </p>
-          <div className="production-next-step" aria-label="Nächster Produktionsschritt">
-            <p className="eyebrow">Nächster Schritt</p>
-            <strong>{nextStep.title}</strong>
-            <p className="helper-text">{nextStep.description}</p>
-          </div>
-        </header>
-        {slots.inputSlot}
-      </article>
-
       <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
         <p className="eyebrow">Aktiver Produktionsauftrag</p>
         <strong>{activeSpecLabel}</strong>
@@ -155,19 +139,22 @@ export function ProductionConversationalWorkbench({
           Rückfragenstatus: offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}
         </p>
         <p className="helper-text">
-          Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.
-        </p>
-        <p className="helper-text">
-          Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.
-        </p>
-        <p className="helper-text">
-          Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.
-        </p>
-        <p className="helper-text">
           Plan: {formatOperatorPlanStatus(planStatusLabel)} · Einkaufsliste: {purchaseStatusLabel}
         </p>
         <p className="helper-text">Produktionsergebnis: {formatOperatorProductionObjects(productionObjectStatusLabel)}</p>
         <p className="helper-text">Freigabe: nicht erteilt.</p>
+        <details className="production-boundary-details">
+          <summary>Arbeitsgrenzen</summary>
+          <p className="helper-text">
+            Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.
+          </p>
+          <p className="helper-text">
+            Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.
+          </p>
+          <p className="helper-text">
+            Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.
+          </p>
+        </details>
         {activeTechnicalContextLabel ? (
           <details className="technical-context-details">
             <summary>Technische Details</summary>
@@ -198,6 +185,22 @@ export function ProductionConversationalWorkbench({
           </>
         ) : null}
       </aside>
+
+      <article className="production-composer" aria-label="Zentrale Produktionsarbeit">
+        <header className="production-composer__header">
+          <p className="eyebrow">Produktionsagent-Chat</p>
+          <h3>Was braucht die Produktion als Nächstes?</h3>
+          <p className="helper-text">
+            Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.
+          </p>
+          <div className="production-next-step" aria-label="Nächster Produktionsschritt">
+            <p className="eyebrow">Nächster Schritt</p>
+            <strong>{nextStep.title}</strong>
+            <p className="helper-text">{nextStep.description}</p>
+          </div>
+        </header>
+        {slots.inputSlot}
+      </article>
 
       <div className="production-progressive-zone">
         <details className="progressive-panel" open={questionCount > 0}>
