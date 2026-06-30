@@ -158,14 +158,8 @@ export function ProductionInputPanel({
   });
   const showPrimaryAnalysisResult = Boolean(panelState.showCompletedProgress && analysisResult);
 
-  return (
-    <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
-      {showPrimaryAnalysisResult && analysisResult ? (
-        <ProductionAnalysisResultCard
-          analysisResult={analysisResult}
-          documentName={sourceInput.activeDocumentName}
-        />
-      ) : null}
+  const inputControls = (
+    <>
       <div className="upload-shortcut-bar">
         <div>
           <p className="eyebrow">Anfrageeingang</p>
@@ -363,6 +357,28 @@ export function ProductionInputPanel({
       <button disabled={submitting} onClick={() => void manualInputActions.submitManualSpec()}>
         Spezifikation anlegen
       </button>
+    </>
+  );
+
+  return (
+    <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
+      {showPrimaryAnalysisResult && analysisResult ? (
+        <ProductionAnalysisResultCard
+          analysisResult={analysisResult}
+          documentName={sourceInput.activeDocumentName}
+        />
+      ) : null}
+      {showPrimaryAnalysisResult ? (
+        <details className="production-input-followup">
+          <summary>
+            <span>Eingabe ändern oder weitere Anfrage laden</span>
+            <strong>Datei, Text oder manuelle Spezifikation</strong>
+          </summary>
+          <div className="production-input-followup__body">{inputControls}</div>
+        </details>
+      ) : (
+        inputControls
+      )}
     </article>
   );
 }

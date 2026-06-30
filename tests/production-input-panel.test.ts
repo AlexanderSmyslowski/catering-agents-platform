@@ -165,8 +165,14 @@ describe("production input panel", () => {
     expect(markup).toContain("Pflichtprüfung");
     expect(markup).toContain("Preisrahmen");
     expect(markup).toContain("Nächster Produktionsschritt: Rückfragen klären");
+    expect(markup).toContain("Eingabe ändern oder weitere Anfrage laden");
+    expect(markup).toContain("Datei, Text oder manuelle Spezifikation");
     expect(markup.indexOf("Erkannte Produktionsdaten")).toBeLessThan(markup.indexOf("Kundenanfrage übernehmen"));
     expect(markup.indexOf("Erkannte Produktionsdaten")).toBeLessThan(markup.indexOf("Datei hier ablegen"));
+    expect(markup.indexOf("Nächster Produktionsschritt")).toBeLessThan(
+      markup.indexOf("Eingabe ändern oder weitere Anfrage laden")
+    );
+    expect(markup).toContain('<details class="production-input-followup"><summary>');
     expect(markup).not.toContain("<span>100%</span>");
   });
 
