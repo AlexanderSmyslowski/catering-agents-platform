@@ -332,7 +332,7 @@ describe("shared mini pilot workbench flow", () => {
           summary: {
             status: "ready",
             reason: "mini_pilot_ready",
-            nextStep: "Export nur manuell pruefen."
+            nextStep: "Export nur manuell prüfen."
           },
           preflight: {
             preferredMiniPilotCommand: "npm run llm:synthetic-live:check:mini-pilot"
@@ -351,9 +351,9 @@ describe("shared mini pilot workbench flow", () => {
     });
 
     const text = document.body.textContent ?? "";
-    expect(text).toContain("Produktions-Export ist jetzt fachlich pruefbar");
+    expect(text).toContain("Produktions-Export ist jetzt fachlich prüfbar");
     expect(text).toContain("Status: ready");
-    expect(text).toContain("Export nur manuell pruefen.");
+    expect(text).toContain("Export nur manuell prüfen.");
 
     await act(async () => {
       root.unmount();

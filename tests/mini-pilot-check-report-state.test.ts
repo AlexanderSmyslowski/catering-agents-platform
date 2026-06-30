@@ -6,7 +6,7 @@ describe("buildMiniPilotCheckReportState", () => {
     expect(buildMiniPilotCheckReportState("")).toEqual({
       statusLabel: "noch kein Ergebnis",
       reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
-      nextStepLabel: "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+      nextStepLabel: "Check lokal ausführen, JSON einfüllen und dann erst mit dem Draft weiterarbeiten.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
       errorLabels: []
     });
@@ -14,9 +14,9 @@ describe("buildMiniPilotCheckReportState", () => {
 
   it("shows a parse warning when the pasted result is not JSON", () => {
     expect(buildMiniPilotCheckReportState("not-json")).toEqual({
-      statusLabel: "ungueltiges Ergebnis",
+      statusLabel: "ungültiges Ergebnis",
       reasonLabel: "Die Eingabe ist kein lesbares Mini-Pilot-JSON.",
-      nextStepLabel: "Nur die JSON-Ausgabe von npm run llm:synthetic-live:check:mini-pilot einfuegen.",
+      nextStepLabel: "Nur die JSON-Ausgabe von npm run llm:synthetic-live:check:mini-pilot einfügen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
       errorLabels: []
     });
@@ -31,7 +31,7 @@ describe("buildMiniPilotCheckReportState", () => {
           summary: {
             status: "ready",
             reason: "mini_pilot_ready",
-            nextStep: "Draft nur manuell pruefen."
+            nextStep: "Draft nur manuell prüfen."
           },
           preflight: {
             preferredMiniPilotCommand: "npm run llm:synthetic-live:check:mini-pilot"
@@ -40,8 +40,8 @@ describe("buildMiniPilotCheckReportState", () => {
       )
     ).toEqual({
       statusLabel: "ready",
-      reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-      nextStepLabel: "Draft nur manuell pruefen.",
+      reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+      nextStepLabel: "Draft nur manuell prüfen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
       errorLabels: []
     });
@@ -63,7 +63,7 @@ describe("buildMiniPilotCheckReportState", () => {
       )
     ).toEqual({
       statusLabel: "blocked",
-      reasonLabel: "Mini-Pilot-Rahmen ist noch nicht vollstaendig markiert.",
+      reasonLabel: "Mini-Pilot-Rahmen ist noch nicht vollständig markiert.",
       nextStepLabel: "PA62-Markierungen korrigieren.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
       errorLabels: ["mini-pilot policy is not fully marked as ready"]

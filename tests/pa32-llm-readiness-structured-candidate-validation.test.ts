@@ -91,7 +91,7 @@ describe("PA32 LLM readiness structured candidate validation", () => {
       ],
       humanApprovalRequired: true,
       writesProductObject: false,
-      text: "Bitte klaeren, ob Kaffee gewuenscht ist.",
+      text: "Bitte klären, ob Kaffee gewünscht ist.",
       structuredCandidate: {
         reasonCode: "beverages.coffee",
         prompt: "do not smuggle prompt material here"

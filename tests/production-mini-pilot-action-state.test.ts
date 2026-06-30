@@ -6,20 +6,20 @@ describe("buildProductionMiniPilotActionState", () => {
     expect(
       buildProductionMiniPilotActionState({
         statusLabel: "ready",
-        reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-        nextStepLabel: "Draft nur manuell pruefen.",
+        reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+        nextStepLabel: "Draft nur manuell prüfen.",
         commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
         errorLabels: []
       }, "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20")
     ).toEqual({
       eyebrow: "Mini-Pilot-Status vor Export",
-      title: "Produktions-Export ist jetzt fachlich pruefbar",
+      title: "Produktions-Export ist jetzt fachlich prüfbar",
       statusLabel: "Status: ready",
-      reasonLabel: "Grund: Mini-Pilot-Rahmen ist gruen.",
+      reasonLabel: "Grund: Mini-Pilot-Rahmen ist grün.",
       trustLabel: "Vertrauenslage: frisch lokal gesetzt.",
       provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
       cautionLabel: undefined,
-      helperText: "Draft nur manuell pruefen.",
+      helperText: "Draft nur manuell prüfen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
     });
   });
@@ -28,16 +28,16 @@ describe("buildProductionMiniPilotActionState", () => {
     expect(
       buildProductionMiniPilotActionState({
         statusLabel: "blocked",
-        reasonLabel: "Mini-Pilot-Rahmen ist noch nicht vollstaendig markiert.",
+        reasonLabel: "Mini-Pilot-Rahmen ist noch nicht vollständig markiert.",
         nextStepLabel: "PA62-Markierungen korrigieren.",
         commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
         errorLabels: []
       }, "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20")
     ).toEqual({
       eyebrow: "Mini-Pilot-Status vor Export",
-      title: "Export erst nach gruenem Mini-Pilot-Check",
+      title: "Export erst nach grünem Mini-Pilot-Check",
       statusLabel: "Status: blocked",
-      reasonLabel: "Grund: Mini-Pilot-Rahmen ist noch nicht vollstaendig markiert.",
+      reasonLabel: "Grund: Mini-Pilot-Rahmen ist noch nicht vollständig markiert.",
       trustLabel: "Vertrauenslage: übernommener lokaler Stand.",
       provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
       cautionLabel: "Übernommener lokaler Stand: vor dem Export besser noch einmal frisch prüfen.",
@@ -50,14 +50,14 @@ describe("buildProductionMiniPilotActionState", () => {
     expect(
       buildProductionMiniPilotActionState({
         statusLabel: "ready",
-        reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-        nextStepLabel: "Draft nur manuell pruefen.",
+        reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+        nextStepLabel: "Draft nur manuell prüfen.",
         commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
         errorLabels: []
       }, "Lokaler Stand übernommen · zuletzt aktualisiert 07.06.26, 18:20 · älter als 30 Minuten")
     ).toMatchObject({
-      title: "Vor dem Export Mini-Pilot-Check besser neu ausfuehren",
-      statusLabel: "Status: ready, aber neu pruefen",
+      title: "Vor dem Export Mini-Pilot-Check besser neu ausführen",
+      statusLabel: "Status: ready, aber neu prüfen",
       trustLabel: "Vertrauenslage: älterer übernommener Stand.",
       cautionLabel: "Übernommener lokaler Stand ist älter als 30 Minuten: vor dem Export bitte neu prüfen."
     });

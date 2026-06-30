@@ -131,7 +131,7 @@ export const byoLlmBoundaryPolicy = {
       explicitOptInRequired: true,
       realCustomerDataAllowed: false,
       writeEffectsAllowed: false,
-      operationalNote: "Nur fuer lokalen Operator-Betrieb; Server- und Batch-Nutzung gehoeren auf die API-Schiene."
+      operationalNote: "Nur für lokalen Operator-Betrieb; Server- und Batch-Nutzung gehören auf die API-Schiene."
     },
     {
       providerKind: "custom_byo_provider",

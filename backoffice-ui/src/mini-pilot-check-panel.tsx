@@ -78,7 +78,7 @@ export function MiniPilotCheckPanel({
       <p className="eyebrow">Mini-Pilot-Check</p>
       <strong>Ready oder blocked direkt im Arbeitsfluss lesen</strong>
       <p className="helper-text">
-        JSON-Ausgabe von <code>{effectiveReportState.commandLabel}</code> einfuegen; die Oberflaeche fasst Status, Grund und
+        JSON-Ausgabe von <code>{effectiveReportState.commandLabel}</code> einfügen; die Oberfläche fasst Status, Grund und
         naechsten sicheren Schritt lokal zusammen.
       </p>
       {storageHintLabel ? <p className="helper-text">{storageHintLabel}</p> : null}
@@ -100,7 +100,7 @@ export function MiniPilotCheckPanel({
       ) : null}
       <p className="helper-text">Status: {effectiveReportState.statusLabel}</p>
       <p className="helper-text">Grund: {effectiveReportState.reasonLabel}</p>
-      <p className="helper-text">Naechster Schritt: {effectiveReportState.nextStepLabel}</p>
+      <p className="helper-text">Nächster Schritt: {effectiveReportState.nextStepLabel}</p>
       {effectiveReportState.errorLabels.length > 0 ? (
         <ul className="item-list compact trace-list">
           {effectiveReportState.errorLabels.map((error) => (

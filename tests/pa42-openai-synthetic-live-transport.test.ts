@@ -16,7 +16,7 @@ function buildRequest(): LlmReadinessSyntheticLiveTransportRequest {
     promptVersion: "v0",
     outputKind: "clarification_question_draft",
     systemPrompt: "JSON only",
-    userPrompt: "Bitte gib JSON zurueck."
+    userPrompt: "Bitte gib JSON zurück."
   };
 }
 
@@ -75,7 +75,7 @@ describe("PA42 OpenAI synthetic live transport", () => {
         JSON.stringify({
           id: "resp-1",
           output_text: JSON.stringify({
-            text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+            text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
             reason: "missingFields",
             reasonCode: "attendees.expected"
           })
@@ -101,7 +101,7 @@ describe("PA42 OpenAI synthetic live transport", () => {
       errors: [],
       providerId: "openai-responses",
       providerRequestId: "req-openai-1",
-      text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+      text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
       structuredCandidate: {
         reason: "missingFields",
         reasonCode: "attendees.expected"

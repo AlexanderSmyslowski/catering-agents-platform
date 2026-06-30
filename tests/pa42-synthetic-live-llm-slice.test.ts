@@ -55,7 +55,7 @@ describe("PA42 synthetic live LLM slice", () => {
         errors: [],
         providerId: "fake-provider",
         providerRequestId: "req-1",
-        text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+        text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
         structuredCandidate: {
           reason: "missingFields",
           reasonCode: "attendees.expected"
@@ -89,7 +89,7 @@ describe("PA42 synthetic live LLM slice", () => {
         sourceRefs: cloneInput(0).sourceRefs,
         humanApprovalRequired: true,
         writesProductObject: false,
-        text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+        text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
         structuredCandidate: {
           reason: "missingFields",
           reasonCode: "attendees.expected"
@@ -144,7 +144,7 @@ describe("PA42 synthetic live LLM slice", () => {
           ok: true,
           errors: [],
           providerId: "fake-provider",
-          text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+          text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
           structuredCandidate: {
             reason: "missingFields"
           }

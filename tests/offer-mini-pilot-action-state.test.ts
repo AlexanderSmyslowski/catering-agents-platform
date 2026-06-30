@@ -7,19 +7,19 @@ describe("buildOfferMiniPilotActionState", () => {
       buildOfferMiniPilotActionState({
         statusLabel: "noch kein Ergebnis",
         reasonLabel: "JSON-Ausgabe fehlt.",
-        nextStepLabel: "Check zuerst lokal ausfuehren.",
+        nextStepLabel: "Check zuerst lokal ausführen.",
         commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
         errorLabels: []
       }, "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20")
     ).toEqual({
-      eyebrow: "Mini-Pilot-Status vor Uebernahme",
-      title: "Uebernahme erst nach gruenem Mini-Pilot-Check",
+      eyebrow: "Mini-Pilot-Status vor Übernahme",
+      title: "Übernahme erst nach grünem Mini-Pilot-Check",
       statusLabel: "Status: noch kein Ergebnis",
       reasonLabel: "Grund: JSON-Ausgabe fehlt.",
       trustLabel: "Vertrauenslage: übernommener lokaler Stand.",
       provenanceLabel: "Lokaler Stand uebernommen · zuletzt aktualisiert 07.06.26, 18:20",
       cautionLabel: "Übernommener lokaler Stand: vor der manuellen Übernahme besser noch einmal frisch prüfen.",
-      helperText: "Check zuerst lokal ausfuehren.",
+      helperText: "Check zuerst lokal ausführen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
     });
   });
@@ -28,20 +28,20 @@ describe("buildOfferMiniPilotActionState", () => {
     expect(
       buildOfferMiniPilotActionState({
         statusLabel: "ready",
-        reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-        nextStepLabel: "Draft nur manuell pruefen.",
+        reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+        nextStepLabel: "Draft nur manuell prüfen.",
         commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
         errorLabels: []
       }, "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20")
     ).toEqual({
-      eyebrow: "Mini-Pilot-Status vor Uebernahme",
-      title: "Manuelle Uebernahme ist jetzt fachlich pruefbar",
+      eyebrow: "Mini-Pilot-Status vor Übernahme",
+      title: "Manuelle Übernahme ist jetzt fachlich prüfbar",
       statusLabel: "Status: ready",
-      reasonLabel: "Grund: Mini-Pilot-Rahmen ist gruen.",
+      reasonLabel: "Grund: Mini-Pilot-Rahmen ist grün.",
       trustLabel: "Vertrauenslage: frisch lokal gesetzt.",
       provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
       cautionLabel: undefined,
-      helperText: "Draft nur manuell pruefen.",
+      helperText: "Draft nur manuell prüfen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
     });
   });
@@ -50,14 +50,14 @@ describe("buildOfferMiniPilotActionState", () => {
     expect(
       buildOfferMiniPilotActionState({
         statusLabel: "ready",
-        reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-        nextStepLabel: "Draft nur manuell pruefen.",
+        reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+        nextStepLabel: "Draft nur manuell prüfen.",
         commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
         errorLabels: []
       }, "Lokaler Stand übernommen · zuletzt aktualisiert 07.06.26, 18:20 · älter als 30 Minuten")
     ).toMatchObject({
-      title: "Vor der manuellen Uebernahme Mini-Pilot-Check besser neu ausfuehren",
-      statusLabel: "Status: ready, aber neu pruefen",
+      title: "Vor der manuellen Übernahme Mini-Pilot-Check besser neu ausführen",
+      statusLabel: "Status: ready, aber neu prüfen",
       trustLabel: "Vertrauenslage: älterer übernommener Stand.",
       cautionLabel: "Übernommener lokaler Stand ist älter als 30 Minuten: vor der manuellen Übernahme bitte neu prüfen."
     });

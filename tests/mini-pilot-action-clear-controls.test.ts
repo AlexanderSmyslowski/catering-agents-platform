@@ -78,12 +78,12 @@ function offerWorkbenchProps(overrides: Partial<OfferWorkbenchProps> = {}): Offe
     completeSpecCount: 1,
     partialSpecCount: 0,
     miniPilotRawResult:
-      '{"ok":true,"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell pruefen."}}',
+      '{"ok":true,"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell prüfen."}}',
     setMiniPilotRawResult: () => undefined,
     miniPilotReportState: {
       statusLabel: "ready",
-      reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-      nextStepLabel: "Draft nur manuell pruefen.",
+      reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+      nextStepLabel: "Draft nur manuell prüfen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
       errorLabels: []
     },
@@ -190,13 +190,13 @@ describe("mini-pilot action clear controls", () => {
           },
           miniPilotActionState: {
             eyebrow: "Mini-Pilot-Status vor Export",
-            title: "Produktions-Export ist jetzt fachlich pruefbar",
+            title: "Produktions-Export ist jetzt fachlich prüfbar",
             statusLabel: "Status: ready",
-            reasonLabel: "Grund: Mini-Pilot-Rahmen ist gruen.",
+            reasonLabel: "Grund: Mini-Pilot-Rahmen ist grün.",
             trustLabel: "Vertrauenslage: frisch lokal gesetzt.",
             provenanceLabel: "Lokal gespeichert · zuletzt aktualisiert 07.06.26, 18:20",
             cautionLabel: undefined,
-            helperText: "Draft nur manuell pruefen.",
+            helperText: "Draft nur manuell prüfen.",
             commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
           },
           onClearMiniPilotResult
@@ -242,10 +242,10 @@ describe("mini-pilot action clear controls", () => {
         },
         miniPilotActionState: {
           eyebrow: "Mini-Pilot-Status vor Export",
-          title: "Export erst nach gruenem Mini-Pilot-Check",
+          title: "Export erst nach grünem Mini-Pilot-Check",
           statusLabel: "Status: noch kein Ergebnis",
           reasonLabel: "Grund: JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
-          helperText: "Check lokal ausfuehren und dann weiterarbeiten.",
+          helperText: "Check lokal ausführen und dann weiterarbeiten.",
           commandLabel: "npm run llm:synthetic-live:check:mini-pilot"
         }
       })

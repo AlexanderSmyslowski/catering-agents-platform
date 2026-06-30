@@ -381,8 +381,8 @@ describe("backoffice production presentation smoke", () => {
     expect(content).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
     expect(content).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
     expect(content).not.toContain("Status: noch kein Ergebnis");
-    expect(content).not.toContain("Mini-Pilot-Status vor Uebernahme");
-    expect(content).not.toContain("Uebernahme erst nach gruenem Mini-Pilot-Check");
+    expect(content).not.toContain("Mini-Pilot-Status vor Übernahme");
+    expect(content).not.toContain("Übernahme erst nach grünem Mini-Pilot-Check");
     expect(content).not.toContain("Angebots-Workbench-Projektion");
     expect(content).not.toContain("Angebotsdienst");
   });
@@ -408,7 +408,7 @@ describe("backoffice production presentation smoke", () => {
     expect(content).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
     expect(content).not.toContain("Status: noch kein Ergebnis");
     expect(content).not.toContain("Mini-Pilot-Status vor Export");
-    expect(content).not.toContain("Export erst nach gruenem Mini-Pilot-Check");
+    expect(content).not.toContain("Export erst nach grünem Mini-Pilot-Check");
     expect(content).toContain("Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar");
     expect(content).toContain("Produktionsblatt exportieren");
     expect(content).toContain("Einkaufsliste exportieren");

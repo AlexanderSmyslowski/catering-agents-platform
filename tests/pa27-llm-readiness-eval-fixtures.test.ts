@@ -64,6 +64,14 @@ describe("PA27 LLM readiness eval fixtures", () => {
     }
   });
 
+  it("keeps human-facing draft fixture texts in polished German", () => {
+    const outputTexts = llmReadinessEvalFixtures.map((fixture) => fixture.expectedOutput.text).join("\n");
+
+    expect(outputTexts).toContain("klären");
+    expect(outputTexts).toContain("für");
+    expect(outputTexts).not.toMatch(/\b(?:klaeren|fuer|gewuenscht|Gaeste)\b/i);
+  });
+
   it("does not carry raw prompts provider responses secrets or tool calls", () => {
     for (const fixture of llmReadinessEvalFixtures) {
       for (const forbiddenKey of forbiddenPayloadKeys) {

@@ -1426,7 +1426,7 @@ describe("backoffice production acceptance smoke", () => {
               statusLabel: "noch kein Ergebnis",
               reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
               nextStepLabel:
-                "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+                "Check lokal ausführen, JSON einfüllen und dann erst mit dem Draft weiterarbeiten.",
               commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
               errorLabels: []
             },
@@ -1507,7 +1507,7 @@ describe("backoffice production acceptance smoke", () => {
               statusLabel: "noch kein Ergebnis",
               reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
               nextStepLabel:
-                "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+                "Check lokal ausführen, JSON einfüllen und dann erst mit dem Draft weiterarbeiten.",
               commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
               errorLabels: []
             },

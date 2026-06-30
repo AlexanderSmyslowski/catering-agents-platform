@@ -84,7 +84,7 @@ describe("PA63 synthetic-live mini-pilot probe guard", () => {
         errors: [],
         providerId: "openai-responses",
         providerRequestId: "resp-mini-pilot-1",
-        text: "Bitte klaeren, ob die Kaffeepause am Vormittag oder am Nachmittag stattfinden soll.",
+        text: "Bitte klären, ob die Kaffeepause am Vormittag oder am Nachmittag stattfinden soll.",
         structuredCandidate: {
           reason: "missingFields",
           reasonCode: "coffeeBreak.timeWindow"

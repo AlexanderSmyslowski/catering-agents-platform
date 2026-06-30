@@ -20,9 +20,9 @@ type MiniPilotCheckLike = {
 
 function formatReasonLabel(reason: string): string {
   const labels: Record<string, string> = {
-    mini_pilot_ready: "Mini-Pilot-Rahmen ist gruen.",
-    preflight_failed: "Lokaler Preflight ist noch nicht gruen.",
-    mini_pilot_policy_incomplete: "Mini-Pilot-Rahmen ist noch nicht vollstaendig markiert.",
+    mini_pilot_ready: "Mini-Pilot-Rahmen ist grün.",
+    preflight_failed: "Lokaler Preflight ist noch nicht grün.",
+    mini_pilot_policy_incomplete: "Mini-Pilot-Rahmen ist noch nicht vollständig markiert.",
     probe_failed: "Der lokale Probe-Lauf ist fehlgeschlagen.",
     eval_mismatch: "Der Provider-Output driftet gegen die Erwartung."
   };
@@ -56,7 +56,7 @@ export function buildMiniPilotCheckReportState(rawResult: string): MiniPilotChec
     return {
       statusLabel: "noch kein Ergebnis",
       reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
-      nextStepLabel: "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+      nextStepLabel: "Check lokal ausführen, JSON einfüllen und dann erst mit dem Draft weiterarbeiten.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
       errorLabels: []
     };
@@ -68,9 +68,9 @@ export function buildMiniPilotCheckReportState(rawResult: string): MiniPilotChec
     parsed = JSON.parse(trimmed) as MiniPilotCheckLike;
   } catch {
     return {
-      statusLabel: "ungueltiges Ergebnis",
+      statusLabel: "ungültiges Ergebnis",
       reasonLabel: "Die Eingabe ist kein lesbares Mini-Pilot-JSON.",
-      nextStepLabel: "Nur die JSON-Ausgabe von npm run llm:synthetic-live:check:mini-pilot einfuegen.",
+      nextStepLabel: "Nur die JSON-Ausgabe von npm run llm:synthetic-live:check:mini-pilot einfügen.",
       commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
       errorLabels: []
     };
@@ -78,9 +78,9 @@ export function buildMiniPilotCheckReportState(rawResult: string): MiniPilotChec
 
   if (!isSummaryShape(parsed.summary)) {
     return {
-      statusLabel: "unvollstaendiges Ergebnis",
-      reasonLabel: "Die JSON-Ausgabe enthaelt keinen vollstaendigen ready/blocked-Status.",
-      nextStepLabel: "Mini-Pilot-Check erneut ausfuehren und die vollstaendige JSON-Ausgabe einfuegen.",
+      statusLabel: "unvollständiges Ergebnis",
+      reasonLabel: "Die JSON-Ausgabe enthält keinen vollständigen ready/blocked-Status.",
+      nextStepLabel: "Mini-Pilot-Check erneut ausführen und die vollständige JSON-Ausgabe einfügen.",
       commandLabel:
         typeof parsed.preflight?.preferredMiniPilotCommand === "string"
           ? parsed.preflight.preferredMiniPilotCommand

@@ -25,7 +25,7 @@ async function buildSyntheticLiveClarificationRun() {
       errors: [],
       providerId: "openai-responses-api",
       providerRequestId: "resp_123",
-      text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+      text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
       structuredCandidate: {
         reason: "missingFields",
         reasonCode: "attendees.expected"

@@ -37,7 +37,7 @@ describe("PA44 synthetic-live probe runner", () => {
         errors: [],
         providerId: "openai-responses",
         providerRequestId: "resp-probe-1",
-        text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+        text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
         structuredCandidate: {
           reason: "missingFields",
           reasonCode: "attendees.expected"

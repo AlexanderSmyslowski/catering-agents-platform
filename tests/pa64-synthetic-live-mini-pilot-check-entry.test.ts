@@ -61,7 +61,7 @@ describe("PA64 synthetic-live mini-pilot check entry", () => {
         errors: [],
         providerId: "openai-responses",
         providerRequestId: "resp-mini-pilot-check-1",
-        text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+        text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
         structuredCandidate: {
           reason: "missingFields",
           reasonCode: "attendees.expected"

@@ -456,7 +456,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
     expect(production.text).not.toContain("Status: noch kein Ergebnis");
     expect(production.text).not.toContain("Mini-Pilot-Status vor Export");
-    expect(production.text).not.toContain("Export erst nach gruenem Mini-Pilot-Check");
+    expect(production.text).not.toContain("Export erst nach grünem Mini-Pilot-Check");
     expect(production.text).toContain("Produktionsblatt exportieren für diesen Produktionsplan");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/corridor-plan-1/html");
     expect(production.text).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
@@ -547,8 +547,8 @@ describe("backoffice route smoke", () => {
     expect(offer).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
     expect(offer).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
     expect(offer).not.toContain("Status: noch kein Ergebnis");
-    expect(offer).not.toContain("Mini-Pilot-Status vor Uebernahme");
-    expect(offer).not.toContain("Uebernahme erst nach gruenem Mini-Pilot-Check");
+    expect(offer).not.toContain("Mini-Pilot-Status vor Übernahme");
+    expect(offer).not.toContain("Übernahme erst nach grünem Mini-Pilot-Check");
     expect(offer).toContain("offer-draft-buffet");
     expect(offer).toContain("Entwurfs-Spec: offer-draft-buffet-spec (teilweise vollständig)");
     expect(offer).toContain("Entwurfs-Quelle: offer_service: offer-draft-buffet");

@@ -49,7 +49,7 @@ describe("PA65 synthetic-live mini-pilot summary signal", () => {
         errors: [],
         providerId: "openai-responses",
         providerRequestId: "resp-mini-pilot-summary-1",
-        text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+        text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
         structuredCandidate: {
           reason: "missingFields",
           reasonCode: "attendees.expected"
@@ -75,7 +75,7 @@ describe("PA65 synthetic-live mini-pilot summary signal", () => {
 
     expect(result.summary.status).toBe("ready");
     expect(result.summary.reason).toBe("mini_pilot_ready");
-    expect(result.summary.nextStep).toContain("manuell pruefen");
+    expect(result.summary.nextStep).toContain("manuell prüfen");
   });
 
   it("keeps the summary signal discoverable from repo docs", () => {

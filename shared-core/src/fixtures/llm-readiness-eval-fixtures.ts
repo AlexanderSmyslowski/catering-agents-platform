@@ -65,7 +65,7 @@ export const llmReadinessEvalFixtures = [
       ],
       humanApprovalRequired: true,
       writesProductObject: false,
-      text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+      text: "Bitte klären, für wie viele Personen die Kaffeepause geplant werden soll.",
       structuredCandidate: {
         reason: "missingFields",
         reasonCode: "attendees.expected"
@@ -135,7 +135,7 @@ export const llmReadinessEvalFixtures = [
       ],
       humanApprovalRequired: true,
       writesProductObject: false,
-      text: "Entwurf fuer Operatoren: Buffet-Spezifikation, Produktionsplan und Einkaufsliste liegen als synthetische Arbeitsbelege vor.",
+      text: "Entwurf für Operatoren: Buffet-Spezifikation, Produktionsplan und Einkaufsliste liegen als synthetische Arbeitsbelege vor.",
       structuredCandidate: {
         summaryKind: "operator_context",
         dataMode: "synthetic_or_demo_only"

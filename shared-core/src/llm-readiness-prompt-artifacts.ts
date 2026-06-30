@@ -30,13 +30,13 @@ export const llmReadinessPromptArtifacts = [
     inputKind: "clarification_draft_request",
     status: "synthetic_live_ready",
     systemPrompt:
-      "Du erstellst genau einen menschlich freizugebenden Klaerungsfragen-Entwurf fuer einen synthetischen Catering-Fall. " +
+      "Du erstellst genau einen menschlich freizugebenden Klärungsfragen-Entwurf für einen synthetischen Catering-Fall. " +
       "Arbeite nur mit den gegebenen synthetischen Fixture-Hinweisen. " +
-      "Erfinde keine neuen Fakten, schreibe nichts in Produktobjekte und gib nur JSON zurueck.",
+      "Erfinde keine neuen Fakten, schreibe nichts in Produktobjekte und gib nur JSON zurück.",
     userPromptTemplate:
       "Erzeuge ein JSON-Objekt mit den Feldern text, reason und reasonCode. " +
-      "text muss eine einzelne deutsche Rueckfrage sein. " +
-      "reason und reasonCode muessen knappe scalar-Werte sein. " +
+      "text muss eine einzelne deutsche Rückfrage sein. " +
+      "reason und reasonCode müssen knappe scalar-Werte sein. " +
       "Nutze nur die unten genannten Fixture-Hinweise und SourceRefs."
   },
   {
@@ -49,7 +49,7 @@ export const llmReadinessPromptArtifacts = [
     systemPrompt:
       "Dieser Prompt-Artefaktplatzhalter bleibt vorerst providerlos und dient nur als nicht-leerer Registry-Anker.",
     userPromptTemplate:
-      "Kein live freigegebener Provider-Lauf fuer operator_summary_request in dieser Phase."
+      "Kein live freigegebener Provider-Lauf für operator_summary_request in dieser Phase."
   }
 ] as const satisfies readonly LlmReadinessPromptArtifact[];
 

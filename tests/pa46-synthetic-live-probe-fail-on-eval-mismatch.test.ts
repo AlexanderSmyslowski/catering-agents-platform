@@ -62,7 +62,7 @@ describe("PA46 synthetic-live probe fail on eval mismatch", () => {
         errors: [],
         providerId: "openai-responses",
         providerRequestId: "resp-probe-drift-2",
-        text: "Bitte klaeren, fuer wie viele Gaeste die Kaffeepause geplant werden soll.",
+        text: "Bitte klären, für wie viele Gäste die Kaffeepause geplant werden soll.",
         structuredCandidate: {
           reason: "missingFields",
           reasonCode: "attendees.expected"

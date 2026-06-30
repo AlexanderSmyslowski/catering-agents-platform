@@ -38,7 +38,7 @@ describe("MiniPilotCheckPanel", () => {
           summary: {
             status: "ready",
             reason: "mini_pilot_ready",
-            nextStep: "Draft nur manuell pruefen."
+            nextStep: "Draft nur manuell prüfen."
           },
           preflight: {
             preferredMiniPilotCommand: "npm run llm:synthetic-live:check:mini-pilot"
@@ -49,8 +49,8 @@ describe("MiniPilotCheckPanel", () => {
 
     const text = document.body.textContent ?? "";
     expect(text).toContain("Status: ready");
-    expect(text).toContain("Grund: Mini-Pilot-Rahmen ist gruen.");
-    expect(text).toContain("Naechster Schritt: Draft nur manuell pruefen.");
+    expect(text).toContain("Grund: Mini-Pilot-Rahmen ist grün.");
+    expect(text).toContain("Nächster Schritt: Draft nur manuell prüfen.");
 
     await act(async () => {
       root.unmount();
@@ -78,7 +78,7 @@ describe("MiniPilotCheckPanel", () => {
           summary: {
             status: "ready",
             reason: "mini_pilot_ready",
-            nextStep: "Draft nur manuell pruefen."
+            nextStep: "Draft nur manuell prüfen."
           },
           preflight: {
             preferredMiniPilotCommand: "npm run llm:synthetic-live:check:mini-pilot"
@@ -115,12 +115,12 @@ describe("MiniPilotCheckPanel", () => {
       root.render(
         createElement(MiniPilotCheckPanel as never, {
           rawResult:
-            '{"ok":true,"errors":[],"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell pruefen."}}',
+            '{"ok":true,"errors":[],"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell prüfen."}}',
           onRawResultChange: () => undefined,
           reportState: {
             statusLabel: "ready",
-            reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-            nextStepLabel: "Draft nur manuell pruefen.",
+            reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+            nextStepLabel: "Draft nur manuell prüfen.",
             commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
             errorLabels: []
           },
@@ -148,12 +148,12 @@ describe("MiniPilotCheckPanel", () => {
       root.render(
         createElement(MiniPilotCheckPanel as never, {
           rawResult:
-            '{"ok":true,"errors":[],"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell pruefen."}}',
+            '{"ok":true,"errors":[],"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell prüfen."}}',
           onRawResultChange: () => undefined,
           reportState: {
             statusLabel: "ready",
-            reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-            nextStepLabel: "Draft nur manuell pruefen.",
+            reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+            nextStepLabel: "Draft nur manuell prüfen.",
             commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
             errorLabels: []
           },
@@ -184,12 +184,12 @@ describe("MiniPilotCheckPanel", () => {
       root.render(
         createElement(MiniPilotCheckPanel as never, {
           rawResult:
-            '{"ok":true,"errors":[],"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell pruefen."}}',
+            '{"ok":true,"errors":[],"summary":{"status":"ready","reason":"mini_pilot_ready","nextStep":"Draft nur manuell prüfen."}}',
           onRawResultChange: () => undefined,
           reportState: {
             statusLabel: "ready",
-            reasonLabel: "Mini-Pilot-Rahmen ist gruen.",
-            nextStepLabel: "Draft nur manuell pruefen.",
+            reasonLabel: "Mini-Pilot-Rahmen ist grün.",
+            nextStepLabel: "Draft nur manuell prüfen.",
             commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
             errorLabels: []
           },

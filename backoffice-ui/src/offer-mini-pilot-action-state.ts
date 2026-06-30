@@ -60,11 +60,11 @@ export function buildOfferMiniPilotActionState(
     const staleCarryover = isStaleCarryover(storageHintLabel);
 
     return {
-      eyebrow: "Mini-Pilot-Status vor Uebernahme",
+      eyebrow: "Mini-Pilot-Status vor Übernahme",
       title: staleCarryover
-        ? "Vor der manuellen Uebernahme Mini-Pilot-Check besser neu ausfuehren"
-        : "Manuelle Uebernahme ist jetzt fachlich pruefbar",
-      statusLabel: staleCarryover ? "Status: ready, aber neu pruefen" : "Status: ready",
+        ? "Vor der manuellen Übernahme Mini-Pilot-Check besser neu ausführen"
+        : "Manuelle Übernahme ist jetzt fachlich prüfbar",
+      statusLabel: staleCarryover ? "Status: ready, aber neu prüfen" : "Status: ready",
       reasonLabel: `Grund: ${reportState.reasonLabel}`,
       trustLabel: buildMiniPilotTrustLabel(storageHintLabel),
       provenanceLabel: storageHintLabel,
@@ -75,8 +75,8 @@ export function buildOfferMiniPilotActionState(
   }
 
   return {
-    eyebrow: "Mini-Pilot-Status vor Uebernahme",
-    title: "Uebernahme erst nach gruenem Mini-Pilot-Check",
+    eyebrow: "Mini-Pilot-Status vor Übernahme",
+    title: "Übernahme erst nach grünem Mini-Pilot-Check",
     statusLabel: `Status: ${reportState.statusLabel}`,
     reasonLabel: `Grund: ${reportState.reasonLabel}`,
     trustLabel: buildMiniPilotTrustLabel(storageHintLabel),

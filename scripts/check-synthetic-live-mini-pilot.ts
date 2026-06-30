@@ -31,7 +31,7 @@ function buildSyntheticLiveMiniPilotSummary(
     return {
       status: "ready",
       reason: "mini_pilot_ready",
-      nextStep: "Mini-Pilot-Rahmen ist gruen. Draft-Ergebnis nur manuell pruefen und bewusst uebernehmen."
+      nextStep: "Mini-Pilot-Rahmen ist grün. Draft-Ergebnis nur manuell prüfen und bewusst übernehmen."
     };
   }
 
@@ -39,7 +39,7 @@ function buildSyntheticLiveMiniPilotSummary(
     return {
       status: "blocked",
       reason: "preflight_failed",
-      nextStep: "Zuerst den lokalen Preflight korrigieren und den Mini-Pilot-Check erneut ausfuehren."
+      nextStep: "Zuerst den lokalen Preflight korrigieren und den Mini-Pilot-Check erneut ausführen."
     };
   }
 
@@ -47,7 +47,7 @@ function buildSyntheticLiveMiniPilotSummary(
     return {
       status: "blocked",
       reason: "mini_pilot_policy_incomplete",
-      nextStep: "Fehlende PA62-Mini-Pilot-Markierungen setzen und dann den Check erneut ausfuehren."
+      nextStep: "Fehlende PA62-Mini-Pilot-Markierungen setzen und dann den Check erneut ausführen."
     };
   }
 
@@ -55,14 +55,14 @@ function buildSyntheticLiveMiniPilotSummary(
     return {
       status: "blocked",
       reason: "eval_mismatch",
-      nextStep: "Provider-Output driftet gegen die Fixture. Draft nicht uebernehmen und zuerst die Abweichung pruefen."
+      nextStep: "Provider-Output driftet gegen die Fixture. Draft nicht übernehmen und zuerst die Abweichung prüfen."
     };
   }
 
   return {
     status: "blocked",
     reason: "probe_failed",
-    nextStep: "Probe-Lauffehler pruefen, keine Uebernahme vor erneutem grueneem Mini-Pilot-Check."
+    nextStep: "Probe-Lauffehler prüfen, keine Übernahme vor erneutem grünem Mini-Pilot-Check."
   };
 }
 

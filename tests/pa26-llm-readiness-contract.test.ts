@@ -101,7 +101,7 @@ describe("PA26 LLM readiness contract", () => {
       ],
       humanApprovalRequired: true,
       writesProductObject: false,
-      text: "Bitte klaeren, ob die Kaffeepause vor oder nach dem Vortrag stattfinden soll.",
+      text: "Bitte klären, ob die Kaffeepause vor oder nach dem Vortrag stattfinden soll.",
       structuredCandidate: {
         reasonCode: "event.schedule"
       }

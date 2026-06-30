@@ -62,9 +62,9 @@ export function buildProductionMiniPilotActionState(
     return {
       eyebrow: "Mini-Pilot-Status vor Export",
       title: staleCarryover
-        ? "Vor dem Export Mini-Pilot-Check besser neu ausfuehren"
-        : "Produktions-Export ist jetzt fachlich pruefbar",
-      statusLabel: staleCarryover ? "Status: ready, aber neu pruefen" : "Status: ready",
+        ? "Vor dem Export Mini-Pilot-Check besser neu ausführen"
+        : "Produktions-Export ist jetzt fachlich prüfbar",
+      statusLabel: staleCarryover ? "Status: ready, aber neu prüfen" : "Status: ready",
       reasonLabel: `Grund: ${reportState.reasonLabel}`,
       trustLabel: buildMiniPilotTrustLabel(storageHintLabel),
       provenanceLabel: storageHintLabel,
@@ -76,7 +76,7 @@ export function buildProductionMiniPilotActionState(
 
   return {
     eyebrow: "Mini-Pilot-Status vor Export",
-    title: "Export erst nach gruenem Mini-Pilot-Check",
+    title: "Export erst nach grünem Mini-Pilot-Check",
     statusLabel: `Status: ${reportState.statusLabel}`,
     reasonLabel: `Grund: ${reportState.reasonLabel}`,
     trustLabel: buildMiniPilotTrustLabel(storageHintLabel),
