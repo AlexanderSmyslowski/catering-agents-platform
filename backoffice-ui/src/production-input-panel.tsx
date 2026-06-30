@@ -123,7 +123,7 @@ function ProductionAnalysisResultCard({
           )}
         </div>
         <div>
-          <p className="eyebrow">Produktionsartefakte</p>
+          <p className="eyebrow">Produktionsmappe</p>
           <ul className="item-list compact production-analysis-artifact-list">
             {analysisResult.artifactItems.map((item) => (
               <li

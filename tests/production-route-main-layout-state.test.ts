@@ -72,8 +72,10 @@ describe("production route main layout state", () => {
     expect(result?.nextStepTitle).toBe("Rückfragen klären");
     expect(result?.artifactItems).toEqual([
       { label: "Kalkulationsübersicht", value: "Preisrahmen offen", status: "open" },
-      { label: "Produktionsplan / Mengen", value: "noch nicht vorhanden", status: "open" },
-      { label: "Einkaufsliste", value: "noch nicht erstellt", status: "open" }
+      { label: "Mengenkalkulation je Gericht", value: "entsteht mit Berechnung", status: "open" },
+      { label: "Rezeptkarten / Produktionsschritte", value: "noch nicht verknüpft", status: "open" },
+      { label: "Einkaufsliste nach Metro-Logik", value: "noch nicht erstellt", status: "open" },
+      { label: "Mise-en-Place / Abschlussprüfung", value: "entsteht mit Berechnung", status: "open" }
     ]);
     expect(result?.checklistItems).toEqual([
       { label: "Anlass", value: "Konferenz", status: "ok" },
@@ -83,6 +85,72 @@ describe("production route main layout state", () => {
       { label: "Gerichte", value: "2 Komponenten", status: "ok" },
       { label: "Preisrahmen", value: "offen", status: "open" },
       { label: "Zukauf/Convenience", value: "geklärt", status: "ok" }
+    ]);
+  });
+
+  it("marks production folder sections present only from existing plan artifacts", () => {
+    const result = buildDocumentAnalysisResult(
+      {
+        dragActive: false,
+        intakeFile: null,
+        intakeChannel: "pdf_upload",
+        documentPhase: "done",
+        activeDocumentName: "angebot.pdf",
+        documentProgress: 100,
+        intakeText: "",
+        canClearWorkspace: false,
+        canArchiveCurrentIntake: false,
+        clearWorkspaceTitle: "",
+        archiveCurrentIntakeTitle: ""
+      },
+      {
+        activeSpecLabel: "Empfang · 45 Teilnehmer · 2026-06-14",
+        readinessLabel: "vollständig",
+        planStatusLabel: "vollständig",
+        purchaseStatusLabel: "1 Einkaufsliste",
+        questionCount: 0,
+        answeredQuestionCount: 0,
+        unansweredQuestionCount: 0,
+        productionObjectCount: 1,
+        productionObjectStatusLabel: "1 Plan",
+        purchaseListCount: 1
+      },
+      {
+        title: "Produktionsarbeit prüfen",
+        description: "Mappe prüfen."
+      },
+      {
+        focusedProductionSpec: {
+          budgetContext: { targetFoodCost: 1200 },
+          event: { type: "reception", date: "2026-06-14" },
+          attendees: { expected: 45 },
+          servicePlan: { serviceForm: "standing_reception" },
+          menuPlan: [{ componentId: "component-1", label: "Vitello tonnato" }]
+        },
+        focusedSpecReadinessLabel: "vollständig",
+        selectedPlan: {
+          productionBatches: [{ batchId: "batch-1" }],
+          kitchenSheets: [{ sheetId: "sheet-1" }, { sheetId: "sheet-2" }],
+          timeline: [{ entryId: "timeline-1" }]
+        },
+        currentSpecPurchaseLists: [{ purchaseListId: "purchase-1" }],
+        productionQuestions: [],
+        productionAssumptions: [],
+        productionConversationProjection: { sessionId: "session-test", messages: [] },
+        workbenchSpecFacts: [],
+        intakeRequestDetail: null,
+        filteredSpecs: [],
+        documentPhase: "done",
+        productionWorkspaceCleared: false
+      }
+    );
+
+    expect(result?.artifactItems).toEqual([
+      { label: "Kalkulationsübersicht", value: "Preisrahmen vorhanden", status: "ok" },
+      { label: "Mengenkalkulation je Gericht", value: "1 Mengenposition", status: "ok" },
+      { label: "Rezeptkarten / Produktionsschritte", value: "2 Küchenkarten", status: "ok" },
+      { label: "Einkaufsliste nach Metro-Logik", value: "1 Einkaufsliste", status: "ok" },
+      { label: "Mise-en-Place / Abschlussprüfung", value: "1 Zeitpunkt", status: "ok" }
     ]);
   });
 

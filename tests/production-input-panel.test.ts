@@ -144,8 +144,10 @@ describe("production input panel", () => {
         questionPreviewOverflowCount: 2,
         artifactItems: [
           { label: "Kalkulationsübersicht", value: "Preisrahmen offen", status: "open" },
-          { label: "Produktionsplan / Mengen", value: "noch nicht vorhanden", status: "open" },
-          { label: "Einkaufsliste", value: "noch nicht erstellt", status: "open" }
+          { label: "Mengenkalkulation je Gericht", value: "entsteht mit Berechnung", status: "open" },
+          { label: "Rezeptkarten / Produktionsschritte", value: "noch nicht verknüpft", status: "open" },
+          { label: "Einkaufsliste nach Metro-Logik", value: "noch nicht erstellt", status: "open" },
+          { label: "Mise-en-Place / Abschlussprüfung", value: "entsteht mit Berechnung", status: "open" }
         ],
         checklistItems: [
           { label: "Anlass", value: "Empfang", status: "ok" },
@@ -167,9 +169,14 @@ describe("production input panel", () => {
     expect(markup).toContain("Zwingende Rückfragen");
     expect(markup).toContain("Welche Komponenten werden fertig zugekauft?");
     expect(markup).toContain("+ 2 weitere Rückfragen im Rückfragenbereich.");
-    expect(markup).toContain("Produktionsartefakte");
+    expect(markup).toContain("Produktionsmappe");
     expect(markup).toContain("Kalkulationsübersicht");
-    expect(markup).toContain("Produktionsplan / Mengen");
+    expect(markup).toContain("Mengenkalkulation je Gericht");
+    expect(markup).toContain("Rezeptkarten / Produktionsschritte");
+    expect(markup).toContain("Einkaufsliste nach Metro-Logik");
+    expect(markup).toContain("Mise-en-Place / Abschlussprüfung");
+    expect(markup).toContain("entsteht mit Berechnung");
+    expect(markup).toContain("noch nicht verknüpft");
     expect(markup).toContain("noch nicht erstellt");
     expect(markup).toContain("Pflichtprüfung");
     expect(markup).toContain("Preisrahmen");

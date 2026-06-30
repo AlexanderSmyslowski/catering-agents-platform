@@ -99,6 +99,15 @@ function hasCompletePlan(summary: ProductionWorkbenchSummary): boolean {
   );
 }
 
+function countRecordArray(record: Record<string, unknown> | undefined, key: string): number {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function formatCount(count: number, singular: string, plural: string): string {
+  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+}
+
 export function buildDocumentAnalysisResult(
   sourceInput: ProductionSourceInputValues,
   summary: ProductionWorkbenchSummary,
@@ -124,6 +133,11 @@ export function buildDocumentAnalysisResult(
   const visibleQuestions = questionState.productionQuestions.filter((question) => question.trim().length > 0);
   const questionPreviewItems = buildQuestionPreviewItems(questionState.productionQuestions);
   const questionPreviewOverflowCount = Math.max(0, visibleQuestions.length - questionPreviewItems.length);
+  const selectedPlan = asRecord(questionState.selectedPlan);
+  const hasPlan = hasCompletePlan(summary);
+  const productionBatchCount = countRecordArray(selectedPlan, "productionBatches");
+  const kitchenSheetCount = countRecordArray(selectedPlan, "kitchenSheets");
+  const timelineCount = countRecordArray(selectedPlan, "timeline");
 
   return {
     title: summary.activeSpecLabel,
@@ -143,14 +157,34 @@ export function buildDocumentAnalysisResult(
         status: hasBudgetContext ? "ok" : "open"
       },
       {
-        label: "Produktionsplan / Mengen",
-        value: formatOperatorPlanStatus(summary.planStatusLabel),
-        status: hasCompletePlan(summary) ? "ok" : "open"
+        label: "Mengenkalkulation je Gericht",
+        value: productionBatchCount > 0
+          ? formatCount(productionBatchCount, "Mengenposition", "Mengenpositionen")
+          : hasPlan
+            ? "im Plan prüfen"
+            : "entsteht mit Berechnung",
+        status: productionBatchCount > 0 ? "ok" : "open"
       },
       {
-        label: "Einkaufsliste",
+        label: "Rezeptkarten / Produktionsschritte",
+        value: kitchenSheetCount > 0
+          ? formatCount(kitchenSheetCount, "Küchenkarte", "Küchenkarten")
+          : "noch nicht verknüpft",
+        status: kitchenSheetCount > 0 ? "ok" : "open"
+      },
+      {
+        label: "Einkaufsliste nach Metro-Logik",
         value: summary.purchaseListCount > 0 ? summary.purchaseStatusLabel : "noch nicht erstellt",
         status: summary.purchaseListCount > 0 ? "ok" : "open"
+      },
+      {
+        label: "Mise-en-Place / Abschlussprüfung",
+        value: timelineCount > 0
+          ? formatCount(timelineCount, "Zeitpunkt", "Zeitpunkte")
+          : hasPlan
+            ? "im Plan prüfen"
+            : "entsteht mit Berechnung",
+        status: timelineCount > 0 ? "ok" : "open"
       }
     ],
     checklistItems: [
