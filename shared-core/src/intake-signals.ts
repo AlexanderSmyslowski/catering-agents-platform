@@ -22,9 +22,13 @@ function addUniqueUncertainty(values: Uncertainty[], uncertainty: Uncertainty): 
   if (
     !values.some(
       (entry) =>
-        entry.field === uncertainty.field &&
-        entry.message === uncertainty.message &&
-        entry.severity === uncertainty.severity
+        (entry.field === uncertainty.field &&
+          entry.message === uncertainty.message &&
+          entry.severity === uncertainty.severity) ||
+        (Boolean(entry.suggestedQuestion) &&
+          entry.field === uncertainty.field &&
+          entry.suggestedQuestion === uncertainty.suggestedQuestion &&
+          entry.severity === uncertainty.severity)
     )
   ) {
     values.push(uncertainty);

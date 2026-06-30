@@ -158,7 +158,7 @@ function looksLikeMenuHeading(line: string): boolean {
 }
 
 function isMenuNoise(line: string): boolean {
-  return /(?:uhr|gesamt|kosten|position|beschreibung|personalkosten|lieferung|transport|aufbau|abbau|umbau|rücklauf|personaleinsatz|hall of fame|hauptspeisenteller|stehttische|stehtische|geschirr|tischdecken|reinigungskosten|stunden|stunde)/i.test(
+  return /(?:uhr|gesamt|kosten|position|beschreibung|personalkosten|lieferung|transport|aufbau|abbau|umbau|rücklauf|personaleinsatz|hall of fame|hauptspeisenteller|stehttische|stehtische|geschirr|tischdecken|reinigungskosten|stunden|stunde|weingl(?:ä|ae)ser|men(?:ü|ue)schilder|bilderrahmen|edzard)/i.test(
     line
   );
 }
@@ -302,9 +302,13 @@ function uniqueUncertainties(base: Uncertainty[], additions: Uncertainty[]): Unc
     if (
       !result.some(
         (entry) =>
-          entry.field === item.field &&
-          entry.message === item.message &&
-          entry.severity === item.severity
+          (entry.field === item.field &&
+            entry.message === item.message &&
+            entry.severity === item.severity) ||
+          (Boolean(entry.suggestedQuestion) &&
+            entry.field === item.field &&
+            entry.suggestedQuestion === item.suggestedQuestion &&
+            entry.severity === item.severity)
       )
     ) {
       result.push(item);

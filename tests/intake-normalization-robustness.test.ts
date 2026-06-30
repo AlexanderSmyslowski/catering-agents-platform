@@ -173,4 +173,36 @@ describe("intake normalization robustness", () => {
       expect.arrayContaining(["vegan", "vegetarian"])
     );
   });
+
+  it("keeps service equipment out of menu components and deduplicates repeated schedule questions", () => {
+    const request = createEventRequestFromText({
+      requestId: "koepff-reception-upload",
+      channel: "pdf_upload",
+      rawText: [
+        "herzlichen Dank für Ihre Anfrage für Ihr Catering am 14.06.2026 im Max-Weber-Haus ab 17.00 Uhr.",
+        "45 Personen",
+        "EXKLUSIVES BUFFET | IN GLÄSCHEN",
+        "HERZHAFTES GEBÄCK ZUM WEIN | KÄSEGEBÄCK - KLEINE BREZEL",
+        "FEINE BROT- UND BAGUETTEAUSWAHL | KÄSEGEBÄCK | RUTZ & GRIMMINGER",
+        "Weingläser",
+        "8Menüschilder | Edzard-Bilderrahmen",
+        "14.00 Uhr - 16.30 Uhr Anlieferung",
+        "16.30 Uhr - 23.00 Uhr Service",
+        "17.00 Uhr - 19.00 Uhr Musik",
+        "17.00 Uhr - 18.45 Uhr Aufbau Buffet"
+      ].join("\n")
+    });
+    const spec = normalizeEventRequestToSpec(request);
+    const labels = spec.menuPlan.map((component) => component.label);
+    const scheduleQuestions = (spec.uncertainties ?? [])
+      .filter((uncertainty) => uncertainty.field === "event.schedule")
+      .map((uncertainty) => uncertainty.suggestedQuestion);
+
+    expect(labels).toEqual([
+      "EXKLUSIVES BUFFET | IN GLÄSCHEN",
+      "HERZHAFTES GEBÄCK ZUM WEIN | KÄSEGEBÄCK - KLEINE BREZEL",
+      "FEINE BROT- UND BAGUETTEAUSWAHL | KÄSEGEBÄCK | RUTZ & GRIMMINGER"
+    ]);
+    expect(scheduleQuestions).toEqual(["Wie lautet das verbindliche Zeitfenster?"]);
+  });
 });
