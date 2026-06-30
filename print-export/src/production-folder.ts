@@ -43,6 +43,25 @@ function formatUnit(unit: string): string {
   return unit === "servings" ? "Portionen" : unit;
 }
 
+function formatRecipeApprovalState(value: string | undefined): string {
+  const labels: Record<string, string> = {
+    approved_internal: "intern freigegeben",
+    auto_usable: "automatisch nutzbar - Prüfung empfohlen",
+    review_required: "Prüfung nötig",
+    rejected: "abgelehnt"
+  };
+
+  return value ? labels[value] ?? value : "Prüfung nötig";
+}
+
+function formatMissingRecipeHint(count: number): string {
+  if (count === 1) {
+    return "1 verknüpfte Rezeptkarte fehlt im Bestand.";
+  }
+
+  return `${formatNumber(count)} verknüpfte Rezeptkarten fehlen im Bestand.`;
+}
+
 function formatQuantity(quantity?: { amount: number; unit: string }): string {
   if (!quantity) {
     return "offen";
@@ -305,16 +324,19 @@ function renderSection7(input: RenderProductionFolderInput, recipeById: Map<stri
     const batch = input.plan.productionBatches.find((candidate) => candidate.recipeId === recipeId);
     const ingredients = ingredientsFor(sheet, batch, recipe);
 
-    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(recipe.source.approvalState)}</p><table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
+    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(formatRecipeApprovalState(recipe.source.approvalState))}</p><table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
   });
   const missingRecipeIds = linkedRecipeIds.filter((recipeId) => !recipeById.has(recipeId));
 
   if (recipeCards.length === 0) {
-    return `<section><h2>7. Rezeptkarten</h2><p>keine freigegebenen Rezeptkarten verknüpft.</p></section>`;
+    const emptyHint = linkedRecipeIds.length > 0
+      ? formatMissingRecipeHint(linkedRecipeIds.length)
+      : "keine freigegebenen Rezeptkarten verknüpft.";
+    return `<section><h2>7. Rezeptkarten</h2><p>${escapeHtml(emptyHint)}</p></section>`;
   }
 
   const missingHint = missingRecipeIds.length > 0
-    ? `<p>Fehlende Rezeptkarten: ${escapeHtml(missingRecipeIds.join(", "))}</p>`
+    ? `<p>Hinweis: ${escapeHtml(formatMissingRecipeHint(missingRecipeIds.length))}</p>`
     : "";
 
   return `<section><h2>7. Rezeptkarten</h2>${missingHint}${recipeCards.join("")}</section>`;

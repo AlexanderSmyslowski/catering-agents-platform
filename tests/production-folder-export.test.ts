@@ -389,6 +389,37 @@ describe("production folder export", () => {
     expect(html).not.toContain("PAX");
   });
 
+  it("uses kitchen-facing recipe approval labels", () => {
+    const input = fixture();
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain("Status: Prüfung nötig");
+    expect(html).not.toContain("review_required");
+    expect(html).not.toContain("approved_internal");
+    expect(html).not.toContain("auto_usable");
+  });
+
+  it("reports linked recipe cards missing from the library honestly", () => {
+    const input = fixture();
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: []
+    });
+    const section7Start = html.indexOf("7. Rezeptkarten");
+    const section8Start = html.indexOf("8. Einkaufsliste nach Metro-Logik");
+    const section7 = html.slice(section7Start, section8Start);
+
+    expect(section7).toContain("1 verknüpfte Rezeptkarte fehlt im Bestand.");
+    expect(section7).not.toContain("keine freigegebenen Rezeptkarten verknüpft.");
+  });
+
   it("returns 404 for an unknown production plan", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
