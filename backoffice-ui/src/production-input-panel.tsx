@@ -180,20 +180,11 @@ export function ProductionInputPanel({
           </div>
         ) : null}
         {panelState.showCompletedProgress ? (
-          <div className="progress-panel">
-            <div
-              className="progress-ring progress-ring--done"
-              style={{ "--progress-angle": "360deg" } as CSSProperties}
-            >
-              <span>100%</span>
-            </div>
+          <div className="upload-complete-panel">
             <div className="progress-panel__content">
               <p className="processing-note processing-note--success">
                 Analyse abgeschlossen für {sourceInput.activeDocumentName}.
               </p>
-              <div className="progress-bar">
-                <div className="progress-bar__fill" style={{ width: "100%" }} />
-              </div>
               <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
               {uploadResultSummary ? (
                 <section className="upload-result-card" aria-label="Erkannte Produktionsdaten nach Upload">

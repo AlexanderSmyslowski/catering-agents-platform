@@ -1,6 +1,7 @@
 import {
   translateEventType,
   translateMenuCategory,
+  translateProductionMode,
   translateServiceForm
 } from "./production-language.js";
 import {
@@ -39,6 +40,27 @@ function readMessage(record: Record<string, unknown>, fallback: string): string 
   return readStringOrNumber(record, "suggestedQuestion") ?? readStringOrNumber(record, "message") ?? fallback;
 }
 
+function formatPurchasedElements(component: Record<string, unknown>): string | undefined {
+  const productionDecision = asRecord(component.productionDecision);
+  const purchasedElements = productionDecision?.purchasedElements;
+  if (!Array.isArray(purchasedElements) || purchasedElements.length === 0) {
+    return undefined;
+  }
+
+  return `Zukauf: ${purchasedElements.map((entry) => String(entry)).join(", ")}`;
+}
+
+function formatMenuComponentDetail(component: Record<string, unknown>): string {
+  const productionDecision = asRecord(component.productionDecision);
+  const labels = [
+    `Kategorie: ${translateMenuCategory(readStringOrNumber(component, "menuCategory") ?? "")}`,
+    `Herstellung: ${translateProductionMode(readStringOrNumber(productionDecision, "mode") ?? "")}`,
+    formatPurchasedElements(component)
+  ].filter(Boolean);
+
+  return labels.join(" · ");
+}
+
 export function buildProductionUploadResultSummaryState(
   spec?: Record<string, unknown>
 ): ProductionUploadResultSummaryState | undefined {
@@ -67,13 +89,13 @@ export function buildProductionUploadResultSummaryState(
 
   return {
     eventLabel: `${translateEventType(eventType)} · ${formatProductionTimingWindow(spec)} · ${attendeeLabel} Personen · ${translateServiceForm(serviceForm)}`,
-    statusLabel: `Readiness: ${translateReadiness(readStringOrNumber(readiness, "status") ?? "-")}`,
+    statusLabel: `Pflichtangaben: ${translateReadiness(readStringOrNumber(readiness, "status") ?? "-")}`,
     menuItems: menuPlan.map((item) => {
       const component = asRecord(item) ?? {};
       return {
         key: readStringOrNumber(component, "componentId") ?? readStringOrNumber(component, "label") ?? "menu-item",
         label: readStringOrNumber(component, "label") ?? readStringOrNumber(component, "componentId") ?? "offene Komponente",
-        detailLabel: translateMenuCategory(readStringOrNumber(component, "menuCategory") ?? "")
+        detailLabel: formatMenuComponentDetail(component)
       };
     }),
     questionLabels,

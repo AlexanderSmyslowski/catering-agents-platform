@@ -956,7 +956,7 @@ button:disabled {
   display: grid;
   gap: 0.9rem;
   padding: 1rem;
-  border-radius: 1.1rem;
+  border-radius: 0.5rem;
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid rgba(15, 23, 34, 0.08);
 }
@@ -974,10 +974,8 @@ button:disabled {
 
 .upload-result-grid section {
   min-width: 0;
-  padding: 0.85rem;
-  border-radius: 0.95rem;
-  background: rgba(247, 250, 255, 0.76);
-  border: 1px solid rgba(15, 23, 34, 0.06);
+  padding: 0.15rem 0 0;
+  border-top: 1px solid rgba(15, 23, 34, 0.08);
 }
 
 .upload-result-list {
@@ -1023,6 +1021,11 @@ button:disabled {
   grid-template-columns: 108px minmax(0, 1fr);
   gap: 1rem;
   align-items: center;
+}
+
+.upload-complete-panel {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .progress-panel__content {

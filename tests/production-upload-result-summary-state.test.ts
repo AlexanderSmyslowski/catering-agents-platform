@@ -17,7 +17,11 @@ describe("production upload result summary state", () => {
           {
             componentId: "tarte",
             label: "Tortilla-Tarte",
-            menuCategory: "vegetarian"
+            menuCategory: "vegetarian",
+            productionDecision: {
+              mode: "hybrid",
+              purchasedElements: ["Mini-Tarteböden"]
+            }
           }
         ],
         uncertainties: [
@@ -34,12 +38,12 @@ describe("production upload result summary state", () => {
       })
     ).toEqual({
       eventLabel: "Konferenz · Datum: 2026-09-03 · Terminfenster: Service 12:00–14:00 · 90 Personen · Buffet",
-      statusLabel: "Readiness: teilweise vollständig",
+      statusLabel: "Pflichtangaben: teilweise vollständig",
       menuItems: [
         {
           key: "tarte",
           label: "Tortilla-Tarte",
-          detailLabel: "Vegetarisch"
+          detailLabel: "Kategorie: Vegetarisch · Herstellung: Hybrid · Zukauf: Mini-Tarteböden"
         }
       ],
       questionLabels: ["Wie lautet das verbindliche Zeitfenster?"],

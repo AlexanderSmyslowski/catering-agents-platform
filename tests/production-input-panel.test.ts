@@ -192,7 +192,11 @@ describe("production input panel", () => {
             {
               componentId: "tarte",
               label: "Tortilla-Tarte",
-              menuCategory: "vegetarian"
+              menuCategory: "vegetarian",
+              productionDecision: {
+                mode: "hybrid",
+                purchasedElements: ["Mini-Tarteböden"]
+              }
             }
           ],
           uncertainties: [
@@ -223,12 +227,14 @@ describe("production input panel", () => {
     expect(markup).toContain("production-input-panel--completed");
     expect(markup).toContain('aria-hidden="true"');
     expect(markup).toContain('tabindex="-1"');
+    expect(markup).not.toContain("progress-ring--done");
+    expect(markup).not.toContain(">100%</span>");
     expect(markup).not.toContain("Drag & Drop");
     expect(markup).not.toContain("Anfrage als Datei übernehmen");
     expect(markup).toContain("Konferenz · Datum: 2026-09-03 · 90 Personen · Buffet");
     expect(markup).not.toContain("Alter Vorgang");
     expect(markup).toContain("Tortilla-Tarte");
-    expect(markup).toContain("Vegetarisch");
+    expect(markup).toContain("Kategorie: Vegetarisch · Herstellung: Hybrid · Zukauf: Mini-Tarteböden");
     expect(markup).toContain("Produktionsstand");
     expect(markup).toContain("Mengenkalkulation: wartet auf Berechnung");
     expect(markup).toContain("Rezeptkarten: warten auf Rezeptzuordnung");
