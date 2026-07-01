@@ -20,6 +20,8 @@ export type ProductionAnalysisResult = {
   menuItems: string[];
   questionPreviewItems: string[];
   questionPreviewOverflowCount: number;
+  assumptionPreviewItems: string[];
+  assumptionPreviewOverflowCount: number;
   artifactItems: Array<{
     label: string;
     value: string;
@@ -82,6 +84,13 @@ function buildQuestionPreviewItems(questions: string[]): string[] {
     .slice(0, 3);
 }
 
+function buildAssumptionPreviewItems(assumptions: string[]): string[] {
+  return assumptions
+    .map((assumption) => assumption.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
 function hasConvenienceDecision(spec?: Record<string, unknown>): boolean {
   const menuPlan = Array.isArray(spec?.menuPlan) ? spec.menuPlan : [];
   return menuPlan.length > 0 && menuPlan.every((entry) => {
@@ -133,6 +142,9 @@ export function buildDocumentAnalysisResult(
   const visibleQuestions = questionState.productionQuestions.filter((question) => question.trim().length > 0);
   const questionPreviewItems = buildQuestionPreviewItems(questionState.productionQuestions);
   const questionPreviewOverflowCount = Math.max(0, visibleQuestions.length - questionPreviewItems.length);
+  const visibleAssumptions = questionState.productionAssumptions.filter((assumption) => assumption.trim().length > 0);
+  const assumptionPreviewItems = buildAssumptionPreviewItems(questionState.productionAssumptions);
+  const assumptionPreviewOverflowCount = Math.max(0, visibleAssumptions.length - assumptionPreviewItems.length);
   const selectedPlan = asRecord(questionState.selectedPlan);
   const hasPlan = hasCompletePlan(summary);
   const productionBatchCount = countRecordArray(selectedPlan, "productionBatches");
@@ -150,6 +162,8 @@ export function buildDocumentAnalysisResult(
     menuItems,
     questionPreviewItems,
     questionPreviewOverflowCount,
+    assumptionPreviewItems,
+    assumptionPreviewOverflowCount,
     artifactItems: [
       {
         label: "Kalkulationsübersicht",

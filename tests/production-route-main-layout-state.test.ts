@@ -56,7 +56,7 @@ describe("production route main layout state", () => {
         focusedSpecReadinessLabel: "vollständig",
         currentSpecPurchaseLists: [],
         productionQuestions: ["Welche Komponenten werden fertig zugekauft?"],
-        productionAssumptions: [],
+        productionAssumptions: ["Kaffeestation wird als Zukauf mit Endmontage behandelt."],
         productionConversationProjection: { sessionId: "session-test", messages: [] },
         workbenchSpecFacts: [],
         intakeRequestDetail: null,
@@ -69,6 +69,8 @@ describe("production route main layout state", () => {
     expect(result?.menuItems).toEqual(["Lunchbuffet", "Kaffeestation"]);
     expect(result?.questionPreviewItems).toEqual(["Welche Komponenten werden fertig zugekauft?"]);
     expect(result?.questionPreviewOverflowCount).toBe(0);
+    expect(result?.assumptionPreviewItems).toEqual(["Kaffeestation wird als Zukauf mit Endmontage behandelt."]);
+    expect(result?.assumptionPreviewOverflowCount).toBe(0);
     expect(result?.nextStepTitle).toBe("Rückfragen klären");
     expect(result?.artifactItems).toEqual([
       { label: "Kalkulationsübersicht", value: "Preisrahmen offen", status: "open" },

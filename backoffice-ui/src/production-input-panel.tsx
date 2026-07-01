@@ -71,6 +71,10 @@ type ProductionInputPanelProps = {
   analysisResult?: ProductionAnalysisResult;
 };
 
+function formatAdditionalItems(count: number, singular: string, plural: string): string {
+  return count === 1 ? `+ 1 weitere ${singular}` : `+ ${count} weitere ${plural}`;
+}
+
 function ProductionAnalysisResultCard({
   analysisResult,
   documentName
@@ -114,7 +118,7 @@ function ProductionAnalysisResultCard({
               </ul>
               {analysisResult.questionPreviewOverflowCount > 0 ? (
                 <p className="helper-text">
-                  + {analysisResult.questionPreviewOverflowCount} weitere Rückfragen im Rückfragenbereich.
+                  {formatAdditionalItems(analysisResult.questionPreviewOverflowCount, "Rückfrage", "Rückfragen")} im Rückfragenbereich.
                 </p>
               ) : null}
             </>
@@ -122,6 +126,21 @@ function ProductionAnalysisResultCard({
             <p className="helper-text">Keine blockierenden Rückfragen erkannt.</p>
           )}
         </div>
+        {analysisResult.assumptionPreviewItems.length > 0 ? (
+          <div>
+            <p className="eyebrow">Annahmen</p>
+            <ul className="item-list compact production-analysis-assumption-list">
+              {analysisResult.assumptionPreviewItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            {analysisResult.assumptionPreviewOverflowCount > 0 ? (
+              <p className="helper-text">
+                {formatAdditionalItems(analysisResult.assumptionPreviewOverflowCount, "Annahme", "Annahmen")} im Rückfragenbereich.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <div>
           <p className="eyebrow">Produktionsmappe</p>
           <ul className="item-list compact production-analysis-artifact-list">

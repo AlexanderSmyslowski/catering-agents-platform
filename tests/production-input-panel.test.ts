@@ -142,6 +142,11 @@ describe("production input panel", () => {
           "Welche Convenience-Stufe ist gewünscht?"
         ],
         questionPreviewOverflowCount: 2,
+        assumptionPreviewItems: [
+          "Tortilla-Tarte wird als vegetarische Komponente behandelt.",
+          "Tartelettes werden als Zukauf angenommen."
+        ],
+        assumptionPreviewOverflowCount: 1,
         artifactItems: [
           { label: "Kalkulationsübersicht", value: "Preisrahmen offen", status: "open" },
           { label: "Mengenkalkulation je Gericht", value: "entsteht mit Berechnung", status: "open" },
@@ -169,6 +174,10 @@ describe("production input panel", () => {
     expect(markup).toContain("Zwingende Rückfragen");
     expect(markup).toContain("Welche Komponenten werden fertig zugekauft?");
     expect(markup).toContain("+ 2 weitere Rückfragen im Rückfragenbereich.");
+    expect(markup).toContain("Annahmen");
+    expect(markup).toContain("Tortilla-Tarte wird als vegetarische Komponente behandelt.");
+    expect(markup).toContain("Tartelettes werden als Zukauf angenommen.");
+    expect(markup).toContain("+ 1 weitere Annahme im Rückfragenbereich.");
     expect(markup).toContain("Produktionsmappe");
     expect(markup).toContain("Kalkulationsübersicht");
     expect(markup).toContain("Mengenkalkulation je Gericht");

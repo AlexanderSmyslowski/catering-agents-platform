@@ -1046,6 +1046,7 @@ button:disabled {
 
 .production-analysis-menu-list,
 .production-analysis-question-list,
+.production-analysis-assumption-list,
 .production-analysis-artifact-list,
 .production-analysis-checklist {
   margin-top: 0.45rem;
