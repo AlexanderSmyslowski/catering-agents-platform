@@ -93,7 +93,7 @@ describe("production plan submission action", () => {
       "setSelectedPlanId:plan-created-1",
       "refreshDashboard",
       "completePlanProgress",
-      "setNotice:Produktionsplan wurde erzeugt.",
+      "setNotice:Produktionsplan ist zur fachlichen Prüfung bereit; keine automatische Produktionsfreigabe.",
       "setSubmitting:false"
     ]);
   });

@@ -58,7 +58,7 @@ export async function completeProductionStateAfterPlanSuccess(
   }
   await actions.refreshDashboard();
   actions.completePlanProgress();
-  actions.setNotice("Produktionsplan wurde erzeugt.");
+  actions.setNotice("Produktionsplan ist zur fachlichen Prüfung bereit; keine automatische Produktionsfreigabe.");
 }
 
 export function resetProductionStateAfterPlanFailure(

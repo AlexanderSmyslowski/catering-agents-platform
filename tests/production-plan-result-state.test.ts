@@ -134,12 +134,14 @@ describe("production plan result state", () => {
     expect(actions.setSelectedPlanId).toHaveBeenCalledWith("plan-created-1");
     expect(actions.refreshDashboard).toHaveBeenCalledTimes(1);
     expect(actions.completePlanProgress).toHaveBeenCalledTimes(1);
-    expect(actions.setNotice).toHaveBeenCalledWith("Produktionsplan wurde erzeugt.");
+    expect(actions.setNotice).toHaveBeenCalledWith(
+      "Produktionsplan ist zur fachlichen Prüfung bereit; keine automatische Produktionsfreigabe."
+    );
     expect(calls).toEqual([
       "setSelectedPlanId:plan-created-1",
       "refreshDashboard",
       "completePlanProgress",
-      "setNotice:Produktionsplan wurde erzeugt."
+      "setNotice:Produktionsplan ist zur fachlichen Prüfung bereit; keine automatische Produktionsfreigabe."
     ]);
   });
 
@@ -156,7 +158,7 @@ describe("production plan result state", () => {
     expect(calls).toEqual([
       "refreshDashboard",
       "completePlanProgress",
-      "setNotice:Produktionsplan wurde erzeugt."
+      "setNotice:Produktionsplan ist zur fachlichen Prüfung bereit; keine automatische Produktionsfreigabe."
     ]);
   });
 

@@ -525,7 +525,9 @@ describe("backoffice internal usage smoke", () => {
     expect(plannedComponent?.productionDecision?.mode).toBe("scratch");
     expect(plannedComponent?.recipeOverrideId).toBe(fixture.recipe.recipeId);
 
-    expect(document.body.textContent ?? "").toContain("Produktionsplan wurde erzeugt.");
+    expect(document.body.textContent ?? "").toContain(
+      "Produktionsplan ist zur fachlichen Prüfung bereit; keine automatische Produktionsfreigabe."
+    );
     expect(document.body.textContent ?? "").toContain("Status: vollständig");
     expect(document.body.textContent ?? "").toContain("Offene Punkte: keine");
     expect(document.body.textContent ?? "").toContain("Arbeitsblätter: 1");
