@@ -85,25 +85,28 @@ describe("production workbench output anchor state", () => {
   });
 
   it("uses available dossier metrics for concrete production-map statuses", () => {
-    expect(
-      buildProductionWorkbenchOutputAnchorState({
-        specFactCount: 4,
-        questionCount: 2,
-        dossierMetrics: {
-          answeredQuestionCount: 1,
-          questionPreview: "Welche Komponenten sind fertig zugekauft?",
-          assumptionCount: 1,
-          assumptionPreview: "Brot als Bäcker-Zukauf führen.",
-          productionBatchCount: 3,
-          kitchenSheetCount: 4,
-          recipeSelectionCount: 3,
-          purchaseItemCount: 18,
-          exportStatusLabel: "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
-        },
-        productionObjectCount: 1,
-        purchaseListCount: 1
-      }).reviewItems
-    ).toEqual([
+    const state = buildProductionWorkbenchOutputAnchorState({
+      specFactCount: 4,
+      questionCount: 2,
+      dossierMetrics: {
+        answeredQuestionCount: 1,
+        questionPreview: "Welche Komponenten sind fertig zugekauft?",
+        assumptionCount: 1,
+        assumptionPreview: "Brot als Bäcker-Zukauf führen.",
+        productionBatchCount: 3,
+        kitchenSheetCount: 4,
+        recipeSelectionCount: 3,
+        purchaseItemCount: 18,
+        exportStatusLabel: "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
+      },
+      productionObjectCount: 1,
+      purchaseListCount: 1
+    });
+
+    expect(state.grouping).toBe(
+      "Arbeitsgrundlage: Eckdaten und Speisen erkannt · 2 Rückfragen offen · nächste Rückfrage: Welche Komponenten sind fertig zugekauft? · 1 Annahme sichtbar · erste Annahme: Brot als Bäcker-Zukauf führen. · Plan und Einkaufsliste vorhanden · Freigabe nicht erteilt"
+    );
+    expect(state.reviewItems).toEqual([
       { label: "Verständnis des Angebots", status: "Eckdaten sichtbar, Klärpunkte offen" },
       {
         label: "Rückfragen",

@@ -1439,6 +1439,16 @@ describe("backoffice production acceptance smoke", () => {
               questionCount: 7,
               answeredQuestionCount: 0,
               unansweredQuestionCount: 1,
+              dossierMetrics: {
+                answeredQuestionCount: 0,
+                questionPreview: "Welche Komponenten sind fertig zugekauft?",
+                assumptionCount: 1,
+                assumptionPreview: "Brot als Bäcker-Zukauf führen.",
+                productionBatchCount: 0,
+                kitchenSheetCount: 0,
+                recipeSelectionCount: 0,
+                purchaseItemCount: 0
+              },
               productionObjectCount: 0,
               productionObjectStatusLabel: "noch kein Plan",
               purchaseListCount: 0
@@ -1490,6 +1500,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rückfragen: 7 offene Rückfragen");
     expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
+    expect(content).toContain(
+      "Arbeitsgrundlage: Spezifikation im Fokus · 7 Rückfragen offen · nächste Rückfrage: Welche Komponenten sind fertig zugekauft?"
+    );
+    expect(content).toContain("1 Annahme sichtbar · erste Annahme: Brot als Bäcker-Zukauf führen.");
     expect(content).toContain("Produktionsmappe-Status");
     const checklistPanel = document.querySelector<HTMLDetailsElement>(".production-output-checklist-panel");
     expect(checklistPanel).not.toBeNull();

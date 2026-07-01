@@ -24,19 +24,23 @@ function formatQuestionStatus(count: number): string {
   return count === 1 ? "1 Rückfrage sichtbar" : `${count} Rückfragen sichtbar`;
 }
 
-function formatOpenQuestionCount(count: number): string {
+function formatOpenQuestionBasis(count: number, metrics?: ProductionDossierMetrics): string {
+  const preview = metrics?.questionPreview?.trim();
   if (count === 0) {
     return "keine offenen Rückfragen";
   }
-  return count === 1 ? "1 Rückfrage offen" : `${count} Rückfragen offen`;
+  const countLabel = count === 1 ? "1 Rückfrage offen" : `${count} Rückfragen offen`;
+  return preview ? `${countLabel} · nächste Rückfrage: ${preview}` : countLabel;
 }
 
 function formatAssumptionBasis(metrics?: ProductionDossierMetrics): string {
   const assumptionCount = metrics?.assumptionCount ?? 0;
+  const preview = metrics?.assumptionPreview?.trim();
   if (assumptionCount === 0) {
     return "Annahmen fachlich prüfen";
   }
-  return assumptionCount === 1 ? "1 Annahme sichtbar" : `${assumptionCount} Annahmen sichtbar`;
+  const countLabel = assumptionCount === 1 ? "1 Annahme sichtbar" : `${assumptionCount} Annahmen sichtbar`;
+  return preview ? `${countLabel} · erste Annahme: ${preview}` : countLabel;
 }
 
 function formatArtifactBasis(hasPlan: boolean, hasPurchaseList: boolean): string {
@@ -63,7 +67,7 @@ function formatWorkingBasisStatus(input: {
       : "Spezifikation im Fokus";
   const parts = [
     sourcePart,
-    formatOpenQuestionCount(input.questionCount),
+    formatOpenQuestionBasis(input.questionCount, input.metrics),
     formatAssumptionBasis(input.metrics),
     formatArtifactBasis(input.hasPlan, input.hasPurchaseList),
     "Freigabe nicht erteilt"
