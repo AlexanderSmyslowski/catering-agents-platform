@@ -65,6 +65,7 @@ describe("data safety and audit gates", () => {
         "recipe_reviewed",
         "offer_html_export",
         "production_plan_html_export",
+        "production_folder_html_export",
         "purchase_list_csv_export",
         "llm_readiness_agent_audit"
       ])
@@ -86,7 +87,7 @@ describe("data safety and audit gates", () => {
     );
 
     const exports = auditEvidencePaths.filter((path) => path.evidenceKind === "export");
-    expect(exports).toHaveLength(3);
+    expect(exports).toHaveLength(4);
     expect(exports.every((path) => path.readOnlyEvidence)).toBe(true);
     expect(exports.every((path) => path.productApprovalEffect === "none")).toBe(true);
   });

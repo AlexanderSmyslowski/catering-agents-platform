@@ -238,6 +238,15 @@ export const auditEvidencePaths = [
     requiredRole: "production_operator"
   },
   {
+    id: "production_folder_html_export",
+    service: "print-export",
+    route: "GET /v1/exports/production-folders/:planId/html",
+    evidenceKind: "export",
+    readOnlyEvidence: true,
+    productApprovalEffect: "none",
+    requiredRole: "production_operator"
+  },
+  {
     id: "purchase_list_csv_export",
     service: "print-export",
     route: "GET /v1/exports/purchase-lists/:purchaseListId/csv",
