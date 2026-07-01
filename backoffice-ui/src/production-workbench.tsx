@@ -253,7 +253,7 @@ export function ProductionConversationalWorkbench({
   );
   const composerEyebrow = hasVisibleProductionWork ? "Produktionsarbeitsstand" : "Anfrageeingang";
   const composerTitle = hasVisibleProductionWork
-    ? "Produktionsdaten aus der Analyse"
+    ? "Prüfbare Produktionsgrundlage"
     : "Was braucht die Produktion als Nächstes?";
   const composerHelperText = hasVisibleProductionWork
     ? "Rückfragen, Pläne, Einkaufslisten und Exporte erscheinen im aktuellen Vorgang nach Verfügbarkeit."

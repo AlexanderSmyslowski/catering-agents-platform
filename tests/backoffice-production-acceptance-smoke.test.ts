@@ -729,7 +729,7 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsarbeitsstand");
-    expect(content).toContain("Produktionsdaten aus der Analyse");
+    expect(content).toContain("Prüfbare Produktionsgrundlage");
     expect(content).toContain(
       "Rückfragen, Pläne, Einkaufslisten und Exporte erscheinen im aktuellen Vorgang nach Verfügbarkeit."
     );
