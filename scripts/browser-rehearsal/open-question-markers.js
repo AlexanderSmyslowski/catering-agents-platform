@@ -208,12 +208,14 @@ async () => {
       for (let attempt = 0; attempt < 60; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 150));
         const submittedText = document.body.innerText;
+        const submittedHtml = document.body.innerHTML;
         if (
           submittedText.includes("Produktionsplan wurde erzeugt.") &&
-          submittedText.includes("Plan-Kontext: planId ") &&
-          submittedText.includes("purchaseListId: ") &&
+          submittedText.includes("Plan-Kontext: aktueller Produktionsplan") &&
           submittedText.includes("Produktionsblatt exportieren") &&
-          submittedText.includes("Einkaufsliste exportieren")
+          submittedText.includes("Einkaufsliste exportieren") &&
+          submittedHtml.includes("/api/exports/v1/exports/production-plans/") &&
+          submittedHtml.includes("/api/exports/v1/exports/purchase-lists/")
         ) {
           break;
         }
@@ -222,74 +224,64 @@ async () => {
       const submittedText = document.body.innerText;
       const submittedHtml = document.body.innerHTML;
       const submittedExportLinks = [...document.querySelectorAll("a")]
-        .map((anchor) => anchor.getAttribute("href") ?? "");
-      const submittedPlanContext = submittedText.match(/Plan-Kontext: planId ([^\s]+) · specId ([^\s]+)/);
-      const submittedPurchaseContext = submittedText.match(/purchaseListId: ([^\s]+) · specId: ([^\s]+)/);
-      let submittedPlanId;
-      let submittedPlanSpecId;
-      let submittedPurchaseListId;
-      let submittedPurchaseSpecId;
+        .map((anchor) => {
+          const href = anchor.getAttribute("href") ?? "";
+          return href ? new URL(href, location.origin).pathname : "";
+        });
+      const submittedPlanExport = submittedExportLinks.find((href) =>
+        /^\/api\/exports\/v1\/exports\/production-plans\/[^/]+\/html$/.test(href)
+      );
+      const submittedPurchaseExport = submittedExportLinks.find((href) =>
+        /^\/api\/exports\/v1\/exports\/purchase-lists\/[^/]+\/csv$/.test(href)
+      );
+      const submittedPlanId = submittedPlanExport?.match(/^\/api\/exports\/v1\/exports\/production-plans\/([^/]+)\/html$/)?.[1];
+      const submittedPurchaseListId = submittedPurchaseExport?.match(/^\/api\/exports\/v1\/exports\/purchase-lists\/([^/]+)\/csv$/)?.[1];
+      const expectedHandoffContext =
+        "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden";
       if (!submittedText.includes("Produktionsplan wurde erzeugt.")) {
         missing.push("Answer-Submit-Rehearsal ohne Plan-Erfolgsmeldung");
       }
       if (!submittedText.includes("Teilnehmerzahl: 43")) {
         missing.push("Answer-Submit-Rehearsal ohne gespeicherte strukturierte Teilnehmerzahl");
       }
-      if (!submittedPlanContext) {
-        missing.push("Answer-Submit-Rehearsal ohne aktuellen Plan-Kontext");
+      if (!submittedText.includes("Plan-Kontext: aktueller Produktionsplan")) {
+        missing.push("Answer-Submit-Rehearsal ohne lesbaren aktuellen Plan-Kontext");
+      }
+      if (submittedText.includes("Plan-Kontext: planId ") || submittedText.includes("purchaseListId: ")) {
+        missing.push("Answer-Submit-Rehearsal zeigt technische IDs im sichtbaren Kontext");
+      }
+      if (!submittedPlanExport || !submittedPlanId) {
+        missing.push("Answer-Submit-Rehearsal ohne aktuellen Produktionsplan-Exportlink");
       } else {
-        const [, planId, specId] = submittedPlanContext;
-        submittedPlanId = planId;
-        submittedPlanSpecId = specId;
-        const expectedPlanHref = `/api/exports/v1/exports/production-plans/${planId}/html`;
-        if (!submittedExportLinks.includes(expectedPlanHref)) {
-          missing.push(`Answer-Submit-Rehearsal Produktionsplan-Exportlink passt nicht zu ${planId}`);
+        const planExportResponse = await fetch(submittedPlanExport);
+        if (!planExportResponse.ok) {
+          missing.push(`Answer-Submit-Rehearsal Produktionsplan-Export ist nicht abrufbar: ${planExportResponse.status}`);
         } else {
-          const planExportResponse = await fetch(expectedPlanHref);
-          if (!planExportResponse.ok) {
-            missing.push(`Answer-Submit-Rehearsal Produktionsplan-Export ist nicht abrufbar: ${planExportResponse.status}`);
-          } else {
-            const planExportBody = await planExportResponse.text();
-            if (!planExportBody.includes(`Produktionsplan ${planId}`)) {
-              missing.push(`Answer-Submit-Rehearsal Produktionsplan-Exportinhalt passt nicht zu ${planId}`);
-            }
+          const planExportBody = await planExportResponse.text();
+          if (!planExportBody.includes(`Produktionsplan ${submittedPlanId}`)) {
+            missing.push(`Answer-Submit-Rehearsal Produktionsplan-Exportinhalt passt nicht zu ${submittedPlanId}`);
           }
         }
       }
-      if (!submittedPurchaseContext) {
+      if (!submittedPurchaseExport || !submittedPurchaseListId) {
         missing.push("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
       } else {
-        const [, purchaseListId, specId] = submittedPurchaseContext;
-        submittedPurchaseListId = purchaseListId;
-        submittedPurchaseSpecId = specId;
-        const expectedPurchaseHref = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
-        if (!submittedExportLinks.includes(expectedPurchaseHref)) {
-          missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Exportlink passt nicht zu ${purchaseListId}`);
+        const purchaseExportResponse = await fetch(submittedPurchaseExport);
+        if (!purchaseExportResponse.ok) {
+          missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Export ist nicht abrufbar: ${purchaseExportResponse.status}`);
         } else {
-          const purchaseExportResponse = await fetch(expectedPurchaseHref);
-          if (!purchaseExportResponse.ok) {
-            missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Export ist nicht abrufbar: ${purchaseExportResponse.status}`);
-          } else {
-            const purchaseExportBody = await purchaseExportResponse.text();
-            if (
-              !purchaseExportBody.includes(
-                `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
-              )
-            ) {
-              missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${purchaseListId}`);
-            }
+          const purchaseExportBody = await purchaseExportResponse.text();
+          if (
+            !purchaseExportBody.includes(
+              `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
+            )
+          ) {
+            missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${submittedPurchaseListId}`);
           }
         }
       }
-      if (submittedPlanId && submittedPlanSpecId && submittedPurchaseListId && submittedPurchaseSpecId) {
-        if (submittedPlanSpecId !== submittedPurchaseSpecId) {
-          missing.push(`Answer-Submit-Rehearsal Abschluss-Kontext hat unterschiedliche Spezifikationen ${submittedPlanSpecId}/${submittedPurchaseSpecId}`);
-        }
-        const expectedHandoffContext =
-          `Abschluss-Kontext: planId ${submittedPlanId} · specId ${submittedPlanSpecId} · purchaseListId ${submittedPurchaseListId}`;
-        if (!submittedText.includes(expectedHandoffContext)) {
-          missing.push("Answer-Submit-Rehearsal ohne passenden Abschluss-Kontext");
-        }
+      if (!submittedText.includes(expectedHandoffContext)) {
+        missing.push("Answer-Submit-Rehearsal ohne lesbaren Abschluss-Kontext");
       }
       if (!submittedHtml.includes("/api/exports/v1/exports/production-plans/")) {
         missing.push("Answer-Submit-Rehearsal ohne Produktionsplan-Exportlink");

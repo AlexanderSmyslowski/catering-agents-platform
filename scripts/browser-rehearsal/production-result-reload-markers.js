@@ -4,7 +4,7 @@ async () => {
   if (!storedContext) {
     throw new Error("Produktions-Ergebnis-Reload ohne gespeicherten Vor-Reload-Kontext");
   }
-  const { planId, planSpecId, purchaseListId, purchaseSpecId, planExport, purchaseExport, handoffContext } =
+  const { planId, purchaseListId, planExport, purchaseExport, handoffContext } =
     JSON.parse(storedContext);
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -12,8 +12,7 @@ async () => {
     const text = document.body.innerText;
     const html = document.body.innerHTML;
     if (
-      text.includes(`Plan-Kontext: planId ${planId} · specId ${planSpecId}`) &&
-      text.includes(`purchaseListId: ${purchaseListId} · specId: ${purchaseSpecId}`) &&
+      text.includes("Plan-Kontext: aktueller Produktionsplan") &&
       text.includes(handoffContext) &&
       html.includes(planExport) &&
       html.includes(purchaseExport)
@@ -24,14 +23,14 @@ async () => {
 
   const afterText = document.body.innerText;
   const afterHtml = document.body.innerHTML;
-  if (!afterText.includes(`Plan-Kontext: planId ${planId} · specId ${planSpecId}`)) {
-    missing.push("Produktions-Ergebnis-Reload verliert aktuellen Plan-Kontext");
+  if (!afterText.includes("Plan-Kontext: aktueller Produktionsplan")) {
+    missing.push("Produktions-Ergebnis-Reload verliert lesbaren aktuellen Plan-Kontext");
   }
-  if (!afterText.includes(`purchaseListId: ${purchaseListId} · specId: ${purchaseSpecId}`)) {
-    missing.push("Produktions-Ergebnis-Reload verliert aktuelle Einkaufsliste");
+  if (afterText.includes(`Plan-Kontext: planId ${planId}`) || afterText.includes(`purchaseListId: ${purchaseListId}`)) {
+    missing.push("Produktions-Ergebnis-Reload zeigt technische IDs im sichtbaren Kontext");
   }
   if (!afterText.includes(handoffContext)) {
-    missing.push("Produktions-Ergebnis-Reload verliert passenden Abschluss-Kontext");
+    missing.push("Produktions-Ergebnis-Reload verliert lesbaren Abschluss-Kontext");
   }
   if (!afterHtml.includes(planExport)) {
     missing.push("Produktions-Ergebnis-Reload verliert aktuellen Produktionsplan-Exportlink");

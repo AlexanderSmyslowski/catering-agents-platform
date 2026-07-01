@@ -16,35 +16,40 @@ async () => {
     "keine rechtssichere Audit-Behauptung"
   ].filter((marker) => !text.includes(marker));
   const exportLinks = [...document.querySelectorAll("a")]
-    .map((anchor) => anchor.getAttribute("href") ?? "");
+    .map((anchor) => {
+      const href = anchor.getAttribute("href") ?? "";
+      return href ? new URL(href, location.origin).pathname : "";
+    });
   const buttons = [...document.querySelectorAll("button")].map((button) => ({
     text: (button.textContent ?? "").replace(/\s+/g, " ").trim(),
     disabled: button.disabled,
     title: button.getAttribute("title") ?? ""
   }));
-  if (!exportLinks.some((href) => href.includes("/api/exports/v1/exports/production-plans/") && href.endsWith("/html"))) {
+  const planExportLink = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/production-plans\/[^/]+\/html$/.test(href)
+  );
+  const purchaseExportLink = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/purchase-lists\/[^/]+\/csv$/.test(href)
+  );
+  const planId = planExportLink?.match(/^\/api\/exports\/v1\/exports\/production-plans\/([^/]+)\/html$/)?.[1];
+  const purchaseListId = purchaseExportLink?.match(/^\/api\/exports\/v1\/exports\/purchase-lists\/([^/]+)\/csv$/)?.[1];
+  if (!planExportLink || !planId) {
     missing.push("Produktionsplan-Exportlink fehlt");
   }
-  if (!exportLinks.some((href) => href.includes("/api/exports/v1/exports/purchase-lists/") && href.endsWith("/csv"))) {
+  if (!purchaseExportLink || !purchaseListId) {
     missing.push("Einkaufslisten-Exportlink fehlt");
   }
-  const planContext = text.match(/Plan-Kontext: planId ([^\s]+) · specId ([^\s]+)/);
-  let currentPlanId;
-  let currentPlanSpecId;
-  if (!planContext) {
-    missing.push("aktueller Plan-Kontext fehlt");
-  } else {
-    const [, planId, specId] = planContext;
-    currentPlanId = planId;
-    currentPlanSpecId = specId;
-    const expectedPlanHref = `/api/exports/v1/exports/production-plans/${planId}/html`;
-    if (!exportLinks.includes(expectedPlanHref)) {
-      missing.push(`aktueller Produktionsplan-Exportlink passt nicht zu ${planId}`);
-    }
-    if (!text.includes(`Produktionsblatt exportieren\\nfür Plan ${planId} · Spezifikation ${specId}`)) {
-      missing.push(`Produktionsplan-Exportlabel passt nicht zu ${planId}/${specId}`);
-    }
-    const planExportResponse = await fetch(expectedPlanHref);
+  if (!text.includes("Plan-Kontext: aktueller Produktionsplan")) {
+    missing.push("lesbarer aktueller Plan-Kontext fehlt");
+  }
+  if (text.includes("Plan-Kontext: planId ") || text.includes("purchaseListId: ")) {
+    missing.push("sichtbarer Produktionskontext enthaelt technische IDs");
+  }
+  if (text.includes("für Plan ") || text.includes("Spezifikation spec-")) {
+    missing.push("sichtbare Exportlabels enthalten technische Plan-/Spezifikations-IDs");
+  }
+  if (planExportLink && planId) {
+    const planExportResponse = await fetch(planExportLink);
     if (!planExportResponse.ok) {
       missing.push(`aktueller Produktionsplan-Export ist im Browser nicht abrufbar: ${planExportResponse.status}`);
     } else {
@@ -54,23 +59,8 @@ async () => {
       }
     }
   }
-  const purchaseContext = text.match(/purchaseListId: ([^\s]+) · specId: ([^\s]+)/);
-  let currentPurchaseListId;
-  let currentPurchaseSpecId;
-  if (!purchaseContext) {
-    missing.push("aktueller Einkaufslisten-Kontext fehlt");
-  } else {
-    const [, purchaseListId, specId] = purchaseContext;
-    currentPurchaseListId = purchaseListId;
-    currentPurchaseSpecId = specId;
-    const expectedPurchaseHref = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
-    if (!exportLinks.includes(expectedPurchaseHref)) {
-      missing.push(`aktueller Einkaufslisten-Exportlink passt nicht zu ${purchaseListId}`);
-    }
-    if (!text.includes(`Einkaufsliste exportieren\\nfür aktuellen Vorgang ${purchaseListId} · Spezifikation ${specId}`)) {
-      missing.push(`Einkaufslisten-Exportlabel passt nicht zu ${purchaseListId}/${specId}`);
-    }
-    const purchaseExportResponse = await fetch(expectedPurchaseHref);
+  if (purchaseExportLink && purchaseListId) {
+    const purchaseExportResponse = await fetch(purchaseExportLink);
     if (!purchaseExportResponse.ok) {
       missing.push(`aktueller Einkaufslisten-Export ist im Browser nicht abrufbar: ${purchaseExportResponse.status}`);
     } else {
@@ -84,15 +74,11 @@ async () => {
       }
     }
   }
-  if (currentPlanId && currentPlanSpecId && currentPurchaseListId && currentPurchaseSpecId) {
-    if (currentPlanSpecId !== currentPurchaseSpecId) {
-      missing.push(`Abschluss-Kontext hat unterschiedliche Spezifikationen ${currentPlanSpecId}/${currentPurchaseSpecId}`);
-    }
-    const expectedHandoffContext =
-      `Abschluss-Kontext: planId ${currentPlanId} · specId ${currentPlanSpecId} · purchaseListId ${currentPurchaseListId}`;
-    if (!text.includes(expectedHandoffContext)) {
-      missing.push("Abschluss-Kontext passt nicht zum aktuellen Plan-/Einkaufslisten-Kontext");
-    }
+  if (!text.includes("Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden")) {
+    missing.push("lesbarer Abschluss-Kontext fehlt");
+  }
+  if (text.includes("Abschluss-Kontext: planId ")) {
+    missing.push("sichtbarer Abschluss-Kontext enthaelt technische IDs");
   }
   if (text.includes("ÄLTERE EINKAUFSLISTEN") && !text.includes("Nur bei Bedarf aufklappen; ältere Listen sind kein aktueller Vorgang.")) {
     missing.push("aeltere Einkaufslisten sind nicht klar als nicht aktuell markiert");
@@ -120,7 +106,7 @@ async () => {
     missing.push("Arbeitsbereich-lokal-leeren-Aktion fehlt");
   } else if (clearWorkspaceButton.disabled) {
     missing.push("Arbeitsbereich-lokal-leeren-Aktion ist trotz aktuellem Ergebnis deaktiviert");
-  } else if (!clearWorkspaceButton.text.includes("Plan-Kontext geladen:") || !clearWorkspaceButton.title.includes("Lokalen Arbeitsbereich leeren:")) {
+  } else if (!clearWorkspaceButton.title.includes("Lokalen Arbeitsbereich leeren:")) {
     missing.push("Arbeitsbereich-lokal-leeren-Aktion ist nicht mit aktuellem Kontext beschriftet");
   }
   const archiveButton = buttons.find((button) => button.text === "Fehlupload archivieren");
