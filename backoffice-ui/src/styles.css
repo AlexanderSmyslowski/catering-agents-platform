@@ -1502,6 +1502,14 @@ button:disabled {
   margin: 0.35rem 0 0;
 }
 
+.production-output-facts-label {
+  margin: 0.85rem 0 0;
+}
+
+.production-output-facts {
+  margin-top: 0.65rem;
+}
+
 .production-output-checklist-label {
   margin: 0.85rem 0 0;
 }

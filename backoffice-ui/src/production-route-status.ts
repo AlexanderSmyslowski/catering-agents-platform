@@ -116,11 +116,13 @@ export function buildWorkbenchSpecFacts(spec?: Record<string, unknown>): Workben
     return [];
   }
 
+  const event = asRecord(spec.event);
   const attendees = asRecord(spec.attendees);
   const servicePlan = asRecord(spec.servicePlan);
   const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
+  const eventType = readStringOrNumber(event, ["type"]) ?? readStringOrNumber(servicePlan, ["eventType"]);
 
-  return [
+  const facts: WorkbenchSpecFact[] = [
     {
       label: "Status",
       value: translateReadiness(String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "-"))
@@ -142,6 +144,12 @@ export function buildWorkbenchSpecFacts(spec?: Record<string, unknown>): Workben
       value: `${menuPlan.length} Komponenten`
     }
   ];
+
+  if (!eventType) {
+    return facts;
+  }
+
+  return [facts[0], { label: "Veranstaltung", value: translateEventType(eventType) }, ...facts.slice(1)];
 }
 
 export function countClarificationAnswerStatuses(

@@ -84,6 +84,10 @@ describe("production conversation state", () => {
       label: "Status",
       value: "teilweise vollständig"
     });
+    expect(state.workbenchSpecFacts).toContainEqual({
+      label: "Veranstaltung",
+      value: "Lunch"
+    });
   });
 
   it("keeps empty production focus from creating local UI questions", () => {

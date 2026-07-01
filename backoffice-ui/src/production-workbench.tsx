@@ -8,6 +8,10 @@ import { buildProductionWorkbenchOutputAnchorState } from "./production-workbenc
 export type ProductionWorkbenchSummary = {
   activeSpecLabel: string;
   activeTechnicalContextLabel?: string;
+  specFacts?: Array<{
+    label: string;
+    value: string;
+  }>;
   readinessLabel: string;
   planStatusLabel: string;
   purchaseStatusLabel: string;
@@ -117,7 +121,8 @@ export function ProductionConversationalWorkbench({
     unansweredQuestionCount,
     productionObjectCount,
     productionObjectStatusLabel,
-    purchaseListCount
+    purchaseListCount,
+    specFacts = []
   } = summary;
   const openVisibleQuestionCount = countOpenVisibleQuestions(
     questionCount,
@@ -197,6 +202,19 @@ export function ProductionConversationalWorkbench({
           <h3>{productionOutputAnchor.title}</h3>
           <p className="helper-text">{productionOutputAnchor.description}</p>
           <p className="helper-text">{productionOutputAnchor.grouping}</p>
+          {specFacts.length > 0 ? (
+            <>
+              <p className="eyebrow production-output-facts-label">Erkannte Eckdaten</p>
+              <dl className="spec-fact-grid production-output-facts" aria-label="Erkannte Produktionsdaten">
+                {specFacts.map((fact) => (
+                  <div key={fact.label} className="spec-fact">
+                    <dt>{fact.label}</dt>
+                    <dd>{fact.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          ) : null}
           <p className="eyebrow production-output-checklist-label">Arbeitsstruktur der Produktion</p>
           <ul className="production-output-checklist" aria-label="Arbeitsstruktur der Produktion">
             {productionOutputAnchor.reviewItems.map((item) => (

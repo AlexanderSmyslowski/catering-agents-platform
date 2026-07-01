@@ -755,6 +755,11 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("production-objects-zone");
     expect(content).toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
+    expect(content).toContain("Erkannte Eckdaten");
+    expect(rendered.html).toContain('aria-label="Erkannte Produktionsdaten"');
+    expect(content).toContain("Veranstaltung");
+    expect(content).toContain("Konferenz");
+    expect(content).toContain("36 Personen");
     expect(content).toContain("Produktionsplan");
     expect(content).not.toContain("Produktionsplan1");
     expect(content).not.toContain("Einkaufsliste1");

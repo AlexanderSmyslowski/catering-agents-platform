@@ -56,6 +56,7 @@ describe("production route view state", () => {
 
     expect(viewState.workbenchSummary).toEqual({
       activeSpecLabel: "Lunch · 42 Pax",
+      specFacts: [{ label: "Pax", value: "42" }],
       readinessLabel: "vollständig",
       planStatusLabel: "Plan bereit",
       purchaseStatusLabel: "1 Liste",
