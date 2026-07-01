@@ -55,6 +55,13 @@ function ReadOnlyWorkbenchProjection({
   );
 }
 
+function formatPurchaseListCount(count: number): string {
+  if (count === 0) {
+    return "offen";
+  }
+  return count === 1 ? "1 Liste" : `${count} Listen`;
+}
+
 export function ProductionQuestionThread({
   specLabel,
   facts,
@@ -87,9 +94,7 @@ export function ProductionQuestionThread({
         </span>
         <span>Plan: {selectedPlan ? selectedPlanReadinessLabel ?? "-" : "noch nicht berechnet"}</span>
         <span>Produktionsblatt: {selectedPlan ? "vorhanden" : "offen"}</span>
-        <span>
-          Einkauf: {currentSpecPurchaseLists.length > 0 ? `${currentSpecPurchaseLists.length} Liste(n)` : "offen"}
-        </span>
+        <span>Einkauf: {formatPurchaseListCount(currentSpecPurchaseLists.length)}</span>
       </div>
       <div className="structured-chat-thread" aria-label="Strukturierte Rückfragen als Chatfluss">
         {productionConversationProjection.messages.map((message) => {
