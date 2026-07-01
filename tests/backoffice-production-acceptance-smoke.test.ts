@@ -915,9 +915,8 @@ describe("backoffice production acceptance smoke", () => {
         method: "POST",
         body: JSON.stringify({ reasonCode: "wrong_upload" })
       });
-      expect(content).toContain(
-        "Fehlupload request-production-fallback-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
-      );
+      expect(content).toContain("Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.");
+      expect(content).not.toContain("Fehlupload request-production-fallback-1");
       expect(content).toContain("Kein aktiver Vorgang");
       expect(content).toContain("Rückfragen: keine offenen Rückfragen");
       expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
@@ -1107,9 +1106,8 @@ describe("backoffice production acceptance smoke", () => {
         body: JSON.stringify({ reasonCode: "wrong_upload" })
       });
       expect(fallbackArchiveCall).toBeUndefined();
-      expect(archivedContent).toContain(
-        "Fehlupload request-production-search-target-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
-      );
+      expect(archivedContent).toContain("Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.");
+      expect(archivedContent).not.toContain("Fehlupload request-production-search-target-1");
       expect(archivedContent).toContain("Kein aktiver Vorgang");
       expect(archivedContent).not.toContain("requestId: request-production-search-target-1");
       expect(archivedContent).not.toContain("requestId: request-production-fallback-1");

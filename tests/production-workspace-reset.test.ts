@@ -49,15 +49,15 @@ describe("production workspace reset", () => {
       })
     };
 
-    await completeProductionIntakeArchiveSuccess("request-wrong-upload-1", actions);
+    await completeProductionIntakeArchiveSuccess(actions);
 
     expect(actions.setNotice).toHaveBeenCalledWith(
-      "Fehlupload request-wrong-upload-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+      "Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
     );
     expect(calls).toEqual([
       "resetProductionWorkspaceState",
       "refreshDashboard",
-      "setNotice:Fehlupload request-wrong-upload-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+      "setNotice:Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
     ]);
   });
 

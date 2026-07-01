@@ -102,7 +102,7 @@ describe("production workspace controls", () => {
       "archiveIntakeRequest:request-wrong-upload-1:wrong_upload",
       "resetIntakeDraft",
       "refreshDashboard",
-      "setNotice:Fehlupload request-wrong-upload-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+      "setNotice:Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
     ]);
   });
 });
