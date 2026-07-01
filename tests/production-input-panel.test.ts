@@ -97,6 +97,8 @@ describe("production input panel", () => {
     expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
     expect(markup).toContain("Anfrage als Datei übernehmen");
     expect(markup).toContain("PDF / Anfrage");
+    expect(markup).toContain("Weitere Eingaben oder Korrektur");
+    expect(markup).toContain('class="secondary-workspace production-secondary-inputs" open=""');
     expect(markup).not.toContain("Intake-Pfad");
     expect(markup).not.toContain("Chat-Eingang");
     expect(markup).not.toContain("Angebotsdatei auswählen");
@@ -226,5 +228,7 @@ describe("production input panel", () => {
     expect(markup).toContain("Lunchbuffet: Herstellungsentscheidung fehlt.");
     expect(markup).toContain("Annahmen:");
     expect(markup).toContain("Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.");
+    expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
+    expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
   });
 });

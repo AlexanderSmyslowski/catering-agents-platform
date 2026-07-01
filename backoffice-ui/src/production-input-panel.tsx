@@ -89,6 +89,7 @@ export function ProductionInputPanel({
     productionQuestions,
     productionAssumptions
   });
+  const secondaryInputsOpen = !panelState.uploadResultSummary;
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
@@ -247,102 +248,110 @@ export function ProductionInputPanel({
           Erneut mit ausgewähltem Typ verarbeiten
         </button>
       </div>
-      <div className="divider" />
-      <header>
-        <p className="eyebrow">Texteingabe</p>
-        <h3>Kundenanfrage oder Produktionskontext direkt einfügen</h3>
-      </header>
-      <textarea value={sourceInput.intakeText} onChange={(event) => sourceInputActions.setIntakeText(event.target.value)} />
-      <div className="action-row">
-        <button disabled={submitting} onClick={() => void sourceInputActions.submitText()}>
-          Erfassungstext normalisieren
-        </button>
-      </div>
-      <details className="maintenance-actions">
+      <details className="secondary-workspace production-secondary-inputs" open={secondaryInputsOpen}>
         <summary>
-          <span>Demo-/Wartungsaktionen</span>
-          <strong>lokaler Arbeitsstand</strong>
+          <span>Weitere Eingaben oder Korrektur</span>
+          <strong>Text und manuelle Anlage</strong>
         </summary>
-        <div className="maintenance-actions__body">
-          <p className="helper-text">
-            Diese Aktionen sind nur für lokale Demo- und Korrekturfälle. Sie erstellen kein Angebot und geben nichts frei.
-          </p>
+        <div className="secondary-workspace__content">
+          <div className="divider" />
+          <header>
+            <p className="eyebrow">Texteingabe</p>
+            <h3>Kundenanfrage oder Produktionskontext direkt einfügen</h3>
+          </header>
+          <textarea value={sourceInput.intakeText} onChange={(event) => sourceInputActions.setIntakeText(event.target.value)} />
           <div className="action-row">
-            <button
-              type="button"
-              className="secondary-button destructive-button"
-              disabled={panelState.clearWorkspaceDisabled}
-              title={sourceInput.clearWorkspaceTitle}
-              onClick={sourceInputActions.clearWorkspace}
-            >
-              Demo-Arbeitsstand zurücksetzen
-              {sourceInput.clearWorkspaceContextLabel ? (
-                <span className="visually-hidden"> für {sourceInput.clearWorkspaceContextLabel}</span>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              className="secondary-button destructive-button"
-              disabled={panelState.archiveCurrentIntakeDisabled}
-              title={sourceInput.archiveCurrentIntakeTitle}
-              onClick={() => void sourceInputActions.archiveCurrentIntake()}
-            >
-              Fehlgeschlagenen Demo-Upload ausblenden
-              {sourceInput.archiveCurrentIntakeContextLabel ? (
-                <span className="visually-hidden"> für {sourceInput.archiveCurrentIntakeContextLabel}</span>
-              ) : null}
+            <button disabled={submitting} onClick={() => void sourceInputActions.submitText()}>
+              Erfassungstext normalisieren
             </button>
           </div>
+          <details className="maintenance-actions">
+            <summary>
+              <span>Demo-/Wartungsaktionen</span>
+              <strong>lokaler Arbeitsstand</strong>
+            </summary>
+            <div className="maintenance-actions__body">
+              <p className="helper-text">
+                Diese Aktionen sind nur für lokale Demo- und Korrekturfälle. Sie erstellen kein Angebot und geben nichts frei.
+              </p>
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="secondary-button destructive-button"
+                  disabled={panelState.clearWorkspaceDisabled}
+                  title={sourceInput.clearWorkspaceTitle}
+                  onClick={sourceInputActions.clearWorkspace}
+                >
+                  Demo-Arbeitsstand zurücksetzen
+                  {sourceInput.clearWorkspaceContextLabel ? (
+                    <span className="visually-hidden"> für {sourceInput.clearWorkspaceContextLabel}</span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button destructive-button"
+                  disabled={panelState.archiveCurrentIntakeDisabled}
+                  title={sourceInput.archiveCurrentIntakeTitle}
+                  onClick={() => void sourceInputActions.archiveCurrentIntake()}
+                >
+                  Fehlgeschlagenen Demo-Upload ausblenden
+                  {sourceInput.archiveCurrentIntakeContextLabel ? (
+                    <span className="visually-hidden"> für {sourceInput.archiveCurrentIntakeContextLabel}</span>
+                  ) : null}
+                </button>
+              </div>
+            </div>
+          </details>
+          <div className="divider" />
+          <header>
+            <p className="eyebrow">Strukturierte Eingabe</p>
+            <h3>Arbeitsauftrag manuell anlegen</h3>
+          </header>
+          <input
+            value={manualInput.eventType}
+            onChange={(event) => manualInputActions.setEventType(event.target.value)}
+            placeholder="Veranstaltungstyp, z. B. Konferenz"
+          />
+          <input
+            value={manualInput.eventDate}
+            onChange={(event) => manualInputActions.setEventDate(event.target.value)}
+            placeholder="Datum, z. B. 2026-10-10"
+          />
+          <input
+            value={manualInput.attendeeCount}
+            onChange={(event) => manualInputActions.setAttendeeCount(event.target.value)}
+            placeholder="Teilnehmerzahl"
+          />
+          <input
+            value={manualInput.serviceForm}
+            onChange={(event) => manualInputActions.setServiceForm(event.target.value)}
+            placeholder="Serviceform, z. B. Buffet"
+          />
+          <input
+            value={manualInput.menuItems}
+            onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
+            placeholder="Menüpunkte, durch Komma getrennt"
+          />
+          <input
+            value={manualInput.customerName}
+            onChange={(event) => manualInputActions.setCustomerName(event.target.value)}
+            placeholder="Kundenname"
+          />
+          <input
+            value={manualInput.venueName}
+            onChange={(event) => manualInputActions.setVenueName(event.target.value)}
+            placeholder="Ort oder Veranstaltungsort"
+          />
+          <textarea
+            value={manualInput.notes}
+            onChange={(event) => manualInputActions.setNotes(event.target.value)}
+            placeholder="Interne Notizen oder Einschränkungen"
+          />
+          <button disabled={submitting} onClick={() => void manualInputActions.submitManualSpec()}>
+            Spezifikation anlegen
+          </button>
         </div>
       </details>
-      <div className="divider" />
-      <header>
-        <p className="eyebrow">Strukturierte Eingabe</p>
-        <h3>Arbeitsauftrag manuell anlegen</h3>
-      </header>
-      <input
-        value={manualInput.eventType}
-        onChange={(event) => manualInputActions.setEventType(event.target.value)}
-        placeholder="Veranstaltungstyp, z. B. Konferenz"
-      />
-      <input
-        value={manualInput.eventDate}
-        onChange={(event) => manualInputActions.setEventDate(event.target.value)}
-        placeholder="Datum, z. B. 2026-10-10"
-      />
-      <input
-        value={manualInput.attendeeCount}
-        onChange={(event) => manualInputActions.setAttendeeCount(event.target.value)}
-        placeholder="Teilnehmerzahl"
-      />
-      <input
-        value={manualInput.serviceForm}
-        onChange={(event) => manualInputActions.setServiceForm(event.target.value)}
-        placeholder="Serviceform, z. B. Buffet"
-      />
-      <input
-        value={manualInput.menuItems}
-        onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
-        placeholder="Menüpunkte, durch Komma getrennt"
-      />
-      <input
-        value={manualInput.customerName}
-        onChange={(event) => manualInputActions.setCustomerName(event.target.value)}
-        placeholder="Kundenname"
-      />
-      <input
-        value={manualInput.venueName}
-        onChange={(event) => manualInputActions.setVenueName(event.target.value)}
-        placeholder="Ort oder Veranstaltungsort"
-      />
-      <textarea
-        value={manualInput.notes}
-        onChange={(event) => manualInputActions.setNotes(event.target.value)}
-        placeholder="Interne Notizen oder Einschränkungen"
-      />
-      <button disabled={submitting} onClick={() => void manualInputActions.submitManualSpec()}>
-        Spezifikation anlegen
-      </button>
     </article>
   );
 }
