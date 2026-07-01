@@ -125,10 +125,58 @@ describe("production route view app boundary", () => {
     expect(boundary.productionRouteViewState.recipeStatus.recipeReviewCounts.reviewRequired).toBe(1);
   });
 
+  it("uses the selected plan spec for workbench facts when the focused spec facts are unavailable", () => {
+    const selectedPlanSpec = {
+      specId: "spec-plan-only",
+      readiness: { status: "complete" },
+      event: { type: "conference", date: "2026-07-13" },
+      attendees: { expected: 36 },
+      servicePlan: { serviceForm: "buffet" },
+      menuPlan: [{ label: "Brot-Baguette" }]
+    };
+    const selectedPlan = {
+      planId: "plan-plan-only",
+      eventSpecId: "spec-plan-only",
+      readiness: { status: "partial" }
+    };
+
+    const boundary = buildProductionRouteViewAppBoundary(
+      input({
+        selectedPlan,
+        selectedPlanSpec,
+        currentSpecPlans: [selectedPlan],
+        filteredSpecs: [],
+        workbenchSpecFacts: [],
+        specById: new Map([["spec-plan-only", selectedPlanSpec]])
+      })
+    );
+
+    expect(boundary.productionStatusSummary.activeProductionContextLabel).toBe(
+      "Konferenz · 36 Teilnehmer · 2026-07-13"
+    );
+    expect(boundary.productionRouteViewState.workbenchSummary.specFacts).toContainEqual({
+      label: "Veranstaltung",
+      value: "Konferenz"
+    });
+    expect(boundary.productionRouteViewState.workbenchSummary.specFacts).toContainEqual({
+      label: "Speisen",
+      value: "Brot-Baguette"
+    });
+    expect(boundary.productionRouteViewState.questionState.workbenchSpecFacts).toEqual(
+      boundary.productionRouteViewState.workbenchSummary.specFacts
+    );
+  });
+
   it("keeps cleared workspaces free from stale intake and handoff state", () => {
     const boundary = buildProductionRouteViewAppBoundary(
       input({
         productionWorkspaceCleared: true,
+        selectedPlanSpec: {
+          specId: "spec-stale",
+          event: { type: "conference" },
+          menuPlan: [{ label: "Stale Baguette" }]
+        },
+        workbenchSpecFacts: [{ label: "Speisen", value: "Stale Baguette" }],
         intakeRequestDetail: {
           requestId: "request-stale",
           source: { channel: "pdf_upload", receivedAt: "2026-05-26T01:00:00.000Z" },
@@ -149,6 +197,8 @@ describe("production route view app boundary", () => {
     expect(boundary.productionRouteViewState.questionState.intakeRequestDetail).toBeNull();
     expect(boundary.productionRouteViewState.questionState.intakeRequestDetailError).toBeUndefined();
     expect(boundary.productionRouteViewState.questionState.filteredSpecs).toEqual([]);
+    expect(boundary.productionRouteViewState.questionState.workbenchSpecFacts).toEqual([]);
+    expect(boundary.productionRouteViewState.workbenchSummary.specFacts).toBeUndefined();
     expect(boundary.productionRouteViewState.handoffState.intakeOriginLabel).toBe(
       "kein Intake-Ursprung verknüpft"
     );

@@ -1,4 +1,8 @@
 import {
+  buildWorkbenchSpecFacts,
+  type WorkbenchSpecFact
+} from "./production-route-state.js";
+import {
   buildProductionRouteViewState,
   type ProductionRouteViewState,
   type ProductionRouteViewStateInput
@@ -31,6 +35,20 @@ export type ProductionRouteViewAppBoundary = {
   productionRouteViewState: ProductionRouteViewState;
 };
 
+function resolveWorkbenchSpecFacts(input: {
+  productionWorkspaceCleared: boolean;
+  selectedPlanSpec?: Record<string, unknown>;
+  workbenchSpecFacts: WorkbenchSpecFact[];
+}): WorkbenchSpecFact[] {
+  if (input.productionWorkspaceCleared) {
+    return [];
+  }
+  if (input.workbenchSpecFacts.length > 0) {
+    return input.workbenchSpecFacts;
+  }
+  return buildWorkbenchSpecFacts(input.selectedPlanSpec);
+}
+
 export function buildProductionRouteViewAppBoundary(
   input: ProductionRouteViewAppBoundaryInput
 ): ProductionRouteViewAppBoundary {
@@ -47,11 +65,17 @@ export function buildProductionRouteViewAppBoundary(
     currentIntakeRequestId: input.currentIntakeRequestId,
     productionWorkspaceCleared: input.productionWorkspaceCleared
   });
+  const workbenchSpecFacts = resolveWorkbenchSpecFacts({
+    productionWorkspaceCleared: input.productionWorkspaceCleared,
+    selectedPlanSpec: input.selectedPlanSpec,
+    workbenchSpecFacts: input.workbenchSpecFacts
+  });
 
   return {
     productionStatusSummary,
     productionRouteViewState: buildProductionRouteViewState({
       ...input,
+      workbenchSpecFacts,
       activeProductionContextLabel: productionStatusSummary.activeProductionContextLabel,
       activeProductionTechnicalContextLabel: productionStatusSummary.activeProductionTechnicalContextLabel,
       focusedSpecReadinessLabel: productionStatusSummary.focusedSpecReadinessLabel,
