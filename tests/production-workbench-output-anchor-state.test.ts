@@ -16,11 +16,15 @@ describe("production workbench output anchor state", () => {
       grouping:
         "Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen; Beschaffung bleibt offen.",
       reviewItems: [
-        { label: "Verständnis & Rückfragen", status: "keine offenen Rückfragen sichtbar" },
-        { label: "Mengen & Produktionsplan", status: "1 Plan-Artefakt vorhanden" },
-        { label: "Rezeptkarten & Mise-en-Place", status: "im Plan und Export fachlich prüfen" },
-        { label: "Einkaufsliste nach Warengruppen", status: "noch offen" },
-        { label: "Export & Abschlussprüfung", status: "nach Plan und Einkaufsliste offen" }
+        { label: "Verständnis des Angebots", status: "Spezifikation sichtbar" },
+        { label: "Rückfragen", status: "keine offenen Rückfragen sichtbar" },
+        { label: "Annahmen & Festlegungen", status: "im Plan fachlich prüfen" },
+        { label: "Kalkulationsübersicht", status: "im Produktionsplan prüfen" },
+        { label: "Mengenkalkulation je Gericht", status: "1 Plan-Artefakt vorhanden" },
+        { label: "Rezeptkarten", status: "im Plan und Export fachlich prüfen" },
+        { label: "Metro-Einkaufsliste", status: "noch offen" },
+        { label: "Mise-en-Place", status: "im Plan und Export fachlich prüfen" },
+        { label: "Abschlussprüfung & Exporte", status: "nach Plan und Einkaufsliste offen" }
       ]
     });
   });
@@ -39,11 +43,15 @@ describe("production workbench output anchor state", () => {
       grouping:
         "Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar; ältere Vorgänge bleiben eingeklappt.",
       reviewItems: [
-        { label: "Verständnis & Rückfragen", status: "2 Rückfragen sichtbar" },
-        { label: "Mengen & Produktionsplan", status: "2 Plan-Artefakte vorhanden" },
-        { label: "Rezeptkarten & Mise-en-Place", status: "im Plan und Export fachlich prüfen" },
-        { label: "Einkaufsliste nach Warengruppen", status: "1 Einkaufsliste vorhanden" },
-        { label: "Export & Abschlussprüfung", status: "Exportlinks prüfen; Freigabe offen" }
+        { label: "Verständnis des Angebots", status: "Spezifikation sichtbar, Klärpunkte offen" },
+        { label: "Rückfragen", status: "2 Rückfragen sichtbar" },
+        { label: "Annahmen & Festlegungen", status: "im Plan fachlich prüfen" },
+        { label: "Kalkulationsübersicht", status: "im Produktionsplan prüfen" },
+        { label: "Mengenkalkulation je Gericht", status: "2 Plan-Artefakte vorhanden" },
+        { label: "Rezeptkarten", status: "im Plan und Export fachlich prüfen" },
+        { label: "Metro-Einkaufsliste", status: "1 Einkaufsliste vorhanden" },
+        { label: "Mise-en-Place", status: "im Plan und Export fachlich prüfen" },
+        { label: "Abschlussprüfung & Exporte", status: "Exportlinks prüfen; Freigabe offen" }
       ]
     });
   });
@@ -61,11 +69,15 @@ describe("production workbench output anchor state", () => {
         "Noch kein Produktionsplan bereit: Zuerst Berechnung starten; Einkaufsliste und Exportlinks bleiben bis dahin offen.",
       grouping: "Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.",
       reviewItems: [
-        { label: "Verständnis & Rückfragen", status: "1 Rückfrage sichtbar" },
-        { label: "Mengen & Produktionsplan", status: "noch nicht berechnet" },
-        { label: "Rezeptkarten & Mise-en-Place", status: "nach Produktionsplan offen" },
-        { label: "Einkaufsliste nach Warengruppen", status: "noch offen" },
-        { label: "Export & Abschlussprüfung", status: "nach Plan und Einkaufsliste offen" }
+        { label: "Verständnis des Angebots", status: "Spezifikation sichtbar, Klärpunkte offen" },
+        { label: "Rückfragen", status: "1 Rückfrage sichtbar" },
+        { label: "Annahmen & Festlegungen", status: "vor Berechnung offen prüfen" },
+        { label: "Kalkulationsübersicht", status: "nach Berechnung offen" },
+        { label: "Mengenkalkulation je Gericht", status: "noch nicht berechnet" },
+        { label: "Rezeptkarten", status: "nach Produktionsplan offen" },
+        { label: "Metro-Einkaufsliste", status: "noch offen" },
+        { label: "Mise-en-Place", status: "nach Produktionsplan offen" },
+        { label: "Abschlussprüfung & Exporte", status: "nach Plan und Einkaufsliste offen" }
       ]
     });
   });

@@ -26,23 +26,39 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
   const hasPurchaseList = input.purchaseListCount > 0;
   const reviewItems = [
     {
-      label: "Verständnis & Rückfragen",
+      label: "Verständnis des Angebots",
+      status: hasQuestions ? "Spezifikation sichtbar, Klärpunkte offen" : "Spezifikation sichtbar"
+    },
+    {
+      label: "Rückfragen",
       status: hasQuestions ? formatQuestionStatus(input.questionCount) : "keine offenen Rückfragen sichtbar"
     },
     {
-      label: "Mengen & Produktionsplan",
+      label: "Annahmen & Festlegungen",
+      status: hasPlan ? "im Plan fachlich prüfen" : "vor Berechnung offen prüfen"
+    },
+    {
+      label: "Kalkulationsübersicht",
+      status: hasPlan ? "im Produktionsplan prüfen" : "nach Berechnung offen"
+    },
+    {
+      label: "Mengenkalkulation je Gericht",
       status: hasPlan ? formatPlanArtifactStatus(input.productionObjectCount) : "noch nicht berechnet"
     },
     {
-      label: "Rezeptkarten & Mise-en-Place",
+      label: "Rezeptkarten",
       status: hasPlan ? "im Plan und Export fachlich prüfen" : "nach Produktionsplan offen"
     },
     {
-      label: "Einkaufsliste nach Warengruppen",
+      label: "Metro-Einkaufsliste",
       status: hasPurchaseList ? `${input.purchaseListCount} Einkaufsliste vorhanden` : "noch offen"
     },
     {
-      label: "Export & Abschlussprüfung",
+      label: "Mise-en-Place",
+      status: hasPlan ? "im Plan und Export fachlich prüfen" : "nach Produktionsplan offen"
+    },
+    {
+      label: "Abschlussprüfung & Exporte",
       status: hasPlan && hasPurchaseList ? "Exportlinks prüfen; Freigabe offen" : "nach Plan und Einkaufsliste offen"
     }
   ];
