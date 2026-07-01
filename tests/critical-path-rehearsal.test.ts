@@ -308,7 +308,8 @@ describe("critical path rehearsal", () => {
       });
       expect(planExport.statusCode).toBe(200);
       expect(planExport.headers["content-type"]).toContain("text/html");
-      expect(planExport.body).toContain("critical-path-tomato-soup");
+      expect(planExport.body).toContain("<h2>Vegetarische Tomatensuppe</h2>");
+      expect(planExport.body).not.toContain("<h2>critical-path-tomato-soup</h2>");
       expect(planExport.body).toContain("Tomaten garen");
       expect(planExport.body).toContain("Mystery Bowl");
 

@@ -3780,7 +3780,8 @@ describe("catering agents platform", () => {
     expect(planExportResponse.body).not.toContain(String(productionPayload.productionPlan.planId));
     expect(planExportResponse.body).toContain("Rezeptauswahl:");
     expect(planExportResponse.body).toContain("Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.");
-    expect(planExportResponse.body).toContain("Status: complete");
+    expect(planExportResponse.body).toContain("Status: vollständig");
+    expect(planExportResponse.body).not.toContain("Status: complete");
 
     expect(purchaseExportResponse.statusCode).toBe(200);
     expect(purchaseExportResponse.headers["content-type"]).toContain("text/csv");

@@ -3,6 +3,7 @@ import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "@catering/offer-service";
 import { ProductionStore } from "@catering/production-service";
 import type {
+  AcceptedEventSpec,
   CollectionStorageOptions,
   OfferDraft,
   ProductionPlan,
@@ -55,6 +56,32 @@ function formatOfferReviewStatusLabel(value: unknown): string {
     return "Prüfung nötig";
   }
   return status || "Prüfung nötig";
+}
+
+function formatProductionReadinessStatusLabel(value: unknown): string {
+  const status = String(value ?? "").trim();
+  if (status === "complete") {
+    return "vollständig";
+  }
+  if (status === "partial") {
+    return "teilweise vollständig";
+  }
+  if (status === "insufficient") {
+    return "nicht ausreichend";
+  }
+  return status || "offen";
+}
+
+function productionComponentLabel(
+  componentId: string,
+  plan: ProductionPlan,
+  spec?: AcceptedEventSpec
+): string {
+  return (
+    spec?.menuPlan.find((component) => component.componentId === componentId)?.label ??
+    plan.componentReadiness?.find((component) => component.componentId === componentId)?.label ??
+    componentId
+  );
 }
 
 function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
@@ -170,7 +197,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
   ].join("");
 }
 
-export function renderProductionPlanHtml(plan: ProductionPlan): string {
+export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEventSpec): string {
   const unresolvedSection =
     plan.unresolvedItems.length > 0
       ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`]
@@ -178,7 +205,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
   return [
     "<html><body>",
     "<h1>Produktionsplan</h1>",
-    `<p>Status: ${escapeHtml(plan.readiness.status)}</p>`,
+    `<p>Status: ${escapeHtml(formatProductionReadinessStatusLabel(plan.readiness.status))}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
     ...unresolvedSection,
@@ -192,7 +219,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
           batch.recipeId
         );
 
-        return `<section><h2>${escapeHtml(batch.componentId)}</h2><p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
+        return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, spec))}</h2><p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
           .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)
           .join("")}</ol></section>`;
       }
@@ -395,13 +422,15 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
+      const spec = await intakeStore.getSpec(plan.eventSpecId);
+
       reply.header(
         "content-disposition",
         `inline; filename="${request.params.planId}.html"`
       );
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderProductionPlanHtml(plan));
+        .send(renderProductionPlanHtml(plan, spec));
     }
   );
 

@@ -237,7 +237,7 @@ describe("export source metadata readability", () => {
     const purchaseList = aggregatePurchaseList("spec-export-source", [
       artifacts.batch
     ]);
-    const html = renderProductionPlanHtml({
+    const plan: ProductionPlan = {
       schemaVersion: SCHEMA_VERSION,
       planId: "plan-export-source",
       eventSpecId: "spec-export-source",
@@ -250,9 +250,14 @@ describe("export source metadata readability", () => {
       kitchenSheets: [artifacts.kitchenSheet],
       recipeSelections: [],
       unresolvedItems: []
-    });
+    };
+    const html = renderProductionPlanHtml(plan, eventSpec(menuComponent));
     const csv = renderPurchaseListCsv(purchaseList);
 
+    expect(html).toContain("<h2>Tomato Soup</h2>");
+    expect(html).not.toContain("<h2>component-soup</h2>");
+    expect(html).toContain("Status: vollständig");
+    expect(html).not.toContain("Status: complete");
     expect(html).toContain("Rezeptquelle:");
     expect(html).toContain("Web-Rezept geprüft");
     expect(html).toContain("Example Recipes");
