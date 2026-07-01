@@ -330,11 +330,11 @@ export function ProductionConversationalWorkbench({
               </dl>
             </>
           ) : null}
-          <details className="production-output-checklist-panel">
+          <details className="production-output-checklist-panel" open={hasVisibleProductionWork}>
             <summary>
               <span>Produktionsmappe-Status</span>
               {" "}
-              <strong>9 Prüfpunkte anzeigen</strong>
+              <strong>{hasVisibleProductionWork ? "9 Prüfpunkte sichtbar" : "9 Prüfpunkte anzeigen"}</strong>
             </summary>
             <ol className="production-output-checklist" aria-label="Produktionsmappe-Status">
               {productionOutputAnchor.reviewItems.map((item, index) => (

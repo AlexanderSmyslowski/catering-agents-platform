@@ -1508,8 +1508,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsmappe-Status");
     const checklistPanel = document.querySelector<HTMLDetailsElement>(".production-output-checklist-panel");
     expect(checklistPanel).not.toBeNull();
-    expect(checklistPanel?.open).toBe(false);
-    expect(checklistPanel?.querySelector("summary")?.textContent).toContain("9 Prüfpunkte anzeigen");
+    expect(checklistPanel?.open).toBe(true);
+    expect(checklistPanel?.querySelector("summary")?.textContent).toContain("9 Prüfpunkte sichtbar");
     expect(document.querySelector('[aria-label="Produktionsmappe-Status"]')).not.toBeNull();
     expect(content).toContain("Verständnis des Angebots");
     expect(content).toContain("Rückfragen");
@@ -1633,6 +1633,7 @@ describe("backoffice production acceptance smoke", () => {
 
       const initialResults = document.querySelector<HTMLElement>('[aria-label="Aktuelle Produktionsergebnisse"]');
       expect(initialResults).not.toBeNull();
+      expect(document.querySelector<HTMLDetailsElement>(".production-output-checklist-panel")?.open).toBe(false);
       expect(scrollIntoView).not.toHaveBeenCalled();
       expect(document.activeElement).not.toBe(initialResults);
 
@@ -1654,6 +1655,10 @@ describe("backoffice production acceptance smoke", () => {
       expect(document.body.textContent ?? "").toContain("Produktionsdaten prüfen");
       expect(document.body.textContent ?? "").toContain("Erkannte Eckdaten und Speisen liegen vor.");
       expect(document.body.textContent ?? "").toContain("Tortilla-Tarte, Vitello Tonnato");
+      expect(document.querySelector<HTMLDetailsElement>(".production-output-checklist-panel")?.open).toBe(true);
+      expect(document.querySelector(".production-output-checklist-panel summary")?.textContent).toContain(
+        "9 Prüfpunkte sichtbar"
+      );
       expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
 
       await act(async () => {
