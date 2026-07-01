@@ -42,6 +42,7 @@ export function ProductionPurchaseListPanel({
               Einkaufsliste exportieren
               <span className="visually-hidden"> {purchaseList.exportContextLabel}</span>
             </a>
+            <p className="helper-text">Export ist ein internes Arbeitsdokument; Mengen und Freigabe prüfen.</p>
             {purchaseList.warnings.map((warning) => (
               <p className="helper-text" key={warning.key}>
                 {warning.label}
@@ -96,6 +97,7 @@ export function ProductionPurchaseListPanel({
                     Einkaufsliste exportieren
                     <span className="visually-hidden"> {purchaseList.exportContextLabel}</span>
                   </a>
+                  <p className="helper-text">Export ist ein internes Arbeitsdokument; Mengen und Freigabe prüfen.</p>
                 </li>
               ))}
             </ul>

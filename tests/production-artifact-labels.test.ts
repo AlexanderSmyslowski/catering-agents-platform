@@ -112,6 +112,7 @@ describe("production artifact labels", () => {
     expect(markup).toContain("Abendessen · 24 Teilnehmer · 2026-06-19");
     expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-lunch/csv"');
     expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-dinner/csv"');
+    expect(markup).toContain("Export ist ein internes Arbeitsdokument; Mengen und Freigabe prüfen.");
     expect(markup).not.toContain("<strong>Einkaufsliste</strong>");
   });
 });
