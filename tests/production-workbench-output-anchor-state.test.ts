@@ -21,9 +21,9 @@ describe("production workbench output anchor state", () => {
         { label: "Annahmen & Festlegungen", status: "im Plan fachlich prüfen" },
         { label: "Kalkulationsübersicht", status: "im Produktionsplan prüfen" },
         { label: "Mengenkalkulation je Gericht", status: "1 Plan-Artefakt vorhanden" },
-        { label: "Rezeptkarten", status: "im Plan und Export fachlich prüfen" },
+        { label: "Rezeptkarten", status: "Plan auf Rezeptbezug prüfen" },
         { label: "Metro-Einkaufsliste", status: "noch offen" },
-        { label: "Mise-en-Place", status: "im Plan und Export fachlich prüfen" },
+        { label: "Mise-en-Place", status: "Plan auf Mise-en-Place prüfen" },
         { label: "Abschlussprüfung & Exporte", status: "nach Plan und Einkaufsliste offen" }
       ]
     });
@@ -48,9 +48,9 @@ describe("production workbench output anchor state", () => {
         { label: "Annahmen & Festlegungen", status: "im Plan fachlich prüfen" },
         { label: "Kalkulationsübersicht", status: "im Produktionsplan prüfen" },
         { label: "Mengenkalkulation je Gericht", status: "2 Plan-Artefakte vorhanden" },
-        { label: "Rezeptkarten", status: "im Plan und Export fachlich prüfen" },
+        { label: "Rezeptkarten", status: "Plan auf Rezeptbezug prüfen" },
         { label: "Metro-Einkaufsliste", status: "1 Einkaufsliste vorhanden" },
-        { label: "Mise-en-Place", status: "im Plan und Export fachlich prüfen" },
+        { label: "Mise-en-Place", status: "Plan auf Mise-en-Place prüfen" },
         { label: "Abschlussprüfung & Exporte", status: "Exportlinks prüfen; Freigabe offen" }
       ]
     });

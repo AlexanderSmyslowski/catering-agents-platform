@@ -47,7 +47,7 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
     },
     {
       label: "Rezeptkarten",
-      status: hasPlan ? "im Plan und Export fachlich prüfen" : "nach Produktionsplan offen"
+      status: hasPlan ? "Plan auf Rezeptbezug prüfen" : "nach Produktionsplan offen"
     },
     {
       label: "Metro-Einkaufsliste",
@@ -55,7 +55,7 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
     },
     {
       label: "Mise-en-Place",
-      status: hasPlan ? "im Plan und Export fachlich prüfen" : "nach Produktionsplan offen"
+      status: hasPlan ? "Plan auf Mise-en-Place prüfen" : "nach Produktionsplan offen"
     },
     {
       label: "Abschlussprüfung & Exporte",
