@@ -120,7 +120,7 @@ function sanitizeMenuLine(line: string): string {
 function splitMenuEntries(value: string): string[] {
   const menuOnly = value.split(/\.\s+/)[0] ?? value;
   return menuOnly
-    .split(/\bund\b|&|\/|;/i)
+    .split(/\bund\b|,|&|\/|;/i)
     .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
     .filter(Boolean);
 }
@@ -169,6 +169,10 @@ function isMenuNoise(line: string): boolean {
   return /(?:uhr|gesamt|kosten|position|beschreibung|personalkosten|lieferung|transport|aufbau|abbau|umbau|rücklauf|personaleinsatz|hall of fame|hauptspeisenteller|stehttische|stehtische|geschirr|tischdecken|reinigungskosten|stunden|stunde)/i.test(
     line
   );
+}
+
+function isStructuredNonMenuLine(line: string): boolean {
+  return /^(serviceform|service form|kunde|kundin|auftraggeber|ort|veranstaltungsort|location)\s*:/i.test(line);
 }
 
 function extractStructuredMenuSection(text: string): InferredMenuItem[] {
@@ -232,10 +236,19 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
     .filter(Boolean);
 
   const detected = lines.flatMap((line) => {
-    const directMatch = line.match(/\b(?:mit|includes?|serves?|menu|menü)\s+(.+)$/i);
+    if (isStructuredNonMenuLine(line)) {
+      return [];
+    }
 
-    if (directMatch?.[1]) {
-      return splitMenuEntries(directMatch[1]).map((label) => ({
+    const directMatch = line.match(/\b(mit|includes?|serves?|menu|menü|menue)\b\s*:?\s*(.+)$/i);
+
+    if (directMatch?.[2]) {
+      const prefix = directMatch[1].toLowerCase();
+      const source = /^(menu|menü|menue)$/i.test(prefix)
+        ? directMatch[2].replace(/\s+\bmit\b\s+/i, ", ")
+        : directMatch[2];
+
+      return splitMenuEntries(source).map((label) => ({
         label,
         menuCategory: inferMenuCategoryFromText(label),
         dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))

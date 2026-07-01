@@ -189,4 +189,26 @@ describe("intake normalization robustness", () => {
       "Kaffeestation"
     ]);
   });
+
+  it("keeps structured service-form lines out of menu components", () => {
+    const request = createEventRequestFromText({
+      requestId: "menu-serviceform-boundary-1",
+      channel: "text",
+      rawText: [
+        "Konferenz am 2026-09-03 fuer 90 Teilnehmer.",
+        "Serviceform: Buffet.",
+        "Menue: Lunchbuffet mit Tomatensuppe und Kaffeestation.",
+        "Kunde: Universitaet Heidelberg.",
+        "Ort: Campus Heidelberg."
+      ].join("\n")
+    });
+    const spec = normalizeEventRequestToSpec(request);
+
+    expect(spec.event.serviceForm).toBe("buffet");
+    expect(spec.menuPlan.map((component) => component.label)).toEqual([
+      "Lunchbuffet",
+      "Tomatensuppe",
+      "Kaffeestation"
+    ]);
+  });
 });
