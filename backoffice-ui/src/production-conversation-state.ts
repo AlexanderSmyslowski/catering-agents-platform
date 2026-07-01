@@ -24,6 +24,21 @@ export type ProductionConversationState = {
   workbenchSpecFacts: WorkbenchSpecFact[];
 };
 
+function questionAwareWorkbenchFacts(
+  facts: WorkbenchSpecFact[],
+  productionQuestions: string[]
+): WorkbenchSpecFact[] {
+  if (productionQuestions.length === 0) {
+    return facts;
+  }
+
+  return facts.map((fact) =>
+    fact.label === "Status" && fact.value === "vollständig"
+      ? { ...fact, value: "Prüfung nötig" }
+      : fact
+  );
+}
+
 export function buildProductionConversationState(input: {
   focusedProductionSpec?: Record<string, unknown>;
   focusedProductionSpecRecord?: Record<string, unknown>;
@@ -56,6 +71,9 @@ export function buildProductionConversationState(input: {
     productionAssumptions,
     productionConversationProjection,
     clarificationStatusCounts: countClarificationAnswerStatuses(productionConversationProjection.messages),
-    workbenchSpecFacts: buildWorkbenchSpecFacts(input.focusedProductionSpecRecord)
+    workbenchSpecFacts: questionAwareWorkbenchFacts(
+      buildWorkbenchSpecFacts(input.focusedProductionSpecRecord),
+      productionQuestions
+    )
   };
 }

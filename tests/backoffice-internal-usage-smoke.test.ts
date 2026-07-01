@@ -470,7 +470,7 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Eventtyp: Konferenz");
     expect(document.body.textContent ?? "").toContain("Datum: 2026-07-12");
     expect(document.body.textContent ?? "").toContain("Teilnehmerzahl: 24 · Serviceform: Buffet · Readiness: vollständig");
-    expect(document.body.textContent ?? "").toContain("Status: vollständig");
+    expect(document.body.textContent ?? "").toContain("Status: Prüfung nötig");
     expect(document.body.textContent ?? "").toContain("Speichern und Berechnung starten");
 
     await act(async () => {

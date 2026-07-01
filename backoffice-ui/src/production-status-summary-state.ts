@@ -44,6 +44,17 @@ export type ProductionStatusSummaryStateInput = {
   productionWorkspaceCleared: boolean;
 };
 
+function formatFocusedSpecReadinessForOperator(input: {
+  focusedProductionSpec?: Record<string, unknown>;
+  productionQuestions: string[];
+}): string {
+  const readinessLabel = formatProductionReadinessLabel(input.focusedProductionSpec);
+  if (readinessLabel === "vollständig" && input.productionQuestions.length > 0) {
+    return "Prüfung nötig";
+  }
+  return readinessLabel;
+}
+
 export function buildProductionStatusSummaryState(
   input: ProductionStatusSummaryStateInput
 ): ProductionStatusSummaryState {
@@ -89,7 +100,10 @@ export function buildProductionStatusSummaryState(
       selectedPlanSpecLabel: selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : undefined,
       productionWorkspaceCleared: input.productionWorkspaceCleared
     }),
-    focusedSpecReadinessLabel: formatProductionReadinessLabel(focusedProductionSpec),
+    focusedSpecReadinessLabel: formatFocusedSpecReadinessForOperator({
+      focusedProductionSpec,
+      productionQuestions
+    }),
     selectedPlanReadinessLabel: selectedPlan
       ? formatProductionReadinessLabel(selectedPlan)
       : undefined,

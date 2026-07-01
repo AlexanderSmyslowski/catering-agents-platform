@@ -62,6 +62,25 @@ describe("production status summary state", () => {
     expect(state.productionNextStep.title).toBe("Rückfragen beantworten");
   });
 
+  it("marks a technically complete spec as review required when production questions are still open", () => {
+    const state = buildProductionStatusSummaryState({
+      focusedProductionSpec: {
+        specId: "spec-open-questions",
+        readiness: { status: "complete" },
+        event: { type: "conference", date: "2026-06-01" },
+        attendees: { expected: 90 }
+      },
+      currentSpecPlans: [],
+      currentSpecPurchaseLists: [],
+      productionQuestions: ["Lunchbuffet: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen."],
+      filteredAuditEvents: [],
+      productionWorkspaceCleared: false
+    });
+
+    expect(state.focusedSpecReadinessLabel).toBe("Prüfung nötig");
+    expect(state.productionNextStep.title).toBe("Rückfragen beantworten");
+  });
+
   it("keeps the empty and cleared production defaults in one state object", () => {
     const state = buildProductionStatusSummaryState({
       currentSpecPlans: [],

@@ -86,6 +86,38 @@ describe("production conversation state", () => {
     });
   });
 
+  it("shows review required in workbench facts when open questions remain on a complete spec", () => {
+    const completeButUnreviewedSpec = {
+      specId: "spec-complete-open-questions",
+      readiness: { status: "complete" },
+      event: { type: "conference", date: "2026-06-01" },
+      attendees: { expected: 90 },
+      servicePlan: { serviceForm: "buffet" },
+      menuPlan: [
+        {
+          componentId: "component-lunch",
+          label: "Lunchbuffet",
+          productionDecision: { mode: "scratch" }
+        }
+      ]
+    };
+
+    const state = buildProductionConversationState({
+      focusedProductionSpec: completeButUnreviewedSpec,
+      focusedProductionSpecRecord: completeButUnreviewedSpec,
+      currentSpecPlans: [],
+      currentSpecPurchaseLists: []
+    });
+
+    expect(state.productionQuestions).toContain(
+      "Lunchbuffet: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen."
+    );
+    expect(state.workbenchSpecFacts).toContainEqual({
+      label: "Status",
+      value: "Prüfung nötig"
+    });
+  });
+
   it("keeps empty production focus from creating local UI questions", () => {
     const state = buildProductionConversationState({
       currentSpecPlans: [],
