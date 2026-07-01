@@ -173,4 +173,20 @@ describe("intake normalization robustness", () => {
       expect.arrayContaining(["vegan", "vegetarian"])
     );
   });
+
+  it("keeps menu components separate from trailing venue and work-order sentences", () => {
+    const request = createEventRequestFromText({
+      requestId: "menu-boundary-1",
+      channel: "text",
+      rawText:
+        "Konferenz am 2026-09-03 fuer 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation. Veranstaltungsort: Heidelberg. Bitte Produktionsplanung und Rückfragen vorbereiten."
+    });
+    const spec = normalizeEventRequestToSpec(request);
+
+    expect(spec.menuPlan.map((component) => component.label)).toEqual([
+      "Lunchbuffet",
+      "Tomatensuppe",
+      "Kaffeestation"
+    ]);
+  });
 });

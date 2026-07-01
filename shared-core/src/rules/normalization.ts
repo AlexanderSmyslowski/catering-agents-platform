@@ -117,6 +117,14 @@ function sanitizeMenuLine(line: string): string {
     .trim();
 }
 
+function splitMenuEntries(value: string): string[] {
+  const menuOnly = value.split(/\.\s+/)[0] ?? value;
+  return menuOnly
+    .split(/\bund\b|&|\/|;/i)
+    .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
+    .filter(Boolean);
+}
+
 function inferMenuCategoryFromText(
   line: string
 ): MenuComponent["menuCategory"] | undefined {
@@ -227,27 +235,21 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
     const directMatch = line.match(/\b(?:mit|includes?|serves?|menu|menü)\s+(.+)$/i);
 
     if (directMatch?.[1]) {
-      return directMatch[1]
-        .split(/\bund\b|&|\/|;/i)
-        .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
-        .filter(Boolean)
-        .map((label) => ({
-          label,
-          menuCategory: inferMenuCategoryFromText(label),
-          dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))
-        }));
+      return splitMenuEntries(directMatch[1]).map((label) => ({
+        label,
+        menuCategory: inferMenuCategoryFromText(label),
+        dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))
+      }));
     }
 
     return /(buffet|salat|suppe|kaffee|croissant|dessert|fingerfood|wein|snack|menü|baguette|brot|kuchen|curry)/i.test(
       line
     ) && !isMenuNoise(line)
-      ? [
-          {
-            label: line,
-            menuCategory: inferMenuCategoryFromText(line),
-            dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(line))
-          }
-        ]
+      ? splitMenuEntries(line).map((label) => ({
+          label,
+          menuCategory: inferMenuCategoryFromText(label),
+          dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))
+        }))
       : [];
   });
 

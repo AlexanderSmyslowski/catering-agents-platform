@@ -189,7 +189,7 @@ describe("production gold run", () => {
     expect(acceptedSpec.attendees.expected).toBe(80);
     expect(acceptedSpec.event.serviceForm).toBe("buffet");
     expect(acceptedSpec.menuPlan.map((item) => item.label)).toEqual(
-      expect.arrayContaining(["Lunchbuffet", "Vegetarische Tomatensuppe und Mystery Bowl."])
+      expect.arrayContaining(["Lunchbuffet", "Vegetarische Tomatensuppe", "Mystery Bowl"])
     );
 
     const productionSpec = applyGoldRunProductionDecisions(acceptedSpec);
