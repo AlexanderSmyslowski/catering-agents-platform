@@ -833,7 +833,7 @@ describe("backoffice route smoke", () => {
     expect(text).toContain("Die Datei ist zu groß. Maximal erlaubt sind 25 MB.");
     expect(text).not.toContain("Datei ist zu gross fuer den Import.");
     expect(text).not.toContain("Dokument zu-gross.txt wird analysiert");
-    expect(text).not.toContain("Dokument zu-gross.txt wurde übernommen und analysiert.");
+    expect(text).not.toContain("Dokument zu-gross.txt ist zur Prüfung übernommen.");
 
     await act(async () => {
       root.unmount();

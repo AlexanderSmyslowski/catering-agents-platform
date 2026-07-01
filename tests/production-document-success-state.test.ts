@@ -38,13 +38,15 @@ describe("production document success state", () => {
 
     expect(actions.setFocusedProductionSpecId).toHaveBeenCalledWith("spec-upload-1");
     expect(actions.refreshDashboard).toHaveBeenCalledTimes(1);
-    expect(actions.setNotice).toHaveBeenCalledWith("Dokument angebot.pdf wurde übernommen und analysiert.");
+    expect(actions.setNotice).toHaveBeenCalledWith(
+      "Dokument angebot.pdf ist zur Prüfung übernommen. Produktionsdaten und Rückfragen prüfen; keine automatische Produktionsfreigabe."
+    );
     expect(calls).toEqual([
       "setFocusedProductionSpecId:spec-upload-1",
       "completeIncomingProductionFile",
       "completeDocumentProgress",
       "refreshDashboard",
-      "setNotice:Dokument angebot.pdf wurde übernommen und analysiert."
+      "setNotice:Dokument angebot.pdf ist zur Prüfung übernommen. Produktionsdaten und Rückfragen prüfen; keine automatische Produktionsfreigabe."
     ]);
   });
 
@@ -60,7 +62,7 @@ describe("production document success state", () => {
       "completeIncomingProductionFile",
       "completeDocumentProgress",
       "refreshDashboard",
-      "setNotice:Dokument angebot-ohne-spec.txt wurde übernommen und analysiert."
+      "setNotice:Dokument angebot-ohne-spec.txt ist zur Prüfung übernommen. Produktionsdaten und Rückfragen prüfen; keine automatische Produktionsfreigabe."
     ]);
   });
 });

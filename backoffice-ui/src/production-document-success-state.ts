@@ -20,5 +20,7 @@ export async function completeProductionStateAfterDocumentSuccess(
   actions.completeIncomingProductionFile();
   actions.completeDocumentProgress();
   await actions.refreshDashboard();
-  actions.setNotice(`Dokument ${file.name} wurde übernommen und analysiert.`);
+  actions.setNotice(
+    `Dokument ${file.name} ist zur Prüfung übernommen. Produktionsdaten und Rückfragen prüfen; keine automatische Produktionsfreigabe.`
+  );
 }
