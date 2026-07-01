@@ -10,6 +10,7 @@ export type ProductionUploadResultSummaryState = {
   menuItems: ProductionSpecDetailsMenuItemState[];
   openItems: string[];
   assumptionItems: string[];
+  artifactStatusItems: string[];
   nextStepLabel: string;
 };
 
@@ -54,6 +55,21 @@ function formatUploadSummaryLabel(summaryLabel: string): string {
   return summaryLabel.replace(/\s+·\s+Readiness: .+$/, "");
 }
 
+function buildArtifactStatusItems(input: {
+  openItemCount: number;
+  menuItemCount: number;
+}): string[] {
+  const recognized = input.menuItemCount > 0
+    ? "Erkannt: Eckdaten, Gerichte/Komponenten, Rückfragen und Annahmen."
+    : "Erkannt: Eckdaten und Rückfragen; Gerichte fehlen noch.";
+
+  const nextArtifactStep = input.openItemCount > 0
+    ? "Noch nicht berechnet: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe."
+    : "Noch nicht erzeugt: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe.";
+
+  return [recognized, nextArtifactStep];
+}
+
 function buildUploadResultSummary(input: {
   documentPhase: ProductionSourceInputValues["documentPhase"];
   focusedProductionSpec?: Record<string, unknown>;
@@ -78,6 +94,10 @@ function buildUploadResultSummary(input: {
     menuItems: detailsState.menuItems,
     openItems,
     assumptionItems,
+    artifactStatusItems: buildArtifactStatusItems({
+      openItemCount: openItems.length,
+      menuItemCount: detailsState.menuItems.length
+    }),
     nextStepLabel: formatNextStep({
       openItemCount: openItems.length,
       menuItemCount: detailsState.menuItems.length

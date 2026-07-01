@@ -175,7 +175,9 @@ export function ProductionInputPanel({
               <div className="progress-bar">
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
               </div>
-              <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+              <p className="helper-text">
+                Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe.
+              </p>
               {panelState.uploadResultSummary ? (
                 <div className="upload-result-summary" aria-label="Erkannte Produktionsdaten">
                   <div>
@@ -227,6 +229,14 @@ export function ProductionInputPanel({
                       </ul>
                     </div>
                   ) : null}
+                  <div>
+                    <p className="helper-text">Stand der Produktionsartefakte:</p>
+                    <ul className="item-list compact">
+                      {panelState.uploadResultSummary.artifactStatusItems.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
                   <p className="helper-text">{panelState.uploadResultSummary.nextStepLabel}</p>
                 </div>
               ) : null}

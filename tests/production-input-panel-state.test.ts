@@ -130,6 +130,10 @@ describe("production input panel state", () => {
         "Kaffeestation: Kategorie fehlt."
       ],
       assumptionItems: ["Serviceform als Buffet abgeleitet."],
+      artifactStatusItems: [
+        "Erkannt: Eckdaten, Gerichte/Komponenten, Rückfragen und Annahmen.",
+        "Noch nicht berechnet: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe."
+      ],
       nextStepLabel: "Nächster Schritt: Rückfragen beantworten, dann Berechnung starten."
     });
   });

@@ -218,6 +218,9 @@ describe("production input panel", () => {
     );
 
     expect(markup).toContain("Analyse abgeschlossen für Angebot_Koepff.pdf.");
+    expect(markup).toContain(
+      "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
+    );
     expect(markup).toContain("Erkannte Produktionsdaten");
     expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
     expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");
@@ -227,6 +230,9 @@ describe("production input panel", () => {
     expect(markup).toContain("Offen vor Produktion:");
     expect(markup).toContain("Lunchbuffet: Herstellungsentscheidung fehlt.");
     expect(markup).toContain("Annahmen:");
+    expect(markup).toContain("Stand der Produktionsartefakte:");
+    expect(markup).toContain("Erkannt: Eckdaten, Gerichte/Komponenten, Rückfragen und Annahmen.");
+    expect(markup).toContain("Noch nicht berechnet: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe.");
     expect(markup).toContain("Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
