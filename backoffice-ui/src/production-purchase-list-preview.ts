@@ -78,7 +78,11 @@ function compactLabelParts(parts: Array<string | undefined>): string[] {
     .filter((part): part is string => Boolean(part));
 }
 
-function formatPreviewSourceMetadataLabel(source: RecipeSourceExportMetadata): string {
+export function formatPreviewRecipeSourceLabel(source?: RecipeSourceExportMetadata): string {
+  if (!source) {
+    return "Quelle offen";
+  }
+
   const referenceLabel = recipeSourceReferenceLabel(source);
   const shouldShowReference =
     source.originType !== "internal_db" && referenceLabel !== "Quelle offen";
@@ -94,7 +98,7 @@ function formatSourceLabel(itemRecord: Record<string, unknown>): string {
   const sourceMetadata = readSourceMetadata(itemRecord);
   const metadataRecipeIds = new Set(sourceMetadata.map((source) => source.recipeId).filter(Boolean));
   const labels = [
-    ...sourceMetadata.map((source) => formatPreviewSourceMetadataLabel(source)),
+    ...sourceMetadata.map((source) => formatPreviewRecipeSourceLabel(source)),
     ...readSourceRecipeIds(itemRecord)
       .filter((recipeId) => !metadataRecipeIds.has(recipeId))
       .map(() => "Quelle offen")

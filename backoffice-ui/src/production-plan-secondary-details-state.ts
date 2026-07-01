@@ -1,9 +1,9 @@
-import { formatRecipeSourceEvidenceLabel } from "../../shared-core/src/export-source-metadata.js";
 import type { RecipeSourceExportMetadata } from "../../shared-core/src/types.js";
 import {
   translateMenuCategory,
   translateProductionMode
 } from "./production-language.js";
+import { formatPreviewRecipeSourceLabel } from "./production-purchase-list-preview.js";
 
 export type ProductionPlanSecondaryRecipeSelectionState = {
   key: string;
@@ -96,6 +96,12 @@ function asRecipeSourceExportMetadata(value: unknown): RecipeSourceExportMetadat
   return record as RecipeSourceExportMetadata | undefined;
 }
 
+function formatSearchTraceEntry(entry: unknown, recipeId?: string): string {
+  const label = String(entry);
+  const normalizedRecipeId = recipeId?.trim();
+  return normalizedRecipeId ? label.replace(` (${normalizedRecipeId})`, "") : label;
+}
+
 function asProductionPlanSecondaryBatch(value: unknown): ProductionPlanSecondaryBatch {
   const record = asRecord(value);
   return {
@@ -177,15 +183,15 @@ export function buildProductionPlanSecondaryDetailsState(
                 String(component.productionDecision?.mode ?? "")
               )}`
             : undefined,
-          sourceLabel: formatRecipeSourceEvidenceLabel(
-            recipeSourceByComponentId.get(componentId),
-            String(normalizedSelection.recipeId ?? "")
-          ),
+          sourceLabel: formatPreviewRecipeSourceLabel(recipeSourceByComponentId.get(componentId)),
           scoreLabel:
             qualityScore || fitScore
               ? `${qualityScore ? `Qualität ${qualityScore}` : "Qualität offen"}${fitScore ? ` · Passung ${fitScore}` : ""}`
               : undefined,
-          searchTrace: normalizedSelection.searchTrace?.map((entry) => String(entry)) ?? []
+          searchTrace:
+            normalizedSelection.searchTrace?.map((entry) =>
+              formatSearchTraceEntry(entry, normalizedSelection.recipeId)
+            ) ?? []
         };
       })
     : [];
@@ -196,10 +202,7 @@ export function buildProductionPlanSecondaryDetailsState(
         return {
           key: `${String(normalizedSheet.title ?? "Arbeitsblatt")}-${sheetIndex}`,
           title: String(normalizedSheet.title ?? "Arbeitsblatt"),
-          sourceLabel: formatRecipeSourceEvidenceLabel(
-            normalizedSheet.recipeSource,
-            String(normalizedSheet.recipeId ?? "")
-          ),
+          sourceLabel: formatPreviewRecipeSourceLabel(normalizedSheet.recipeSource),
           instructions: normalizedSheet.instructions?.map((entry) => String(entry)) ?? []
         };
       })

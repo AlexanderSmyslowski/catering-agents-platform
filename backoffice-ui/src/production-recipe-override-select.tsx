@@ -31,7 +31,7 @@ export function ProductionRecipeOverrideSelect({
           <option value="">Automatisch suchen</option>
           {recipeOptions.map((option) => (
             <option key={option.recipeId} value={option.recipeId}>
-              {option.name} ({option.recipeId})
+              {option.name}
             </option>
           ))}
         </select>

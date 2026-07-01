@@ -91,8 +91,9 @@ describe("production component answer card", () => {
 
     expect(recipeSelect.getAttribute("aria-label")).toBe("Rezept gezielt aus Bibliothek zuweisen");
     expect(container.textContent ?? "").toContain("Vorgeschlagene Bibliotheksrezepte: Potato Salad with Herbs");
-    expect(recipeOptionLabels).toContain("Potato Salad with Herbs (recipe-potato-salad)");
-    expect(recipeOptionLabels).not.toContain("Caesar Salad Buffet (recipe-caesar-salad)");
+    expect(recipeOptionLabels).toContain("Potato Salad with Herbs");
+    expect(recipeOptionLabels).not.toContain("Potato Salad with Herbs (recipe-potato-salad)");
+    expect(recipeOptionLabels).not.toContain("Caesar Salad Buffet");
 
     act(() => {
       recipeSelect.value = "recipe-potato-salad";
