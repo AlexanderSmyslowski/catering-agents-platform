@@ -354,40 +354,39 @@ function buildUploadResultSummary(input: {
   }
 
   const detailsState = buildProductionSpecDetailsState(input.focusedProductionSpec);
-  if (!detailsState) {
-    return undefined;
-  }
-
   const openItems = visibleTextList(input.productionQuestions);
   const assumptionItems = visibleTextList(input.productionAssumptions);
   const sourceCheckItems = buildSourceCheckItems(input.intakeRequestDetail);
+  const menuItemCount = detailsState?.menuItems.length ?? 0;
   const preflightItems = buildPreflightItems({
     focusedProductionSpec: input.focusedProductionSpec,
-    menuItemCount: detailsState.menuItems.length,
+    menuItemCount,
     openItemCount: openItems.length,
     sourceCheckItemCount: sourceCheckItems.length
   });
 
   return {
-    eventLabel: detailsState.eventLabel,
-    summaryLabel: formatUploadSummaryLabel(detailsState.summaryLabel),
+    eventLabel: detailsState?.eventLabel ?? "Noch keine Produktionsdaten erkannt",
+    summaryLabel: detailsState
+      ? formatUploadSummaryLabel(detailsState.summaryLabel)
+      : "Quelle wurde verarbeitet; bitte Eckdaten, Gerichte und Rückfragen prüfen.",
     snapshotItems: buildSnapshotItems({
-      menuItemCount: detailsState.menuItems.length,
+      menuItemCount,
       openItemCount: openItems.length,
       sourceCheckItemCount: sourceCheckItems.length
     }),
-    menuItems: detailsState.menuItems,
+    menuItems: detailsState?.menuItems ?? [],
     openItems,
     assumptionItems,
     preflightItems,
     artifactStatusItems: buildArtifactStatusItems({
       openItemCount: openItems.length,
-      menuItemCount: detailsState.menuItems.length
+      menuItemCount
     }),
     sourceCheckItems,
     nextStepLabel: formatNextStep({
       openItemCount: openItems.length,
-      menuItemCount: detailsState.menuItems.length,
+      menuItemCount,
       sourceCheckItemCount: sourceCheckItems.length
     })
   };
