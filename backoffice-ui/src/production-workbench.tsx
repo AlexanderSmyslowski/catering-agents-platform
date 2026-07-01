@@ -93,6 +93,42 @@ function formatOperatorProductionObjects(productionObjectStatusLabel: string): s
   return productionObjectStatusLabel.replace("unzureichend", "Prüfung nötig");
 }
 
+function buildProductionSummaryFacts(input: {
+  readinessLabel: string;
+  openVisibleQuestionCount: number;
+  answeredQuestionCount: number;
+  planStatusLabel: string;
+  purchaseStatusLabel: string;
+  productionObjectStatusLabel: string;
+}): Array<{ label: string; value: string }> {
+  return [
+    {
+      label: "Status",
+      value: formatOperatorReadiness(input.readinessLabel)
+    },
+    {
+      label: "Rückfragen",
+      value: `offen ${input.openVisibleQuestionCount} · beantwortet ${input.answeredQuestionCount}`
+    },
+    {
+      label: "Plan",
+      value: formatOperatorPlanStatus(input.planStatusLabel)
+    },
+    {
+      label: "Einkauf",
+      value: input.purchaseStatusLabel
+    },
+    {
+      label: "Ergebnis",
+      value: formatOperatorProductionObjects(input.productionObjectStatusLabel)
+    },
+    {
+      label: "Freigabe",
+      value: "nicht erteilt"
+    }
+  ];
+}
+
 export function ProductionConversationalWorkbench({
   summary,
   nextStep,
@@ -126,6 +162,14 @@ export function ProductionConversationalWorkbench({
     productionObjectCount,
     purchaseListCount
   });
+  const summaryFacts = buildProductionSummaryFacts({
+    readinessLabel,
+    openVisibleQuestionCount,
+    answeredQuestionCount,
+    planStatusLabel,
+    purchaseStatusLabel,
+    productionObjectStatusLabel
+  });
 
   return (
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
@@ -146,28 +190,20 @@ export function ProductionConversationalWorkbench({
       </article>
 
       <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
-        <p className="eyebrow">Aktiver Produktionsauftrag</p>
+        <p className="eyebrow">Produktionsdaten im Fokus</p>
         <strong>{activeSpecLabel}</strong>
+        <ul className="production-calm-summary__facts" aria-label="Datenstand Produktionsauftrag">
+          {summaryFacts.map((fact) => (
+            <li key={fact.label}>
+              <span>{fact.label}: </span>
+              <strong>{fact.value}</strong>
+            </li>
+          ))}
+        </ul>
         <p className="helper-text">
-          Status: {formatOperatorReadiness(readinessLabel)} · Rückfragen: {formatQuestionStatus(questionCount)}
+          Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.
         </p>
-        <p className="helper-text">
-          Rückfragenstatus: offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}
-        </p>
-        <p className="helper-text">
-          Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.
-        </p>
-        <p className="helper-text">
-          Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.
-        </p>
-        <p className="helper-text">
-          Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.
-        </p>
-        <p className="helper-text">
-          Plan: {formatOperatorPlanStatus(planStatusLabel)} · Einkaufsliste: {purchaseStatusLabel}
-        </p>
-        <p className="helper-text">Produktionsergebnis: {formatOperatorProductionObjects(productionObjectStatusLabel)}</p>
-        <p className="helper-text">Freigabe: nicht erteilt.</p>
+        <p className="helper-text">Rückfragen: {formatQuestionStatus(questionCount)}.</p>
         {activeTechnicalContextLabel ? (
           <details className="technical-context-details">
             <summary>Technische Details</summary>

@@ -741,11 +741,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
     expect(content).toContain("Datei hier ablegen");
     expect(content).toContain("Downloadbereich");
-    expect(content).toContain("Aktiver Produktionsauftrag");
+    expect(content).toContain("Produktionsdaten im Fokus");
     expect(rendered.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
-    expect(content).toContain("Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.");
-    expect(content).toContain("Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.");
-    expect(content).toContain("Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.");
+    expect(rendered.html).toContain('aria-label="Datenstand Produktionsauftrag"');
+    expect(content).toContain("Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.");
     expect(content).not.toContain("Reviewer-Hinweis");
     expect(content).not.toContain("Option-A-Zeitfenster");
     expect(content).toContain("Nächster Arbeitsschritt");
@@ -919,7 +918,7 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).not.toContain("Fehlupload request-production-fallback-1");
       expect(content).toContain("Kein aktiver Vorgang");
       expect(content).toContain("Rückfragen: keine offenen Rückfragen");
-      expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
+      expect(content).toContain("Rückfragen: offen 0 · beantwortet 0");
       expect(content).toContain("Auftrag einfügen oder Datei ablegen");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Rückfragen: 1 offene Rückfrage");
@@ -1166,10 +1165,10 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Aktiver Produktionsauftrag");
+    expect(content).toContain("Produktionsdaten im Fokus");
     expect(content).toContain("Produktionsplan aus gespeicherter Spezifikation");
     expect(content).toContain("Status: Prüfung nötig");
-    expect(content).toContain("Freigabe: nicht erteilt.");
+    expect(content).toContain("Freigabe: nicht erteilt");
     expect(content).toContain("Technische Details");
     expect(content).toContain("Plan plan-production-fallback-1 · Spezifikation spec-production-fallback-1");
     expect(content).not.toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-fallback-1");
@@ -1225,7 +1224,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(route.text).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(route.text).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
     expect(route.text).toContain("Rückfragen: keine offenen Rückfragen");
-    expect(route.text).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
+    expect(route.text).toContain("Rückfragen: offen 0 · beantwortet 0");
     expect(route.html).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Demo-Arbeitsstand zurücksetzen/);
     expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlgeschlagenen Demo-Upload ausblenden/);
@@ -1329,7 +1328,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).toContain("Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.");
     expect(content).not.toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
-    expect(content).toContain("Produktionsergebnis: 1 Plan · vollständig");
+    expect(content).toContain("Ergebnis: 1 Plan · vollständig");
   });
 
   it("shows a synthetic Quick Lunch plan with internal recipe hits and baker purchase as one current result", async () => {
@@ -1352,7 +1351,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Baguette");
     expect(content).toContain("Menge: 120");
     expect(content).toContain("Einkaufsliste exportieren");
-    expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
+    expect(content).toContain("Rückfragen: offen 0 · beantwortet 0");
     expect(content).toContain("kein Internet-Fallback");
     expect(content).not.toContain("BROT & BAGUETTE: Herstellungsentscheidung fehlt");
     expect(content).not.toContain("BROT & BAGUETTE: Kategorie fehlt");
@@ -1383,11 +1382,11 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 1");
+    expect(content).toContain("Rückfragen: offen 0 · beantwortet 1");
     expect(content).toContain("Rückfrage beantwortet");
     expect(content).toContain("Antwort auf Rückfrage");
     expect(content).toContain("Glutenfreies Baguette wird separat ersetzt.");
-    expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
+    expect(content).not.toContain("Rückfragen: offen 1 · beantwortet 0");
   });
 
   it("keeps the compact clarification status aligned with the visible open question count", async () => {
@@ -1457,9 +1456,9 @@ describe("backoffice production acceptance smoke", () => {
     const content = document.body.textContent ?? "";
 
     expect(content).toContain("Rückfragen: 7 offene Rückfragen");
-    expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
+    expect(content).toContain("Rückfragen: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
-    expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
+    expect(content).not.toContain("Rückfragen: offen 1 · beantwortet 0");
     expect(document.querySelector(".production-composer .production-column--input")?.textContent).toContain("input");
     expect(document.querySelector(".production-progressive-zone .production-column--questions")?.textContent).toContain("fragen");
     expect(document.querySelector(".production-objects-zone .production-column--objects")?.textContent).toContain("objekte");
@@ -1521,9 +1520,10 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = document.body.textContent ?? "";
 
-    expect(content).toContain("Aktiver Produktionsauftrag");
-    expect(content).toContain("Plan: wird geladen · Einkaufsliste: Einkaufslisten werden geladen");
-    expect(content).toContain("Freigabe: nicht erteilt.");
+    expect(content).toContain("Produktionsdaten im Fokus");
+    expect(content).toContain("Plan: wird geladen");
+    expect(content).toContain("Einkauf: Einkaufslisten werden geladen");
+    expect(content).toContain("Freigabe: nicht erteilt");
     expect(content).not.toContain("Plan: vorhanden, wird geladen");
 
     await act(async () => {

@@ -442,7 +442,7 @@ describe("backoffice internal usage smoke", () => {
     const productionRoute = await renderAppRoute(productionHandoffLink.getAttribute("href") ?? "/produktion");
 
     expect(document.body.textContent ?? "").toContain("Was braucht die Produktion als Nächstes?");
-    expect(document.body.textContent ?? "").toContain("Aktiver Produktionsauftrag");
+    expect(document.body.textContent ?? "").toContain("Produktionsdaten im Fokus");
     expect(document.body.textContent ?? "").toContain("Auftrag einfügen oder Datei ablegen");
 
     const manualEventType = findInputByPlaceholder<HTMLInputElement>("Veranstaltungstyp, z. B. Konferenz");

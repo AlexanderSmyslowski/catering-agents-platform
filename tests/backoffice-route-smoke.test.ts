@@ -261,7 +261,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Produktionsagent");
     expect(production.text).toContain("Was braucht die Produktion als Nächstes?");
     expect(production.text).toContain("Auftrag einfügen oder Datei ablegen");
-    expect(production.text).toContain("Aktiver Produktionsauftrag");
+    expect(production.text).toContain("Produktionsdaten im Fokus");
     expect(production.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
     expect(production.text).toContain("Bestehende Aufträge, Pläne, Einkaufslisten und Rezepte durchsuchen.");
   });
@@ -327,8 +327,8 @@ describe("backoffice route smoke", () => {
     const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
     expect(production).toContain("Produktionsagent");
     expect(production).toContain("Was braucht die Produktion als Nächstes?");
-    expect(production).toContain("Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.");
-    expect(production).toContain("Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.");
+    expect(production).toContain("Produktionsdaten im Fokus");
+    expect(production).toContain("Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.");
     expect(production).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
   });
 

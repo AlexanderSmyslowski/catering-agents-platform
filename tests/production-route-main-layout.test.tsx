@@ -204,6 +204,16 @@ describe("production route main layout", () => {
   it("uses the selected plan spec for the upload summary without focusing the question panel", () => {
     const markup = renderToStaticMarkup(createElement(ProductionRouteMainLayout, buildProps()));
 
+    expect(markup).toContain("Produktionsdaten im Fokus");
+    expect(markup).toContain("Datenstand Produktionsauftrag");
+    expect(markup).toContain("Status");
+    expect(markup).toContain("teilweise geklärt");
+    expect(markup).toContain("Plan");
+    expect(markup).toContain("vorhanden, Prüfung nötig");
+    expect(markup).toContain("Einkauf");
+    expect(markup).toContain("1 Liste · 0 Positionen");
+    expect(markup).toContain("Freigabe");
+    expect(markup).toContain("nicht erteilt");
     expect(markup).toContain("Erkannte Produktionsdaten");
     expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
     expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");

@@ -1541,6 +1541,34 @@ button:disabled {
   margin: 0.25rem 0 0;
 }
 
+.production-calm-summary__facts {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-calm-summary__facts li {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 1.3fr);
+  gap: 0.65rem;
+  align-items: baseline;
+  padding: 0.45rem 0;
+  border-top: 1px solid rgba(15, 23, 34, 0.06);
+}
+
+.production-calm-summary__facts span {
+  color: rgba(15, 23, 34, 0.58);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.production-calm-summary__facts strong {
+  margin: 0;
+  font-size: 0.94rem;
+}
+
 .technical-context-details {
   margin-top: 0.55rem;
   color: rgba(15, 23, 34, 0.66);
