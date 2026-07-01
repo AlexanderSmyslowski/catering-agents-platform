@@ -980,6 +980,45 @@ button:disabled {
   color: #0f1722;
 }
 
+.upload-preflight-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.25rem 0.55rem;
+  align-items: start;
+}
+
+.upload-preflight-list .helper-text {
+  grid-column: 2;
+}
+
+.preflight-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.6rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.preflight-status--checked {
+  background: rgba(223, 246, 231, 0.9);
+  color: #155c31;
+}
+
+.preflight-status--open {
+  background: rgba(255, 236, 214, 0.92);
+  color: #8a4b10;
+}
+
+.preflight-status--review {
+  background: rgba(232, 242, 255, 0.95);
+  color: #164775;
+}
+
 .progress-panel {
   display: grid;
   grid-template-columns: 108px minmax(0, 1fr);

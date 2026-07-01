@@ -73,6 +73,12 @@ type ProductionInputPanelProps = {
   intakeRequestDetail?: IntakeRequestDetail | null;
 };
 
+const preflightStatusLabels = {
+  checked: "erkannt",
+  open: "offen",
+  review: "prüfen"
+} as const;
+
 export function ProductionInputPanel({
   submitting,
   sourceInput,
@@ -240,6 +246,20 @@ export function ProductionInputPanel({
                     ) : (
                       <p className="helper-text">Keine blockierenden Rückfragen erkannt.</p>
                     )}
+                  </div>
+                  <div>
+                    <p className="helper-text">Vorprüfung vor Berechnung:</p>
+                    <ul className="item-list compact upload-preflight-list">
+                      {panelState.uploadResultSummary.preflightItems.map((item) => (
+                        <li key={item.key}>
+                          <span className={`preflight-status preflight-status--${item.status}`}>
+                            {preflightStatusLabels[item.status]}
+                          </span>
+                          <strong>{item.label}</strong>
+                          <p className="helper-text">{item.detailLabel}</p>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                   {panelState.uploadResultSummary.assumptionItems.length > 0 ? (
                     <div>

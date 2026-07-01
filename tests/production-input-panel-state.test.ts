@@ -130,6 +130,56 @@ describe("production input panel state", () => {
         "Kaffeestation: Kategorie fehlt."
       ],
       assumptionItems: ["Serviceform als Buffet abgeleitet."],
+      preflightItems: [
+        {
+          key: "attendees",
+          label: "Personenzahl",
+          detailLabel: "90 Personen erkannt.",
+          status: "checked"
+        },
+        {
+          key: "timing",
+          label: "Datum und Zeitfenster",
+          detailLabel: "Datum erkannt: 2026-09-03.",
+          status: "checked"
+        },
+        {
+          key: "service-form",
+          label: "Serviceform",
+          detailLabel: "Serviceform erkannt.",
+          status: "checked"
+        },
+        {
+          key: "menu",
+          label: "Gerichte und Komponenten",
+          detailLabel: "2 Komponenten erkannt.",
+          status: "checked"
+        },
+        {
+          key: "production-decision",
+          label: "Eigenproduktion und Zukauf",
+          detailLabel: "Offen: Herstellungsentscheidungen fehlen.",
+          status: "open"
+        },
+        {
+          key: "budget",
+          label: "Preisrahmen",
+          detailLabel: "Prüfen: kein Preisrahmen für wirtschaftliche Plausibilität erkannt.",
+          status: "review"
+        },
+        {
+          key: "source",
+          label: "Quelle und Lesbarkeit",
+          detailLabel: "Keine Ingestion-Warnung im aktuellen Intake-Detail.",
+          status: "checked"
+        },
+        {
+          key: "calculation-release",
+          label: "Berechnung starten",
+          detailLabel: "Noch nicht freigegeben: offene Punkte zuerst klären.",
+          status: "open"
+        }
+      ],
       artifactStatusItems: [
         "Erkannt: Eckdaten, Gerichte/Komponenten, Rückfragen und Annahmen.",
         "Noch nicht berechnet: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe."
@@ -175,6 +225,12 @@ describe("production input panel state", () => {
     expect(summary?.sourceCheckItems).toEqual([
       "Quelle: angebot.pdf · unsichere Textextraktion · Warnung: PDF-Text nur fallback/unsicher extrahiert"
     ]);
+    expect(summary?.preflightItems).toContainEqual({
+      key: "source",
+      label: "Quelle und Lesbarkeit",
+      detailLabel: "Prüfen: Dokumentquelle hat Hinweise oder Warnungen.",
+      status: "review"
+    });
     expect(summary?.nextStepLabel).toBe("Nächster Schritt: Quellenprüfung bestätigen, dann Berechnung starten.");
   });
 });

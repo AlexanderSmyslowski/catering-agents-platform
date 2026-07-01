@@ -234,6 +234,14 @@ describe("production input panel", () => {
     expect(markup).toContain("Kaffeestation");
     expect(markup).toContain("Offen vor Produktion:");
     expect(markup).toContain("Lunchbuffet: Herstellungsentscheidung fehlt.");
+    expect(markup).toContain("Vorprüfung vor Berechnung:");
+    expect(markup).toContain("Personenzahl");
+    expect(markup).toContain("90 Personen erkannt.");
+    expect(markup).toContain("Eigenproduktion und Zukauf");
+    expect(markup).toContain("Offen: Herstellungsentscheidungen fehlen.");
+    expect(markup).toContain("Prüfen: kein Preisrahmen für wirtschaftliche Plausibilität erkannt.");
+    expect(markup).toContain("Berechnung starten");
+    expect(markup).toContain("Noch nicht freigegeben: offene Punkte zuerst klären.");
     expect(markup).toContain("Annahmen:");
     expect(markup).toContain("Stand der Produktionsartefakte:");
     expect(markup).toContain("Erkannt: Eckdaten, Gerichte/Komponenten, Rückfragen und Annahmen.");

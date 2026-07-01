@@ -11,9 +11,17 @@ export type ProductionUploadResultSummaryState = {
   menuItems: ProductionSpecDetailsMenuItemState[];
   openItems: string[];
   assumptionItems: string[];
+  preflightItems: ProductionUploadPreflightItemState[];
   artifactStatusItems: string[];
   sourceCheckItems: string[];
   nextStepLabel: string;
+};
+
+export type ProductionUploadPreflightItemState = {
+  key: string;
+  label: string;
+  detailLabel: string;
+  status: "checked" | "open" | "review";
 };
 
 export type ProductionInputPanelState = {
@@ -36,6 +44,20 @@ function formatEta(seconds: number): string {
 
 function visibleTextList(items: string[]): string[] {
   return items.map((item) => item.trim()).filter(Boolean);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function readPositiveNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 function formatNextStep(input: {
@@ -122,6 +144,151 @@ function buildSourceCheckItems(intakeRequestDetail?: IntakeRequestDetail | null)
     .filter((item): item is string => Boolean(item));
 }
 
+function buildPreflightItems(input: {
+  focusedProductionSpec?: Record<string, unknown>;
+  menuItemCount: number;
+  openItemCount: number;
+  sourceCheckItemCount: number;
+}): ProductionUploadPreflightItemState[] {
+  const spec = input.focusedProductionSpec;
+  const event = asRecord(spec?.event);
+  const attendees = asRecord(spec?.attendees);
+  const servicePlan = asRecord(spec?.servicePlan);
+  const budgetContext = asRecord(spec?.budgetContext);
+  const menuPlan = Array.isArray(spec?.menuPlan) ? spec.menuPlan : [];
+  const attendeeCount = readPositiveNumber(attendees?.expected);
+  const eventDate = readString(event?.date);
+  const schedule = Array.isArray(event?.schedule) ? event.schedule : [];
+  const serviceForm = readString(servicePlan?.serviceForm ?? event?.serviceForm);
+  const missingProductionDecisions = menuPlan.filter((entry) => {
+    const component = asRecord(entry);
+    const productionDecision = asRecord(component?.productionDecision);
+    return !readString(productionDecision?.mode);
+  }).length;
+  const missingPurchasedElements = menuPlan.filter((entry) => {
+    const component = asRecord(entry);
+    const productionDecision = asRecord(component?.productionDecision);
+    const mode = readString(productionDecision?.mode);
+    const purchasedElements = Array.isArray(productionDecision?.purchasedElements)
+      ? productionDecision.purchasedElements.map(readString).filter(Boolean)
+      : [];
+    return (mode === "hybrid" || mode === "convenience_purchase") && purchasedElements.length === 0;
+  }).length;
+  const hasBudget =
+    Boolean(asRecord(budgetContext?.targetBudget)) ||
+    Boolean(asRecord(budgetContext?.pricingSummary));
+
+  return [
+    attendeeCount
+      ? {
+          key: "attendees",
+          label: "Personenzahl",
+          detailLabel: `${attendeeCount} Personen erkannt.`,
+          status: "checked"
+        }
+      : {
+          key: "attendees",
+          label: "Personenzahl",
+          detailLabel: "Offen: verbindliche Teilnehmerzahl fehlt.",
+          status: "open"
+        },
+    eventDate || schedule.length > 0
+      ? {
+          key: "timing",
+          label: "Datum und Zeitfenster",
+          detailLabel: eventDate ? `Datum erkannt: ${eventDate}.` : "Zeitfenster im Ablauf erkannt.",
+          status: "checked"
+        }
+      : {
+          key: "timing",
+          label: "Datum und Zeitfenster",
+          detailLabel: "Offen: Datum oder verbindliches Zeitfenster fehlt.",
+          status: "open"
+        },
+    serviceForm
+      ? {
+          key: "service-form",
+          label: "Serviceform",
+          detailLabel: "Serviceform erkannt.",
+          status: "checked"
+        }
+      : {
+          key: "service-form",
+          label: "Serviceform",
+          detailLabel: "Offen: Buffet, Empfang, Kaffeepause oder andere Serviceform fehlt.",
+          status: "open"
+        },
+    input.menuItemCount > 0
+      ? {
+          key: "menu",
+          label: "Gerichte und Komponenten",
+          detailLabel: `${input.menuItemCount} Komponenten erkannt.`,
+          status: "checked"
+        }
+      : {
+          key: "menu",
+          label: "Gerichte und Komponenten",
+          detailLabel: "Offen: keine Gerichte erkannt.",
+          status: "open"
+        },
+    missingProductionDecisions === 0 && missingPurchasedElements === 0 && menuPlan.length > 0
+      ? {
+          key: "production-decision",
+          label: "Eigenproduktion und Zukauf",
+          detailLabel: "Herstellungsentscheidungen sind erfasst.",
+          status: "checked"
+        }
+      : {
+          key: "production-decision",
+          label: "Eigenproduktion und Zukauf",
+          detailLabel:
+            missingPurchasedElements > 0
+              ? "Offen: Zukaufbestandteile für hybride oder Convenience-Komponenten fehlen."
+              : "Offen: Herstellungsentscheidungen fehlen.",
+          status: "open"
+        },
+    hasBudget
+      ? {
+          key: "budget",
+          label: "Preisrahmen",
+          detailLabel: "Budget- oder Kalkulationskontext erkannt.",
+          status: "checked"
+        }
+      : {
+          key: "budget",
+          label: "Preisrahmen",
+          detailLabel: "Prüfen: kein Preisrahmen für wirtschaftliche Plausibilität erkannt.",
+          status: "review"
+        },
+    input.sourceCheckItemCount > 0
+      ? {
+          key: "source",
+          label: "Quelle und Lesbarkeit",
+          detailLabel: "Prüfen: Dokumentquelle hat Hinweise oder Warnungen.",
+          status: "review"
+        }
+      : {
+          key: "source",
+          label: "Quelle und Lesbarkeit",
+          detailLabel: "Keine Ingestion-Warnung im aktuellen Intake-Detail.",
+          status: "checked"
+        },
+    input.openItemCount > 0 || input.sourceCheckItemCount > 0
+      ? {
+          key: "calculation-release",
+          label: "Berechnung starten",
+          detailLabel: "Noch nicht freigegeben: offene Punkte zuerst klären.",
+          status: "open"
+        }
+      : {
+          key: "calculation-release",
+          label: "Berechnung starten",
+          detailLabel: "Prüfen: Berechnung bleibt eine bewusste Operator-Aktion.",
+          status: "review"
+        }
+  ];
+}
+
 function buildUploadResultSummary(input: {
   documentPhase: ProductionSourceInputValues["documentPhase"];
   focusedProductionSpec?: Record<string, unknown>;
@@ -141,6 +308,12 @@ function buildUploadResultSummary(input: {
   const openItems = visibleTextList(input.productionQuestions);
   const assumptionItems = visibleTextList(input.productionAssumptions);
   const sourceCheckItems = buildSourceCheckItems(input.intakeRequestDetail);
+  const preflightItems = buildPreflightItems({
+    focusedProductionSpec: input.focusedProductionSpec,
+    menuItemCount: detailsState.menuItems.length,
+    openItemCount: openItems.length,
+    sourceCheckItemCount: sourceCheckItems.length
+  });
 
   return {
     eventLabel: detailsState.eventLabel,
@@ -148,6 +321,7 @@ function buildUploadResultSummary(input: {
     menuItems: detailsState.menuItems,
     openItems,
     assumptionItems,
+    preflightItems,
     artifactStatusItems: buildArtifactStatusItems({
       openItemCount: openItems.length,
       menuItemCount: detailsState.menuItems.length
