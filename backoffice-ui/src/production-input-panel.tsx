@@ -99,11 +99,13 @@ export function ProductionInputPanel({
     intakeRequestDetail
   });
   const hasUploadResultSummary = Boolean(panelState.uploadResultSummary);
-  const secondaryInputsOpen = !hasUploadResultSummary;
+  const completedDocument = panelState.showCompletedProgress;
+  const compactInputMode = hasUploadResultSummary || completedDocument;
+  const secondaryInputsOpen = !compactInputMode;
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
-      {hasUploadResultSummary ? (
+      {compactInputMode ? (
         <input
           ref={sourceInputActions.uploadInputRef}
           className="visually-hidden"
@@ -112,13 +114,15 @@ export function ProductionInputPanel({
           onChange={sourceInputActions.handleFileSelection}
         />
       ) : null}
-      <div className={hasUploadResultSummary ? "upload-shortcut-bar upload-shortcut-bar--compact" : "upload-shortcut-bar"}>
+      <div className={compactInputMode ? "upload-shortcut-bar upload-shortcut-bar--compact" : "upload-shortcut-bar"}>
         <div>
           <p className="eyebrow">Anfrageeingang</p>
-          <strong>{hasUploadResultSummary ? "Weitere Anfrage übernehmen" : "Kundenanfrage übernehmen"}</strong>
+          <strong>{compactInputMode ? "Weitere Anfrage übernehmen" : "Kundenanfrage übernehmen"}</strong>
           <p className="helper-text">
             PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der Inhalt wird als Catering-Anfrage erfasst.
-            {hasUploadResultSummary ? " Die erkannten Produktionsdaten stehen direkt darunter." : " Alternativ kannst du den Text unten direkt einfügen."}
+            {compactInputMode
+              ? " Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar."
+              : " Alternativ kannst du den Text unten direkt einfügen."}
           </p>
         </div>
         <div className="action-row">
@@ -127,7 +131,7 @@ export function ProductionInputPanel({
           </button>
         </div>
       </div>
-      {!hasUploadResultSummary ? (
+      {!compactInputMode ? (
         <>
           <header>
             <p className="eyebrow">Eingabequelle</p>
@@ -185,24 +189,11 @@ export function ProductionInputPanel({
           </div>
         ) : null}
         {panelState.showCompletedProgress ? (
-          <div className={hasUploadResultSummary ? "upload-complete-panel" : "progress-panel"}>
-            {!hasUploadResultSummary ? (
-              <div
-                className="progress-ring progress-ring--done"
-                style={{ "--progress-angle": "360deg" } as CSSProperties}
-              >
-                <span>100%</span>
-              </div>
-            ) : null}
+          <div className="upload-complete-panel">
             <div className="progress-panel__content">
               <p className="processing-note processing-note--success">
                 Analyse abgeschlossen für {sourceInput.activeDocumentName}.
               </p>
-              {!hasUploadResultSummary ? (
-                <div className="progress-bar">
-                  <div className="progress-bar__fill" style={{ width: "100%" }} />
-                </div>
-              ) : null}
               <p className="helper-text">
                 Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe.
               </p>

@@ -103,6 +103,8 @@ export function ProductionRouteMainLayout({
       )
     : undefined;
   const canClearMiniPilotResult = miniPilotRawResult.trim().length > 0;
+  const inputSummarySpec =
+    questionState.focusedProductionSpec ?? objectPanelState.selectedPlanSpec;
 
   return (
     <ProductionConversationalWorkbench
@@ -121,7 +123,7 @@ export function ProductionRouteMainLayout({
               sourceInputActions={sourceInputActions}
               manualInput={manualInput}
               manualInputActions={manualInputActions}
-              focusedProductionSpec={questionState.focusedProductionSpec}
+              focusedProductionSpec={inputSummarySpec}
               productionQuestions={questionState.productionQuestions}
               productionAssumptions={questionState.productionAssumptions}
               intakeRequestDetail={questionState.intakeRequestDetail}

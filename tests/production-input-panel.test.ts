@@ -133,6 +133,24 @@ describe("production input panel", () => {
     expect(analysingMarkup).toContain("Analyse läuft für anfrage.pdf");
   });
 
+  it("keeps the completed upload surface compact even before recognized data is available", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "Angebot_Koepff.pdf",
+        documentProgress: 100
+      })
+    );
+
+    expect(markup).toContain("Weitere Anfrage übernehmen");
+    expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
+    expect(markup).toContain("Analyse abgeschlossen für Angebot_Koepff.pdf.");
+    expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
+    expect(markup).not.toContain("progress-ring--done");
+    expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
+    expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
+  });
+
   it("keeps workspace actions separated as local demo maintenance", () => {
     const markup = renderPanel(
       buildSourceInput({
@@ -223,7 +241,7 @@ describe("production input panel", () => {
       "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
     );
     expect(markup).toContain("Weitere Anfrage übernehmen");
-    expect(markup).toContain("Die erkannten Produktionsdaten stehen direkt darunter.");
+    expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("progress-ring--done");
     expect(markup).toContain("Erkannte Produktionsdaten");
