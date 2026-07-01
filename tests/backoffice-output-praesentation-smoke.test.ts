@@ -400,7 +400,8 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Datei auswählen");
     expect(content).toContain("Workbench-Projektion");
     expect(content).toContain("Klärbereich");
-    expect(content).toContain("Nächster Arbeitsschritt");
+    expect(content).toContain("Ergebnisstatus");
+    expect(content).not.toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan");
     expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");

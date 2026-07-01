@@ -299,8 +299,8 @@ export function ProductionConversationalWorkbench({
         tabIndex={-1}
         aria-label="Aktuelle Produktionsergebnisse"
       >
-        <article className="production-output-anchor" aria-label="Nächster Schritt zur Produktionsarbeit">
-          <p className="eyebrow">Nächster Arbeitsschritt</p>
+        <article className="production-output-anchor" aria-label="Status der Produktionsarbeit">
+          <p className="eyebrow">Ergebnisstatus</p>
           <h3>{productionOutputAnchor.title}</h3>
           <p className="helper-text">{productionOutputAnchor.description}</p>
           <p className="helper-text">{productionOutputAnchor.grouping}</p>

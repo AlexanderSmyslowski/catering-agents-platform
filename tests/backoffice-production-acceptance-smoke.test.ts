@@ -755,7 +755,9 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("production-objects-zone");
     expect(content).not.toContain("production-purchase-zone");
     expect(rendered.html).toContain('aria-label="Aktuelle Produktionsergebnisse"');
-    expect(content).toContain("Nächster Arbeitsschritt");
+    expect(rendered.html).toContain('aria-label="Status der Produktionsarbeit"');
+    expect(content).toContain("Ergebnisstatus");
+    expect(content).not.toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Erkannte Grundlage");
     expect(rendered.html).toContain('aria-label="Sofort sichtbare Produktionsdaten"');
