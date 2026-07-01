@@ -1,4 +1,17 @@
 import type { ProductionSourceInputValues } from "./production-input-panel.js";
+import {
+  buildProductionSpecDetailsState,
+  type ProductionSpecDetailsMenuItemState
+} from "./production-spec-details-state.js";
+
+export type ProductionUploadResultSummaryState = {
+  eventLabel: string;
+  summaryLabel: string;
+  menuItems: ProductionSpecDetailsMenuItemState[];
+  openItems: string[];
+  assumptionItems: string[];
+  nextStepLabel: string;
+};
 
 export type ProductionInputPanelState = {
   clearWorkspaceDisabled: boolean;
@@ -8,6 +21,7 @@ export type ProductionInputPanelState = {
   showAnalysingProgress: boolean;
   showCompletedProgress: boolean;
   documentEtaLabel: string;
+  uploadResultSummary?: ProductionUploadResultSummaryState;
 };
 
 function formatEta(seconds: number): string {
@@ -17,9 +31,66 @@ function formatEta(seconds: number): string {
   return `${seconds} Sekunden`;
 }
 
+function visibleTextList(items: string[]): string[] {
+  return items.map((item) => item.trim()).filter(Boolean);
+}
+
+function formatNextStep(input: {
+  openItemCount: number;
+  menuItemCount: number;
+}): string {
+  if (input.openItemCount > 0) {
+    return "Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.";
+  }
+
+  if (input.menuItemCount > 0) {
+    return "Nächster Schritt: Komponenten prüfen und Berechnung starten.";
+  }
+
+  return "Nächster Schritt: erkannte Eckdaten prüfen und fehlende Gerichte ergänzen.";
+}
+
+function formatUploadSummaryLabel(summaryLabel: string): string {
+  return summaryLabel.replace(/\s+·\s+Readiness: .+$/, "");
+}
+
+function buildUploadResultSummary(input: {
+  documentPhase: ProductionSourceInputValues["documentPhase"];
+  focusedProductionSpec?: Record<string, unknown>;
+  productionQuestions: string[];
+  productionAssumptions: string[];
+}): ProductionUploadResultSummaryState | undefined {
+  if (input.documentPhase !== "done") {
+    return undefined;
+  }
+
+  const detailsState = buildProductionSpecDetailsState(input.focusedProductionSpec);
+  if (!detailsState) {
+    return undefined;
+  }
+
+  const openItems = visibleTextList(input.productionQuestions);
+  const assumptionItems = visibleTextList(input.productionAssumptions);
+
+  return {
+    eventLabel: detailsState.eventLabel,
+    summaryLabel: formatUploadSummaryLabel(detailsState.summaryLabel),
+    menuItems: detailsState.menuItems,
+    openItems,
+    assumptionItems,
+    nextStepLabel: formatNextStep({
+      openItemCount: openItems.length,
+      menuItemCount: detailsState.menuItems.length
+    })
+  };
+}
+
 export function buildProductionInputPanelState(input: {
   submitting: boolean;
   sourceInput: ProductionSourceInputValues;
+  focusedProductionSpec?: Record<string, unknown>;
+  productionQuestions?: string[];
+  productionAssumptions?: string[];
 }): ProductionInputPanelState {
   return {
     clearWorkspaceDisabled: input.submitting || !input.sourceInput.canClearWorkspace,
@@ -30,6 +101,12 @@ export function buildProductionInputPanelState(input: {
       input.sourceInput.documentPhase === "analysing" && Boolean(input.sourceInput.activeDocumentName),
     showCompletedProgress:
       input.sourceInput.documentPhase === "done" && Boolean(input.sourceInput.activeDocumentName),
-    documentEtaLabel: formatEta(input.sourceInput.documentEtaSeconds ?? 1)
+    documentEtaLabel: formatEta(input.sourceInput.documentEtaSeconds ?? 1),
+    uploadResultSummary: buildUploadResultSummary({
+      documentPhase: input.sourceInput.documentPhase,
+      focusedProductionSpec: input.focusedProductionSpec,
+      productionQuestions: input.productionQuestions ?? [],
+      productionAssumptions: input.productionAssumptions ?? []
+    })
   };
 }

@@ -34,7 +34,8 @@ describe("production input panel state", () => {
       selectedFileName: undefined,
       showAnalysingProgress: false,
       showCompletedProgress: false,
-      documentEtaLabel: "weniger als 1 Sekunde"
+      documentEtaLabel: "weniger als 1 Sekunde",
+      uploadResultSummary: undefined
     });
   });
 
@@ -74,6 +75,62 @@ describe("production input panel state", () => {
     ).toMatchObject({
       showAnalysingProgress: false,
       showCompletedProgress: true
+    });
+  });
+
+  it("builds a compact visible production summary after document analysis", () => {
+    expect(
+      buildProductionInputPanelState({
+        submitting: false,
+        sourceInput: sourceInput({
+          documentPhase: "done",
+          activeDocumentName: "angebot.pdf"
+        }),
+        focusedProductionSpec: {
+          event: { type: "conference", date: "2026-09-03" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "partial" },
+          menuPlan: [
+            {
+              componentId: "lunch",
+              label: "Lunchbuffet",
+              menuCategory: "classic",
+              productionDecision: { mode: "scratch" }
+            },
+            {
+              componentId: "coffee",
+              label: "Kaffeestation"
+            }
+          ]
+        },
+        productionQuestions: [
+          "Lunchbuffet: Herstellungsentscheidung fehlt.",
+          "Kaffeestation: Kategorie fehlt."
+        ],
+        productionAssumptions: ["Serviceform als Buffet abgeleitet."]
+      }).uploadResultSummary
+    ).toEqual({
+      eventLabel: "Eventtyp: Konferenz · Datum: 2026-09-03",
+      summaryLabel: "Teilnehmerzahl: 90 · Serviceform: Buffet",
+      menuItems: [
+        {
+          key: "lunch",
+          label: "Lunchbuffet",
+          detailLabel: "Klassisch · Eigenproduktion"
+        },
+        {
+          key: "coffee",
+          label: "Kaffeestation",
+          detailLabel: "offen · offen"
+        }
+      ],
+      openItems: [
+        "Lunchbuffet: Herstellungsentscheidung fehlt.",
+        "Kaffeestation: Kategorie fehlt."
+      ],
+      assumptionItems: ["Serviceform als Buffet abgeleitet."],
+      nextStepLabel: "Nächster Schritt: Rückfragen beantworten, dann Berechnung starten."
     });
   });
 });

@@ -121,6 +121,9 @@ export function ProductionRouteMainLayout({
               sourceInputActions={sourceInputActions}
               manualInput={manualInput}
               manualInputActions={manualInputActions}
+              focusedProductionSpec={questionState.focusedProductionSpec}
+              productionQuestions={questionState.productionQuestions}
+              productionAssumptions={questionState.productionAssumptions}
             />
           </div>
         ),

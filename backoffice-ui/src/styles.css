@@ -957,6 +957,24 @@ button:disabled {
   border-color: rgba(32, 112, 61, 0.14);
 }
 
+.upload-result-summary {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(15, 23, 34, 0.08);
+}
+
+.upload-result-summary > div {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.upload-result-summary strong {
+  color: #0f1722;
+}
+
 .progress-panel {
   display: grid;
   grid-template-columns: 108px minmax(0, 1fr);

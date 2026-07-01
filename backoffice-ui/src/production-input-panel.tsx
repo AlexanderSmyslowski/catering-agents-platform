@@ -67,6 +67,9 @@ type ProductionInputPanelProps = {
   sourceInputActions: ProductionSourceInputActions;
   manualInput: ProductionManualInputValues;
   manualInputActions: ProductionManualInputActions;
+  focusedProductionSpec?: Record<string, unknown>;
+  productionQuestions?: string[];
+  productionAssumptions?: string[];
 };
 
 export function ProductionInputPanel({
@@ -74,11 +77,17 @@ export function ProductionInputPanel({
   sourceInput,
   sourceInputActions,
   manualInput,
-  manualInputActions
+  manualInputActions,
+  focusedProductionSpec,
+  productionQuestions,
+  productionAssumptions
 }: ProductionInputPanelProps) {
   const panelState = buildProductionInputPanelState({
     submitting,
-    sourceInput
+    sourceInput,
+    focusedProductionSpec,
+    productionQuestions,
+    productionAssumptions
   });
 
   return (
@@ -166,6 +175,60 @@ export function ProductionInputPanel({
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
               </div>
               <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+              {panelState.uploadResultSummary ? (
+                <div className="upload-result-summary" aria-label="Erkannte Produktionsdaten">
+                  <div>
+                    <p className="eyebrow">Erkannte Produktionsdaten</p>
+                    <strong>{panelState.uploadResultSummary.eventLabel}</strong>
+                    <p className="helper-text">{panelState.uploadResultSummary.summaryLabel}</p>
+                  </div>
+                  <div>
+                    <p className="helper-text">Gerichte und Komponenten:</p>
+                    {panelState.uploadResultSummary.menuItems.length > 0 ? (
+                      <ul className="item-list compact">
+                        {panelState.uploadResultSummary.menuItems.map((item) => (
+                          <li key={item.key}>
+                            <strong>{item.label}</strong>
+                            <p className="helper-text">{item.detailLabel}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="helper-text">Noch keine Gerichte erkannt.</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="helper-text">Offen vor Produktion:</p>
+                    {panelState.uploadResultSummary.openItems.length > 0 ? (
+                      <>
+                        <ul className="item-list compact">
+                          {panelState.uploadResultSummary.openItems.slice(0, 4).map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                        {panelState.uploadResultSummary.openItems.length > 4 ? (
+                          <p className="helper-text">
+                            {panelState.uploadResultSummary.openItems.length - 4} weitere offene Punkte im Rückfragenbereich.
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="helper-text">Keine blockierenden Rückfragen erkannt.</p>
+                    )}
+                  </div>
+                  {panelState.uploadResultSummary.assumptionItems.length > 0 ? (
+                    <div>
+                      <p className="helper-text">Annahmen:</p>
+                      <ul className="item-list compact">
+                        {panelState.uploadResultSummary.assumptionItems.slice(0, 3).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <p className="helper-text">{panelState.uploadResultSummary.nextStepLabel}</p>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}

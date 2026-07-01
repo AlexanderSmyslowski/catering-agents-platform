@@ -65,14 +65,22 @@ function buildSourceInput(overrides?: Partial<ProductionSourceInputValues>): Pro
   };
 }
 
-function renderPanel(sourceInput: ProductionSourceInputValues): string {
+function renderPanel(
+  sourceInput: ProductionSourceInputValues,
+  overrides: {
+    focusedProductionSpec?: Record<string, unknown>;
+    productionQuestions?: string[];
+    productionAssumptions?: string[];
+  } = {}
+): string {
   return renderToStaticMarkup(
     createElement(ProductionInputPanel, {
       submitting: false,
       sourceInput,
       sourceInputActions,
       manualInput,
-      manualInputActions
+      manualInputActions,
+      ...overrides
     })
   );
 }
@@ -171,5 +179,52 @@ describe("production input panel", () => {
 
     expect(markup).toContain("Ausgewählt: problemangebot.pdf");
     expect(markup).toMatch(/<button(?:(?!disabled).)*>Erneut mit ausgewähltem Typ verarbeiten<\/button>/);
+  });
+
+  it("shows the recognized production data directly after document analysis", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "Angebot_Koepff.pdf",
+        documentProgress: 100
+      }),
+      {
+        focusedProductionSpec: {
+          event: { type: "conference", date: "2026-09-03" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "partial" },
+          menuPlan: [
+            {
+              componentId: "lunch",
+              label: "Lunchbuffet",
+              menuCategory: "classic",
+              productionDecision: { mode: "scratch" }
+            },
+            {
+              componentId: "coffee",
+              label: "Kaffeestation"
+            }
+          ]
+        },
+        productionQuestions: [
+          "Lunchbuffet: Herstellungsentscheidung fehlt.",
+          "Kaffeestation: Kategorie fehlt."
+        ],
+        productionAssumptions: ["Serviceform als Buffet abgeleitet."]
+      }
+    );
+
+    expect(markup).toContain("Analyse abgeschlossen für Angebot_Koepff.pdf.");
+    expect(markup).toContain("Erkannte Produktionsdaten");
+    expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
+    expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");
+    expect(markup).toContain("Gerichte und Komponenten:");
+    expect(markup).toContain("Lunchbuffet");
+    expect(markup).toContain("Kaffeestation");
+    expect(markup).toContain("Offen vor Produktion:");
+    expect(markup).toContain("Lunchbuffet: Herstellungsentscheidung fehlt.");
+    expect(markup).toContain("Annahmen:");
+    expect(markup).toContain("Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.");
   });
 });
