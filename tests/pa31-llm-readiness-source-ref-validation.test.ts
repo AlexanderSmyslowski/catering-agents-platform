@@ -30,6 +30,7 @@ describe("PA31 LLM readiness source ref validation", () => {
       "accepted_event_spec",
       "production_plan",
       "purchase_list",
+      "recipe_card",
       "conversation_projection",
       "safe_source_anchor"
     ]);

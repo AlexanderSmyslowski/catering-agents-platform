@@ -60,6 +60,28 @@ export const llmReadinessDraftContracts = [
     writesProductObject: false,
     forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
     description: "Contract for a human-reviewed operator summary draft from existing product-object references."
+  },
+  {
+    contractId: "production-dossier-draft.v0",
+    registryVersion: llmReadinessDraftRegistryVersion,
+    readinessContractVersion: llmReadinessContractVersion,
+    inputKind: "production_dossier_draft_request",
+    outputKind: "production_dossier_draft",
+    status: "schema_contract_only",
+    providerCalls: "disabled",
+    dataMode: "synthetic_or_demo_only",
+    allowedToolEffects: ["read", "draft"],
+    requiredSourceObjectTypes: [
+      "accepted_event_spec",
+      "production_plan",
+      "purchase_list",
+      "recipe_card",
+      "conversation_projection"
+    ],
+    humanApprovalRequired: true,
+    writesProductObject: false,
+    forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
+    description: "Contract for a human-reviewed production dossier draft from existing production artifacts."
   }
 ] as const satisfies readonly LlmReadinessDraftContract[];
 

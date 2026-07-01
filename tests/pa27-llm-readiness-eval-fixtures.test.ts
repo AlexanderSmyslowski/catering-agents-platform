@@ -34,13 +34,37 @@ describe("PA27 LLM readiness eval fixtures", () => {
   it("provides the first clarification and operator-summary eval cases", () => {
     expect(llmReadinessEvalFixtures.map((fixture) => fixture.fixtureId)).toEqual([
       "llm-eval-synthetic-coffee-break-missing-attendees",
-      "llm-eval-synthetic-buffet-operator-summary"
+      "llm-eval-synthetic-buffet-operator-summary",
+      "llm-eval-synthetic-koepff-production-dossier"
     ]);
 
     expect(llmReadinessEvalFixtures.map((fixture) => fixture.expectedOutput.kind)).toEqual([
       "clarification_question_draft",
-      "operator_summary_draft"
+      "operator_summary_draft",
+      "production_dossier_draft"
     ]);
+  });
+
+  it("anchors production dossier drafts as nine-section review artifacts", () => {
+    const fixture = llmReadinessEvalFixtures.find(
+      (candidate) => candidate.fixtureId === "llm-eval-synthetic-koepff-production-dossier"
+    );
+
+    expect(fixture?.input.kind).toBe("production_dossier_draft_request");
+    expect(fixture?.input.sourceRefs.map((sourceRef) => sourceRef.objectType)).toEqual([
+      "accepted_event_spec",
+      "production_plan",
+      "purchase_list",
+      "recipe_card",
+      "conversation_projection"
+    ]);
+    expect(fixture?.expectedOutput.structuredCandidate).toMatchObject({
+      sectionCount: 9,
+      summaryKind: "production_dossier",
+      approval: "pending_human_review"
+    });
+    expect(fixture?.expectedOutput.text).toContain("Metro-Einkauf");
+    expect(fixture?.expectedOutput.text).toContain("Abschlusspruefung");
   });
 
   it("keeps every fixture synthetic or demo only and disables provider calls", () => {

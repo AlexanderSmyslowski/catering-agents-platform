@@ -151,6 +151,99 @@ export const llmReadinessEvalFixtures = [
       "secret",
       "apiKey"
     ]
+  },
+  {
+    fixtureId: "llm-eval-synthetic-koepff-production-dossier",
+    title: "Synthetic production dossier draft from existing production artifacts",
+    input: {
+      contractVersion: llmReadinessContractVersion,
+      inputId: "input-llm-eval-production-dossier-001",
+      kind: "production_dossier_draft_request",
+      sourceRefs: [
+        {
+          objectType: "accepted_event_spec",
+          objectId: "spec-synthetic-koepff",
+          label: "synthetic Koepff accepted spec"
+        },
+        {
+          objectType: "production_plan",
+          objectId: "plan-synthetic-koepff",
+          label: "synthetic Koepff production plan"
+        },
+        {
+          objectType: "purchase_list",
+          objectId: "purchase-synthetic-koepff",
+          label: "synthetic Koepff purchase list"
+        },
+        {
+          objectType: "recipe_card",
+          objectId: "recipe-synthetic-vitello",
+          label: "synthetic Vitello recipe card"
+        },
+        {
+          objectType: "conversation_projection",
+          objectId: "conversation-synthetic-koepff",
+          label: "synthetic clarification projection"
+        }
+      ],
+      policy: {
+        providerCalls: "disabled",
+        dataMode: "synthetic_or_demo_only",
+        allowedToolEffects: ["read", "draft"]
+      }
+    },
+    expectedOutput: {
+      contractVersion: llmReadinessContractVersion,
+      outputId: "output-llm-eval-production-dossier-001",
+      kind: "production_dossier_draft",
+      sourceRefs: [
+        {
+          objectType: "accepted_event_spec",
+          objectId: "spec-synthetic-koepff",
+          label: "synthetic Koepff accepted spec"
+        },
+        {
+          objectType: "production_plan",
+          objectId: "plan-synthetic-koepff",
+          label: "synthetic Koepff production plan"
+        },
+        {
+          objectType: "purchase_list",
+          objectId: "purchase-synthetic-koepff",
+          label: "synthetic Koepff purchase list"
+        },
+        {
+          objectType: "recipe_card",
+          objectId: "recipe-synthetic-vitello",
+          label: "synthetic Vitello recipe card"
+        },
+        {
+          objectType: "conversation_projection",
+          objectId: "conversation-synthetic-koepff",
+          label: "synthetic clarification projection"
+        }
+      ],
+      humanApprovalRequired: true,
+      writesProductObject: false,
+      text:
+        "Entwurf fuer Operatoren: Produktionsdossier mit Verstaendnis, Rueckfragen, Annahmen, Kalkulation, Mengen, Rezeptkarten, Metro-Einkauf, Mise-en-Place und Abschlusspruefung aus vorhandenen synthetischen Artefakten.",
+      structuredCandidate: {
+        sectionCount: 9,
+        summaryKind: "production_dossier",
+        dataMode: "synthetic_or_demo_only",
+        approval: "pending_human_review"
+      }
+    },
+    disallowedPayloadKeys: [
+      "rawText",
+      "extractedText",
+      "prompt",
+      "messages",
+      "providerResponse",
+      "toolCalls",
+      "secret",
+      "apiKey"
+    ]
   }
 ] as const satisfies readonly LlmReadinessEvalFixture[];
 

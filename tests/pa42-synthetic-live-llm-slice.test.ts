@@ -35,9 +35,11 @@ describe("PA42 synthetic live LLM slice", () => {
 
     const clarificationArtifact = findLlmReadinessPromptArtifactByInputKind("clarification_draft_request");
     const operatorArtifact = findLlmReadinessPromptArtifactByInputKind("operator_summary_request");
+    const dossierArtifact = findLlmReadinessPromptArtifactByInputKind("production_dossier_draft_request");
 
     expect(clarificationArtifact?.status).toBe("synthetic_live_ready");
     expect(operatorArtifact?.status).toBe("providerless_contract_only");
+    expect(dossierArtifact?.status).toBe("providerless_contract_only");
     expect(clarificationArtifact?.systemPrompt).toContain("JSON");
   });
 

@@ -50,6 +50,19 @@ export const llmReadinessPromptArtifacts = [
       "Dieser Prompt-Artefaktplatzhalter bleibt vorerst providerlos und dient nur als nicht-leerer Registry-Anker.",
     userPromptTemplate:
       "Kein live freigegebener Provider-Lauf fuer operator_summary_request in dieser Phase."
+  },
+  {
+    promptArtifactId: "production-dossier-draft.prompt",
+    promptVersion: "v0",
+    promptSchemaId: "production-dossier-draft-prompt-schema.v0",
+    promptSchemaRegistryVersion: llmReadinessPromptSchemaRegistryVersion,
+    inputKind: "production_dossier_draft_request",
+    status: "providerless_contract_only",
+    systemPrompt:
+      "Dieser Prompt-Artefaktplatzhalter beschreibt einen kuenftigen Produktionsdossier-Entwurf aus vorhandenen Artefakten. " +
+      "Er bleibt providerlos, synthetisch/demo-only, draft-only und ohne Schreibwirkung.",
+    userPromptTemplate:
+      "Kein live freigegebener Provider-Lauf fuer production_dossier_draft_request in dieser Phase."
   }
 ] as const satisfies readonly LlmReadinessPromptArtifact[];
 

@@ -52,6 +52,13 @@ export const llmReadinessToolBoundaries = [
     description: "Existing PurchaseList data may be referenced as read-only context."
   },
   {
+    toolId: "recipe_card.read",
+    effect: "read",
+    status: "allowed_without_provider",
+    requiresHumanApproval: false,
+    description: "Existing approved or review-visible recipe cards may be referenced as read-only context."
+  },
+  {
     toolId: "clarification_question.draft",
     effect: "draft",
     status: "allowed_without_provider",
@@ -64,6 +71,13 @@ export const llmReadinessToolBoundaries = [
     status: "allowed_without_provider",
     requiresHumanApproval: true,
     description: "A model-shaped draft may summarize existing context for an operator."
+  },
+  {
+    toolId: "production_dossier.draft",
+    effect: "draft",
+    status: "allowed_without_provider",
+    requiresHumanApproval: true,
+    description: "A model-shaped draft may assemble a production dossier outline from existing artifacts."
   },
   {
     toolId: "accepted_event_spec.write",
@@ -90,14 +104,16 @@ export const llmReadinessToolBoundaries = [
 
 export const llmReadinessModelInputKinds = [
   "clarification_draft_request",
-  "operator_summary_request"
+  "operator_summary_request",
+  "production_dossier_draft_request"
 ] as const;
 
 export type LlmReadinessModelInputKind = typeof llmReadinessModelInputKinds[number];
 
 export const llmReadinessModelOutputKinds = [
   "clarification_question_draft",
-  "operator_summary_draft"
+  "operator_summary_draft",
+  "production_dossier_draft"
 ] as const;
 
 export type LlmReadinessModelOutputKind = typeof llmReadinessModelOutputKinds[number];
@@ -106,6 +122,7 @@ export const llmReadinessSourceObjectTypes = [
   "accepted_event_spec",
   "production_plan",
   "purchase_list",
+  "recipe_card",
   "conversation_projection",
   "safe_source_anchor"
 ] as const;

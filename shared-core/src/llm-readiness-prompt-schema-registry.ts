@@ -81,6 +81,35 @@ export const llmReadinessPromptSchemaRegistry = [
     fixtureIds: ["llm-eval-synthetic-buffet-operator-summary"],
     forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
     description: "Schema-only prompt, policy and output-schema metadata for operator summary readiness."
+  },
+  {
+    promptSchemaId: "production-dossier-draft-prompt-schema.v0",
+    registryVersion: llmReadinessPromptSchemaRegistryVersion,
+    readinessContractVersion: llmReadinessContractVersion,
+    draftContractId: "production-dossier-draft.v0",
+    inputKind: "production_dossier_draft_request",
+    outputKind: "production_dossier_draft",
+    status: "schema_contract_only",
+    promptArtifactId: "production-dossier-draft.prompt",
+    promptVersion: "v0",
+    policyArtifactId: "production-dossier-draft.policy",
+    policyVersion: "v0",
+    outputSchemaId: "production-dossier-draft.output-schema.v0",
+    providerCalls: "disabled",
+    dataMode: "synthetic_or_demo_only",
+    allowedToolEffects: ["read", "draft"],
+    requiredSourceObjectTypes: [
+      "accepted_event_spec",
+      "production_plan",
+      "purchase_list",
+      "recipe_card",
+      "conversation_projection"
+    ],
+    humanApprovalRequired: true,
+    writesProductObject: false,
+    fixtureIds: ["llm-eval-synthetic-koepff-production-dossier"],
+    forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
+    description: "Schema-only prompt, policy and output-schema metadata for production dossier draft readiness."
   }
 ] as const satisfies readonly LlmReadinessPromptSchemaRegistryEntry[];
 

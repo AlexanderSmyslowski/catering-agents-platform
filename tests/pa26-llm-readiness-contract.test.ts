@@ -51,9 +51,11 @@ describe("PA26 LLM readiness contract", () => {
     expect(readTools.map((tool) => tool.status)).toEqual([
       "allowed_without_provider",
       "allowed_without_provider",
+      "allowed_without_provider",
       "allowed_without_provider"
     ]);
     expect(draftTools.map((tool) => tool.status)).toEqual([
+      "allowed_without_provider",
       "allowed_without_provider",
       "allowed_without_provider"
     ]);

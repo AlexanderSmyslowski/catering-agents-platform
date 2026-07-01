@@ -79,6 +79,7 @@ describe("BYO LLM boundary", () => {
   it("keeps all allowed draft use cases human-approved and non-writing", () => {
     expect(byoLlmBoundaryPolicy.allowedDraftUseCases.map((useCase) => useCase.draftType)).toEqual([
       "clarification_question_draft",
+      "production_dossier_draft",
       "recipe_research_summary_draft",
       "search_query_suggestion_draft",
       "uncertainty_summary_draft"
@@ -92,6 +93,9 @@ describe("BYO LLM boundary", () => {
     }
 
     expect(allowedByoLlmDraftUseCaseByType("clarification_question_draft")).toMatchObject({
+      status: "implemented_readiness_contract"
+    });
+    expect(allowedByoLlmDraftUseCaseByType("production_dossier_draft")).toMatchObject({
       status: "implemented_readiness_contract"
     });
     expect(allowedByoLlmDraftUseCaseByType("recipe_research_summary_draft")).toMatchObject({

@@ -13,6 +13,7 @@ Vor PA31 musste ein `sourceRef` nur ein nicht-leeres `objectId` und irgendeinen 
 - `accepted_event_spec`
 - `production_plan`
 - `purchase_list`
+- `recipe_card`
 - `conversation_projection`
 - `safe_source_anchor`
 

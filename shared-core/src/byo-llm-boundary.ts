@@ -12,6 +12,7 @@ export type ByoLlmProviderKind = "fixture" | "openai" | "codex_cli" | "custom_by
 
 export type ByoLlmDraftUseCase =
   | "clarification_question_draft"
+  | "production_dossier_draft"
   | "recipe_research_summary_draft"
   | "search_query_suggestion_draft"
   | "uncertainty_summary_draft";
@@ -76,6 +77,14 @@ export const byoLlmBoundaryPolicy = {
   allowedDraftUseCases: [
     {
       draftType: "clarification_question_draft",
+      status: "implemented_readiness_contract",
+      providerCallsDefault: "disabled",
+      externalCallsByDefault: false,
+      humanApprovalRequired: true,
+      writesProductObject: false
+    },
+    {
+      draftType: "production_dossier_draft",
       status: "implemented_readiness_contract",
       providerCallsDefault: "disabled",
       externalCallsByDefault: false,
