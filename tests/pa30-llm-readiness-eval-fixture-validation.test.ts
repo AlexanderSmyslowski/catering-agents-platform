@@ -72,6 +72,27 @@ describe("PA30 LLM readiness eval fixture validation", () => {
     expect(result.errors).toContain("expectedOutput.kind must match the draft contract outputKind");
   });
 
+  it("applies the production dossier draft output contract to matching fixtures", () => {
+    const fixture = cloneFixture(2);
+    fixture.expectedOutput.text = "Verstaendnis\nRueckfragen\nAnnahmen";
+    fixture.expectedOutput.structuredCandidate = {
+      sectionCount: 8,
+      summaryKind: "production_dossier",
+      dataMode: "synthetic_or_demo_only",
+      approval: "pending_human_review"
+    };
+
+    const result = validateLlmReadinessEvalFixture(fixture);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "productionDossierDraft.structuredCandidate.sectionCount must be 9"
+    );
+    expect(result.errors).toContain(
+      "productionDossierDraft.text must mention production dossier sections: missing kalkulation, mengen, rezept, metro, mise-en-place, abschluss"
+    );
+  });
+
   it("rejects missing required source references and stale forbidden-key lists", () => {
     const fixture = cloneFixture(1);
     fixture.input.sourceRefs = fixture.input.sourceRefs.filter((sourceRef) => sourceRef.objectType !== "purchase_list");

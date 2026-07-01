@@ -12,6 +12,7 @@ import {
   llmReadinessDraftContracts,
   type LlmReadinessDraftContract
 } from "../llm-readiness-draft-registry.js";
+import { validateProductionDossierDraftOutput } from "../llm-readiness-production-dossier-output.js";
 
 export interface LlmReadinessEvalFixture {
   fixtureId: string;
@@ -317,6 +318,22 @@ export function validateLlmReadinessEvalFixture(
   const outputValidation = validateLlmReadinessModelOutputCandidate(fixture.expectedOutput);
   for (const outputError of outputValidation.errors) {
     errors.push(`expectedOutput.${outputError}`);
+  }
+
+  if (
+    inputValidation.valid &&
+    outputValidation.valid &&
+    isRecord(fixture.input) &&
+    fixture.input.kind === "production_dossier_draft_request"
+  ) {
+    const dossierOutputValidation = validateProductionDossierDraftOutput(
+      fixture.expectedOutput,
+      fixture.input as unknown as LlmReadinessModelInput
+    );
+
+    for (const dossierOutputError of dossierOutputValidation.errors) {
+      errors.push(`productionDossierDraft.${dossierOutputError}`);
+    }
   }
 
   if (!isRecord(fixture.input)) {
