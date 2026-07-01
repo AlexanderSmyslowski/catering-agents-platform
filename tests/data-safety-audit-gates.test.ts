@@ -59,10 +59,26 @@ describe("data safety and audit gates", () => {
         "intake_normalized",
         "intake_documents_normalized",
         "intake_soft_archive",
+        "intake_manual_spec_created",
+        "intake_spec_updated",
+        "intake_spec_governance_finalized",
+        "intake_seed_demo",
         "offer_draft_created",
+        "offer_draft_created_from_text",
         "offer_promoted_variant",
+        "offer_seed_demo",
+        "offer_recipe_imported_text",
+        "offer_recipe_uploaded_file",
+        "offer_recipe_reviewed",
         "production_plan_created",
-        "recipe_reviewed",
+        "production_seed_demo",
+        "production_clarification_draft_created",
+        "production_clarification_draft_rejected",
+        "production_clarification_draft_approved",
+        "production_clarification_draft_rejected_by_operator",
+        "production_recipe_imported_text",
+        "production_recipe_uploaded_file",
+        "production_recipe_reviewed",
         "offer_html_export",
         "production_plan_html_export",
         "production_folder_html_export",
@@ -80,9 +96,46 @@ describe("data safety and audit gates", () => {
         "intake.normalized",
         "intake.documents_normalized",
         "intake.request_soft_archived",
+        "intake.manual_spec_created",
+        "intake.spec_updated",
+        "intake.spec_governance_finalized",
+        "intake.seed_demo",
         "offer.promoted_variant",
+        "recipe.imported_text",
+        "recipe.uploaded_file",
         "production.plan_created",
+        "production.seed_demo",
+        "production.clarification_draft_approved",
         "recipe.reviewed"
+      ])
+    );
+
+    const auditActions = auditEvidencePaths.flatMap((path) =>
+      "action" in path ? [path.action] : []
+    );
+
+    expect(auditActions).toEqual(
+      expect.arrayContaining([
+        "intake.documents_normalized",
+        "intake.manual_spec_created",
+        "intake.normalized",
+        "intake.request_soft_archived",
+        "intake.seed_demo",
+        "intake.spec_governance_finalized",
+        "intake.spec_updated",
+        "offer.draft_created",
+        "offer.draft_created_from_text",
+        "offer.promoted_variant",
+        "offer.seed_demo",
+        "production.clarification_draft_approved",
+        "production.clarification_draft_created",
+        "production.clarification_draft_rejected",
+        "production.clarification_draft_rejected_by_operator",
+        "production.plan_created",
+        "production.seed_demo",
+        "recipe.imported_text",
+        "recipe.reviewed",
+        "recipe.uploaded_file"
       ])
     );
 
