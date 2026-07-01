@@ -92,6 +92,7 @@ describe("production input panel", () => {
     expect(markup).toContain("Datei auswählen");
     expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
     expect(markup).toContain("Anfrage als Datei übernehmen");
+    expect(markup).not.toContain("Neue Eingabe oder Korrektur");
     expect(markup).toContain("PDF / Anfrage");
     expect(markup).not.toContain("Intake-Pfad");
     expect(markup).not.toContain("Chat-Eingang");
@@ -225,6 +226,12 @@ describe("production input panel", () => {
     expect(markup).toContain("Erkannte Produktionsdaten");
     expect(markup).toContain("Verständnis des Angebots");
     expect(markup).toContain("production-input-panel--completed");
+    expect(markup).toContain('class="secondary-workspace production-input-secondary"');
+    expect(markup).toContain("Neue Eingabe oder Korrektur");
+    expect(markup).toContain("Upload, Text oder manuell");
+    expect(markup.indexOf("Erkannte Produktionsdaten")).toBeLessThan(
+      markup.indexOf("Neue Eingabe oder Korrektur")
+    );
     expect(markup).toContain('aria-hidden="true"');
     expect(markup).toContain('tabindex="-1"');
     expect(markup).not.toContain("progress-ring--done");
