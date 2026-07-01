@@ -41,7 +41,16 @@ function visibleTextList(items: string[]): string[] {
 function formatNextStep(input: {
   openItemCount: number;
   menuItemCount: number;
+  sourceCheckItemCount: number;
 }): string {
+  if (input.sourceCheckItemCount > 0 && input.openItemCount > 0) {
+    return "Nächster Schritt: Quellenprüfung und Rückfragen klären, dann Berechnung starten.";
+  }
+
+  if (input.sourceCheckItemCount > 0) {
+    return "Nächster Schritt: Quellenprüfung bestätigen, dann Berechnung starten.";
+  }
+
   if (input.openItemCount > 0) {
     return "Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.";
   }
@@ -131,6 +140,7 @@ function buildUploadResultSummary(input: {
 
   const openItems = visibleTextList(input.productionQuestions);
   const assumptionItems = visibleTextList(input.productionAssumptions);
+  const sourceCheckItems = buildSourceCheckItems(input.intakeRequestDetail);
 
   return {
     eventLabel: detailsState.eventLabel,
@@ -142,10 +152,11 @@ function buildUploadResultSummary(input: {
       openItemCount: openItems.length,
       menuItemCount: detailsState.menuItems.length
     }),
-    sourceCheckItems: buildSourceCheckItems(input.intakeRequestDetail),
+    sourceCheckItems,
     nextStepLabel: formatNextStep({
       openItemCount: openItems.length,
-      menuItemCount: detailsState.menuItems.length
+      menuItemCount: detailsState.menuItems.length,
+      sourceCheckItemCount: sourceCheckItems.length
     })
   };
 }
