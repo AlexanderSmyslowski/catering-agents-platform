@@ -152,7 +152,7 @@ function buildArtifactFact(input: {
   }
 
   if (kitchenSheetCount > 0) {
-    parts.push(formatCount(kitchenSheetCount, "Rezeptkarte", "Rezeptkarten"));
+    parts.push(formatCount(kitchenSheetCount, "Küchen-/Arbeitsblatt", "Küchen-/Arbeitsblätter"));
   }
 
   if (purchaseItemCount > 0) {

@@ -1674,7 +1674,19 @@ describe("backoffice production acceptance smoke", () => {
       expect(primaryFacts?.textContent).toContain("Vorgang");
       expect(primaryFacts?.textContent).toContain("Business Lunch · 42 Teilnehmer");
       expect(primaryFacts?.textContent).toContain("Artefakte");
-      expect(primaryFacts?.textContent).toContain("2 Mengenkalkulationen · 1 Rezeptkarte · 1 Einkaufsposition");
+      expect(primaryFacts?.textContent).toContain("2 Mengenkalkulationen · 1 Küchen-/Arbeitsblatt · 1 Einkaufsposition");
+
+      await act(async () => {
+        root.render(
+          renderWorkbench(1, [
+            { label: "Vorgang", value: "PDF-Analyse · 42 Teilnehmer" }
+          ])
+        );
+      });
+
+      const workingSheetFacts = document.querySelector('[aria-label="Sofort sichtbare Produktionsdaten"]');
+      expect(workingSheetFacts?.textContent).toContain("2 Mengenkalkulationen · 1 Küchen-/Arbeitsblatt · 1 Einkaufsposition");
+      expect(workingSheetFacts?.textContent).not.toContain("1 Rezeptkarte");
     } finally {
       if (originalScrollIntoView) {
         Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
