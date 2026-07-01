@@ -1438,6 +1438,40 @@ button:disabled {
   margin: 0;
 }
 
+.production-primary-facts-label {
+  margin: 0.65rem 0 0;
+}
+
+.production-primary-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.55rem 0.75rem;
+  margin: 0.3rem 0 0;
+  padding: 0.7rem 0;
+  border-top: 1px solid rgba(15, 23, 34, 0.08);
+  border-bottom: 1px solid rgba(15, 23, 34, 0.08);
+}
+
+.production-primary-facts div {
+  min-width: 0;
+}
+
+.production-primary-facts dt {
+  color: rgba(15, 23, 34, 0.52);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.production-primary-facts dd {
+  margin: 0.22rem 0 0;
+  color: rgba(15, 23, 34, 0.9);
+  font-size: 0.9rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
 .production-composer--compact .production-next-step {
   margin-top: 0.5rem;
   padding: 0.65rem 0.8rem;

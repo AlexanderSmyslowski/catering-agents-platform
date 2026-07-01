@@ -114,6 +114,26 @@ function formatOperatorProductionObjects(productionObjectStatusLabel: string): s
     .replace("vollständig", "vollständig, Freigabe nicht erteilt");
 }
 
+function selectPrimarySpecFacts(
+  specFacts: NonNullable<ProductionWorkbenchSummary["specFacts"]>,
+  activeSpecLabel: string
+): NonNullable<ProductionWorkbenchSummary["specFacts"]> {
+  const preferredLabels = ["Veranstaltung", "Datum", "Personen", "Speisen"];
+  const selected = preferredLabels
+    .map((label) => specFacts.find((fact) => fact.label === label))
+    .filter((fact): fact is { label: string; value: string } => Boolean(fact));
+
+  if (selected.length > 0) {
+    return selected;
+  }
+  const fallbackFacts = specFacts.slice(0, 4);
+  if (fallbackFacts.length > 0) {
+    return fallbackFacts;
+  }
+  const fallbackLabel = activeSpecLabel.trim();
+  return fallbackLabel ? [{ label: "Vorgang", value: fallbackLabel }] : [];
+}
+
 export function ProductionConversationalWorkbench({
   summary,
   nextStep,
@@ -180,6 +200,7 @@ export function ProductionConversationalWorkbench({
   const composerHelperText = hasVisibleProductionWork
     ? "Rückfragen, Pläne, Einkaufslisten und Exporte erscheinen im aktuellen Vorgang nach Verfügbarkeit."
     : "Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.";
+  const primarySpecFacts = selectPrimarySpecFacts(specFacts, activeSpecLabel);
 
   useEffect(() => {
     const becameVisible = hasVisibleProductionWork && !previousHasVisibleProductionWork.current;
@@ -204,6 +225,19 @@ export function ProductionConversationalWorkbench({
           <p className="eyebrow">{composerEyebrow}</p>
           <h3>{composerTitle}</h3>
           <p className="helper-text">{composerHelperText}</p>
+          {hasVisibleProductionWork && primarySpecFacts.length > 0 ? (
+            <>
+              <p className="eyebrow production-primary-facts-label">Erkannte Grundlage</p>
+              <dl className="production-primary-facts" aria-label="Sofort sichtbare Produktionsdaten">
+                {primarySpecFacts.map((fact) => (
+                  <div key={fact.label}>
+                    <dt>{fact.label}</dt>
+                    <dd>{fact.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          ) : null}
           <div className="production-next-step" aria-label="Nächster Produktionsschritt">
             <p className="eyebrow">Nächster Schritt</p>
             <strong>{nextStep.title}</strong>

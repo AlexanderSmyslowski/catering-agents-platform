@@ -757,6 +757,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(rendered.html).toContain('aria-label="Aktuelle Produktionsergebnisse"');
     expect(content).toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
+    expect(content).toContain("Erkannte Grundlage");
+    expect(rendered.html).toContain('aria-label="Sofort sichtbare Produktionsdaten"');
     expect(content).toContain("Erkannte Eckdaten");
     expect(rendered.html).toContain('aria-label="Erkannte Produktionsdaten"');
     expect(content).toContain("Veranstaltung");
@@ -1610,12 +1612,22 @@ describe("backoffice production acceptance smoke", () => {
       expect(focusedResults).not.toBeNull();
       expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
       expect(document.activeElement).toBe(focusedResults);
+      expect(document.querySelector('[aria-label="Sofort sichtbare Produktionsdaten"]')).not.toBeNull();
+      expect(document.body.textContent ?? "").toContain("Erkannte Grundlage");
       expect(document.body.textContent ?? "").toContain("Erkannte Eckdaten");
       expect(document.body.textContent ?? "").toContain("42 Personen");
       expect(document.body.textContent ?? "").toContain("Produktionsdaten prüfen");
       expect(document.body.textContent ?? "").toContain("Erkannte Eckdaten und Speisen liegen vor.");
       expect(document.body.textContent ?? "").toContain("Tortilla-Tarte, Vitello Tonnato");
       expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
+
+      await act(async () => {
+        root.render(renderWorkbench(1));
+      });
+
+      const primaryFacts = document.querySelector('[aria-label="Sofort sichtbare Produktionsdaten"]');
+      expect(primaryFacts?.textContent).toContain("Vorgang");
+      expect(primaryFacts?.textContent).toContain("Business Lunch · 42 Teilnehmer");
     } finally {
       if (originalScrollIntoView) {
         Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
