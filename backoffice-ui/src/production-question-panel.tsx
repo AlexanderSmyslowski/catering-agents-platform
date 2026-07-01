@@ -126,6 +126,7 @@ export function ProductionQuestionPanel({
     editingSpecId,
     submitting,
     hasFocusedSpecEditChanges,
+    openQuestionCount: productionQuestions.length,
     sourceReviewRequired,
     sourceReviewConfirmed
   });

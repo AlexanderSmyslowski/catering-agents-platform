@@ -3,6 +3,7 @@ export type ProductionQuestionPanelActionStateInput = {
   editingSpecId?: string;
   submitting: boolean;
   hasFocusedSpecEditChanges: boolean;
+  openQuestionCount?: number;
   sourceReviewRequired?: boolean;
   sourceReviewConfirmed?: boolean;
 };
@@ -23,6 +24,7 @@ export function buildProductionQuestionPanelActionState({
   editingSpecId,
   submitting,
   hasFocusedSpecEditChanges,
+  openQuestionCount = 0,
   sourceReviewRequired = false,
   sourceReviewConfirmed = false
 }: ProductionQuestionPanelActionStateInput): ProductionQuestionPanelActionState {
@@ -31,6 +33,15 @@ export function buildProductionQuestionPanelActionState({
       ? String(focusedProductionSpec.specId)
       : undefined;
   const isFocusedSpecEditing = focusedSpecId !== undefined && editingSpecId === focusedSpecId;
+  const hasOpenQuestions = openQuestionCount > 0;
+  const blocksForOpenQuestions = hasOpenQuestions && !isFocusedSpecEditing;
+  const blocksForSourceReview = sourceReviewRequired && !sourceReviewConfirmed;
+  const sourceReviewHelperText = blocksForSourceReview
+    ? "Quellenprüfung bestätigen, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    : undefined;
+  const openQuestionHelperText = blocksForOpenQuestions
+    ? "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    : undefined;
 
   return {
     focusedSpecId,
@@ -39,10 +50,8 @@ export function buildProductionQuestionPanelActionState({
     showSaveAnswersButton: isFocusedSpecEditing,
     saveAnswersDisabled: submitting || !hasFocusedSpecEditChanges,
     primaryActionLabel: isFocusedSpecEditing ? "Speichern und Berechnung starten" : "Berechnung starten",
-    primaryActionDisabled: submitting || (sourceReviewRequired && !sourceReviewConfirmed),
-    sourceReviewHelperText:
-      sourceReviewRequired && !sourceReviewConfirmed
-        ? "Quellenprüfung bestätigen, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
-        : undefined
+    primaryActionDisabled: submitting || blocksForSourceReview || blocksForOpenQuestions,
+    sourceReviewHelperText: [sourceReviewHelperText, openQuestionHelperText].filter(Boolean).join(" ")
+      || undefined
   };
 }

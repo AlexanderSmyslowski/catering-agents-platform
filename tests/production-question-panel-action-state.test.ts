@@ -105,4 +105,34 @@ describe("production question panel action state", () => {
       }).primaryActionDisabled
     ).toBe(false);
   });
+
+  it("blocks calculation from read mode until open production questions are answered", () => {
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        editingSpecId: undefined,
+        submitting: false,
+        hasFocusedSpecEditChanges: false,
+        openQuestionCount: 2
+      })
+    ).toMatchObject({
+      primaryActionLabel: "Berechnung starten",
+      primaryActionDisabled: true,
+      sourceReviewHelperText: "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    });
+
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        editingSpecId: "spec-1",
+        submitting: false,
+        hasFocusedSpecEditChanges: true,
+        openQuestionCount: 2
+      })
+    ).toMatchObject({
+      primaryActionLabel: "Speichern und Berechnung starten",
+      primaryActionDisabled: false,
+      sourceReviewHelperText: undefined
+    });
+  });
 });
