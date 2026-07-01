@@ -17,6 +17,7 @@ export * from "./llm-readiness-mini-pilot-policy.js";
 export * from "./llm-readiness-openai-transport.js";
 export * from "./llm-readiness-prompt-artifacts.js";
 export * from "./llm-readiness-prompt-schema-registry.js";
+export * from "./llm-readiness-production-dossier-input.js";
 export * from "./llm-readiness-provider-adapter.js";
 export * from "./llm-readiness-run-result.js";
 export * from "./llm-readiness-synthetic-live-slice.js";
