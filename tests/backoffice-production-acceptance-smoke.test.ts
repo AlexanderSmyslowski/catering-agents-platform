@@ -1567,7 +1567,8 @@ describe("backoffice production acceptance smoke", () => {
 
     const renderWorkbench = (
       productionObjectCount: number,
-      specFacts: Array<{ label: string; value: string }> = []
+      specFacts: Array<{ label: string; value: string }> = [],
+      purchaseItemCount = 1
     ) =>
       createElement(
         ProductionConversationalWorkbench,
@@ -1589,7 +1590,7 @@ describe("backoffice production acceptance smoke", () => {
                     productionBatchCount: 2,
                     kitchenSheetCount: 1,
                     recipeSelectionCount: 1,
-                    purchaseItemCount: 1
+                    purchaseItemCount
                   }
                 }
               : {}),
@@ -1680,12 +1681,14 @@ describe("backoffice production acceptance smoke", () => {
         root.render(
           renderWorkbench(1, [
             { label: "Vorgang", value: "PDF-Analyse · 42 Teilnehmer" }
-          ])
+          ], 0)
         );
       });
 
       const workingSheetFacts = document.querySelector('[aria-label="Sofort sichtbare Produktionsdaten"]');
-      expect(workingSheetFacts?.textContent).toContain("2 Mengenkalkulationen · 1 Küchen-/Arbeitsblatt · 1 Einkaufsposition");
+      expect(workingSheetFacts?.textContent).toContain(
+        "2 Mengenkalkulationen · 1 Küchen-/Arbeitsblatt · 1 Einkaufsliste · 0 Einkaufspositionen"
+      );
       expect(workingSheetFacts?.textContent).not.toContain("1 Rezeptkarte");
     } finally {
       if (originalScrollIntoView) {

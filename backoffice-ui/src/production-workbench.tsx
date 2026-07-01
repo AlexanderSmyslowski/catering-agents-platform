@@ -143,7 +143,7 @@ function buildArtifactFact(input: {
   const parts: string[] = [];
   const productionBatchCount = input.dossierMetrics?.productionBatchCount ?? 0;
   const kitchenSheetCount = input.dossierMetrics?.kitchenSheetCount ?? 0;
-  const purchaseItemCount = input.dossierMetrics?.purchaseItemCount ?? 0;
+  const purchaseItemCount = input.dossierMetrics?.purchaseItemCount;
 
   if (productionBatchCount > 0) {
     parts.push(formatCount(productionBatchCount, "Mengenkalkulation", "Mengenkalkulationen"));
@@ -155,10 +155,15 @@ function buildArtifactFact(input: {
     parts.push(formatCount(kitchenSheetCount, "Küchen-/Arbeitsblatt", "Küchen-/Arbeitsblätter"));
   }
 
-  if (purchaseItemCount > 0) {
+  if (typeof purchaseItemCount === "number" && purchaseItemCount > 0) {
     parts.push(formatCount(purchaseItemCount, "Einkaufsposition", "Einkaufspositionen"));
   } else if (input.purchaseListCount > 0) {
-    parts.push(formatCount(input.purchaseListCount, "Einkaufsliste", "Einkaufslisten"));
+    const purchaseListLabel = formatCount(input.purchaseListCount, "Einkaufsliste", "Einkaufslisten");
+    if (typeof purchaseItemCount === "number") {
+      parts.push(`${purchaseListLabel} · 0 Einkaufspositionen`);
+    } else {
+      parts.push(purchaseListLabel);
+    }
   }
 
   return parts.length > 0 ? { label: "Artefakte", value: parts.join(" · ") } : undefined;
