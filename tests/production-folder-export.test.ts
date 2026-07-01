@@ -389,6 +389,29 @@ describe("production folder export", () => {
     expect(html).not.toContain("PAX");
   });
 
+  it("uses singular portion grammar for exactly one portion per person", () => {
+    const input = fixture();
+    input.plan.productionBatches[0].scaledYield = {
+      amount: 45,
+      unit: "servings"
+    };
+    input.plan.kitchenSheets[0].productionQty = {
+      amount: 45,
+      unit: "servings"
+    };
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain("1 Portion p. P.");
+    expect(html).toContain("45 Portionen");
+    expect(html).not.toContain("1 Portionen p. P.");
+    expect(html).not.toContain("servings");
+  });
+
   it("returns 404 for an unknown production plan", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

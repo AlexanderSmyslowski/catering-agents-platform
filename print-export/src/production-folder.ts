@@ -39,8 +39,12 @@ function formatNumber(value: number): string {
     : value.toLocaleString("de-DE", { maximumFractionDigits: 2 });
 }
 
-function formatUnit(unit: string): string {
-  return unit === "servings" ? "Portionen" : unit;
+function formatUnit(unit: string, amount?: number): string {
+  if (unit === "servings" || unit === "Portionen") {
+    return amount === 1 ? "Portion" : "Portionen";
+  }
+
+  return unit;
 }
 
 function formatQuantity(quantity?: { amount: number; unit: string }): string {
@@ -48,7 +52,7 @@ function formatQuantity(quantity?: { amount: number; unit: string }): string {
     return "offen";
   }
 
-  return `${formatNumber(quantity.amount)} ${formatUnit(quantity.unit)}`;
+  return `${formatNumber(quantity.amount)} ${formatUnit(quantity.unit, quantity.amount)}`;
 }
 
 function formatMoney(value?: { amount: number; currency: string }): string | undefined {
@@ -261,7 +265,7 @@ function renderSection6(input: RenderProductionFolderInput, recipeById: Map<stri
     const recipe = source.recipeId ? recipeById.get(source.recipeId) : undefined;
     const total = productionQuantityFor("productionQty" in source ? source : undefined, batch);
     const perPerson = pax && total
-      ? `${formatNumber(total.amount / pax)} ${formatUnit(total.unit)} p. P.`
+      ? `${formatNumber(total.amount / pax)} ${formatUnit(total.unit, total.amount / pax)} p. P.`
       : "offen";
     const lossFactor = recipe?.scalingRules.defaultLossFactor ?? batch?.lossFactor ?? 1;
     const lossNote = lossFactor > 1 ? `Verlustfaktor ${formatNumber(lossFactor)}` : "";
