@@ -389,6 +389,19 @@ describe("production folder export", () => {
     expect(html).not.toContain("PAX");
   });
 
+  it("renders recipe approval states as operator-facing labels", () => {
+    const input = fixture();
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain("Status: Prüfung nötig");
+    expect(html).not.toContain("review_required");
+  });
+
   it("returns 404 for an unknown production plan", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

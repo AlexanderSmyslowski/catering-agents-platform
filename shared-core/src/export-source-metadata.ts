@@ -27,7 +27,7 @@ function recipeSourceTierLabel(tier?: string): string | undefined {
   return tier;
 }
 
-function recipeApprovalStateLabel(approvalState?: string): string | undefined {
+export function formatRecipeApprovalStateLabel(approvalState?: string): string | undefined {
   if (approvalState === "approved_internal") {
     return "intern freigegeben";
   }
@@ -113,7 +113,7 @@ export function formatRecipeSourceEvidenceLabel(
     metadata.recipeId,
     recipeSourceOriginLabel(metadata),
     recipeSourceTierLabel(metadata.sourceTier),
-    recipeApprovalStateLabel(metadata.approvalState),
+    formatRecipeApprovalStateLabel(metadata.approvalState),
     metadata.publisher,
     metadata.url,
     metadata.reference
