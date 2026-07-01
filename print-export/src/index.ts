@@ -8,13 +8,13 @@ import type {
   OfferDraft,
   ProductionPlan,
   PurchaseList,
-  Recipe
+  Recipe,
+  RecipeSourceExportMetadata
 } from "@catering/shared-core";
 import {
   formatDocumentIngestionStatusLabel,
   formatDocumentIngestionWarningLabel,
   formatMetroGroupLabel,
-  formatRecipeSourceEvidenceLabel,
   isDevAuthEnabled,
   RecipeLibrary,
   recipeSourceOriginLabel,
@@ -82,6 +82,28 @@ function productionComponentLabel(
     plan.componentReadiness?.find((component) => component.componentId === componentId)?.label ??
     componentId
   );
+}
+
+function compactLabelParts(parts: Array<string | undefined>): string[] {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+}
+
+function formatProductionPlanRecipeSourceLabel(metadata?: RecipeSourceExportMetadata): string {
+  if (!metadata) {
+    return "Quelle offen";
+  }
+
+  const referenceLabel = recipeSourceReferenceLabel(metadata);
+  const shouldShowReference =
+    metadata.originType !== "internal_db" && referenceLabel !== "Quelle offen";
+
+  return compactLabelParts([
+    metadata.recipeName,
+    recipeSourceOriginLabel(metadata),
+    shouldShowReference ? referenceLabel : undefined
+  ]).join(" · ");
 }
 
 function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
@@ -214,10 +236,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
         const kitchenSheet = plan.kitchenSheets.find((sheet) =>
           sheet.componentId === batch.componentId && sheet.recipeId === batch.recipeId
         );
-        const sourceLabel = formatRecipeSourceEvidenceLabel(
-          batch.recipeSource ?? kitchenSheet?.recipeSource,
-          batch.recipeId
-        );
+        const sourceLabel = formatProductionPlanRecipeSourceLabel(batch.recipeSource ?? kitchenSheet?.recipeSource);
 
         return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, spec))}</h2><p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
           .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)

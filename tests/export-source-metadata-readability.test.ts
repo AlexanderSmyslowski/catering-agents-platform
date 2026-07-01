@@ -262,7 +262,9 @@ describe("export source metadata readability", () => {
     expect(html).toContain("Web-Rezept geprüft");
     expect(html).toContain("Example Recipes");
     expect(html).toContain("https://example.test/tomato-soup");
+    expect(html).not.toContain("recipe-tomato-soup");
     expect(csv).toContain("\"Web-Rezept geprüft\"");
+    expect(csv).toContain("\"recipe-tomato-soup\"");
     expect(csv).toContain(
       "\"Example Recipes | https://example.test/tomato-soup | web:tomato-soup\""
     );
@@ -356,8 +358,9 @@ describe("export source metadata readability", () => {
     expect(validateProductionPlan(legacyPlan)).toBe(legacyPlan);
     expect(validatePurchaseList(legacyPurchaseList)).toBe(legacyPurchaseList);
     expect(renderProductionPlanHtml(legacyPlan)).toContain(
-      "Quelle offen (recipe-tomato-soup)"
+      "Quelle offen"
     );
+    expect(renderProductionPlanHtml(legacyPlan)).not.toContain("recipe-tomato-soup");
     expect(renderPurchaseListCsv(legacyPurchaseList)).toContain(
       "\"Quelle offen\""
     );
