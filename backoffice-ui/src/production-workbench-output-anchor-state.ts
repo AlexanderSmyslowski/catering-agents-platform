@@ -24,6 +24,53 @@ function formatQuestionStatus(count: number): string {
   return count === 1 ? "1 Rückfrage sichtbar" : `${count} Rückfragen sichtbar`;
 }
 
+function formatOpenQuestionCount(count: number): string {
+  if (count === 0) {
+    return "keine offenen Rückfragen";
+  }
+  return count === 1 ? "1 Rückfrage offen" : `${count} Rückfragen offen`;
+}
+
+function formatAssumptionBasis(metrics?: ProductionDossierMetrics): string {
+  const assumptionCount = metrics?.assumptionCount ?? 0;
+  if (assumptionCount === 0) {
+    return "Annahmen fachlich prüfen";
+  }
+  return assumptionCount === 1 ? "1 Annahme sichtbar" : `${assumptionCount} Annahmen sichtbar`;
+}
+
+function formatArtifactBasis(hasPlan: boolean, hasPurchaseList: boolean): string {
+  if (hasPlan && hasPurchaseList) {
+    return "Plan und Einkaufsliste vorhanden";
+  }
+  if (hasPlan) {
+    return "Plan vorhanden, Einkauf offen";
+  }
+  return "Plan und Einkauf nach Berechnung offen";
+}
+
+function formatWorkingBasisStatus(input: {
+  hasSpecFacts: boolean;
+  questionCount: number;
+  hasPlan: boolean;
+  hasPurchaseList: boolean;
+  metrics?: ProductionDossierMetrics;
+}): string {
+  const sourcePart = input.hasSpecFacts
+    ? "Eckdaten und Speisen erkannt"
+    : input.hasPlan
+      ? "Produktionsplan sichtbar"
+      : "Spezifikation im Fokus";
+  const parts = [
+    sourcePart,
+    formatOpenQuestionCount(input.questionCount),
+    formatAssumptionBasis(input.metrics),
+    formatArtifactBasis(input.hasPlan, input.hasPurchaseList),
+    "Freigabe nicht erteilt"
+  ];
+  return `Arbeitsgrundlage: ${parts.join(" · ")}`;
+}
+
 function formatQuestionReviewStatus(count: number, metrics?: ProductionDossierMetrics): string {
   const answeredCount = metrics?.answeredQuestionCount ?? 0;
   const preview = metrics?.questionPreview?.trim();
@@ -116,6 +163,13 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
   const hasQuestions = input.questionCount > 0;
   const hasPlan = input.productionObjectCount > 0;
   const hasPurchaseList = input.purchaseListCount > 0;
+  const workingBasisStatus = formatWorkingBasisStatus({
+    hasSpecFacts,
+    questionCount: input.questionCount,
+    hasPlan,
+    hasPurchaseList,
+    metrics: input.dossierMetrics
+  });
   const reviewItems = [
     {
       label: "Verständnis des Angebots",
@@ -167,8 +221,7 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
         title: "Produktionsplan prüfen",
         description:
           "Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.",
-        grouping:
-          "Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen; Beschaffung bleibt offen.",
+        grouping: workingBasisStatus,
         reviewItems
       };
     }
@@ -177,8 +230,7 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
       title: "Produktionsarbeit prüfen",
       description:
         "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.",
-      grouping:
-        "Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar; ältere Vorgänge bleiben eingeklappt.",
+      grouping: workingBasisStatus,
       reviewItems
     };
   }
@@ -188,8 +240,7 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
       title: "Produktionsdaten prüfen",
       description:
         "Erkannte Eckdaten und Speisen liegen vor. Bitte Angaben prüfen und danach die Berechnung starten.",
-      grouping:
-        "Plan, Einkaufsliste und Exportlinks entstehen erst nach der Berechnung; Rückfragen bleiben sichtbar.",
+      grouping: workingBasisStatus,
       reviewItems
     };
   }
@@ -198,7 +249,7 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
     title: "Produktionsplan berechnen",
     description:
       "Noch kein Produktionsplan bereit: Zuerst Berechnung starten; Einkaufsliste und Exportlinks bleiben bis dahin offen.",
-    grouping: "Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.",
+    grouping: workingBasisStatus,
     reviewItems
   };
 }

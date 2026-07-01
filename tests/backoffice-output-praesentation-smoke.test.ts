@@ -410,7 +410,9 @@ describe("backoffice production presentation smoke", () => {
     expect(content).not.toContain("Status: noch kein Ergebnis");
     expect(content).not.toContain("Mini-Pilot-Status vor Export");
     expect(content).not.toContain("Export erst nach gruenem Mini-Pilot-Check");
-    expect(content).toContain("Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar");
+    expect(content).toContain("Arbeitsgrundlage:");
+    expect(content).toContain("Plan und Einkaufsliste vorhanden");
+    expect(content).toContain("Freigabe nicht erteilt");
     expect(content).toContain("Produktionsblatt exportieren");
     expect(content).toContain("Einkaufsliste exportieren");
     expect(content).toContain("Plan, Mengen und Rezeptquellen prüfen");

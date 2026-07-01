@@ -15,7 +15,7 @@ describe("production workbench output anchor state", () => {
       description:
         "Erkannte Eckdaten und Speisen liegen vor. Bitte Angaben prüfen und danach die Berechnung starten.",
       grouping:
-        "Plan, Einkaufsliste und Exportlinks entstehen erst nach der Berechnung; Rückfragen bleiben sichtbar.",
+        "Arbeitsgrundlage: Eckdaten und Speisen erkannt · keine offenen Rückfragen · Annahmen fachlich prüfen · Plan und Einkauf nach Berechnung offen · Freigabe nicht erteilt",
       reviewItems: [
         { label: "Verständnis des Angebots", status: "Eckdaten sichtbar" },
         { label: "Rückfragen", status: "keine offenen Rückfragen sichtbar" },
@@ -42,7 +42,7 @@ describe("production workbench output anchor state", () => {
       description:
         "Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.",
       grouping:
-        "Bitte Plan, Mengen, Rezeptquellen und Freigabegrenzen prüfen; Beschaffung bleibt offen.",
+        "Arbeitsgrundlage: Produktionsplan sichtbar · keine offenen Rückfragen · Annahmen fachlich prüfen · Plan vorhanden, Einkauf offen · Freigabe nicht erteilt",
       reviewItems: [
         { label: "Verständnis des Angebots", status: "Spezifikation sichtbar" },
         { label: "Rückfragen", status: "keine offenen Rückfragen sichtbar" },
@@ -69,7 +69,7 @@ describe("production workbench output anchor state", () => {
       description:
         "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.",
       grouping:
-        "Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar; ältere Vorgänge bleiben eingeklappt.",
+        "Arbeitsgrundlage: Produktionsplan sichtbar · 2 Rückfragen offen · Annahmen fachlich prüfen · Plan und Einkaufsliste vorhanden · Freigabe nicht erteilt",
       reviewItems: [
         { label: "Verständnis des Angebots", status: "Spezifikation sichtbar, Klärpunkte offen" },
         { label: "Rückfragen", status: "2 Rückfragen sichtbar" },
@@ -133,7 +133,8 @@ describe("production workbench output anchor state", () => {
       title: "Produktionsplan berechnen",
       description:
         "Noch kein Produktionsplan bereit: Zuerst Berechnung starten; Einkaufsliste und Exportlinks bleiben bis dahin offen.",
-      grouping: "Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.",
+      grouping:
+        "Arbeitsgrundlage: Spezifikation im Fokus · 1 Rückfrage offen · Annahmen fachlich prüfen · Plan und Einkauf nach Berechnung offen · Freigabe nicht erteilt",
       reviewItems: [
         { label: "Verständnis des Angebots", status: "Spezifikation sichtbar, Klärpunkte offen" },
         { label: "Rückfragen", status: "1 Rückfrage sichtbar" },
