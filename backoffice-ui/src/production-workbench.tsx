@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
@@ -128,6 +128,8 @@ export function ProductionConversationalWorkbench({
   });
   const hasVisibleProductionWork =
     questionCount > 0 || answeredQuestionCount > 0 || productionObjectCount > 0 || purchaseListCount > 0;
+  const productionResultsRef = useRef<HTMLDivElement>(null);
+  const previousHasVisibleProductionWork = useRef(hasVisibleProductionWork);
   const inputSlot = hasVisibleProductionWork ? (
     <details className="progressive-panel production-input-collapse">
       <summary>
@@ -146,6 +148,19 @@ export function ProductionConversationalWorkbench({
   const composerHelperText = hasVisibleProductionWork
     ? "Plan, Einkaufsliste, Rückfragen und Exporte stehen im aktuellen Vorgang."
     : "Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.";
+
+  useEffect(() => {
+    const becameVisible = hasVisibleProductionWork && !previousHasVisibleProductionWork.current;
+    previousHasVisibleProductionWork.current = hasVisibleProductionWork;
+
+    if (!becameVisible) {
+      return;
+    }
+
+    const target = productionResultsRef.current;
+    target?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    target?.focus({ preventScroll: true });
+  }, [hasVisibleProductionWork]);
 
   return (
     <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
@@ -166,7 +181,12 @@ export function ProductionConversationalWorkbench({
         {hasVisibleProductionWork ? null : inputSlot}
       </article>
 
-      <div className="production-objects-zone">
+      <div
+        ref={productionResultsRef}
+        className="production-objects-zone"
+        tabIndex={-1}
+        aria-label="Aktuelle Produktionsergebnisse"
+      >
         <span className="visually-hidden">production-objects-zone</span>
         <article className="production-output-anchor" aria-label="Nächster Schritt zur Produktionsarbeit">
           <p className="eyebrow">Nächster Arbeitsschritt</p>

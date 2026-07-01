@@ -1476,6 +1476,99 @@ describe("backoffice production acceptance smoke", () => {
     });
   });
 
+  it("moves focus to the production results when analysis creates visible work", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
+
+    const renderWorkbench = (productionObjectCount: number) =>
+      createElement(
+        ProductionConversationalWorkbench,
+        {
+          summary: {
+            activeSpecLabel:
+              productionObjectCount > 0 ? "Business Lunch · 42 Teilnehmer" : "Noch kein aktiver Vorgang",
+            readinessLabel: productionObjectCount > 0 ? "vollständig" : "-",
+            planStatusLabel: productionObjectCount > 0 ? "vollständig" : "offen",
+            purchaseStatusLabel: productionObjectCount > 0 ? "1 Liste · 1 Positionen" : "noch keine Liste",
+            questionCount: 0,
+            answeredQuestionCount: 0,
+            unansweredQuestionCount: 0,
+            productionObjectCount,
+            productionObjectStatusLabel: productionObjectCount > 0 ? "1 Plan · vollständig" : "noch kein Plan",
+            purchaseListCount: productionObjectCount > 0 ? 1 : 0
+          },
+          nextStep: {
+            title: productionObjectCount > 0 ? "Produktionsarbeit prüfen" : "Auftrag einfügen oder Datei ablegen",
+            description:
+              productionObjectCount > 0
+                ? "Produktionsplan und Einkaufsliste liegen vor."
+                : "Starte mit Angebot, E-Mail, Text oder manuellen Veranstaltungsdaten."
+          },
+          miniPilotRawResult: "",
+          setMiniPilotRawResult: () => undefined,
+          miniPilotReportState: {
+            statusLabel: "noch kein Ergebnis",
+            reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+            nextStepLabel:
+              "Check lokal ausfuehren, JSON einfuellen und dann erst mit dem Draft weiterarbeiten.",
+            commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+            errorLabels: []
+          },
+          slots: {
+            inputSlot: createElement("div", { className: "production-column production-column--input" }, "input"),
+            questionsSlot: createElement("div", null),
+            productionObjectsSlot: createElement(
+              "div",
+              { className: "production-column production-column--objects" },
+              "objekte"
+            ),
+            purchaseListSlot: createElement("div", null),
+            lowerSlots: createElement("div", null)
+          }
+        }
+      );
+
+    try {
+      await act(async () => {
+        root.render(renderWorkbench(0));
+      });
+
+      const initialResults = document.querySelector<HTMLElement>('[aria-label="Aktuelle Produktionsergebnisse"]');
+      expect(initialResults).not.toBeNull();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(document.activeElement).not.toBe(initialResults);
+
+      await act(async () => {
+        root.render(renderWorkbench(1));
+      });
+
+      const focusedResults = document.querySelector<HTMLElement>('[aria-label="Aktuelle Produktionsergebnisse"]');
+      expect(focusedResults).not.toBeNull();
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+      expect(document.activeElement).toBe(focusedResults);
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+          configurable: true,
+          value: originalScrollIntoView
+        });
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+      }
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   it("does not claim an existing production plan while the summary is loading", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
