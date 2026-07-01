@@ -110,6 +110,7 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
 }
 
 export function renderOfferHtml(draft: OfferDraft): string {
+  const publishApproved = draft.reviewStatus?.publishApproved === true;
   const openQuestionsSection =
     draft.openQuestions.length > 0
       ? [
@@ -118,6 +119,24 @@ export function renderOfferHtml(draft: OfferDraft): string {
             .join("")}</ul></section>`
         ]
       : ["<p>Offene Punkte: keine</p>"];
+  const reviewStatusSection = publishApproved
+    ? []
+    : [
+        "<section><h2>Interne Prüfung</h2>",
+        "<p>Kundentext erst nach Publish-Freigabe exportieren.</p>",
+        "<ul>",
+        `<li>Preis: ${escapeHtml(draft.reviewStatus?.priceReviewStatus ?? "review_required")}</li>`,
+        `<li>MwSt.: ${escapeHtml(draft.reviewStatus?.taxReviewStatus ?? "review_required")}</li>`,
+        `<li>Allergene: ${escapeHtml(draft.reviewStatus?.allergenReviewStatus ?? "review_required")}</li>`,
+        `<li>Hygiene/Temperatur: ${escapeHtml(
+          draft.reviewStatus?.hygieneTemperatureReviewStatus ?? "review_required"
+        )}</li>`,
+        "</ul>",
+        "</section>"
+      ];
+  const customerTextSection = publishApproved
+    ? ["<pre>", escapeHtml(draft.customerFacingText), "</pre>"]
+    : [];
 
   return [
     "<html><body>",
@@ -130,9 +149,8 @@ export function renderOfferHtml(draft: OfferDraft): string {
     ...draft.serviceModules.map((module) => `<li>${escapeHtml(module.label)}</li>`),
     "</ul>",
     `<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toFixed(2)} ${escapeHtml(draft.pricingSummary.subtotal.currency)}</p>`,
-    "<pre>",
-    escapeHtml(draft.customerFacingText),
-    "</pre>",
+    ...reviewStatusSection,
+    ...customerTextSection,
     "</body></html>"
   ].join("");
 }

@@ -3758,7 +3758,9 @@ describe("catering agents platform", () => {
     expect(offerExportResponse.headers["content-type"]).toContain("text/html");
     expect(offerExportResponse.body).toContain("<h1>Angebot</h1>");
     expect(offerExportResponse.body).not.toContain(String(draft.draftId));
-    expect(offerExportResponse.body).toContain("Vielen Dank");
+    expect(offerExportResponse.body).toContain("Interne Prüfung");
+    expect(offerExportResponse.body).toContain("Kundentext erst nach Publish-Freigabe exportieren.");
+    expect(offerExportResponse.body).not.toContain("Vielen Dank");
 
     const partialOfferExportResponse = await exportApp.inject({
       method: "GET",
