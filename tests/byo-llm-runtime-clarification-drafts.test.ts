@@ -131,12 +131,31 @@ describe("BYO LLM runtime clarification drafts", () => {
         }
       );
     };
-    const adapter = buildByoLlmAdapterFromEnv(
+    const blockedAdapter = buildByoLlmAdapterFromEnv(
       {
         CATERING_LLM_PROVIDER: "openai",
         CATERING_LLM_MODEL: "test-byo-model",
         OPENAI_API_KEY: "test-key",
         CATERING_LLM_BASE_URL: "https://example.test/v1/responses"
+      },
+      { fetchImpl }
+    );
+    const blockedResponse = await blockedAdapter.run({ input: structuredClone(llmReadinessEvalFixtures[0].input) });
+
+    expect(blockedResponse).toMatchObject({
+      ok: false,
+      adapterMode: "synthetic_live",
+      errors: ["provider calls require explicit synthetic-live opt-in"]
+    });
+    expect(calls).toHaveLength(0);
+
+    const adapter = buildByoLlmAdapterFromEnv(
+      {
+        CATERING_LLM_PROVIDER: "openai",
+        CATERING_LLM_MODEL: "test-byo-model",
+        OPENAI_API_KEY: "test-key",
+        CATERING_LLM_BASE_URL: "https://example.test/v1/responses",
+        CATERING_SYNTHETIC_LLM_SLICE: "1"
       },
       { fetchImpl }
     );

@@ -57,6 +57,10 @@ describe("data safety and audit gates", () => {
       scope: "synthetic_or_demo_only",
       externalExposure: "blocked_until_decision"
     });
+    expect(dataIngressPaths.find((path) => path.id === "production_clarification_draft")).toMatchObject({
+      externalExposure: "blocked_until_decision",
+      requiredGate: expect.stringContaining("CATERING_SYNTHETIC_LLM_SLICE")
+    });
     expect(dataIngressPaths.find((path) => path.id === "web_recipe_search")).toMatchObject({
       externalExposure: "disabled_by_default",
       requiredGate: "CATERING_ENABLE_WEB_RECIPE_SEARCH explicit opt-in"
@@ -191,6 +195,7 @@ describe("data safety and audit gates", () => {
         id: "llm_provider_gate",
         boundary: "llm_provider",
         defaultState: "disabled",
+        enablementGate: expect.stringContaining("CATERING_SYNTHETIC_LLM_SLICE"),
         allowedDataScope: "synthetic_or_demo_only",
         writeEffectsAllowed: false
       }),

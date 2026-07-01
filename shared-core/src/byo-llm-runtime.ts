@@ -5,6 +5,7 @@ import {
 import {
   createOpenAiSyntheticLiveTransportFromEnv
 } from "./llm-readiness-openai-transport.js";
+import { validateByoLlmProviderRunBoundary } from "./byo-llm-boundary.js";
 import {
   FixtureOnlyLlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapter,
@@ -61,6 +62,56 @@ class OpenAiByoLlmReadinessProviderAdapter implements LlmReadinessProviderAdapte
   }
 }
 
+class BoundaryGuardedByoLlmProviderAdapter implements LlmReadinessProviderAdapter {
+  readonly adapterId: LlmReadinessProviderAdapter["adapterId"];
+  readonly adapterMode: LlmReadinessProviderAdapter["adapterMode"];
+
+  constructor(
+    private readonly providerKind: ByoLlmRuntimeProvider,
+    private readonly env: Record<string, string | undefined>,
+    private readonly delegate: LlmReadinessProviderAdapter
+  ) {
+    this.adapterId = delegate.adapterId;
+    this.adapterMode = delegate.adapterMode;
+  }
+
+  async run(request: LlmReadinessProviderAdapterRequest): Promise<LlmReadinessProviderAdapterResponse> {
+    const inputBoundary = validateByoLlmProviderRunBoundary({
+      providerKind: this.providerKind,
+      env: this.env,
+      input: request.input
+    });
+
+    if (!inputBoundary.valid) {
+      return {
+        ok: false,
+        errors: inputBoundary.errors,
+        adapterId: this.adapterId,
+        adapterMode: this.adapterMode,
+        promptSchemaId: request.promptSchemaId
+      };
+    }
+
+    const response = await this.delegate.run(request);
+    const outputBoundary = validateByoLlmProviderRunBoundary({
+      providerKind: this.providerKind,
+      env: this.env,
+      input: request.input,
+      outputCandidate: response.outputCandidate
+    });
+
+    if (!outputBoundary.valid) {
+      return {
+        ...response,
+        ok: false,
+        errors: [...new Set([...response.errors, ...outputBoundary.errors])]
+      };
+    }
+
+    return response;
+  }
+}
+
 export function buildByoLlmAdapterFromEnv(
   env: Record<string, string | undefined> = process.env,
   options: BuildByoLlmAdapterOptions = {}
@@ -68,17 +119,25 @@ export function buildByoLlmAdapterFromEnv(
   const provider = normalizedProvider(env.CATERING_LLM_PROVIDER);
 
   if (provider === "fixture") {
-    return new FixtureOnlyLlmReadinessProviderAdapter();
+    return new BoundaryGuardedByoLlmProviderAdapter(
+      provider,
+      env,
+      new FixtureOnlyLlmReadinessProviderAdapter()
+    );
   }
 
   if (provider === "codex_cli") {
-    return new CodexCliLlmReadinessProviderAdapter({
-      cliBin: env.CATERING_LLM_CLI_BIN,
-      model: env.CATERING_LLM_MODEL,
-      timeoutMs: parseOptionalPositiveInteger(env.CATERING_LLM_CLI_TIMEOUT_MS, "CATERING_LLM_CLI_TIMEOUT_MS"),
-      execImpl: options.codexCliExec,
-      providerRunIdPrefix: options.providerRunIdPrefix
-    });
+    return new BoundaryGuardedByoLlmProviderAdapter(
+      provider,
+      env,
+      new CodexCliLlmReadinessProviderAdapter({
+        cliBin: env.CATERING_LLM_CLI_BIN,
+        model: env.CATERING_LLM_MODEL,
+        timeoutMs: parseOptionalPositiveInteger(env.CATERING_LLM_CLI_TIMEOUT_MS, "CATERING_LLM_CLI_TIMEOUT_MS"),
+        execImpl: options.codexCliExec,
+        providerRunIdPrefix: options.providerRunIdPrefix
+      })
+    );
   }
 
   const apiKey = env.CATERING_LLM_API_KEY ?? env.OPENAI_API_KEY;
@@ -104,11 +163,15 @@ export function buildByoLlmAdapterFromEnv(
     );
   }
 
-  return new OpenAiByoLlmReadinessProviderAdapter(
-    new SyntheticLiveLlmReadinessSlice({
-      enabled: true,
-      transport
-    }),
-    options.providerRunIdPrefix ?? "byo-llm"
+  return new BoundaryGuardedByoLlmProviderAdapter(
+    provider,
+    env,
+    new OpenAiByoLlmReadinessProviderAdapter(
+      new SyntheticLiveLlmReadinessSlice({
+        enabled: true,
+        transport
+      }),
+      options.providerRunIdPrefix ?? "byo-llm"
+    )
   );
 }

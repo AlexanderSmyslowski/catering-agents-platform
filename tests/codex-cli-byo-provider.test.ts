@@ -112,7 +112,8 @@ describe("Codex CLI BYO LLM provider", () => {
         CATERING_LLM_PROVIDER: "codex_cli",
         CATERING_LLM_CLI_BIN: "codex-test",
         CATERING_LLM_MODEL: "test-codex-model",
-        CATERING_LLM_CLI_TIMEOUT_MS: "1234"
+        CATERING_LLM_CLI_TIMEOUT_MS: "1234",
+        CATERING_SYNTHETIC_LLM_SLICE: "1"
       },
       { codexCliExec: successfulCodexExec(calls) }
     );
@@ -165,7 +166,7 @@ describe("Codex CLI BYO LLM provider", () => {
 
   it("distinguishes missing binary, login and timeout errors without fixture fallback", async () => {
     const missingBinaryAdapter = buildByoLlmAdapterFromEnv(
-      { CATERING_LLM_PROVIDER: "codex_cli" },
+      { CATERING_LLM_PROVIDER: "codex_cli", CATERING_SYNTHETIC_LLM_SLICE: "1" },
       {
         codexCliExec: async () => ({
           exitCode: null,
@@ -176,7 +177,7 @@ describe("Codex CLI BYO LLM provider", () => {
       }
     );
     const loginAdapter = buildByoLlmAdapterFromEnv(
-      { CATERING_LLM_PROVIDER: "codex_cli" },
+      { CATERING_LLM_PROVIDER: "codex_cli", CATERING_SYNTHETIC_LLM_SLICE: "1" },
       {
         codexCliExec: async () => ({
           exitCode: 1,
@@ -189,7 +190,8 @@ describe("Codex CLI BYO LLM provider", () => {
     const timeoutAdapter = buildByoLlmAdapterFromEnv(
       {
         CATERING_LLM_PROVIDER: "codex_cli",
-        CATERING_LLM_CLI_TIMEOUT_MS: "5"
+        CATERING_LLM_CLI_TIMEOUT_MS: "5",
+        CATERING_SYNTHETIC_LLM_SLICE: "1"
       },
       {
         codexCliExec: async () => ({
@@ -243,7 +245,8 @@ describe("Codex CLI BYO LLM provider", () => {
         buildByoLlmAdapterFromEnv(
           {
             CATERING_LLM_PROVIDER: "codex_cli",
-            CATERING_LLM_CLI_BIN: "codex-test"
+            CATERING_LLM_CLI_BIN: "codex-test",
+            CATERING_SYNTHETIC_LLM_SLICE: "1"
           },
           { codexCliExec: successfulCodexExec(calls) }
         )
@@ -295,7 +298,10 @@ describe("Codex CLI BYO LLM provider", () => {
       trustedActorSecret: TRUSTED_SECRET,
       buildLlmAdapter: () =>
         buildByoLlmAdapterFromEnv(
-          { CATERING_LLM_PROVIDER: "codex_cli" },
+          {
+            CATERING_LLM_PROVIDER: "codex_cli",
+            CATERING_SYNTHETIC_LLM_SLICE: "1"
+          },
           {
             codexCliExec: async () => ({
               exitCode: 0,

@@ -173,7 +173,7 @@ export const dataIngressPaths = [
     source: "AcceptedEventSpec and BYO-LLM draft adapter",
     scope: "operator_supplied_internal",
     externalExposure: "blocked_until_decision",
-    requiredGate: "production_operator auth and human review before product write"
+    requiredGate: "production_operator auth, fixture-only default or explicit CATERING_SYNTHETIC_LLM_SLICE opt-in, human review before product write"
   },
   {
     id: "production_clarification_draft_decision",
@@ -521,7 +521,7 @@ export const externalBoundaryGates = [
     service: "shared-core",
     boundary: "llm_provider",
     defaultState: "disabled",
-    enablementGate: "LLM readiness policy requires providerCalls disabled",
+    enablementGate: "CATERING_SYNTHETIC_LLM_SLICE explicit opt-in plus providerCalls disabled and synthetic/demo data policy",
     allowedDataScope: "synthetic_or_demo_only",
     writeEffectsAllowed: false
   },
