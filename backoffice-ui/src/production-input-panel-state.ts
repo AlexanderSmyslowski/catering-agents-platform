@@ -43,6 +43,7 @@ export type ProductionInputPanelState = {
   selectedFileName?: string;
   showAnalysingProgress: boolean;
   showCompletedProgress: boolean;
+  completedProgressHelperLabel: string;
   documentEtaLabel: string;
   uploadResultSummary?: ProductionUploadResultSummaryState;
 };
@@ -392,6 +393,21 @@ function buildUploadResultSummary(input: {
   };
 }
 
+function formatCompletedProgressHelperLabel(input: {
+  documentPhase: ProductionSourceInputValues["documentPhase"];
+  focusedProductionSpec?: Record<string, unknown>;
+}): string {
+  if (input.documentPhase !== "done") {
+    return "";
+  }
+
+  if (buildProductionSpecDetailsState(input.focusedProductionSpec)) {
+    return "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe.";
+  }
+
+  return "Quelle wurde verarbeitet; noch keine belastbaren Produktionsdaten erkannt.";
+}
+
 export function buildProductionInputPanelState(input: {
   submitting: boolean;
   sourceInput: ProductionSourceInputValues;
@@ -409,6 +425,10 @@ export function buildProductionInputPanelState(input: {
       input.sourceInput.documentPhase === "analysing" && Boolean(input.sourceInput.activeDocumentName),
     showCompletedProgress:
       input.sourceInput.documentPhase === "done" && Boolean(input.sourceInput.activeDocumentName),
+    completedProgressHelperLabel: formatCompletedProgressHelperLabel({
+      documentPhase: input.sourceInput.documentPhase,
+      focusedProductionSpec: input.focusedProductionSpec
+    }),
     documentEtaLabel: formatEta(input.sourceInput.documentEtaSeconds ?? 1),
     uploadResultSummary: buildUploadResultSummary({
       documentPhase: input.sourceInput.documentPhase,

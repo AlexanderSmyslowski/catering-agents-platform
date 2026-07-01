@@ -74,7 +74,8 @@ describe("production input panel state", () => {
       })
     ).toMatchObject({
       showAnalysingProgress: false,
-      showCompletedProgress: true
+      showCompletedProgress: true,
+      completedProgressHelperLabel: "Quelle wurde verarbeitet; noch keine belastbaren Produktionsdaten erkannt."
     });
   });
 
@@ -135,38 +136,41 @@ describe("production input panel state", () => {
   });
 
   it("builds a compact visible production summary after document analysis", () => {
-    expect(
-      buildProductionInputPanelState({
-        submitting: false,
-        sourceInput: sourceInput({
-          documentPhase: "done",
-          activeDocumentName: "angebot.pdf"
-        }),
-        focusedProductionSpec: {
-          event: { type: "conference", date: "2026-09-03" },
-          attendees: { expected: 90 },
-          servicePlan: { serviceForm: "buffet" },
-          readiness: { status: "partial" },
-          menuPlan: [
-            {
-              componentId: "lunch",
-              label: "Lunchbuffet",
-              menuCategory: "classic",
-              productionDecision: { mode: "scratch" }
-            },
-            {
-              componentId: "coffee",
-              label: "Kaffeestation"
-            }
-          ]
-        },
-        productionQuestions: [
-          "Lunchbuffet: Herstellungsentscheidung fehlt.",
-          "Kaffeestation: Kategorie fehlt."
-        ],
-        productionAssumptions: ["Serviceform als Buffet abgeleitet."]
-      }).uploadResultSummary
-    ).toEqual({
+    const state = buildProductionInputPanelState({
+      submitting: false,
+      sourceInput: sourceInput({
+        documentPhase: "done",
+        activeDocumentName: "angebot.pdf"
+      }),
+      focusedProductionSpec: {
+        event: { type: "conference", date: "2026-09-03" },
+        attendees: { expected: 90 },
+        servicePlan: { serviceForm: "buffet" },
+        readiness: { status: "partial" },
+        menuPlan: [
+          {
+            componentId: "lunch",
+            label: "Lunchbuffet",
+            menuCategory: "classic",
+            productionDecision: { mode: "scratch" }
+          },
+          {
+            componentId: "coffee",
+            label: "Kaffeestation"
+          }
+        ]
+      },
+      productionQuestions: [
+        "Lunchbuffet: Herstellungsentscheidung fehlt.",
+        "Kaffeestation: Kategorie fehlt."
+      ],
+      productionAssumptions: ["Serviceform als Buffet abgeleitet."]
+    });
+
+    expect(state.completedProgressHelperLabel).toBe(
+      "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
+    );
+    expect(state.uploadResultSummary).toEqual({
       eventLabel: "Eventtyp: Konferenz · Datum: 2026-09-03",
       summaryLabel: "Teilnehmerzahl: 90 · Serviceform: Buffet",
       snapshotItems: [

@@ -200,9 +200,7 @@ export function ProductionInputPanel({
               <p className="processing-note processing-note--success">
                 Analyse abgeschlossen für {sourceInput.activeDocumentName}.
               </p>
-              <p className="helper-text">
-                Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe.
-              </p>
+              <p className="helper-text">{panelState.completedProgressHelperLabel}</p>
               {panelState.uploadResultSummary ? (
                 <div className="upload-result-summary" aria-label="Erkannte Produktionsdaten">
                   <div>
