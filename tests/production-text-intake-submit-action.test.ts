@@ -58,7 +58,7 @@ describe("production text intake submit action", () => {
       "createAcceptedSpecFromText:Lunch fuer 40 Personen mit Tomatensuppe.",
       "setFocusedProductionSpecId:spec-text-1",
       "refreshDashboard",
-      "setNotice:Freitext wurde in eine operative Spezifikation überführt.",
+      "setNotice:Freitext ist zur Prüfung übernommen. Erkannte Produktionsgrundlage prüfen, Rückfragen klären und danach Berechnung starten; keine automatische Produktionsfreigabe.",
       "setSubmitting:false"
     ]);
   });
@@ -73,7 +73,9 @@ describe("production text intake submit action", () => {
 
     expect(actionsInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
     expect(actionsInput.refreshDashboard).toHaveBeenCalledTimes(1);
-    expect(actionsInput.setNotice).toHaveBeenCalledWith("Freitext wurde in eine operative Spezifikation überführt.");
+    expect(actionsInput.setNotice).toHaveBeenCalledWith(
+      "Freitext ist zur Prüfung übernommen. Erkannte Produktionsgrundlage prüfen, Rückfragen klären und danach Berechnung starten; keine automatische Produktionsfreigabe."
+    );
   });
 
   it("surfaces normalization failures and always exits submitting state", async () => {

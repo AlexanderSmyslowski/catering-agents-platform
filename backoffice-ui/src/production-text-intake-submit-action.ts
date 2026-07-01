@@ -35,7 +35,9 @@ export function buildProductionTextIntakeSubmitAction({
         setFocusedProductionSpecId(specId);
       }
       await refreshDashboard();
-      setNotice("Freitext wurde in eine operative Spezifikation überführt.");
+      setNotice(
+        "Freitext ist zur Prüfung übernommen. Erkannte Produktionsgrundlage prüfen, Rückfragen klären und danach Berechnung starten; keine automatische Produktionsfreigabe."
+      );
     } catch (submitError) {
       setError(
         formatSubmitErrorMessage(submitError, "Erfassungstext konnte nicht normalisiert werden.")
