@@ -4,6 +4,12 @@ Status: Entwurf v0.1 auf Basis des aktuellen Repo-Iststands
 
 Stand: 2026-04-11
 
+Hinweis 2026-07-01: Fuer die naechsten Architektur- und Code-Slices ist
+`docs/product/PFLICHTENHEFT_BYO_AI_CATERING_HARNESS.md` der fuehrende
+Zielanker. Es schaerft dieses alte Pflichtenheft in Richtung providerneutrales
+Catering Harness, getrennte Angebots-/Produktionsprodukte, eigene
+Wissensschicht und konsequenten Ballast-Abbau.
+
 ## 1. Zweck des Dokuments
 
 Dieses Dokument beschreibt den aktuellen fachlichen und technischen Ziel- und Arbeitsrahmen der Repository-basierten Catering Agents Platform. Es ist bewusst repo-gebunden, lebt vom realen Ist-Stand und ersetzt kein abstraktes generisches Projektpapier.
