@@ -1489,6 +1489,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
     expect(content).toContain("Produktionsmappe-Status");
+    const checklistPanel = document.querySelector<HTMLDetailsElement>(".production-output-checklist-panel");
+    expect(checklistPanel).not.toBeNull();
+    expect(checklistPanel?.open).toBe(false);
+    expect(checklistPanel?.querySelector("summary")?.textContent).toContain("9 Prüfpunkte anzeigen");
     expect(document.querySelector('[aria-label="Produktionsmappe-Status"]')).not.toBeNull();
     expect(content).toContain("Verständnis des Angebots");
     expect(content).toContain("Rückfragen");

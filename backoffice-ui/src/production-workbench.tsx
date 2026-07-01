@@ -330,18 +330,24 @@ export function ProductionConversationalWorkbench({
               </dl>
             </>
           ) : null}
-          <p className="eyebrow production-output-checklist-label">Produktionsmappe-Status</p>
-          <ol className="production-output-checklist" aria-label="Produktionsmappe-Status">
-            {productionOutputAnchor.reviewItems.map((item, index) => (
-              <li key={item.label}>
-                <span className="production-output-checklist__number" aria-hidden="true">{index + 1}</span>
-                <span className="production-output-checklist__body">
-                  <strong>{item.label}</strong>
-                  <span>{item.status}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
+          <details className="production-output-checklist-panel">
+            <summary>
+              <span>Produktionsmappe-Status</span>
+              {" "}
+              <strong>9 Prüfpunkte anzeigen</strong>
+            </summary>
+            <ol className="production-output-checklist" aria-label="Produktionsmappe-Status">
+              {productionOutputAnchor.reviewItems.map((item, index) => (
+                <li key={item.label}>
+                  <span className="production-output-checklist__number" aria-hidden="true">{index + 1}</span>
+                  <span className="production-output-checklist__body">
+                    <strong>{item.label}</strong>
+                    <span>{item.status}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </details>
         </article>
         <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
           <summary>
