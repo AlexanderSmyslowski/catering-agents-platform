@@ -46,6 +46,17 @@ function formatBytes(sizeBytes: number): string {
   return `${(sizeBytes / 1024).toFixed(1)} KB`;
 }
 
+function formatOfferReviewStatusLabel(value: unknown): string {
+  const status = String(value ?? "review_required").trim();
+  if (status === "verified") {
+    return "geprüft";
+  }
+  if (status === "review_required") {
+    return "Prüfung nötig";
+  }
+  return status || "Prüfung nötig";
+}
+
 function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
   const sourceAnchors = Array.isArray(record.sourceAnchors) ? record.sourceAnchors : [];
   const rows = sourceAnchors.flatMap((item) => {
@@ -129,11 +140,11 @@ export function renderOfferHtml(draft: OfferDraft): string {
         "<section><h2>Interne Prüfung</h2>",
         "<p>Kundentext erst nach Publish-Freigabe exportieren.</p>",
         "<ul>",
-        `<li>Preis: ${escapeHtml(draft.reviewStatus?.priceReviewStatus ?? "review_required")}</li>`,
-        `<li>MwSt.: ${escapeHtml(draft.reviewStatus?.taxReviewStatus ?? "review_required")}</li>`,
-        `<li>Allergene: ${escapeHtml(draft.reviewStatus?.allergenReviewStatus ?? "review_required")}</li>`,
+        `<li>Preis: ${escapeHtml(formatOfferReviewStatusLabel(draft.reviewStatus?.priceReviewStatus))}</li>`,
+        `<li>MwSt.: ${escapeHtml(formatOfferReviewStatusLabel(draft.reviewStatus?.taxReviewStatus))}</li>`,
+        `<li>Allergene: ${escapeHtml(formatOfferReviewStatusLabel(draft.reviewStatus?.allergenReviewStatus))}</li>`,
         `<li>Hygiene/Temperatur: ${escapeHtml(
-          draft.reviewStatus?.hygieneTemperatureReviewStatus ?? "review_required"
+          formatOfferReviewStatusLabel(draft.reviewStatus?.hygieneTemperatureReviewStatus)
         )}</li>`,
         "</ul>",
         "</section>"

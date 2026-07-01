@@ -110,6 +110,11 @@ describe("print export HTML escaping", () => {
 
     expect(html).toContain("Interne Prüfung");
     expect(html).toContain("Kundentext erst nach Publish-Freigabe exportieren.");
+    expect(html).toContain("Preis: Prüfung nötig");
+    expect(html).toContain("MwSt.: Prüfung nötig");
+    expect(html).toContain("Allergene: Prüfung nötig");
+    expect(html).toContain("Hygiene/Temperatur: Prüfung nötig");
+    expect(html).not.toContain("review_required");
     expect(html).not.toContain("Internal review notes");
     expect(html).not.toContain("Customer should stay gated");
   });
