@@ -123,6 +123,7 @@ export function ProductionConversationalWorkbench({
     unansweredQuestionCount
   );
   const productionOutputAnchor = buildProductionWorkbenchOutputAnchorState({
+    questionCount,
     productionObjectCount,
     purchaseListCount
   });
@@ -193,6 +194,15 @@ export function ProductionConversationalWorkbench({
           <h3>{productionOutputAnchor.title}</h3>
           <p className="helper-text">{productionOutputAnchor.description}</p>
           <p className="helper-text">{productionOutputAnchor.grouping}</p>
+          <p className="eyebrow production-output-checklist-label">Arbeitsstruktur der Produktion</p>
+          <ul className="production-output-checklist" aria-label="Arbeitsstruktur der Produktion">
+            {productionOutputAnchor.reviewItems.map((item) => (
+              <li key={item.label}>
+                <strong>{item.label}</strong>
+                <span>{item.status}</span>
+              </li>
+            ))}
+          </ul>
         </article>
         <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
           <summary>

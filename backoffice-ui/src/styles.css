@@ -1502,6 +1502,42 @@ button:disabled {
   margin: 0.35rem 0 0;
 }
 
+.production-output-checklist-label {
+  margin: 0.85rem 0 0;
+}
+
+.production-output-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.45rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-output-checklist li {
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 34, 0.035);
+  border: 1px solid rgba(15, 23, 34, 0.055);
+}
+
+.production-output-checklist strong,
+.production-output-checklist span {
+  display: block;
+}
+
+.production-output-checklist strong {
+  font-size: 0.82rem;
+}
+
+.production-output-checklist span {
+  margin-top: 0.2rem;
+  color: rgba(15, 23, 34, 0.68);
+  font-size: 0.82rem;
+}
+
 .production-output-summary {
   display: flex;
   align-items: center;

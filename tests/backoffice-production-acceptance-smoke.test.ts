@@ -1463,6 +1463,14 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rückfragen: 7 offene Rückfragen");
     expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
+    expect(content).toContain("Arbeitsstruktur der Produktion");
+    expect(content).toContain("Verständnis & Rückfragen");
+    expect(content).toContain("Mengen & Produktionsplan");
+    expect(content).toContain("Rezeptkarten & Mise-en-Place");
+    expect(content).toContain("Einkaufsliste nach Warengruppen");
+    expect(content).toContain("Export & Abschlussprüfung");
+    expect(content).toContain("7 Rückfragen sichtbar");
+    expect(content).toContain("noch nicht berechnet");
     expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
     expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
     expect(document.querySelector(".production-input-collapse summary")?.textContent).toContain("Neue Eingabe oder Korrektur");
