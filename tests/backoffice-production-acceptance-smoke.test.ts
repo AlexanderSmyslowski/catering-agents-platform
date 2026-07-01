@@ -1530,14 +1530,20 @@ describe("backoffice production acceptance smoke", () => {
       value: scrollIntoView
     });
 
-    const renderWorkbench = (productionObjectCount: number) =>
+    const renderWorkbench = (
+      productionObjectCount: number,
+      specFacts: Array<{ label: string; value: string }> = []
+    ) =>
       createElement(
         ProductionConversationalWorkbench,
         {
           summary: {
             activeSpecLabel:
-              productionObjectCount > 0 ? "Business Lunch · 42 Teilnehmer" : "Noch kein aktiver Vorgang",
-            readinessLabel: productionObjectCount > 0 ? "vollständig" : "-",
+              productionObjectCount > 0 || specFacts.length > 0
+                ? "Business Lunch · 42 Teilnehmer"
+                : "Noch kein aktiver Vorgang",
+            specFacts,
+            readinessLabel: productionObjectCount > 0 || specFacts.length > 0 ? "vollständig" : "-",
             planStatusLabel: productionObjectCount > 0 ? "vollständig" : "offen",
             purchaseStatusLabel: productionObjectCount > 0 ? "1 Liste · 1 Positionen" : "noch keine Liste",
             questionCount: 0,
@@ -1589,13 +1595,16 @@ describe("backoffice production acceptance smoke", () => {
       expect(document.activeElement).not.toBe(initialResults);
 
       await act(async () => {
-        root.render(renderWorkbench(1));
+        root.render(renderWorkbench(0, [{ label: "Gäste", value: "42 Personen" }]));
       });
 
       const focusedResults = document.querySelector<HTMLElement>('[aria-label="Aktuelle Produktionsergebnisse"]');
       expect(focusedResults).not.toBeNull();
       expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
       expect(document.activeElement).toBe(focusedResults);
+      expect(document.body.textContent ?? "").toContain("Erkannte Eckdaten");
+      expect(document.body.textContent ?? "").toContain("42 Personen");
+      expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
     } finally {
       if (originalScrollIntoView) {
         Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {

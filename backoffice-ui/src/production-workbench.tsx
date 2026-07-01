@@ -135,7 +135,11 @@ export function ProductionConversationalWorkbench({
     purchaseListCount
   });
   const hasVisibleProductionWork =
-    questionCount > 0 || answeredQuestionCount > 0 || productionObjectCount > 0 || purchaseListCount > 0;
+    specFacts.length > 0 ||
+    questionCount > 0 ||
+    answeredQuestionCount > 0 ||
+    productionObjectCount > 0 ||
+    purchaseListCount > 0;
   const productionResultsRef = useRef<HTMLDivElement>(null);
   const previousHasVisibleProductionWork = useRef(hasVisibleProductionWork);
   const inputSlot = hasVisibleProductionWork ? (
