@@ -23,12 +23,37 @@ Quelle -> KI-Entwurf -> Harness-Validierung -> einfache menschliche Review
 -> freigegebene Produktartefakte -> Produktionsfeedback -> geprueftes Wissen
 ```
 
+### Belegter Anlass
+
+Der unmittelbare Anlass ist die Operator-Sichtung vom 2026-07-01 im
+Produktionsfluss: Ein echtes PDF-Angebot mit klar sichtbaren Buffet- und
+Welcome-Drink-Positionen wurde nach dem Upload als abgeschlossen analysiert,
+die Hauptflaeche zeigte aber nur fuenf gemischte Komponenten, darunter
+Infrastruktur-/Dekopositionen wie Glaeser und Menueschilder, waehrend mehrere
+fachliche Buffetgerichte nicht sichtbar als Produktionsdaten erschienen. Dieser
+Befund belegt nicht, dass alle Parser unbrauchbar sind; er belegt, dass
+gestaltete Angebots-PDFs nicht weiter durch immer neue Regex-Sonderfaelle zum
+fuehrenden Produktionsinput gemacht werden duerfen.
+
+### Vorrang gegenueber aelteren Roadmaps
+
+Dieses Pflichtenheft ersetzt keine bestehenden Sicherheits-, Daten-,
+Auth- oder Betriebs-Gates. Es setzt aber fuer die naechsten Umsetzungsslices
+den Vorrang: ProductionDraft-Vertrag, draft-only Import, einfache Review und
+Freigabegrenze gehen vor weiterer Parser-Haertung fuer gestaltete Angebote.
+Fruehere Analysepfade wie Batch-Klassifikation oder Intake-Schattenlaeufe
+bleiben moegliche Belege, sind aber nicht mehr die fuehrende Reihenfolge fuer
+den naechsten Produktwert.
+
 ## 2. Produktzuschnitt
 
 Angebot und Produktion werden fachlich als zwei Produkte behandelt.
 
 Sie duerfen im selben Monorepo bleiben, aber sie sollen nicht mehr als eine
 gemeinsame Backoffice-App mit vermischtem Arbeitsfluss gedacht werden.
+Ein gemeinsames Portal darf beide Produkte einbetten; es darf keine
+produktuebergreifenden Freigabe- oder Produktionsfluesse besitzen, die diese
+fachliche Trennung umgehen.
 
 ### Angebotsprodukt
 
@@ -131,7 +156,7 @@ werden:
 - lokal testbar
 - ersetzbar durch eigenen Adapter
 
-Aktuelle Kandidaten:
+Aktuelle unverbindliche Kandidaten:
 
 - Vercel AI SDK: guter TypeScript-Kandidat fuer strukturierte Outputs, nur als
   duenne Transportschicht, keine Vercel-Cloud-Annahme.
@@ -148,7 +173,8 @@ KI-Ausgaben sind nicht Wissen. Sie sind Entwuerfe.
 
 Geprueftes Wissen entsteht erst durch Review, Freigabe oder Produktionsfeedback.
 
-Zieltypen der Wissensschicht:
+Moegliche spaetere Zieltypen der Wissensschicht, erst nach echtem
+Implementierungsbeleg verbindlich:
 
 - `verified_recipe`
 - `approved_offer_pattern`
