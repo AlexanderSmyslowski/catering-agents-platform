@@ -72,6 +72,9 @@ describe("production artifact labels", () => {
     expect(markup).toContain("Plan-Kontext: aktueller Produktionsplan");
     expect(markup).toContain("Produktionsblatt exportieren");
     expect(markup).toContain("für aktuellen Produktionsplan");
+    expect(markup).toContain(
+      "Druckbares Arbeitsdokument aus dem bestehenden Exportpfad; enthält nur vorhandene Artefakte, Freigabe nicht erteilt."
+    );
     expect(markup).toContain('href="/api/exports/v1/exports/production-plans/plan-lunch/html"');
     expect(markup).not.toContain("Plan-Kontext: planId");
     expect(markup).not.toContain("Spezifikation spec-lunch");

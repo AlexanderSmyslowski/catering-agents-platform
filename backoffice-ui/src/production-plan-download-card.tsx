@@ -62,7 +62,10 @@ export function ProductionPlanDownloadCard({
         <div>
           <p className="eyebrow">Plan</p>
           <strong>Produktionsblatt</strong>
-          <p className="helper-text">Druckbares Ergebnis aus dem bestehenden Exportpfad.</p>
+          <p className="helper-text">
+            Druckbares Arbeitsdokument aus dem bestehenden Exportpfad; enthält nur vorhandene Artefakte, Freigabe
+            nicht erteilt.
+          </p>
         </div>
         <a
           className="ghost-link"
