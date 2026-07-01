@@ -122,7 +122,7 @@ describe("PA16 production clarification model slice 1", () => {
         reasonCode: "document_text_extraction_fallback",
         severity: "warning",
         blocking: false,
-        prompt: "Bitte Ingestion-Warnung prüfen: Textextraktion unsicher.",
+        prompt: "Bitte Dokumentprüfung prüfen: Textextraktion unsicher.",
         sourceAnchors: [
           {
             documentId: "document-pa16-1",
@@ -201,13 +201,13 @@ describe("PA16 production clarification model slice 1", () => {
 
     expect(questions.find((question) => question.reasonCode === "event.date")?.prompt).toBe("Bitte klären: Veranstaltungsdatum.");
     expect(questions.find((question) => question.reasonCode === "document_text_extraction_fallback")?.prompt).toBe(
-      "Bitte Ingestion-Warnung prüfen: Textextraktion unsicher."
+      "Bitte Dokumentprüfung prüfen: Textextraktion unsicher."
     );
     expect(questions.find((question) => question.reasonCode === "custom.unknown_field")?.prompt).toBe(
       "Bitte klären: custom.unknown_field."
     );
     expect(questions.find((question) => question.reasonCode === "unknown_warning_key")?.prompt).toBe(
-      "Bitte Ingestion-Warnung prüfen: unknown_warning_key."
+      "Bitte Dokumentprüfung prüfen: unknown_warning_key."
     );
     expect(JSON.stringify(questions)).not.toContain("Dieser extrahierte Text");
     expect(JSON.stringify(questions)).not.toContain("extractedText");

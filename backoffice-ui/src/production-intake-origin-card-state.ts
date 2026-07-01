@@ -1,4 +1,8 @@
 import type { IntakeRequestDetail } from "./api.js";
+import {
+  formatDocumentIngestionStatusLabel,
+  formatDocumentIngestionWarningLabel
+} from "../../shared-core/src/conversation-projection.js";
 
 export type ProductionIntakeOriginCardRawInputState = {
   key: string;
@@ -86,7 +90,10 @@ export function formatDocumentIngestionSummary(input: Record<string, unknown>): 
     return undefined;
   }
 
-  return [`Status ${status}`, warnings.length > 0 ? `Warnkey ${warnings.join(",")}` : undefined]
+  return [
+    status ? `Lesbarkeit: ${formatDocumentIngestionStatusLabel(status)}` : undefined,
+    warnings.length > 0 ? `Hinweise: ${warnings.map(formatDocumentIngestionWarningLabel).join(", ")}` : undefined
+  ]
     .filter(Boolean)
     .join(" · ");
 }

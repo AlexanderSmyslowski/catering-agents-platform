@@ -128,7 +128,7 @@ export function formatLatestIntakeRequest(requests: Array<Record<string, unknown
   return [
     `letzte Erfassung: ${requestId} via ${channel}`,
     sourceFilename ? `Quelle: ${sourceFilename}` : undefined,
-    ingestionSummary ? `Ingestion-Warnung: ${ingestionSummary}` : undefined
+    ingestionSummary ? `Dokumentprüfung: ${ingestionSummary}` : undefined
   ]
     .filter(Boolean)
     .join(" · ");

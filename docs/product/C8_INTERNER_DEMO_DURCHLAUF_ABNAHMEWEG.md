@@ -112,7 +112,7 @@ In `/produktion` wird fuer die interne Demo geprueft:
 1. Die aktive Spezifikation bzw. der Demo-Kontext ist sichtbar.
 2. Vorhandene Rueckfragen und Antworten erscheinen als strukturierte Workbench-/Conversation-Sicht.
 3. Upload-/Import-Warnungen erscheinen nur als sichere Status- und Warnmarker:
-   - Warnstatus und Warnkey, zum Beispiel `Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback`,
+   - Dokumentprüfung, zum Beispiel `Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert`,
    - keine Rohtextspiegelung aus Dokumenten,
    - sichere Quellen-/Hash-Kurzanker,
    - gekuerzte Quellenmetadaten,
@@ -125,7 +125,7 @@ In `/produktion` wird fuer die interne Demo geprueft:
    - zu grosse oder nicht erlaubte Dateien bleiben kontrolliert abgewiesen,
    - erlaubte Demo-Dateien laufen im internen Korridor weiter,
    - Produktionsnahe Verarbeitung echter oder beliebiger Uploads bleibt ohne Sandbox/Worker/AV-Gate `blocked`,
-   - Warnungen bleiben sichere Status-/Warnkey-Marker ohne Rohtext- oder Vollhash-Spiegelung.
+   - Warnungen bleiben sichere Dokumentprüfungsmarker ohne Rohtext- oder Vollhash-Spiegelung.
 5. P3-B38 Echte-Daten-Stop-Gate bleibt fuer den Beta-Runbook-Kontext verbindlich:
    - Demo-/Seed-/synthetische Daten bleiben der erlaubte interne Beta-Korridor,
    - echte Personen-/Kunden-/Einsatzdaten bleiben `blocked`, solange PII/Retention/Backup-Gate und Sandbox/Worker/AV-Gate nicht bewusst entschieden sind,

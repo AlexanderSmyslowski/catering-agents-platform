@@ -170,7 +170,7 @@ describe("production input panel state", () => {
         {
           key: "source",
           label: "Quelle und Lesbarkeit",
-          detailLabel: "Keine Ingestion-Warnung im aktuellen Intake-Detail.",
+          detailLabel: "Keine Dokumentwarnung im aktuellen Intake-Detail.",
           status: "checked"
         },
         {

@@ -54,7 +54,9 @@ describe("app shell state helpers", () => {
 
     expect(intakeLabel).toContain("letzte Erfassung: new-request via pdf_upload");
     expect(intakeLabel).toContain("Quelle: synthetisches-angebot.pdf");
-    expect(intakeLabel).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
+    expect(intakeLabel).toContain(
+      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
+    );
     expect(intakeLabel).not.toContain("abcdef1234567890");
 
     const auditEvent = {

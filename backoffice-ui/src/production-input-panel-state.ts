@@ -270,7 +270,7 @@ function buildPreflightItems(input: {
       : {
           key: "source",
           label: "Quelle und Lesbarkeit",
-          detailLabel: "Keine Ingestion-Warnung im aktuellen Intake-Detail.",
+          detailLabel: "Keine Dokumentwarnung im aktuellen Intake-Detail.",
           status: "checked"
         },
     input.openItemCount > 0 || input.sourceCheckItemCount > 0

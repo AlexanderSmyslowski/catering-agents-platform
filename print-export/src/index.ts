@@ -10,6 +10,8 @@ import type {
   Recipe
 } from "@catering/shared-core";
 import {
+  formatDocumentIngestionStatusLabel,
+  formatDocumentIngestionWarningLabel,
   formatMetroGroupLabel,
   formatRecipeSourceEvidenceLabel,
   isDevAuthEnabled,
@@ -87,8 +89,10 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
     return [
       [
         filename,
-        ingestionStatus ? `Status: ${ingestionStatus}` : undefined,
-        ingestionWarnings.length > 0 ? `Warnungen: ${ingestionWarnings.join(",")}` : undefined
+        ingestionStatus ? `Lesbarkeit: ${formatDocumentIngestionStatusLabel(ingestionStatus)}` : undefined,
+        ingestionWarnings.length > 0
+          ? `Hinweise: ${ingestionWarnings.map(formatDocumentIngestionWarningLabel).join(", ")}`
+          : undefined
       ]
         .filter(Boolean)
         .join(" · ")
@@ -101,7 +105,7 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
       : []),
     ...(warningRows.length > 0
       ? [
-          `<section><h2>Ingestion-Warnungen</h2><ul>${warningRows
+          `<section><h2>Dokumentprüfungen</h2><ul>${warningRows
             .map((row) => `<li>${escapeHtml(row)}</li>`)
             .join("")}</ul></section>`
         ]

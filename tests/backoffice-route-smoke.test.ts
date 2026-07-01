@@ -501,7 +501,9 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("Erfassung");
     expect(home).toContain("letzte Erfassung: intake-source-warning-1 via pdf_upload");
     expect(home).toContain("Quelle: kundenanfrage-b21.pdf");
-    expect(home).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
+    expect(home).toContain(
+      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
+    );
     expect(home).not.toContain("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd");
   });
 
@@ -936,7 +938,9 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Spezifikation im Fokus");
     expect(production.text).not.toContain("specId: c4-spec-handoff");
     expect(production.text).not.toContain("requestId: c4-request-handoff");
-    expect(production.text).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
+    expect(production.text).toContain(
+      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
+    );
     expect(production.text).toContain("Quellenmetadaten (gekürzt): c4-angebot.pdf · application/pdf · 2.0 KB · sha256:abcdef123456 · intake");
     expect(production.text).not.toContain("B5 Rohtext");
     expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
