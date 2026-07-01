@@ -1268,6 +1268,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(content).toContain("Glutenfreies Baguette");
     expect(content).toContain("Olivenöl");
+    expect(content).toContain("Rezeptquelle: nicht verknüpft");
+    expect(content).not.toContain("Rezeptquelle: source unknown");
     expect(content).not.toContain("Aktueller Vorgang zuerst");
   });
 

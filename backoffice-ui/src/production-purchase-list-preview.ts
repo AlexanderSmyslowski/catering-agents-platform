@@ -80,7 +80,21 @@ function formatSourceLabel(itemRecord: Record<string, unknown>): string {
   ];
   const uniqueLabels = [...new Set(labels)];
 
-  return uniqueLabels.length > 0 ? uniqueLabels.join("; ") : "source unknown";
+  return uniqueLabels.length > 0 ? uniqueLabels.map(formatUserFacingSourceLabel).join("; ") : "nicht verknüpft";
+}
+
+function formatUserFacingSourceLabel(label: string): string {
+  const trimmed = label.trim();
+  if (trimmed === "source unknown") {
+    return "nicht verknüpft";
+  }
+
+  const unknownWithReference = trimmed.match(/^source unknown \((.+)\)$/);
+  if (unknownWithReference) {
+    return `ungeprüft: ${unknownWithReference[1]}`;
+  }
+
+  return trimmed;
 }
 
 function looksLikeRecipeInstruction(value: string): boolean {

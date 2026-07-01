@@ -64,7 +64,7 @@ describe("production purchase list panel state", () => {
               articleName: "Glutenfreies Baguette",
               quantityLabel: "Menge: 3",
               unitLabel: "Einheit: Stk",
-              sourceLabel: "Rezeptquelle: source unknown"
+              sourceLabel: "Rezeptquelle: nicht verknüpft"
             }
           ]
         }
