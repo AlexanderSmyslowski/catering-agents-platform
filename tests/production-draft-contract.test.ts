@@ -256,7 +256,7 @@ function productionDraft(): ProductionDraft {
         kind: "risk",
         title: "Garparameter offen",
         summary: "Kerntemperatur und Konvektomat-Einstellung sind fachlich zu prüfen.",
-        decision: "blocked",
+        decision: "pending",
         riskLevel: "blocking",
         requiredApproval: true
       }
@@ -300,16 +300,63 @@ describe("ProductionDraft contract", () => {
     );
   });
 
-  it("rejects raw prompt or response payload leaks", () => {
+  it("rejects forbidden payload keys at any depth", () => {
+    const leakedSpec = eventSpec();
+    leakedSpec.attendees = {
+      ...leakedSpec.attendees,
+      dietaryMix: {
+        prompt: 1
+      }
+    };
+
+    expectInvalid(
+      {
+        ...productionDraft(),
+        draftArtifacts: {
+          ...productionDraft().draftArtifacts,
+          eventSpec: leakedSpec
+        }
+      },
+      /prompt is not allowed in ProductionDraft/
+    );
+  });
+
+  it("rejects oversized free-text payloads instead of accepting raw dumps as notes", () => {
+    expectInvalid(
+      {
+        ...productionDraft(),
+        draftArtifacts: {
+          ...productionDraft().draftArtifacts,
+          notes: ["x".repeat(1001)]
+        }
+      },
+      /must NOT have more than 1000 characters/
+    );
+  });
+
+  it("does not allow a notes-only draft artifact", () => {
+    expectInvalid(
+      {
+        ...productionDraft(),
+        draftArtifacts: {
+          notes: ["Notiz ohne fachliches Draft-Artefakt."]
+        }
+      },
+      /must match a schema in anyOf/
+    );
+  });
+
+  it("requires model and hash provenance for AI or CLI sourced drafts", () => {
     expectInvalid(
       {
         ...productionDraft(),
         source: {
-          ...productionDraft().source,
-          rawPrompt: "voller Prompt darf hier nicht liegen"
+          kind: "ai_provider",
+          receivedAt: "2026-07-01T12:00:00.000Z",
+          providerId: "provider-1"
         }
       },
-      /must NOT have additional properties/
+      /must have required property 'modelId'/
     );
   });
 
@@ -339,5 +386,50 @@ describe("ProductionDraft contract", () => {
       },
       /must be equal to one of the allowed values/
     );
+  });
+
+  it("requires decision metadata for non-pending review cards", () => {
+    expectInvalid(
+      {
+        ...productionDraft(),
+        reviewCards: [
+          {
+            ...productionDraft().reviewCards[0],
+            decision: "fits"
+          }
+        ]
+      },
+      /needs decidedBy and decidedAt/
+    );
+  });
+
+  it("rejects approved drafts with unresolved or blocking review cards", () => {
+    expectInvalid(
+      {
+        ...productionDraft(),
+        status: "approved",
+        approvedBy: "Alexander",
+        approvedAt: "2026-07-01T13:00:00.000Z"
+      },
+      /approved ProductionDraft must have only fits review card decisions/
+    );
+  });
+
+  it("accepts approved drafts only after all review cards are positively decided", () => {
+    const draft: ProductionDraft = {
+      ...productionDraft(),
+      status: "approved",
+      approvedBy: "Alexander",
+      approvedAt: "2026-07-01T13:00:00.000Z",
+      reviewCards: productionDraft().reviewCards.map((card) => ({
+        ...card,
+        decision: "fits",
+        riskLevel: card.riskLevel === "blocking" ? "high" : card.riskLevel,
+        decidedBy: "Alexander",
+        decidedAt: "2026-07-01T13:00:00.000Z"
+      }))
+    };
+
+    expect(validateProductionDraft(draft)).toEqual(draft);
   });
 });

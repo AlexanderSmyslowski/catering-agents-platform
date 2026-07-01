@@ -356,6 +356,8 @@ export interface ProductionDraftReviewCard {
   riskLevel?: "low" | "medium" | "high" | "blocking";
   requiredApproval?: boolean;
   operatorComment?: string;
+  decidedBy?: string;
+  decidedAt?: string;
 }
 
 export interface IngredientLine {
@@ -545,6 +547,8 @@ export interface ProductionDraft {
   status: ProductionDraftStatus;
   createdAt: string;
   supersedesDraftId?: string;
+  approvedBy?: string;
+  approvedAt?: string;
   source: ProductionDraftSource;
   guardrails: ProductionDraftGuardrails;
   reviewCards: ProductionDraftReviewCard[];

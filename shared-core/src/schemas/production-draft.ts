@@ -13,14 +13,49 @@ export const productionDraftSchema = {
     "reviewCards",
     "draftArtifacts"
   ],
+  allOf: [
+    {
+      if: {
+        required: ["source"],
+        properties: {
+          source: {
+            required: ["kind"],
+            properties: {
+              kind: { enum: ["ai_provider", "agent_cli", "local_provider"] }
+            }
+          }
+        }
+      },
+      then: {
+        properties: {
+          source: {
+            required: ["providerId", "modelId", "inputHash", "outputHash"]
+          }
+        }
+      }
+    },
+    {
+      if: {
+        required: ["status"],
+        properties: {
+          status: { const: "approved" }
+        }
+      },
+      then: {
+        required: ["approvedBy", "approvedAt"]
+      }
+    }
+  ],
   properties: {
-    schemaVersion: { type: "string" },
-    draftId: { type: "string" },
+    schemaVersion: { type: "string", maxLength: 32 },
+    draftId: { type: "string", maxLength: 160 },
     status: {
       enum: ["pending_review", "approved", "rejected", "superseded"]
     },
-    createdAt: { type: "string" },
-    supersedesDraftId: { type: "string" },
+    createdAt: { type: "string", maxLength: 80 },
+    supersedesDraftId: { type: "string", maxLength: 160 },
+    approvedBy: { type: "string", maxLength: 160 },
+    approvedAt: { type: "string", maxLength: 80 },
     source: {
       type: "object",
       additionalProperties: false,
@@ -29,13 +64,13 @@ export const productionDraftSchema = {
         kind: {
           enum: ["fixture", "manual_import", "ai_provider", "agent_cli", "local_provider"]
         },
-        receivedAt: { type: "string" },
-        sourceRef: { type: "string" },
-        providerId: { type: "string" },
-        modelId: { type: "string" },
-        inputHash: { type: "string" },
-        outputHash: { type: "string" },
-        runId: { type: "string" }
+        receivedAt: { type: "string", maxLength: 80 },
+        sourceRef: { type: "string", maxLength: 500 },
+        providerId: { type: "string", maxLength: 120 },
+        modelId: { type: "string", maxLength: 160 },
+        inputHash: { type: "string", maxLength: 160 },
+        outputHash: { type: "string", maxLength: 160 },
+        runId: { type: "string", maxLength: 160 }
       }
     },
     guardrails: {
@@ -61,12 +96,13 @@ export const productionDraftSchema = {
     reviewCards: {
       type: "array",
       minItems: 1,
+      maxItems: 200,
       items: {
         type: "object",
         additionalProperties: false,
         required: ["cardId", "kind", "title", "summary", "decision"],
         properties: {
-          cardId: { type: "string" },
+          cardId: { type: "string", maxLength: 160 },
           kind: {
             enum: [
               "event_data",
@@ -81,18 +117,20 @@ export const productionDraftSchema = {
               "source_note"
             ]
           },
-          title: { type: "string" },
-          summary: { type: "string" },
           decision: {
             enum: ["pending", "fits", "change_requested", "unclear", "blocked"]
           },
-          targetPath: { type: "string" },
-          targetId: { type: "string" },
+          title: { type: "string", maxLength: 160 },
+          summary: { type: "string", maxLength: 1000 },
+          targetPath: { type: "string", maxLength: 240 },
+          targetId: { type: "string", maxLength: 160 },
           riskLevel: {
             enum: ["low", "medium", "high", "blocking"]
           },
           requiredApproval: { type: "boolean" },
-          operatorComment: { type: "string" }
+          operatorComment: { type: "string", maxLength: 1000 },
+          decidedBy: { type: "string", maxLength: 160 },
+          decidedAt: { type: "string", maxLength: 80 }
         }
       }
     },
@@ -123,7 +161,8 @@ export const productionDraftSchema = {
         },
         notes: {
           type: "array",
-          items: { type: "string" }
+          maxItems: 50,
+          items: { type: "string", maxLength: 1000 }
         }
       },
       anyOf: [
@@ -140,12 +179,6 @@ export const productionDraftSchema = {
           required: ["openQuestions"],
           properties: {
             openQuestions: { minItems: 1 }
-          }
-        },
-        {
-          required: ["notes"],
-          properties: {
-            notes: { minItems: 1 }
           }
         }
       ]
