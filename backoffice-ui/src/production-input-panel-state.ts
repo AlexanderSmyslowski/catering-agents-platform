@@ -12,6 +12,7 @@ import {
 export type ProductionUploadResultSummaryState = {
   eventLabel: string;
   summaryLabel: string;
+  snapshotItems: ProductionUploadSnapshotItemState[];
   menuItems: ProductionSpecDetailsMenuItemState[];
   openItems: string[];
   assumptionItems: string[];
@@ -19,6 +20,13 @@ export type ProductionUploadResultSummaryState = {
   artifactStatusItems: string[];
   sourceCheckItems: string[];
   nextStepLabel: string;
+};
+
+export type ProductionUploadSnapshotItemState = {
+  key: string;
+  label: string;
+  value: string;
+  status: "checked" | "open" | "review";
 };
 
 export type ProductionUploadPreflightItemState = {
@@ -105,6 +113,63 @@ function buildArtifactStatusItems(input: {
     : "Noch nicht erzeugt: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe.";
 
   return [recognized, nextArtifactStep];
+}
+
+function formatOpenItemCount(openItemCount: number): string {
+  if (openItemCount === 0) {
+    return "keine blockierenden Punkte";
+  }
+
+  if (openItemCount === 1) {
+    return "1 offener Punkt";
+  }
+
+  return `${openItemCount} offene Punkte`;
+}
+
+function formatMenuItemCount(menuItemCount: number): string {
+  if (menuItemCount === 0) {
+    return "keine Gerichte erkannt";
+  }
+
+  if (menuItemCount === 1) {
+    return "1 Komponente erkannt";
+  }
+
+  return `${menuItemCount} Komponenten erkannt`;
+}
+
+function buildSnapshotItems(input: {
+  menuItemCount: number;
+  openItemCount: number;
+  sourceCheckItemCount: number;
+}): ProductionUploadSnapshotItemState[] {
+  return [
+    {
+      key: "menu",
+      label: "Gerichte",
+      value: formatMenuItemCount(input.menuItemCount),
+      status: input.menuItemCount > 0 ? "checked" : "open"
+    },
+    {
+      key: "open-items",
+      label: "Offen",
+      value: formatOpenItemCount(input.openItemCount),
+      status: input.openItemCount > 0 ? "open" : "checked"
+    },
+    {
+      key: "source",
+      label: "Quelle",
+      value: input.sourceCheckItemCount > 0 ? "Lesbarkeit prüfen" : "keine Warnung",
+      status: input.sourceCheckItemCount > 0 ? "review" : "checked"
+    },
+    {
+      key: "artifacts",
+      label: "Artefakte",
+      value: input.openItemCount > 0 ? "noch nicht berechnet" : "noch nicht erzeugt",
+      status: input.openItemCount > 0 ? "open" : "review"
+    }
+  ];
 }
 
 function buildSourceCheckItems(intakeRequestDetail?: IntakeRequestDetail | null): string[] {
@@ -306,6 +371,11 @@ function buildUploadResultSummary(input: {
   return {
     eventLabel: detailsState.eventLabel,
     summaryLabel: formatUploadSummaryLabel(detailsState.summaryLabel),
+    snapshotItems: buildSnapshotItems({
+      menuItemCount: detailsState.menuItems.length,
+      openItemCount: openItems.length,
+      sourceCheckItemCount: sourceCheckItems.length
+    }),
     menuItems: detailsState.menuItems,
     openItems,
     assumptionItems,

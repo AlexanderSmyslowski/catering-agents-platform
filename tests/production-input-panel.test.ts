@@ -247,6 +247,10 @@ describe("production input panel", () => {
     expect(markup).toContain("Erkannte Produktionsdaten");
     expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
     expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");
+    expect(markup).toContain("Sofortübersicht Produktionsdaten");
+    expect(markup).toContain("2 Komponenten erkannt");
+    expect(markup).toContain("2 offene Punkte");
+    expect(markup).toContain("noch nicht berechnet");
     expect(markup).toContain("Gerichte und Komponenten:");
     expect(markup).toContain("Lunchbuffet");
     expect(markup).toContain("Kaffeestation");

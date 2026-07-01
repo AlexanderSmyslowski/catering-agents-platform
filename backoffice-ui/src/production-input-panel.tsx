@@ -79,6 +79,12 @@ const preflightStatusLabels = {
   review: "prüfen"
 } as const;
 
+const snapshotStatusLabels = {
+  checked: "erkannt",
+  open: "offen",
+  review: "prüfen"
+} as const;
+
 export function ProductionInputPanel({
   submitting,
   sourceInput,
@@ -203,6 +209,15 @@ export function ProductionInputPanel({
                     <p className="eyebrow">Erkannte Produktionsdaten</p>
                     <strong>{panelState.uploadResultSummary.eventLabel}</strong>
                     <p className="helper-text">{panelState.uploadResultSummary.summaryLabel}</p>
+                  </div>
+                  <div className="upload-result-snapshot" aria-label="Sofortübersicht Produktionsdaten">
+                    {panelState.uploadResultSummary.snapshotItems.map((item) => (
+                      <div key={item.key} className={`upload-result-snapshot__item upload-result-snapshot__item--${item.status}`}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                        <small>{snapshotStatusLabels[item.status]}</small>
+                      </div>
+                    ))}
                   </div>
                   <div>
                     <p className="helper-text">Gerichte und Komponenten:</p>

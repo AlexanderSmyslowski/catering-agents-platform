@@ -113,6 +113,32 @@ describe("production input panel state", () => {
     ).toEqual({
       eventLabel: "Eventtyp: Konferenz · Datum: 2026-09-03",
       summaryLabel: "Teilnehmerzahl: 90 · Serviceform: Buffet",
+      snapshotItems: [
+        {
+          key: "menu",
+          label: "Gerichte",
+          value: "2 Komponenten erkannt",
+          status: "checked"
+        },
+        {
+          key: "open-items",
+          label: "Offen",
+          value: "2 offene Punkte",
+          status: "open"
+        },
+        {
+          key: "source",
+          label: "Quelle",
+          value: "keine Warnung",
+          status: "checked"
+        },
+        {
+          key: "artifacts",
+          label: "Artefakte",
+          value: "noch nicht berechnet",
+          status: "open"
+        }
+      ],
       menuItems: [
         {
           key: "lunch",
