@@ -134,5 +134,19 @@ describe("production question panel action state", () => {
       primaryActionDisabled: false,
       sourceReviewHelperText: undefined
     });
+
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        editingSpecId: "spec-1",
+        submitting: false,
+        hasFocusedSpecEditChanges: false,
+        openQuestionCount: 2
+      })
+    ).toMatchObject({
+      primaryActionLabel: "Speichern und Berechnung starten",
+      primaryActionDisabled: true,
+      sourceReviewHelperText: "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    });
   });
 });

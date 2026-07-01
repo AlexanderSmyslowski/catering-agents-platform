@@ -34,7 +34,8 @@ export function buildProductionQuestionPanelActionState({
       : undefined;
   const isFocusedSpecEditing = focusedSpecId !== undefined && editingSpecId === focusedSpecId;
   const hasOpenQuestions = openQuestionCount > 0;
-  const blocksForOpenQuestions = hasOpenQuestions && !isFocusedSpecEditing;
+  const blocksForOpenQuestions =
+    hasOpenQuestions && (!isFocusedSpecEditing || !hasFocusedSpecEditChanges);
   const blocksForSourceReview = sourceReviewRequired && !sourceReviewConfirmed;
   const sourceReviewHelperText = blocksForSourceReview
     ? "Quellenprüfung bestätigen, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
