@@ -134,7 +134,46 @@ describe("production input panel state", () => {
         "Erkannt: Eckdaten, Gerichte/Komponenten, Rückfragen und Annahmen.",
         "Noch nicht berechnet: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe."
       ],
+      sourceCheckItems: [],
       nextStepLabel: "Nächster Schritt: Rückfragen beantworten, dann Berechnung starten."
     });
+  });
+
+  it("surfaces document ingestion warnings without exposing raw document text", () => {
+    expect(
+      buildProductionInputPanelState({
+        submitting: false,
+        sourceInput: sourceInput({
+          documentPhase: "done",
+          activeDocumentName: "angebot.pdf"
+        }),
+        focusedProductionSpec: {
+          event: { type: "conference", date: "2026-09-03" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "partial" },
+          menuPlan: [{ componentId: "lunch", label: "Lunchbuffet" }]
+        },
+        intakeRequestDetail: {
+          requestId: "request-upload-1",
+          rawInputs: [
+            {
+              kind: "pdf",
+              content: "%PDF Rohinhalt darf nicht sichtbar werden",
+              documentId: "document-upload-1",
+              sourceMetadata: {
+                filename: "angebot.pdf"
+              },
+              documentIngestion: {
+                status: "fallback",
+                warnings: ["document_text_extraction_fallback"]
+              }
+            }
+          ]
+        }
+      }).uploadResultSummary?.sourceCheckItems
+    ).toEqual([
+      "Quelle: angebot.pdf · unsichere Textextraktion · Warnung: PDF-Text nur fallback/unsicher extrahiert"
+    ]);
   });
 });

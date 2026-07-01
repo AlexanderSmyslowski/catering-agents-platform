@@ -71,6 +71,7 @@ function renderPanel(
     focusedProductionSpec?: Record<string, unknown>;
     productionQuestions?: string[];
     productionAssumptions?: string[];
+    intakeRequestDetail?: Parameters<typeof ProductionInputPanel>[0]["intakeRequestDetail"];
   } = {}
 ): string {
   return renderToStaticMarkup(
@@ -236,5 +237,47 @@ describe("production input panel", () => {
     expect(markup).toContain("Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
+  });
+
+  it("shows safe source warnings after uncertain document ingestion", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "Angebot_Koepff.pdf",
+        documentProgress: 100
+      }),
+      {
+        focusedProductionSpec: {
+          event: { type: "conference", date: "2026-09-03" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "partial" },
+          menuPlan: [{ componentId: "lunch", label: "Lunchbuffet" }]
+        },
+        intakeRequestDetail: {
+          requestId: "request-upload-1",
+          rawInputs: [
+            {
+              kind: "pdf",
+              content: "%PDF Rohinhalt darf nicht sichtbar werden",
+              documentId: "document-upload-1",
+              sourceMetadata: {
+                filename: "Angebot_Koepff.pdf"
+              },
+              documentIngestion: {
+                status: "fallback",
+                warnings: ["document_text_extraction_fallback"]
+              }
+            }
+          ]
+        }
+      }
+    );
+
+    expect(markup).toContain("Quellenprüfung:");
+    expect(markup).toContain(
+      "Quelle: Angebot_Koepff.pdf · unsichere Textextraktion · Warnung: PDF-Text nur fallback/unsicher extrahiert"
+    );
+    expect(markup).not.toContain("%PDF Rohinhalt");
   });
 });

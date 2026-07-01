@@ -124,6 +124,7 @@ export function ProductionRouteMainLayout({
               focusedProductionSpec={questionState.focusedProductionSpec}
               productionQuestions={questionState.productionQuestions}
               productionAssumptions={questionState.productionAssumptions}
+              intakeRequestDetail={questionState.intakeRequestDetail}
             />
           </div>
         ),

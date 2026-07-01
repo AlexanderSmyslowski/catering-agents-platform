@@ -3,7 +3,7 @@ import {
   type ChangeEvent,
   type DragEvent
 } from "react";
-import type { IntakeDocumentChannel } from "./api.js";
+import type { IntakeDocumentChannel, IntakeRequestDetail } from "./api.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
 import { buildProductionInputPanelState } from "./production-input-panel-state.js";
 
@@ -70,6 +70,7 @@ type ProductionInputPanelProps = {
   focusedProductionSpec?: Record<string, unknown>;
   productionQuestions?: string[];
   productionAssumptions?: string[];
+  intakeRequestDetail?: IntakeRequestDetail | null;
 };
 
 export function ProductionInputPanel({
@@ -80,14 +81,16 @@ export function ProductionInputPanel({
   manualInputActions,
   focusedProductionSpec,
   productionQuestions,
-  productionAssumptions
+  productionAssumptions,
+  intakeRequestDetail
 }: ProductionInputPanelProps) {
   const panelState = buildProductionInputPanelState({
     submitting,
     sourceInput,
     focusedProductionSpec,
     productionQuestions,
-    productionAssumptions
+    productionAssumptions,
+    intakeRequestDetail
   });
   const secondaryInputsOpen = !panelState.uploadResultSummary;
 
@@ -237,6 +240,16 @@ export function ProductionInputPanel({
                       ))}
                     </ul>
                   </div>
+                  {panelState.uploadResultSummary.sourceCheckItems.length > 0 ? (
+                    <div>
+                      <p className="helper-text">Quellenprüfung:</p>
+                      <ul className="item-list compact">
+                        {panelState.uploadResultSummary.sourceCheckItems.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   <p className="helper-text">{panelState.uploadResultSummary.nextStepLabel}</p>
                 </div>
               ) : null}

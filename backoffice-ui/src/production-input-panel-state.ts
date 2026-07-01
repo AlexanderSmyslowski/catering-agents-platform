@@ -1,4 +1,5 @@
 import type { ProductionSourceInputValues } from "./production-input-panel.js";
+import type { IntakeRequestDetail } from "./api.js";
 import {
   buildProductionSpecDetailsState,
   type ProductionSpecDetailsMenuItemState
@@ -11,6 +12,7 @@ export type ProductionUploadResultSummaryState = {
   openItems: string[];
   assumptionItems: string[];
   artifactStatusItems: string[];
+  sourceCheckItems: string[];
   nextStepLabel: string;
 };
 
@@ -70,11 +72,53 @@ function buildArtifactStatusItems(input: {
   return [recognized, nextArtifactStep];
 }
 
+function formatIngestionStatus(value: string): string {
+  const labels: Record<string, string> = {
+    extracted: "Text extrahiert",
+    fallback: "unsichere Textextraktion",
+    failed: "Extraktion fehlgeschlagen"
+  };
+  return labels[value] ?? value;
+}
+
+function formatIngestionWarning(value: string): string {
+  const labels: Record<string, string> = {
+    document_text_extraction_fallback: "PDF-Text nur fallback/unsicher extrahiert"
+  };
+  return labels[value] ?? value;
+}
+
+function buildSourceCheckItems(intakeRequestDetail?: IntakeRequestDetail | null): string[] {
+  const rawInputs = Array.isArray(intakeRequestDetail?.rawInputs) ? intakeRequestDetail.rawInputs : [];
+
+  return rawInputs
+    .map((input) => {
+      const filename = input.sourceMetadata?.filename?.trim() || input.documentId?.trim() || "Quelle";
+      const status = input.documentIngestion?.status?.trim();
+      const warnings = Array.isArray(input.documentIngestion?.warnings)
+        ? input.documentIngestion.warnings.map((warning) => warning.trim()).filter(Boolean)
+        : [];
+
+      if (!status && warnings.length === 0) {
+        return undefined;
+      }
+
+      const statusLabel = status ? formatIngestionStatus(status) : undefined;
+      const warningLabel = warnings.length > 0
+        ? `Warnung: ${warnings.map(formatIngestionWarning).join(", ")}`
+        : undefined;
+
+      return [`Quelle: ${filename}`, statusLabel, warningLabel].filter(Boolean).join(" · ");
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
 function buildUploadResultSummary(input: {
   documentPhase: ProductionSourceInputValues["documentPhase"];
   focusedProductionSpec?: Record<string, unknown>;
   productionQuestions: string[];
   productionAssumptions: string[];
+  intakeRequestDetail?: IntakeRequestDetail | null;
 }): ProductionUploadResultSummaryState | undefined {
   if (input.documentPhase !== "done") {
     return undefined;
@@ -98,6 +142,7 @@ function buildUploadResultSummary(input: {
       openItemCount: openItems.length,
       menuItemCount: detailsState.menuItems.length
     }),
+    sourceCheckItems: buildSourceCheckItems(input.intakeRequestDetail),
     nextStepLabel: formatNextStep({
       openItemCount: openItems.length,
       menuItemCount: detailsState.menuItems.length
@@ -111,6 +156,7 @@ export function buildProductionInputPanelState(input: {
   focusedProductionSpec?: Record<string, unknown>;
   productionQuestions?: string[];
   productionAssumptions?: string[];
+  intakeRequestDetail?: IntakeRequestDetail | null;
 }): ProductionInputPanelState {
   return {
     clearWorkspaceDisabled: input.submitting || !input.sourceInput.canClearWorkspace,
@@ -126,7 +172,8 @@ export function buildProductionInputPanelState(input: {
       documentPhase: input.sourceInput.documentPhase,
       focusedProductionSpec: input.focusedProductionSpec,
       productionQuestions: input.productionQuestions ?? [],
-      productionAssumptions: input.productionAssumptions ?? []
+      productionAssumptions: input.productionAssumptions ?? [],
+      intakeRequestDetail: input.intakeRequestDetail
     })
   };
 }
