@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   ProductionInputPanel,
+  type ProductionInputAnalysisResult,
   type ProductionManualInputActions,
   type ProductionManualInputValues,
   type ProductionSourceInputActions,
@@ -49,6 +50,17 @@ const sourceInputActions: ProductionSourceInputActions = {
   submitText: noopAsync
 };
 
+const analysisResult: ProductionInputAnalysisResult = {
+  activeSpecLabel: "Konferenz · 90 Teilnehmer · 2026-09-18",
+  readinessLabel: "teilweise vollständig",
+  questionCount: 2,
+  answeredQuestionCount: 1,
+  planStatusLabel: "offen",
+  purchaseStatusLabel: "noch keine Liste",
+  nextStepTitle: "Rückfragen beantworten",
+  nextStepDescription: "Die Produktion braucht noch strukturierte Antworten, bevor Ergebnisse belastbar sind."
+};
+
 function buildSourceInput(overrides?: Partial<ProductionSourceInputValues>): ProductionSourceInputValues {
   return {
     dragActive: false,
@@ -65,14 +77,18 @@ function buildSourceInput(overrides?: Partial<ProductionSourceInputValues>): Pro
   };
 }
 
-function renderPanel(sourceInput: ProductionSourceInputValues): string {
+function renderPanel(
+  sourceInput: ProductionSourceInputValues,
+  overrides?: { analysisResult?: ProductionInputAnalysisResult }
+): string {
   return renderToStaticMarkup(
     createElement(ProductionInputPanel, {
       submitting: false,
       sourceInput,
       sourceInputActions,
       manualInput,
-      manualInputActions
+      manualInputActions,
+      analysisResult: overrides?.analysisResult
     })
   );
 }
@@ -120,6 +136,32 @@ describe("production input panel", () => {
     expect(rejectedMarkup).not.toContain("Analyse abgeschlossen");
     expect(analysingMarkup).toContain("Ausgewählt: anfrage.pdf");
     expect(analysingMarkup).toContain("Analyse läuft für anfrage.pdf");
+  });
+
+  it("shows the recognized production context and next step after document analysis", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "angebot-koepff.pdf",
+        documentProgress: 100
+      }),
+      { analysisResult }
+    );
+
+    expect(markup).toContain("Analyse abgeschlossen für angebot-koepff.pdf");
+    expect(markup).toContain("Erkannter Auftrag");
+    expect(markup).toContain("Konferenz · 90 Teilnehmer · 2026-09-18");
+    expect(markup).toContain("Klarheit: teilweise vollständig");
+    expect(markup).toContain("Rückfragen");
+    expect(markup).toContain("2 offen");
+    expect(markup).toContain("Beantwortet: 1");
+    expect(markup).toContain("Produktionsdaten");
+    expect(markup).toContain("Plan: offen");
+    expect(markup).toContain("Einkauf: noch keine Liste");
+    expect(markup).toContain("Nächster Schritt");
+    expect(markup).toContain("Rückfragen beantworten");
+    expect(markup).not.toContain("<span>100%</span>");
+    expect(markup).not.toContain("Die Rückfragen und Ergebnisse wurden aktualisiert.");
   });
 
   it("keeps workspace actions separated as local demo maintenance", () => {

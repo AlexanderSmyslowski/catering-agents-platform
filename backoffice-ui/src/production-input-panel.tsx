@@ -61,12 +61,24 @@ export type ProductionSourceInputActions = {
   submitText: () => Promise<void>;
 };
 
+export type ProductionInputAnalysisResult = {
+  activeSpecLabel: string;
+  readinessLabel: string;
+  questionCount: number;
+  answeredQuestionCount: number;
+  planStatusLabel: string;
+  purchaseStatusLabel: string;
+  nextStepTitle: string;
+  nextStepDescription: string;
+};
+
 type ProductionInputPanelProps = {
   submitting: boolean;
   sourceInput: ProductionSourceInputValues;
   sourceInputActions: ProductionSourceInputActions;
   manualInput: ProductionManualInputValues;
   manualInputActions: ProductionManualInputActions;
+  analysisResult?: ProductionInputAnalysisResult;
 };
 
 export function ProductionInputPanel({
@@ -74,7 +86,8 @@ export function ProductionInputPanel({
   sourceInput,
   sourceInputActions,
   manualInput,
-  manualInputActions
+  manualInputActions,
+  analysisResult
 }: ProductionInputPanelProps) {
   const panelState = buildProductionInputPanelState({
     submitting,
@@ -151,23 +164,47 @@ export function ProductionInputPanel({
           </div>
         ) : null}
         {panelState.showCompletedProgress ? (
-          <div className="progress-panel">
-            <div
-              className="progress-ring progress-ring--done"
-              style={{ "--progress-angle": "360deg" } as CSSProperties}
-            >
-              <span>100%</span>
-            </div>
-            <div className="progress-panel__content">
+          <section className="analysis-result-panel" aria-label="Analyseergebnis">
+            <div className="analysis-result-panel__header">
               <p className="processing-note processing-note--success">
                 Analyse abgeschlossen für {sourceInput.activeDocumentName}.
               </p>
-              <div className="progress-bar">
-                <div className="progress-bar__fill" style={{ width: "100%" }} />
-              </div>
-              <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
             </div>
-          </div>
+            {analysisResult ? (
+              <>
+                <div className="analysis-result-grid">
+                  <div>
+                    <p className="eyebrow">Erkannter Auftrag</p>
+                    <strong>{analysisResult.activeSpecLabel}</strong>
+                    <p className="helper-text">Klarheit: {analysisResult.readinessLabel}</p>
+                  </div>
+                  <div>
+                    <p className="eyebrow">Rückfragen</p>
+                    <strong>
+                      {analysisResult.questionCount === 1
+                        ? "1 offen"
+                        : `${analysisResult.questionCount} offen`}
+                    </strong>
+                    <p className="helper-text">Beantwortet: {analysisResult.answeredQuestionCount}</p>
+                  </div>
+                  <div>
+                    <p className="eyebrow">Produktionsdaten</p>
+                    <strong>Plan: {analysisResult.planStatusLabel}</strong>
+                    <p className="helper-text">Einkauf: {analysisResult.purchaseStatusLabel}</p>
+                  </div>
+                </div>
+                <div className="analysis-next-step">
+                  <p className="eyebrow">Nächster Schritt</p>
+                  <strong>{analysisResult.nextStepTitle}</strong>
+                  <p className="helper-text">{analysisResult.nextStepDescription}</p>
+                </div>
+              </>
+            ) : (
+              <p className="helper-text">
+                Die Anfrage ist als Spezifikation erfasst. Produktionsplan und Einkaufsdaten entstehen erst nach dem nächsten Schritt.
+              </p>
+            )}
+          </section>
         ) : null}
       </div>
       <div className="action-row">

@@ -121,6 +121,16 @@ export function ProductionRouteMainLayout({
               sourceInputActions={sourceInputActions}
               manualInput={manualInput}
               manualInputActions={manualInputActions}
+              analysisResult={{
+                activeSpecLabel: workbenchSummary.activeSpecLabel,
+                readinessLabel: workbenchSummary.readinessLabel,
+                questionCount: workbenchSummary.questionCount,
+                answeredQuestionCount: workbenchSummary.answeredQuestionCount,
+                planStatusLabel: workbenchSummary.planStatusLabel,
+                purchaseStatusLabel: workbenchSummary.purchaseStatusLabel,
+                nextStepTitle: workbenchNextStep.title,
+                nextStepDescription: workbenchNextStep.description
+              }}
             />
           </div>
         ),

@@ -969,6 +969,48 @@ button:disabled {
   gap: 0.65rem;
 }
 
+.analysis-result-panel {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.analysis-result-panel__header {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.analysis-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.65rem;
+}
+
+.analysis-result-grid > div,
+.analysis-next-step {
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
+  padding: 0.78rem 0.9rem;
+  border-radius: 0.95rem;
+  background: rgba(247, 250, 255, 0.82);
+  border: 1px solid rgba(15, 23, 34, 0.07);
+}
+
+.analysis-result-grid strong,
+.analysis-next-step strong {
+  min-width: 0;
+  color: #0f1722;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.analysis-result-grid .helper-text,
+.analysis-next-step .helper-text {
+  margin: 0;
+}
+
 .progress-ring {
   --progress-angle: 0deg;
   width: 108px;
