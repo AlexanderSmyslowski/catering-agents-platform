@@ -223,7 +223,7 @@ describe("production input panel state", () => {
     }).uploadResultSummary;
 
     expect(summary?.sourceCheckItems).toEqual([
-      "Quelle: angebot.pdf · unsichere Textextraktion · Warnung: PDF-Text nur fallback/unsicher extrahiert"
+      "Quelle: angebot.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     ]);
     expect(summary?.preflightItems).toContainEqual({
       key: "source",

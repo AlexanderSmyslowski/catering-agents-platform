@@ -52,7 +52,8 @@ describe("app shell state helpers", () => {
       }
     ]);
 
-    expect(intakeLabel).toContain("letzte Erfassung: new-request via pdf_upload");
+    expect(intakeLabel).toContain("letzte Erfassung: Dateiupload");
+    expect(intakeLabel).not.toContain("new-request");
     expect(intakeLabel).toContain("Quelle: synthetisches-angebot.pdf");
     expect(intakeLabel).toContain(
       "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"

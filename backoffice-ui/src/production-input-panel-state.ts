@@ -1,6 +1,10 @@
 import type { ProductionSourceInputValues } from "./production-input-panel.js";
 import type { IntakeRequestDetail } from "./api.js";
 import {
+  formatDocumentIngestionStatusLabel,
+  formatDocumentIngestionWarningLabel
+} from "../../shared-core/src/conversation-projection.js";
+import {
   buildProductionSpecDetailsState,
   type ProductionSpecDetailsMenuItemState
 } from "./production-spec-details-state.js";
@@ -103,22 +107,6 @@ function buildArtifactStatusItems(input: {
   return [recognized, nextArtifactStep];
 }
 
-function formatIngestionStatus(value: string): string {
-  const labels: Record<string, string> = {
-    extracted: "Text extrahiert",
-    fallback: "unsichere Textextraktion",
-    failed: "Extraktion fehlgeschlagen"
-  };
-  return labels[value] ?? value;
-}
-
-function formatIngestionWarning(value: string): string {
-  const labels: Record<string, string> = {
-    document_text_extraction_fallback: "PDF-Text nur fallback/unsicher extrahiert"
-  };
-  return labels[value] ?? value;
-}
-
 function buildSourceCheckItems(intakeRequestDetail?: IntakeRequestDetail | null): string[] {
   const rawInputs = Array.isArray(intakeRequestDetail?.rawInputs) ? intakeRequestDetail.rawInputs : [];
 
@@ -134,9 +122,9 @@ function buildSourceCheckItems(intakeRequestDetail?: IntakeRequestDetail | null)
         return undefined;
       }
 
-      const statusLabel = status ? formatIngestionStatus(status) : undefined;
+      const statusLabel = status ? `Lesbarkeit: ${formatDocumentIngestionStatusLabel(status)}` : undefined;
       const warningLabel = warnings.length > 0
-        ? `Warnung: ${warnings.map(formatIngestionWarning).join(", ")}`
+        ? `Hinweise: ${warnings.map(formatDocumentIngestionWarningLabel).join(", ")}`
         : undefined;
 
       return [`Quelle: ${filename}`, statusLabel, warningLabel].filter(Boolean).join(" · ");

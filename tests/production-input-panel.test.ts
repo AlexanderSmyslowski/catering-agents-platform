@@ -306,7 +306,7 @@ describe("production input panel", () => {
 
     expect(markup).toContain("Quellenprüfung:");
     expect(markup).toContain(
-      "Quelle: Angebot_Koepff.pdf · unsichere Textextraktion · Warnung: PDF-Text nur fallback/unsicher extrahiert"
+      "Quelle: Angebot_Koepff.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     );
     expect(markup).toContain("Nächster Schritt: Quellenprüfung bestätigen, dann Berechnung starten.");
     expect(markup).not.toContain("%PDF Rohinhalt");

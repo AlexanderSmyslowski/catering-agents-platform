@@ -54,7 +54,7 @@ describe("home route", () => {
       },
       offerHandoffCounts: { complete: 1, partial: 1 },
       recipeReviewCounts: { approved: 1, reviewRequired: 1 },
-      latestIntakeRequestSummary: "letzte Erfassung: request-1 via manual_form",
+      latestIntakeRequestSummary: "letzte Erfassung: manuelle Eingabe",
       filteredAuditEvents: [
         {
           auditId: "audit-1",
@@ -71,7 +71,7 @@ describe("home route", () => {
     expect(text).toContain("1 kaufmännische Entwürfe können direkt übernommen werden.");
     expect(text).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
     expect(text).toContain("2 Rezepte · 1 intern freigegeben · 1 Prüfung nötig");
-    expect(text).toContain("bereit · Anfragen: 2 · letzte Erfassung: request-1 via manual_form");
+    expect(text).toContain("bereit · Anfragen: 2 · letzte Erfassung: manuelle Eingabe");
     expect(text).toContain("1 Änderungen geladen · neueste: Produktionsplan erstellt");
     expect(text).toContain("Audit-/Handoff-Hinweis: interne Arbeitsbelege");
   });

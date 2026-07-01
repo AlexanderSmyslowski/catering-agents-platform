@@ -55,7 +55,7 @@ describe("app dashboard route state", () => {
     expect(state.filteredAuditEvents.map((event) => event.auditId)).toEqual(["audit-almond"]);
     expect(state.productionArtifactSpecIds).toEqual(["spec-current"]);
     expect(state.offerHandoffCounts).toEqual({ complete: 1, partial: 1 });
-    expect(state.latestIntakeRequestSummary).toBe("letzte Erfassung: request-latest via -");
+    expect(state.latestIntakeRequestSummary).toBe("letzte Erfassung: unbekannte Quelle");
     expect(state.isInitialHomeLoading).toBe(false);
     expect(state.isInitialProductionLoading).toBe(false);
     expect(state.selectedDraft?.draftId).toBe("draft-old");

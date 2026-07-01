@@ -499,7 +499,8 @@ describe("backoffice route smoke", () => {
     const home = (await renderRoute("/")).text;
 
     expect(home).toContain("Erfassung");
-    expect(home).toContain("letzte Erfassung: intake-source-warning-1 via pdf_upload");
+    expect(home).toContain("letzte Erfassung: Dateiupload");
+    expect(home).not.toContain("intake-source-warning-1");
     expect(home).toContain("Quelle: kundenanfrage-b21.pdf");
     expect(home).toContain(
       "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
@@ -1034,7 +1035,7 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("1 kaufmännische Entwürfe können direkt übernommen werden.");
     expect(home).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
     expect(home).toContain("2 Rezepte · 1 intern freigegeben · 1 Prüfung nötig");
-    expect(home).toContain("letzte Erfassung: start-intake-new via manual_form");
+    expect(home).toContain("letzte Erfassung: manuelle Eingabe");
     expect(home).toContain(
       "1 Änderungen geladen · neueste: Demo-Daten geladen · Actor: Mia · Action: seed_demo · 2026-07-01T10:05:00.000Z"
     );

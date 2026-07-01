@@ -112,7 +112,6 @@ export function formatLatestIntakeRequest(requests: Array<Record<string, unknown
     return requestTimestamp >= latestTimestamp ? request : latest;
   });
 
-  const requestId = String(latestRequest.requestId ?? latestRequest.id ?? "unbekannt");
   const channel = String((latestRequest.source as Record<string, unknown> | undefined)?.channel ?? "-");
   const rawInputs = Array.isArray(latestRequest.rawInputs) ? latestRequest.rawInputs : [];
   const firstInputWithSource = rawInputs.find((input) => {
@@ -126,12 +125,28 @@ export function formatLatestIntakeRequest(requests: Array<Record<string, unknown
   const ingestionSummary = firstInputWithWarning ? formatDocumentIngestionSummary(firstInputWithWarning) : undefined;
 
   return [
-    `letzte Erfassung: ${requestId} via ${channel}`,
+    `letzte Erfassung: ${formatIntakeChannelLabel(channel)}`,
     sourceFilename ? `Quelle: ${sourceFilename}` : undefined,
     ingestionSummary ? `Dokumentprüfung: ${ingestionSummary}` : undefined
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function formatIntakeChannelLabel(value: string): string {
+  const channel = value.trim();
+  if (!channel || channel === "-") {
+    return "unbekannte Quelle";
+  }
+  const labels: Record<string, string> = {
+    manual_form: "manuelle Eingabe",
+    offer: "Angebotsagent",
+    text: "Text",
+    pdf_upload: "Dateiupload",
+    email: "E-Mail"
+  };
+
+  return labels[channel] ?? channel;
 }
 
 export function formatAuditEventHandoffLabel(event: Record<string, unknown>): string {
