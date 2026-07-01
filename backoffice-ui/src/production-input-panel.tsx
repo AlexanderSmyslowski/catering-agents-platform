@@ -253,48 +253,51 @@ export function ProductionInputPanel({
                       <p className="helper-text">Keine blockierenden Rückfragen erkannt.</p>
                     )}
                   </div>
-                  <div>
-                    <p className="helper-text">Vorprüfung vor Berechnung:</p>
-                    <ul className="item-list compact upload-preflight-list">
-                      {panelState.uploadResultSummary.preflightItems.map((item) => (
-                        <li key={item.key}>
-                          <span className={`preflight-status preflight-status--${item.status}`}>
-                            {preflightStatusLabels[item.status]}
-                          </span>
-                          <strong>{item.label}</strong>
-                          <p className="helper-text">{item.detailLabel}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  {panelState.uploadResultSummary.assumptionItems.length > 0 ? (
+                  <details className="upload-result-review-details">
+                    <summary>Prüfpunkte vor Berechnung</summary>
                     <div>
-                      <p className="helper-text">Annahmen:</p>
+                      <p className="helper-text">Vorprüfung vor Berechnung:</p>
+                      <ul className="item-list compact upload-preflight-list">
+                        {panelState.uploadResultSummary.preflightItems.map((item) => (
+                          <li key={item.key}>
+                            <span className={`preflight-status preflight-status--${item.status}`}>
+                              {preflightStatusLabels[item.status]}
+                            </span>
+                            <strong>{item.label}</strong>
+                            <p className="helper-text">{item.detailLabel}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    {panelState.uploadResultSummary.assumptionItems.length > 0 ? (
+                      <div>
+                        <p className="helper-text">Annahmen:</p>
+                        <ul className="item-list compact">
+                          {panelState.uploadResultSummary.assumptionItems.slice(0, 3).map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <div>
+                      <p className="helper-text">Stand der Produktionsartefakte:</p>
                       <ul className="item-list compact">
-                        {panelState.uploadResultSummary.assumptionItems.slice(0, 3).map((item) => (
+                        {panelState.uploadResultSummary.artifactStatusItems.map((item) => (
                           <li key={item}>{item}</li>
                         ))}
                       </ul>
                     </div>
-                  ) : null}
-                  <div>
-                    <p className="helper-text">Stand der Produktionsartefakte:</p>
-                    <ul className="item-list compact">
-                      {panelState.uploadResultSummary.artifactStatusItems.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  {panelState.uploadResultSummary.sourceCheckItems.length > 0 ? (
-                    <div>
-                      <p className="helper-text">Quellenprüfung:</p>
-                      <ul className="item-list compact">
-                        {panelState.uploadResultSummary.sourceCheckItems.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
+                    {panelState.uploadResultSummary.sourceCheckItems.length > 0 ? (
+                      <div>
+                        <p className="helper-text">Quellenprüfung:</p>
+                        <ul className="item-list compact">
+                          {panelState.uploadResultSummary.sourceCheckItems.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </details>
                   <p className="helper-text">{panelState.uploadResultSummary.nextStepLabel}</p>
                 </div>
               ) : null}

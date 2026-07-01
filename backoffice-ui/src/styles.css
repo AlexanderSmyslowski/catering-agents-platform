@@ -1018,6 +1018,24 @@ button:disabled {
   border-left-color: rgba(46, 104, 173, 0.5);
 }
 
+.upload-result-review-details {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid rgba(15, 23, 34, 0.08);
+}
+
+.upload-result-review-details > summary {
+  cursor: pointer;
+  color: rgba(15, 23, 34, 0.72);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.upload-result-review-details[open] {
+  gap: 0.75rem;
+}
+
 .upload-preflight-list li {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

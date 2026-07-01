@@ -151,6 +151,9 @@ describe("production input panel", () => {
     expect(markup).toContain("Noch keine Gerichte erkannt.");
     expect(markup).toContain("Offen: keine Gerichte erkannt.");
     expect(markup).toContain("Nächster Schritt: erkannte Eckdaten prüfen und fehlende Gerichte ergänzen.");
+    expect(markup).toContain('class="upload-result-review-details"');
+    expect(markup).toContain("Prüfpunkte vor Berechnung");
+    expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("progress-ring--done");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
@@ -262,6 +265,9 @@ describe("production input panel", () => {
     expect(markup).toContain("Kaffeestation");
     expect(markup).toContain("Offen vor Produktion:");
     expect(markup).toContain("Lunchbuffet: Herstellungsentscheidung fehlt.");
+    expect(markup).toContain('class="upload-result-review-details"');
+    expect(markup).toContain("Prüfpunkte vor Berechnung");
+    expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
     expect(markup).toContain("Vorprüfung vor Berechnung:");
     expect(markup).toContain("Personenzahl");
     expect(markup).toContain("90 Personen erkannt.");
