@@ -106,10 +106,6 @@ function formatAssumptionStatus(hasPlan: boolean, metrics?: ProductionDossierMet
   return hasPlan ? "im Plan fachlich prüfen" : "vor Berechnung offen prüfen";
 }
 
-function formatPlanArtifactStatus(count: number): string {
-  return count === 1 ? "1 Plan-Artefakt vorhanden" : `${count} Plan-Artefakte vorhanden`;
-}
-
 function formatRecipeCardCount(count: number): string {
   return count === 1 ? "1 Rezeptkarte" : `${count} Rezeptkarten`;
 }
@@ -123,7 +119,7 @@ function formatBatchStatus(planCount: number, metrics?: ProductionDossierMetrics
   if (batchCount > 0) {
     return `${batchCount} Mengenkalkulation${batchCount === 1 ? "" : "en"} im Plan`;
   }
-  return planCount > 0 ? formatPlanArtifactStatus(planCount) : "noch nicht berechnet";
+  return planCount > 0 ? "keine Mengenkalkulation im Plan" : "noch nicht berechnet";
 }
 
 function formatRecipeStatus(hasPlan: boolean, metrics?: ProductionDossierMetrics): string {
