@@ -65,12 +65,16 @@ function buildSourceInput(overrides?: Partial<ProductionSourceInputValues>): Pro
   };
 }
 
-function renderPanel(sourceInput: ProductionSourceInputValues): string {
+function renderPanel(
+  sourceInput: ProductionSourceInputValues,
+  uploadResultSpec?: Record<string, unknown>
+): string {
   return renderToStaticMarkup(
     createElement(ProductionInputPanel, {
       submitting: false,
       sourceInput,
       sourceInputActions,
+      uploadResultSpec,
       manualInput,
       manualInputActions
     })
@@ -171,5 +175,66 @@ describe("production input panel", () => {
 
     expect(markup).toContain("Ausgewählt: problemangebot.pdf");
     expect(markup).toMatch(/<button(?:(?!disabled).)*>Erneut mit ausgewähltem Typ verarbeiten<\/button>/);
+  });
+
+  it("shows the accepted production data directly after a completed upload", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "angebot.pdf",
+        documentProgress: 100,
+        uploadResultSpec: {
+          event: { type: "conference", date: "2026-09-03" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "partial" },
+          menuPlan: [
+            {
+              componentId: "tarte",
+              label: "Tortilla-Tarte",
+              menuCategory: "vegetarian"
+            }
+          ],
+          uncertainties: [
+            {
+              field: "event.schedule",
+              suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?"
+            }
+          ],
+          assumptions: [
+            {
+              message: "Serviceform aus dem Anfragetext abgeleitet: Buffet."
+            }
+          ]
+        }
+      }),
+      {
+        event: { type: "meeting", date: "2026-01-01" },
+        attendees: { expected: 12 },
+        servicePlan: { serviceForm: "coffee_break" },
+        readiness: { status: "complete" },
+        menuPlan: [{ componentId: "stale", label: "Alter Vorgang" }]
+      }
+    );
+
+    expect(markup).toContain("Analyse abgeschlossen für angebot.pdf.");
+    expect(markup).toContain("Erkannte Produktionsdaten");
+    expect(markup).toContain("Verständnis des Angebots");
+    expect(markup).toContain("production-input-panel--completed");
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).toContain('tabindex="-1"');
+    expect(markup).not.toContain("Drag & Drop");
+    expect(markup).not.toContain("Anfrage als Datei übernehmen");
+    expect(markup).toContain("Konferenz · Datum: 2026-09-03 · 90 Personen · Buffet");
+    expect(markup).not.toContain("Alter Vorgang");
+    expect(markup).toContain("Tortilla-Tarte");
+    expect(markup).toContain("Vegetarisch");
+    expect(markup).toContain("Produktionsstand");
+    expect(markup).toContain("Mengenkalkulation: wartet auf Berechnung");
+    expect(markup).toContain("Rezeptkarten: warten auf Rezeptzuordnung");
+    expect(markup).toContain("Einkaufsliste: wartet auf Berechnung");
+    expect(markup).toContain("Wie lautet das verbindliche Zeitfenster?");
+    expect(markup).toContain("Serviceform aus dem Anfragetext abgeleitet: Buffet.");
+    expect(markup).toContain("Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.");
   });
 });

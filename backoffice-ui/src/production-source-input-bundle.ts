@@ -30,6 +30,7 @@ export function buildProductionSourceInputBundle(
       activeDocumentName: input.activeDocumentName,
       documentProgress: input.documentProgress,
       documentEtaSeconds: input.documentEtaSeconds,
+      uploadResultSpec: input.uploadResultSpec,
       intakeText: input.intakeText,
       canClearWorkspace: input.canClearWorkspace,
       canArchiveCurrentIntake: input.canArchiveCurrentIntake,

@@ -119,6 +119,11 @@ export function ProductionRouteMainLayout({
               submitting={submitting}
               sourceInput={sourceInput}
               sourceInputActions={sourceInputActions}
+              uploadResultSpec={
+                sourceInput.documentPhase === "done" && !questionState.productionWorkspaceCleared
+                  ? questionState.focusedProductionSpec
+                  : undefined
+              }
               manualInput={manualInput}
               manualInputActions={manualInputActions}
             />

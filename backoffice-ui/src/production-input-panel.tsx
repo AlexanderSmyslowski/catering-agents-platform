@@ -6,6 +6,7 @@ import {
 import type { IntakeDocumentChannel } from "./api.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
 import { buildProductionInputPanelState } from "./production-input-panel-state.js";
+import { buildProductionUploadResultSummaryState } from "./production-upload-result-summary-state.js";
 
 export type ProductionManualInputValues = {
   eventType: string;
@@ -38,6 +39,7 @@ export type ProductionSourceInputValues = {
   activeDocumentName?: string;
   documentProgress: number;
   documentEtaSeconds?: number;
+  uploadResultSpec?: Record<string, unknown>;
   intakeText: string;
   canClearWorkspace: boolean;
   canArchiveCurrentIntake: boolean;
@@ -65,6 +67,7 @@ type ProductionInputPanelProps = {
   submitting: boolean;
   sourceInput: ProductionSourceInputValues;
   sourceInputActions: ProductionSourceInputActions;
+  uploadResultSpec?: Record<string, unknown>;
   manualInput: ProductionManualInputValues;
   manualInputActions: ProductionManualInputActions;
 };
@@ -73,6 +76,7 @@ export function ProductionInputPanel({
   submitting,
   sourceInput,
   sourceInputActions,
+  uploadResultSpec,
   manualInput,
   manualInputActions
 }: ProductionInputPanelProps) {
@@ -80,9 +84,30 @@ export function ProductionInputPanel({
     submitting,
     sourceInput
   });
+  const uploadResultSummary = panelState.showCompletedProgress
+    ? buildProductionUploadResultSummaryState(sourceInput.uploadResultSpec ?? uploadResultSpec)
+    : undefined;
 
   return (
-    <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
+    <article
+      className={
+        panelState.showCompletedProgress
+          ? "panel form-panel production-input-panel production-input-panel--completed"
+          : "panel form-panel production-input-panel"
+      }
+      aria-label="Arbeitsauftrag und Eingabe"
+    >
+      {panelState.showCompletedProgress ? (
+        <input
+          ref={sourceInputActions.uploadInputRef}
+          className="visually-hidden"
+          type="file"
+          aria-hidden="true"
+          tabIndex={-1}
+          accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
+          onChange={sourceInputActions.handleFileSelection}
+        />
+      ) : null}
       <div className="upload-shortcut-bar">
         <div>
           <p className="eyebrow">Anfrageeingang</p>
@@ -97,33 +122,37 @@ export function ProductionInputPanel({
           </button>
         </div>
       </div>
-      <header>
-        <p className="eyebrow">Eingabequelle</p>
-        <h3>Anfrage als Datei übernehmen</h3>
-      </header>
-      <label
-        className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
-        onDragOver={(event) => {
-          event.preventDefault();
-          sourceInputActions.setDragActive(true);
-        }}
-        onDragLeave={() => sourceInputActions.setDragActive(false)}
-        onDrop={sourceInputActions.handleDrop}
-      >
-        <input
-          ref={sourceInputActions.uploadInputRef}
-          className="visually-hidden"
-          type="file"
-          accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
-          onChange={sourceInputActions.handleFileSelection}
-        />
-        <span className="eyebrow">Drag & Drop</span>
-        <strong>Datei hier ablegen oder Dateiauswahl öffnen</strong>
-        <p className="helper-text">
-          Unterstützt PDF, E-Mail und Textdateien bis {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Nach der Auswahl erscheint der Dateiname hier, danach bewusst verarbeiten.
-        </p>
-        <span className="drag-drop-zone__cta">Datei auswählen</span>
-      </label>
+      {panelState.showCompletedProgress ? null : (
+        <>
+          <header className="production-file-input-heading">
+            <p className="eyebrow">Eingabequelle</p>
+            <h3>Anfrage als Datei übernehmen</h3>
+          </header>
+          <label
+            className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
+            onDragOver={(event) => {
+              event.preventDefault();
+              sourceInputActions.setDragActive(true);
+            }}
+            onDragLeave={() => sourceInputActions.setDragActive(false)}
+            onDrop={sourceInputActions.handleDrop}
+          >
+            <input
+              ref={sourceInputActions.uploadInputRef}
+              className="visually-hidden"
+              type="file"
+              accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
+              onChange={sourceInputActions.handleFileSelection}
+            />
+            <span className="eyebrow">Drag & Drop</span>
+            <strong>Datei hier ablegen oder Dateiauswahl öffnen</strong>
+            <p className="helper-text">
+              Unterstützt PDF, E-Mail und Textdateien bis {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Nach der Auswahl erscheint der Dateiname hier, danach bewusst verarbeiten.
+            </p>
+            <span className="drag-drop-zone__cta">Datei auswählen</span>
+          </label>
+        </>
+      )}
       <div className="activity-slot">
         {panelState.selectedFileName ? <p className="helper-text">Ausgewählt: {panelState.selectedFileName}</p> : null}
         {panelState.showAnalysingProgress ? (
@@ -166,6 +195,64 @@ export function ProductionInputPanel({
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
               </div>
               <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+              {uploadResultSummary ? (
+                <section className="upload-result-card" aria-label="Erkannte Produktionsdaten nach Upload">
+                  <header>
+                    <p className="eyebrow">Erkannte Produktionsdaten</p>
+                    <strong>Verständnis des Angebots</strong>
+                    <p className="helper-text">{uploadResultSummary.eventLabel}</p>
+                    <p className="helper-text">{uploadResultSummary.statusLabel}</p>
+                  </header>
+                  <div className="upload-result-grid">
+                    <section>
+                      <h4>Speisen / Komponenten</h4>
+                      {uploadResultSummary.menuItems.length > 0 ? (
+                        <ul className="upload-result-list">
+                          {uploadResultSummary.menuItems.map((item) => (
+                            <li key={item.key}>
+                              <strong>{item.label}</strong>
+                              <span>{item.detailLabel}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="helper-text">Noch keine Komponenten erkannt.</p>
+                      )}
+                    </section>
+                    <section>
+                      <h4>Rückfragen</h4>
+                      <p className="helper-text">
+                        {uploadResultSummary.questionLabels.length > 0
+                          ? `${uploadResultSummary.questionLabels.length} offen · ${uploadResultSummary.questionLabels[0]}`
+                          : "Keine blockierenden Rückfragen erkannt."}
+                      </p>
+                    </section>
+                    <section>
+                      <h4>Annahmen</h4>
+                      <p className="helper-text">
+                        {uploadResultSummary.assumptionLabels.length > 0
+                          ? `${uploadResultSummary.assumptionLabels.length} · ${uploadResultSummary.assumptionLabels[0]}`
+                          : "Keine Annahmen ausgewiesen."}
+                      </p>
+                    </section>
+                    <section>
+                      <h4>Produktionsstand</h4>
+                      <ul className="upload-result-list">
+                        {uploadResultSummary.artifactStatusLabels.map((label) => (
+                          <li key={label}>{label}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  </div>
+                  <p className="result-status-strip">
+                    <strong>{uploadResultSummary.nextStepLabel}</strong>
+                  </p>
+                </section>
+              ) : (
+                <p className="helper-text">
+                  Noch keine strukturierten Produktionsdaten im Fokus. Bitte den erkannten Vorgang in den Rückfragen öffnen.
+                </p>
+              )}
             </div>
           </div>
         ) : null}

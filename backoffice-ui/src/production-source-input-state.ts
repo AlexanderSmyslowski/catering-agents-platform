@@ -11,6 +11,7 @@ export type ProductionSourceInputStateInput = {
   activeDocumentName?: string;
   documentProgress: number;
   documentEtaSeconds?: number;
+  uploadResultSpec?: Record<string, unknown>;
   intakeText: string;
   canClearWorkspace: boolean;
   canArchiveCurrentIntake: boolean;
@@ -60,6 +61,7 @@ export function buildProductionSourceInputState({
   activeDocumentName,
   documentProgress,
   documentEtaSeconds,
+  uploadResultSpec,
   intakeText,
   canClearWorkspace,
   canArchiveCurrentIntake,
@@ -74,6 +76,7 @@ export function buildProductionSourceInputState({
     activeDocumentName,
     documentProgress,
     documentEtaSeconds,
+    uploadResultSpec,
     intakeText,
     canClearWorkspace,
     canArchiveCurrentIntake,

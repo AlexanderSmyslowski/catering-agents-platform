@@ -51,6 +51,7 @@ describe("useProductionIntakeDraft", () => {
     expect(probe.draft.intakeChannel).toBe("pdf_upload");
     expect(probe.draft.intakeFile).toBeNull();
     expect(probe.draft.dragActive).toBe(false);
+    expect(probe.draft.uploadResultSpec).toBeUndefined();
   });
 
   it("tracks incoming file processing without changing the text draft", () => {
@@ -69,12 +70,19 @@ describe("useProductionIntakeDraft", () => {
     expect(probe.draft.dragActive).toBe(true);
 
     act(() => {
-      probe.draft.completeIncomingProductionFile();
+      probe.draft.completeIncomingProductionFile({ specId: "spec-upload-1" });
     });
 
     expect(probe.draft.intakeFile).toBeNull();
     expect(probe.draft.dragActive).toBe(false);
     expect(probe.draft.intakeChannel).toBe("email");
+    expect(probe.draft.uploadResultSpec).toEqual({ specId: "spec-upload-1" });
+
+    act(() => {
+      probe.draft.startIncomingProductionFile(file, "pdf_upload");
+    });
+
+    expect(probe.draft.uploadResultSpec).toBeUndefined();
   });
 
   it("restores failed files and clears only file/drag state on reset", () => {
@@ -97,5 +105,6 @@ describe("useProductionIntakeDraft", () => {
     expect(probe.draft.intakeText).toBe("Bleibt erhalten");
     expect(probe.draft.intakeFile).toBeNull();
     expect(probe.draft.dragActive).toBe(false);
+    expect(probe.draft.uploadResultSpec).toBeUndefined();
   });
 });

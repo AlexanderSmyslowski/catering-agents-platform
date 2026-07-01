@@ -37,6 +37,7 @@ describe("production document success state", () => {
     );
 
     expect(actions.setFocusedProductionSpecId).toHaveBeenCalledWith("spec-upload-1");
+    expect(actions.completeIncomingProductionFile).toHaveBeenCalledWith({ specId: "spec-upload-1" });
     expect(actions.refreshDashboard).toHaveBeenCalledTimes(1);
     expect(actions.setNotice).toHaveBeenCalledWith("Dokument angebot.pdf wurde übernommen und analysiert.");
     expect(calls).toEqual([
@@ -56,6 +57,7 @@ describe("production document success state", () => {
     await completeProductionStateAfterDocumentSuccess(file, { acceptedEventSpec: { specId: 123 } }, actions);
 
     expect(actions.setFocusedProductionSpecId).not.toHaveBeenCalled();
+    expect(actions.completeIncomingProductionFile).toHaveBeenCalledWith({ specId: 123 });
     expect(calls).toEqual([
       "completeIncomingProductionFile",
       "completeDocumentProgress",

@@ -78,8 +78,8 @@ describe("production document submit action", () => {
       setFocusedProductionSpecId: vi.fn((specId) => {
         calls.push(`setFocusedProductionSpecId:${specId}`);
       }),
-      completeIncomingProductionFile: vi.fn(() => {
-        calls.push("completeIncomingProductionFile");
+      completeIncomingProductionFile: vi.fn((spec) => {
+        calls.push(`completeIncomingProductionFile:${String(spec?.specId ?? "none")}`);
       }),
       completeDocumentProgress: vi.fn(() => {
         calls.push("completeDocumentProgress");
@@ -103,7 +103,7 @@ describe("production document submit action", () => {
       "setNotice:Dokument angebot.pdf wird analysiert...",
       "createAcceptedSpecFromDocument",
       "setFocusedProductionSpecId:spec-upload-1",
-      "completeIncomingProductionFile",
+      "completeIncomingProductionFile:spec-upload-1",
       "completeDocumentProgress",
       "refreshDashboard",
       "setNotice:Dokument angebot.pdf wurde übernommen und analysiert.",
