@@ -2,6 +2,34 @@ import { describe, expect, it } from "vitest";
 import { buildProductionWorkbenchOutputAnchorState } from "../backoffice-ui/src/production-workbench-output-anchor-state.js";
 
 describe("production workbench output anchor state", () => {
+  it("treats recognized spec facts as production data before plan calculation", () => {
+    expect(
+      buildProductionWorkbenchOutputAnchorState({
+        specFactCount: 6,
+        questionCount: 0,
+        productionObjectCount: 0,
+        purchaseListCount: 0
+      })
+    ).toEqual({
+      title: "Produktionsdaten prüfen",
+      description:
+        "Erkannte Eckdaten und Speisen liegen vor. Bitte Angaben prüfen und danach die Berechnung starten.",
+      grouping:
+        "Plan, Einkaufsliste und Exportlinks entstehen erst nach der Berechnung; Rückfragen bleiben sichtbar.",
+      reviewItems: [
+        { label: "Verständnis des Angebots", status: "Eckdaten sichtbar" },
+        { label: "Rückfragen", status: "keine offenen Rückfragen sichtbar" },
+        { label: "Annahmen & Festlegungen", status: "vor Berechnung offen prüfen" },
+        { label: "Kalkulationsübersicht", status: "nach Berechnung offen" },
+        { label: "Mengenkalkulation je Gericht", status: "noch nicht berechnet" },
+        { label: "Rezeptkarten", status: "nach Produktionsplan offen" },
+        { label: "Metro-Einkaufsliste", status: "noch offen" },
+        { label: "Mise-en-Place", status: "nach Produktionsplan offen" },
+        { label: "Abschlussprüfung & Exporte", status: "nach Plan und Einkaufsliste offen" }
+      ]
+    });
+  });
+
   it("keeps plan-only copy from claiming purchase list or export readiness", () => {
     expect(
       buildProductionWorkbenchOutputAnchorState({

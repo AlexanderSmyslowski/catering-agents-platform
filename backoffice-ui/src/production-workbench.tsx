@@ -130,6 +130,7 @@ export function ProductionConversationalWorkbench({
     unansweredQuestionCount
   );
   const productionOutputAnchor = buildProductionWorkbenchOutputAnchorState({
+    specFactCount: specFacts.length,
     questionCount,
     productionObjectCount,
     purchaseListCount

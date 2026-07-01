@@ -17,17 +17,25 @@ function formatPlanArtifactStatus(count: number): string {
 }
 
 export function buildProductionWorkbenchOutputAnchorState(input: {
+  specFactCount?: number;
   questionCount: number;
   productionObjectCount: number;
   purchaseListCount: number;
 }): ProductionWorkbenchOutputAnchorState {
+  const hasSpecFacts = (input.specFactCount ?? 0) > 0;
   const hasQuestions = input.questionCount > 0;
   const hasPlan = input.productionObjectCount > 0;
   const hasPurchaseList = input.purchaseListCount > 0;
   const reviewItems = [
     {
       label: "Verständnis des Angebots",
-      status: hasQuestions ? "Spezifikation sichtbar, Klärpunkte offen" : "Spezifikation sichtbar"
+      status: hasSpecFacts
+        ? hasQuestions
+          ? "Eckdaten sichtbar, Klärpunkte offen"
+          : "Eckdaten sichtbar"
+        : hasQuestions
+          ? "Spezifikation sichtbar, Klärpunkte offen"
+          : "Spezifikation sichtbar"
     },
     {
       label: "Rückfragen",
@@ -81,6 +89,17 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
         "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.",
       grouping:
         "Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar; ältere Vorgänge bleiben eingeklappt.",
+      reviewItems
+    };
+  }
+
+  if (hasSpecFacts) {
+    return {
+      title: "Produktionsdaten prüfen",
+      description:
+        "Erkannte Eckdaten und Speisen liegen vor. Bitte Angaben prüfen und danach die Berechnung starten.",
+      grouping:
+        "Plan, Einkaufsliste und Exportlinks entstehen erst nach der Berechnung; Rückfragen bleiben sichtbar.",
       reviewItems
     };
   }

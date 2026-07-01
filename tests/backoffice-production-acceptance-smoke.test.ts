@@ -762,6 +762,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Veranstaltung");
     expect(content).toContain("Konferenz");
     expect(content).toContain("36 Personen");
+    expect(content).toContain("Speisen");
+    expect(content).toContain("Brot-Baguette");
     expect(content).toContain("Produktionsplan");
     expect(content).not.toContain("Produktionsplan1");
     expect(content).not.toContain("Einkaufsliste1");
@@ -1595,7 +1597,10 @@ describe("backoffice production acceptance smoke", () => {
       expect(document.activeElement).not.toBe(initialResults);
 
       await act(async () => {
-        root.render(renderWorkbench(0, [{ label: "Gäste", value: "42 Personen" }]));
+        root.render(renderWorkbench(0, [
+          { label: "Gäste", value: "42 Personen" },
+          { label: "Speisen", value: "Tortilla-Tarte, Vitello Tonnato" }
+        ]));
       });
 
       const focusedResults = document.querySelector<HTMLElement>('[aria-label="Aktuelle Produktionsergebnisse"]');
@@ -1604,6 +1609,9 @@ describe("backoffice production acceptance smoke", () => {
       expect(document.activeElement).toBe(focusedResults);
       expect(document.body.textContent ?? "").toContain("Erkannte Eckdaten");
       expect(document.body.textContent ?? "").toContain("42 Personen");
+      expect(document.body.textContent ?? "").toContain("Produktionsdaten prüfen");
+      expect(document.body.textContent ?? "").toContain("Erkannte Eckdaten und Speisen liegen vor.");
+      expect(document.body.textContent ?? "").toContain("Tortilla-Tarte, Vitello Tonnato");
       expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
     } finally {
       if (originalScrollIntoView) {

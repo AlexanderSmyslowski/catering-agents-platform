@@ -24,6 +24,22 @@ function readStringOrNumber(record: Record<string, unknown> | undefined, keys: s
   return undefined;
 }
 
+function formatMenuComponentSummary(menuPlan: unknown[]): string | undefined {
+  const labels = menuPlan
+    .map((item) => readStringOrNumber(asRecord(item), ["label", "name", "title"]))
+    .filter((label): label is string => Boolean(label?.trim()));
+
+  if (labels.length === 0) {
+    return undefined;
+  }
+
+  const visibleLabels = labels.slice(0, 4);
+  const remainingCount = labels.length - visibleLabels.length;
+  return remainingCount > 0
+    ? `${visibleLabels.join(", ")} + ${remainingCount} weitere`
+    : visibleLabels.join(", ");
+}
+
 export function translateReadiness(value?: string): string {
   const labels: Record<string, string> = {
     complete: "vollständig",
@@ -121,6 +137,7 @@ export function buildWorkbenchSpecFacts(spec?: Record<string, unknown>): Workben
   const servicePlan = asRecord(spec.servicePlan);
   const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
   const eventType = readStringOrNumber(event, ["type"]) ?? readStringOrNumber(servicePlan, ["eventType"]);
+  const menuComponentSummary = formatMenuComponentSummary(menuPlan);
 
   const facts: WorkbenchSpecFact[] = [
     {
@@ -144,6 +161,12 @@ export function buildWorkbenchSpecFacts(spec?: Record<string, unknown>): Workben
       value: `${menuPlan.length} Komponenten`
     }
   ];
+  if (menuComponentSummary) {
+    facts.push({
+      label: "Speisen",
+      value: menuComponentSummary
+    });
+  }
 
   if (!eventType) {
     return facts;

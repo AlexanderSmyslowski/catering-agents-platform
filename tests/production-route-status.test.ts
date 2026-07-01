@@ -12,14 +12,37 @@ describe("production route status", () => {
         },
         attendees: { expected: 48 },
         servicePlan: { serviceForm: "buffet" },
-        menuPlan: [{ componentId: "starter" }, { componentId: "main" }]
+        menuPlan: [
+          { componentId: "starter", label: "Vitello Tonnato" },
+          { componentId: "main", label: "Tortilla-Tarte" }
+        ]
       })
     ).toEqual([
       { label: "Status", value: "vollständig" },
       { label: "Zeit", value: "Datum: 2026-06-12 · Terminfenster: Service 12:00–14:00" },
       { label: "Gäste", value: "48 Personen" },
-        { label: "Service", value: "Buffet" },
-        { label: "Menü", value: "2 Komponenten" }
-      ]);
+      { label: "Service", value: "Buffet" },
+      { label: "Menü", value: "2 Komponenten" },
+      { label: "Speisen", value: "Vitello Tonnato, Tortilla-Tarte" }
+    ]);
+  });
+
+  it("keeps the production result summary compact when many components are recognized", () => {
+    expect(
+      buildWorkbenchSpecFacts({
+        readiness: { status: "partial" },
+        event: { type: "conference" },
+        menuPlan: [
+          { label: "Vitello Tonnato" },
+          { label: "Grüner Spargel" },
+          { label: "Tortilla-Tarte" },
+          { label: "Rotgarnelen" },
+          { label: "Roastbeef" }
+        ]
+      })
+    ).toContainEqual({
+      label: "Speisen",
+      value: "Vitello Tonnato, Grüner Spargel, Tortilla-Tarte, Rotgarnelen + 1 weitere"
+    });
   });
 });
