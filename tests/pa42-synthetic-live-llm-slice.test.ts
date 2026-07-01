@@ -7,7 +7,8 @@ import {
   llmReadinessEvalFixtures,
   validateLlmReadinessPromptArtifacts,
   type LlmReadinessModelInput,
-  type LlmReadinessSyntheticLiveTransport
+  type LlmReadinessSyntheticLiveTransport,
+  type LlmReadinessSyntheticLiveTransportRequest
 } from "@catering/shared-core";
 
 const docPath = "docs/architecture/PA42_SYNTHETIC_LIVE_LLM_SLICE.md";
@@ -51,18 +52,22 @@ describe("PA42 synthetic live LLM slice", () => {
   });
 
   it("builds a valid synthetic-live clarification draft when the feature flag is enabled", async () => {
+    const transportRequests: LlmReadinessSyntheticLiveTransportRequest[] = [];
     const transport: LlmReadinessSyntheticLiveTransport = {
-      run: async () => ({
-        ok: true,
-        errors: [],
-        providerId: "fake-provider",
-        providerRequestId: "req-1",
-        text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
-        structuredCandidate: {
-          reason: "missingFields",
-          reasonCode: "attendees.expected"
-        }
-      })
+      run: async (request) => {
+        transportRequests.push(request);
+        return {
+          ok: true,
+          errors: [],
+          providerId: "fake-provider",
+          providerRequestId: "req-1",
+          text: "Bitte klaeren, fuer wie viele Personen die Kaffeepause geplant werden soll.",
+          structuredCandidate: {
+            reason: "missingFields",
+            reasonCode: "attendees.expected"
+          }
+        };
+      }
     };
 
     const slice = new SyntheticLiveLlmReadinessSlice({
@@ -98,6 +103,12 @@ describe("PA42 synthetic live LLM slice", () => {
         }
       }
     });
+    expect(transportRequests).toHaveLength(1);
+    expect(transportRequests[0].userPrompt).toContain(
+      "Erzeuge ein JSON-Objekt mit den Feldern text, reason und reasonCode."
+    );
+    expect(transportRequests[0].userPrompt).toContain("Bekannte SourceRefs:");
+    expect(transportRequests[0].userPrompt).toContain("accepted_event_spec:spec-synthetic-coffee-break");
   });
 
   it("rejects live runs while the feature flag is disabled", async () => {

@@ -140,7 +140,8 @@ describe("Codex CLI BYO LLM provider", () => {
       "-"
     ]));
     expect(calls[0].stdin).toContain("reine Inferenz");
-    expect(calls[0].stdin).toContain("Antwortformat: JSON mit text, reason und reasonCode.");
+    expect(calls[0].stdin).toContain("Erzeuge ein JSON-Objekt mit den Feldern text, reason und reasonCode.");
+    expect(calls[0].stdin).toContain("accepted_event_spec:spec-synthetic-coffee-break");
     expect(buildByoLlmAdapterFromEnv({ CATERING_LLM_PROVIDER: "fixture" }).adapterMode).toBe("fixture_only");
     expect(() => buildByoLlmAdapterFromEnv({ CATERING_LLM_PROVIDER: "openai" })).toThrow("CATERING_LLM_MODEL");
     expect(() =>

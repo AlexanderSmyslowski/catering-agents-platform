@@ -13,7 +13,8 @@ import {
 import { findLlmReadinessPromptSchemaEntryByInputKind } from "./llm-readiness-prompt-schema-registry.js";
 import {
   findLlmReadinessPromptArtifactByInputKind,
-  validateLlmReadinessPromptArtifacts
+  validateLlmReadinessPromptArtifacts,
+  type LlmReadinessPromptArtifact
 } from "./llm-readiness-prompt-artifacts.js";
 import { validateLlmReadinessDraftOutputForInput } from "./llm-readiness-draft-output-validation.js";
 
@@ -102,7 +103,7 @@ function fixtureMatchesInput(input: LlmReadinessModelInput, fixture: LlmReadines
   );
 }
 
-function buildUserPrompt(fixture: LlmReadinessEvalFixture): string {
+function buildUserPrompt(fixture: LlmReadinessEvalFixture, promptArtifact: LlmReadinessPromptArtifact): string {
   const sourceRefLines = fixture.input.sourceRefs.map((sourceRef) =>
     `- ${sourceRef.objectType}:${sourceRef.objectId}${sourceRef.label ? ` (${sourceRef.label})` : ""}`
   );
@@ -110,10 +111,10 @@ function buildUserPrompt(fixture: LlmReadinessEvalFixture): string {
   return [
     fixture.title,
     "",
-    "Bekannte SourceRefs:",
-    ...sourceRefLines,
+    promptArtifact.userPromptTemplate,
     "",
-    "Antwortformat: JSON mit text, reason und reasonCode."
+    "Bekannte SourceRefs:",
+    ...sourceRefLines
   ].join("\n");
 }
 
@@ -259,7 +260,7 @@ export class SyntheticLiveLlmReadinessSlice {
       promptVersion: promptArtifact.promptVersion,
       outputKind: promptSchemaEntry.outputKind,
       systemPrompt: promptArtifact.systemPrompt,
-      userPrompt: buildUserPrompt(fixture)
+      userPrompt: buildUserPrompt(fixture, promptArtifact)
     });
 
     if (!transportResponse.ok) {
