@@ -110,7 +110,8 @@ describe("production input panel", () => {
     expect(markup).toContain("Der Inhalt wird als Catering-Anfrage erfasst.");
     expect(markup).toContain("Datei auswählen");
     expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
-    expect(markup).toContain("Anfrage als Datei übernehmen");
+    expect(markup).not.toContain("Anfrage als Datei übernehmen");
+    expect(markup).not.toContain("upload-shortcut-bar");
     expect(markup).toContain("PDF / Anfrage");
     expect(markup).not.toContain("Intake-Pfad");
     expect(markup).not.toContain("Chat-Eingang");

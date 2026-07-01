@@ -86,23 +86,12 @@ export function ProductionInputPanel({
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
-      <div className="upload-shortcut-bar">
-        <div>
-          <p className="eyebrow">Anfrageeingang</p>
-          <strong>Kundenanfrage übernehmen</strong>
-          <p className="helper-text">
-            PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der Inhalt wird als Catering-Anfrage erfasst. Alternativ kannst du den Text unten direkt einfügen.
-          </p>
-        </div>
-        <div className="action-row">
-          <button type="button" disabled={submitting} onClick={sourceInputActions.openFilePicker}>
-            Datei auswählen
-          </button>
-        </div>
-      </div>
       <header>
-        <p className="eyebrow">Eingabequelle</p>
-        <h3>Anfrage als Datei übernehmen</h3>
+        <p className="eyebrow">Anfrageeingang</p>
+        <h3>Kundenanfrage übernehmen</h3>
+        <p className="helper-text">
+          PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der Inhalt wird als Catering-Anfrage erfasst. Alternativ kannst du den Text unten direkt einfügen.
+        </p>
       </header>
       <label
         className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
