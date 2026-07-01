@@ -62,6 +62,25 @@ describe("production status summary state", () => {
     expect(state.productionNextStep.title).toBe("Rückfragen beantworten");
   });
 
+  it("does not show complete readiness while production questions are still open", () => {
+    const state = buildProductionStatusSummaryState({
+      focusedProductionSpec: {
+        specId: "spec-open-questions",
+        readiness: { status: "complete" },
+        event: { type: "conference", date: "2026-09-03" },
+        attendees: { expected: 90 }
+      },
+      currentSpecPlans: [],
+      currentSpecPurchaseLists: [],
+      productionQuestions: ["Wie lautet das verbindliche Zeitfenster?"],
+      filteredAuditEvents: [],
+      productionWorkspaceCleared: false
+    });
+
+    expect(state.focusedSpecReadinessLabel).toBe("teilweise vollständig");
+    expect(state.productionNextStep.title).toBe("Rückfragen beantworten");
+  });
+
   it("keeps the empty and cleared production defaults in one state object", () => {
     const state = buildProductionStatusSummaryState({
       currentSpecPlans: [],

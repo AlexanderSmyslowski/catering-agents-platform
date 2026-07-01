@@ -30,7 +30,7 @@ describe("production spec details state", () => {
     ).toEqual({
       contextLabel: "Spezifikation im Fokus",
       eventLabel: "Eventtyp: Lunch · Datum: 2026-06-12 · Terminfenster: Service 12:00–14:00",
-      summaryLabel: "Teilnehmerzahl: 48 · Serviceform: Buffet · Readiness: teilweise vollständig",
+      summaryLabel: "Teilnehmerzahl: 48 · Serviceform: Buffet · Pflichtangaben: teilweise vollständig",
       menuItems: [
         {
           key: "starter",
@@ -52,7 +52,7 @@ describe("production spec details state", () => {
     ).toEqual({
       contextLabel: "Spezifikation im Fokus",
       eventLabel: "Eventtyp: Konferenz · Terminfenster: noch zu bestätigen",
-      summaryLabel: "Teilnehmerzahl: - · Serviceform: offen · Readiness: vollständig",
+      summaryLabel: "Teilnehmerzahl: - · Serviceform: offen · Pflichtangaben: vollständig",
       menuItems: [
         {
           key: "component-1",

@@ -37,6 +37,17 @@ export function formatProductionReadinessLabel(source?: Record<string, unknown>)
   return translateReadiness(String(asRecord(source?.readiness)?.status ?? "-"));
 }
 
+export function formatProductionReadinessLabelForQuestionCount(
+  source: Record<string, unknown> | undefined,
+  questionCount: number
+): string {
+  const status = String(asRecord(source?.readiness)?.status ?? "-");
+  if (questionCount > 0 && status === "complete") {
+    return translateReadiness("partial");
+  }
+  return translateReadiness(status);
+}
+
 export function formatProductionPlanStatusLabel(selectedPlan?: Record<string, unknown>): string {
   return selectedPlan ? formatProductionReadinessLabel(selectedPlan) : "offen";
 }
@@ -111,7 +122,10 @@ export function formatProductionTimingWindow(spec?: Record<string, unknown>): st
   return "Terminfenster: noch zu bestätigen";
 }
 
-export function buildWorkbenchSpecFacts(spec?: Record<string, unknown>): WorkbenchSpecFact[] {
+export function buildWorkbenchSpecFacts(
+  spec?: Record<string, unknown>,
+  options?: { questionCount?: number }
+): WorkbenchSpecFact[] {
   if (!spec) {
     return [];
   }
@@ -123,7 +137,7 @@ export function buildWorkbenchSpecFacts(spec?: Record<string, unknown>): Workben
   return [
     {
       label: "Status",
-      value: translateReadiness(String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "-"))
+      value: formatProductionReadinessLabelForQuestionCount(spec, options?.questionCount ?? 0)
     },
     {
       label: "Zeit",

@@ -15,6 +15,7 @@ import {
   formatProductionObjectStatusLabel,
   formatProductionPlanStatusLabel,
   formatProductionReadinessLabel,
+  formatProductionReadinessLabelForQuestionCount,
   formatProductionTimingWindow,
   formatStructuredProductionAnswerSummary,
   lookupProductionSpecById,
@@ -533,6 +534,10 @@ describe("production route state", () => {
     expect(translateReadiness()).toBe("-");
 
     expect(formatProductionReadinessLabel({ readiness: { status: "complete" } })).toBe("vollständig");
+    expect(formatProductionReadinessLabelForQuestionCount({ readiness: { status: "complete" } }, 0)).toBe("vollständig");
+    expect(formatProductionReadinessLabelForQuestionCount({ readiness: { status: "complete" } }, 2)).toBe(
+      "teilweise vollständig"
+    );
     expect(formatProductionReadinessLabel({ readiness: { status: "partial" } })).toBe("teilweise vollständig");
     expect(formatProductionReadinessLabel({})).toBe("-");
     expect(formatProductionReadinessLabel()).toBe("-");
@@ -617,22 +622,25 @@ describe("production route state", () => {
   it("builds workbench spec facts from the focused production spec", () => {
     expect(buildWorkbenchSpecFacts()).toEqual([]);
     expect(
-      buildWorkbenchSpecFacts({
-        readiness: { status: "complete" },
-        event: {
-          date: "2026-03-04",
-          schedule: [{ label: "Service", start: "12:00", end: "13:00" }]
+      buildWorkbenchSpecFacts(
+        {
+          readiness: { status: "complete" },
+          event: {
+            date: "2026-03-04",
+            schedule: [{ label: "Service", start: "12:00", end: "13:00" }]
+          },
+          attendees: {
+            expected: 120
+          },
+          servicePlan: {
+            serviceForm: "buffet"
+          },
+          menuPlan: [{ componentId: "a" }, { componentId: "b" }]
         },
-        attendees: {
-          expected: 120
-        },
-        servicePlan: {
-          serviceForm: "buffet"
-        },
-        menuPlan: [{ componentId: "a" }, { componentId: "b" }]
-      })
+        { questionCount: 1 }
+      )
     ).toEqual([
-      { label: "Status", value: "vollständig" },
+      { label: "Status", value: "teilweise vollständig" },
       { label: "Zeit", value: "Datum: 2026-03-04 · Terminfenster: Service 12:00–13:00" },
       { label: "Gäste", value: "120 Personen" },
       { label: "Service", value: "Buffet" },

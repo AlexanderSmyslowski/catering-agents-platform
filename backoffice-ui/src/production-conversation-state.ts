@@ -56,6 +56,8 @@ export function buildProductionConversationState(input: {
     productionAssumptions,
     productionConversationProjection,
     clarificationStatusCounts: countClarificationAnswerStatuses(productionConversationProjection.messages),
-    workbenchSpecFacts: buildWorkbenchSpecFacts(input.focusedProductionSpecRecord)
+    workbenchSpecFacts: buildWorkbenchSpecFacts(input.focusedProductionSpecRecord, {
+      questionCount: productionQuestions.length
+    })
   };
 }

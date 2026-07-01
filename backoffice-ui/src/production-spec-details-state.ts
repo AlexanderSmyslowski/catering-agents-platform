@@ -45,7 +45,7 @@ export function buildProductionSpecDetailsState(
     eventLabel: `Eventtyp: ${translateEventType(String(event?.type ?? servicePlan?.eventType ?? ""))} · ${formatProductionTimingWindow(spec)}`,
     summaryLabel: `Teilnehmerzahl: ${String(attendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
       String(servicePlan?.serviceForm ?? "")
-    )} · Readiness: ${translateReadiness(String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "-"))}`,
+    )} · Pflichtangaben: ${translateReadiness(String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "-"))}`,
     menuItems: menuPlan.map((entry) => {
       const component = entry as Record<string, unknown>;
       return {

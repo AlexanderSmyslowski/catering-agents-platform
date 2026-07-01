@@ -801,7 +801,7 @@ describe("backoffice production acceptance smoke", () => {
       ).map((button) => button.getAttribute("aria-label"));
 
       expect(actionLabels).toContain(
-        "Rückfragen öffnen: Archivsuche Ziel · 12 Teilnehmer · 2099-05-26 · Klarheit: vollständig"
+        "Rückfragen öffnen: Archivsuche Ziel · 12 Teilnehmer · 2099-05-26 · Klarheit: teilweise vollständig"
       );
       expect(actionLabels).toContain(
         "Rückfragen öffnen: Konferenz · 36 Teilnehmer · 2026-07-13 · Klarheit: unzureichend"

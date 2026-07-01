@@ -10,6 +10,7 @@ import {
   formatProductionObjectStatusLabel,
   formatProductionPlanStatusLabel,
   formatProductionReadinessLabel,
+  formatProductionReadinessLabelForQuestionCount,
   formatPurchaseZoneStatusLabel,
   selectProductionNextStep,
   type ProductionNextStep
@@ -89,7 +90,10 @@ export function buildProductionStatusSummaryState(
       selectedPlanSpecLabel: selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : undefined,
       productionWorkspaceCleared: input.productionWorkspaceCleared
     }),
-    focusedSpecReadinessLabel: formatProductionReadinessLabel(focusedProductionSpec),
+    focusedSpecReadinessLabel: formatProductionReadinessLabelForQuestionCount(
+      focusedProductionSpec,
+      productionQuestions.length
+    ),
     selectedPlanReadinessLabel: selectedPlan
       ? formatProductionReadinessLabel(selectedPlan)
       : undefined,

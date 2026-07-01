@@ -14,6 +14,7 @@ export {
   formatProductionObjectStatusLabel,
   formatProductionPlanStatusLabel,
   formatProductionReadinessLabel,
+  formatProductionReadinessLabelForQuestionCount,
   formatProductionTimingWindow,
   formatStructuredProductionAnswerSummary,
   translateReadiness

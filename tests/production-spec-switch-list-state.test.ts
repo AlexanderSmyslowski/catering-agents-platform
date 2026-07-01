@@ -7,7 +7,16 @@ describe("production spec switch list state", () => {
       specId: "spec-complete",
       event: { type: "conference", date: "2026-09-18" },
       attendees: { expected: 120 },
-      readiness: { status: "complete" }
+      servicePlan: { serviceForm: "buffet" },
+      readiness: { status: "complete" },
+      menuPlan: [
+        {
+          componentId: "lunchbuffet",
+          label: "Lunchbuffet",
+          menuCategory: "classic",
+          productionDecision: { mode: "scratch" }
+        }
+      ]
     };
     const partialSpec = {
       specId: "spec-demo-production-answered-clarification",
@@ -50,6 +59,30 @@ describe("production spec switch list state", () => {
       label: "Besprechung · ? Teilnehmer · offen",
       readinessLabel: "Klarheit: -",
       openActionLabel: "Rückfragen öffnen: Besprechung · ? Teilnehmer · offen · Klarheit: -"
+    });
+  });
+
+  it("keeps complete specs with open production questions out of the complete clarity label", () => {
+    const [item] = buildProductionSpecSwitchItems([
+      {
+        specId: "spec-open-production-questions",
+        event: { type: "conference", date: "2026-09-18" },
+        attendees: { expected: 120 },
+        servicePlan: { serviceForm: "buffet" },
+        readiness: { status: "complete" },
+        menuPlan: [
+          {
+            componentId: "lunchbuffet",
+            label: "Lunchbuffet"
+          }
+        ]
+      }
+    ]);
+
+    expect(item).toMatchObject({
+      readinessLabel: "Klarheit: teilweise vollständig",
+      openActionLabel:
+        "Rückfragen öffnen: Konferenz · 120 Teilnehmer · 2026-09-18 · Klarheit: teilweise vollständig"
     });
   });
 });

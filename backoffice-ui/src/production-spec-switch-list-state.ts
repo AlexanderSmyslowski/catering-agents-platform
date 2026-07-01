@@ -1,5 +1,5 @@
-import { getSpecLabel } from "./production-language.js";
-import { translateReadiness } from "./production-route-state.js";
+import { buildProductionQuestions, getSpecLabel } from "./production-language.js";
+import { formatProductionReadinessLabelForQuestionCount } from "./production-route-state.js";
 
 export type ProductionSpecSwitchItem = {
   spec: Record<string, unknown>;
@@ -19,8 +19,10 @@ export function buildProductionSpecSwitchItems(
   return specs.map((spec) => {
     const specId = String(spec.specId ?? "");
     const label = getSpecLabel(spec);
-    const readiness = String(asRecord(spec.readiness)?.status ?? "");
-    const readinessLabel = translateReadiness(readiness || undefined);
+    const readinessLabel = formatProductionReadinessLabelForQuestionCount(
+      spec,
+      buildProductionQuestions(spec).length
+    );
 
     return {
       spec,

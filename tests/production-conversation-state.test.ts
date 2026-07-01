@@ -86,6 +86,45 @@ describe("production conversation state", () => {
     });
   });
 
+  it("keeps complete readiness from looking complete while derived production questions are open", () => {
+    const state = buildProductionConversationState({
+      focusedProductionSpec: {
+        specId: "spec-open-production-question",
+        readiness: { status: "complete" },
+        event: { type: "conference", date: "2026-09-18" },
+        attendees: { expected: 120 },
+        servicePlan: { serviceForm: "buffet" },
+        menuPlan: [
+          {
+            componentId: "lunchbuffet",
+            label: "Lunchbuffet"
+          }
+        ]
+      },
+      focusedProductionSpecRecord: {
+        specId: "spec-open-production-question",
+        readiness: { status: "complete" },
+        event: { type: "conference", date: "2026-09-18" },
+        attendees: { expected: 120 },
+        servicePlan: { serviceForm: "buffet" },
+        menuPlan: [
+          {
+            componentId: "lunchbuffet",
+            label: "Lunchbuffet"
+          }
+        ]
+      },
+      currentSpecPlans: [],
+      currentSpecPurchaseLists: []
+    });
+
+    expect(state.productionQuestions.length).toBeGreaterThan(0);
+    expect(state.workbenchSpecFacts).toContainEqual({
+      label: "Status",
+      value: "teilweise vollständig"
+    });
+  });
+
   it("keeps empty production focus from creating local UI questions", () => {
     const state = buildProductionConversationState({
       currentSpecPlans: [],
