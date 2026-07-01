@@ -23,6 +23,32 @@ describe("production route context state", () => {
       selectProductionNextStep({
         hasFocusedProductionSpec: true,
         questionCount: 0,
+        hasSourceWarnings: true,
+        hasSelectedPlan: true,
+        purchaseListCount: 1
+      })
+    ).toEqual({
+      title: "Quellenprüfung bestätigen",
+      description: "Die Quelle wurde nur unsicher verarbeitet. Bitte Lesbarkeit und erkannte Daten prüfen."
+    });
+
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 2,
+        hasSourceWarnings: true,
+        hasSelectedPlan: false,
+        purchaseListCount: 0
+      })
+    ).toEqual({
+      title: "Quellenprüfung und Rückfragen klären",
+      description: "Die Quelle wurde nur unsicher verarbeitet. Bitte Quelle prüfen und offene Rückfragen beantworten."
+    });
+
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
         hasSelectedPlan: true,
         purchaseListCount: 1
       })

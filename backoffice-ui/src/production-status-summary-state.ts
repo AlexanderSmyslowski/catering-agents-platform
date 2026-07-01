@@ -47,12 +47,26 @@ export type ProductionStatusSummaryStateInput = {
 function formatFocusedSpecReadinessForOperator(input: {
   focusedProductionSpec?: Record<string, unknown>;
   productionQuestions: string[];
+  hasSourceWarnings: boolean;
 }): string {
   const readinessLabel = formatProductionReadinessLabel(input.focusedProductionSpec);
-  if (readinessLabel === "vollständig" && input.productionQuestions.length > 0) {
+  if (readinessLabel === "vollständig" && (input.productionQuestions.length > 0 || input.hasSourceWarnings)) {
     return "Prüfung nötig";
   }
   return readinessLabel;
+}
+
+function hasUnsafeIntakeSource(intakeRequestDetail?: Record<string, unknown> | null): boolean {
+  const rawInputs = Array.isArray(intakeRequestDetail?.rawInputs) ? intakeRequestDetail.rawInputs : [];
+  return rawInputs.some((entry) => {
+    const rawInput = entry as Record<string, unknown>;
+    const documentIngestion = rawInput.documentIngestion as Record<string, unknown> | undefined;
+    const status = typeof documentIngestion?.status === "string" ? documentIngestion.status.trim() : "";
+    const warnings = Array.isArray(documentIngestion?.warnings)
+      ? documentIngestion.warnings.filter((warning) => typeof warning === "string" && warning.trim())
+      : [];
+    return status === "fallback" || status === "failed" || warnings.length > 0;
+  });
 }
 
 export function buildProductionStatusSummaryState(
@@ -66,6 +80,9 @@ export function buildProductionStatusSummaryState(
   const productionQuestions = input.productionWorkspaceCleared ? [] : input.productionQuestions;
   const currentPurchaseListItemCount = countPurchaseListItems(currentSpecPurchaseLists);
   const latestProductionAuditEvent = input.productionWorkspaceCleared ? undefined : input.filteredAuditEvents[0];
+  const hasSourceWarnings = input.productionWorkspaceCleared
+    ? false
+    : hasUnsafeIntakeSource(input.intakeRequestDetail);
 
   if (input.isInitialProductionLoading) {
     return {
@@ -102,7 +119,8 @@ export function buildProductionStatusSummaryState(
     }),
     focusedSpecReadinessLabel: formatFocusedSpecReadinessForOperator({
       focusedProductionSpec,
-      productionQuestions
+      productionQuestions,
+      hasSourceWarnings
     }),
     selectedPlanReadinessLabel: selectedPlan
       ? formatProductionReadinessLabel(selectedPlan)
@@ -135,6 +153,7 @@ export function buildProductionStatusSummaryState(
     productionNextStep: selectProductionNextStep({
       hasFocusedProductionSpec: Boolean(focusedProductionSpec),
       questionCount: productionQuestions.length,
+      hasSourceWarnings,
       hasSelectedPlan: Boolean(selectedPlan),
       purchaseListCount: currentSpecPurchaseLists.length
     })

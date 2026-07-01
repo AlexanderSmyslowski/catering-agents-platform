@@ -81,6 +81,46 @@ describe("production status summary state", () => {
     expect(state.productionNextStep.title).toBe("Rückfragen beantworten");
   });
 
+  it("marks a technically complete spec as review required when the source has ingestion warnings", () => {
+    const state = buildProductionStatusSummaryState({
+      focusedProductionSpec: {
+        specId: "spec-source-warning",
+        readiness: { status: "complete" },
+        event: { type: "conference", date: "2026-06-01" },
+        attendees: { expected: 90 }
+      },
+      currentSpecPlans: [],
+      currentSpecPurchaseLists: [],
+      productionQuestions: [],
+      filteredAuditEvents: [],
+      intakeRequestDetail: {
+        requestId: "request-source-warning",
+        rawInputs: [
+          {
+            kind: "pdf",
+            content: "%PDF Rohinhalt darf nicht sichtbar werden",
+            documentId: "document-source-warning",
+            sourceMetadata: {
+              filename: "angebot.pdf"
+            },
+            documentIngestion: {
+              status: "fallback",
+              warnings: ["document_text_extraction_fallback"]
+            }
+          }
+        ]
+      },
+      productionWorkspaceCleared: false
+    });
+
+    expect(state.focusedSpecReadinessLabel).toBe("Prüfung nötig");
+    expect(state.productionNextStep).toEqual({
+      title: "Quellenprüfung bestätigen",
+      description: "Die Quelle wurde nur unsicher verarbeitet. Bitte Lesbarkeit und erkannte Daten prüfen."
+    });
+    expect(JSON.stringify(state)).not.toContain("%PDF Rohinhalt");
+  });
+
   it("keeps the empty and cleared production defaults in one state object", () => {
     const state = buildProductionStatusSummaryState({
       currentSpecPlans: [],
