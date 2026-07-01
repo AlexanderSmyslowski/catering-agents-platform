@@ -84,6 +84,40 @@ describe("production workbench output anchor state", () => {
     });
   });
 
+  it("uses available dossier metrics for concrete production-map statuses", () => {
+    expect(
+      buildProductionWorkbenchOutputAnchorState({
+        specFactCount: 4,
+        questionCount: 2,
+        dossierMetrics: {
+          answeredQuestionCount: 1,
+          questionPreview: "Welche Komponenten sind fertig zugekauft?",
+          assumptionCount: 1,
+          assumptionPreview: "Brot als Bäcker-Zukauf führen.",
+          productionBatchCount: 3,
+          kitchenSheetCount: 4,
+          recipeSelectionCount: 3,
+          purchaseItemCount: 18
+        },
+        productionObjectCount: 1,
+        purchaseListCount: 1
+      }).reviewItems
+    ).toEqual([
+      { label: "Verständnis des Angebots", status: "Eckdaten sichtbar, Klärpunkte offen" },
+      {
+        label: "Rückfragen",
+        status: "2 Rückfragen sichtbar · erste: Welche Komponenten sind fertig zugekauft?"
+      },
+      { label: "Annahmen & Festlegungen", status: "1 Annahme · erste: Brot als Bäcker-Zukauf führen." },
+      { label: "Kalkulationsübersicht", status: "im Produktionsplan prüfen" },
+      { label: "Mengenkalkulation je Gericht", status: "3 Mengenkalkulationen im Plan" },
+      { label: "Rezeptkarten", status: "4 Rezept-/Küchenkarten sichtbar" },
+      { label: "Metro-Einkaufsliste", status: "1 Einkaufsliste · 18 Positionen" },
+      { label: "Mise-en-Place", status: "über Rezept-/Küchenkarten prüfen" },
+      { label: "Abschlussprüfung & Exporte", status: "Exportlinks prüfen; Freigabe offen" }
+    ]);
+  });
+
   it("points to calculating a production plan when no artifacts exist yet", () => {
     expect(
       buildProductionWorkbenchOutputAnchorState({

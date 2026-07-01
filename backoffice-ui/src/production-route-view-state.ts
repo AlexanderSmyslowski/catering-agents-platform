@@ -153,6 +153,8 @@ export function buildProductionRouteViewState({
       productionQuestions,
       clarificationStatusCounts,
       currentSpecPlans: visibleArtifacts.currentSpecPlans,
+      selectedPlan: visibleArtifacts.selectedPlan,
+      productionAssumptions,
       productionObjectStatusLabel,
       currentSpecPurchaseLists: visibleArtifacts.currentSpecPurchaseLists
     }),

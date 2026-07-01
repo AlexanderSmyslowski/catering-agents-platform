@@ -12,8 +12,15 @@ describe("production workbench summary state", () => {
       productionQuestions: ["Pax bestätigen?", "Zeitfenster klären?"],
       clarificationStatusCounts: { answered: 1, unanswered: 2 },
       currentSpecPlans: [{ planId: "plan-1" }, { planId: "plan-2" }],
+      selectedPlan: {
+        planId: "plan-1",
+        productionBatches: [{ batchId: "batch-1" }, { batchId: "batch-2" }],
+        kitchenSheets: [{ title: "Küchenblatt 1" }],
+        recipeSelections: [{ recipeId: "recipe-1" }]
+      },
+      productionAssumptions: ["Brot als Zukauf"],
       productionObjectStatusLabel: "2 aktuelle Pläne",
-      currentSpecPurchaseLists: [{ purchaseListId: "purchase-1" }]
+      currentSpecPurchaseLists: [{ purchaseListId: "purchase-1", totals: { itemCount: 8 } }]
     });
 
     expect(summary).toEqual({
@@ -26,6 +33,16 @@ describe("production workbench summary state", () => {
         },
         { label: "Freigabe", value: "nicht erteilt" }
       ],
+      dossierMetrics: {
+        answeredQuestionCount: 1,
+        questionPreview: "Pax bestätigen?",
+        assumptionCount: 1,
+        assumptionPreview: "Brot als Zukauf",
+        productionBatchCount: 2,
+        kitchenSheetCount: 1,
+        recipeSelectionCount: 1,
+        purchaseItemCount: 8
+      },
       readinessLabel: "teilweise vollständig",
       planStatusLabel: "1 aktueller Plan",
       purchaseStatusLabel: "1 aktuelle Liste",
@@ -58,5 +75,13 @@ describe("production workbench summary state", () => {
     expect(summary.purchaseListCount).toBe(0);
     expect(summary.activeSpecLabel).toBe("Kein aktiver Vorgang");
     expect(summary.assuranceFacts).toEqual([{ label: "Freigabe", value: "nicht erteilt" }]);
+    expect(summary.dossierMetrics).toEqual({
+      answeredQuestionCount: 0,
+      assumptionCount: 0,
+      productionBatchCount: 0,
+      kitchenSheetCount: 0,
+      recipeSelectionCount: 0,
+      purchaseItemCount: 0
+    });
   });
 });

@@ -8,17 +8,94 @@ export type ProductionWorkbenchOutputAnchorState = {
   }>;
 };
 
+type ProductionDossierMetrics = {
+  answeredQuestionCount?: number;
+  questionPreview?: string;
+  assumptionCount?: number;
+  assumptionPreview?: string;
+  productionBatchCount?: number;
+  kitchenSheetCount?: number;
+  recipeSelectionCount?: number;
+  purchaseItemCount?: number;
+};
+
 function formatQuestionStatus(count: number): string {
   return count === 1 ? "1 Rückfrage sichtbar" : `${count} Rückfragen sichtbar`;
+}
+
+function formatQuestionReviewStatus(count: number, metrics?: ProductionDossierMetrics): string {
+  const answeredCount = metrics?.answeredQuestionCount ?? 0;
+  const preview = metrics?.questionPreview?.trim();
+
+  if (count > 0 && preview) {
+    return `${formatQuestionStatus(count)} · erste: ${preview}`;
+  }
+  if (count > 0) {
+    return formatQuestionStatus(count);
+  }
+  if (answeredCount > 0) {
+    return `${answeredCount} beantwortet · keine offenen Rückfragen sichtbar`;
+  }
+  return "keine offenen Rückfragen sichtbar";
+}
+
+function formatAssumptionStatus(hasPlan: boolean, metrics?: ProductionDossierMetrics): string {
+  const assumptionCount = metrics?.assumptionCount ?? 0;
+  const preview = metrics?.assumptionPreview?.trim();
+
+  if (assumptionCount > 0 && preview) {
+    return `${assumptionCount} Annahme${assumptionCount === 1 ? "" : "n"} · erste: ${preview}`;
+  }
+  if (assumptionCount > 0) {
+    return `${assumptionCount} Annahme${assumptionCount === 1 ? "" : "n"} sichtbar`;
+  }
+  return hasPlan ? "im Plan fachlich prüfen" : "vor Berechnung offen prüfen";
 }
 
 function formatPlanArtifactStatus(count: number): string {
   return count === 1 ? "1 Plan-Artefakt vorhanden" : `${count} Plan-Artefakte vorhanden`;
 }
 
+function formatBatchStatus(planCount: number, metrics?: ProductionDossierMetrics): string {
+  const batchCount = metrics?.productionBatchCount ?? 0;
+  if (batchCount > 0) {
+    return `${batchCount} Mengenkalkulation${batchCount === 1 ? "" : "en"} im Plan`;
+  }
+  return planCount > 0 ? formatPlanArtifactStatus(planCount) : "noch nicht berechnet";
+}
+
+function formatRecipeStatus(hasPlan: boolean, metrics?: ProductionDossierMetrics): string {
+  const kitchenSheetCount = metrics?.kitchenSheetCount ?? 0;
+  const recipeSelectionCount = metrics?.recipeSelectionCount ?? 0;
+  if (kitchenSheetCount > 0) {
+    return `${kitchenSheetCount} Rezept-/Küchenkarten sichtbar`;
+  }
+  if (recipeSelectionCount > 0) {
+    return `${recipeSelectionCount} Rezeptbezüge im Plan`;
+  }
+  return hasPlan ? "Plan auf Rezeptbezug prüfen" : "nach Produktionsplan offen";
+}
+
+function formatPurchaseStatus(listCount: number, metrics?: ProductionDossierMetrics): string {
+  const purchaseItemCount = metrics?.purchaseItemCount ?? 0;
+  if (purchaseItemCount > 0) {
+    return `${listCount} Einkaufsliste${listCount === 1 ? "" : "n"} · ${purchaseItemCount} Positionen`;
+  }
+  return listCount > 0 ? `${listCount} Einkaufsliste vorhanden` : "noch offen";
+}
+
+function formatMiseEnPlaceStatus(hasPlan: boolean, metrics?: ProductionDossierMetrics): string {
+  const kitchenSheetCount = metrics?.kitchenSheetCount ?? 0;
+  if (kitchenSheetCount > 0) {
+    return "über Rezept-/Küchenkarten prüfen";
+  }
+  return hasPlan ? "Plan auf Mise-en-Place prüfen" : "nach Produktionsplan offen";
+}
+
 export function buildProductionWorkbenchOutputAnchorState(input: {
   specFactCount?: number;
   questionCount: number;
+  dossierMetrics?: ProductionDossierMetrics;
   productionObjectCount: number;
   purchaseListCount: number;
 }): ProductionWorkbenchOutputAnchorState {
@@ -39,11 +116,11 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
     },
     {
       label: "Rückfragen",
-      status: hasQuestions ? formatQuestionStatus(input.questionCount) : "keine offenen Rückfragen sichtbar"
+      status: formatQuestionReviewStatus(input.questionCount, input.dossierMetrics)
     },
     {
       label: "Annahmen & Festlegungen",
-      status: hasPlan ? "im Plan fachlich prüfen" : "vor Berechnung offen prüfen"
+      status: formatAssumptionStatus(hasPlan, input.dossierMetrics)
     },
     {
       label: "Kalkulationsübersicht",
@@ -51,19 +128,19 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
     },
     {
       label: "Mengenkalkulation je Gericht",
-      status: hasPlan ? formatPlanArtifactStatus(input.productionObjectCount) : "noch nicht berechnet"
+      status: formatBatchStatus(input.productionObjectCount, input.dossierMetrics)
     },
     {
       label: "Rezeptkarten",
-      status: hasPlan ? "Plan auf Rezeptbezug prüfen" : "nach Produktionsplan offen"
+      status: formatRecipeStatus(hasPlan, input.dossierMetrics)
     },
     {
       label: "Metro-Einkaufsliste",
-      status: hasPurchaseList ? `${input.purchaseListCount} Einkaufsliste vorhanden` : "noch offen"
+      status: formatPurchaseStatus(input.purchaseListCount, input.dossierMetrics)
     },
     {
       label: "Mise-en-Place",
-      status: hasPlan ? "Plan auf Mise-en-Place prüfen" : "nach Produktionsplan offen"
+      status: formatMiseEnPlaceStatus(hasPlan, input.dossierMetrics)
     },
     {
       label: "Abschlussprüfung & Exporte",

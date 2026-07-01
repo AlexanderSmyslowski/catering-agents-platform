@@ -16,6 +16,16 @@ export type ProductionWorkbenchSummary = {
     label: string;
     value: string;
   }>;
+  dossierMetrics?: {
+    answeredQuestionCount: number;
+    questionPreview?: string;
+    assumptionCount: number;
+    assumptionPreview?: string;
+    productionBatchCount: number;
+    kitchenSheetCount: number;
+    recipeSelectionCount: number;
+    purchaseItemCount: number;
+  };
   readinessLabel: string;
   planStatusLabel: string;
   purchaseStatusLabel: string;
@@ -127,7 +137,8 @@ export function ProductionConversationalWorkbench({
     productionObjectStatusLabel,
     purchaseListCount,
     specFacts = [],
-    assuranceFacts = []
+    assuranceFacts = [],
+    dossierMetrics
   } = summary;
   const openVisibleQuestionCount = countOpenVisibleQuestions(
     questionCount,
@@ -137,6 +148,7 @@ export function ProductionConversationalWorkbench({
   const productionOutputAnchor = buildProductionWorkbenchOutputAnchorState({
     specFactCount: specFacts.length,
     questionCount,
+    dossierMetrics,
     productionObjectCount,
     purchaseListCount
   });

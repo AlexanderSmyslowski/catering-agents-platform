@@ -4,9 +4,15 @@ import { buildProductionRouteViewState } from "../backoffice-ui/src/production-r
 describe("production route view state", () => {
   it("maps existing production route values into panel state objects without recomputing behavior", () => {
     const focusedSpec = { specId: "spec-1", eventType: "Lunch" };
-    const selectedPlan = { planId: "plan-1", eventSpecId: "spec-1" };
+    const selectedPlan = {
+      planId: "plan-1",
+      eventSpecId: "spec-1",
+      productionBatches: [{ batchId: "batch-1" }],
+      kitchenSheets: [{ title: "Küchenblatt 1" }, { title: "Küchenblatt 2" }],
+      recipeSelections: [{ recipeId: "recipe-1" }]
+    };
     const currentPlan = { planId: "plan-current", eventSpecId: "spec-1" };
-    const currentPurchaseList = { purchaseListId: "purchase-1", eventSpecId: "spec-1" };
+    const currentPurchaseList = { purchaseListId: "purchase-1", eventSpecId: "spec-1", items: [{ sku: "metro-1" }] };
     const specById = new Map([["spec-1", focusedSpec]]);
     const selectedPlanComponentsById = new Map([["component-1", { componentId: "component-1" }]]);
 
@@ -56,11 +62,22 @@ describe("production route view state", () => {
 
     expect(viewState.workbenchSummary).toEqual({
       activeSpecLabel: "Lunch · 42 Pax",
+      activeTechnicalContextLabel: undefined,
       specFacts: [{ label: "Pax", value: "42" }],
       assuranceFacts: [
         { label: "Herkunft", value: "PDF-Upload" },
         { label: "Freigabe", value: "nicht erteilt" }
       ],
+      dossierMetrics: {
+        answeredQuestionCount: 1,
+        questionPreview: "Pax bestätigen?",
+        assumptionCount: 1,
+        assumptionPreview: "Brot als Zukauf",
+        productionBatchCount: 1,
+        kitchenSheetCount: 2,
+        recipeSelectionCount: 1,
+        purchaseItemCount: 1
+      },
       readinessLabel: "vollständig",
       planStatusLabel: "Plan bereit",
       purchaseStatusLabel: "1 Liste",
