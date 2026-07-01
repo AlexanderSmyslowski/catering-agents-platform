@@ -50,6 +50,7 @@ describe("production artifact labels", () => {
 
     expect(markup).toContain("Lunch · 40 Teilnehmer · 2026-06-18");
     expect(markup).toContain('href="/api/exports/v1/exports/production-plans/plan-lunch-list/html"');
+    expect(markup).toContain("Export ist ein internes Arbeitsdokument; keine Produktionsfreigabe.");
     expect(markup).not.toContain("<strong>Produktionsplan</strong>");
   });
 

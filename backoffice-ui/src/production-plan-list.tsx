@@ -71,6 +71,7 @@ export function ProductionPlanList({
                 für diesen Produktionsplan
               </span>
             </a>
+            <p className="helper-text">Export ist ein internes Arbeitsdokument; keine Produktionsfreigabe.</p>
           </li>
         );
       })}
