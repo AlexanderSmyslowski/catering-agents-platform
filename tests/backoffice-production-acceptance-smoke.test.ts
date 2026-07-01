@@ -747,6 +747,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Downloadbereich");
     expect(content).toContain("Aktiver Produktionsauftrag");
     expect(rendered.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
+    expect(content).toContain("Freigabegrenzen");
     expect(content).toContain("Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.");
     expect(content).toContain("Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.");
     expect(content).toContain("Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.");

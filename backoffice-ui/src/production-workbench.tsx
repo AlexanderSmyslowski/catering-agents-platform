@@ -380,19 +380,22 @@ export function ProductionConversationalWorkbench({
           Rückfragenstatus: offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}
         </p>
         <p className="helper-text">
-          Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.
-        </p>
-        <p className="helper-text">
-          Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.
-        </p>
-        <p className="helper-text">
-          Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.
-        </p>
-        <p className="helper-text">
           Plan: {formatOperatorPlanStatus(planStatusLabel)} · Einkaufsliste: {purchaseStatusLabel}
         </p>
         <p className="helper-text">Produktionsergebnis: {formatOperatorProductionObjects(productionObjectStatusLabel)}</p>
         <p className="helper-text">Freigabe: nicht erteilt.</p>
+        <details className="technical-context-details">
+          <summary>Freigabegrenzen</summary>
+          <p className="helper-text">
+            Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.
+          </p>
+          <p className="helper-text">
+            Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.
+          </p>
+          <p className="helper-text">
+            Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.
+          </p>
+        </details>
         {activeTechnicalContextLabel ? (
           <details className="technical-context-details">
             <summary>Technische Details</summary>
