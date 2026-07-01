@@ -218,17 +218,21 @@ export function ProductionInputPanel({
           Erneut mit ausgewähltem Typ verarbeiten
         </button>
       </div>
-      <div className="divider" />
-      <header>
-        <p className="eyebrow">Texteingabe</p>
-        <h3>Kundenanfrage oder Produktionskontext direkt einfügen</h3>
-      </header>
-      <textarea value={sourceInput.intakeText} onChange={(event) => sourceInputActions.setIntakeText(event.target.value)} />
-      <div className="action-row">
-        <button disabled={submitting} onClick={() => void sourceInputActions.submitText()}>
-          Erfassungstext normalisieren
-        </button>
-      </div>
+      <details className="secondary-input-details">
+        <summary>
+          <span>Texteingabe</span>
+          <strong>Text statt Datei einfügen</strong>
+        </summary>
+        <div className="secondary-input-details__body">
+          <p className="helper-text">Ausweichpfad für E-Mail-Text oder bereits kopierten Produktionskontext.</p>
+          <textarea value={sourceInput.intakeText} onChange={(event) => sourceInputActions.setIntakeText(event.target.value)} />
+          <div className="action-row">
+            <button disabled={submitting} onClick={() => void sourceInputActions.submitText()}>
+              Erfassungstext normalisieren
+            </button>
+          </div>
+        </div>
+      </details>
       <details className="maintenance-actions">
         <summary>
           <span>Demo-/Wartungsaktionen</span>
@@ -266,54 +270,57 @@ export function ProductionInputPanel({
           </div>
         </div>
       </details>
-      <div className="divider" />
-      <header>
-        <p className="eyebrow">Strukturierte Eingabe</p>
-        <h3>Arbeitsauftrag manuell anlegen</h3>
-      </header>
-      <input
-        value={manualInput.eventType}
-        onChange={(event) => manualInputActions.setEventType(event.target.value)}
-        placeholder="Veranstaltungstyp, z. B. Konferenz"
-      />
-      <input
-        value={manualInput.eventDate}
-        onChange={(event) => manualInputActions.setEventDate(event.target.value)}
-        placeholder="Datum, z. B. 2026-10-10"
-      />
-      <input
-        value={manualInput.attendeeCount}
-        onChange={(event) => manualInputActions.setAttendeeCount(event.target.value)}
-        placeholder="Teilnehmerzahl"
-      />
-      <input
-        value={manualInput.serviceForm}
-        onChange={(event) => manualInputActions.setServiceForm(event.target.value)}
-        placeholder="Serviceform, z. B. Buffet"
-      />
-      <input
-        value={manualInput.menuItems}
-        onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
-        placeholder="Menüpunkte, durch Komma getrennt"
-      />
-      <input
-        value={manualInput.customerName}
-        onChange={(event) => manualInputActions.setCustomerName(event.target.value)}
-        placeholder="Kundenname"
-      />
-      <input
-        value={manualInput.venueName}
-        onChange={(event) => manualInputActions.setVenueName(event.target.value)}
-        placeholder="Ort oder Veranstaltungsort"
-      />
-      <textarea
-        value={manualInput.notes}
-        onChange={(event) => manualInputActions.setNotes(event.target.value)}
-        placeholder="Interne Notizen oder Einschränkungen"
-      />
-      <button disabled={submitting} onClick={() => void manualInputActions.submitManualSpec()}>
-        Spezifikation anlegen
-      </button>
+      <details className="secondary-input-details">
+        <summary>
+          <span>Strukturierte Eingabe</span>
+          <strong>Arbeitsauftrag manuell anlegen</strong>
+        </summary>
+        <div className="secondary-input-details__body">
+          <input
+            value={manualInput.eventType}
+            onChange={(event) => manualInputActions.setEventType(event.target.value)}
+            placeholder="Veranstaltungstyp, z. B. Konferenz"
+          />
+          <input
+            value={manualInput.eventDate}
+            onChange={(event) => manualInputActions.setEventDate(event.target.value)}
+            placeholder="Datum, z. B. 2026-10-10"
+          />
+          <input
+            value={manualInput.attendeeCount}
+            onChange={(event) => manualInputActions.setAttendeeCount(event.target.value)}
+            placeholder="Teilnehmerzahl"
+          />
+          <input
+            value={manualInput.serviceForm}
+            onChange={(event) => manualInputActions.setServiceForm(event.target.value)}
+            placeholder="Serviceform, z. B. Buffet"
+          />
+          <input
+            value={manualInput.menuItems}
+            onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
+            placeholder="Menüpunkte, durch Komma getrennt"
+          />
+          <input
+            value={manualInput.customerName}
+            onChange={(event) => manualInputActions.setCustomerName(event.target.value)}
+            placeholder="Kundenname"
+          />
+          <input
+            value={manualInput.venueName}
+            onChange={(event) => manualInputActions.setVenueName(event.target.value)}
+            placeholder="Ort oder Veranstaltungsort"
+          />
+          <textarea
+            value={manualInput.notes}
+            onChange={(event) => manualInputActions.setNotes(event.target.value)}
+            placeholder="Interne Notizen oder Einschränkungen"
+          />
+          <button disabled={submitting} onClick={() => void manualInputActions.submitManualSpec()}>
+            Spezifikation anlegen
+          </button>
+        </div>
+      </details>
     </article>
   );
 }

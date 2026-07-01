@@ -714,13 +714,15 @@ button:disabled {
   box-shadow: 0 10px 24px rgba(31, 57, 89, 0.08);
 }
 
-.maintenance-actions {
+.maintenance-actions,
+.secondary-input-details {
   border: 1px solid rgba(15, 23, 34, 0.08);
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.56);
 }
 
-.maintenance-actions > summary {
+.maintenance-actions > summary,
+.secondary-input-details > summary {
   display: flex;
   justify-content: space-between;
   gap: 0.8rem;
@@ -728,13 +730,15 @@ button:disabled {
   cursor: pointer;
 }
 
-.maintenance-actions > summary strong {
+.maintenance-actions > summary strong,
+.secondary-input-details > summary strong {
   color: rgba(15, 23, 34, 0.58);
   font-size: 0.88rem;
   font-weight: 600;
 }
 
-.maintenance-actions__body {
+.maintenance-actions__body,
+.secondary-input-details__body {
   display: grid;
   gap: 0.8rem;
   padding: 0 1rem 1rem;

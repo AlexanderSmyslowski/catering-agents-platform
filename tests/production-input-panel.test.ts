@@ -120,6 +120,16 @@ describe("production input panel", () => {
     expect(markup).not.toContain("+ Angebot auswählen");
   });
 
+  it("keeps alternate input paths collapsed below the primary upload", () => {
+    const markup = renderPanel(buildSourceInput());
+
+    expect(markup).toContain('<details class="secondary-input-details"><summary><span>Texteingabe</span>');
+    expect(markup).toContain("Text statt Datei einfügen");
+    expect(markup).toContain('<details class="secondary-input-details"><summary><span>Strukturierte Eingabe</span>');
+    expect(markup).toContain("Arbeitsauftrag manuell anlegen");
+    expect(markup).not.toContain('<details class="secondary-input-details" open="">');
+  });
+
   it("keeps progress visible only for accepted processing states", () => {
     const rejectedMarkup = renderPanel(
       buildSourceInput({
