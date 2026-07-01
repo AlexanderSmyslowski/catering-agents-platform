@@ -1338,7 +1338,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.");
     expect(content).toContain("Exportlinks prüfen; Freigabe offen");
     expect(content).not.toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
-    expect(content).toContain("Produktionsergebnis: 1 Plan · vollständig");
+    expect(content).toContain("Produktionsergebnis: 1 Plan · vollständig, Freigabe offen");
   });
 
   it("shows a synthetic Quick Lunch plan with internal recipe hits and baker purchase as one current result", async () => {

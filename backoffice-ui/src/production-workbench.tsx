@@ -90,7 +90,9 @@ function formatOperatorProductionObjects(productionObjectStatusLabel: string): s
   if (productionObjectStatusLabel === "noch kein Plan") {
     return "noch kein Produktionsplan";
   }
-  return productionObjectStatusLabel.replace("unzureichend", "Prüfung nötig");
+  return productionObjectStatusLabel
+    .replace("unzureichend", "Prüfung nötig")
+    .replace("vollständig", "vollständig, Freigabe offen");
 }
 
 export function ProductionConversationalWorkbench({
