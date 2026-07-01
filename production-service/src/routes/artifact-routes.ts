@@ -15,6 +15,7 @@ import {
   type LlmReadinessProviderAdapterRequest,
   type LlmReadinessProviderAdapterResponse,
   type ProductionDraft,
+  type ProductionDraftReviewDecision,
   type TrustedActor
 } from "@catering/shared-core";
 import type { IntakeStore } from "@catering/intake-service";
@@ -25,6 +26,13 @@ import type {
   ProductionStore
 } from "../repositories/production-store.js";
 import { buildProductionArtifacts } from "../rules/planning.js";
+
+const operatorProductionDraftReviewDecisions = [
+  "fits",
+  "change_requested",
+  "unclear",
+  "blocked"
+] as const satisfies readonly Exclude<ProductionDraftReviewDecision, "pending">[];
 
 function sourceLineageRequestIds(eventSpec: AcceptedEventSpec): string[] {
   const ids = new Set<string>();
@@ -264,6 +272,162 @@ export function registerProductionArtifactRoutes(
     });
   });
 
+  app.patch<{
+    Params: { draftId: string; cardId: string };
+    Body: { decision?: unknown; operatorComment?: unknown };
+  }>(
+    "/v1/production/drafts/:draftId/review-cards/:cardId",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) {
+        return forbidden;
+      }
+
+      const decision = productionDraftReviewDecisionFromBody(request.body?.decision);
+      if (!decision) {
+        return reply.code(400).send({
+          message: "decision muss fits, change_requested, unclear oder blocked sein."
+        });
+      }
+
+      const operatorComment = operatorCommentFromBody(request.body?.operatorComment);
+      if (operatorComment === false) {
+        return reply.code(400).send({
+          message: "operatorComment muss Text mit maximal 1000 Zeichen sein."
+        });
+      }
+
+      const draft = await store.getProductionDraft(request.params.draftId);
+      if (!draft) {
+        return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+      }
+      if (draft.status !== "pending_review") {
+        return reply.code(409).send({ message: "ProductionDraft wurde bereits entschieden." });
+      }
+
+      const cardIndex = draft.reviewCards.findIndex((card) => card.cardId === request.params.cardId);
+      if (cardIndex < 0) {
+        return reply.code(404).send({ message: "Review-Karte nicht gefunden." });
+      }
+
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const decidedAt = new Date().toISOString();
+      const reviewCards = draft.reviewCards.map((card, index) =>
+        index === cardIndex
+          ? {
+            ...card,
+            decision,
+            decidedBy: actor.name,
+            decidedAt,
+            ...(operatorComment ? { operatorComment } : {})
+          }
+          : card
+      );
+      const reviewedDraft = validateProductionDraft({
+        ...draft,
+        reviewCards
+      });
+
+      await store.saveProductionDraft(reviewedDraft);
+      const card = reviewedDraft.reviewCards[cardIndex];
+      await auditLog.log({
+        action: "production.production_draft_review_card_decided",
+        entityType: "ProductionDraft",
+        entityId: reviewedDraft.draftId,
+        actor,
+        summary: "ProductionDraft-Review-Karte entschieden.",
+        details: compactAuditDetails({
+          draftId: reviewedDraft.draftId,
+          cardId: card.cardId,
+          cardKind: card.kind,
+          decision: card.decision,
+          targetId: card.targetId,
+          riskLevel: card.riskLevel,
+          requiredApproval: card.requiredApproval
+        })
+      });
+
+      return reply.send({
+        draft: reviewedDraft,
+        reviewCard: card
+      });
+    }
+  );
+
+  app.post<{ Params: { draftId: string }; Body: { approve?: unknown } }>(
+    "/v1/production/drafts/:draftId/decision",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) {
+        return forbidden;
+      }
+
+      if (typeof request.body?.approve !== "boolean") {
+        return reply.code(400).send({ message: "approve muss true oder false sein." });
+      }
+
+      const draft = await store.getProductionDraft(request.params.draftId);
+      if (!draft) {
+        return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+      }
+      if (draft.status !== "pending_review") {
+        return reply.code(409).send({ message: "ProductionDraft wurde bereits entschieden." });
+      }
+
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const decidedAt = new Date().toISOString();
+      let decidedDraft: ProductionDraft;
+      if (request.body.approve) {
+        const openCards = draft.reviewCards.filter((card) => card.decision !== "fits");
+        const blockingCards = draft.reviewCards.filter((card) => card.riskLevel === "blocking");
+        if (openCards.length > 0 || blockingCards.length > 0) {
+          return reply.code(422).send({
+            message: "ProductionDraft kann erst freigegeben werden, wenn alle Review-Karten passen und keine Blocking-Risiken offen sind.",
+            errors: [
+              ...openCards.map((card) => `reviewCard ${card.cardId} is ${card.decision}`),
+              ...blockingCards.map((card) => `reviewCard ${card.cardId} has blocking risk`)
+            ]
+          });
+        }
+        decidedDraft = validateProductionDraft({
+          ...draft,
+          status: "approved",
+          approvedBy: actor.name,
+          approvedAt: decidedAt
+        });
+      } else {
+        decidedDraft = validateProductionDraft({
+          ...draft,
+          status: "rejected"
+        });
+      }
+
+      await store.saveProductionDraft(decidedDraft);
+      await auditLog.log({
+        action: request.body.approve
+          ? "production.production_draft_approved"
+          : "production.production_draft_rejected",
+        entityType: "ProductionDraft",
+        entityId: decidedDraft.draftId,
+        actor,
+        summary: request.body.approve
+          ? "ProductionDraft nach Review freigegeben."
+          : "ProductionDraft nach Review verworfen.",
+        details: compactAuditDetails({
+          draftId: decidedDraft.draftId,
+          status: decidedDraft.status,
+          reviewCardCount: decidedDraft.reviewCards.length,
+          fittingReviewCardCount: decidedDraft.reviewCards.filter((card) => card.decision === "fits").length,
+          blockingReviewCardCount: decidedDraft.reviewCards.filter((card) => card.riskLevel === "blocking").length,
+          humanApprovalRequired: decidedDraft.guardrails.humanApprovalRequired,
+          writesProductObject: decidedDraft.guardrails.writesProductObjects
+        })
+      });
+
+      return reply.send({ draft: decidedDraft });
+    }
+  );
+
   app.get<{ Params: { specId: string } }>(
     "/v1/production/specs/:specId/clarification-drafts",
     async (request, reply) => {
@@ -478,6 +642,32 @@ export function registerProductionArtifactRoutes(
       });
     }
   );
+}
+
+function productionDraftReviewDecisionFromBody(
+  value: unknown
+): Exclude<ProductionDraftReviewDecision, "pending"> | undefined {
+  return typeof value === "string" &&
+    operatorProductionDraftReviewDecisions.includes(value as Exclude<ProductionDraftReviewDecision, "pending">)
+    ? value as Exclude<ProductionDraftReviewDecision, "pending">
+    : undefined;
+}
+
+function operatorCommentFromBody(value: unknown): string | false | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  return trimmed.length <= 1000 ? trimmed : false;
 }
 
 function buildClarificationDraftInput(spec: AcceptedEventSpec): LlmReadinessModelInput {

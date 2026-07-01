@@ -30,6 +30,8 @@ describe("data safety and audit gates", () => {
       "offer_seed_demo",
       "production_plan_creation",
       "production_draft_import",
+      "production_draft_review_card_decision",
+      "production_draft_decision",
       "production_recipe_upload",
       "production_clarification_draft",
       "production_clarification_draft_decision",
@@ -66,6 +68,10 @@ describe("data safety and audit gates", () => {
       externalExposure: "blocked_until_decision",
       requiredGate: expect.stringContaining("no product writes")
     });
+    expect(dataIngressPaths.find((path) => path.id === "production_draft_decision")).toMatchObject({
+      externalExposure: "none",
+      requiredGate: expect.stringContaining("no product writes")
+    });
     expect(dataIngressPaths.find((path) => path.id === "web_recipe_search")).toMatchObject({
       externalExposure: "disabled_by_default",
       requiredGate: "CATERING_ENABLE_WEB_RECIPE_SEARCH explicit opt-in"
@@ -92,6 +98,8 @@ describe("data safety and audit gates", () => {
         "POST /v1/offers/recipes/upload",
         "PATCH /v1/offers/recipes/:recipeId/review",
         "POST /v1/production/drafts",
+        "POST /v1/production/drafts/:draftId/decision",
+        "PATCH /v1/production/drafts/:draftId/review-cards/:cardId",
         "POST /v1/production/plans",
         "POST /v1/production/specs/:specId/clarification-drafts",
         "POST /v1/production/clarification-drafts/:draftId/decision",
@@ -122,6 +130,9 @@ describe("data safety and audit gates", () => {
         "offer_recipe_reviewed",
         "production_plan_created",
         "production_draft_imported",
+        "production_draft_review_card_decided",
+        "production_draft_approved",
+        "production_draft_rejected",
         "production_seed_demo",
         "production_clarification_draft_created",
         "production_clarification_draft_rejected",
@@ -183,7 +194,10 @@ describe("data safety and audit gates", () => {
         "production.clarification_draft_rejected",
         "production.clarification_draft_rejected_by_operator",
         "production.plan_created",
+        "production.production_draft_approved",
         "production.production_draft_imported",
+        "production.production_draft_rejected",
+        "production.production_draft_review_card_decided",
         "production.seed_demo",
         "recipe.imported_text",
         "recipe.reviewed",

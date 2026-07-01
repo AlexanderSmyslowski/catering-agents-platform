@@ -58,7 +58,7 @@ fachlichen Entwurfsweg fuer gestaltete Angebots-PDFs.
 | Ruhiges Arbeitsfenster / Produktions-UX | umgesetzt fuer internen MVP-Korridor, weiter verbesserbar | UI-Komponenten, Route-Smokes, Workbench-Smokes | echtes chatzentriertes Agentenfenster bleibt Zielbild, keine grosse UI-Neugestaltung ohne Entscheidung |
 | Codeklarheit im Produktionskern | fortgeschritten, aber nicht final | extrahierte `App.tsx`-Boundaries, kleine Planning-/RecipeDiscovery-Module, viele fokussierte Tests | weitere kleine Boundaries sind moeglich; kein Big-Bang-Refactor |
 | Deterministische Planung, Rezeptsuche, Einkaufsliste | umgesetzt und breit getestet | `production-service/src/rules/*`, `recipe-discovery/*`, Produktions-/Recipe-/Purchase-Tests | weitere synthetische Catering-Faelle und Qualitaetschecks koennen autonom nachziehen |
-| BYO-AI-Harness ProductionDraft-Vertrag | als erster ausfuehrbarer Vertrag vorbereitet | `shared-core/src/schemas/production-draft.ts`, `tests/production-draft-contract.test.ts`, PR #518 | Import als draft-only Objekt, einfache Review und Freigabeuebernahme fehlen |
+| BYO-AI-Harness ProductionDraft-Vertrag | als erster ausfuehrbarer Vertrag mit Import und Review-State vorbereitet | `shared-core/src/schemas/production-draft.ts`, `tests/production-draft-contract.test.ts`, `tests/production-draft-import.test.ts`, `tests/production-draft-review-state.test.ts`, PR #518/#519 | einfache UI-Review und Freigabeuebernahme in Produktobjekte fehlen |
 | Conversation/Rueckfragen | teilweise umgesetzt | `ProductionConversationProjection`, Clarification-Fragen/-Antworten, read-only UI | echte `ConversationSession` als Runtime-Objekt bleibt Entscheidungspflicht |
 | LLM-Readiness ohne Provider | als kleiner Vertrag weitgehend bis Level-9-Vorbereitung umgesetzt | 10/10-Coding-Architektur, PA26-PA40 | nicht-leere Prompt-Artefakte und eine entscheidungsreife Provider-/Daten-/Runtime-Vorlage fehlen noch |
 | LLM-Provider / Modellaufrufe | teilweise lokal umgesetzt, uebergeordnet weiter gate-pflichtig | PA41, PA42-PA50, PA51, PA54, PA55, PA56, PA57, PA58, PA59, PA60, PA61, 10/10-Coding-Architektur, Produktziel | lokaler synthetic-only Korridor ist vorhanden; Alexander-Entscheidung zu Operatorrahmen, Kosten, Logging/Retention/Evidence, Secrets, Datenrahmen, Deployment-/Zielumgebungsrahmen, Human-Approval-/Handover-Rahmen, Tool-/Write-Effect-Grenzen, Runtime-/ConversationSession-Rahmen, Dokument-/Upload-Quellenrahmen und spaeterem Runtime-Scope bleibt erforderlich |
@@ -95,13 +95,15 @@ Diese Punkte duerfen nicht autonom in Runtime-Code kippen.
 ## 6. Naechster nicht-gate-pflichtige Schritt
 
 Der naechste nicht-gate-pflichtige Schritt nach dem BYO-AI-Harness-Zielbild ist
-kein weiterer PDF-Parser-Sonderfall, sondern ein draft-only Importpfad fuer
-`ProductionDraft`.
+kein weiterer PDF-Parser-Sonderfall, sondern ein draft-only Import- und
+Review-State-Pfad fuer `ProductionDraft`.
 
-Dieser Importpfad darf:
+Dieser Pfad darf:
 
 - einen bereits strukturierten, validierten ProductionDraft speichern,
 - den Draft listen und fuer spaetere Review sichtbar machen,
+- einzelne Review-Karten entscheiden,
+- den Draft nach Review als approved oder rejected markieren,
 - Audit-Metadaten ohne Raw-Prompt-/Raw-Response-Inhalte schreiben.
 
 Er darf nicht:
@@ -110,7 +112,7 @@ Er darf nicht:
   Produktobjekt veraendern,
 - Provider aufrufen,
 - echte Daten freigeben,
-- Approval, Review oder Wissens-Writeback vorwegnehmen.
+- Produktuebernahme, UI-Review oder Wissens-Writeback vorwegnehmen.
 
 PA41 hat die `Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice` bereits geliefert.
 

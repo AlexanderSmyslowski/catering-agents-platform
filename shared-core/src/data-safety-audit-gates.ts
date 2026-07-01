@@ -167,6 +167,24 @@ export const dataIngressPaths = [
     requiredGate: "production_operator auth, validateProductionDraft, pending_review only, no product writes"
   },
   {
+    id: "production_draft_review_card_decision",
+    service: "production-service",
+    route: "PATCH /v1/production/drafts/:draftId/review-cards/:cardId",
+    source: "operator ProductionDraft review-card decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "production_operator auth, pending_review draft only, no product writes"
+  },
+  {
+    id: "production_draft_decision",
+    service: "production-service",
+    route: "POST /v1/production/drafts/:draftId/decision",
+    source: "operator ProductionDraft approve/reject decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "production_operator auth, explicit approve/reject, no product writes"
+  },
+  {
     id: "production_recipe_upload",
     service: "production-service",
     route: "POST /v1/production/recipes/import-text and POST /v1/production/recipes/upload",
@@ -403,6 +421,36 @@ export const auditEvidencePaths = [
     service: "production-service",
     route: "POST /v1/production/drafts",
     action: "production.production_draft_imported",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_draft_review_card_decided",
+    service: "production-service",
+    route: "PATCH /v1/production/drafts/:draftId/review-cards/:cardId",
+    action: "production.production_draft_review_card_decided",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_draft_approved",
+    service: "production-service",
+    route: "POST /v1/production/drafts/:draftId/decision",
+    action: "production.production_draft_approved",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_draft_rejected",
+    service: "production-service",
+    route: "POST /v1/production/drafts/:draftId/decision",
+    action: "production.production_draft_rejected",
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "draft_only",
