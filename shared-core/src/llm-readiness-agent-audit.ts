@@ -9,14 +9,14 @@ import {
   type LlmReadinessSourceObjectType,
   type LlmReadinessSourceRef,
   type LlmReadinessToolEffect,
-  validateLlmReadinessModelInputCandidate,
-  validateLlmReadinessModelOutputCandidate
+  validateLlmReadinessModelInputCandidate
 } from "./llm-readiness.js";
 import {
   findLlmReadinessPromptSchemaEntryByInputKind,
   llmReadinessPromptSchemaRegistryVersion,
   type LlmReadinessPromptSchemaRegistryEntry
 } from "./llm-readiness-prompt-schema-registry.js";
+import { validateLlmReadinessDraftOutputForInput } from "./llm-readiness-draft-output-validation.js";
 import type {
   LlmReadinessProviderAdapterMode,
   LlmReadinessProviderAdapterRequest,
@@ -160,7 +160,7 @@ function validateResponseConsistency(
       errors.push("response.fixtureId must be a non-empty string when response.ok is true");
     }
 
-    const outputValidation = validateLlmReadinessModelOutputCandidate(response.outputCandidate);
+    const outputValidation = validateLlmReadinessDraftOutputForInput(response.outputCandidate, request.input);
     for (const outputError of outputValidation.errors) {
       errors.push(`response.outputCandidate.${outputError}`);
     }

@@ -118,6 +118,39 @@ describe("PA39 LLM readiness agent audit", () => {
     expect(build.auditRecord).toBeUndefined();
   });
 
+  it("rejects production dossier outputs that fail the dossier-specific draft contract", async () => {
+    const adapter = new FixtureOnlyLlmReadinessProviderAdapter();
+    const input = cloneInput(2);
+    const response = await adapter.run({ input });
+    const outputCandidate = structuredClone(response.outputCandidate);
+
+    if (outputCandidate) {
+      outputCandidate.text = "Verstaendnis\nRueckfragen\nAnnahmen";
+      outputCandidate.structuredCandidate = {
+        sectionCount: 8,
+        summaryKind: "production_dossier",
+        dataMode: "synthetic_or_demo_only",
+        approval: "pending_human_review"
+      };
+    }
+
+    const build = createLlmReadinessAgentAuditRecord({
+      auditId: "audit-synthetic-production-dossier-invalid",
+      request: { input },
+      response: {
+        ...response,
+        outputCandidate
+      }
+    });
+
+    expect(build.ok).toBe(false);
+    expect(build.errors).toContain("response.outputCandidate.structuredCandidate.sectionCount must be 9");
+    expect(build.errors).toContain(
+      "response.outputCandidate.text must mention production dossier sections: missing kalkulation, mengen, rezept, metro, mise-en-place, abschluss"
+    );
+    expect(build.auditRecord).toBeUndefined();
+  });
+
   it("rejects malformed audit records via the record validator", () => {
     const validation = validateLlmReadinessAgentAuditRecord({
       auditVersion: "llm-readiness-agent-audit-v0",

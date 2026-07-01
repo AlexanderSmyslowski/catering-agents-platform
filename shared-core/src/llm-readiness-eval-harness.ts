@@ -8,6 +8,7 @@ import {
   validateLlmReadinessEvalFixture,
   type LlmReadinessEvalFixture
 } from "./fixtures/llm-readiness-eval-fixtures.js";
+import { validateLlmReadinessDraftOutputForInput } from "./llm-readiness-draft-output-validation.js";
 
 export interface LlmReadinessEvalOutputMatchValidation {
   valid: boolean;
@@ -118,7 +119,12 @@ export function evaluateLlmReadinessEvalOutputCandidateMatch(
     errors.push(`fixture.${fixtureError}`);
   }
 
-  const candidateValidation = validateLlmReadinessModelOutputCandidate(candidate);
+  const candidateValidation = isRecord(fixture) && isRecord(fixture.input)
+    ? validateLlmReadinessDraftOutputForInput(
+      candidate,
+      fixture.input as unknown as LlmReadinessEvalFixture["input"]
+    )
+    : validateLlmReadinessModelOutputCandidate(candidate);
   for (const candidateError of candidateValidation.errors) {
     errors.push(`candidate.${candidateError}`);
   }

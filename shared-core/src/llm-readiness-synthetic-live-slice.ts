@@ -1,6 +1,5 @@
 import {
   validateLlmReadinessModelInputCandidate,
-  validateLlmReadinessModelOutputCandidate,
   type LlmReadinessModelInput,
   type LlmReadinessModelInputKind,
   type LlmReadinessModelOutputCandidate,
@@ -16,6 +15,7 @@ import {
   findLlmReadinessPromptArtifactByInputKind,
   validateLlmReadinessPromptArtifacts
 } from "./llm-readiness-prompt-artifacts.js";
+import { validateLlmReadinessDraftOutputForInput } from "./llm-readiness-draft-output-validation.js";
 
 export interface LlmReadinessSyntheticLiveTransportRequest {
   providerRunId: string;
@@ -136,11 +136,12 @@ function buildOutputCandidate(
 
 function validateCandidateAgainstSlice(
   fixture: LlmReadinessEvalFixture,
+  input: LlmReadinessModelInput,
   candidate: LlmReadinessModelOutputCandidate
 ): string[] {
   const errors: string[] = [];
   const expectedOutput = fixture.expectedOutput;
-  const validation = validateLlmReadinessModelOutputCandidate(candidate);
+  const validation = validateLlmReadinessDraftOutputForInput(candidate, input);
 
   for (const error of validation.errors) {
     errors.push(`outputCandidate.${error}`);
@@ -275,7 +276,7 @@ export class SyntheticLiveLlmReadinessSlice {
     }
 
     const outputCandidate = buildOutputCandidate(request.input, promptSchemaEntry.outputKind, transportResponse);
-    const candidateErrors = validateCandidateAgainstSlice(fixture, outputCandidate);
+    const candidateErrors = validateCandidateAgainstSlice(fixture, request.input, outputCandidate);
 
     if (candidateErrors.length > 0) {
       return {

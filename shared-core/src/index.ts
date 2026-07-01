@@ -12,6 +12,7 @@ export * from "./fixtures/demo-scenarios.js";
 export * from "./fixtures/llm-readiness-eval-fixtures.js";
 export * from "./llm-readiness-agent-audit.js";
 export * from "./llm-readiness-draft-registry.js";
+export * from "./llm-readiness-draft-output-validation.js";
 export * from "./llm-readiness-eval-harness.js";
 export * from "./llm-readiness-mini-pilot-policy.js";
 export * from "./llm-readiness-openai-transport.js";

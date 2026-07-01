@@ -87,6 +87,26 @@ describe("PA36 LLM readiness eval harness", () => {
     );
   });
 
+  it("uses input-specific draft output validation for production dossier candidates", () => {
+    const fixture = cloneFixture(2);
+    const candidate = cloneExpectedOutput(2);
+    candidate.text = "Verstaendnis\nRueckfragen\nAnnahmen";
+    candidate.structuredCandidate = {
+      sectionCount: 8,
+      summaryKind: "production_dossier",
+      dataMode: "synthetic_or_demo_only",
+      approval: "pending_human_review"
+    };
+
+    const result = validateLlmReadinessEvalOutputCandidateMatch(fixture, candidate);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("candidate.structuredCandidate.sectionCount must be 9");
+    expect(result.errors).toContain(
+      "candidate.text must mention production dossier sections: missing kalkulation, mengen, rezept, metro, mise-en-place, abschluss"
+    );
+  });
+
   it("surfaces invalid fixtures through fixture-prefixed harness errors", () => {
     const fixture = cloneFixture(0);
     fixture.disallowedPayloadKeys = fixture.disallowedPayloadKeys.filter((key) => key !== "toolCalls");
