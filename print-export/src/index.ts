@@ -36,6 +36,9 @@ function escapeHtml(value: string | number): string {
     .replace(/'/g, "&#39;");
 }
 
+const internalWorkingDocumentFooter =
+  "<footer>Internes Arbeitsdokument – Inhalte vor Freigabe fachlich prüfen; keine automatische Allergen-, Preis-, Margen- oder Produktionsfreigabe.</footer>";
+
 function formatBytes(sizeBytes: number): string {
   if (sizeBytes < 1024) {
     return `${sizeBytes} B`;
@@ -133,6 +136,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
     "<pre>",
     escapeHtml(draft.customerFacingText),
     "</pre>",
+    internalWorkingDocumentFooter,
     "</body></html>"
   ].join("");
 }
@@ -164,6 +168,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
           .join("")}</ol></section>`;
       }
     ),
+    internalWorkingDocumentFooter,
     "</body></html>"
   ].join("");
 }

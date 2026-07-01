@@ -70,6 +70,9 @@ describe("print export HTML escaping", () => {
     const html = renderOfferHtml(minimalOfferDraft());
 
     expect(html).toContain("<h1>Angebot</h1>");
+    expect(html).toContain(
+      "Internes Arbeitsdokument – Inhalte vor Freigabe fachlich prüfen; keine automatische Allergen-, Preis-, Margen- oder Produktionsfreigabe."
+    );
     expect(html).not.toContain("Angebot draft-");
     expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;");
@@ -84,6 +87,9 @@ describe("print export HTML escaping", () => {
     const html = renderProductionPlanHtml(minimalProductionPlan());
 
     expect(html).toContain("<h1>Produktionsplan</h1>");
+    expect(html).toContain(
+      "Internes Arbeitsdokument – Inhalte vor Freigabe fachlich prüfen; keine automatische Allergen-, Preis-, Margen- oder Produktionsfreigabe."
+    );
     expect(html).not.toContain("Produktionsplan plan-");
     expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;");

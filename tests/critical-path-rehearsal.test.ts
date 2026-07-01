@@ -300,6 +300,7 @@ describe("critical path rehearsal", () => {
       expect(offerExport.headers["content-type"]).toContain("text/html");
       expect(offerExport.body).toContain("<h1>Angebot</h1>");
       expect(offerExport.body).not.toContain(draft.draftId);
+      expect(offerExport.body).toContain("keine automatische Allergen-, Preis-, Margen- oder Produktionsfreigabe");
 
       const planExport = await exportApp.inject({
         method: "GET",
@@ -311,6 +312,7 @@ describe("critical path rehearsal", () => {
       expect(planExport.body).toContain("critical-path-tomato-soup");
       expect(planExport.body).toContain("Tomaten garen");
       expect(planExport.body).toContain("Mystery Bowl");
+      expect(planExport.body).toContain("keine automatische Allergen-, Preis-, Margen- oder Produktionsfreigabe");
 
       const purchaseExport = await exportApp.inject({
         method: "GET",
