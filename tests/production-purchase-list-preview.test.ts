@@ -21,7 +21,7 @@ describe("production purchase list preview", () => {
         articleName: "Tomaten",
         quantity: "8",
         unit: "kg",
-        sourceLabel: "source unknown"
+        sourceLabel: "Quelle offen"
       }
     ]);
   });
@@ -44,7 +44,7 @@ describe("production purchase list preview", () => {
         articleName: "Baguette",
         quantity: "40",
         unit: "Stück",
-        sourceLabel: "source unknown"
+        sourceLabel: "Quelle offen"
       }
     ]);
   });
@@ -63,10 +63,10 @@ describe("production purchase list preview", () => {
     });
 
     expect(preview).toEqual([
-      { articleName: "Linsen", quantity: "5", unit: "kg", sourceLabel: "source unknown" },
-      { articleName: "Karotten", quantity: "3", unit: "kg", sourceLabel: "source unknown" },
-      { articleName: "Sellerie", quantity: "2", unit: "Bund", sourceLabel: "source unknown" },
-      { articleName: "Petersilie", quantity: "-", unit: "-", sourceLabel: "source unknown" }
+      { articleName: "Linsen", quantity: "5", unit: "kg", sourceLabel: "Quelle offen" },
+      { articleName: "Karotten", quantity: "3", unit: "kg", sourceLabel: "Quelle offen" },
+      { articleName: "Sellerie", quantity: "2", unit: "Bund", sourceLabel: "Quelle offen" },
+      { articleName: "Petersilie", quantity: "-", unit: "-", sourceLabel: "Quelle offen" }
     ]);
   });
 
@@ -98,7 +98,7 @@ describe("production purchase list preview", () => {
         quantity: "8",
         unit: "kg",
         sourceLabel:
-          "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup"
+          "Tomatensuppe | recipe-tomato-soup | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:tomato-soup"
       }
     ]);
   });
@@ -139,8 +139,8 @@ describe("production purchase list preview", () => {
         quantity: "12",
         unit: "kg",
         sourceLabel:
-          "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup; " +
-          "Bruschetta | recipe-bruschetta | internal recipe, approved | internal_verified | approved_internal | internal:bruschetta"
+          "Tomatensuppe | recipe-tomato-soup | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:tomato-soup; " +
+          "Bruschetta | recipe-bruschetta | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:bruschetta"
       }
     ]);
     expect(preview[0]?.sourceLabel).toContain("Tomatensuppe");
@@ -180,8 +180,8 @@ describe("production purchase list preview", () => {
         quantity: "10",
         unit: "kg",
         sourceLabel:
-          "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup; " +
-          "source unknown (recipe-bruschetta)"
+          "Tomatensuppe | recipe-tomato-soup | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:tomato-soup; " +
+          "Quelle offen (recipe-bruschetta)"
       }
     ]);
   });
@@ -221,7 +221,7 @@ describe("production purchase list preview", () => {
         quantity: "8",
         unit: "kg",
         sourceLabel:
-          "Tomatensuppe | recipe-tomato-soup | internal recipe, approved | internal_verified | approved_internal | internal:tomato-soup"
+          "Tomatensuppe | recipe-tomato-soup | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:tomato-soup"
       }
     ]);
   });

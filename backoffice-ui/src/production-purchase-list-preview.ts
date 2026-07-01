@@ -80,7 +80,7 @@ function formatSourceLabel(itemRecord: Record<string, unknown>): string {
   ];
   const uniqueLabels = [...new Set(labels)];
 
-  return uniqueLabels.length > 0 ? uniqueLabels.join("; ") : "source unknown";
+  return uniqueLabels.length > 0 ? uniqueLabels.join("; ") : formatRecipeSourceEvidenceLabel();
 }
 
 function looksLikeRecipeInstruction(value: string): boolean {

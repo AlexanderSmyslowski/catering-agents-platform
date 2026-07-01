@@ -78,7 +78,7 @@ describe("production plan secondary details state", () => {
           selectionReasonLabel: "Internes Rezept passt am besten.",
           componentDetailLabel: "Kategorie: Klassisch · Herstellungsart: Eigenproduktion",
           sourceLabel:
-            "Vorspeise Rezept | recipe-starter | internal recipe, approved | internal_verified | approved_internal | internal:starter",
+            "Vorspeise Rezept | recipe-starter | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:starter",
           scoreLabel: "Qualität 91 % · Passung 87 %",
           searchTrace: ["Interner Treffer", "kein Fallback"]
         }
@@ -89,7 +89,7 @@ describe("production plan secondary details state", () => {
           key: "Küchenblatt Vorspeise-0",
           title: "Küchenblatt Vorspeise",
           sourceLabel:
-            "Vorspeise Rezept | recipe-starter | internal recipe, approved | internal_verified | approved_internal | internal:starter",
+            "Vorspeise Rezept | recipe-starter | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:starter",
           instructions: ["30 Portionen vorbereiten", "Kühl lagern"]
         }
       ]
@@ -120,7 +120,7 @@ describe("production plan secondary details state", () => {
           componentLabel: "-",
           selectionReasonLabel: "-",
           componentDetailLabel: undefined,
-          sourceLabel: "source unknown",
+          sourceLabel: "Quelle offen",
           scoreLabel: undefined,
           searchTrace: []
         }
@@ -150,7 +150,7 @@ describe("production plan secondary details state", () => {
           componentLabel: "-",
           selectionReasonLabel: "-",
           componentDetailLabel: undefined,
-          sourceLabel: "source unknown",
+          sourceLabel: "Quelle offen",
           scoreLabel: undefined,
           searchTrace: []
         }
@@ -160,7 +160,7 @@ describe("production plan secondary details state", () => {
         {
           key: "Arbeitsblatt-0",
           title: "Arbeitsblatt",
-          sourceLabel: "source unknown",
+          sourceLabel: "Quelle offen",
           instructions: []
         }
       ]
@@ -223,9 +223,9 @@ describe("production plan secondary details state", () => {
       showArchivedPlans: false
     });
 
-    expect(state?.recipeSelections[0]?.sourceLabel).toContain("web recipe, reviewed");
+    expect(state?.recipeSelections[0]?.sourceLabel).toContain("Web-Rezept geprüft");
     expect(state?.recipeSelections[0]?.sourceLabel).toContain("Example Recipes");
     expect(state?.recipeSelections[0]?.sourceLabel).toContain("https://example.test/starter");
-    expect(state?.kitchenSheets[0]?.sourceLabel).toContain("web recipe, reviewed");
+    expect(state?.kitchenSheets[0]?.sourceLabel).toContain("Web-Rezept geprüft");
   });
 });

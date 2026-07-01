@@ -219,11 +219,11 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
       item.sourceRecipes.join("; "),
       (item.sourceRecipeMetadata && item.sourceRecipeMetadata.length > 0
         ? item.sourceRecipeMetadata.map(recipeSourceOriginLabel)
-        : ["source unknown"]
+        : [recipeSourceOriginLabel()]
       ).join("; "),
       (item.sourceRecipeMetadata && item.sourceRecipeMetadata.length > 0
         ? item.sourceRecipeMetadata.map(recipeSourceReferenceLabel)
-        : ["source unknown"]
+        : [recipeSourceReferenceLabel()]
       ).join("; ")
     ]
       .map(escapeCsv)
