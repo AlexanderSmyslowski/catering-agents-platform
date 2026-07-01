@@ -29,6 +29,7 @@ describe("data safety and audit gates", () => {
       "offer_variant_promotion",
       "offer_seed_demo",
       "production_plan_creation",
+      "production_draft_import",
       "production_recipe_upload",
       "production_clarification_draft",
       "production_clarification_draft_decision",
@@ -61,6 +62,10 @@ describe("data safety and audit gates", () => {
       externalExposure: "blocked_until_decision",
       requiredGate: expect.stringContaining("CATERING_SYNTHETIC_LLM_SLICE")
     });
+    expect(dataIngressPaths.find((path) => path.id === "production_draft_import")).toMatchObject({
+      externalExposure: "blocked_until_decision",
+      requiredGate: expect.stringContaining("no product writes")
+    });
     expect(dataIngressPaths.find((path) => path.id === "web_recipe_search")).toMatchObject({
       externalExposure: "disabled_by_default",
       requiredGate: "CATERING_ENABLE_WEB_RECIPE_SEARCH explicit opt-in"
@@ -86,6 +91,7 @@ describe("data safety and audit gates", () => {
         "POST /v1/offers/recipes/import-text",
         "POST /v1/offers/recipes/upload",
         "PATCH /v1/offers/recipes/:recipeId/review",
+        "POST /v1/production/drafts",
         "POST /v1/production/plans",
         "POST /v1/production/specs/:specId/clarification-drafts",
         "POST /v1/production/clarification-drafts/:draftId/decision",
@@ -115,6 +121,7 @@ describe("data safety and audit gates", () => {
         "offer_recipe_uploaded_file",
         "offer_recipe_reviewed",
         "production_plan_created",
+        "production_draft_imported",
         "production_seed_demo",
         "production_clarification_draft_created",
         "production_clarification_draft_rejected",
@@ -176,6 +183,7 @@ describe("data safety and audit gates", () => {
         "production.clarification_draft_rejected",
         "production.clarification_draft_rejected_by_operator",
         "production.plan_created",
+        "production.production_draft_imported",
         "production.seed_demo",
         "recipe.imported_text",
         "recipe.reviewed",

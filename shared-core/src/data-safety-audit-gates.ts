@@ -158,6 +158,15 @@ export const dataIngressPaths = [
     requiredGate: "production_operator auth"
   },
   {
+    id: "production_draft_import",
+    service: "production-service",
+    route: "POST /v1/production/drafts",
+    source: "validated ProductionDraft",
+    scope: "uploaded_internal",
+    externalExposure: "blocked_until_decision",
+    requiredGate: "production_operator auth, validateProductionDraft, pending_review only, no product writes"
+  },
+  {
     id: "production_recipe_upload",
     service: "production-service",
     route: "POST /v1/production/recipes/import-text and POST /v1/production/recipes/upload",
@@ -387,6 +396,16 @@ export const auditEvidencePaths = [
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "product_mutation",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_draft_imported",
+    service: "production-service",
+    route: "POST /v1/production/drafts",
+    action: "production.production_draft_imported",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
     requiredRole: "production_operator"
   },
   {

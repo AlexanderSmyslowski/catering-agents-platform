@@ -6,8 +6,10 @@ import {
   type LlmReadinessProviderAdapterMode,
   type PersistentCollection,
   type ProductionClarificationAnswer,
+  type ProductionDraft,
   type ProductionPlan,
-  type PurchaseList
+  type PurchaseList,
+  validateProductionDraft
 } from "@catering/shared-core";
 
 export type ClarificationDraftStatus = "pending_review" | "approved" | "rejected";
@@ -96,6 +98,7 @@ export class ProductionStore {
   private readonly purchaseLists: PersistentCollection<PurchaseList>;
   private readonly clarificationAnswers: PersistentCollection<ProductionClarificationAnswer>;
   private readonly clarificationDrafts: PersistentCollection<ClarificationDraft>;
+  private readonly productionDrafts: PersistentCollection<ProductionDraft>;
 
   constructor(options?: CollectionStorageOptions) {
     this.plans = createPersistentCollection<ProductionPlan>({
@@ -122,6 +125,14 @@ export class ProductionStore {
     this.clarificationDrafts = createPersistentCollection<ClarificationDraft>({
       collectionName: "production/clarification-drafts",
       getId: (draft) => draft.draftId,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    });
+    this.productionDrafts = createPersistentCollection<ProductionDraft>({
+      collectionName: "production/drafts",
+      getId: (draft) => draft.draftId,
+      validate: validateProductionDraft,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
@@ -185,6 +196,19 @@ export class ProductionStore {
     return drafts
       .filter((draft) => !specId || draft.specId === specId)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async saveProductionDraft(draft: ProductionDraft): Promise<void> {
+    await this.productionDrafts.set(validateProductionDraft(draft));
+  }
+
+  async getProductionDraft(draftId: string): Promise<ProductionDraft | undefined> {
+    return this.productionDrafts.get(draftId);
+  }
+
+  async listProductionDrafts(): Promise<ProductionDraft[]> {
+    const drafts = await this.productionDrafts.list();
+    return drafts.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 }
 
