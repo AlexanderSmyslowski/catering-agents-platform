@@ -61,16 +61,6 @@ type ProductionConversationalWorkbenchProps = {
   slots: ProductionWorkbenchSlots;
 };
 
-function formatQuestionStatus(questionCount: number): string {
-  if (questionCount === 0) {
-    return "keine offenen Rückfragen";
-  }
-  if (questionCount === 1) {
-    return "1 offene Rückfrage";
-  }
-  return `${questionCount} offene Rückfragen`;
-}
-
 function countOpenVisibleQuestions(
   questionCount: number,
   answeredQuestionCount: number,
@@ -379,10 +369,8 @@ export function ProductionConversationalWorkbench({
         <p className="eyebrow">Aktiver Produktionsauftrag</p>
         <strong>{activeSpecLabel}</strong>
         <p className="helper-text">
-          Status: {formatOperatorReadiness(readinessLabel)} · Rückfragen: {formatQuestionStatus(questionCount)}
-        </p>
-        <p className="helper-text">
-          Rückfragenstatus: offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}
+          Status: {formatOperatorReadiness(readinessLabel)} · Rückfragen: offen {openVisibleQuestionCount} · beantwortet{" "}
+          {answeredQuestionCount}
         </p>
         <p className="helper-text">
           Plan: {formatOperatorPlanStatus(planStatusLabel)} · Einkaufsliste: {purchaseStatusLabel}

@@ -944,11 +944,11 @@ describe("backoffice production acceptance smoke", () => {
         "Fehlupload request-production-fallback-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
       );
       expect(content).toContain("Kein aktiver Vorgang");
-      expect(content).toContain("Rückfragen: keine offenen Rückfragen");
-      expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
+      expect(content).toContain("Rückfragen: offen 0 · beantwortet 0");
+      expect(content).not.toContain("Rückfragenstatus:");
       expect(content).toContain("Auftrag einfügen oder Datei ablegen");
       expect(content).not.toContain("requestId: request-production-fallback-1");
-      expect(content).not.toContain("Rückfragen: 1 offene Rückfrage");
+      expect(content).not.toContain("Rückfragen: offen 1 · beantwortet 0");
       expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
       expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
       expect(content).not.toContain("Produktionsblatt exportieren");
@@ -1251,8 +1251,8 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(route.text).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(route.text).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
-    expect(route.text).toContain("Rückfragen: keine offenen Rückfragen");
-    expect(route.text).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
+    expect(route.text).toContain("Rückfragen: offen 0 · beantwortet 0");
+    expect(route.text).not.toContain("Rückfragenstatus:");
     expect(route.html).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Demo-Arbeitsstand zurücksetzen/);
     expect(route.html).toMatch(/<button[^>]+disabled=""[^>]*>\s*Fehlgeschlagenen Demo-Upload ausblenden/);
@@ -1384,7 +1384,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Baguette");
     expect(content).toContain("Menge: 120");
     expect(content).toContain("Einkaufsliste exportieren");
-    expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 0");
+    expect(content).toContain("Rückfragen: offen 0 · beantwortet 0");
     expect(content).toContain("kein Internet-Fallback");
     expect(content).not.toContain("BROT & BAGUETTE: Herstellungsentscheidung fehlt");
     expect(content).not.toContain("BROT & BAGUETTE: Kategorie fehlt");
@@ -1415,11 +1415,11 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Rückfragenstatus: offen 0 · beantwortet 1");
+    expect(content).toContain("Rückfragen: offen 0 · beantwortet 1");
     expect(content).toContain("Rückfrage beantwortet");
     expect(content).toContain("Antwort auf Rückfrage");
     expect(content).toContain("Glutenfreies Baguette wird separat ersetzt.");
-    expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
+    expect(content).not.toContain("Rückfragen: offen 1 · beantwortet 0");
   });
 
   it("keeps the compact clarification status aligned with the visible open question count", async () => {
@@ -1498,8 +1498,8 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = document.body.textContent ?? "";
 
-    expect(content).toContain("Rückfragen: 7 offene Rückfragen");
-    expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
+    expect(content).toContain("Rückfragen: offen 7 · beantwortet 0");
+    expect(content).not.toContain("Rückfragenstatus:");
     expect(content).toContain("Rückfragen klären");
     expect(content).toContain("Erste Rückfrage: Welche Komponenten sind fertig zugekauft?");
     expect(content).not.toContain("Produktionsplan berechnen");
@@ -1526,7 +1526,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("7 Rückfragen sichtbar");
     expect(content).toContain("noch nicht berechnet");
     expect(content).toContain("Freigabe: nicht erteilt.");
-    expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
+    expect(content).not.toContain("Rückfragen: offen 1 · beantwortet 0");
     expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
     expect(document.querySelector(".production-input-collapse summary")?.textContent).toContain("Neue Eingabe oder Korrektur");
     expect(document.querySelector(".production-input-collapse summary")?.textContent).not.toContain(
