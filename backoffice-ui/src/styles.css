@@ -1516,8 +1516,7 @@ button:disabled {
 
 .production-output-checklist {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 0.45rem;
+  gap: 0.35rem;
   margin: 0.8rem 0 0;
   padding: 0;
   list-style: none;
@@ -1525,14 +1524,37 @@ button:disabled {
 
 .production-output-checklist li {
   min-width: 0;
-  padding: 0.6rem 0.7rem;
-  border-radius: 0.75rem;
-  background: rgba(15, 23, 34, 0.035);
-  border: 1px solid rgba(15, 23, 34, 0.055);
+  display: grid;
+  grid-template-columns: 1.65rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.55rem;
+  padding: 0.48rem 0;
+  border-top: 1px solid rgba(15, 23, 34, 0.07);
 }
 
-.production-output-checklist strong,
-.production-output-checklist span {
+.production-output-checklist li:first-child {
+  border-top: 0;
+}
+
+.production-output-checklist__number {
+  display: inline-grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(15, 23, 34, 0.06);
+  color: rgba(15, 23, 34, 0.58);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.production-output-checklist__body {
+  min-width: 0;
+}
+
+.production-output-checklist__body,
+.production-output-checklist__body span,
+.production-output-checklist strong {
   display: block;
 }
 
@@ -1540,7 +1562,7 @@ button:disabled {
   font-size: 0.82rem;
 }
 
-.production-output-checklist span {
+.production-output-checklist__body span {
   margin-top: 0.2rem;
   color: rgba(15, 23, 34, 0.68);
   font-size: 0.82rem;

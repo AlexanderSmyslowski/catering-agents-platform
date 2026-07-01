@@ -1482,7 +1482,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rückfragen: 7 offene Rückfragen");
     expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
-    expect(content).toContain("Arbeitsstruktur der Produktion");
+    expect(content).toContain("Produktionsmappe-Status");
+    expect(document.querySelector('[aria-label="Produktionsmappe-Status"]')).not.toBeNull();
     expect(content).toContain("Verständnis des Angebots");
     expect(content).toContain("Rückfragen");
     expect(content).toContain("Annahmen & Festlegungen");
