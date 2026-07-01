@@ -382,7 +382,7 @@ describe("UI critical path rehearsal", () => {
         ])
       );
       expect(document.body.textContent ?? "").toContain(
-        "Angebotsvariante wurde als operative Spezifikation \u00fcbernommen."
+        "Angebotsvariante wurde als operative Spezifikation zur Produktionspr\u00fcfung \u00fcbernommen; keine Produktionsfreigabe."
       );
       expect(findAnchorByText("Zur Produktion").getAttribute("href")).toBe("/produktion");
 

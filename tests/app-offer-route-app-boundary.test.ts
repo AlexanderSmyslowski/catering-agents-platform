@@ -155,7 +155,7 @@ describe("app offer route app boundary", () => {
       "promoteOfferDraft:draft-1:balanced",
       "setFocusedProductionSpecId:spec-promoted",
       "refreshDashboard",
-      "setNotice:Angebotsvariante wurde als operative Spezifikation übernommen."
+      "setNotice:Angebotsvariante wurde als operative Spezifikation zur Produktionsprüfung übernommen; keine Produktionsfreigabe."
     ]);
   });
 });

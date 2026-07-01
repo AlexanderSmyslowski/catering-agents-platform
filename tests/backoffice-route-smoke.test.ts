@@ -771,7 +771,7 @@ describe("backoffice route smoke", () => {
 
     const promotedText = document.body.textContent ?? "";
     expect(promotedBodies).toEqual([{ variantId: "classic" }]);
-    expect(promotedText).toContain("Angebotsvariante wurde als operative Spezifikation übernommen.");
+    expect(promotedText).toContain("Angebotsvariante wurde als operative Spezifikation zur Produktionsprüfung übernommen; keine Produktionsfreigabe.");
     expect(promotedText).toContain("Übergabe: 1 vollständig · 1 teilweise");
     expect(promotedText).toContain("aktive Spezifikation: sommerfest · 80 Teilnehmer · 2026-08-20 (teilweise vollständig)");
     expect(promotedText).toContain("specId: c3-spec-promoted");
