@@ -21,6 +21,6 @@ export async function completeProductionStateAfterDocumentSuccess(
   actions.completeDocumentProgress();
   await actions.refreshDashboard();
   actions.setNotice(
-    `Dokument ${file.name} ist zur Prüfung übernommen. Produktionsdaten und Rückfragen prüfen; keine automatische Produktionsfreigabe.`
+    `Dokument ${file.name} ist zur Prüfung übernommen. Erkannte Produktionsgrundlage prüfen, Rückfragen klären und danach Berechnung starten; keine automatische Produktionsfreigabe.`
   );
 }

@@ -106,7 +106,7 @@ describe("production document submit action", () => {
       "completeIncomingProductionFile",
       "completeDocumentProgress",
       "refreshDashboard",
-      "setNotice:Dokument angebot.pdf ist zur Prüfung übernommen. Produktionsdaten und Rückfragen prüfen; keine automatische Produktionsfreigabe.",
+      "setNotice:Dokument angebot.pdf ist zur Prüfung übernommen. Erkannte Produktionsgrundlage prüfen, Rückfragen klären und danach Berechnung starten; keine automatische Produktionsfreigabe.",
       "setSubmitting:false"
     ]);
   });
