@@ -49,7 +49,9 @@ describe("production recipe controls", () => {
     expect(actionsInput.uploadRecipeFile).toHaveBeenCalledWith("production", file, "Kartoffelgratin");
     expect(actionsInput.clearRecipeUploadDraft).toHaveBeenCalledTimes(1);
     expect(actionsInput.refreshDashboard).toHaveBeenCalledTimes(1);
-    expect(actionsInput.setNotice).toHaveBeenCalledWith("Rezeptdatei wurde in die gemeinsame Bibliothek übernommen.");
+    expect(actionsInput.setNotice).toHaveBeenCalledWith(
+      "Rezeptdatei wurde zur Prüfung in die gemeinsame Bibliothek übernommen."
+    );
     expect(actionsInput.setError).not.toHaveBeenCalled();
   });
 

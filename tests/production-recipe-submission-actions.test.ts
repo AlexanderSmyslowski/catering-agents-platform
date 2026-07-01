@@ -70,7 +70,7 @@ describe("production recipe submission actions", () => {
       "uploadRecipeFile",
       "clearRecipeUploadDraft",
       "refreshDashboard",
-      "setNotice:Rezeptdatei wurde in die gemeinsame Bibliothek übernommen.",
+      "setNotice:Rezeptdatei wurde zur Prüfung in die gemeinsame Bibliothek übernommen.",
       "setSubmitting:false"
     ]);
   });

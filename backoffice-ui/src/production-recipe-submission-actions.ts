@@ -66,7 +66,7 @@ export function buildProductionRecipeSubmissionActions({
         await uploadRecipeFile(target, recipeFile, recipeName);
         clearRecipeUploadDraft();
         await refreshDashboard();
-        setNotice("Rezeptdatei wurde in die gemeinsame Bibliothek übernommen.");
+        setNotice("Rezeptdatei wurde zur Prüfung in die gemeinsame Bibliothek übernommen.");
       } catch (submitError) {
         setError(formatSubmitErrorMessage(submitError, "Rezept konnte nicht hochgeladen werden."));
       } finally {
