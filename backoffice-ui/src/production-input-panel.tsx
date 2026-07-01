@@ -92,16 +92,27 @@ export function ProductionInputPanel({
     productionAssumptions,
     intakeRequestDetail
   });
-  const secondaryInputsOpen = !panelState.uploadResultSummary;
+  const hasUploadResultSummary = Boolean(panelState.uploadResultSummary);
+  const secondaryInputsOpen = !hasUploadResultSummary;
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
-      <div className="upload-shortcut-bar">
+      {hasUploadResultSummary ? (
+        <input
+          ref={sourceInputActions.uploadInputRef}
+          className="visually-hidden"
+          type="file"
+          accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
+          onChange={sourceInputActions.handleFileSelection}
+        />
+      ) : null}
+      <div className={hasUploadResultSummary ? "upload-shortcut-bar upload-shortcut-bar--compact" : "upload-shortcut-bar"}>
         <div>
           <p className="eyebrow">Anfrageeingang</p>
-          <strong>Kundenanfrage übernehmen</strong>
+          <strong>{hasUploadResultSummary ? "Weitere Anfrage übernehmen" : "Kundenanfrage übernehmen"}</strong>
           <p className="helper-text">
-            PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der Inhalt wird als Catering-Anfrage erfasst. Alternativ kannst du den Text unten direkt einfügen.
+            PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der Inhalt wird als Catering-Anfrage erfasst.
+            {hasUploadResultSummary ? " Die erkannten Produktionsdaten stehen direkt darunter." : " Alternativ kannst du den Text unten direkt einfügen."}
           </p>
         </div>
         <div className="action-row">
@@ -110,33 +121,37 @@ export function ProductionInputPanel({
           </button>
         </div>
       </div>
-      <header>
-        <p className="eyebrow">Eingabequelle</p>
-        <h3>Anfrage als Datei übernehmen</h3>
-      </header>
-      <label
-        className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
-        onDragOver={(event) => {
-          event.preventDefault();
-          sourceInputActions.setDragActive(true);
-        }}
-        onDragLeave={() => sourceInputActions.setDragActive(false)}
-        onDrop={sourceInputActions.handleDrop}
-      >
-        <input
-          ref={sourceInputActions.uploadInputRef}
-          className="visually-hidden"
-          type="file"
-          accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
-          onChange={sourceInputActions.handleFileSelection}
-        />
-        <span className="eyebrow">Drag & Drop</span>
-        <strong>Datei hier ablegen oder Dateiauswahl öffnen</strong>
-        <p className="helper-text">
-          Unterstützt PDF, E-Mail und Textdateien bis {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Nach der Auswahl erscheint der Dateiname hier, danach bewusst verarbeiten.
-        </p>
-        <span className="drag-drop-zone__cta">Datei auswählen</span>
-      </label>
+      {!hasUploadResultSummary ? (
+        <>
+          <header>
+            <p className="eyebrow">Eingabequelle</p>
+            <h3>Anfrage als Datei übernehmen</h3>
+          </header>
+          <label
+            className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
+            onDragOver={(event) => {
+              event.preventDefault();
+              sourceInputActions.setDragActive(true);
+            }}
+            onDragLeave={() => sourceInputActions.setDragActive(false)}
+            onDrop={sourceInputActions.handleDrop}
+          >
+            <input
+              ref={sourceInputActions.uploadInputRef}
+              className="visually-hidden"
+              type="file"
+              accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
+              onChange={sourceInputActions.handleFileSelection}
+            />
+            <span className="eyebrow">Drag & Drop</span>
+            <strong>Datei hier ablegen oder Dateiauswahl öffnen</strong>
+            <p className="helper-text">
+              Unterstützt PDF, E-Mail und Textdateien bis {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Nach der Auswahl erscheint der Dateiname hier, danach bewusst verarbeiten.
+            </p>
+            <span className="drag-drop-zone__cta">Datei auswählen</span>
+          </label>
+        </>
+      ) : null}
       <div className="activity-slot">
         {panelState.selectedFileName ? <p className="helper-text">Ausgewählt: {panelState.selectedFileName}</p> : null}
         {panelState.showAnalysingProgress ? (
@@ -164,20 +179,24 @@ export function ProductionInputPanel({
           </div>
         ) : null}
         {panelState.showCompletedProgress ? (
-          <div className="progress-panel">
-            <div
-              className="progress-ring progress-ring--done"
-              style={{ "--progress-angle": "360deg" } as CSSProperties}
-            >
-              <span>100%</span>
-            </div>
+          <div className={hasUploadResultSummary ? "upload-complete-panel" : "progress-panel"}>
+            {!hasUploadResultSummary ? (
+              <div
+                className="progress-ring progress-ring--done"
+                style={{ "--progress-angle": "360deg" } as CSSProperties}
+              >
+                <span>100%</span>
+              </div>
+            ) : null}
             <div className="progress-panel__content">
               <p className="processing-note processing-note--success">
                 Analyse abgeschlossen für {sourceInput.activeDocumentName}.
               </p>
-              <div className="progress-bar">
-                <div className="progress-bar__fill" style={{ width: "100%" }} />
-              </div>
+              {!hasUploadResultSummary ? (
+                <div className="progress-bar">
+                  <div className="progress-bar__fill" style={{ width: "100%" }} />
+                </div>
+              ) : null}
               <p className="helper-text">
                 Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe.
               </p>

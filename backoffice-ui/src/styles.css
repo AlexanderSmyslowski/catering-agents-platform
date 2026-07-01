@@ -732,6 +732,11 @@ button:disabled {
   letter-spacing: -0.02em;
 }
 
+.upload-shortcut-bar--compact {
+  padding: 0.8rem 1rem;
+  background: rgba(250, 252, 255, 0.82);
+}
+
 .maintenance-actions {
   border: 1px solid rgba(15, 23, 34, 0.08);
   border-radius: 1rem;
@@ -985,6 +990,10 @@ button:disabled {
 .progress-panel__content {
   display: grid;
   gap: 0.65rem;
+}
+
+.upload-complete-panel {
+  display: grid;
 }
 
 .progress-ring {

@@ -222,6 +222,10 @@ describe("production input panel", () => {
     expect(markup).toContain(
       "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
     );
+    expect(markup).toContain("Weitere Anfrage übernehmen");
+    expect(markup).toContain("Die erkannten Produktionsdaten stehen direkt darunter.");
+    expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
+    expect(markup).not.toContain("progress-ring--done");
     expect(markup).toContain("Erkannte Produktionsdaten");
     expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
     expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");
