@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildIntakeApp } from "../intake-service/src/app.js";
-import { buildProductionConversationProjection } from "@catering/shared-core";
+import { AuditLogStore, buildProductionConversationProjection } from "@catering/shared-core";
 import { renderProductionPlanHtml } from "@catering/print-export";
 
 function createDataRoot(): string {
@@ -9,7 +9,8 @@ function createDataRoot(): string {
 
 describe("PA11 intake DocumentIngestion bridge", () => {
   it("transports safe ingestion status for the JSON/base64 text document path", async () => {
-    const app = buildIntakeApp({ rootDir: createDataRoot() });
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({ rootDir: dataRoot });
 
     const response = await app.inject({
       method: "POST",
@@ -46,6 +47,9 @@ describe("PA11 intake DocumentIngestion bridge", () => {
     });
     expect(body.documentIngestion.documents[0].sourceMetadata.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(body.documentIngestion)).not.toContain("Lunch am 2026-05-14");
+    const auditEvents = await new AuditLogStore({ rootDir: dataRoot }).listRecent(5);
+    expect(auditEvents[0].summary).toBe("1 hochgeladenes Dokument in AcceptedEventSpec normalisiert.");
+    expect(auditEvents[0].summary).not.toContain("Dokument(e)");
 
     await app.close();
   });

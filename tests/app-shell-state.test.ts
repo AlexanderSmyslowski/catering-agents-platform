@@ -70,6 +70,23 @@ describe("app shell state helpers", () => {
     expect(formatLatestAuditOverviewLabel(auditEvent)).toBe(
       "Produktionsplan erstellt · Actor: Küche · Action: production.plan.created · 2026-05-21T10:00:00.000Z"
     );
+
+    const legacyUploadAuditEvent = {
+      auditId: "audit-upload-legacy",
+      at: "2026-05-21T11:00:00.000Z",
+      action: "intake.documents_normalized",
+      summary: "1 hochgeladene(s) Dokument(e) per Direkt-Upload in AcceptedEventSpec normalisiert.",
+      actor: { name: "Intake" }
+    };
+    expect(formatAuditEventHandoffLabel(legacyUploadAuditEvent)).toBe(
+      "1 hochgeladenes Dokument per Direkt-Upload in AcceptedEventSpec normalisiert. · Intake · intake.documents_normalized · 2026-05-21T11:00:00.000Z"
+    );
+    expect(formatLatestAuditOverviewLabel({
+      ...legacyUploadAuditEvent,
+      summary: "3 hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert."
+    })).toBe(
+      "3 hochgeladene Dokumente in AcceptedEventSpec normalisiert. · Actor: Intake · Action: intake.documents_normalized · 2026-05-21T11:00:00.000Z"
+    );
   });
 
   it("keeps numeric newest sorting limited to generated id suffixes", () => {

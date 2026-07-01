@@ -137,7 +137,7 @@ export function formatLatestIntakeRequest(requests: Array<Record<string, unknown
 export function formatAuditEventHandoffLabel(event: Record<string, unknown>): string {
   const actor = asRecord(event.actor);
   const parts = [
-    readStringOrNumber(event, ["summary", "action", "auditId"]),
+    formatAuditSummaryLabel(readStringOrNumber(event, ["summary", "action", "auditId"])),
     readStringOrNumber(actor, ["name"]),
     readStringOrNumber(event, ["action"]),
     readStringOrNumber(event, ["at"])
@@ -148,7 +148,7 @@ export function formatAuditEventHandoffLabel(event: Record<string, unknown>): st
 
 export function formatLatestAuditOverviewLabel(event: Record<string, unknown>): string {
   const actor = asRecord(event.actor);
-  const summary = readStringOrNumber(event, ["summary", "action", "auditId"]) ?? "Audit-Eintrag vorhanden";
+  const summary = formatAuditSummaryLabel(readStringOrNumber(event, ["summary", "action", "auditId"])) ?? "Audit-Eintrag vorhanden";
   const parts = [
     summary,
     readStringOrNumber(actor, ["name"]) ? `Actor: ${readStringOrNumber(actor, ["name"])}` : undefined,
@@ -157,6 +157,17 @@ export function formatLatestAuditOverviewLabel(event: Record<string, unknown>): 
   ].filter(Boolean);
 
   return parts.join(" · ");
+}
+
+function formatAuditSummaryLabel(summary?: string): string | undefined {
+  const legacyUploadSummary = summary?.match(/^(\d+) hochgeladene\(s\) Dokument\(e\)(.*)$/);
+  if (!legacyUploadSummary) {
+    return summary;
+  }
+
+  const documentCount = Number(legacyUploadSummary[1]);
+  const documentLabel = documentCount === 1 ? "hochgeladenes Dokument" : "hochgeladene Dokumente";
+  return `${documentCount} ${documentLabel}${legacyUploadSummary[2] ?? ""}`;
 }
 
 export function getRouteTitle(route: AppRoute): string {

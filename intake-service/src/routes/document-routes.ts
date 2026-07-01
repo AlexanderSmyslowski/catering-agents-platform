@@ -209,6 +209,12 @@ export const intakeDocumentJsonRouteOptions = {
   bodyLimit: DOCUMENT_UPLOAD_LIMITS.intake.maxJsonBodyBytes
 } as const;
 
+function formatUploadedDocumentAuditSummary(documentCount: number, modeLabel?: string): string {
+  const documentLabel = documentCount === 1 ? "hochgeladenes Dokument" : "hochgeladene Dokumente";
+  const modePart = modeLabel ? ` ${modeLabel}` : "";
+  return `${documentCount} ${documentLabel}${modePart} in AcceptedEventSpec normalisiert.`;
+}
+
 export function registerIntakeDocumentRoutes(
   app: FastifyInstance,
   deps: IntakeDocumentRouteDependencies
@@ -260,7 +266,7 @@ export function registerIntakeDocumentRoutes(
         entityType: "AcceptedEventSpec",
         entityId: normalized.acceptedEventSpec.specId,
         actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-        summary: `${documents.length} hochgeladene(s) Dokument(e) in AcceptedEventSpec normalisiert.`,
+        summary: formatUploadedDocumentAuditSummary(documents.length),
         details: {
           requestId: normalized.eventRequest.requestId,
           documentCount: documents.length,
@@ -296,7 +302,7 @@ export function registerIntakeDocumentRoutes(
         entityType: "AcceptedEventSpec",
         entityId: normalized.acceptedEventSpec.specId,
         actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-        summary: `${upload.documents.length} hochgeladene(s) Dokument(e) per Direkt-Upload in AcceptedEventSpec normalisiert.`,
+        summary: formatUploadedDocumentAuditSummary(upload.documents.length, "per Direkt-Upload"),
         details: {
           requestId: normalized.eventRequest.requestId,
           documentCount: upload.documents.length,
