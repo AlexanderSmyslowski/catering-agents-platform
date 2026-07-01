@@ -54,12 +54,12 @@ describe("app route content", () => {
     expect(markup).not.toContain("production-main");
   });
 
-  it("renders the production filter before the production main layout", () => {
+  it("renders the active production main layout before inventory search", () => {
     const markup = renderRoute("production");
 
     expect(markup).toContain('data-route-content="production-filter"');
     expect(markup).toContain('data-route-content="production-main"');
-    expect(markup.indexOf("production-filter")).toBeLessThan(markup.indexOf("production-main"));
+    expect(markup.indexOf("production-main")).toBeLessThan(markup.indexOf("production-filter"));
     expect(markup).not.toContain("home-route");
     expect(markup).not.toContain("offer-route");
   });

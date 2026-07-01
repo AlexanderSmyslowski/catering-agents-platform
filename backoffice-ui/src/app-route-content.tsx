@@ -24,10 +24,9 @@ export function AppRouteContent({
     <>
       {route === "home" ? <HomeRoute {...home} /> : null}
 
-      {route === "production" ? <ProductionRouteFilterPanel {...productionFilter} /> : null}
-
       {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbench} /> : null}
       {route === "production" ? <ProductionRouteMainLayout {...productionMain} /> : null}
+      {route === "production" ? <ProductionRouteFilterPanel {...productionFilter} /> : null}
     </>
   );
 }
