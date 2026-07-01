@@ -1332,6 +1332,7 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).toContain("Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.");
+    expect(content).toContain("Exportlinks prüfen; Freigabe offen");
     expect(content).not.toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Produktionsergebnis: 1 Plan · vollständig");
   });
@@ -1471,6 +1472,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Export & Abschlussprüfung");
     expect(content).toContain("7 Rückfragen sichtbar");
     expect(content).toContain("noch nicht berechnet");
+    expect(content).toContain("Freigabe: nicht erteilt.");
     expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
     expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
     expect(document.querySelector(".production-input-collapse summary")?.textContent).toContain("Neue Eingabe oder Korrektur");

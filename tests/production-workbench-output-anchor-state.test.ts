@@ -18,7 +18,7 @@ describe("production workbench output anchor state", () => {
       reviewItems: [
         { label: "Verständnis & Rückfragen", status: "keine offenen Rückfragen sichtbar" },
         { label: "Mengen & Produktionsplan", status: "1 Plan-Artefakt vorhanden" },
-        { label: "Rezeptkarten & Mise-en-Place", status: "im Plan und Export prüfen" },
+        { label: "Rezeptkarten & Mise-en-Place", status: "im Plan und Export fachlich prüfen" },
         { label: "Einkaufsliste nach Warengruppen", status: "noch offen" },
         { label: "Export & Abschlussprüfung", status: "nach Plan und Einkaufsliste offen" }
       ]
@@ -41,9 +41,9 @@ describe("production workbench output anchor state", () => {
       reviewItems: [
         { label: "Verständnis & Rückfragen", status: "2 Rückfragen sichtbar" },
         { label: "Mengen & Produktionsplan", status: "2 Plan-Artefakte vorhanden" },
-        { label: "Rezeptkarten & Mise-en-Place", status: "im Plan und Export prüfen" },
+        { label: "Rezeptkarten & Mise-en-Place", status: "im Plan und Export fachlich prüfen" },
         { label: "Einkaufsliste nach Warengruppen", status: "1 Einkaufsliste vorhanden" },
-        { label: "Export & Abschlussprüfung", status: "Exportlinks im Vorgang prüfen" }
+        { label: "Export & Abschlussprüfung", status: "Exportlinks prüfen; Freigabe offen" }
       ]
     });
   });
