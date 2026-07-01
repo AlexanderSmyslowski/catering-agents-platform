@@ -196,7 +196,6 @@ export function ProductionConversationalWorkbench({
         tabIndex={-1}
         aria-label="Aktuelle Produktionsergebnisse"
       >
-        <span className="visually-hidden">production-objects-zone</span>
         <article className="production-output-anchor" aria-label="Nächster Schritt zur Produktionsarbeit">
           <p className="eyebrow">Nächster Arbeitsschritt</p>
           <h3>{productionOutputAnchor.title}</h3>
@@ -237,7 +236,6 @@ export function ProductionConversationalWorkbench({
       </div>
 
       <div className="production-purchase-zone">
-        <span className="visually-hidden">production-purchase-zone</span>
         <details className="progressive-panel production-purchase-panel" open={purchaseListCount > 0}>
           <summary>
             <span>Einkaufsliste</span>

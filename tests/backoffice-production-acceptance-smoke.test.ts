@@ -752,7 +752,9 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.");
     expect(content).not.toContain("Reviewer-Hinweis");
     expect(content).not.toContain("Option-A-Zeitfenster");
-    expect(content).toContain("production-objects-zone");
+    expect(content).not.toContain("production-objects-zone");
+    expect(content).not.toContain("production-purchase-zone");
+    expect(rendered.html).toContain('aria-label="Aktuelle Produktionsergebnisse"');
     expect(content).toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Erkannte Eckdaten");
@@ -1251,9 +1253,10 @@ describe("backoffice production acceptance smoke", () => {
   it("keeps purchase lists reachable through a quiet progressive workbench zone", async () => {
     installProductionAcceptanceMocks({ withCurrentPurchaseList: true });
 
-    const content = await renderProductionRoute();
+    const rendered = await renderProductionRouteMarkup();
+    const content = rendered.text;
 
-    expect(content).toContain("production-purchase-zone");
+    expect(rendered.html).toContain('class="production-purchase-zone"');
     expect(content).toContain("Einkaufsliste");
     expect(content).toContain(
       "Die sichtbare Liste gehört zum aktuellen Vorgang; ältere Einkaufslisten bleiben getrennt darunter."

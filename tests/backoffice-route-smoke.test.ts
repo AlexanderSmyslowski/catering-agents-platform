@@ -450,7 +450,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Rückfragen beantworten");
     expect(production.text).toContain("Intake-Ursprung: Dateiupload · erhalten 2026-08-20T09:00:00.000Z");
     expect(production.text).not.toContain("requestId: corridor-request-1");
-    expect(production.text).toContain("production-objects-zone");
+    expect(production.html).toContain('aria-label="Aktuelle Produktionsergebnisse"');
     expect(production.text).toContain("Produktionsplan");
     expect(production.text).not.toContain("Produktionsobjekte und Downloads prüfen");
     expect(production.text).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
