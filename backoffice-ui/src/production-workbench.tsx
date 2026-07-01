@@ -25,6 +25,7 @@ export type ProductionWorkbenchSummary = {
     kitchenSheetCount: number;
     recipeSelectionCount: number;
     purchaseItemCount: number;
+    exportStatusLabel?: string;
   };
   readinessLabel: string;
   planStatusLabel: string;
@@ -110,7 +111,7 @@ function formatOperatorProductionObjects(productionObjectStatusLabel: string): s
   }
   return productionObjectStatusLabel
     .replace("unzureichend", "Prüfung nötig")
-    .replace("vollständig", "vollständig, Freigabe offen");
+    .replace("vollständig", "vollständig, Freigabe nicht erteilt");
 }
 
 export function ProductionConversationalWorkbench({

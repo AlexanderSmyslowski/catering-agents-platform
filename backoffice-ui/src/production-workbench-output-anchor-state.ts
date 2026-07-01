@@ -17,6 +17,7 @@ type ProductionDossierMetrics = {
   kitchenSheetCount?: number;
   recipeSelectionCount?: number;
   purchaseItemCount?: number;
+  exportStatusLabel?: string;
 };
 
 function formatQuestionStatus(count: number): string {
@@ -92,6 +93,18 @@ function formatMiseEnPlaceStatus(hasPlan: boolean, metrics?: ProductionDossierMe
   return hasPlan ? "Plan auf Mise-en-Place prüfen" : "nach Produktionsplan offen";
 }
 
+function formatFinalCheckStatus(
+  hasPlan: boolean,
+  hasPurchaseList: boolean,
+  metrics?: ProductionDossierMetrics
+): string {
+  const exportStatusLabel = metrics?.exportStatusLabel?.trim();
+  if (exportStatusLabel) {
+    return `${exportStatusLabel} · Freigabe nicht erteilt`;
+  }
+  return hasPlan && hasPurchaseList ? "Exportlinks prüfen; Freigabe nicht erteilt" : "nach Plan und Einkaufsliste offen";
+}
+
 export function buildProductionWorkbenchOutputAnchorState(input: {
   specFactCount?: number;
   questionCount: number;
@@ -144,7 +157,7 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
     },
     {
       label: "Abschlussprüfung & Exporte",
-      status: hasPlan && hasPurchaseList ? "Exportlinks prüfen; Freigabe offen" : "nach Plan und Einkaufsliste offen"
+      status: formatFinalCheckStatus(hasPlan, hasPurchaseList, input.dossierMetrics)
     }
   ];
 

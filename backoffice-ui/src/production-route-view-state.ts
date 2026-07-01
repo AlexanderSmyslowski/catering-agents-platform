@@ -155,6 +155,7 @@ export function buildProductionRouteViewState({
       currentSpecPlans: visibleArtifacts.currentSpecPlans,
       selectedPlan: visibleArtifacts.selectedPlan,
       productionAssumptions,
+      productionHandoffExportLabel,
       productionObjectStatusLabel,
       currentSpecPurchaseLists: visibleArtifacts.currentSpecPurchaseLists
     }),

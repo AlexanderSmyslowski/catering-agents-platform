@@ -19,6 +19,7 @@ export type ProductionWorkbenchSummaryStateInput = {
   currentSpecPlans: Array<Record<string, unknown>>;
   selectedPlan?: Record<string, unknown>;
   productionAssumptions?: string[];
+  productionHandoffExportLabel?: string;
   productionObjectStatusLabel: string;
   currentSpecPurchaseLists: Array<Record<string, unknown>>;
 };
@@ -36,6 +37,7 @@ export function buildProductionWorkbenchSummaryState({
   currentSpecPlans,
   selectedPlan,
   productionAssumptions = [],
+  productionHandoffExportLabel,
   productionObjectStatusLabel,
   currentSpecPurchaseLists
 }: ProductionWorkbenchSummaryStateInput): ProductionWorkbenchSummary {
@@ -45,6 +47,7 @@ export function buildProductionWorkbenchSummaryState({
     clarificationStatusCounts,
     selectedPlan,
     productionAssumptions,
+    productionHandoffExportLabel,
     currentSpecPurchaseLists
   });
 
@@ -89,8 +92,11 @@ function buildProductionDossierMetrics(input: {
   clarificationStatusCounts: ClarificationStatusCounts;
   selectedPlan?: Record<string, unknown>;
   productionAssumptions: string[];
+  productionHandoffExportLabel?: string;
   currentSpecPurchaseLists: Array<Record<string, unknown>>;
 }): ProductionWorkbenchSummary["dossierMetrics"] {
+  const exportStatusLabel = input.productionHandoffExportLabel?.trim();
+
   return {
     answeredQuestionCount: input.clarificationStatusCounts.answered,
     questionPreview: previewFirstText(input.productionQuestions),
@@ -99,7 +105,8 @@ function buildProductionDossierMetrics(input: {
     productionBatchCount: countRecordArray(input.selectedPlan, "productionBatches"),
     kitchenSheetCount: countRecordArray(input.selectedPlan, "kitchenSheets"),
     recipeSelectionCount: countRecordArray(input.selectedPlan, "recipeSelections"),
-    purchaseItemCount: countPurchaseListItems(input.currentSpecPurchaseLists)
+    purchaseItemCount: countPurchaseListItems(input.currentSpecPurchaseLists),
+    ...(exportStatusLabel ? { exportStatusLabel } : {})
   };
 }
 

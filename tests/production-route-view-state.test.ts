@@ -76,7 +76,8 @@ describe("production route view state", () => {
         productionBatchCount: 1,
         kitchenSheetCount: 2,
         recipeSelectionCount: 1,
-        purchaseItemCount: 1
+        purchaseItemCount: 1,
+        exportStatusLabel: "Plan und Einkaufsliste"
       },
       readinessLabel: "vollständig",
       planStatusLabel: "Plan bereit",

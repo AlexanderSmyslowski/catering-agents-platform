@@ -19,6 +19,7 @@ describe("production workbench summary state", () => {
         recipeSelections: [{ recipeId: "recipe-1" }]
       },
       productionAssumptions: ["Brot als Zukauf"],
+      productionHandoffExportLabel: "Produktionsblatt vorhanden · Einkaufsliste vorhanden",
       productionObjectStatusLabel: "2 aktuelle Pläne",
       currentSpecPurchaseLists: [{ purchaseListId: "purchase-1", totals: { itemCount: 8 } }]
     });
@@ -41,7 +42,8 @@ describe("production workbench summary state", () => {
         productionBatchCount: 2,
         kitchenSheetCount: 1,
         recipeSelectionCount: 1,
-        purchaseItemCount: 8
+        purchaseItemCount: 8,
+        exportStatusLabel: "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
       },
       readinessLabel: "teilweise vollständig",
       planStatusLabel: "1 aktueller Plan",

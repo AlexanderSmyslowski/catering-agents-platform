@@ -79,7 +79,7 @@ describe("production workbench output anchor state", () => {
         { label: "Rezeptkarten", status: "Plan auf Rezeptbezug prüfen" },
         { label: "Metro-Einkaufsliste", status: "1 Einkaufsliste vorhanden" },
         { label: "Mise-en-Place", status: "Plan auf Mise-en-Place prüfen" },
-        { label: "Abschlussprüfung & Exporte", status: "Exportlinks prüfen; Freigabe offen" }
+        { label: "Abschlussprüfung & Exporte", status: "Exportlinks prüfen; Freigabe nicht erteilt" }
       ]
     });
   });
@@ -97,7 +97,8 @@ describe("production workbench output anchor state", () => {
           productionBatchCount: 3,
           kitchenSheetCount: 4,
           recipeSelectionCount: 3,
-          purchaseItemCount: 18
+          purchaseItemCount: 18,
+          exportStatusLabel: "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
         },
         productionObjectCount: 1,
         purchaseListCount: 1
@@ -114,7 +115,10 @@ describe("production workbench output anchor state", () => {
       { label: "Rezeptkarten", status: "4 Rezept-/Küchenkarten sichtbar" },
       { label: "Metro-Einkaufsliste", status: "1 Einkaufsliste · 18 Positionen" },
       { label: "Mise-en-Place", status: "über Rezept-/Küchenkarten prüfen" },
-      { label: "Abschlussprüfung & Exporte", status: "Exportlinks prüfen; Freigabe offen" }
+      {
+        label: "Abschlussprüfung & Exporte",
+        status: "Produktionsblatt vorhanden · Einkaufsliste vorhanden · Freigabe nicht erteilt"
+      }
     ]);
   });
 
