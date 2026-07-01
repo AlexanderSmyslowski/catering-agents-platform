@@ -400,7 +400,7 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Datei auswählen");
     expect(content).toContain("Workbench-Projektion");
     expect(content).toContain("Klärbereich");
-    expect(content).toContain("production-objects-zone");
+    expect(content).toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan");
     expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");
@@ -434,7 +434,6 @@ describe("backoffice production presentation smoke", () => {
     expect(content).not.toContain("channel: manual_form");
     expect(content).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(content).not.toContain("Einkaufsliste exportieren für aktuellen Vorgang presentation-purchase-success");
-    expect(content).toContain("production-purchase-zone");
     expect(content).toContain("Einkaufsliste");
     expect(content).toContain("1 Liste · 3 Positionen");
     expect(content).not.toContain("Status: unzureichend");

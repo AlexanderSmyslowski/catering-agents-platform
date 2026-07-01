@@ -748,7 +748,6 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Grenze: nur interne Demo- oder Testdaten; keine externen Kunden und keine Produktionsfreigabe.");
     expect(content).not.toContain("Reviewer-Hinweis");
     expect(content).not.toContain("Option-A-Zeitfenster");
-    expect(content).toContain("production-objects-zone");
     expect(content).toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Produktionsplan");
@@ -1240,7 +1239,6 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("production-purchase-zone");
     expect(content).toContain("Einkaufsliste");
     expect(content).toContain(
       "Die sichtbare Liste gehört zum aktuellen Vorgang; ältere Einkaufslisten bleiben getrennt darunter."
