@@ -8,15 +8,16 @@ import {
   llmReadinessModelInputKinds,
   llmReadinessModelOutputKinds,
   llmReadinessSourceObjectTypes,
+  type LlmReadinessModelInput,
   type LlmReadinessModelInputKind,
   type LlmReadinessModelOutputCandidate,
   type LlmReadinessModelOutputKind,
   type LlmReadinessSourceObjectType,
   type LlmReadinessSourceRef,
   type LlmReadinessToolEffect,
-  validateLlmReadinessModelInputCandidate,
-  validateLlmReadinessModelOutputCandidate
+  validateLlmReadinessModelInputCandidate
 } from "./llm-readiness.js";
+import { validateLlmReadinessDraftOutputForInput } from "./llm-readiness-draft-output-validation.js";
 import {
   findLlmReadinessPromptSchemaEntryByInputKind,
   llmReadinessPromptSchemaRegistryVersion
@@ -133,6 +134,12 @@ function hasAllowedInputToolEffects(value: unknown): value is readonly LlmReadin
   return value.length === 2 && value[0] === "read" && value[1] === "draft";
 }
 
+function normalizedInputToolEffects(
+  value: readonly LlmReadinessToolEffect[]
+): readonly ["read"] | readonly ["read", "draft"] {
+  return value.length === 1 ? ["read"] : ["read", "draft"];
+}
+
 function uniqueErrors(errors: readonly string[]): string[] {
   return [...new Set(errors)];
 }
@@ -162,6 +169,33 @@ function collectSourceRefKeys(sourceRefs: unknown): string[] {
 
 function sameStringList(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function buildInputCandidateFromRunResult(candidate: Record<string, unknown>): LlmReadinessModelInput | undefined {
+  if (
+    candidate.readinessContractVersion !== llmReadinessContractVersion ||
+    typeof candidate.inputId !== "string" ||
+    candidate.inputId.trim().length === 0 ||
+    !hasAllowedInputKind(candidate.inputKind) ||
+    !hasSafeSourceRefs(candidate.sourceRefs) ||
+    candidate.providerCalls !== "disabled" ||
+    candidate.dataMode !== "synthetic_or_demo_only" ||
+    !hasAllowedInputToolEffects(candidate.allowedToolEffects)
+  ) {
+    return undefined;
+  }
+
+  return {
+    contractVersion: candidate.readinessContractVersion,
+    inputId: candidate.inputId,
+    kind: candidate.inputKind,
+    sourceRefs: candidate.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
+    policy: {
+      providerCalls: candidate.providerCalls,
+      dataMode: candidate.dataMode,
+      allowedToolEffects: normalizedInputToolEffects(candidate.allowedToolEffects)
+    }
+  };
 }
 
 function validateAuditConsistency(
@@ -348,9 +382,12 @@ export function validateLlmReadinessRunResult(
     if (!isRecord(candidate.outputCandidate)) {
       errors.push("outputCandidate is required when status is completed");
     } else {
-      const outputValidation = validateLlmReadinessModelOutputCandidate(candidate.outputCandidate);
-      for (const outputError of outputValidation.errors) {
-        errors.push(`outputCandidate.${outputError}`);
+      const inputCandidate = buildInputCandidateFromRunResult(candidate);
+      if (inputCandidate) {
+        const outputValidation = validateLlmReadinessDraftOutputForInput(candidate.outputCandidate, inputCandidate);
+        for (const outputError of outputValidation.errors) {
+          errors.push(`outputCandidate.${outputError}`);
+        }
       }
 
       if (candidate.outputCandidate.kind !== candidate.outputKind) {
@@ -414,7 +451,10 @@ export function createLlmReadinessRunResult(
   );
 
   if (buildRequest.response.ok) {
-    const outputValidation = validateLlmReadinessModelOutputCandidate(buildRequest.response.outputCandidate);
+    const outputValidation = validateLlmReadinessDraftOutputForInput(
+      buildRequest.response.outputCandidate,
+      buildRequest.request.input
+    );
     for (const outputError of outputValidation.errors) {
       errors.push(`response.outputCandidate.${outputError}`);
     }

@@ -85,6 +85,39 @@ describe("PA40 LLM readiness run result", () => {
     expect(validateLlmReadinessRunResult(build.runResult).valid).toBe(true);
   });
 
+  it("rejects completed production dossier run results that miss the dossier-specific draft contract", async () => {
+    const { request, response, audit } = await buildAudit(2);
+    expect(audit.ok).toBe(true);
+
+    const invalidDossierResponse = {
+      ...response,
+      outputCandidate: {
+        ...response.outputCandidate!,
+        text: "Verständnis des Angebots\nRückfragen\nAnnahmen",
+        structuredCandidate: {
+          sectionCount: 8,
+          summaryKind: "production_dossier",
+          dataMode: "synthetic_or_demo_only",
+          approval: "pending_human_review"
+        }
+      }
+    };
+
+    const build = createLlmReadinessRunResult({
+      resultId: "run-synthetic-production-dossier-invalid",
+      request,
+      response: invalidDossierResponse,
+      auditRecord: audit.auditRecord!
+    });
+
+    expect(build.ok).toBe(false);
+    expect(build.runResult).toBeUndefined();
+    expect(build.errors).toContain("response.outputCandidate.structuredCandidate.sectionCount must be 9");
+    expect(build.errors).toContain(
+      "response.outputCandidate.text must mention production dossier sections: missing kalkulation, mengen, rezept, metro, mise-en-place, abschluss"
+    );
+  });
+
   it("builds a rejected run result from a rejected fixture-only run", async () => {
     const { request, response, audit } = await buildAudit(0, "operator-summary-draft-prompt-schema.v0");
     expect(audit.ok).toBe(true);
