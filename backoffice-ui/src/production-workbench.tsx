@@ -12,6 +12,10 @@ export type ProductionWorkbenchSummary = {
     label: string;
     value: string;
   }>;
+  assuranceFacts?: Array<{
+    label: string;
+    value: string;
+  }>;
   readinessLabel: string;
   planStatusLabel: string;
   purchaseStatusLabel: string;
@@ -122,7 +126,8 @@ export function ProductionConversationalWorkbench({
     productionObjectCount,
     productionObjectStatusLabel,
     purchaseListCount,
-    specFacts = []
+    specFacts = [],
+    assuranceFacts = []
   } = summary;
   const openVisibleQuestionCount = countOpenVisibleQuestions(
     questionCount,
@@ -211,6 +216,19 @@ export function ProductionConversationalWorkbench({
               <p className="eyebrow production-output-facts-label">Erkannte Eckdaten</p>
               <dl className="spec-fact-grid production-output-facts" aria-label="Erkannte Produktionsdaten">
                 {specFacts.map((fact) => (
+                  <div key={fact.label} className="spec-fact">
+                    <dt>{fact.label}</dt>
+                    <dd>{fact.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          ) : null}
+          {hasVisibleProductionWork && assuranceFacts.length > 0 ? (
+            <>
+              <p className="eyebrow production-output-facts-label">Kontrolle</p>
+              <dl className="spec-fact-grid production-output-facts" aria-label="Kontrolle der Produktionsdaten">
+                {assuranceFacts.map((fact) => (
                   <div key={fact.label} className="spec-fact">
                     <dt>{fact.label}</dt>
                     <dd>{fact.value}</dd>

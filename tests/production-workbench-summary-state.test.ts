@@ -5,6 +5,7 @@ describe("production workbench summary state", () => {
   it("maps current production labels, question counts, and artifact counts into the workbench summary", () => {
     const summary = buildProductionWorkbenchSummaryState({
       activeProductionContextLabel: "Lunch · 42 Pax",
+      productionIntakeOriginLabel: "Dateiupload · 2026-06-30T20:26:58.000Z · Intake-Anfrage verknüpft",
       focusedSpecReadinessLabel: "teilweise vollständig",
       productionPlanStatusLabel: "1 aktueller Plan",
       purchaseZoneStatusLabel: "1 aktuelle Liste",
@@ -18,6 +19,13 @@ describe("production workbench summary state", () => {
     expect(summary).toEqual({
       activeSpecLabel: "Lunch · 42 Pax",
       activeTechnicalContextLabel: undefined,
+      assuranceFacts: [
+        {
+          label: "Herkunft",
+          value: "Dateiupload · 2026-06-30T20:26:58.000Z · Intake-Anfrage verknüpft"
+        },
+        { label: "Freigabe", value: "nicht erteilt" }
+      ],
       readinessLabel: "teilweise vollständig",
       planStatusLabel: "1 aktueller Plan",
       purchaseStatusLabel: "1 aktuelle Liste",
@@ -49,5 +57,6 @@ describe("production workbench summary state", () => {
     expect(summary.productionObjectCount).toBe(0);
     expect(summary.purchaseListCount).toBe(0);
     expect(summary.activeSpecLabel).toBe("Kein aktiver Vorgang");
+    expect(summary.assuranceFacts).toEqual([{ label: "Freigabe", value: "nicht erteilt" }]);
   });
 });

@@ -145,6 +145,7 @@ export function buildProductionRouteViewState({
     workbenchSummary: buildProductionWorkbenchSummaryState({
       activeProductionContextLabel,
       activeProductionTechnicalContextLabel,
+      productionIntakeOriginLabel,
       workbenchSpecFacts,
       focusedSpecReadinessLabel,
       productionPlanStatusLabel,
