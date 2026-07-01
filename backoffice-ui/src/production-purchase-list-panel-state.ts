@@ -28,6 +28,7 @@ export type ProductionPurchaseListPanelCurrentListState = {
   title: string;
   itemCountLabel: string;
   contextLabel: string;
+  emptyListLabel?: string;
   exportUrl: string;
   exportContextLabel: string;
   warnings: ProductionPurchaseListPanelWarningState[];
@@ -75,12 +76,19 @@ export function buildProductionPurchaseListPanelState(
       const { purchaseListId } = buildPurchaseListIds(purchaseList);
       const previewItems = getPurchaseListPreviewItems(purchaseList);
       const qualityWarnings = getPurchaseListQualityWarnings(purchaseList);
+      const itemCount = (purchaseList.totals as Record<string, unknown>)?.itemCount;
 
       return {
         key: String(purchaseList.purchaseListId),
         title: buildPurchaseListTitle(purchaseList, purchaseListState.specById),
-        itemCountLabel: `Positionen: ${String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}`,
+        itemCountLabel: `Positionen: ${String(itemCount ?? "-")}`,
         contextLabel: "Aktueller Vorgang",
+        ...(itemCount === 0
+          ? {
+              emptyListLabel:
+                "Diese Einkaufsliste ist angelegt, enthält aber noch keine Einkaufspositionen; der Export wäre aktuell leer."
+            }
+          : {}),
         exportUrl: purchaseListExportUrl(purchaseListId),
         exportContextLabel: "für aktuellen Vorgang",
         warnings: qualityWarnings.map((warning) => ({

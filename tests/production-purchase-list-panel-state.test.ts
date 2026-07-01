@@ -108,6 +108,26 @@ describe("production purchase list panel state", () => {
     ]);
   });
 
+  it("marks current purchase lists with zero items as empty before export", () => {
+    expect(
+      buildProductionPurchaseListPanelState({
+        currentPurchaseLists: [
+          {
+            purchaseListId: "purchase-empty",
+            eventSpecId: "spec-lunch",
+            totals: { itemCount: 0 },
+            items: []
+          }
+        ],
+        archivedPurchaseLists: [],
+        specById: new Map([["spec-lunch", lunchSpec]]),
+        statusLabel: "1 Einkaufsliste"
+      }).currentLists[0]?.emptyListLabel
+    ).toBe(
+      "Diese Einkaufsliste ist angelegt, enthält aber noch keine Einkaufspositionen; der Export wäre aktuell leer."
+    );
+  });
+
   it("keeps empty archived lists hidden and preserves current-list fallback labels", () => {
     expect(
       buildProductionPurchaseListPanelState({

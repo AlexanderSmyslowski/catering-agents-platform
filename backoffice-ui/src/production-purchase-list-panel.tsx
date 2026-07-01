@@ -32,6 +32,7 @@ export function ProductionPurchaseListPanel({
             <strong>{purchaseList.title}</strong>
             <p>{purchaseList.itemCountLabel}</p>
             <p className="helper-text">{purchaseList.contextLabel}</p>
+            {purchaseList.emptyListLabel ? <p className="helper-text">{purchaseList.emptyListLabel}</p> : null}
             <a
               className="ghost-link"
               href={purchaseList.exportUrl}
