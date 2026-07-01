@@ -409,8 +409,9 @@ describe("UI critical path rehearsal", () => {
       expect(productionText).toContain("Einkaufsliste exportieren");
       expect(productionText).toContain("Tomaten");
       expect(productionText).toContain("Rezeptquelle:");
-      expect(productionText).toContain("internal recipe, approved");
-      expect(productionText).toContain("internal/ui-critical-path-tomato-soup");
+      expect(productionText).toContain("Internes Rezept freigegeben");
+      expect(productionText).not.toContain("internal/ui-critical-path-tomato-soup");
+      expect(productionText).not.toContain("(ui-critical-path-tomato-soup)");
       expect(productionText).toContain("Audit-Spur");
       expect(productionText).toContain("production.plan_created");
       expect(productionText).toContain("Beta-Endpunkt");
@@ -432,7 +433,7 @@ describe("UI critical path rehearsal", () => {
       expect(purchaseCsv).toContain("source_recipes");
       expect(purchaseCsv).toContain("source_recipe_origins");
       expect(purchaseCsv).toContain("ui-critical-path-tomato-soup");
-      expect(purchaseCsv).toContain("internal recipe, approved");
+      expect(purchaseCsv).toContain("Internes Rezept freigegeben");
 
       expect(fetchCalls.every((call) => call.url.startsWith("/api/"))).toBe(true);
       expect(fetchCalls.map((call) => call.url).join("\n")).not.toContain("openai");

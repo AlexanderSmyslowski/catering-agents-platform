@@ -3,6 +3,7 @@ import {
   checkPurchaseCoverage,
   formatEventTypeLabel,
   formatMetroGroupLabel,
+  formatRecipeApprovalStateLabel,
   formatServiceFormLabel,
   metroGroupSortIndex,
   type AcceptedEventSpec,
@@ -305,7 +306,9 @@ function renderSection7(input: RenderProductionFolderInput, recipeById: Map<stri
     const batch = input.plan.productionBatches.find((candidate) => candidate.recipeId === recipeId);
     const ingredients = ingredientsFor(sheet, batch, recipe);
 
-    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(recipe.source.approvalState)}</p><table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
+    const approvalStateLabel = formatRecipeApprovalStateLabel(recipe.source.approvalState) ?? "Status offen";
+
+    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p><table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
   });
   const missingRecipeIds = linkedRecipeIds.filter((recipeId) => !recipeById.has(recipeId));
 

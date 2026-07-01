@@ -261,7 +261,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Produktionsagent");
     expect(production.text).toContain("Was braucht die Produktion als Nächstes?");
     expect(production.text).toContain("Auftrag einfügen oder Datei ablegen");
-    expect(production.text).toContain("Aktiver Produktionsauftrag");
+    expect(production.text).toContain("Produktionsdaten im Fokus");
     expect(production.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
     expect(production.text).toContain("Bestehende Aufträge, Pläne, Einkaufslisten und Rezepte durchsuchen.");
   });
@@ -327,8 +327,8 @@ describe("backoffice route smoke", () => {
     const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
     expect(production).toContain("Produktionsagent");
     expect(production).toContain("Was braucht die Produktion als Nächstes?");
-    expect(production).toContain("Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.");
-    expect(production).toContain("Bitte vor Freigabe prüfen: keine automatische Allergen-, Preis- oder Margenfreigabe.");
+    expect(production).toContain("Produktionsdaten im Fokus");
+    expect(production).toContain("Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.");
     expect(production).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
   });
 
@@ -450,7 +450,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Rückfragen beantworten");
     expect(production.text).toContain("Intake-Ursprung: Dateiupload · erhalten 2026-08-20T09:00:00.000Z");
     expect(production.text).not.toContain("requestId: corridor-request-1");
-    expect(production.text).toContain("production-objects-zone");
+    expect(production.text).toContain("Nächster Arbeitsschritt");
     expect(production.text).toContain("Produktionsplan");
     expect(production.text).not.toContain("Produktionsobjekte und Downloads prüfen");
     expect(production.text).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
@@ -499,9 +499,12 @@ describe("backoffice route smoke", () => {
     const home = (await renderRoute("/")).text;
 
     expect(home).toContain("Erfassung");
-    expect(home).toContain("letzte Erfassung: intake-source-warning-1 via pdf_upload");
+    expect(home).toContain("letzte Erfassung: Dateiupload");
+    expect(home).not.toContain("intake-source-warning-1");
     expect(home).toContain("Quelle: kundenanfrage-b21.pdf");
-    expect(home).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
+    expect(home).toContain(
+      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
+    );
     expect(home).not.toContain("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd");
   });
 
@@ -936,7 +939,9 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Spezifikation im Fokus");
     expect(production.text).not.toContain("specId: c4-spec-handoff");
     expect(production.text).not.toContain("requestId: c4-request-handoff");
-    expect(production.text).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
+    expect(production.text).toContain(
+      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
+    );
     expect(production.text).toContain("Quellenmetadaten (gekürzt): c4-angebot.pdf · application/pdf · 2.0 KB · sha256:abcdef123456 · intake");
     expect(production.text).not.toContain("B5 Rohtext");
     expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
@@ -1030,7 +1035,7 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("1 kaufmännische Entwürfe können direkt übernommen werden.");
     expect(home).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
     expect(home).toContain("2 Rezepte · 1 intern freigegeben · 1 Prüfung nötig");
-    expect(home).toContain("letzte Erfassung: start-intake-new via manual_form");
+    expect(home).toContain("letzte Erfassung: manuelle Eingabe");
     expect(home).toContain(
       "1 Änderungen geladen · neueste: Demo-Daten geladen · Actor: Mia · Action: seed_demo · 2026-07-01T10:05:00.000Z"
     );

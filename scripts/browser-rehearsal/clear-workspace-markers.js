@@ -2,17 +2,32 @@ async () => {
   const beforeText = document.body.innerText;
   const beforeHtml = document.body.innerHTML;
   const missing = [];
-  const planContext = beforeText.match(/Plan-Kontext: planId ([^\s]+) · specId ([^\s]+)/);
-  const purchaseContext = beforeText.match(/purchaseListId: ([^\s]+) · specId: ([^\s]+)/);
+  const exportLinks = [...document.querySelectorAll("a")]
+    .map((anchor) => {
+      const href = anchor.getAttribute("href") ?? "";
+      return href ? new URL(href, location.origin).pathname : "";
+    });
+  const planExport = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/production-plans\/[^/]+\/html$/.test(href)
+  );
+  const purchaseExport = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/purchase-lists\/[^/]+\/csv$/.test(href)
+  );
+  const planId = planExport?.match(/^\/api\/exports\/v1\/exports\/production-plans\/([^/]+)\/html$/)?.[1];
+  const purchaseListId = purchaseExport?.match(/^\/api\/exports\/v1\/exports\/purchase-lists\/([^/]+)\/csv$/)?.[1];
+  const handoffContext = "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden";
   const clearButton = [...document.querySelectorAll("button")].find((button) =>
     (button.textContent ?? "").replace(/\s+/g, " ").trim().startsWith("Arbeitsbereich lokal leeren")
   );
 
-  if (!planContext) {
-    missing.push("Clear-Check vor Klick ohne aktuellen Plan-Kontext");
+  if (!planExport || !planId) {
+    missing.push("Clear-Check vor Klick ohne aktuellen Produktionsplan-Exportlink");
   }
-  if (!purchaseContext) {
-    missing.push("Clear-Check vor Klick ohne aktuellen Einkaufslisten-Kontext");
+  if (!purchaseExport || !purchaseListId) {
+    missing.push("Clear-Check vor Klick ohne aktuellen Einkaufslisten-Exportlink");
+  }
+  if (beforeText.includes("Plan-Kontext: planId ") || beforeText.includes("purchaseListId: ")) {
+    missing.push("Clear-Check vor Klick zeigt technische IDs im sichtbaren Kontext");
   }
   if (!clearButton) {
     missing.push("Clear-Check ohne Arbeitsbereich-lokal-leeren-Aktion");
@@ -23,11 +38,6 @@ async () => {
     throw new Error(`Produktions-Clear-Rehearsal vor Klick unsicher: ${missing.join(" | ")}`);
   }
 
-  const [, planId, planSpecId] = planContext;
-  const [, purchaseListId, purchaseSpecId] = purchaseContext;
-  const planExport = `/api/exports/v1/exports/production-plans/${planId}/html`;
-  const purchaseExport = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
-  const handoffContext = `Abschluss-Kontext: planId ${planId} · specId ${planSpecId} · purchaseListId ${purchaseListId}`;
   const auditTrailLabel = beforeText.match(/Audit-Spur\s+([^\n]+)/)?.[1]?.trim();
 
   if (!beforeHtml.includes(planExport)) {
@@ -36,11 +46,8 @@ async () => {
   if (!beforeHtml.includes(purchaseExport)) {
     missing.push(`Clear-Check vor Klick ohne Einkaufslisten-Export ${purchaseExport}`);
   }
-  if (planSpecId !== purchaseSpecId) {
-    missing.push(`Clear-Check vor Klick Abschluss-Kontext hat unterschiedliche Spezifikationen ${planSpecId}/${purchaseSpecId}`);
-  }
   if (!beforeText.includes(handoffContext)) {
-    missing.push("Clear-Check vor Klick ohne passenden Abschluss-Kontext");
+    missing.push("Clear-Check vor Klick ohne lesbaren Abschluss-Kontext");
   }
   if (missing.length > 0) {
     throw new Error(`Produktions-Clear-Rehearsal vor Klick unvollstaendig: ${missing.join(" | ")}`);
@@ -55,6 +62,7 @@ async () => {
     if (
       text.includes("Kein aktiver Vorgang") &&
       text.includes("Auftrag einfügen oder Datei ablegen") &&
+      !text.includes("Plan-Kontext: aktueller Produktionsplan") &&
       !text.includes(`Plan-Kontext: planId ${planId}`) &&
       !text.includes(`purchaseListId: ${purchaseListId}`) &&
       !text.includes(handoffContext) &&
@@ -90,7 +98,7 @@ async () => {
   if (
     afterText.includes(handoffContext) ||
     (afterText.includes("Abschluss-Kontext:") &&
-      (afterText.includes(planId) || afterText.includes(planSpecId) || afterText.includes(purchaseListId)))
+      (afterText.includes(planId) || afterText.includes(purchaseListId)))
   ) {
     missing.push("Clear-Check nach Klick zeigt alten Abschluss-Kontext");
   }
@@ -112,9 +120,7 @@ async () => {
   }
   sessionStorage.setItem("capClearWorkspaceContext", JSON.stringify({
     planId,
-    planSpecId,
     purchaseListId,
-    purchaseSpecId,
     planExport,
     purchaseExport,
     handoffContext,

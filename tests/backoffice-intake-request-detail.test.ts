@@ -169,11 +169,13 @@ describe("backoffice intake request detail", () => {
     expect(document.body.textContent).toContain("Herkunft und Übergabe");
     expect(document.body.textContent).toContain("Intake-Ursprung");
     expect(document.body.textContent).not.toContain("Konferenz am 2026-04-18 fuer 45 Teilnehmer");
-    expect(document.body.textContent).toContain("Ingestion-Warnung");
+    expect(document.body.textContent).toContain("Dokumentprüfung");
     expect(document.body.textContent).toContain(
-      "Quelle unsicher/fallback: angebot-detail.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
+      "Quelle prüfen: angebot-detail.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     );
-    expect(document.body.textContent).toContain("Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback");
+    expect(document.body.textContent).toContain(
+      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
+    );
 
     await act(async () => {
       root.unmount();

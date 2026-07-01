@@ -167,7 +167,7 @@ describe("export source metadata readability", () => {
     expect(row).toContain("\"4.2\"");
     expect(row).toContain("\"kg\"");
     expect(row).toContain("\"recipe-tomato-soup\"");
-    expect(row).toContain("\"internal recipe, approved\"");
+    expect(row).toContain("\"Internes Rezept freigegeben\"");
     expect(row).toContain("\"internal:tomato-soup\"");
   });
 
@@ -237,7 +237,7 @@ describe("export source metadata readability", () => {
     const purchaseList = aggregatePurchaseList("spec-export-source", [
       artifacts.batch
     ]);
-    const html = renderProductionPlanHtml({
+    const plan: ProductionPlan = {
       schemaVersion: SCHEMA_VERSION,
       planId: "plan-export-source",
       eventSpecId: "spec-export-source",
@@ -250,14 +250,21 @@ describe("export source metadata readability", () => {
       kitchenSheets: [artifacts.kitchenSheet],
       recipeSelections: [],
       unresolvedItems: []
-    });
+    };
+    const html = renderProductionPlanHtml(plan, eventSpec(menuComponent));
     const csv = renderPurchaseListCsv(purchaseList);
 
+    expect(html).toContain("<h2>Tomato Soup</h2>");
+    expect(html).not.toContain("<h2>component-soup</h2>");
+    expect(html).toContain("Status: vollständig");
+    expect(html).not.toContain("Status: complete");
     expect(html).toContain("Rezeptquelle:");
-    expect(html).toContain("web recipe, reviewed");
+    expect(html).toContain("Web-Rezept geprüft");
     expect(html).toContain("Example Recipes");
     expect(html).toContain("https://example.test/tomato-soup");
-    expect(csv).toContain("\"web recipe, reviewed\"");
+    expect(html).not.toContain("recipe-tomato-soup");
+    expect(csv).toContain("\"Web-Rezept geprüft\"");
+    expect(csv).toContain("\"recipe-tomato-soup\"");
     expect(csv).toContain(
       "\"Example Recipes | https://example.test/tomato-soup | web:tomato-soup\""
     );
@@ -292,9 +299,9 @@ describe("export source metadata readability", () => {
     const csv = renderPurchaseListCsv(purchaseList);
 
     expect(csv).toContain("\"legacy-recipe\"");
-    expect(csv).toContain("\"source unknown\"");
+    expect(csv).toContain("\"Quelle offen\"");
     expect(formatRecipeSourceEvidenceLabel(undefined, "legacy-recipe")).toBe(
-      "source unknown (legacy-recipe)"
+      "Quelle offen (legacy-recipe)"
     );
   });
 
@@ -351,10 +358,11 @@ describe("export source metadata readability", () => {
     expect(validateProductionPlan(legacyPlan)).toBe(legacyPlan);
     expect(validatePurchaseList(legacyPurchaseList)).toBe(legacyPurchaseList);
     expect(renderProductionPlanHtml(legacyPlan)).toContain(
-      "source unknown (recipe-tomato-soup)"
+      "Quelle offen"
     );
+    expect(renderProductionPlanHtml(legacyPlan)).not.toContain("recipe-tomato-soup");
     expect(renderPurchaseListCsv(legacyPurchaseList)).toContain(
-      "\"source unknown\""
+      "\"Quelle offen\""
     );
   });
 

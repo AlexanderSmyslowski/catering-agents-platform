@@ -128,7 +128,7 @@ describe("offer gold run", () => {
       specId: draft.proposedEventSpec.specId,
       status: "review_required",
       sourcePackageId: "business_lunch_basic",
-      customerOfferVisible: true,
+      customerOfferVisible: false,
       internalCalculationVisible: false
     });
     expect(draft.productionHandoff?.reviewStatus.publishApproved).toBe(false);

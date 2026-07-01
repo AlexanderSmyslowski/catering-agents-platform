@@ -3,15 +3,18 @@ import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "@catering/offer-service";
 import { ProductionStore } from "@catering/production-service";
 import type {
+  AcceptedEventSpec,
   CollectionStorageOptions,
   OfferDraft,
   ProductionPlan,
   PurchaseList,
-  Recipe
+  Recipe,
+  RecipeSourceExportMetadata
 } from "@catering/shared-core";
 import {
+  formatDocumentIngestionStatusLabel,
+  formatDocumentIngestionWarningLabel,
   formatMetroGroupLabel,
-  formatRecipeSourceEvidenceLabel,
   isDevAuthEnabled,
   RecipeLibrary,
   recipeSourceOriginLabel,
@@ -42,6 +45,65 @@ function formatBytes(sizeBytes: number): string {
   }
 
   return `${(sizeBytes / 1024).toFixed(1)} KB`;
+}
+
+function formatOfferReviewStatusLabel(value: unknown): string {
+  const status = String(value ?? "review_required").trim();
+  if (status === "verified") {
+    return "geprüft";
+  }
+  if (status === "review_required") {
+    return "Prüfung nötig";
+  }
+  return status || "Prüfung nötig";
+}
+
+function formatProductionReadinessStatusLabel(value: unknown): string {
+  const status = String(value ?? "").trim();
+  if (status === "complete") {
+    return "vollständig";
+  }
+  if (status === "partial") {
+    return "teilweise vollständig";
+  }
+  if (status === "insufficient") {
+    return "nicht ausreichend";
+  }
+  return status || "offen";
+}
+
+function productionComponentLabel(
+  componentId: string,
+  plan: ProductionPlan,
+  spec?: AcceptedEventSpec
+): string {
+  return (
+    spec?.menuPlan.find((component) => component.componentId === componentId)?.label ??
+    plan.componentReadiness?.find((component) => component.componentId === componentId)?.label ??
+    componentId
+  );
+}
+
+function compactLabelParts(parts: Array<string | undefined>): string[] {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+}
+
+function formatProductionPlanRecipeSourceLabel(metadata?: RecipeSourceExportMetadata): string {
+  if (!metadata) {
+    return "Quelle offen";
+  }
+
+  const referenceLabel = recipeSourceReferenceLabel(metadata);
+  const shouldShowReference =
+    metadata.originType !== "internal_db" && referenceLabel !== "Quelle offen";
+
+  return compactLabelParts([
+    metadata.recipeName,
+    recipeSourceOriginLabel(metadata),
+    shouldShowReference ? referenceLabel : undefined
+  ]).join(" · ");
 }
 
 function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
@@ -87,8 +149,10 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
     return [
       [
         filename,
-        ingestionStatus ? `Status: ${ingestionStatus}` : undefined,
-        ingestionWarnings.length > 0 ? `Warnungen: ${ingestionWarnings.join(",")}` : undefined
+        ingestionStatus ? `Lesbarkeit: ${formatDocumentIngestionStatusLabel(ingestionStatus)}` : undefined,
+        ingestionWarnings.length > 0
+          ? `Hinweise: ${ingestionWarnings.map(formatDocumentIngestionWarningLabel).join(", ")}`
+          : undefined
       ]
         .filter(Boolean)
         .join(" · ")
@@ -101,7 +165,7 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
       : []),
     ...(warningRows.length > 0
       ? [
-          `<section><h2>Ingestion-Warnungen</h2><ul>${warningRows
+          `<section><h2>Dokumentprüfungen</h2><ul>${warningRows
             .map((row) => `<li>${escapeHtml(row)}</li>`)
             .join("")}</ul></section>`
         ]
@@ -110,6 +174,7 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
 }
 
 export function renderOfferHtml(draft: OfferDraft): string {
+  const publishApproved = draft.reviewStatus?.publishApproved === true;
   const openQuestionsSection =
     draft.openQuestions.length > 0
       ? [
@@ -118,6 +183,24 @@ export function renderOfferHtml(draft: OfferDraft): string {
             .join("")}</ul></section>`
         ]
       : ["<p>Offene Punkte: keine</p>"];
+  const reviewStatusSection = publishApproved
+    ? []
+    : [
+        "<section><h2>Interne Prüfung</h2>",
+        "<p>Kundentext erst nach Publish-Freigabe exportieren.</p>",
+        "<ul>",
+        `<li>Preis: ${escapeHtml(formatOfferReviewStatusLabel(draft.reviewStatus?.priceReviewStatus))}</li>`,
+        `<li>MwSt.: ${escapeHtml(formatOfferReviewStatusLabel(draft.reviewStatus?.taxReviewStatus))}</li>`,
+        `<li>Allergene: ${escapeHtml(formatOfferReviewStatusLabel(draft.reviewStatus?.allergenReviewStatus))}</li>`,
+        `<li>Hygiene/Temperatur: ${escapeHtml(
+          formatOfferReviewStatusLabel(draft.reviewStatus?.hygieneTemperatureReviewStatus)
+        )}</li>`,
+        "</ul>",
+        "</section>"
+      ];
+  const customerTextSection = publishApproved
+    ? ["<pre>", escapeHtml(draft.customerFacingText), "</pre>"]
+    : [];
 
   return [
     "<html><body>",
@@ -130,14 +213,13 @@ export function renderOfferHtml(draft: OfferDraft): string {
     ...draft.serviceModules.map((module) => `<li>${escapeHtml(module.label)}</li>`),
     "</ul>",
     `<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toFixed(2)} ${escapeHtml(draft.pricingSummary.subtotal.currency)}</p>`,
-    "<pre>",
-    escapeHtml(draft.customerFacingText),
-    "</pre>",
+    ...reviewStatusSection,
+    ...customerTextSection,
     "</body></html>"
   ].join("");
 }
 
-export function renderProductionPlanHtml(plan: ProductionPlan): string {
+export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEventSpec): string {
   const unresolvedSection =
     plan.unresolvedItems.length > 0
       ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`]
@@ -145,7 +227,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
   return [
     "<html><body>",
     "<h1>Produktionsplan</h1>",
-    `<p>Status: ${escapeHtml(plan.readiness.status)}</p>`,
+    `<p>Status: ${escapeHtml(formatProductionReadinessStatusLabel(plan.readiness.status))}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
     ...unresolvedSection,
@@ -154,16 +236,14 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
         const kitchenSheet = plan.kitchenSheets.find((sheet) =>
           sheet.componentId === batch.componentId && sheet.recipeId === batch.recipeId
         );
-        const sourceLabel = formatRecipeSourceEvidenceLabel(
-          batch.recipeSource ?? kitchenSheet?.recipeSource,
-          batch.recipeId
-        );
+        const sourceLabel = formatProductionPlanRecipeSourceLabel(batch.recipeSource ?? kitchenSheet?.recipeSource);
 
-        return `<section><h2>${escapeHtml(batch.componentId)}</h2><p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
+        return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, spec))}</h2><p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
           .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)
           .join("")}</ol></section>`;
       }
     ),
+    "<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer>",
     "</body></html>"
   ].join("");
 }
@@ -196,11 +276,11 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
       item.sourceRecipes.join("; "),
       (item.sourceRecipeMetadata && item.sourceRecipeMetadata.length > 0
         ? item.sourceRecipeMetadata.map(recipeSourceOriginLabel)
-        : ["source unknown"]
+        : [recipeSourceOriginLabel()]
       ).join("; "),
       (item.sourceRecipeMetadata && item.sourceRecipeMetadata.length > 0
         ? item.sourceRecipeMetadata.map(recipeSourceReferenceLabel)
-        : ["source unknown"]
+        : [recipeSourceReferenceLabel()]
       ).join("; ")
     ]
       .map(escapeCsv)
@@ -361,13 +441,15 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
+      const spec = await intakeStore.getSpec(plan.eventSpecId);
+
       reply.header(
         "content-disposition",
         `inline; filename="${request.params.planId}.html"`
       );
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderProductionPlanHtml(plan));
+        .send(renderProductionPlanHtml(plan, spec));
     }
   );
 

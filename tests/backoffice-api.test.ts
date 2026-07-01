@@ -98,6 +98,31 @@ describe("backoffice API actor defaults", () => {
     expect(calls.map((call) => call.contentType)).toEqual(["application/json", "application/json", "application/json"]);
   });
 
+  it("sends source review confirmation only when production planning confirms it", async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body ?? "{}")));
+
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        });
+      })
+    );
+
+    await createProductionPlan({ specId: "spec-safe" });
+    await createProductionPlan({ specId: "spec-confirmed" }, { sourceReviewConfirmed: true });
+
+    expect(bodies).toEqual([
+      { eventSpec: { specId: "spec-safe" } },
+      { eventSpec: { specId: "spec-confirmed" }, sourceReviewConfirmed: true }
+    ]);
+  });
+
   it("keeps export links on the read-only export service paths", () => {
     expect(offerExportUrl("draft-ops-1")).toBe("/api/exports/v1/exports/offers/draft-ops-1/html");
     expect(productionExportUrl("plan-ops-1")).toBe("/api/exports/v1/exports/production-plans/plan-ops-1/html");

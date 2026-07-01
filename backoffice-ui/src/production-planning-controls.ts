@@ -37,7 +37,10 @@ export type ProductionPlanningControlsInput =
 
 export type ProductionPlanningControls = ProductionSpecFocusActions & {
   persistCurrentSpecEdit: (options?: { quiet?: boolean }) => Promise<Record<string, unknown> | undefined>;
-  handleCreatePlan: (spec: Record<string, unknown>) => Promise<void>;
+  handleCreatePlan: (
+    spec: Record<string, unknown>,
+    options?: { sourceReviewConfirmed?: boolean }
+  ) => Promise<void>;
   handleSaveSpecEdit: () => Promise<void>;
 };
 

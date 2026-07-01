@@ -14,6 +14,7 @@ import {
   selectProductionNextStep,
   type ProductionNextStep
 } from "./production-route-state.js";
+import { hasUnsafeIntakeSource } from "./production-intake-origin-card-state.js";
 
 export type ProductionStatusSummaryState = {
   activeProductionContextLabel: string;
@@ -44,6 +45,18 @@ export type ProductionStatusSummaryStateInput = {
   productionWorkspaceCleared: boolean;
 };
 
+function formatFocusedSpecReadinessForOperator(input: {
+  focusedProductionSpec?: Record<string, unknown>;
+  productionQuestions: string[];
+  hasSourceWarnings: boolean;
+}): string {
+  const readinessLabel = formatProductionReadinessLabel(input.focusedProductionSpec);
+  if (readinessLabel === "vollständig" && (input.productionQuestions.length > 0 || input.hasSourceWarnings)) {
+    return "Prüfung nötig";
+  }
+  return readinessLabel;
+}
+
 export function buildProductionStatusSummaryState(
   input: ProductionStatusSummaryStateInput
 ): ProductionStatusSummaryState {
@@ -55,6 +68,9 @@ export function buildProductionStatusSummaryState(
   const productionQuestions = input.productionWorkspaceCleared ? [] : input.productionQuestions;
   const currentPurchaseListItemCount = countPurchaseListItems(currentSpecPurchaseLists);
   const latestProductionAuditEvent = input.productionWorkspaceCleared ? undefined : input.filteredAuditEvents[0];
+  const hasSourceWarnings = input.productionWorkspaceCleared
+    ? false
+    : hasUnsafeIntakeSource(input.intakeRequestDetail);
 
   if (input.isInitialProductionLoading) {
     return {
@@ -89,7 +105,11 @@ export function buildProductionStatusSummaryState(
       selectedPlanSpecLabel: selectedPlanSpec ? getSpecLabel(selectedPlanSpec) : undefined,
       productionWorkspaceCleared: input.productionWorkspaceCleared
     }),
-    focusedSpecReadinessLabel: formatProductionReadinessLabel(focusedProductionSpec),
+    focusedSpecReadinessLabel: formatFocusedSpecReadinessForOperator({
+      focusedProductionSpec,
+      productionQuestions,
+      hasSourceWarnings
+    }),
     selectedPlanReadinessLabel: selectedPlan
       ? formatProductionReadinessLabel(selectedPlan)
       : undefined,
@@ -121,6 +141,7 @@ export function buildProductionStatusSummaryState(
     productionNextStep: selectProductionNextStep({
       hasFocusedProductionSpec: Boolean(focusedProductionSpec),
       questionCount: productionQuestions.length,
+      hasSourceWarnings,
       hasSelectedPlan: Boolean(selectedPlan),
       purchaseListCount: currentSpecPurchaseLists.length
     })

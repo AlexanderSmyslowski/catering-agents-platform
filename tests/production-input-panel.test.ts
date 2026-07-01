@@ -65,14 +65,23 @@ function buildSourceInput(overrides?: Partial<ProductionSourceInputValues>): Pro
   };
 }
 
-function renderPanel(sourceInput: ProductionSourceInputValues): string {
+function renderPanel(
+  sourceInput: ProductionSourceInputValues,
+  overrides: {
+    focusedProductionSpec?: Record<string, unknown>;
+    productionQuestions?: string[];
+    productionAssumptions?: string[];
+    intakeRequestDetail?: Parameters<typeof ProductionInputPanel>[0]["intakeRequestDetail"];
+  } = {}
+): string {
   return renderToStaticMarkup(
     createElement(ProductionInputPanel, {
       submitting: false,
       sourceInput,
       sourceInputActions,
       manualInput,
-      manualInputActions
+      manualInputActions,
+      ...overrides
     })
   );
 }
@@ -89,6 +98,8 @@ describe("production input panel", () => {
     expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
     expect(markup).toContain("Anfrage als Datei übernehmen");
     expect(markup).toContain("PDF / Anfrage");
+    expect(markup).toContain("Weitere Eingaben oder Korrektur");
+    expect(markup).toContain('class="secondary-workspace production-secondary-inputs" open=""');
     expect(markup).not.toContain("Intake-Pfad");
     expect(markup).not.toContain("Chat-Eingang");
     expect(markup).not.toContain("Angebotsdatei auswählen");
@@ -120,6 +131,37 @@ describe("production input panel", () => {
     expect(rejectedMarkup).not.toContain("Analyse abgeschlossen");
     expect(analysingMarkup).toContain("Ausgewählt: anfrage.pdf");
     expect(analysingMarkup).toContain("Analyse läuft für anfrage.pdf");
+  });
+
+  it("keeps the completed upload surface compact even before recognized data is available", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "Angebot_Koepff.pdf",
+        documentProgress: 100
+      })
+    );
+
+    expect(markup).toContain("Weitere Anfrage übernehmen");
+    expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
+    expect(markup).toContain("Analyse abgeschlossen für Angebot_Koepff.pdf.");
+    expect(markup).toContain("Quelle wurde verarbeitet; noch keine belastbaren Produktionsdaten erkannt.");
+    expect(markup).not.toContain(
+      "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
+    );
+    expect(markup).toContain("Erkannte Produktionsdaten");
+    expect(markup).toContain("Noch keine Produktionsdaten erkannt");
+    expect(markup).toContain("Quelle wurde verarbeitet; bitte Eckdaten, Gerichte und Rückfragen prüfen.");
+    expect(markup).toContain("Noch keine Gerichte erkannt.");
+    expect(markup).toContain("Offen: keine Gerichte erkannt.");
+    expect(markup).toContain("Nächster Schritt: erkannte Eckdaten prüfen und fehlende Gerichte ergänzen.");
+    expect(markup).toContain('class="upload-result-review-details"');
+    expect(markup).toContain("Prüfpunkte vor Berechnung");
+    expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
+    expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
+    expect(markup).not.toContain("progress-ring--done");
+    expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
+    expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
   });
 
   it("keeps workspace actions separated as local demo maintenance", () => {
@@ -171,5 +213,122 @@ describe("production input panel", () => {
 
     expect(markup).toContain("Ausgewählt: problemangebot.pdf");
     expect(markup).toMatch(/<button(?:(?!disabled).)*>Erneut mit ausgewähltem Typ verarbeiten<\/button>/);
+  });
+
+  it("shows the recognized production data directly after document analysis", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "Angebot_Koepff.pdf",
+        documentProgress: 100
+      }),
+      {
+        focusedProductionSpec: {
+          event: { type: "conference", date: "2026-09-03" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "partial" },
+          menuPlan: [
+            {
+              componentId: "lunch",
+              label: "Lunchbuffet",
+              menuCategory: "classic",
+              productionDecision: { mode: "scratch" }
+            },
+            {
+              componentId: "coffee",
+              label: "Kaffeestation"
+            }
+          ]
+        },
+        productionQuestions: [
+          "Lunchbuffet: Herstellungsentscheidung fehlt.",
+          "Kaffeestation: Kategorie fehlt."
+        ],
+        productionAssumptions: ["Serviceform als Buffet abgeleitet."]
+      }
+    );
+
+    expect(markup).toContain("Analyse abgeschlossen für Angebot_Koepff.pdf.");
+    expect(markup).toContain(
+      "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
+    );
+    expect(markup).toContain("Weitere Anfrage übernehmen");
+    expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
+    expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
+    expect(markup).not.toContain("progress-ring--done");
+    expect(markup).toContain("Erkannte Produktionsdaten");
+    expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
+    expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");
+    expect(markup).toContain("Sofortübersicht Produktionsdaten");
+    expect(markup).toContain("2 Komponenten erkannt");
+    expect(markup).toContain("2 offene Punkte");
+    expect(markup).toContain("noch nicht berechnet");
+    expect(markup).toContain("Gerichte und Komponenten:");
+    expect(markup).toContain("Lunchbuffet");
+    expect(markup).toContain("Kaffeestation");
+    expect(markup).toContain("Offen vor Produktion:");
+    expect(markup).toContain("Lunchbuffet: Herstellungsentscheidung fehlt.");
+    expect(markup).toContain('class="upload-result-review-details"');
+    expect(markup).toContain("Prüfpunkte vor Berechnung");
+    expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
+    expect(markup).toContain("Vorprüfung vor Berechnung:");
+    expect(markup).toContain("Personenzahl");
+    expect(markup).toContain("90 Personen erkannt.");
+    expect(markup).toContain("Eigenproduktion und Zukauf");
+    expect(markup).toContain("Offen: Herstellungsentscheidungen fehlen.");
+    expect(markup).toContain("Prüfen: kein Preisrahmen für wirtschaftliche Plausibilität erkannt.");
+    expect(markup).toContain("Berechnung starten");
+    expect(markup).toContain("Noch nicht freigegeben: offene Punkte zuerst klären.");
+    expect(markup).toContain("Annahmen:");
+    expect(markup).toContain("Stand der Produktionsartefakte:");
+    expect(markup).toContain("Erkannt: Eckdaten, Gerichte/Komponenten, Rückfragen und Annahmen.");
+    expect(markup).toContain("Noch nicht berechnet: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe.");
+    expect(markup).toContain("Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.");
+    expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
+    expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
+  });
+
+  it("shows safe source warnings after uncertain document ingestion", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "Angebot_Koepff.pdf",
+        documentProgress: 100
+      }),
+      {
+        focusedProductionSpec: {
+          event: { type: "conference", date: "2026-09-03" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "partial" },
+          menuPlan: [{ componentId: "lunch", label: "Lunchbuffet" }]
+        },
+        intakeRequestDetail: {
+          requestId: "request-upload-1",
+          rawInputs: [
+            {
+              kind: "pdf",
+              content: "%PDF Rohinhalt darf nicht sichtbar werden",
+              documentId: "document-upload-1",
+              sourceMetadata: {
+                filename: "Angebot_Koepff.pdf"
+              },
+              documentIngestion: {
+                status: "fallback",
+                warnings: ["document_text_extraction_fallback"]
+              }
+            }
+          ]
+        }
+      }
+    );
+
+    expect(markup).toContain("Quellenprüfung:");
+    expect(markup).toContain(
+      "Quelle: Angebot_Koepff.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
+    );
+    expect(markup).toContain("Nächster Schritt: Quellenprüfung bestätigen, dann Berechnung starten.");
+    expect(markup).not.toContain("%PDF Rohinhalt");
   });
 });

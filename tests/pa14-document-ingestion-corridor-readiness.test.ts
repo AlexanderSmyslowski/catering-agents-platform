@@ -69,7 +69,7 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
     expect(sourceAnchor?.text).toContain("pa14-abnahme-angebot.pdf");
     expect(sourceAnchor?.text).toContain("sha256:");
     expect(warningAnchor?.text).toBe(
-      "Quelle unsicher/fallback: pa14-abnahme-angebot.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
+      "Quelle prüfen: pa14-abnahme-angebot.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     );
     expect(outputAnchor?.sourceAnchors).toEqual([
       expect.objectContaining({
@@ -79,7 +79,7 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
         ingestionWarnings: ["document_text_extraction_fallback"]
       })
     ]);
-    expect(outputAnchor?.text).toContain("Ingestion-Warnung");
+    expect(outputAnchor?.text).toContain("Dokumentprüfung");
     expect(JSON.stringify(projection.messages)).not.toContain("PA14 Rohtext");
 
     const exportHtml = renderProductionPlanHtml({
@@ -88,9 +88,9 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
       extractedText: "%PDF PA14 Rohtext darf nicht im Export erscheinen."
     } as never);
 
-    expect(exportHtml).toContain("Ingestion-Warnungen");
+    expect(exportHtml).toContain("Dokumentprüfungen");
     expect(exportHtml).toContain(
-      "pa14-abnahme-angebot.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
+      "pa14-abnahme-angebot.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     );
     expect(exportHtml).not.toContain("PA14 Rohtext");
     expect(exportHtml).not.toContain("%PDF");
@@ -104,12 +104,16 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
     );
 
     expect(testingGuide).toContain("PA14 DocumentIngestion-Korridor");
-    expect(testingGuide).toContain("Quelle vorhanden -> Ingestion-Status sichtbar -> Warnungen sichtbar -> Exportanker sicher");
+    expect(testingGuide).toContain("Quelle vorhanden -> Dokumentpruefung sichtbar -> Warnungen sichtbar -> Exportanker sicher");
     expect(testingGuide).toContain("keine Rohtextspiegelung");
-    expect(testingGuide).toContain("Backoffice-Demo-Marker: `Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback`");
+    expect(testingGuide).toContain(
+      "Backoffice-Demo-Marker: `Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert`"
+    );
     expect(testingGuide).toContain("Quellenmetadaten (gekürzt)");
     expect(testingGuide).toContain("keine vollen SHA-256-Hashes");
-    expect(c8DemoPath).toContain("Warnstatus und Warnkey, zum Beispiel `Ingestion-Warnung: Status fallback · Warnkey document_text_extraction_fallback`");
+    expect(c8DemoPath).toContain(
+      "Dokumentprüfung, zum Beispiel `Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert`"
+    );
     expect(c8DemoPath).toContain("keine vollen SHA-256-Hashes");
   });
 
@@ -126,7 +130,7 @@ describe("PA14 document ingestion corridor readiness anchor", () => {
       expect(document).toContain("Rezeptuploads in Angebot und Produktion: maximal 5 MB und genau eine Datei pro Upload");
       expect(document).toContain("PDF/TXT/MD/EML/Pages");
       expect(document).toContain("Produktionsnahe Verarbeitung echter oder beliebiger Uploads bleibt ohne Sandbox/Worker/AV-Gate `blocked`");
-      expect(document).toContain("Warnungen bleiben sichere Status-/Warnkey-Marker ohne Rohtext- oder Vollhash-Spiegelung");
+      expect(document).toContain("Warnungen bleiben sichere Dokumentprüfungsmarker ohne Rohtext- oder Vollhash-Spiegelung");
       expect(document).not.toContain("sha256:44df5c6bb17828b242fa96cd873be7e535be26cc742aecadd77237b1f86db31d");
     }
   });

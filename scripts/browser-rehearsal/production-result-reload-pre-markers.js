@@ -2,28 +2,35 @@
   const beforeText = document.body.innerText;
   const beforeHtml = document.body.innerHTML;
   const missing = [];
-  const planContext = beforeText.match(/Plan-Kontext: planId ([^\s]+) · specId ([^\s]+)/);
-  const purchaseContext = beforeText.match(/purchaseListId: ([^\s]+) · specId: ([^\s]+)/);
-  if (!planContext) {
-    missing.push("Produktions-Ergebnis-Reload vor Reload ohne aktuellen Plan-Kontext");
+  const exportLinks = [...document.querySelectorAll("a")]
+    .map((anchor) => {
+      const href = anchor.getAttribute("href") ?? "";
+      return href ? new URL(href, location.origin).pathname : "";
+    });
+  const planExport = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/production-plans\/[^/]+\/html$/.test(href)
+  );
+  const purchaseExport = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/purchase-lists\/[^/]+\/csv$/.test(href)
+  );
+  const planId = planExport?.match(/^\/api\/exports\/v1\/exports\/production-plans\/([^/]+)\/html$/)?.[1];
+  const purchaseListId = purchaseExport?.match(/^\/api\/exports\/v1\/exports\/purchase-lists\/([^/]+)\/csv$/)?.[1];
+  const handoffContext = "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden";
+  if (!planExport || !planId) {
+    missing.push("Produktions-Ergebnis-Reload vor Reload ohne aktuellen Produktionsplan-Exportlink");
   }
-  if (!purchaseContext) {
+  if (!purchaseExport || !purchaseListId) {
     missing.push("Produktions-Ergebnis-Reload vor Reload ohne aktuelle Einkaufsliste");
+  }
+  if (beforeText.includes("Plan-Kontext: planId ") || beforeText.includes("purchaseListId: ")) {
+    missing.push("Produktions-Ergebnis-Reload vor Reload zeigt technische IDs im sichtbaren Kontext");
   }
   if (missing.length > 0) {
     throw new Error(`Produktions-Ergebnis-Reload vor Reload unsicher: ${missing.join(" | ")}`);
   }
 
-  const [, planId, planSpecId] = planContext;
-  const [, purchaseListId, purchaseSpecId] = purchaseContext;
-  const planExport = `/api/exports/v1/exports/production-plans/${planId}/html`;
-  const purchaseExport = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
-  const handoffContext = `Abschluss-Kontext: planId ${planId} · specId ${planSpecId} · purchaseListId ${purchaseListId}`;
-  if (planSpecId !== purchaseSpecId) {
-    missing.push(`Produktions-Ergebnis-Reload vor Reload Abschluss-Kontext hat unterschiedliche Spezifikationen ${planSpecId}/${purchaseSpecId}`);
-  }
   if (!beforeText.includes(handoffContext)) {
-    missing.push("Produktions-Ergebnis-Reload vor Reload ohne passenden Abschluss-Kontext");
+    missing.push("Produktions-Ergebnis-Reload vor Reload ohne lesbaren Abschluss-Kontext");
   }
   if (!beforeHtml.includes(planExport)) {
     missing.push(`Produktions-Ergebnis-Reload vor Reload ohne Produktionsplan-Export ${planExport}`);
@@ -37,9 +44,7 @@
 
   sessionStorage.setItem("capProductionResultReloadContext", JSON.stringify({
     planId,
-    planSpecId,
     purchaseListId,
-    purchaseSpecId,
     planExport,
     purchaseExport,
     handoffContext

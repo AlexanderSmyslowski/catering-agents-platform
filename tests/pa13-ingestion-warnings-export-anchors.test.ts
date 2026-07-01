@@ -64,7 +64,7 @@ describe("PA13 ingestion warnings in export anchors", () => {
     const outputAnchor = projection.messages.find((message) => message.type === "production_output_anchor");
 
     expect(outputAnchor?.text).toContain(
-      "Ingestion-Warnung: pa13-angebot.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
+      "Dokumentprüfung: pa13-angebot.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     );
     expect(outputAnchor?.text).not.toContain("Rohtext");
     expect(outputAnchor?.sourceAnchors).toEqual([
@@ -82,9 +82,9 @@ describe("PA13 ingestion warnings in export anchors", () => {
       extractedText: "%PDF Rohtext darf nicht im Export erscheinen."
     } as never);
 
-    expect(exportHtml).toContain("Ingestion-Warnungen");
+    expect(exportHtml).toContain("Dokumentprüfungen");
     expect(exportHtml).toContain(
-      "pa13-angebot.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
+      "pa13-angebot.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     );
     expect(exportHtml).not.toContain("Rohtext");
     expect(exportHtml).not.toContain("%PDF");
@@ -124,10 +124,10 @@ describe("PA13 ingestion warnings in export anchors", () => {
       sourceAnchors: outputAnchor?.sourceAnchors
     } as never);
 
-    expect(outputAnchor?.text).not.toContain("Ingestion-Warnung");
+    expect(outputAnchor?.text).not.toContain("Dokumentprüfung");
     expect(outputAnchor?.sourceAnchors?.[0]).not.toHaveProperty("ingestionStatus");
     expect(outputAnchor?.sourceAnchors?.[0]).not.toHaveProperty("ingestionWarnings");
-    expect(exportHtml).not.toContain("Ingestion-Warnungen");
+    expect(exportHtml).not.toContain("Dokumentprüfungen");
     expect(exportHtml).not.toContain("Extrahierter Rohtext");
   });
 });

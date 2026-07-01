@@ -41,7 +41,7 @@ export function buildProductionIntakeArchiveAction({
     clearMessages();
     try {
       await archiveIntakeRequest(archivedRequestId, "wrong_upload");
-      await completeProductionIntakeArchiveSuccess(archivedRequestId, {
+      await completeProductionIntakeArchiveSuccess({
         resetProductionWorkspaceState,
         refreshDashboard,
         setNotice

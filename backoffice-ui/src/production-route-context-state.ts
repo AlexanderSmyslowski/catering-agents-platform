@@ -16,6 +16,7 @@ export function formatProductionContextId(...values: unknown[]): string {
 export function selectProductionNextStep(input: {
   hasFocusedProductionSpec: boolean;
   questionCount: number;
+  hasSourceWarnings?: boolean;
   hasSelectedPlan: boolean;
   purchaseListCount: number;
 }): ProductionNextStep {
@@ -23,6 +24,18 @@ export function selectProductionNextStep(input: {
     return {
       title: "Auftrag einfügen oder Datei ablegen",
       description: "Starte mit Angebot, E-Mail, Text oder manuellen Veranstaltungsdaten."
+    };
+  }
+  if (input.hasSourceWarnings && input.questionCount > 0) {
+    return {
+      title: "Quellenprüfung und Rückfragen klären",
+      description: "Die Quelle wurde nur unsicher verarbeitet. Bitte Quelle prüfen und offene Rückfragen beantworten."
+    };
+  }
+  if (input.hasSourceWarnings) {
+    return {
+      title: "Quellenprüfung bestätigen",
+      description: "Die Quelle wurde nur unsicher verarbeitet. Bitte Lesbarkeit und erkannte Daten prüfen."
     };
   }
   if (input.questionCount > 0) {

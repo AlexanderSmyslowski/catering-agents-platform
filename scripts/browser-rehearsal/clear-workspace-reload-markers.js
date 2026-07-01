@@ -4,7 +4,7 @@ async () => {
   if (!storedContext) {
     throw new Error("Clear-Check Reload ohne gespeicherten Vor-Reload-Kontext");
   }
-  const { planId, planSpecId, purchaseListId, planExport, purchaseExport, handoffContext, auditTrailLabel } =
+  const { planId, purchaseListId, planExport, purchaseExport, handoffContext, auditTrailLabel } =
     JSON.parse(storedContext);
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -12,7 +12,7 @@ async () => {
     const text = document.body.innerText;
     if (
       text.includes("Produktionsagent") &&
-      (text.includes("Kein aktiver Vorgang") || text.includes("Plan-Kontext: planId ") || text.includes("purchaseListId: "))
+      (text.includes("Kein aktiver Vorgang") || text.includes("Plan-Kontext: aktueller Produktionsplan"))
     ) {
       break;
     }
@@ -35,8 +35,9 @@ async () => {
     !reloadedHtml.includes(planExport) &&
     !reloadedHtml.includes(purchaseExport);
   const reloadRestoredCurrentContext =
-    reloadedText.includes(`Plan-Kontext: planId ${planId} · specId ${planSpecId}`) &&
-    reloadedText.includes(`purchaseListId: ${purchaseListId}`) &&
+    reloadedText.includes("Plan-Kontext: aktueller Produktionsplan") &&
+    !reloadedText.includes(`Plan-Kontext: planId ${planId}`) &&
+    !reloadedText.includes(`purchaseListId: ${purchaseListId}`) &&
     reloadedText.includes(handoffContext) &&
     reloadedHtml.includes(planExport) &&
     reloadedHtml.includes(purchaseExport);

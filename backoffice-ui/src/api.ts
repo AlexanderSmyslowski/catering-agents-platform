@@ -315,10 +315,16 @@ export async function promoteOfferDraft(draftId: string, variantId?: string) {
   }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 
-export async function createProductionPlan(eventSpec: Record<string, unknown>) {
+export async function createProductionPlan(
+  eventSpec: Record<string, unknown>,
+  options?: { sourceReviewConfirmed?: boolean }
+) {
   return fetchJson<Record<string, unknown>>("/api/production/v1/production/plans", {
     method: "POST",
-    body: JSON.stringify({ eventSpec })
+    body: JSON.stringify({
+      eventSpec,
+      ...(options?.sourceReviewConfirmed ? { sourceReviewConfirmed: true } : {})
+    })
   }, DEFAULT_MUTATION_ACTOR_NAMES.production);
 }
 

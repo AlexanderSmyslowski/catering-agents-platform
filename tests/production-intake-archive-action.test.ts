@@ -52,7 +52,7 @@ describe("production intake archive action", () => {
       "archiveIntakeRequest:request-wrong-upload-1:wrong_upload",
       "resetProductionWorkspaceState",
       "refreshDashboard",
-      "setNotice:Fehlupload request-wrong-upload-1 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.",
+      "setNotice:Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.",
       "setSubmitting:false"
     ]);
   });

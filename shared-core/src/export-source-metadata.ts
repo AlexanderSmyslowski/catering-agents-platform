@@ -9,6 +9,37 @@ function compactParts(parts: Array<string | undefined>): string[] {
     .filter((part): part is string => Boolean(part));
 }
 
+const UNKNOWN_SOURCE_LABEL = "Quelle offen";
+
+function recipeSourceTierLabel(tier?: string): string | undefined {
+  if (tier === "internal_verified") {
+    return "intern verifiziert";
+  }
+  if (tier === "digitized_cookbook") {
+    return "digitalisiertes Kochbuch";
+  }
+  if (tier === "internal_approved") {
+    return "intern freigegeben";
+  }
+  if (tier === "internet_fallback") {
+    return "Internet-Ausweichquelle";
+  }
+  return tier;
+}
+
+export function formatRecipeApprovalStateLabel(approvalState?: string): string | undefined {
+  if (approvalState === "approved_internal") {
+    return "intern freigegeben";
+  }
+  if (approvalState === "auto_usable") {
+    return "automatisch nutzbar";
+  }
+  if (approvalState === "review_required") {
+    return "Prüfung nötig";
+  }
+  return approvalState;
+}
+
 export function recipeSourceExportMetadataForRecipe(
   recipe: Recipe
 ): RecipeSourceExportMetadata {
@@ -28,13 +59,13 @@ export function recipeSourceOriginLabel(
   metadata?: RecipeSourceExportMetadata
 ): string {
   if (!metadata) {
-    return "source unknown";
+    return UNKNOWN_SOURCE_LABEL;
   }
 
   if (metadata.originType === "web") {
     return metadata.approvalState === "approved_internal"
-      ? "web recipe, reviewed"
-      : "web recipe, review required";
+      ? "Web-Rezept geprüft"
+      : "Web-Rezept Prüfung nötig";
   }
 
   if (
@@ -42,31 +73,31 @@ export function recipeSourceOriginLabel(
     metadata.originType === "approved_import"
   ) {
     return metadata.approvalState === "approved_internal"
-      ? "internal recipe, approved"
-      : "internal recipe, review required";
+      ? "Internes Rezept freigegeben"
+      : "Internes Rezept Prüfung nötig";
   }
 
   if (metadata.originType === "cookbook") {
     return metadata.approvalState === "approved_internal"
-      ? "cookbook recipe, approved"
-      : "cookbook recipe, review required";
+      ? "Kochbuchrezept freigegeben"
+      : "Kochbuchrezept Prüfung nötig";
   }
 
-  return "source unknown";
+  return UNKNOWN_SOURCE_LABEL;
 }
 
 export function recipeSourceReferenceLabel(
   metadata?: RecipeSourceExportMetadata
 ): string {
   if (!metadata) {
-    return "source unknown";
+    return UNKNOWN_SOURCE_LABEL;
   }
 
   return compactParts([
     metadata.publisher,
     metadata.url,
     metadata.reference
-  ]).join(" | ") || "source unknown";
+  ]).join(" | ") || UNKNOWN_SOURCE_LABEL;
 }
 
 export function formatRecipeSourceEvidenceLabel(
@@ -74,15 +105,15 @@ export function formatRecipeSourceEvidenceLabel(
   fallbackRecipeId?: string
 ): string {
   if (!metadata) {
-    return `source unknown${fallbackRecipeId ? ` (${fallbackRecipeId})` : ""}`;
+    return `${UNKNOWN_SOURCE_LABEL}${fallbackRecipeId ? ` (${fallbackRecipeId})` : ""}`;
   }
 
   return compactParts([
     metadata.recipeName || metadata.recipeId,
     metadata.recipeId,
     recipeSourceOriginLabel(metadata),
-    metadata.sourceTier,
-    metadata.approvalState,
+    recipeSourceTierLabel(metadata.sourceTier),
+    formatRecipeApprovalStateLabel(metadata.approvalState),
     metadata.publisher,
     metadata.url,
     metadata.reference

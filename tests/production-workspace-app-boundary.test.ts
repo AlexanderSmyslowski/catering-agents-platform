@@ -123,7 +123,7 @@ describe("production workspace app boundary", () => {
       "archiveIntakeRequest:request-wrong-upload-2:wrong_upload",
       "resetIntakeDraft",
       "refreshDashboard",
-      "setNotice:Fehlupload request-wrong-upload-2 wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+      "setNotice:Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
     ]);
   });
 });

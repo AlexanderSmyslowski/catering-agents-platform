@@ -11,7 +11,10 @@ import {
 } from "./production-plan-result-state.js";
 
 export type ProductionPlanSubmissionServices = {
-  createProductionPlan: (spec: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  createProductionPlan: (
+    spec: Record<string, unknown>,
+    options?: { sourceReviewConfirmed?: boolean }
+  ) => Promise<Record<string, unknown>>;
 };
 
 export type ProductionPlanSubmissionCallbacks =
@@ -46,7 +49,10 @@ export function buildProductionPlanSubmissionAction({
   setNotice,
   setError
 }: ProductionPlanSubmissionActionInput) {
-  return async function handleCreatePlan(spec: Record<string, unknown>) {
+  return async function handleCreatePlan(
+    spec: Record<string, unknown>,
+    options?: { sourceReviewConfirmed?: boolean }
+  ) {
     setSubmitting(true);
     setProductionWorkspaceCleared(false);
     clearMessages();
@@ -62,7 +68,9 @@ export function buildProductionPlanSubmissionAction({
         clearSelectedPlanId,
         setNotice
       });
-      const response = await createProductionPlan(specForPlanning);
+      const response = options
+        ? await createProductionPlan(specForPlanning, options)
+        : await createProductionPlan(specForPlanning);
       await completeProductionStateAfterPlanSuccess(response, {
         setSelectedPlanId,
         refreshDashboard,

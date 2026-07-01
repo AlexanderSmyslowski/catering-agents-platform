@@ -77,11 +77,38 @@ export const dataIngressPaths = [
     requiredGate: "intake_operator auth and upload validation"
   },
   {
-    id: "seed_demo",
+    id: "intake_seed_demo",
     service: "intake-service",
     route: "POST /v1/intake/seed-demo",
     source: "built-in demo fixtures",
     scope: "synthetic_demo",
+    externalExposure: "none",
+    requiredGate: "operations_audit_operator auth"
+  },
+  {
+    id: "intake_archive_request",
+    service: "intake-service",
+    route: "POST /v1/intake/requests/:requestId/archive",
+    source: "operator archive decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "intake_operator auth"
+  },
+  {
+    id: "intake_spec_update",
+    service: "intake-service",
+    route: "PATCH /v1/intake/specs/:specId",
+    source: "operator spec correction",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "intake_operator auth"
+  },
+  {
+    id: "intake_spec_governance_finalize",
+    service: "intake-service",
+    route: "POST /v1/intake/spec-governance/finalize",
+    source: "operator governance finalization decision",
+    scope: "operator_supplied_internal",
     externalExposure: "none",
     requiredGate: "operations_audit_operator auth"
   },
@@ -104,6 +131,24 @@ export const dataIngressPaths = [
     requiredGate: "offer_operator auth and upload validation"
   },
   {
+    id: "offer_variant_promotion",
+    service: "offer-service",
+    route: "POST /v1/offers/drafts/:draftId/promote",
+    source: "operator selected offer variant",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "offer_operator auth"
+  },
+  {
+    id: "offer_seed_demo",
+    service: "offer-service",
+    route: "POST /v1/offers/seed-demo",
+    source: "built-in demo fixtures",
+    scope: "synthetic_demo",
+    externalExposure: "none",
+    requiredGate: "operations_audit_operator auth"
+  },
+  {
     id: "production_plan_creation",
     service: "production-service",
     route: "POST /v1/production/plans",
@@ -120,6 +165,51 @@ export const dataIngressPaths = [
     scope: "uploaded_internal",
     externalExposure: "none",
     requiredGate: "production_operator auth and upload validation"
+  },
+  {
+    id: "production_clarification_draft",
+    service: "production-service",
+    route: "POST /v1/production/specs/:specId/clarification-drafts",
+    source: "AcceptedEventSpec and BYO-LLM draft adapter",
+    scope: "operator_supplied_internal",
+    externalExposure: "blocked_until_decision",
+    requiredGate: "production_operator auth, fixture-only default or explicit CATERING_SYNTHETIC_LLM_SLICE opt-in, human review before product write"
+  },
+  {
+    id: "production_clarification_draft_decision",
+    service: "production-service",
+    route: "POST /v1/production/clarification-drafts/:draftId/decision",
+    source: "operator clarification draft approval decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "production_operator auth and explicit approve/reject"
+  },
+  {
+    id: "production_recipe_review",
+    service: "production-service",
+    route: "PATCH /v1/production/recipes/:recipeId/review",
+    source: "operator recipe review decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "production_operator auth"
+  },
+  {
+    id: "offer_recipe_review",
+    service: "offer-service",
+    route: "PATCH /v1/offers/recipes/:recipeId/review",
+    source: "operator recipe review decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "offer_operator auth"
+  },
+  {
+    id: "production_seed_demo",
+    service: "production-service",
+    route: "POST /v1/production/seed-demo",
+    source: "built-in demo fixtures",
+    scope: "synthetic_demo",
+    externalExposure: "none",
+    requiredGate: "operations_audit_operator auth"
   },
   {
     id: "export_read",
@@ -180,10 +270,60 @@ export const auditEvidencePaths = [
     requiredRole: "intake_operator"
   },
   {
+    id: "intake_manual_spec_created",
+    service: "intake-service",
+    route: "POST /v1/intake/specs/manual",
+    action: "intake.manual_spec_created",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "intake_operator"
+  },
+  {
+    id: "intake_spec_updated",
+    service: "intake-service",
+    route: "PATCH /v1/intake/specs/:specId",
+    action: "intake.spec_updated",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "intake_operator"
+  },
+  {
+    id: "intake_spec_governance_finalized",
+    service: "intake-service",
+    route: "POST /v1/intake/spec-governance/finalize",
+    action: "intake.spec_governance_finalized",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "operations_audit_operator"
+  },
+  {
+    id: "intake_seed_demo",
+    service: "intake-service",
+    route: "POST /v1/intake/seed-demo",
+    action: "intake.seed_demo",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "operations_audit_operator"
+  },
+  {
     id: "offer_draft_created",
     service: "offer-service",
     route: "POST /v1/offers/drafts",
     action: "offer.draft_created",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
+    requiredRole: "offer_operator"
+  },
+  {
+    id: "offer_draft_created_from_text",
+    service: "offer-service",
+    route: "POST /v1/offers/from-text",
+    action: "offer.draft_created_from_text",
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "draft_only",
@@ -200,6 +340,46 @@ export const auditEvidencePaths = [
     requiredRole: "offer_operator"
   },
   {
+    id: "offer_seed_demo",
+    service: "offer-service",
+    route: "POST /v1/offers/seed-demo",
+    action: "offer.seed_demo",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
+    requiredRole: "operations_audit_operator"
+  },
+  {
+    id: "offer_recipe_imported_text",
+    service: "offer-service",
+    route: "POST /v1/offers/recipes/import-text",
+    action: "recipe.imported_text",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "offer_operator"
+  },
+  {
+    id: "offer_recipe_uploaded_file",
+    service: "offer-service",
+    route: "POST /v1/offers/recipes/upload",
+    action: "recipe.uploaded_file",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "offer_operator"
+  },
+  {
+    id: "offer_recipe_reviewed",
+    service: "offer-service",
+    route: "PATCH /v1/offers/recipes/:recipeId/review",
+    action: "recipe.reviewed",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "offer_operator"
+  },
+  {
     id: "production_plan_created",
     service: "production-service",
     route: "POST /v1/production/plans",
@@ -210,7 +390,77 @@ export const auditEvidencePaths = [
     requiredRole: "production_operator"
   },
   {
-    id: "recipe_reviewed",
+    id: "production_seed_demo",
+    service: "production-service",
+    route: "POST /v1/production/seed-demo",
+    action: "production.seed_demo",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "operations_audit_operator"
+  },
+  {
+    id: "production_clarification_draft_created",
+    service: "production-service",
+    route: "POST /v1/production/specs/:specId/clarification-drafts",
+    action: "production.clarification_draft_created",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_clarification_draft_rejected",
+    service: "production-service",
+    route: "POST /v1/production/specs/:specId/clarification-drafts",
+    action: "production.clarification_draft_rejected",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "none",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_clarification_draft_approved",
+    service: "production-service",
+    route: "POST /v1/production/clarification-drafts/:draftId/decision",
+    action: "production.clarification_draft_approved",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_clarification_draft_rejected_by_operator",
+    service: "production-service",
+    route: "POST /v1/production/clarification-drafts/:draftId/decision",
+    action: "production.clarification_draft_rejected_by_operator",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_recipe_imported_text",
+    service: "production-service",
+    route: "POST /v1/production/recipes/import-text",
+    action: "recipe.imported_text",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_recipe_uploaded_file",
+    service: "production-service",
+    route: "POST /v1/production/recipes/upload",
+    action: "recipe.uploaded_file",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_recipe_reviewed",
     service: "production-service",
     route: "PATCH /v1/production/recipes/:recipeId/review",
     action: "recipe.reviewed",
@@ -232,6 +482,15 @@ export const auditEvidencePaths = [
     id: "production_plan_html_export",
     service: "print-export",
     route: "GET /v1/exports/production-plans/:planId/html",
+    evidenceKind: "export",
+    readOnlyEvidence: true,
+    productApprovalEffect: "none",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_folder_html_export",
+    service: "print-export",
+    route: "GET /v1/exports/production-folders/:planId/html",
     evidenceKind: "export",
     readOnlyEvidence: true,
     productApprovalEffect: "none",
@@ -262,7 +521,7 @@ export const externalBoundaryGates = [
     service: "shared-core",
     boundary: "llm_provider",
     defaultState: "disabled",
-    enablementGate: "LLM readiness policy requires providerCalls disabled",
+    enablementGate: "CATERING_SYNTHETIC_LLM_SLICE explicit opt-in plus providerCalls disabled and synthetic/demo data policy",
     allowedDataScope: "synthetic_or_demo_only",
     writeEffectsAllowed: false
   },

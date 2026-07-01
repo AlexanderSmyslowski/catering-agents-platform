@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildProductionIntakeOriginCardState,
-  formatDocumentIngestionSummary
+  formatDocumentIngestionSummary,
+  hasUnsafeIntakeSource
 } from "../backoffice-ui/src/production-intake-origin-card-state.js";
 
 describe("production intake origin card state", () => {
@@ -40,7 +41,8 @@ describe("production intake origin card state", () => {
           key: "document-1-0",
           kindLabel: "document",
           mimeTypeLabel: " · application/pdf",
-          documentIngestionSummary: "Status fallback · Warnkey document_text_extraction_fallback",
+          documentIngestionSummary:
+            "Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert",
           sourceMetadataSummary:
             "angebot.pdf · application/pdf · 2.0 KB · sha256:1234567890ab · intake · 2026-06-05T08:31:00.000Z"
         }
@@ -87,6 +89,50 @@ describe("production intake origin card state", () => {
           warnings: ["low_confidence"]
         }
       })
-    ).toBe("Status extracted · Warnkey low_confidence");
+    ).toBe("Lesbarkeit: Text extrahiert · Hinweise: niedrige Texterkennungs-Sicherheit");
+  });
+
+  it("detects unsafe intake sources from fallback status or warning markers", () => {
+    expect(
+      hasUnsafeIntakeSource({
+        rawInputs: [
+          {
+            kind: "document",
+            documentIngestion: {
+              status: "extracted",
+              warnings: []
+            }
+          }
+        ]
+      })
+    ).toBe(false);
+
+    expect(
+      hasUnsafeIntakeSource({
+        rawInputs: [
+          {
+            kind: "document",
+            documentIngestion: {
+              status: "fallback",
+              warnings: []
+            }
+          }
+        ]
+      })
+    ).toBe(true);
+
+    expect(
+      hasUnsafeIntakeSource({
+        rawInputs: [
+          {
+            kind: "document",
+            documentIngestion: {
+              status: "extracted",
+              warnings: ["document_text_extraction_fallback"]
+            }
+          }
+        ]
+      })
+    ).toBe(true);
   });
 });

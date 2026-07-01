@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
 import type { IntakeRequestDetail } from "./api.js";
 import { ProductionIntakeOriginCard } from "./production-intake-origin-card.js";
+import { hasUnsafeIntakeSource } from "./production-intake-origin-card-state.js";
 import { getSpecLabel } from "./production-language.js";
 import { ProductionSpecDetailsCard } from "./production-spec-details.js";
 import { ProductionQuestionThread } from "./production-question-thread.js";
@@ -35,7 +37,7 @@ export type ProductionQuestionEditorActions = {
   updateEditingComponentState: (componentId: string, patch: Partial<ComponentEditState>) => void;
   beginSpecEdit: (spec: Record<string, unknown>) => void;
   saveSpecEdit: () => Promise<void>;
-  createPlan: (spec: Record<string, unknown>) => Promise<void>;
+  createPlan: (spec: Record<string, unknown>, options?: { sourceReviewConfirmed?: boolean }) => Promise<void>;
   resetSpecEdit: (markDismissed?: boolean) => void;
 };
 
@@ -116,12 +118,17 @@ export function ProductionQuestionPanel({
     createPlan,
     resetSpecEdit
   } = editorActions;
+  const [sourceReviewConfirmed, setSourceReviewConfirmed] = useState(false);
   const specSwitchItems = buildProductionSpecSwitchItems(filteredSpecs);
+  const sourceReviewRequired = hasUnsafeIntakeSource(intakeRequestDetail);
   const actionState = buildProductionQuestionPanelActionState({
     focusedProductionSpec,
     editingSpecId,
     submitting,
-    hasFocusedSpecEditChanges
+    hasFocusedSpecEditChanges,
+    openQuestionCount: productionQuestions.length,
+    sourceReviewRequired,
+    sourceReviewConfirmed
   });
   const visibilityState = buildProductionQuestionPanelVisibilityState({
     documentPhase,
@@ -130,6 +137,12 @@ export function ProductionQuestionPanel({
     editingSpecId,
     focusedProductionSpecId: String(focusedProductionSpec?.specId ?? "")
   });
+  const focusedSpecId = actionState.focusedSpecId ?? "";
+  const requestId = intakeRequestDetail?.requestId ?? "";
+
+  useEffect(() => {
+    setSourceReviewConfirmed(false);
+  }, [focusedSpecId, requestId]);
 
   return (
     <article className="panel form-panel question-panel production-step-card">
@@ -190,6 +203,17 @@ export function ProductionQuestionPanel({
               </p>
             ) : null}
             {intakeRequestDetail ? <ProductionIntakeOriginCard intakeRequestDetail={intakeRequestDetail} /> : null}
+            {sourceReviewRequired ? (
+              <label className="component-answer-card">
+                <input
+                  type="checkbox"
+                  checked={sourceReviewConfirmed}
+                  disabled={submitting}
+                  onChange={(event) => setSourceReviewConfirmed(event.target.checked)}
+                />
+                Quelle und erkannte Daten geprüft
+              </label>
+            ) : null}
             <ProductionClarificationDraftPanel
               specId={String(focusedProductionSpec.specId ?? "")}
               submitting={submitting}
@@ -213,10 +237,18 @@ export function ProductionQuestionPanel({
                 Antworten speichern
               </button>
             ) : null}
-            <button disabled={submitting} onClick={() => void createPlan(focusedProductionSpec)}>
+            <button
+              disabled={actionState.primaryActionDisabled}
+              onClick={() => void createPlan(focusedProductionSpec, { sourceReviewConfirmed })}
+            >
               {actionState.primaryActionLabel}
             </button>
           </div>
+          {actionState.sourceReviewHelperText ? (
+            <p className="helper-text" role="status">
+              {actionState.sourceReviewHelperText}
+            </p>
+          ) : null}
         </>
       ) : (
         <p className="helper-text">{visibilityState.emptyStateMessage}</p>

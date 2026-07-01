@@ -12,6 +12,25 @@ type ProductionClarificationDraftPanelProps = {
   onDraftChanged?: () => Promise<void>;
 };
 
+export function formatClarificationDraftSourceLabel(draft: ClarificationDraft): string {
+  return draft.modelMetadata?.adapterMode === "fixture_only"
+    ? "Offline-Testentwurf"
+    : "KI-Entwurf";
+}
+
+export function formatClarificationDraftStatusLabel(status: ClarificationDraft["status"]): string {
+  if (status === "pending_review") {
+    return "wartet auf Freigabe";
+  }
+  if (status === "approved") {
+    return "übernommen";
+  }
+  if (status === "rejected") {
+    return "verworfen";
+  }
+  return "Status offen";
+}
+
 function shouldShowLlmDraftsPanel(): boolean {
   const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
   return env?.VITE_SHOW_LLM_DRAFTS === "1";
@@ -118,8 +137,7 @@ export function ProductionClarificationDraftPanel({
             <li key={draft.draftId}>
               <strong>{draft.questions[0]?.text ?? "Rückfragen-Entwurf"}</strong>
               <p className="helper-text">
-                {draft.modelMetadata?.adapterMode === "synthetic_live" ? "Provider-Entwurf" : "Fixture-Entwurf"} ·
-                pending review
+                {formatClarificationDraftSourceLabel(draft)} · {formatClarificationDraftStatusLabel(draft.status)}
               </p>
               <div className="action-row">
                 <button

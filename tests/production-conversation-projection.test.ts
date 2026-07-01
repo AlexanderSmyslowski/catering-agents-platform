@@ -248,8 +248,8 @@ describe("production conversation projection", () => {
 
     expect(warningHint).toMatchObject({
       role: "system",
-      title: "Ingestion-Warnung",
-      text: "Quelle unsicher/fallback: angebot-pa12.pdf · Status: fallback · Warnungen: document_text_extraction_fallback"
+      title: "Dokumentprüfung",
+      text: "Quelle prüfen: angebot-pa12.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     });
     expect(warningHint?.text).not.toContain("%PDF Rohinhalt");
   });

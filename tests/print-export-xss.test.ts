@@ -4,7 +4,7 @@ import { renderOfferHtml, renderProductionPlanHtml } from "@catering/print-expor
 
 const maliciousText = `<script>alert("xss")</script><img src=x onerror="alert('xss')"><b data-x="1">bold</b> "quoted" & 'single'`;
 
-function minimalOfferDraft(): OfferDraft {
+function minimalOfferDraft(overrides: Partial<OfferDraft> = {}): OfferDraft {
   return {
     schemaVersion: "1.0.0",
     draftId: `draft-${maliciousText}`,
@@ -25,7 +25,8 @@ function minimalOfferDraft(): OfferDraft {
     variantSet: [],
     customerFacingText: `Customer ${maliciousText}`,
     internalWorkingText: "Internal",
-    proposedEventSpec: {} as OfferDraft["proposedEventSpec"]
+    proposedEventSpec: {} as OfferDraft["proposedEventSpec"],
+    ...overrides
   };
 }
 
@@ -67,7 +68,18 @@ function minimalProductionPlan(): ProductionPlan {
 
 describe("print export HTML escaping", () => {
   it("escapes data-driven offer HTML text so tags, event attributes, and quotes are inert", () => {
-    const html = renderOfferHtml(minimalOfferDraft());
+    const html = renderOfferHtml(
+      minimalOfferDraft({
+        reviewStatus: {
+          priceReviewStatus: "verified",
+          taxReviewStatus: "verified",
+          allergenReviewStatus: "verified",
+          hygieneTemperatureReviewStatus: "verified",
+          sourceSecured: true,
+          publishApproved: true
+        }
+      })
+    );
 
     expect(html).toContain("<h1>Angebot</h1>");
     expect(html).not.toContain("Angebot draft-");
@@ -80,10 +92,40 @@ describe("print export HTML escaping", () => {
     expect(html).not.toContain('"quoted" & \'single\'');
   });
 
+  it("keeps unapproved offer customer text out of the HTML export", () => {
+    const html = renderOfferHtml(
+      minimalOfferDraft({
+        customerFacingText: `Customer should stay gated ${maliciousText}`,
+        internalWorkingText: "Internal review notes",
+        reviewStatus: {
+          priceReviewStatus: "review_required",
+          taxReviewStatus: "review_required",
+          allergenReviewStatus: "review_required",
+          hygieneTemperatureReviewStatus: "review_required",
+          sourceSecured: true,
+          publishApproved: false
+        }
+      })
+    );
+
+    expect(html).toContain("Interne Prüfung");
+    expect(html).toContain("Kundentext erst nach Publish-Freigabe exportieren.");
+    expect(html).toContain("Preis: Prüfung nötig");
+    expect(html).toContain("MwSt.: Prüfung nötig");
+    expect(html).toContain("Allergene: Prüfung nötig");
+    expect(html).toContain("Hygiene/Temperatur: Prüfung nötig");
+    expect(html).not.toContain("review_required");
+    expect(html).not.toContain("Internal review notes");
+    expect(html).not.toContain("Customer should stay gated");
+  });
+
   it("escapes data-driven production HTML text so tags, event attributes, and quotes are inert", () => {
     const html = renderProductionPlanHtml(minimalProductionPlan());
 
     expect(html).toContain("<h1>Produktionsplan</h1>");
+    expect(html).toContain("Status: teilweise vollständig");
+    expect(html).not.toContain("Status: partial");
+    expect(html).toContain("Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.");
     expect(html).not.toContain("Produktionsplan plan-");
     expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;");

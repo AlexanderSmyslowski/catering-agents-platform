@@ -16,7 +16,9 @@ describe("production question panel action state", () => {
       editAnswersDisabled: false,
       showSaveAnswersButton: false,
       saveAnswersDisabled: true,
-      primaryActionLabel: "Berechnung starten"
+      primaryActionLabel: "Berechnung starten",
+      primaryActionDisabled: false,
+      sourceReviewHelperText: undefined
     });
   });
 
@@ -34,7 +36,9 @@ describe("production question panel action state", () => {
       editAnswersDisabled: true,
       showSaveAnswersButton: true,
       saveAnswersDisabled: false,
-      primaryActionLabel: "Speichern und Berechnung starten"
+      primaryActionLabel: "Speichern und Berechnung starten",
+      primaryActionDisabled: false,
+      sourceReviewHelperText: undefined
     });
   });
 
@@ -71,7 +75,78 @@ describe("production question panel action state", () => {
       editAnswersDisabled: false,
       showSaveAnswersButton: false,
       saveAnswersDisabled: false,
-      primaryActionLabel: "Berechnung starten"
+      primaryActionLabel: "Berechnung starten",
+      primaryActionDisabled: false,
+      sourceReviewHelperText: undefined
+    });
+  });
+
+  it("blocks the primary calculation action until unsafe upload sources are confirmed", () => {
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        submitting: false,
+        hasFocusedSpecEditChanges: false,
+        sourceReviewRequired: true,
+        sourceReviewConfirmed: false
+      })
+    ).toMatchObject({
+      primaryActionDisabled: true,
+      sourceReviewHelperText: "Quellenprüfung bestätigen, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    });
+
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        submitting: false,
+        hasFocusedSpecEditChanges: false,
+        sourceReviewRequired: true,
+        sourceReviewConfirmed: true
+      }).primaryActionDisabled
+    ).toBe(false);
+  });
+
+  it("blocks calculation from read mode until open production questions are answered", () => {
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        editingSpecId: undefined,
+        submitting: false,
+        hasFocusedSpecEditChanges: false,
+        openQuestionCount: 2
+      })
+    ).toMatchObject({
+      primaryActionLabel: "Berechnung starten",
+      primaryActionDisabled: true,
+      sourceReviewHelperText: "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    });
+
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        editingSpecId: "spec-1",
+        submitting: false,
+        hasFocusedSpecEditChanges: true,
+        openQuestionCount: 2
+      })
+    ).toMatchObject({
+      primaryActionLabel: "Speichern und Berechnung starten",
+      primaryActionDisabled: false,
+      sourceReviewHelperText: undefined
+    });
+
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        editingSpecId: "spec-1",
+        submitting: false,
+        hasFocusedSpecEditChanges: false,
+        openQuestionCount: 2
+      })
+    ).toMatchObject({
+      primaryActionLabel: "Speichern und Berechnung starten",
+      primaryActionDisabled: true,
+      sourceReviewHelperText: "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
     });
   });
 });

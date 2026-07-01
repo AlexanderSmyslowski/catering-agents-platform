@@ -41,12 +41,11 @@ export function clearProductionWorkspaceState(actions: ProductionWorkspaceClearA
 }
 
 export async function completeProductionIntakeArchiveSuccess(
-  archivedRequestId: string,
   actions: ProductionIntakeArchiveSuccessActions
 ) {
   actions.resetProductionWorkspaceState();
   await actions.refreshDashboard();
   actions.setNotice(
-    `Fehlupload ${archivedRequestId} wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen.`
+    "Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
   );
 }

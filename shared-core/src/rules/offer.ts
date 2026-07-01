@@ -193,7 +193,7 @@ function createProductionHandoff(
     status: "review_required",
     sourcePackageId: packagePreset.id,
     reviewStatus,
-    customerOfferVisible: true,
+    customerOfferVisible: reviewStatus.publishApproved,
     internalCalculationVisible: false
   };
 }

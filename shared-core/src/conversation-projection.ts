@@ -119,6 +119,27 @@ function formatSize(sizeBytes: number): string {
   return `${(sizeBytes / 1024).toFixed(1)} KB`;
 }
 
+export function formatDocumentIngestionStatusLabel(value: string): string {
+  const status = value.trim();
+  const labels: Record<string, string> = {
+    extracted: "Text extrahiert",
+    fallback: "Textextraktion unsicher",
+    failed: "Textextraktion fehlgeschlagen"
+  };
+
+  return labels[status] ?? status;
+}
+
+export function formatDocumentIngestionWarningLabel(value: string): string {
+  const warning = value.trim();
+  const labels: Record<string, string> = {
+    document_text_extraction_fallback: "PDF-Text nur unsicher extrahiert",
+    low_confidence: "niedrige Texterkennungs-Sicherheit"
+  };
+
+  return labels[warning] ?? warning;
+}
+
 function collectSourceAnchors(sourceInputs: ProductionConversationSourceInput[] = []): ProductionConversationSourceAnchor[] {
   return sourceInputs.flatMap((sourceInput) => {
     const metadata = sourceInput.sourceMetadata;
@@ -190,9 +211,11 @@ function formatIngestionWarning(sourceInput: ProductionConversationSourceInput):
 
   const filename = sourceInput.sourceMetadata?.filename?.trim() || sourceInput.documentId?.trim() || "unbekannte Quelle";
   return [
-    `Quelle unsicher/fallback: ${filename}`,
-    `Status: ${status}`,
-    warnings.length > 0 ? `Warnungen: ${warnings.join(",")}` : undefined
+    `Quelle prüfen: ${filename}`,
+    `Lesbarkeit: ${formatDocumentIngestionStatusLabel(status)}`,
+    warnings.length > 0
+      ? `Hinweise: ${warnings.map(formatDocumentIngestionWarningLabel).join(", ")}`
+      : undefined
   ]
     .filter(Boolean)
     .join(" · ");
@@ -208,10 +231,10 @@ function formatOutputAnchorIngestionWarning(anchor: ProductionConversationSource
   }
 
   return [
-    `Ingestion-Warnung: ${anchor.filename}`,
-    anchor.ingestionStatus ? `Status: ${anchor.ingestionStatus}` : undefined,
+    `Dokumentprüfung: ${anchor.filename}`,
+    anchor.ingestionStatus ? `Lesbarkeit: ${formatDocumentIngestionStatusLabel(anchor.ingestionStatus)}` : undefined,
     anchor.ingestionWarnings && anchor.ingestionWarnings.length > 0
-      ? `Warnungen: ${anchor.ingestionWarnings.join(",")}`
+      ? `Hinweise: ${anchor.ingestionWarnings.map(formatDocumentIngestionWarningLabel).join(", ")}`
       : undefined
   ]
     .filter(Boolean)
@@ -290,7 +313,7 @@ export function buildProductionConversationProjection(
       messageId: `${sessionId}-ingestion-warnings`,
       type: "ingestion_warning_anchor",
       role: "system",
-      title: "Ingestion-Warnung",
+      title: "Dokumentprüfung",
       text: ingestionWarnings.join("\n")
     });
   }

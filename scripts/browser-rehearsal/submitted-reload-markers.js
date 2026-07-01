@@ -2,82 +2,65 @@ async () => {
   const text = document.body.innerText;
   const html = document.body.innerHTML;
   const exportLinks = [...document.querySelectorAll("a")]
-    .map((anchor) => anchor.getAttribute("href") ?? "");
+    .map((anchor) => {
+      const href = anchor.getAttribute("href") ?? "";
+      return href ? new URL(href, location.origin).pathname : "";
+    });
   const missing = [];
-  const planContext = text.match(/Plan-Kontext: planId ([^\s]+) · specId ([^\s]+)/);
-  const purchaseContext = text.match(/purchaseListId: ([^\s]+) · specId: ([^\s]+)/);
-  let planId;
-  let planSpecId;
-  let purchaseListId;
-  let purchaseSpecId;
+  const planExport = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/production-plans\/[^/]+\/html$/.test(href)
+  );
+  const purchaseExport = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/purchase-lists\/[^/]+\/csv$/.test(href)
+  );
+  const planId = planExport?.match(/^\/api\/exports\/v1\/exports\/production-plans\/([^/]+)\/html$/)?.[1];
+  const purchaseListId = purchaseExport?.match(/^\/api\/exports\/v1\/exports\/purchase-lists\/([^/]+)\/csv$/)?.[1];
+  const handoffContext = "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden";
 
   if (!text.includes("Teilnehmerzahl: 43")) {
     missing.push("Answer-Submit-Rehearsal Reload ohne gespeicherte strukturierte Teilnehmerzahl");
   }
-  if (!planContext) {
-    missing.push("Answer-Submit-Rehearsal Reload ohne aktuellen Plan-Kontext");
-  } else {
-    [, planId, planSpecId] = planContext;
+  if (!text.includes("Plan-Kontext: aktueller Produktionsplan")) {
+    missing.push("Answer-Submit-Rehearsal Reload ohne lesbaren aktuellen Plan-Kontext");
   }
-  if (!purchaseContext) {
+  if (text.includes("Plan-Kontext: planId ") || text.includes("purchaseListId: ")) {
+    missing.push("Answer-Submit-Rehearsal Reload zeigt technische IDs im sichtbaren Kontext");
+  }
+
+  if (!planExport || !planId) {
+    missing.push("Answer-Submit-Rehearsal Reload ohne aktuellen Produktionsplan-Exportlink");
+  } else {
+    const planExportResponse = await fetch(planExport);
+    if (!planExportResponse.ok) {
+      missing.push(`Answer-Submit-Rehearsal Reload Produktionsplan-Export ist nicht abrufbar: ${planExportResponse.status}`);
+    } else {
+      const planExportBody = await planExportResponse.text();
+      if (!planExportBody.includes(`Produktionsplan ${planId}`)) {
+        missing.push(`Answer-Submit-Rehearsal Reload Produktionsplan-Exportinhalt passt nicht zu ${planId}`);
+      }
+    }
+  }
+
+  if (!purchaseExport || !purchaseListId) {
     missing.push("Answer-Submit-Rehearsal Reload ohne aktuelle Einkaufsliste");
   } else {
-    [, purchaseListId, purchaseSpecId] = purchaseContext;
-  }
-
-  if (planId && planSpecId) {
-    const expectedPlanHref = `/api/exports/v1/exports/production-plans/${planId}/html`;
-    if (!exportLinks.includes(expectedPlanHref)) {
-      missing.push(`Answer-Submit-Rehearsal Reload Produktionsplan-Exportlink passt nicht zu ${planId}`);
+    const purchaseExportResponse = await fetch(purchaseExport);
+    if (!purchaseExportResponse.ok) {
+      missing.push(`Answer-Submit-Rehearsal Reload Einkaufslisten-Export ist nicht abrufbar: ${purchaseExportResponse.status}`);
     } else {
-      const planExportResponse = await fetch(expectedPlanHref);
-      if (!planExportResponse.ok) {
-        missing.push(`Answer-Submit-Rehearsal Reload Produktionsplan-Export ist nicht abrufbar: ${planExportResponse.status}`);
-      } else {
-        const planExportBody = await planExportResponse.text();
-        if (!planExportBody.includes(`Produktionsplan ${planId}`)) {
-          missing.push(`Answer-Submit-Rehearsal Reload Produktionsplan-Exportinhalt passt nicht zu ${planId}`);
-        }
+      const purchaseExportBody = await purchaseExportResponse.text();
+      if (
+        !purchaseExportBody.includes(
+          `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
+        )
+      ) {
+        missing.push(`Answer-Submit-Rehearsal Reload Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${purchaseListId}`);
       }
     }
-    if (!text.includes(`Produktionsblatt exportieren\nfür Plan ${planId} · Spezifikation ${planSpecId}`)) {
-      missing.push(`Answer-Submit-Rehearsal Reload Produktionsplan-Exportlabel passt nicht zu ${planId}/${planSpecId}`);
-    }
   }
 
-  if (purchaseListId && purchaseSpecId) {
-    const expectedPurchaseHref = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
-    if (!exportLinks.includes(expectedPurchaseHref)) {
-      missing.push(`Answer-Submit-Rehearsal Reload Einkaufslisten-Exportlink passt nicht zu ${purchaseListId}`);
-    } else {
-      const purchaseExportResponse = await fetch(expectedPurchaseHref);
-      if (!purchaseExportResponse.ok) {
-        missing.push(`Answer-Submit-Rehearsal Reload Einkaufslisten-Export ist nicht abrufbar: ${purchaseExportResponse.status}`);
-      } else {
-        const purchaseExportBody = await purchaseExportResponse.text();
-        if (
-          !purchaseExportBody.includes(
-            `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
-          )
-        ) {
-          missing.push(`Answer-Submit-Rehearsal Reload Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${purchaseListId}`);
-        }
-      }
-    }
-    if (!text.includes(`Einkaufsliste exportieren\nfür aktuellen Vorgang ${purchaseListId} · Spezifikation ${purchaseSpecId}`)) {
-      missing.push(`Answer-Submit-Rehearsal Reload Einkaufslisten-Exportlabel passt nicht zu ${purchaseListId}/${purchaseSpecId}`);
-    }
-  }
-
-  if (planId && planSpecId && purchaseListId && purchaseSpecId) {
-    if (planSpecId !== purchaseSpecId) {
-      missing.push(`Answer-Submit-Rehearsal Reload Abschluss-Kontext hat unterschiedliche Spezifikationen ${planSpecId}/${purchaseSpecId}`);
-    }
-    const expectedHandoffContext =
-      `Abschluss-Kontext: planId ${planId} · specId ${planSpecId} · purchaseListId ${purchaseListId}`;
-    if (!text.includes(expectedHandoffContext)) {
-      missing.push("Answer-Submit-Rehearsal Reload ohne passenden Abschluss-Kontext");
-    }
+  if (!text.includes(handoffContext)) {
+    missing.push("Answer-Submit-Rehearsal Reload ohne lesbaren Abschluss-Kontext");
   }
 
   if (!html.includes("/api/exports/v1/exports/production-plans/")) {

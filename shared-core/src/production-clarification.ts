@@ -454,7 +454,7 @@ export function buildProductionClarificationQuestions(input: ProductionClarifica
         reasonCode: warning,
         severity: "warning",
         blocking: false,
-        prompt: `Bitte Ingestion-Warnung prüfen: ${labelForReason(warning)}.`,
+        prompt: `Bitte Dokumentprüfung prüfen: ${labelForReason(warning)}.`,
         sourceAnchors,
         suggestedAnswerType: "confirm_or_correct",
         sortKey: `${anchorRef}-${warning}`

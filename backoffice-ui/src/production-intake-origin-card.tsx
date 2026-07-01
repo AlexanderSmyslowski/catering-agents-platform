@@ -23,7 +23,7 @@ export function ProductionIntakeOriginCard({ intakeRequestDetail }: ProductionIn
             <strong>{rawInput.kindLabel}</strong>
             <p className="helper-text">{rawInput.mimeTypeLabel ?? ""}</p>
             {rawInput.documentIngestionSummary ? (
-              <p className="helper-text">Ingestion-Warnung: {rawInput.documentIngestionSummary}</p>
+              <p className="helper-text">Dokumentprüfung: {rawInput.documentIngestionSummary}</p>
             ) : null}
             {rawInput.sourceMetadataSummary ? (
               <p className="helper-text">Quellenmetadaten (gekürzt): {rawInput.sourceMetadataSummary}</p>

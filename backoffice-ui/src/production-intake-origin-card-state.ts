@@ -1,4 +1,8 @@
 import type { IntakeRequestDetail } from "./api.js";
+import {
+  formatDocumentIngestionStatusLabel,
+  formatDocumentIngestionWarningLabel
+} from "../../shared-core/src/conversation-projection.js";
 
 export type ProductionIntakeOriginCardRawInputState = {
   key: string;
@@ -86,9 +90,27 @@ export function formatDocumentIngestionSummary(input: Record<string, unknown>): 
     return undefined;
   }
 
-  return [`Status ${status}`, warnings.length > 0 ? `Warnkey ${warnings.join(",")}` : undefined]
+  return [
+    status ? `Lesbarkeit: ${formatDocumentIngestionStatusLabel(status)}` : undefined,
+    warnings.length > 0 ? `Hinweise: ${warnings.map(formatDocumentIngestionWarningLabel).join(", ")}` : undefined
+  ]
     .filter(Boolean)
     .join(" · ");
+}
+
+export function hasUnsafeIntakeSource(intakeRequestDetail?: Record<string, unknown> | null): boolean {
+  const rawInputs = Array.isArray(intakeRequestDetail?.rawInputs) ? intakeRequestDetail.rawInputs : [];
+
+  return rawInputs.some((entry) => {
+    const rawInput = entry as Record<string, unknown>;
+    const marker = asRecord(rawInput.documentIngestion);
+    const status = readStringOrNumber(marker, ["status"]);
+    const warnings = Array.isArray(marker?.warnings)
+      ? marker.warnings.map((warning) => String(warning).trim()).filter(Boolean)
+      : [];
+
+    return status === "fallback" || status === "failed" || warnings.length > 0;
+  });
 }
 
 export function buildProductionIntakeOriginCardState(

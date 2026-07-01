@@ -2,15 +2,29 @@ async () => {
   const missing = [];
   const beforeText = document.body.innerText;
   const beforeHtml = document.body.innerHTML;
-  const stalePlanContext = beforeText.match(/Plan-Kontext: planId ([^\s]+) · specId ([^\s]+)/);
-  const stalePurchaseContext = beforeText.match(/purchaseListId: ([^\s]+) · specId: ([^\s]+)/);
+  const exportLinks = [...document.querySelectorAll("a")]
+    .map((anchor) => {
+      const href = anchor.getAttribute("href") ?? "";
+      return href ? new URL(href, location.origin).pathname : "";
+    });
+  const stalePlanExport = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/production-plans\/[^/]+\/html$/.test(href)
+  );
+  const stalePurchaseExport = exportLinks.find((href) =>
+    /^\/api\/exports\/v1\/exports\/purchase-lists\/[^/]+\/csv$/.test(href)
+  );
+  const planId = stalePlanExport?.match(/^\/api\/exports\/v1\/exports\/production-plans\/([^/]+)\/html$/)?.[1];
+  const purchaseListId = stalePurchaseExport?.match(/^\/api\/exports\/v1\/exports\/purchase-lists\/([^/]+)\/csv$/)?.[1];
   const fileInput = document.querySelector("input[type='file']");
 
-  if (!stalePlanContext) {
-    missing.push("Failed-Upload-Rehearsal vor Upload ohne aktuellen Plan-Kontext");
+  if (!stalePlanExport || !planId) {
+    missing.push("Failed-Upload-Rehearsal vor Upload ohne aktuellen Produktionsplan-Exportlink");
   }
-  if (!stalePurchaseContext) {
-    missing.push("Failed-Upload-Rehearsal vor Upload ohne aktuelle Einkaufsliste");
+  if (!stalePurchaseExport || !purchaseListId) {
+    missing.push("Failed-Upload-Rehearsal vor Upload ohne aktuellen Einkaufslisten-Exportlink");
+  }
+  if (beforeText.includes("Plan-Kontext: planId ") || beforeText.includes("purchaseListId: ")) {
+    missing.push("Failed-Upload-Rehearsal vor Upload zeigt technische IDs im sichtbaren Kontext");
   }
   if (!fileInput) {
     missing.push("Failed-Upload-Rehearsal ohne Datei-Input");
@@ -19,10 +33,6 @@ async () => {
     throw new Error(`Failed-Upload-Rehearsal vor Upload unsicher: ${missing.join(" | ")}`);
   }
 
-  const [, planId] = stalePlanContext;
-  const [, purchaseListId] = stalePurchaseContext;
-  const stalePlanExport = `/api/exports/v1/exports/production-plans/${planId}/html`;
-  const stalePurchaseExport = `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
   if (!beforeHtml.includes(stalePlanExport)) {
     missing.push(`Failed-Upload-Rehearsal vor Upload ohne Produktionsplan-Export ${stalePlanExport}`);
   }

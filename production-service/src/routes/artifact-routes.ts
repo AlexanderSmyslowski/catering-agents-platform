@@ -24,6 +24,46 @@ import type {
 } from "../repositories/production-store.js";
 import { buildProductionArtifacts } from "../rules/planning.js";
 
+function sourceLineageRequestIds(eventSpec: AcceptedEventSpec): string[] {
+  const ids = new Set<string>();
+
+  for (const source of eventSpec.sourceLineage) {
+    const reference = source.reference.trim();
+    if (reference) {
+      ids.add(reference);
+    }
+  }
+
+  return [...ids];
+}
+
+function hasUnsafeDocumentIngestion(
+  rawInputs: Array<{ documentIngestion?: { status?: string; warnings?: string[] } }>
+): boolean {
+  return rawInputs.some((rawInput) => {
+    const status = rawInput.documentIngestion?.status?.trim();
+    const warnings = Array.isArray(rawInput.documentIngestion?.warnings)
+      ? rawInput.documentIngestion.warnings.map((warning) => warning.trim()).filter(Boolean)
+      : [];
+
+    return status === "fallback" || status === "failed" || warnings.length > 0;
+  });
+}
+
+async function hasUnsafeLinkedIntakeSource(
+  eventSpec: AcceptedEventSpec,
+  intakeStore: IntakeStore
+): Promise<boolean> {
+  for (const requestId of sourceLineageRequestIds(eventSpec)) {
+    const intakeRequest = await intakeStore.getRequest(requestId);
+    if (intakeRequest && hasUnsafeDocumentIngestion(intakeRequest.rawInputs)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export interface ProductionArtifactRouteDependencies {
   store: ProductionStore;
   intakeStore: IntakeStore;
@@ -67,32 +107,42 @@ export function registerProductionArtifactRoutes(
     actorForRequest
   } = deps;
 
-  app.post<{ Body: { eventSpec: AcceptedEventSpec } }>("/v1/production/plans", async (request, reply) => {
-    if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
-      return reply.code(403).send({
-        message: "Produktions-Operator erforderlich."
-      });
-    }
-
-    const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
-    const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
-    await store.savePlan(artifacts.productionPlan);
-    await store.savePurchaseList(artifacts.purchaseList);
-    await auditLog.log({
-      action: "production.plan_created",
-      entityType: "ProductionPlan",
-      entityId: artifacts.productionPlan.planId,
-      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-      summary: "Produktionsplan erstellt.",
-      details: {
-        specId: eventSpec.specId,
-        purchaseListId: artifacts.purchaseList.purchaseListId,
-        readiness: artifacts.productionPlan.readiness.status,
-        recipeSelections: artifacts.productionPlan.recipeSelections.length
+  app.post<{ Body: { eventSpec: AcceptedEventSpec; sourceReviewConfirmed?: boolean } }>(
+    "/v1/production/plans",
+    async (request, reply) => {
+      if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
+        return reply.code(403).send({
+          message: "Produktions-Operator erforderlich."
+        });
       }
-    });
-    return reply.code(201).send(artifacts);
-  });
+
+      const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
+      const sourceReviewRequired = await hasUnsafeLinkedIntakeSource(eventSpec, intakeStore);
+      if (sourceReviewRequired && request.body.sourceReviewConfirmed !== true) {
+        return reply.code(422).send({
+          message: "Quellenprüfung erforderlich, bevor Produktionsartefakte berechnet werden."
+        });
+      }
+      const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
+      await store.savePlan(artifacts.productionPlan);
+      await store.savePurchaseList(artifacts.purchaseList);
+      await auditLog.log({
+        action: "production.plan_created",
+        entityType: "ProductionPlan",
+        entityId: artifacts.productionPlan.planId,
+        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+        summary: "Produktionsplan erstellt.",
+        details: {
+          specId: eventSpec.specId,
+          purchaseListId: artifacts.purchaseList.purchaseListId,
+          readiness: artifacts.productionPlan.readiness.status,
+          recipeSelections: artifacts.productionPlan.recipeSelections.length,
+          sourceReviewConfirmed: sourceReviewRequired ? true : undefined
+        }
+      });
+      return reply.code(201).send(artifacts);
+    }
+  );
 
   app.get("/v1/production/plans", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
