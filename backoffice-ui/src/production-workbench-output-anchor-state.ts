@@ -106,6 +106,22 @@ function formatAssumptionStatus(hasPlan: boolean, metrics?: ProductionDossierMet
   return hasPlan ? "im Plan fachlich prüfen" : "vor Berechnung offen prüfen";
 }
 
+function formatCalculationStatus(hasPlan: boolean, metrics?: ProductionDossierMetrics): string {
+  if (!hasPlan) {
+    return "nach Berechnung offen";
+  }
+
+  if (
+    metrics &&
+    (metrics.productionBatchCount ?? 0) === 0 &&
+    (metrics.purchaseItemCount ?? 0) === 0
+  ) {
+    return "keine belastbare Kalkulationsübersicht im Plan";
+  }
+
+  return "im Produktionsplan prüfen";
+}
+
 function formatRecipeCardCount(count: number): string {
   return count === 1 ? "1 Rezeptkarte" : `${count} Rezeptkarten`;
 }
@@ -214,7 +230,7 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
     },
     {
       label: "Kalkulationsübersicht",
-      status: hasPlan ? "im Produktionsplan prüfen" : "nach Berechnung offen"
+      status: formatCalculationStatus(hasPlan, input.dossierMetrics)
     },
     {
       label: "Mengenkalkulation je Gericht",

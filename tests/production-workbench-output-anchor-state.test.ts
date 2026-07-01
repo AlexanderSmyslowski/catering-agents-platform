@@ -115,6 +115,10 @@ describe("production workbench output anchor state", () => {
     );
     expect(state.grouping).toContain("Plan vorhanden, Einkaufsliste ohne Positionen");
     expect(state.reviewItems).toContainEqual({
+      label: "Kalkulationsübersicht",
+      status: "keine belastbare Kalkulationsübersicht im Plan"
+    });
+    expect(state.reviewItems).toContainEqual({
       label: "Rezeptkarten",
       status: "1 Rezeptbezug im Plan · Rezeptkarte offen"
     });
