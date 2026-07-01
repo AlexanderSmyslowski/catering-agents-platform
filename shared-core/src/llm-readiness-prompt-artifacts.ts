@@ -62,7 +62,12 @@ export const llmReadinessPromptArtifacts = [
       "Dieser Prompt-Artefaktplatzhalter beschreibt einen kuenftigen Produktionsdossier-Entwurf aus vorhandenen Artefakten. " +
       "Er bleibt providerlos, synthetisch/demo-only, draft-only und ohne Schreibwirkung.",
     userPromptTemplate:
-      "Kein live freigegebener Provider-Lauf fuer production_dossier_draft_request in dieser Phase."
+      "Entwirf ein rein menschlich zu pruefendes Produktionsdossier aus den vorhandenen SourceRefs. " +
+      "Der Entwurf muss neun sichtbare Abschnitte enthalten: Verstaendnis des Angebots, Rueckfragen, Annahmen, " +
+      "Kalkulationsuebersicht, Mengenkalkulation je Gericht, Rezeptkarten, Metro-Einkaufsliste, Mise-en-Place und " +
+      "Abschlusspruefung. structuredCandidate.sectionCount muss 9 sein, summaryKind production_dossier, " +
+      "dataMode synthetic_or_demo_only und approval pending_human_review. " +
+      "Nutze nur vorhandene SourceRefs, erfinde keine Fakten und schreibe nichts in Produktobjekte."
   }
 ] as const satisfies readonly LlmReadinessPromptArtifact[];
 

@@ -44,6 +44,24 @@ describe("PA42 synthetic live LLM slice", () => {
     expect(clarificationArtifact?.systemPrompt).toContain("JSON");
   });
 
+  it("keeps the production dossier prompt template aligned with the nine-section draft contract", () => {
+    const dossierArtifact = findLlmReadinessPromptArtifactByInputKind("production_dossier_draft_request");
+
+    expect(dossierArtifact?.userPromptTemplate).toContain("Verstaendnis des Angebots");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Rueckfragen");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Annahmen");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Kalkulationsuebersicht");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Mengenkalkulation je Gericht");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Rezeptkarten");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Metro-Einkaufsliste");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Mise-en-Place");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Abschlusspruefung");
+    expect(dossierArtifact?.userPromptTemplate).toContain("structuredCandidate.sectionCount muss 9");
+    expect(dossierArtifact?.userPromptTemplate).toContain("approval pending_human_review");
+    expect(dossierArtifact?.userPromptTemplate).toContain("Nutze nur vorhandene SourceRefs");
+    expect(dossierArtifact?.userPromptTemplate).toContain("schreibe nichts in Produktobjekte");
+  });
+
   it("parses the synthetic live feature flag conservatively", () => {
     expect(isLlmReadinessSyntheticLiveSliceEnabled({ CATERING_SYNTHETIC_LLM_SLICE: "1" })).toBe(true);
     expect(isLlmReadinessSyntheticLiveSliceEnabled({ CATERING_SYNTHETIC_LLM_SLICE: "true" })).toBe(true);
