@@ -10,6 +10,7 @@ import { buildProductionSpecSwitchItems } from "./production-spec-switch-list-st
 import { buildProductionQuestionPanelActionState } from "./production-question-panel-action-state.js";
 import { buildProductionQuestionPanelVisibilityState } from "./production-question-panel-visibility-state.js";
 import { ProductionClarificationDraftPanel } from "./production-clarification-draft-panel.js";
+import { ProductionDraftReviewPanel } from "./production-draft-review-panel.js";
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
@@ -216,6 +217,10 @@ export function ProductionQuestionPanel({
             ) : null}
             <ProductionClarificationDraftPanel
               specId={String(focusedProductionSpec.specId ?? "")}
+              submitting={submitting}
+              onDraftChanged={refreshAfterDraftDecision}
+            />
+            <ProductionDraftReviewPanel
               submitting={submitting}
               onDraftChanged={refreshAfterDraftDecision}
             />
