@@ -67,6 +67,7 @@ describe("production route view state", () => {
       purchaseListCount: 1
     });
     expect(viewState.workbenchNextStep.title).toBe("Plan prüfen");
+    expect(viewState.uploadResultSummary?.statusLabel).toBe("Anfrage erfasst. Produktionsdaten prüfen.");
     expect(viewState.questionState.focusedProductionSpec).toBe(focusedSpec);
     expect(viewState.questionState.currentSpecPurchaseLists).toBe(viewState.purchaseListState.currentPurchaseLists);
     expect(viewState.objectPanelState.selectedPlanComponentsById).toBe(selectedPlanComponentsById);
@@ -145,5 +146,6 @@ describe("production route view state", () => {
     expect(viewState.purchaseListState.currentPurchaseLists).toEqual([]);
     expect(viewState.purchaseListState.archivedPurchaseLists).toEqual([]);
     expect(viewState.handoffState.intakeOriginLabel).toBe("kein Intake-Ursprung verknüpft");
+    expect(viewState.uploadResultSummary).toBeUndefined();
   });
 });

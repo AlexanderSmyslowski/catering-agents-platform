@@ -77,6 +77,29 @@ function renderPanel(sourceInput: ProductionSourceInputValues): string {
   );
 }
 
+function renderPanelWithSummary(sourceInput: ProductionSourceInputValues): string {
+  return renderToStaticMarkup(
+    createElement(ProductionInputPanel, {
+      submitting: false,
+      sourceInput,
+      sourceInputActions,
+      manualInput,
+      manualInputActions,
+      uploadResultSummary: {
+        statusLabel: "Anfrage erfasst. Produktionsdaten prüfen.",
+        helperLabel: "Noch keine Produktionsfreigabe.",
+        facts: [
+          { label: "Anlass", value: "Konferenz" },
+          { label: "Personen", value: "90 Teilnehmer" }
+        ],
+        menuItems: ["Lunchbuffet · Klassisch · Hybrid"],
+        openItems: ["1 Rückfrage offen", "Produktionsplan noch nicht berechnet."],
+        nextStepLabel: "Rückfragen beantworten: Offene Angaben prüfen."
+      }
+    })
+  );
+}
+
 describe("production input panel", () => {
   it("uses operator-facing request copy for the file import card", () => {
     const markup = renderPanel(buildSourceInput());
@@ -117,9 +140,29 @@ describe("production input panel", () => {
 
     expect(rejectedMarkup).toContain("Ausgewählt: zu-gross.pdf");
     expect(rejectedMarkup).not.toContain("Analyse läuft");
-    expect(rejectedMarkup).not.toContain("Analyse abgeschlossen");
+    expect(rejectedMarkup).not.toContain("Datei erfasst");
     expect(analysingMarkup).toContain("Ausgewählt: anfrage.pdf");
     expect(analysingMarkup).toContain("Analyse läuft für anfrage.pdf");
+  });
+
+  it("shows operator-facing production data after a completed upload", () => {
+    const markup = renderPanelWithSummary(
+      buildSourceInput({
+        documentPhase: "done",
+        activeDocumentName: "Angebot_Köpff_2.pdf",
+        documentProgress: 100
+      })
+    );
+
+    expect(markup).toContain("Anfrage erfasst. Produktionsdaten prüfen.");
+    expect(markup).toContain("Datei erfasst: Angebot_Köpff_2.pdf.");
+    expect(markup).toContain("Produktionsdaten aus Datei");
+    expect(markup).toContain("Konferenz");
+    expect(markup).toContain("90 Teilnehmer");
+    expect(markup).toContain("Lunchbuffet · Klassisch · Hybrid");
+    expect(markup).toContain("Offen vor Produktion");
+    expect(markup).toContain("Nächster Schritt:");
+    expect(markup).not.toContain("GPT");
   });
 
   it("keeps workspace actions separated as local demo maintenance", () => {

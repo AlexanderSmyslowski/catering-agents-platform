@@ -796,6 +796,10 @@ button:disabled {
   margin: 0;
 }
 
+.spec-fact-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+
 .spec-fact {
   display: grid;
   gap: 0.22rem;
@@ -849,6 +853,24 @@ button:disabled {
 .result-status-strip strong {
   color: #0f1722;
   font-weight: 650;
+}
+
+.post-upload-summary {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-block: 1rem;
+  border-block: 1px solid rgba(15, 23, 34, 0.08);
+}
+
+.post-upload-summary strong {
+  color: #0f1722;
+}
+
+.post-upload-summary__columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
 }
 
 .question-list {

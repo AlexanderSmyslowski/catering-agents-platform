@@ -41,10 +41,12 @@ import {
   type ProductionWorkbenchNextStep,
   type ProductionWorkbenchSummary
 } from "./production-workbench.js";
+import type { ProductionUploadResultSummary } from "./production-upload-result-summary-state.js";
 
 export type ProductionRouteMainLayoutProps = {
   workbenchSummary: ProductionWorkbenchSummary;
   workbenchNextStep: ProductionWorkbenchNextStep;
+  uploadResultSummary?: ProductionUploadResultSummary;
   submitting: boolean;
   sourceInput: ProductionSourceInputValues;
   sourceInputActions: ProductionSourceInputActions;
@@ -72,6 +74,7 @@ export type ProductionRouteMainLayoutProps = {
 export function ProductionRouteMainLayout({
   workbenchSummary,
   workbenchNextStep,
+  uploadResultSummary,
   submitting,
   sourceInput,
   sourceInputActions,
@@ -121,6 +124,7 @@ export function ProductionRouteMainLayout({
               sourceInputActions={sourceInputActions}
               manualInput={manualInput}
               manualInputActions={manualInputActions}
+              uploadResultSummary={uploadResultSummary}
             />
           </div>
         ),

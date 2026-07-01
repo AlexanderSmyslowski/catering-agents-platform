@@ -6,6 +6,7 @@ import {
 import type { IntakeDocumentChannel } from "./api.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
 import { buildProductionInputPanelState } from "./production-input-panel-state.js";
+import type { ProductionUploadResultSummary } from "./production-upload-result-summary-state.js";
 
 export type ProductionManualInputValues = {
   eventType: string;
@@ -67,6 +68,7 @@ type ProductionInputPanelProps = {
   sourceInputActions: ProductionSourceInputActions;
   manualInput: ProductionManualInputValues;
   manualInputActions: ProductionManualInputActions;
+  uploadResultSummary?: ProductionUploadResultSummary;
 };
 
 export function ProductionInputPanel({
@@ -74,7 +76,8 @@ export function ProductionInputPanel({
   sourceInput,
   sourceInputActions,
   manualInput,
-  manualInputActions
+  manualInputActions,
+  uploadResultSummary
 }: ProductionInputPanelProps) {
   const panelState = buildProductionInputPanelState({
     submitting,
@@ -160,14 +163,56 @@ export function ProductionInputPanel({
             </div>
             <div className="progress-panel__content">
               <p className="processing-note processing-note--success">
-                Analyse abgeschlossen für {sourceInput.activeDocumentName}.
+                Datei erfasst: {sourceInput.activeDocumentName}.
               </p>
               <div className="progress-bar">
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
               </div>
-              <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+              <p className="helper-text">Die erkannten Produktionsdaten und Rückfragen wurden aktualisiert.</p>
             </div>
           </div>
+        ) : null}
+        {uploadResultSummary ? (
+          <section className="post-upload-summary" aria-label="Produktionsdaten aus Datei">
+            <div>
+              <p className="eyebrow">Produktionsdaten aus Datei</p>
+              <strong>{uploadResultSummary.statusLabel}</strong>
+              <p className="helper-text">{uploadResultSummary.helperLabel}</p>
+            </div>
+            <dl className="spec-fact-grid spec-fact-grid--compact">
+              {uploadResultSummary.facts.map((fact) => (
+                <div key={fact.label} className="spec-fact">
+                  <dt>{fact.label}</dt>
+                  <dd>{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="post-upload-summary__columns">
+              <div>
+                <p className="eyebrow">Erkannte Gerichte</p>
+                {uploadResultSummary.menuItems.length > 0 ? (
+                  <ul className="item-list compact">
+                    {uploadResultSummary.menuItems.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="helper-text">Keine Menükomponenten im Upload erkannt.</p>
+                )}
+              </div>
+              <div>
+                <p className="eyebrow">Offen vor Produktion</p>
+                <ul className="item-list compact">
+                  {uploadResultSummary.openItems.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <p className="helper-text">
+              Nächster Schritt: <strong>{uploadResultSummary.nextStepLabel}</strong>
+            </p>
+          </section>
         ) : null}
       </div>
       <div className="action-row">
