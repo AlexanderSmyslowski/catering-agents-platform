@@ -74,7 +74,9 @@ export function ProductionPurchaseListPanel({
         <details className="secondary-workspace">
           <summary>
             <span className="eyebrow">Ältere Einkaufslisten</span>
+            {" "}
             <span className="subsection-title">{archivedPurchaseLists.length} frühere Listen</span>
+            {" "}
             <span className="helper-text">Nur bei Bedarf aufklappen; ältere Listen sind kein aktueller Vorgang.</span>
           </summary>
           <div className="secondary-workspace__content">

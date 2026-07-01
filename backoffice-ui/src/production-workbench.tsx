@@ -135,6 +135,7 @@ export function ProductionConversationalWorkbench({
     <details className="progressive-panel production-input-collapse">
       <summary>
         <span>Anfrageeingang</span>
+        {" "}
         <strong>Neue Eingabe oder Korrektur</strong>
       </summary>
       <div className="progressive-panel__body">{slots.inputSlot}</div>
@@ -199,6 +200,7 @@ export function ProductionConversationalWorkbench({
             {productionOutputAnchor.reviewItems.map((item) => (
               <li key={item.label}>
                 <strong>{item.label}</strong>
+                {" "}
                 <span>{item.status}</span>
               </li>
             ))}
@@ -207,6 +209,7 @@ export function ProductionConversationalWorkbench({
         <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
           <summary>
             <span>Produktionsplan</span>
+            {" "}
             <strong>{productionObjectStatusLabel}</strong>
           </summary>
           <div className="progressive-panel__body">{slots.productionObjectsSlot}</div>
@@ -218,6 +221,7 @@ export function ProductionConversationalWorkbench({
         <details className="progressive-panel production-purchase-panel" open={purchaseListCount > 0}>
           <summary>
             <span>Einkaufsliste</span>
+            {" "}
             <strong>{purchaseStatusLabel}</strong>
           </summary>
           <div className="progressive-panel__body">{slots.purchaseListSlot}</div>
@@ -282,6 +286,7 @@ export function ProductionConversationalWorkbench({
         <details className="progressive-panel" open={questionCount > 0}>
           <summary>
             <span>Rückfragen und Antworten</span>
+            {" "}
             <strong>offen {openVisibleQuestionCount} · beantwortet {answeredQuestionCount}</strong>
           </summary>
           <div className="progressive-panel__body">{slots.questionsSlot}</div>

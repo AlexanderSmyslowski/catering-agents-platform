@@ -752,6 +752,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Produktionsplan");
+    expect(content).not.toContain("Produktionsplan1");
+    expect(content).not.toContain("Einkaufsliste1");
+    expect(content).not.toContain("Bestand und SuchePläne");
+    expect(content).not.toContain("Sekundäre DetailsÄltere");
     expect(content).not.toContain("Produktionsplan und Einkaufsliste liegen vor.");
     expect(content).not.toContain("Nächster Agent-Schritt");
     expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");
@@ -1476,6 +1480,19 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Rückfragenstatus: offen 1 · beantwortet 0");
     expect(document.querySelector(".production-input-zone .production-column--input")?.textContent).toContain("input");
     expect(document.querySelector(".production-input-collapse summary")?.textContent).toContain("Neue Eingabe oder Korrektur");
+    expect(document.querySelector(".production-input-collapse summary")?.textContent).not.toContain(
+      "AnfrageeingangNeue Eingabe"
+    );
+    expect(document.querySelector(".production-objects-panel summary")?.textContent).not.toContain("Produktionsplannoch");
+    expect(document.querySelector(".production-purchase-panel summary")?.textContent).toContain(
+      "Einkaufsliste noch keine Liste"
+    );
+    expect(document.querySelector(".production-purchase-panel summary")?.textContent).not.toContain(
+      "Einkaufslistenoch"
+    );
+    expect(document.querySelector(".production-progressive-zone summary")?.textContent).not.toContain(
+      "Rückfragen und Antwortenoffen"
+    );
     expect(document.querySelector(".production-progressive-zone .production-column--questions")?.textContent).toContain("fragen");
     expect(document.querySelector(".production-objects-zone .production-column--objects")?.textContent).toContain("objekte");
     expect(document.querySelector(".production-purchase-zone .production-column--purchase")?.textContent).toContain("einkauf");

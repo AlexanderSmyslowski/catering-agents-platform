@@ -35,7 +35,9 @@ export function ProductionPlanSecondaryDetails({
     <details className="secondary-workspace">
       <summary>
         <span className="eyebrow">Sekundäre Details</span>
+        {" "}
         <span className="subsection-title">Ältere Läufe, Rezeptauswahl und Arbeitsblätter</span>
+        {" "}
         <span className="helper-text">Nur bei Bedarf aufklappen; ältere Läufe sind nicht der aktuelle Vorgang.</span>
       </summary>
       <div className="secondary-workspace__content">

@@ -29,7 +29,9 @@ export function ProductionRouteFilterPanel({
     <details className="panel secondary-workspace production-filter-details">
       <summary>
         <span className="eyebrow">Bestand und Suche</span>
+        {" "}
         <span className="subsection-title">Pläne, Einkaufslisten und Rezepte finden</span>
+        {" "}
         <span className="helper-text">
           {isInitialProductionLoading
             ? "Arbeitsstand wird geladen · Dienststatus wird geprüft"

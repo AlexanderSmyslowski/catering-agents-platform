@@ -791,7 +791,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Intake-UrsprungAngebotsagent · 2026-08-20T09:00:00.000Z · Intake-Anfrage verknüpft");
     expect(production.text).not.toContain("Die ursprüngliche Intake-Anfrage konnte nicht geladen werden");
     expect(production.text).toContain("Nächster SchrittRückfragen beantworten");
-    expect(production.text).toContain("Produktionsplannoch kein Plan");
+    expect(production.text).toContain("Produktionsplan noch kein Plan");
   });
 
   it("keeps production upload limit errors visible in the workbench", async () => {
