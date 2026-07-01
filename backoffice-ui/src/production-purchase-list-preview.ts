@@ -1,4 +1,7 @@
-import { formatRecipeSourceEvidenceLabel } from "../../shared-core/src/export-source-metadata.js";
+import {
+  recipeSourceOriginLabel,
+  recipeSourceReferenceLabel
+} from "../../shared-core/src/export-source-metadata.js";
 import type { RecipeSourceExportMetadata } from "../../shared-core/src/types.js";
 
 export type PurchaseListPreviewItem = {
@@ -69,18 +72,36 @@ function readSourceRecipeIds(itemRecord: Record<string, unknown>): string[] {
     .filter(Boolean);
 }
 
+function compactLabelParts(parts: Array<string | undefined>): string[] {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+}
+
+function formatPreviewSourceMetadataLabel(source: RecipeSourceExportMetadata): string {
+  const referenceLabel = recipeSourceReferenceLabel(source);
+  const shouldShowReference =
+    source.originType !== "internal_db" && referenceLabel !== "Quelle offen";
+
+  return compactLabelParts([
+    source.recipeName,
+    recipeSourceOriginLabel(source),
+    shouldShowReference ? referenceLabel : undefined
+  ]).join(" · ");
+}
+
 function formatSourceLabel(itemRecord: Record<string, unknown>): string {
   const sourceMetadata = readSourceMetadata(itemRecord);
   const metadataRecipeIds = new Set(sourceMetadata.map((source) => source.recipeId).filter(Boolean));
   const labels = [
-    ...sourceMetadata.map((source) => formatRecipeSourceEvidenceLabel(source)),
+    ...sourceMetadata.map((source) => formatPreviewSourceMetadataLabel(source)),
     ...readSourceRecipeIds(itemRecord)
       .filter((recipeId) => !metadataRecipeIds.has(recipeId))
-      .map((recipeId) => formatRecipeSourceEvidenceLabel(undefined, recipeId))
+      .map(() => "Quelle offen")
   ];
   const uniqueLabels = [...new Set(labels)];
 
-  return uniqueLabels.length > 0 ? uniqueLabels.join("; ") : formatRecipeSourceEvidenceLabel();
+  return uniqueLabels.length > 0 ? uniqueLabels.join("; ") : "Quelle offen";
 }
 
 function looksLikeRecipeInstruction(value: string): boolean {

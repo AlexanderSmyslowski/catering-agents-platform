@@ -97,8 +97,7 @@ describe("production purchase list preview", () => {
         articleName: "Tomaten",
         quantity: "8",
         unit: "kg",
-        sourceLabel:
-          "Tomatensuppe | recipe-tomato-soup | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:tomato-soup"
+        sourceLabel: "Tomatensuppe · Internes Rezept freigegeben"
       }
     ]);
   });
@@ -139,12 +138,14 @@ describe("production purchase list preview", () => {
         quantity: "12",
         unit: "kg",
         sourceLabel:
-          "Tomatensuppe | recipe-tomato-soup | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:tomato-soup; " +
-          "Bruschetta | recipe-bruschetta | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:bruschetta"
+          "Tomatensuppe · Internes Rezept freigegeben; " +
+          "Bruschetta · Internes Rezept freigegeben"
       }
     ]);
     expect(preview[0]?.sourceLabel).toContain("Tomatensuppe");
     expect(preview[0]?.sourceLabel).toContain("Bruschetta");
+    expect(preview[0]?.sourceLabel).not.toContain("recipe-tomato-soup");
+    expect(preview[0]?.sourceLabel).not.toContain("internal:tomato-soup");
   });
 
   it("keeps mixed source metadata and source recipe fallbacks deterministic", () => {
@@ -180,10 +181,22 @@ describe("production purchase list preview", () => {
         quantity: "10",
         unit: "kg",
         sourceLabel:
-          "Tomatensuppe | recipe-tomato-soup | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:tomato-soup; " +
-          "Quelle offen (recipe-bruschetta)"
+          "Tomatensuppe · Internes Rezept freigegeben; " +
+          "Quelle offen"
       }
     ]);
+    const sourceLabel = getPurchaseListPreviewItems({
+      items: [
+        {
+          articleName: "Tomaten",
+          purchaseQty: 10,
+          purchaseUnit: "kg",
+          sourceRecipes: ["recipe-bruschetta"]
+        }
+      ]
+    })[0]?.sourceLabel;
+    expect(sourceLabel).toBe("Quelle offen");
+    expect(sourceLabel).not.toContain("recipe-bruschetta");
   });
 
   it("deduplicates exact duplicate source labels without hiding distinct sources", () => {
@@ -220,8 +233,7 @@ describe("production purchase list preview", () => {
         articleName: "Tomaten",
         quantity: "8",
         unit: "kg",
-        sourceLabel:
-          "Tomatensuppe | recipe-tomato-soup | Internes Rezept freigegeben | intern verifiziert | intern freigegeben | internal:tomato-soup"
+        sourceLabel: "Tomatensuppe · Internes Rezept freigegeben"
       }
     ]);
   });
