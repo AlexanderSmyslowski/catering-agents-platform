@@ -247,6 +247,8 @@ export function ProductionConversationalWorkbench({
     productionObjectCount,
     purchaseListCount
   });
+  const nextStepQuestionPreview =
+    questionCount > 0 ? (dossierMetrics?.questionPreview?.trim() ?? "") : "";
 
   useEffect(() => {
     const becameVisible = hasVisibleProductionWork && !previousHasVisibleProductionWork.current;
@@ -288,6 +290,9 @@ export function ProductionConversationalWorkbench({
             <p className="eyebrow">Nächster Schritt</p>
             <strong>{nextStep.title}</strong>
             <p className="helper-text">{nextStep.description}</p>
+            {nextStepQuestionPreview ? (
+              <p className="helper-text">Erste Rückfrage: {nextStepQuestionPreview}</p>
+            ) : null}
           </div>
         </header>
         {hasVisibleProductionWork ? null : inputSlot}
