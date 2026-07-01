@@ -6,6 +6,7 @@ import type {
   AcceptedEventSpec,
   EventRequest,
   OfferDraft,
+  ProductionDraft,
   ProductionPlan,
   PurchaseList,
   Recipe
@@ -35,6 +36,7 @@ type SchemaName =
   | "eventRequest"
   | "offerDraft"
   | "acceptedEventSpec"
+  | "productionDraft"
   | "recipe"
   | "productionPlan"
   | "purchaseList";
@@ -47,6 +49,7 @@ const schemaIds: Record<SchemaName, string> = {
   eventRequest: "https://schemas.catering.local/event-request.json",
   offerDraft: "https://schemas.catering.local/offer-draft.json",
   acceptedEventSpec: "https://schemas.catering.local/accepted-event-spec.json",
+  productionDraft: "https://schemas.catering.local/production-draft.json",
   recipe: "https://schemas.catering.local/recipe.json",
   productionPlan: "https://schemas.catering.local/production-plan.json",
   purchaseList: "https://schemas.catering.local/purchase-list.json"
@@ -96,6 +99,10 @@ export function validateAcceptedEventSpec(
   value: AcceptedEventSpec
 ): AcceptedEventSpec {
   return assertValid("acceptedEventSpec", value);
+}
+
+export function validateProductionDraft(value: ProductionDraft): ProductionDraft {
+  return assertValid("productionDraft", value);
 }
 
 export function validateRecipe(value: Recipe): Recipe {
