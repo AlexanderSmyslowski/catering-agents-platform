@@ -117,9 +117,27 @@ describe("production input panel", () => {
 
     expect(rejectedMarkup).toContain("Ausgewählt: zu-gross.pdf");
     expect(rejectedMarkup).not.toContain("Analyse läuft");
-    expect(rejectedMarkup).not.toContain("Analyse abgeschlossen");
+    expect(rejectedMarkup).not.toContain("Analyse bereit zur Prüfung");
     expect(analysingMarkup).toContain("Ausgewählt: anfrage.pdf");
     expect(analysingMarkup).toContain("Analyse läuft für anfrage.pdf");
+  });
+
+  it("marks completed document analysis as review-ready, not production-approved", () => {
+    const markup = renderPanel(
+      buildSourceInput({
+        intakeFile: { name: "angebot.pdf" } as File,
+        documentPhase: "done",
+        activeDocumentName: "angebot.pdf",
+        documentProgress: 100
+      })
+    );
+
+    expect(markup).toContain("Analyse bereit zur Prüfung für angebot.pdf.");
+    expect(markup).toContain(
+      "Produktionsdaten, Rückfragen und Freigabegrenzen prüfen; keine automatische Produktionsfreigabe."
+    );
+    expect(markup).not.toContain("Analyse abgeschlossen");
+    expect(markup).not.toContain("Die Rückfragen und Ergebnisse wurden aktualisiert.");
   });
 
   it("keeps workspace actions separated as local demo maintenance", () => {

@@ -160,12 +160,14 @@ export function ProductionInputPanel({
             </div>
             <div className="progress-panel__content">
               <p className="processing-note processing-note--success">
-                Analyse abgeschlossen für {sourceInput.activeDocumentName}.
+                Analyse bereit zur Prüfung für {sourceInput.activeDocumentName}.
               </p>
               <div className="progress-bar">
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
               </div>
-              <p className="helper-text">Die Rückfragen und Ergebnisse wurden aktualisiert.</p>
+              <p className="helper-text">
+                Produktionsdaten, Rückfragen und Freigabegrenzen prüfen; keine automatische Produktionsfreigabe.
+              </p>
             </div>
           </div>
         ) : null}
