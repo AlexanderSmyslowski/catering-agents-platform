@@ -7,6 +7,7 @@ describe("production question panel action state", () => {
       buildProductionQuestionPanelActionState({
         focusedProductionSpec: { specId: "spec-1" },
         editingSpecId: "spec-2",
+        questionCount: 0,
         submitting: false,
         hasFocusedSpecEditChanges: false
       })
@@ -16,7 +17,29 @@ describe("production question panel action state", () => {
       editAnswersDisabled: false,
       showSaveAnswersButton: false,
       saveAnswersDisabled: true,
-      primaryActionLabel: "Berechnung starten"
+      primaryActionLabel: "Berechnung starten",
+      primaryActionDisabled: false
+    });
+  });
+
+  it("blocks direct calculation while open questions are still visible", () => {
+    expect(
+      buildProductionQuestionPanelActionState({
+        focusedProductionSpec: { specId: "spec-1" },
+        editingSpecId: undefined,
+        questionCount: 2,
+        submitting: false,
+        hasFocusedSpecEditChanges: false
+      })
+    ).toEqual({
+      focusedSpecId: "spec-1",
+      isFocusedSpecEditing: false,
+      editAnswersDisabled: false,
+      showSaveAnswersButton: false,
+      saveAnswersDisabled: true,
+      primaryActionLabel: "Rückfragen zuerst beantworten",
+      primaryActionDisabled: true,
+      primaryActionHint: "Bitte offene Rückfragen beantworten, bevor die Berechnung gestartet wird."
     });
   });
 
@@ -25,6 +48,7 @@ describe("production question panel action state", () => {
       buildProductionQuestionPanelActionState({
         focusedProductionSpec: { specId: "spec-1" },
         editingSpecId: "spec-1",
+        questionCount: 2,
         submitting: false,
         hasFocusedSpecEditChanges: true
       })
@@ -34,7 +58,8 @@ describe("production question panel action state", () => {
       editAnswersDisabled: true,
       showSaveAnswersButton: true,
       saveAnswersDisabled: false,
-      primaryActionLabel: "Speichern und Berechnung starten"
+      primaryActionLabel: "Speichern und Berechnung starten",
+      primaryActionDisabled: false
     });
   });
 
@@ -43,6 +68,7 @@ describe("production question panel action state", () => {
       buildProductionQuestionPanelActionState({
         focusedProductionSpec: { specId: "spec-1" },
         editingSpecId: "spec-1",
+        questionCount: 0,
         submitting: true,
         hasFocusedSpecEditChanges: true
       }).saveAnswersDisabled
@@ -52,6 +78,7 @@ describe("production question panel action state", () => {
       buildProductionQuestionPanelActionState({
         focusedProductionSpec: { specId: "spec-1" },
         editingSpecId: "spec-1",
+        questionCount: 0,
         submitting: false,
         hasFocusedSpecEditChanges: false
       }).saveAnswersDisabled
@@ -62,6 +89,7 @@ describe("production question panel action state", () => {
     expect(
       buildProductionQuestionPanelActionState({
         editingSpecId: "spec-1",
+        questionCount: 0,
         submitting: false,
         hasFocusedSpecEditChanges: true
       })
@@ -71,7 +99,8 @@ describe("production question panel action state", () => {
       editAnswersDisabled: false,
       showSaveAnswersButton: false,
       saveAnswersDisabled: false,
-      primaryActionLabel: "Berechnung starten"
+      primaryActionLabel: "Berechnung starten",
+      primaryActionDisabled: false
     });
   });
 });
