@@ -132,6 +132,27 @@ function asProductionPlanSecondaryKitchenSheet(value: unknown): ProductionPlanSe
   };
 }
 
+function formatUserFacingRecipeSourceLabel(label: string): string {
+  const trimmed = label.trim();
+  if (trimmed === "source unknown") {
+    return "nicht verknüpft";
+  }
+
+  const unknownWithReference = trimmed.match(/^source unknown \((.+)\)$/);
+  if (unknownWithReference) {
+    return `ungeprüft: ${unknownWithReference[1]}`;
+  }
+
+  return trimmed;
+}
+
+function formatSecondaryRecipeSourceLabel(
+  metadata?: RecipeSourceExportMetadata,
+  fallbackRecipeId?: string
+): string {
+  return formatUserFacingRecipeSourceLabel(formatRecipeSourceEvidenceLabel(metadata, fallbackRecipeId));
+}
+
 function buildRecipeSourceByComponentId(
   selectedPlan: ProductionPlanSecondaryPlan
 ): Map<string, RecipeSourceExportMetadata> {
@@ -177,7 +198,7 @@ export function buildProductionPlanSecondaryDetailsState(
                 String(component.productionDecision?.mode ?? "")
               )}`
             : undefined,
-          sourceLabel: formatRecipeSourceEvidenceLabel(
+          sourceLabel: formatSecondaryRecipeSourceLabel(
             recipeSourceByComponentId.get(componentId),
             String(normalizedSelection.recipeId ?? "")
           ),
@@ -196,7 +217,7 @@ export function buildProductionPlanSecondaryDetailsState(
         return {
           key: `${String(normalizedSheet.title ?? "Arbeitsblatt")}-${sheetIndex}`,
           title: String(normalizedSheet.title ?? "Arbeitsblatt"),
-          sourceLabel: formatRecipeSourceEvidenceLabel(
+          sourceLabel: formatSecondaryRecipeSourceLabel(
             normalizedSheet.recipeSource,
             String(normalizedSheet.recipeId ?? "")
           ),

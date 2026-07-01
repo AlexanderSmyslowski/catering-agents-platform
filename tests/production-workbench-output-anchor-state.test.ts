@@ -64,7 +64,7 @@ describe("production workbench output anchor state", () => {
         { label: "Annahmen & Festlegungen", status: "im Plan fachlich prüfen" },
         { label: "Kalkulationsübersicht", status: "im Produktionsplan prüfen" },
         { label: "Mengenkalkulation je Gericht", status: "1 Plan-Artefakt vorhanden" },
-        { label: "Rezeptkarten", status: "Plan auf Rezeptbezug prüfen" },
+        { label: "Rezeptkarten", status: "keine Rezeptkarte verknüpft" },
         { label: "Metro-Einkaufsliste", status: "noch offen" },
         { label: "Mise-en-Place", status: "Plan auf Mise-en-Place prüfen" },
         { label: "Abschlussprüfung & Exporte", status: "nach Plan und Einkaufsliste offen" }
@@ -91,11 +91,32 @@ describe("production workbench output anchor state", () => {
         { label: "Annahmen & Festlegungen", status: "im Plan fachlich prüfen" },
         { label: "Kalkulationsübersicht", status: "im Produktionsplan prüfen" },
         { label: "Mengenkalkulation je Gericht", status: "2 Plan-Artefakte vorhanden" },
-        { label: "Rezeptkarten", status: "Plan auf Rezeptbezug prüfen" },
-        { label: "Metro-Einkaufsliste", status: "1 Einkaufsliste vorhanden" },
+        { label: "Rezeptkarten", status: "keine Rezeptkarte verknüpft" },
+        { label: "Metro-Einkaufsliste", status: "1 Einkaufsliste · 0 Positionen" },
         { label: "Mise-en-Place", status: "Plan auf Mise-en-Place prüfen" },
         { label: "Abschlussprüfung & Exporte", status: "Exportlinks prüfen; Freigabe nicht erteilt" }
       ]
+    });
+  });
+
+  it("keeps partial recipe and purchase artifacts visibly incomplete", () => {
+    const state = buildProductionWorkbenchOutputAnchorState({
+      questionCount: 0,
+      dossierMetrics: {
+        recipeSelectionCount: 1,
+        purchaseItemCount: 0
+      },
+      productionObjectCount: 1,
+      purchaseListCount: 1
+    });
+
+    expect(state.reviewItems).toContainEqual({
+      label: "Rezeptkarten",
+      status: "1 Rezeptbezug im Plan · Rezeptkarte offen"
+    });
+    expect(state.reviewItems).toContainEqual({
+      label: "Metro-Einkaufsliste",
+      status: "1 Einkaufsliste · 0 Positionen"
     });
   });
 
@@ -130,9 +151,9 @@ describe("production workbench output anchor state", () => {
       { label: "Annahmen & Festlegungen", status: "1 Annahme · erste: Brot als Bäcker-Zukauf führen." },
       { label: "Kalkulationsübersicht", status: "im Produktionsplan prüfen" },
       { label: "Mengenkalkulation je Gericht", status: "3 Mengenkalkulationen im Plan" },
-      { label: "Rezeptkarten", status: "4 Rezept-/Küchenkarten sichtbar" },
+      { label: "Rezeptkarten", status: "3 Rezeptkarten · 4 Küchen-/Arbeitsblätter" },
       { label: "Metro-Einkaufsliste", status: "1 Einkaufsliste · 18 Positionen" },
-      { label: "Mise-en-Place", status: "über Rezept-/Küchenkarten prüfen" },
+      { label: "Mise-en-Place", status: "über Küchen-/Arbeitsblätter prüfen" },
       {
         label: "Abschlussprüfung & Exporte",
         status: "Produktionsblatt vorhanden · Einkaufsliste vorhanden · Freigabe nicht erteilt"

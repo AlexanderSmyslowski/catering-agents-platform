@@ -108,6 +108,14 @@ function formatPlanArtifactStatus(count: number): string {
   return count === 1 ? "1 Plan-Artefakt vorhanden" : `${count} Plan-Artefakte vorhanden`;
 }
 
+function formatRecipeCardCount(count: number): string {
+  return count === 1 ? "1 Rezeptkarte" : `${count} Rezeptkarten`;
+}
+
+function formatKitchenSheetCount(count: number): string {
+  return count === 1 ? "1 Küchen-/Arbeitsblatt" : `${count} Küchen-/Arbeitsblätter`;
+}
+
 function formatBatchStatus(planCount: number, metrics?: ProductionDossierMetrics): string {
   const batchCount = metrics?.productionBatchCount ?? 0;
   if (batchCount > 0) {
@@ -117,15 +125,25 @@ function formatBatchStatus(planCount: number, metrics?: ProductionDossierMetrics
 }
 
 function formatRecipeStatus(hasPlan: boolean, metrics?: ProductionDossierMetrics): string {
+  const recipeCardCount = metrics?.productionBatchCount ?? 0;
   const kitchenSheetCount = metrics?.kitchenSheetCount ?? 0;
   const recipeSelectionCount = metrics?.recipeSelectionCount ?? 0;
+
+  if (recipeCardCount > 0 && kitchenSheetCount > 0) {
+    return `${formatRecipeCardCount(recipeCardCount)} · ${formatKitchenSheetCount(kitchenSheetCount)}`;
+  }
+  if (recipeCardCount > 0) {
+    return `${formatRecipeCardCount(recipeCardCount)} sichtbar`;
+  }
   if (kitchenSheetCount > 0) {
-    return `${kitchenSheetCount} Rezept-/Küchenkarten sichtbar`;
+    return `${formatKitchenSheetCount(kitchenSheetCount)} · Rezeptkarte offen`;
   }
   if (recipeSelectionCount > 0) {
-    return `${recipeSelectionCount} Rezeptbezüge im Plan`;
+    const recipeSelectionLabel =
+      recipeSelectionCount === 1 ? "1 Rezeptbezug im Plan" : `${recipeSelectionCount} Rezeptbezüge im Plan`;
+    return `${recipeSelectionLabel} · Rezeptkarte offen`;
   }
-  return hasPlan ? "Plan auf Rezeptbezug prüfen" : "nach Produktionsplan offen";
+  return hasPlan ? "keine Rezeptkarte verknüpft" : "nach Produktionsplan offen";
 }
 
 function formatPurchaseStatus(listCount: number, metrics?: ProductionDossierMetrics): string {
@@ -133,13 +151,13 @@ function formatPurchaseStatus(listCount: number, metrics?: ProductionDossierMetr
   if (purchaseItemCount > 0) {
     return `${listCount} Einkaufsliste${listCount === 1 ? "" : "n"} · ${purchaseItemCount} Positionen`;
   }
-  return listCount > 0 ? `${listCount} Einkaufsliste vorhanden` : "noch offen";
+  return listCount > 0 ? `${listCount} Einkaufsliste${listCount === 1 ? "" : "n"} · 0 Positionen` : "noch offen";
 }
 
 function formatMiseEnPlaceStatus(hasPlan: boolean, metrics?: ProductionDossierMetrics): string {
   const kitchenSheetCount = metrics?.kitchenSheetCount ?? 0;
   if (kitchenSheetCount > 0) {
-    return "über Rezept-/Küchenkarten prüfen";
+    return "über Küchen-/Arbeitsblätter prüfen";
   }
   return hasPlan ? "Plan auf Mise-en-Place prüfen" : "nach Produktionsplan offen";
 }
