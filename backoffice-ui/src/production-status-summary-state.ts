@@ -111,7 +111,8 @@ export function buildProductionStatusSummaryState(
       : "keine Audit-Ereignisse geladen",
     productionHandoffExportLabel: formatProductionHandoffExportLabel({
       hasSelectedPlan: Boolean(selectedPlan),
-      purchaseListCount: currentSpecPurchaseLists.length
+      purchaseListCount: currentSpecPurchaseLists.length,
+      itemCount: currentPurchaseListItemCount
     }),
     productionHandoffContextLabel: formatProductionHandoffContextLabel({
       selectedPlan,
@@ -122,7 +123,8 @@ export function buildProductionStatusSummaryState(
       hasFocusedProductionSpec: Boolean(focusedProductionSpec),
       questionCount: productionQuestions.length,
       hasSelectedPlan: Boolean(selectedPlan),
-      purchaseListCount: currentSpecPurchaseLists.length
+      purchaseListCount: currentSpecPurchaseLists.length,
+      purchaseItemCount: currentPurchaseListItemCount
     })
   };
 }

@@ -333,7 +333,8 @@ describe("production route state", () => {
         hasFocusedProductionSpec: false,
         questionCount: 0,
         hasSelectedPlan: true,
-        purchaseListCount: 1
+        purchaseListCount: 1,
+        purchaseItemCount: 1
       }).title
     ).toBe("Produktionsarbeit prüfen");
     expect(
@@ -374,6 +375,24 @@ describe("production route state", () => {
         questionCount: 0,
         hasSelectedPlan: true,
         purchaseListCount: 1
+      }).title
+    ).toBe("Produktionsarbeit prüfen");
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        purchaseListCount: 1,
+        purchaseItemCount: 0
+      }).title
+    ).toBe("Einkaufsliste prüfen");
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        purchaseListCount: 1,
+        purchaseItemCount: 1
       }).title
     ).toBe("Produktionsarbeit prüfen");
   });
@@ -476,8 +495,11 @@ describe("production route state", () => {
     expect(formatProductionHandoffExportLabel({ hasSelectedPlan: false, purchaseListCount: 0 })).toBe(
       "Produktionsblatt offen · Einkaufsliste offen"
     );
-    expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1 })).toBe(
+    expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1, itemCount: 4 })).toBe(
       "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
+    );
+    expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1, itemCount: 0 })).toBe(
+      "Produktionsblatt vorhanden · Einkaufsliste ohne Positionen"
     );
   });
 
@@ -505,7 +527,7 @@ describe("production route state", () => {
       formatProductionHandoffContextLabel({
         selectedPlan: { planId: "plan-1", eventSpecId: "spec-1" },
         selectedPlanSpec: { specId: "spec-fallback" },
-        purchaseLists: [{ purchaseListId: "purchase-1" }]
+        purchaseLists: [{ purchaseListId: "purchase-1", totals: { itemCount: 4 } }]
       })
     ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden");
     expect(
@@ -519,9 +541,16 @@ describe("production route state", () => {
       formatProductionHandoffContextLabel({
         selectedPlan: { planId: " plan-3 ", eventSpecId: "   " },
         selectedPlanSpec: { specId: " spec-fallback " },
-        purchaseLists: [{ purchaseListId: " purchase-3 " }]
+        purchaseLists: [{ purchaseListId: " purchase-3 ", items: [{ id: "item-1" }] }]
       })
     ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden");
+    expect(
+      formatProductionHandoffContextLabel({
+        selectedPlan: { planId: "plan-empty", eventSpecId: "spec-1" },
+        selectedPlanSpec: { specId: "spec-fallback" },
+        purchaseLists: [{ purchaseListId: "purchase-empty", totals: { itemCount: 0 } }]
+      })
+    ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen");
     expect(formatProductionHandoffContextLabel({ purchaseLists: [] })).toBeUndefined();
   });
 

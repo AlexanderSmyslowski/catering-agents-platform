@@ -25,8 +25,11 @@ describe("production route artifact status state", () => {
     expect(formatProductionHandoffExportLabel({ hasSelectedPlan: false, purchaseListCount: 0 })).toBe(
       "Produktionsblatt offen · Einkaufsliste offen"
     );
-    expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1 })).toBe(
+    expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1, itemCount: 9 })).toBe(
       "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
+    );
+    expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1, itemCount: 0 })).toBe(
+      "Produktionsblatt vorhanden · Einkaufsliste ohne Positionen"
     );
   });
 
@@ -48,8 +51,15 @@ describe("production route artifact status state", () => {
       formatProductionHandoffContextLabel({
         selectedPlan: { planId: "plan-1", eventSpecId: "spec-1" },
         selectedPlanSpec: { specId: "spec-fallback" },
-        purchaseLists: [{ purchaseListId: "purchase-1" }]
+        purchaseLists: [{ purchaseListId: "purchase-1", totals: { itemCount: 4 } }]
       })
     ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden");
+    expect(
+      formatProductionHandoffContextLabel({
+        selectedPlan: { planId: "plan-empty", eventSpecId: "spec-1" },
+        selectedPlanSpec: { specId: "spec-fallback" },
+        purchaseLists: [{ purchaseListId: "purchase-empty", totals: { itemCount: 0 } }]
+      })
+    ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen");
   });
 });

@@ -43,9 +43,11 @@ function formatAssumptionBasis(metrics?: ProductionDossierMetrics): string {
   return preview ? `${countLabel} · erste Annahme: ${preview}` : countLabel;
 }
 
-function formatArtifactBasis(hasPlan: boolean, hasPurchaseList: boolean): string {
+function formatArtifactBasis(hasPlan: boolean, hasPurchaseList: boolean, metrics?: ProductionDossierMetrics): string {
   if (hasPlan && hasPurchaseList) {
-    return "Plan und Einkaufsliste vorhanden";
+    return metrics?.purchaseItemCount === 0
+      ? "Plan vorhanden, Einkaufsliste ohne Positionen"
+      : "Plan und Einkaufsliste vorhanden";
   }
   if (hasPlan) {
     return "Plan vorhanden, Einkauf offen";
@@ -69,7 +71,7 @@ function formatWorkingBasisStatus(input: {
     sourcePart,
     formatOpenQuestionBasis(input.questionCount, input.metrics),
     formatAssumptionBasis(input.metrics),
-    formatArtifactBasis(input.hasPlan, input.hasPurchaseList),
+    formatArtifactBasis(input.hasPlan, input.hasPurchaseList, input.metrics),
     "Freigabe nicht erteilt"
   ];
   return `Arbeitsgrundlage: ${parts.join(" · ")}`;
@@ -171,6 +173,9 @@ function formatFinalCheckStatus(
   if (exportStatusLabel) {
     return `${exportStatusLabel} · Freigabe nicht erteilt`;
   }
+  if (hasPlan && hasPurchaseList && metrics?.purchaseItemCount === 0) {
+    return "Exportlinks prüfen; Einkaufsliste ohne Positionen; Freigabe nicht erteilt";
+  }
   return hasPlan && hasPurchaseList ? "Exportlinks prüfen; Freigabe nicht erteilt" : "nach Plan und Einkaufsliste offen";
 }
 
@@ -250,8 +255,9 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
 
     return {
       title: "Produktionsarbeit prüfen",
-      description:
-        "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.",
+      description: input.dossierMetrics?.purchaseItemCount === 0
+        ? "Produktionsplan liegt vor; Einkaufsliste ist angelegt, aber ohne Positionen. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen."
+        : "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.",
       grouping: workingBasisStatus,
       reviewItems
     };

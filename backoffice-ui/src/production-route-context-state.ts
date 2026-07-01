@@ -18,6 +18,7 @@ export function selectProductionNextStep(input: {
   questionCount: number;
   hasSelectedPlan: boolean;
   purchaseListCount: number;
+  purchaseItemCount?: number;
 }): ProductionNextStep {
   if (!input.hasFocusedProductionSpec && !input.hasSelectedPlan) {
     return {
@@ -41,6 +42,12 @@ export function selectProductionNextStep(input: {
     return {
       title: "Einkaufsliste noch offen",
       description: "Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch."
+    };
+  }
+  if (input.purchaseItemCount === 0) {
+    return {
+      title: "Einkaufsliste prüfen",
+      description: "Produktionsplan liegt vor; Einkaufsliste ist angelegt, aber ohne Positionen."
     };
   }
   return {

@@ -86,6 +86,40 @@ describe("production status summary state", () => {
     expect(state.productionNextStep.title).toBe("Auftrag einfügen oder Datei ablegen");
   });
 
+  it("labels a selected plan with an empty purchase list as not yet purchase-ready", () => {
+    const state = buildProductionStatusSummaryState({
+      selectedPlan: {
+        planId: "plan-empty-purchase",
+        eventSpecId: "spec-1",
+        readiness: { status: "partial" }
+      },
+      selectedPlanSpec: { specId: "spec-1" },
+      currentSpecPlans: [{ planId: "plan-empty-purchase", eventSpecId: "spec-1" }],
+      currentSpecPurchaseLists: [
+        {
+          purchaseListId: "purchase-empty",
+          eventSpecId: "spec-1",
+          totals: { itemCount: 0 }
+        }
+      ],
+      productionQuestions: [],
+      filteredAuditEvents: [],
+      productionWorkspaceCleared: false
+    });
+
+    expect(state.purchaseZoneStatusLabel).toBe("1 Liste · 0 Positionen");
+    expect(state.productionHandoffExportLabel).toBe(
+      "Produktionsblatt vorhanden · Einkaufsliste ohne Positionen"
+    );
+    expect(state.productionHandoffContextLabel).toBe(
+      "Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen"
+    );
+    expect(state.productionNextStep).toEqual({
+      title: "Einkaufsliste prüfen",
+      description: "Produktionsplan liegt vor; Einkaufsliste ist angelegt, aber ohne Positionen."
+    });
+  });
+
   it("does not surface stale intake origin after the production workspace was cleared", () => {
     const state = buildProductionStatusSummaryState({
       currentSpecPlans: [],

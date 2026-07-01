@@ -24,11 +24,25 @@ describe("production route context state", () => {
         hasFocusedProductionSpec: true,
         questionCount: 0,
         hasSelectedPlan: true,
-        purchaseListCount: 1
+        purchaseListCount: 1,
+        purchaseItemCount: 4
       })
     ).toEqual({
       title: "Produktionsarbeit prüfen",
       description: "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen."
+    });
+
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        purchaseListCount: 1,
+        purchaseItemCount: 0
+      })
+    ).toEqual({
+      title: "Einkaufsliste prüfen",
+      description: "Produktionsplan liegt vor; Einkaufsliste ist angelegt, aber ohne Positionen."
     });
   });
 

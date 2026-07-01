@@ -110,6 +110,10 @@ describe("production workbench output anchor state", () => {
       purchaseListCount: 1
     });
 
+    expect(state.description).toBe(
+      "Produktionsplan liegt vor; Einkaufsliste ist angelegt, aber ohne Positionen. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen."
+    );
+    expect(state.grouping).toContain("Plan vorhanden, Einkaufsliste ohne Positionen");
     expect(state.reviewItems).toContainEqual({
       label: "Rezeptkarten",
       status: "1 Rezeptbezug im Plan · Rezeptkarte offen"
@@ -117,6 +121,10 @@ describe("production workbench output anchor state", () => {
     expect(state.reviewItems).toContainEqual({
       label: "Metro-Einkaufsliste",
       status: "1 Einkaufsliste · 0 Positionen"
+    });
+    expect(state.reviewItems).toContainEqual({
+      label: "Abschlussprüfung & Exporte",
+      status: "Exportlinks prüfen; Einkaufsliste ohne Positionen; Freigabe nicht erteilt"
     });
   });
 

@@ -50,10 +50,18 @@ function formatIntakeSourceChannelLabel(value: unknown): string {
 export function formatProductionHandoffExportLabel(input: {
   hasSelectedPlan: boolean;
   purchaseListCount: number;
+  itemCount?: number;
 }): string {
+  const purchaseListLabel =
+    input.purchaseListCount === 0
+      ? "Einkaufsliste offen"
+      : input.itemCount === 0
+        ? "Einkaufsliste ohne Positionen"
+        : "Einkaufsliste vorhanden";
+
   return [
     input.hasSelectedPlan ? "Produktionsblatt vorhanden" : "Produktionsblatt offen",
-    input.purchaseListCount > 0 ? "Einkaufsliste vorhanden" : "Einkaufsliste offen"
+    purchaseListLabel
   ].join(" · ");
 }
 
@@ -66,10 +74,17 @@ export function formatProductionHandoffContextLabel(input: {
     return undefined;
   }
 
+  const purchaseList = input.purchaseLists[0];
+  const purchaseListLabel = purchaseList
+    ? countPurchaseListItems([purchaseList]) === 0
+      ? "Einkaufsliste ohne Positionen"
+      : "Einkaufsliste vorhanden"
+    : "Einkaufsliste offen";
+
   return [
     "Produktionsplan im Fokus",
     input.selectedPlanSpec ? "Spezifikation im Fokus" : "Spezifikation aus Planbezug",
-    input.purchaseLists[0] ? "Einkaufsliste vorhanden" : "Einkaufsliste offen"
+    purchaseListLabel
   ]
     .filter(Boolean)
     .join(" · ");
