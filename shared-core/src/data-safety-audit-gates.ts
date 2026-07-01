@@ -77,11 +77,38 @@ export const dataIngressPaths = [
     requiredGate: "intake_operator auth and upload validation"
   },
   {
-    id: "seed_demo",
+    id: "intake_seed_demo",
     service: "intake-service",
     route: "POST /v1/intake/seed-demo",
     source: "built-in demo fixtures",
     scope: "synthetic_demo",
+    externalExposure: "none",
+    requiredGate: "operations_audit_operator auth"
+  },
+  {
+    id: "intake_archive_request",
+    service: "intake-service",
+    route: "POST /v1/intake/requests/:requestId/archive",
+    source: "operator archive decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "intake_operator auth"
+  },
+  {
+    id: "intake_spec_update",
+    service: "intake-service",
+    route: "PATCH /v1/intake/specs/:specId",
+    source: "operator spec correction",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "intake_operator auth"
+  },
+  {
+    id: "intake_spec_governance_finalize",
+    service: "intake-service",
+    route: "POST /v1/intake/spec-governance/finalize",
+    source: "operator governance finalization decision",
+    scope: "operator_supplied_internal",
     externalExposure: "none",
     requiredGate: "operations_audit_operator auth"
   },
@@ -104,6 +131,24 @@ export const dataIngressPaths = [
     requiredGate: "offer_operator auth and upload validation"
   },
   {
+    id: "offer_variant_promotion",
+    service: "offer-service",
+    route: "POST /v1/offers/drafts/:draftId/promote",
+    source: "operator selected offer variant",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "offer_operator auth"
+  },
+  {
+    id: "offer_seed_demo",
+    service: "offer-service",
+    route: "POST /v1/offers/seed-demo",
+    source: "built-in demo fixtures",
+    scope: "synthetic_demo",
+    externalExposure: "none",
+    requiredGate: "operations_audit_operator auth"
+  },
+  {
     id: "production_plan_creation",
     service: "production-service",
     route: "POST /v1/production/plans",
@@ -120,6 +165,51 @@ export const dataIngressPaths = [
     scope: "uploaded_internal",
     externalExposure: "none",
     requiredGate: "production_operator auth and upload validation"
+  },
+  {
+    id: "production_clarification_draft",
+    service: "production-service",
+    route: "POST /v1/production/specs/:specId/clarification-drafts",
+    source: "AcceptedEventSpec and BYO-LLM draft adapter",
+    scope: "operator_supplied_internal",
+    externalExposure: "blocked_until_decision",
+    requiredGate: "production_operator auth and human review before product write"
+  },
+  {
+    id: "production_clarification_draft_decision",
+    service: "production-service",
+    route: "POST /v1/production/clarification-drafts/:draftId/decision",
+    source: "operator clarification draft approval decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "production_operator auth and explicit approve/reject"
+  },
+  {
+    id: "production_recipe_review",
+    service: "production-service",
+    route: "PATCH /v1/production/recipes/:recipeId/review",
+    source: "operator recipe review decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "production_operator auth"
+  },
+  {
+    id: "offer_recipe_review",
+    service: "offer-service",
+    route: "PATCH /v1/offers/recipes/:recipeId/review",
+    source: "operator recipe review decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "offer_operator auth"
+  },
+  {
+    id: "production_seed_demo",
+    service: "production-service",
+    route: "POST /v1/production/seed-demo",
+    source: "built-in demo fixtures",
+    scope: "synthetic_demo",
+    externalExposure: "none",
+    requiredGate: "operations_audit_operator auth"
   },
   {
     id: "export_read",

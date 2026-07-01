@@ -20,11 +20,21 @@ describe("data safety and audit gates", () => {
       "manual_intake",
       "manual_spec",
       "document_upload",
-      "seed_demo",
+      "intake_seed_demo",
+      "intake_archive_request",
+      "intake_spec_update",
+      "intake_spec_governance_finalize",
       "offer_draft_creation",
       "offer_recipe_upload",
+      "offer_variant_promotion",
+      "offer_seed_demo",
       "production_plan_creation",
       "production_recipe_upload",
+      "production_clarification_draft",
+      "production_clarification_draft_decision",
+      "production_recipe_review",
+      "offer_recipe_review",
+      "production_seed_demo",
       "export_read",
       "llm_readiness_draft",
       "web_recipe_search"
@@ -35,7 +45,7 @@ describe("data safety and audit gates", () => {
       expect(path.scope).toMatch(/synthetic|operator|uploaded|read_only/);
     }
 
-    expect(dataIngressPaths.find((path) => path.id === "seed_demo")).toMatchObject({
+    expect(dataIngressPaths.find((path) => path.id === "intake_seed_demo")).toMatchObject({
       scope: "synthetic_demo",
       externalExposure: "none"
     });
@@ -51,6 +61,36 @@ describe("data safety and audit gates", () => {
       externalExposure: "disabled_by_default",
       requiredGate: "CATERING_ENABLE_WEB_RECIPE_SEARCH explicit opt-in"
     });
+
+    const ingressRoutes = dataIngressPaths.flatMap((path) =>
+      "route" in path ? path.route.split(" and ") : []
+    );
+    expect(ingressRoutes).toEqual(
+      expect.arrayContaining([
+        "POST /v1/intake/normalize",
+        "POST /v1/intake/specs/manual",
+        "POST /v1/intake/seed-demo",
+        "POST /v1/intake/documents",
+        "POST /v1/intake/documents/upload",
+        "POST /v1/intake/requests/:requestId/archive",
+        "PATCH /v1/intake/specs/:specId",
+        "POST /v1/intake/spec-governance/finalize",
+        "POST /v1/offers/drafts",
+        "POST /v1/offers/from-text",
+        "POST /v1/offers/drafts/:draftId/promote",
+        "POST /v1/offers/seed-demo",
+        "POST /v1/offers/recipes/import-text",
+        "POST /v1/offers/recipes/upload",
+        "PATCH /v1/offers/recipes/:recipeId/review",
+        "POST /v1/production/plans",
+        "POST /v1/production/specs/:specId/clarification-drafts",
+        "POST /v1/production/clarification-drafts/:draftId/decision",
+        "POST /v1/production/seed-demo",
+        "POST /v1/production/recipes/import-text",
+        "POST /v1/production/recipes/upload",
+        "PATCH /v1/production/recipes/:recipeId/review"
+      ])
+    );
   });
 
   it("inventories audit and evidence paths without treating exports as approval", () => {
