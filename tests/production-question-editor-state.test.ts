@@ -80,6 +80,7 @@ describe("production question editor state", () => {
       editingSpecId: "spec-1",
       editingEventType: "Lunch",
       editingEventDate: "2026-06-01",
+      editingEventSchedule: "Service 12:00–14:00",
       editingAttendeeCount: "42",
       editingServiceForm: "Buffet",
       editingMenuItems: "Curry, Salat",
@@ -92,6 +93,7 @@ describe("production question editor state", () => {
       editingSpecId: "spec-1",
       editingEventType: "Lunch",
       editingEventDate: "2026-06-01",
+      editingEventSchedule: "Service 12:00–14:00",
       editingAttendeeCount: "42",
       editingServiceForm: "Buffet",
       editingMenuItems: "Curry, Salat",
@@ -107,6 +109,7 @@ describe("production question editor state", () => {
     const state = buildProductionQuestionEditorState({
       editingEventType: "",
       editingEventDate: "",
+      editingEventSchedule: "",
       editingAttendeeCount: "",
       editingServiceForm: "",
       editingMenuItems: "",

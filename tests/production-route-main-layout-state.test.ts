@@ -119,6 +119,7 @@ describe("production route main layout state", () => {
     const editorState = {
       editingEventType: "",
       editingEventDate: "",
+      editingEventSchedule: "",
       editingAttendeeCount: "",
       editingServiceForm: "",
       editingMenuItems: "",
@@ -129,6 +130,7 @@ describe("production route main layout state", () => {
     const editorActions = {
       setEditingEventType: (_value: string) => undefined,
       setEditingEventDate: (_value: string) => undefined,
+      setEditingEventSchedule: (_value: string) => undefined,
       setEditingAttendeeCount: (_value: string) => undefined,
       setEditingServiceForm: (_value: string) => undefined,
       setEditingMenuItems: (_value: string) => undefined,

@@ -199,6 +199,7 @@ function MiniPilotFlowHarness() {
           editorState={{
             editingEventType: "",
             editingEventDate: "",
+            editingEventSchedule: "",
             editingAttendeeCount: "",
             editingServiceForm: "",
             editingMenuItems: "",
@@ -209,6 +210,7 @@ function MiniPilotFlowHarness() {
           editorActions={{
             setEditingEventType: () => undefined,
             setEditingEventDate: () => undefined,
+            setEditingEventSchedule: () => undefined,
             setEditingAttendeeCount: () => undefined,
             setEditingServiceForm: () => undefined,
             setEditingMenuItems: () => undefined,

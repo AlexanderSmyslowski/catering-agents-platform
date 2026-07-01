@@ -52,6 +52,7 @@ const lunchSpec = {
   event: {
     type: "Lunch",
     date: "2026-06-12",
+    schedule: [{ label: "Service", start: "12:00", end: "14:00" }],
     serviceForm: "Buffet"
   },
   attendees: {
@@ -82,6 +83,7 @@ describe("useProductionSpecEditor", () => {
 
     expect(probe.editor.editingSpecId).toBe("spec-lunch");
     expect(probe.editor.editingEventType).toBe("Lunch");
+    expect(probe.editor.editingEventSchedule).toBe("Service 12:00 14:00");
     expect(probe.editor.editingAttendeeCount).toBe("42");
     expect(probe.editor.editingComponentStates["component-hummus"]).toEqual({
       menuCategory: "vegan",
@@ -101,6 +103,7 @@ describe("useProductionSpecEditor", () => {
     });
     act(() => {
       probe.editor.setEditingAttendeeCount("45");
+      probe.editor.setEditingEventSchedule("Service 13:00–15:00");
       probe.editor.updateEditingComponentState("component-hummus", {
         purchasedElements: "Baguette, Gemuesesticks"
       });
@@ -108,6 +111,7 @@ describe("useProductionSpecEditor", () => {
 
     expect(probe.editor.hasFocusedSpecEditChanges).toBe(true);
     expect(probe.editor.buildCurrentSpecUpdateInput()).toMatchObject({
+      schedule: [{ label: "Servicefenster", start: "Service 13:00–15:00" }],
       attendeeCount: 45,
       componentUpdates: [
         {

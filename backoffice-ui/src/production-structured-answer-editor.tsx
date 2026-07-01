@@ -6,6 +6,7 @@ type ProductionStructuredAnswerEditorProps = {
   focusedProductionSpec: Record<string, unknown>;
   editingEventType: string;
   editingEventDate: string;
+  editingEventSchedule: string;
   editingAttendeeCount: string;
   editingServiceForm: string;
   editingMenuItems: string;
@@ -13,6 +14,7 @@ type ProductionStructuredAnswerEditorProps = {
   recipes: Array<Record<string, unknown>>;
   setEditingEventType: (value: string) => void;
   setEditingEventDate: (value: string) => void;
+  setEditingEventSchedule: (value: string) => void;
   setEditingAttendeeCount: (value: string) => void;
   setEditingServiceForm: (value: string) => void;
   setEditingMenuItems: (value: string) => void;
@@ -23,6 +25,7 @@ export function ProductionStructuredAnswerEditor({
   focusedProductionSpec,
   editingEventType,
   editingEventDate,
+  editingEventSchedule,
   editingAttendeeCount,
   editingServiceForm,
   editingMenuItems,
@@ -30,6 +33,7 @@ export function ProductionStructuredAnswerEditor({
   recipes,
   setEditingEventType,
   setEditingEventDate,
+  setEditingEventSchedule,
   setEditingAttendeeCount,
   setEditingServiceForm,
   setEditingMenuItems,
@@ -51,11 +55,13 @@ export function ProductionStructuredAnswerEditor({
         <ProductionEventAnswerFields
           editingEventType={editingEventType}
           editingEventDate={editingEventDate}
+          editingEventSchedule={editingEventSchedule}
           editingAttendeeCount={editingAttendeeCount}
           editingServiceForm={editingServiceForm}
           editingMenuItems={editingMenuItems}
           setEditingEventType={setEditingEventType}
           setEditingEventDate={setEditingEventDate}
+          setEditingEventSchedule={setEditingEventSchedule}
           setEditingAttendeeCount={setEditingAttendeeCount}
           setEditingServiceForm={setEditingServiceForm}
           setEditingMenuItems={setEditingMenuItems}

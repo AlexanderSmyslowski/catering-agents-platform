@@ -12,6 +12,7 @@ export type ProductionQuestionEditorStateInput = {
   editingSpecId?: string;
   editingEventType: string;
   editingEventDate: string;
+  editingEventSchedule: string;
   editingAttendeeCount: string;
   editingServiceForm: string;
   editingMenuItems: string;
@@ -24,6 +25,7 @@ export function buildProductionQuestionEditorState({
   editingSpecId,
   editingEventType,
   editingEventDate,
+  editingEventSchedule,
   editingAttendeeCount,
   editingServiceForm,
   editingMenuItems,
@@ -35,6 +37,7 @@ export function buildProductionQuestionEditorState({
     editingSpecId,
     editingEventType,
     editingEventDate,
+    editingEventSchedule,
     editingAttendeeCount,
     editingServiceForm,
     editingMenuItems,

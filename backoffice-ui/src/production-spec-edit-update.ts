@@ -3,6 +3,7 @@ import type { ComponentEditState } from "./production-answer-types.js";
 export type SpecEditUpdateFormState = {
   eventType: string;
   eventDate: string;
+  eventSchedule: string;
   attendeeCount: string;
   serviceForm: string;
   menuItems: string;
@@ -20,6 +21,7 @@ export type SpecEditComponentUpdate = {
 
 export type SpecEditUpdateInput = {
   eventDate?: string;
+  schedule?: Array<{ label: string; start: string }>;
   attendeeCount?: number;
   serviceForm?: string;
   eventType?: string;
@@ -62,6 +64,9 @@ export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEd
   return {
     eventType: state.eventType.trim() || undefined,
     eventDate: state.eventDate.trim() || undefined,
+    schedule: state.eventSchedule.trim()
+      ? [{ label: "Servicefenster", start: state.eventSchedule.trim() }]
+      : undefined,
     serviceForm: state.serviceForm.trim() || undefined,
     attendeeCount: state.attendeeCount.trim() ? Number(state.attendeeCount) : undefined,
     menuItems: splitCommaList(state.menuItems),

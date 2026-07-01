@@ -23,6 +23,7 @@ describe("production route actions", () => {
     const actions: ProductionQuestionEditorActionsInput = {
       setEditingEventType: (_value) => undefined,
       setEditingEventDate: (_value) => undefined,
+      setEditingEventSchedule: (_value) => undefined,
       setEditingAttendeeCount: (_value) => undefined,
       setEditingServiceForm: (_value) => undefined,
       setEditingMenuItems: (_value) => undefined,

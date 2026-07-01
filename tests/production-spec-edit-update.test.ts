@@ -7,6 +7,7 @@ describe("production spec edit update input", () => {
       buildSpecEditUpdateInput({
         eventType: " Lunch ",
         eventDate: " 2026-06-12 ",
+        eventSchedule: " Service 12:00–14:00 ",
         attendeeCount: " 42 ",
         serviceForm: " Buffet ",
         menuItems: " Hummus, Salat, ",
@@ -23,6 +24,7 @@ describe("production spec edit update input", () => {
     ).toEqual({
       eventType: "Lunch",
       eventDate: "2026-06-12",
+      schedule: [{ label: "Servicefenster", start: "Service 12:00–14:00" }],
       attendeeCount: 42,
       serviceForm: "Buffet",
       menuItems: ["Hummus", "Salat"],
@@ -44,6 +46,7 @@ describe("production spec edit update input", () => {
       buildSpecEditUpdateInput({
         eventType: " ",
         eventDate: "",
+        eventSchedule: " ",
         attendeeCount: "",
         serviceForm: " ",
         menuItems: " , ",
@@ -60,6 +63,7 @@ describe("production spec edit update input", () => {
     ).toEqual({
       eventType: undefined,
       eventDate: undefined,
+      schedule: undefined,
       attendeeCount: undefined,
       serviceForm: undefined,
       menuItems: [],

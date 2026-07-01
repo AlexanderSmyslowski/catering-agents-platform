@@ -46,6 +46,29 @@ function normalizeMenuItems(input: string[] | undefined): string[] | undefined {
   return items.length > 0 ? items : [];
 }
 
+function normalizeSchedule(
+  input: Array<{ label: string; start?: string; end?: string }> | undefined
+) {
+  if (!input) {
+    return undefined;
+  }
+
+  return input
+    .map((item) => ({
+      label: String(item.label ?? "").trim() || "Servicefenster",
+      start: item.start?.trim() || undefined,
+      end: item.end?.trim() || undefined
+    }))
+    .filter((item) => item.start || item.end);
+}
+
+function keepUnresolvedUncertainty(
+  uncertainty: NonNullable<AcceptedEventSpec["uncertainties"]>[number],
+  resolvedFields: Set<string>
+): boolean {
+  return !resolvedFields.has(uncertainty.field);
+}
+
 function dietaryTagsForCategory(category?: "classic" | "vegetarian" | "vegan"): string[] {
   if (category === "vegan") {
     return ["vegan"];
@@ -90,6 +113,15 @@ function applySpecUpdates(
   const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
   const nextAttendeeCount = body.attendeeCount ?? spec.attendees.expected;
   const nextMenuItems = normalizeMenuItems(body.menuItems);
+  const nextSchedule = normalizeSchedule(body.schedule);
+  const resolvedUncertaintyFields = new Set<string>();
+  if (nextSchedule && nextSchedule.length > 0) {
+    resolvedUncertaintyFields.add("event.schedule");
+  }
+  if (body.eventDate?.trim()) {
+    resolvedUncertaintyFields.add("event.date");
+    resolvedUncertaintyFields.add("event.date_or_schedule");
+  }
   const componentUpdates = new Map(
     (body.componentUpdates ?? []).map((item) => [item.componentId, item])
   );
@@ -115,12 +147,16 @@ function applySpecUpdates(
       ...spec.event,
       type: nextEventType,
       date: body.eventDate?.trim() || spec.event.date,
+      schedule: nextSchedule ?? spec.event.schedule,
       serviceForm: nextServiceForm
     },
     attendees: {
       ...spec.attendees,
       expected: nextAttendeeCount
     },
+    uncertainties: (spec.uncertainties ?? []).filter((uncertainty) =>
+      keepUnresolvedUncertainty(uncertainty, resolvedUncertaintyFields)
+    ),
     servicePlan: {
       ...spec.servicePlan,
       eventType: nextEventType ?? spec.servicePlan.eventType,

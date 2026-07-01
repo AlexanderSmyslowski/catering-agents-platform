@@ -982,6 +982,7 @@ describe("catering agents platform", () => {
       payload: {
         eventType: "conference",
         eventDate: "2026-09-03",
+        schedule: [{ label: "Servicefenster", start: "Service 12:00–14:00" }],
         attendeeCount: 48,
         serviceForm: "buffet",
         menuItems: ["Tomatensuppe", "Lunchbuffet"]
@@ -990,8 +991,48 @@ describe("catering agents platform", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json().acceptedEventSpec.readiness.status).toBe("complete");
+    expect(updateResponse.json().acceptedEventSpec.event.schedule).toEqual([
+      { label: "Servicefenster", start: "Service 12:00–14:00" }
+    ]);
     expect(updateResponse.json().acceptedEventSpec.attendees.expected).toBe(48);
     expect(updateResponse.json().acceptedEventSpec.menuPlan).toHaveLength(2);
+
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("clears the open time-window question after a binding schedule answer is saved", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp({
+      rootDir: dataRoot
+    });
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intake/normalize",
+      payload: {
+        text: "Konferenz am 2026-09-03 um 12 Uhr fuer 48 Teilnehmer mit Tomatensuppe."
+      }
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const createdSpec = createResponse.json().acceptedEventSpec as AcceptedEventSpec;
+    expect((createdSpec.uncertainties ?? []).map((item) => item.field)).toContain("event.schedule");
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/intake/specs/${createdSpec.specId}`,
+      payload: {
+        schedule: [{ label: "Servicefenster", start: "Service 12:00–14:00" }]
+      }
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    const updatedSpec = updateResponse.json().acceptedEventSpec as AcceptedEventSpec;
+    expect(updatedSpec.event.schedule).toEqual([
+      { label: "Servicefenster", start: "Service 12:00–14:00" }
+    ]);
+    expect((updatedSpec.uncertainties ?? []).map((item) => item.field)).not.toContain("event.schedule");
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });

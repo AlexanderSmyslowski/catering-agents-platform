@@ -41,6 +41,7 @@ export function buildAppProductionRouteState(
   const productionQuestionEditorActions = buildProductionQuestionEditorActions({
     setEditingEventType: input.setEditingEventType,
     setEditingEventDate: input.setEditingEventDate,
+    setEditingEventSchedule: input.setEditingEventSchedule,
     setEditingAttendeeCount: input.setEditingAttendeeCount,
     setEditingServiceForm: input.setEditingServiceForm,
     setEditingMenuItems: input.setEditingMenuItems,

@@ -122,6 +122,7 @@ describe("app production route state", () => {
     const editorState = {
       editingEventType: "",
       editingEventDate: "",
+      editingEventSchedule: "",
       editingAttendeeCount: "",
       editingServiceForm: "",
       editingMenuItems: "",
@@ -150,6 +151,7 @@ describe("app production route state", () => {
       openSpecForQuestions: (_specId) => undefined,
       setEditingEventType: (_value) => undefined,
       setEditingEventDate: (_value) => undefined,
+      setEditingEventSchedule: (_value) => undefined,
       setEditingAttendeeCount: (_value) => undefined,
       setEditingServiceForm: (_value) => undefined,
       setEditingMenuItems: (_value) => undefined,
