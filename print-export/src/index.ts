@@ -182,6 +182,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan): string {
           .join("")}</ol></section>`;
       }
     ),
+    "<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer>",
     "</body></html>"
   ].join("");
 }
