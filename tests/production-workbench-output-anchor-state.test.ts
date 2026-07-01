@@ -30,6 +30,21 @@ describe("production workbench output anchor state", () => {
     });
   });
 
+  it("keeps open questions ahead of calculation when recognized spec facts exist", () => {
+    expect(
+      buildProductionWorkbenchOutputAnchorState({
+        specFactCount: 3,
+        questionCount: 2,
+        productionObjectCount: 0,
+        purchaseListCount: 0
+      })
+    ).toMatchObject({
+      title: "Rückfragen zur Produktionsgrundlage klären",
+      description:
+        "Erkannte Eckdaten und offene Rückfragen liegen vor. Bitte zuerst klären; die Berechnung startet danach."
+    });
+  });
+
   it("keeps plan-only copy from claiming purchase list or export readiness", () => {
     expect(
       buildProductionWorkbenchOutputAnchorState({
@@ -133,9 +148,9 @@ describe("production workbench output anchor state", () => {
         purchaseListCount: 0
       })
     ).toEqual({
-      title: "Produktionsplan berechnen",
+      title: "Rückfragen klären",
       description:
-        "Noch kein Produktionsplan bereit: Zuerst Berechnung starten; Einkaufsliste und Exportlinks bleiben bis dahin offen.",
+        "Offene Rückfragen zuerst beantworten; Produktionsplan, Einkaufsliste und Export bleiben bis dahin offen.",
       grouping:
         "Arbeitsgrundlage: Spezifikation im Fokus · 1 Rückfrage offen · Annahmen fachlich prüfen · Plan und Einkauf nach Berechnung offen · Freigabe nicht erteilt",
       reviewItems: [

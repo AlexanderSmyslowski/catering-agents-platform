@@ -241,9 +241,20 @@ export function buildProductionWorkbenchOutputAnchorState(input: {
 
   if (hasSpecFacts) {
     return {
-      title: "Produktionsdaten prüfen",
+      title: hasQuestions ? "Rückfragen zur Produktionsgrundlage klären" : "Produktionsdaten prüfen",
+      description: hasQuestions
+        ? "Erkannte Eckdaten und offene Rückfragen liegen vor. Bitte zuerst klären; die Berechnung startet danach."
+        : "Erkannte Eckdaten und Speisen liegen vor. Bitte Angaben prüfen und danach die Berechnung starten.",
+      grouping: workingBasisStatus,
+      reviewItems
+    };
+  }
+
+  if (hasQuestions) {
+    return {
+      title: "Rückfragen klären",
       description:
-        "Erkannte Eckdaten und Speisen liegen vor. Bitte Angaben prüfen und danach die Berechnung starten.",
+        "Offene Rückfragen zuerst beantworten; Produktionsplan, Einkaufsliste und Export bleiben bis dahin offen.",
       grouping: workingBasisStatus,
       reviewItems
     };

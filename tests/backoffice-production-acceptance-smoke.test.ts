@@ -1500,6 +1500,8 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Rückfragen: 7 offene Rückfragen");
     expect(content).toContain("Rückfragenstatus: offen 7 · beantwortet 0");
+    expect(content).toContain("Rückfragen klären");
+    expect(content).not.toContain("Produktionsplan berechnen");
     expect(content).toContain("offen 7 · beantwortet 0");
     expect(content).toContain(
       "Arbeitsgrundlage: Spezifikation im Fokus · 7 Rückfragen offen · nächste Rückfrage: Welche Komponenten sind fertig zugekauft?"
