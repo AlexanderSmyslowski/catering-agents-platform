@@ -114,24 +114,65 @@ function formatOperatorProductionObjects(productionObjectStatusLabel: string): s
     .replace("vollständig", "vollständig, Freigabe nicht erteilt");
 }
 
-function selectPrimarySpecFacts(
+function formatCount(value: number, singular: string, plural: string): string {
+  return value === 1 ? `1 ${singular}` : `${value} ${plural}`;
+}
+
+function buildArtifactFact(input: {
+  dossierMetrics?: ProductionWorkbenchSummary["dossierMetrics"];
+  productionObjectCount: number;
+  purchaseListCount: number;
+}): { label: string; value: string } | undefined {
+  const parts: string[] = [];
+  const productionBatchCount = input.dossierMetrics?.productionBatchCount ?? 0;
+  const kitchenSheetCount = input.dossierMetrics?.kitchenSheetCount ?? 0;
+  const purchaseItemCount = input.dossierMetrics?.purchaseItemCount ?? 0;
+
+  if (productionBatchCount > 0) {
+    parts.push(formatCount(productionBatchCount, "Mengenkalkulation", "Mengenkalkulationen"));
+  } else if (input.productionObjectCount > 0) {
+    parts.push(formatCount(input.productionObjectCount, "Produktionsplan", "Produktionspläne"));
+  }
+
+  if (kitchenSheetCount > 0) {
+    parts.push(formatCount(kitchenSheetCount, "Rezeptkarte", "Rezeptkarten"));
+  }
+
+  if (purchaseItemCount > 0) {
+    parts.push(formatCount(purchaseItemCount, "Einkaufsposition", "Einkaufspositionen"));
+  } else if (input.purchaseListCount > 0) {
+    parts.push(formatCount(input.purchaseListCount, "Einkaufsliste", "Einkaufslisten"));
+  }
+
+  return parts.length > 0 ? { label: "Artefakte", value: parts.join(" · ") } : undefined;
+}
+
+function selectPrimaryProductionFacts(
   specFacts: NonNullable<ProductionWorkbenchSummary["specFacts"]>,
-  activeSpecLabel: string
+  input: {
+    activeSpecLabel: string;
+    dossierMetrics?: ProductionWorkbenchSummary["dossierMetrics"];
+    productionObjectCount: number;
+    purchaseListCount: number;
+  }
 ): NonNullable<ProductionWorkbenchSummary["specFacts"]> {
   const preferredLabels = ["Veranstaltung", "Datum", "Personen", "Speisen"];
   const selected = preferredLabels
     .map((label) => specFacts.find((fact) => fact.label === label))
     .filter((fact): fact is { label: string; value: string } => Boolean(fact));
+  const artifactFact = buildArtifactFact(input);
+  const withArtifacts = (facts: NonNullable<ProductionWorkbenchSummary["specFacts"]>) =>
+    artifactFact ? [...facts, artifactFact] : facts;
 
   if (selected.length > 0) {
-    return selected;
+    return withArtifacts(selected);
   }
   const fallbackFacts = specFacts.slice(0, 4);
   if (fallbackFacts.length > 0) {
-    return fallbackFacts;
+    return withArtifacts(fallbackFacts);
   }
-  const fallbackLabel = activeSpecLabel.trim();
-  return fallbackLabel ? [{ label: "Vorgang", value: fallbackLabel }] : [];
+  const fallbackLabel = input.activeSpecLabel.trim();
+  return withArtifacts(fallbackLabel ? [{ label: "Vorgang", value: fallbackLabel }] : []);
 }
 
 export function ProductionConversationalWorkbench({
@@ -200,7 +241,12 @@ export function ProductionConversationalWorkbench({
   const composerHelperText = hasVisibleProductionWork
     ? "Rückfragen, Pläne, Einkaufslisten und Exporte erscheinen im aktuellen Vorgang nach Verfügbarkeit."
     : "Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.";
-  const primarySpecFacts = selectPrimarySpecFacts(specFacts, activeSpecLabel);
+  const primarySpecFacts = selectPrimaryProductionFacts(specFacts, {
+    activeSpecLabel,
+    dossierMetrics,
+    productionObjectCount,
+    purchaseListCount
+  });
 
   useEffect(() => {
     const becameVisible = hasVisibleProductionWork && !previousHasVisibleProductionWork.current;

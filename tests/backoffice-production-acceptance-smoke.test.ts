@@ -759,6 +759,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Erkannte Grundlage");
     expect(rendered.html).toContain('aria-label="Sofort sichtbare Produktionsdaten"');
+    expect(content).toContain("Artefakte");
+    expect(content).toContain("Artefakte1 Produktionsplan");
     expect(content).toContain("Erkannte Eckdaten");
     expect(rendered.html).toContain('aria-label="Erkannte Produktionsdaten"');
     expect(content).toContain("Veranstaltung");
@@ -1553,6 +1555,18 @@ describe("backoffice production acceptance smoke", () => {
             readinessLabel: productionObjectCount > 0 || specFacts.length > 0 ? "vollständig" : "-",
             planStatusLabel: productionObjectCount > 0 ? "vollständig" : "offen",
             purchaseStatusLabel: productionObjectCount > 0 ? "1 Liste · 1 Positionen" : "noch keine Liste",
+            ...(productionObjectCount > 0
+              ? {
+                  dossierMetrics: {
+                    answeredQuestionCount: 0,
+                    assumptionCount: 0,
+                    productionBatchCount: 2,
+                    kitchenSheetCount: 1,
+                    recipeSelectionCount: 1,
+                    purchaseItemCount: 1
+                  }
+                }
+              : {}),
             questionCount: 0,
             answeredQuestionCount: 0,
             unansweredQuestionCount: 0,
@@ -1628,6 +1642,8 @@ describe("backoffice production acceptance smoke", () => {
       const primaryFacts = document.querySelector('[aria-label="Sofort sichtbare Produktionsdaten"]');
       expect(primaryFacts?.textContent).toContain("Vorgang");
       expect(primaryFacts?.textContent).toContain("Business Lunch · 42 Teilnehmer");
+      expect(primaryFacts?.textContent).toContain("Artefakte");
+      expect(primaryFacts?.textContent).toContain("2 Mengenkalkulationen · 1 Rezeptkarte · 1 Einkaufsposition");
     } finally {
       if (originalScrollIntoView) {
         Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
