@@ -150,7 +150,7 @@ export function ProductionConversationalWorkbench({
     ? "Produktionsdaten aus der Analyse"
     : "Was braucht die Produktion als Nächstes?";
   const composerHelperText = hasVisibleProductionWork
-    ? "Plan, Einkaufsliste, Rückfragen und Exporte stehen im aktuellen Vorgang."
+    ? "Rückfragen, Pläne, Einkaufslisten und Exporte erscheinen im aktuellen Vorgang nach Verfügbarkeit."
     : "Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.";
 
   useEffect(() => {

@@ -730,6 +730,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsarbeitsstand");
     expect(content).toContain("Produktionsdaten aus der Analyse");
+    expect(content).toContain(
+      "Rückfragen, Pläne, Einkaufslisten und Exporte erscheinen im aktuellen Vorgang nach Verfügbarkeit."
+    );
+    expect(content).not.toContain("Plan, Einkaufsliste, Rückfragen und Exporte stehen im aktuellen Vorgang.");
     expect(content).toContain("Anfrageeingang");
     expect(content).toContain("Kundenanfrage übernehmen");
     expect(content).toContain("Maximal 25 MB");
