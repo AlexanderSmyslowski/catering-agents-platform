@@ -3529,6 +3529,62 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("requires explicit source review before planning unsafe uploaded intake sources", async () => {
+    const dataRoot = createDataRoot();
+    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const unsafeRequest: EventRequest = {
+      schemaVersion: SCHEMA_VERSION,
+      requestId: "unsafe-upload-planning-1",
+      source: {
+        channel: "pdf_upload",
+        receivedAt: "2026-06-30T18:00:00.000Z"
+      },
+      rawInputs: [
+        {
+          kind: "pdf",
+          content: "Konferenz am 2026-07-12 fuer 45 Teilnehmer. Buffet mit Linseneintopf.",
+          mimeType: "application/pdf",
+          documentId: "unsafe-upload-document-1",
+          documentIngestion: {
+            status: "fallback",
+            warnings: ["document_text_extraction_fallback"]
+          }
+        }
+      ]
+    };
+    await intakeStore.saveRequest(unsafeRequest);
+    const spec = withProductionDecision(normalizeEventRequestToSpec(unsafeRequest));
+    const app = buildProductionApp({ dataRoot });
+
+    const blockedResponse = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec
+      }
+    });
+
+    expect(blockedResponse.statusCode).toBe(422);
+    expect(blockedResponse.json()).toMatchObject({
+      message: "Quellenprüfung erforderlich, bevor Produktionsartefakte berechnet werden."
+    });
+    expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(0);
+
+    const confirmedResponse = await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      payload: {
+        eventSpec: spec,
+        sourceReviewConfirmed: true
+      }
+    });
+
+    expect(confirmedResponse.statusCode).toBe(201);
+    expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(1);
+    await app.close();
+    rmSync(dataRoot, { recursive: true, force: true });
+  });
+
   it("imports human-uploaded recipe text through the offer agent into the shared library", async () => {
     const dataRoot = createDataRoot();
     const offerApp = buildOfferApp({

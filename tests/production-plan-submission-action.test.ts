@@ -121,6 +121,18 @@ describe("production plan submission action", () => {
     expect(calls).toContain("persistCurrentSpecEdit:true");
   });
 
+  it("passes explicit source review confirmation into the production plan request", async () => {
+    const actionsInput = input();
+    const handleCreatePlan = buildProductionPlanSubmissionAction(actionsInput);
+    const planningSpec = spec();
+
+    await handleCreatePlan(planningSpec, { sourceReviewConfirmed: true });
+
+    expect(actionsInput.createProductionPlan).toHaveBeenCalledWith(planningSpec, {
+      sourceReviewConfirmed: true
+    });
+  });
+
   it("surfaces planning failures and always exits submitting state", async () => {
     const actionsInput = input({
       createProductionPlan: vi.fn(async () => {

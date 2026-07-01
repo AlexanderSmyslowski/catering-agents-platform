@@ -91,6 +91,21 @@ export function formatDocumentIngestionSummary(input: Record<string, unknown>): 
     .join(" · ");
 }
 
+export function hasUnsafeIntakeSource(intakeRequestDetail?: Record<string, unknown> | null): boolean {
+  const rawInputs = Array.isArray(intakeRequestDetail?.rawInputs) ? intakeRequestDetail.rawInputs : [];
+
+  return rawInputs.some((entry) => {
+    const rawInput = entry as Record<string, unknown>;
+    const marker = asRecord(rawInput.documentIngestion);
+    const status = readStringOrNumber(marker, ["status"]);
+    const warnings = Array.isArray(marker?.warnings)
+      ? marker.warnings.map((warning) => String(warning).trim()).filter(Boolean)
+      : [];
+
+    return status === "fallback" || status === "failed" || warnings.length > 0;
+  });
+}
+
 export function buildProductionIntakeOriginCardState(
   intakeRequestDetail: IntakeRequestDetail
 ): ProductionIntakeOriginCardState {

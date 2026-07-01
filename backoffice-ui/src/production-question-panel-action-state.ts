@@ -3,6 +3,8 @@ export type ProductionQuestionPanelActionStateInput = {
   editingSpecId?: string;
   submitting: boolean;
   hasFocusedSpecEditChanges: boolean;
+  sourceReviewRequired?: boolean;
+  sourceReviewConfirmed?: boolean;
 };
 
 export type ProductionQuestionPanelActionState = {
@@ -12,13 +14,17 @@ export type ProductionQuestionPanelActionState = {
   showSaveAnswersButton: boolean;
   saveAnswersDisabled: boolean;
   primaryActionLabel: string;
+  primaryActionDisabled: boolean;
+  sourceReviewHelperText?: string;
 };
 
 export function buildProductionQuestionPanelActionState({
   focusedProductionSpec,
   editingSpecId,
   submitting,
-  hasFocusedSpecEditChanges
+  hasFocusedSpecEditChanges,
+  sourceReviewRequired = false,
+  sourceReviewConfirmed = false
 }: ProductionQuestionPanelActionStateInput): ProductionQuestionPanelActionState {
   const focusedSpecId =
     focusedProductionSpec && focusedProductionSpec.specId != null
@@ -32,6 +38,11 @@ export function buildProductionQuestionPanelActionState({
     editAnswersDisabled: submitting || isFocusedSpecEditing,
     showSaveAnswersButton: isFocusedSpecEditing,
     saveAnswersDisabled: submitting || !hasFocusedSpecEditChanges,
-    primaryActionLabel: isFocusedSpecEditing ? "Speichern und Berechnung starten" : "Berechnung starten"
+    primaryActionLabel: isFocusedSpecEditing ? "Speichern und Berechnung starten" : "Berechnung starten",
+    primaryActionDisabled: submitting || (sourceReviewRequired && !sourceReviewConfirmed),
+    sourceReviewHelperText:
+      sourceReviewRequired && !sourceReviewConfirmed
+        ? "Quellenprüfung bestätigen, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+        : undefined
   };
 }

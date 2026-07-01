@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildProductionIntakeOriginCardState,
-  formatDocumentIngestionSummary
+  formatDocumentIngestionSummary,
+  hasUnsafeIntakeSource
 } from "../backoffice-ui/src/production-intake-origin-card-state.js";
 
 describe("production intake origin card state", () => {
@@ -88,5 +89,49 @@ describe("production intake origin card state", () => {
         }
       })
     ).toBe("Status extracted · Warnkey low_confidence");
+  });
+
+  it("detects unsafe intake sources from fallback status or warning markers", () => {
+    expect(
+      hasUnsafeIntakeSource({
+        rawInputs: [
+          {
+            kind: "document",
+            documentIngestion: {
+              status: "extracted",
+              warnings: []
+            }
+          }
+        ]
+      })
+    ).toBe(false);
+
+    expect(
+      hasUnsafeIntakeSource({
+        rawInputs: [
+          {
+            kind: "document",
+            documentIngestion: {
+              status: "fallback",
+              warnings: []
+            }
+          }
+        ]
+      })
+    ).toBe(true);
+
+    expect(
+      hasUnsafeIntakeSource({
+        rawInputs: [
+          {
+            kind: "document",
+            documentIngestion: {
+              status: "extracted",
+              warnings: ["document_text_extraction_fallback"]
+            }
+          }
+        ]
+      })
+    ).toBe(true);
   });
 });
