@@ -108,6 +108,33 @@ function formatCount(value: number, singular: string, plural: string): string {
   return value === 1 ? `1 ${singular}` : `${value} ${plural}`;
 }
 
+function buildMandatoryCheckText(input: {
+  hasVisibleProductionWork: boolean;
+  openVisibleQuestionCount: number;
+  questionPreview?: string;
+  assumptionCount?: number;
+}): string | undefined {
+  if (!input.hasVisibleProductionWork) {
+    return undefined;
+  }
+
+  const questionPreview = input.questionPreview?.trim();
+  if (input.openVisibleQuestionCount > 0) {
+    const questionLabel = formatCount(input.openVisibleQuestionCount, "offene Rückfrage", "offene Rückfragen");
+    return questionPreview
+      ? `Pflichtprüfung: ${questionLabel} vor Berechnung klären; nächste Frage: ${questionPreview}`
+      : `Pflichtprüfung: ${questionLabel} vor Berechnung klären.`;
+  }
+
+  const assumptionCount = input.assumptionCount ?? 0;
+  if (assumptionCount > 0) {
+    const assumptionLabel = formatCount(assumptionCount, "Annahme", "Annahmen");
+    return `Pflichtprüfung: keine offenen Rückfragen sichtbar; ${assumptionLabel} vor Freigabe fachlich prüfen.`;
+  }
+
+  return "Pflichtprüfung: keine offenen Rückfragen sichtbar; Annahmen und Festlegungen vor Freigabe fachlich prüfen.";
+}
+
 function buildArtifactFact(input: {
   dossierMetrics?: ProductionWorkbenchSummary["dossierMetrics"];
   productionObjectCount: number;
@@ -239,6 +266,12 @@ export function ProductionConversationalWorkbench({
   });
   const nextStepQuestionPreview =
     questionCount > 0 ? (dossierMetrics?.questionPreview?.trim() ?? "") : "";
+  const mandatoryCheckText = buildMandatoryCheckText({
+    hasVisibleProductionWork,
+    openVisibleQuestionCount,
+    questionPreview: nextStepQuestionPreview,
+    assumptionCount: dossierMetrics?.assumptionCount
+  });
 
   useEffect(() => {
     const becameVisible = hasVisibleProductionWork && !previousHasVisibleProductionWork.current;
@@ -280,9 +313,7 @@ export function ProductionConversationalWorkbench({
             <p className="eyebrow">Nächster Schritt</p>
             <strong>{nextStep.title}</strong>
             <p className="helper-text">{nextStep.description}</p>
-            {nextStepQuestionPreview ? (
-              <p className="helper-text">Erste Rückfrage: {nextStepQuestionPreview}</p>
-            ) : null}
+            {mandatoryCheckText ? <p className="helper-text">{mandatoryCheckText}</p> : null}
           </div>
         </header>
         {hasVisibleProductionWork ? null : inputSlot}
