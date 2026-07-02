@@ -18,6 +18,10 @@ type ProductionQuestionThreadProps = {
   answerEditor?: ReactNode;
 };
 
+function formatPurchaseListCount(count: number): string {
+  return count === 1 ? "1 Liste" : `${count} Listen`;
+}
+
 function ReadOnlyWorkbenchProjection({
   specLabel,
   facts,
@@ -30,12 +34,12 @@ function ReadOnlyWorkbenchProjection({
   readinessLabel: string;
 }) {
   return (
-    <div className="workbench-projection" aria-label="Read-only Workbench-Projektion">
+    <div className="workbench-projection" aria-label="Nur-Lese-Workbench-Projektion">
       <div>
         <p className="eyebrow">Workbench-Projektion</p>
         <p className="question-window__spec">{specLabel}</p>
         <p className="helper-text">
-          Strukturierte Veranstaltungsdaten bleiben führend; dieser Bereich ist nur eine ruhige read-only Sicht.
+          Strukturierte Veranstaltungsdaten bleiben führend; dieser Bereich ist nur eine ruhige Nur-Lese-Sicht.
         </p>
       </div>
       <dl className="spec-fact-grid">
@@ -78,7 +82,7 @@ export function ProductionQuestionThread({
         <p className="eyebrow">Arbeitsverlauf</p>
         <strong>Aktueller Vorgang</strong>
         <p className="helper-text">
-          Read-only Session-Verlauf aus vorhandenen Spezifikations-, Rückfrage- und Output-Daten.
+          Nur-Lese-Sitzungsverlauf aus vorhandenen Spezifikations-, Rückfrage- und Ergebnisdaten.
         </p>
       </div>
       <div className="result-status-strip" aria-label="Ergebnisstatus aktueller Vorgang">
@@ -88,7 +92,7 @@ export function ProductionQuestionThread({
         <span>Plan: {selectedPlan ? selectedPlanReadinessLabel ?? "-" : "noch nicht berechnet"}</span>
         <span>Produktionsblatt: {selectedPlan ? "vorhanden" : "offen"}</span>
         <span>
-          Einkauf: {currentSpecPurchaseLists.length > 0 ? `${currentSpecPurchaseLists.length} Liste(n)` : "offen"}
+          Einkauf: {currentSpecPurchaseLists.length > 0 ? formatPurchaseListCount(currentSpecPurchaseLists.length) : "offen"}
         </span>
       </div>
       <div className="structured-chat-thread" aria-label="Strukturierte Rückfragen als Chatfluss">
