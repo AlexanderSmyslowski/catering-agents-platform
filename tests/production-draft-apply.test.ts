@@ -81,6 +81,36 @@ async function buildDraft(draftId = "production-draft-apply-1"): Promise<Product
         targetPath: "$.draftArtifacts.eventSpec",
         targetId: spec.specId,
         requiredApproval: true
+      },
+      {
+        cardId: "card-production-plan",
+        kind: "timeline",
+        title: "SECRET_PLAN_REVIEW_TITLE",
+        summary: "SECRET_PLAN_REVIEW_SUMMARY",
+        decision: "pending",
+        targetPath: "$.draftArtifacts.productionPlan",
+        targetId: artifacts.productionPlan.planId,
+        requiredApproval: true
+      },
+      {
+        cardId: "card-purchase-list",
+        kind: "purchase_item",
+        title: "SECRET_PURCHASE_REVIEW_TITLE",
+        summary: "SECRET_PURCHASE_REVIEW_SUMMARY",
+        decision: "pending",
+        targetPath: "$.draftArtifacts.purchaseList",
+        targetId: artifacts.purchaseList.purchaseListId,
+        requiredApproval: true
+      },
+      {
+        cardId: "card-recipe",
+        kind: "recipe",
+        title: "SECRET_RECIPE_REVIEW_TITLE",
+        summary: "SECRET_RECIPE_REVIEW_SUMMARY",
+        decision: "pending",
+        targetPath: "$.draftArtifacts.recipes[0]",
+        targetId: "recipe-draft-vitello",
+        requiredApproval: true
       }
     ],
     draftArtifacts: {
@@ -149,16 +179,18 @@ async function importApproveAndApply(
   });
   expect(imported.statusCode).toBe(201);
 
-  const reviewed = await app.inject({
-    method: "PATCH",
-    url: `/v1/production/drafts/${draft.draftId}/review-cards/card-event`,
-    headers: trustedProductionHeaders,
-    payload: {
-      decision: "fits",
-      operatorComment: "SECRET_OPERATOR_COMMENT"
-    }
-  });
-  expect(reviewed.statusCode).toBe(200);
+  for (const card of draft.reviewCards) {
+    const reviewed = await app.inject({
+      method: "PATCH",
+      url: `/v1/production/drafts/${draft.draftId}/review-cards/${card.cardId}`,
+      headers: trustedProductionHeaders,
+      payload: {
+        decision: "fits",
+        operatorComment: "SECRET_OPERATOR_COMMENT"
+      }
+    });
+    expect(reviewed.statusCode).toBe(200);
+  }
 
   const approved = await app.inject({
     method: "POST",

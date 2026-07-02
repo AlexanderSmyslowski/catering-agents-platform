@@ -346,6 +346,11 @@ export function registerProductionArtifactRoutes(
         errors: ["status must be pending_review for draft-only import"]
       });
     }
+    if (await store.getProductionDraft(draft.draftId)) {
+      return reply.code(409).send({
+        message: "ProductionDraft mit dieser ID existiert bereits."
+      });
+    }
 
     await store.saveProductionDraft(draft);
     const artifacts = draft.draftArtifacts;

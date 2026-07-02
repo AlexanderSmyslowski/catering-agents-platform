@@ -33,7 +33,7 @@ function reviewCard(
     title: `SECRET_TITLE_${cardId}`,
     summary: `SECRET_SUMMARY_${cardId}`,
     decision: "pending",
-    targetPath: `$.draftArtifacts.${cardId}`,
+    targetPath: "$.draftArtifacts.eventSpec",
     targetId: `target-${cardId}`,
     riskLevel,
     requiredApproval: true
