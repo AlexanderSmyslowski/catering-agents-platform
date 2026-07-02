@@ -1460,6 +1460,9 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rückfragen: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
     expect(content).not.toContain("Rückfragen: offen 1 · beantwortet 0");
+    expect(document.querySelector(".production-conversation-layout")?.classList.contains(
+      "production-conversation-layout--active-context"
+    )).toBe(true);
     expect(document.querySelector(".production-composer .production-column--input")?.textContent).toContain("input");
     expect(document.querySelector(".production-progressive-zone .production-column--questions")?.textContent).toContain("fragen");
     expect(document.querySelector(".production-objects-zone .production-column--objects")?.textContent).toContain("objekte");
@@ -1526,6 +1529,9 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Einkauf: Einkaufslisten werden geladen");
     expect(content).toContain("Freigabe: nicht erteilt");
     expect(content).not.toContain("Plan: vorhanden, wird geladen");
+    expect(document.querySelector(".production-conversation-layout")?.classList.contains(
+      "production-conversation-layout--active-context"
+    )).toBe(false);
 
     await act(async () => {
       root.unmount();

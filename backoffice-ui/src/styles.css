@@ -1549,6 +1549,10 @@ button:disabled {
   box-shadow: none;
 }
 
+.production-conversation-layout--active-context .production-calm-summary {
+  order: -1;
+}
+
 .production-calm-summary strong {
   display: block;
   margin-bottom: 0.4rem;

@@ -129,6 +129,22 @@ function buildProductionSummaryFacts(input: {
   ];
 }
 
+function hasVisibleProductionContext(input: {
+  answeredQuestionCount: number;
+  openVisibleQuestionCount: number;
+  planStatusLabel: string;
+  productionObjectCount: number;
+  purchaseListCount: number;
+  purchaseStatusLabel: string;
+}): boolean {
+  return input.openVisibleQuestionCount > 0 ||
+    input.answeredQuestionCount > 0 ||
+    input.productionObjectCount > 0 ||
+    input.purchaseListCount > 0 ||
+    (input.planStatusLabel !== "offen" && input.planStatusLabel !== "wird geladen") ||
+    (input.purchaseStatusLabel !== "noch keine Liste" && input.purchaseStatusLabel !== "Einkaufslisten werden geladen");
+}
+
 export function ProductionConversationalWorkbench({
   summary,
   nextStep,
@@ -170,9 +186,19 @@ export function ProductionConversationalWorkbench({
     purchaseStatusLabel,
     productionObjectStatusLabel
   });
+  const layoutClassName = hasVisibleProductionContext({
+    answeredQuestionCount,
+    openVisibleQuestionCount,
+    planStatusLabel,
+    productionObjectCount,
+    purchaseListCount,
+    purchaseStatusLabel
+  })
+    ? "production-conversation-layout production-conversation-layout--active-context"
+    : "production-conversation-layout";
 
   return (
-    <section className="production-conversation-layout" aria-label="Produktionsagent Conversational Workbench">
+    <section className={layoutClassName} aria-label="Produktionsagent Conversational Workbench">
       <article className="production-composer" aria-label="Zentrale Produktionsarbeit">
         <header className="production-composer__header">
           <p className="eyebrow">Produktionsagent-Chat</p>
