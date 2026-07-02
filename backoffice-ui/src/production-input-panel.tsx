@@ -119,6 +119,9 @@ export function ProductionInputPanel({
           ref={sourceInputActions.uploadInputRef}
           className="visually-hidden"
           type="file"
+          aria-hidden="true"
+          hidden
+          tabIndex={-1}
           accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
           onChange={sourceInputActions.handleFileSelection}
         />
