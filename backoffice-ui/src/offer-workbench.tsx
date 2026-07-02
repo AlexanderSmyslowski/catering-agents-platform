@@ -127,13 +127,17 @@ function formatDraftSourceLineage(spec?: Record<string, unknown>): string | unde
   return `${sourceType}: ${reference}`;
 }
 
+function formatOfferSummaryCount(count: number, singular: string, plural: string): string {
+  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+}
+
 function renderDraftSummary(draft?: Record<string, unknown>): string {
   if (!draft) {
     return "Noch kein Angebotsentwurf vorhanden.";
   }
   const variants = getDraftVariants(draft).length;
   const questions = countDraftOpenQuestions(draft);
-  return `${String(draft.eventSummary ?? "Unbenannter Entwurf")} · ${variants} Varianten · ${questions} offene Punkte`;
+  return `${String(draft.eventSummary ?? "Unbenannter Entwurf")} · ${formatOfferSummaryCount(variants, "Variante", "Varianten")} · ${formatOfferSummaryCount(questions, "offener Punkt", "offene Punkte")}`;
 }
 
 function renderDraftFocusLabel(draft?: Record<string, unknown>): string {

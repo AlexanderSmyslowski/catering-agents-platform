@@ -542,7 +542,7 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.");
     expect(offer).not.toContain("Reviewer-Hinweis");
     expect(offer).toContain("Nächster Angebotsschritt: Entwurf prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.");
-    expect(offer).toContain("Sommerfest mit Buffet · 1 Varianten · 1 offene Punkte");
+    expect(offer).toContain("Sommerfest mit Buffet · 1 Variante · 1 offener Punkt");
     expect(offer).toContain("Übergabe: 1 vollständig · 1 teilweise");
     expect(offer).toContain("Technische Details");
     expect(offer).toContain("aktive Spezifikation: Veranstaltung · ? Teilnehmer · offen (teilweise vollständig)");
@@ -759,7 +759,7 @@ describe("backoffice route smoke", () => {
     ]);
     expect(text).toContain("Angebotsentwurf wurde erstellt.");
     expect(text).toContain("Aktueller Fokus: C3 Sommerfest-Angebot für 80 Personen");
-    expect(text).toContain("C3 Sommerfest-Angebot für 80 Personen · 1 Varianten · 1 offene Punkte");
+    expect(text).toContain("C3 Sommerfest-Angebot für 80 Personen · 1 Variante · 1 offener Punkt");
     expect(text).toContain("Getränkepaket noch klären");
     expect(text).toContain("Variante übernehmen: Klassisch");
     expect(createdExport?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/c3-draft-created/html");

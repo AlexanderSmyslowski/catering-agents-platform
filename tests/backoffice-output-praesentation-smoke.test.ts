@@ -373,7 +373,7 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Ausgewählter Entwurf");
     expect(content).toContain("Weitere Eingabewege");
     expect(content).toContain("Operative Übergabe und Audit");
-    expect(content).toContain("Lunch-Angebot für 45 Personen · 2 Varianten · 1 offene Punkte");
+    expect(content).toContain("Lunch-Angebot für 45 Personen · 2 Varianten · 1 offener Punkt");
     expect(content).toContain("Übergabe: 1 vollständig · 0 teilweise");
     expect(content).toContain("presentation-draft-success");
     expect(content).toContain("presentation-spec-success");
@@ -421,7 +421,7 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Ergebnisstatus");
     expect(content).toContain("Plan: vollständig");
     expect(content).toContain("Produktionsblatt: vorhanden");
-    expect(content).toContain("Einkauf: 1 Liste(n)");
+    expect(content).toContain("Einkauf: 1 Liste");
     expect(content).toContain("Offene Punkte: keine");
     expect(content).toContain("Vegetarische Tomatensuppe");
     expect(content).toContain("Küchenblatt Vegetarische Tomatensuppe");
