@@ -9,6 +9,7 @@ import {
   validateProductionDraft,
   validateProductionPlan,
   validatePurchaseList,
+  validateRecipe,
   type AcceptedEventSpec,
   type AuditLogStore,
   type LlmReadinessModelInput,
@@ -20,6 +21,7 @@ import {
   type ProductionDraftReviewDecision,
   type ProductionPlan,
   type PurchaseList,
+  type Recipe,
   type TrustedActor
 } from "@catering/shared-core";
 import type { IntakeStore } from "@catering/intake-service";
@@ -96,12 +98,14 @@ function validateDraftApplyArtifacts(draft: ProductionDraft): {
   eventSpec?: AcceptedEventSpec;
   productionPlan?: ProductionPlan;
   purchaseList?: PurchaseList;
+  recipes: Recipe[];
   errors: string[];
 } {
   const errors: string[] = [];
   let eventSpec: AcceptedEventSpec | undefined;
   let productionPlan: ProductionPlan | undefined;
   let purchaseList: PurchaseList | undefined;
+  const recipes: Recipe[] = [];
 
   try {
     eventSpec = draft.draftArtifacts.eventSpec
@@ -127,6 +131,20 @@ function validateDraftApplyArtifacts(draft: ProductionDraft): {
     errors.push(error instanceof Error ? error.message : "purchaseList ist nicht schema-valide.");
   }
 
+  for (const recipe of draft.draftArtifacts.recipes ?? []) {
+    try {
+      recipes.push(validateRecipe({
+        ...recipe,
+        source: {
+          ...recipe.source,
+          approvalState: "review_required"
+        }
+      }));
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `recipe ${recipe.recipeId} ist nicht schema-valide.`);
+    }
+  }
+
   const eventSpecId = eventSpec?.specId;
   const planSpecId = productionPlan?.eventSpecId;
   const purchaseSpecId = purchaseList?.eventSpecId;
@@ -139,7 +157,7 @@ function validateDraftApplyArtifacts(draft: ProductionDraft): {
   if (planSpecId && purchaseSpecId && planSpecId !== purchaseSpecId) {
     errors.push("productionPlan.eventSpecId passt nicht zur purchaseList.eventSpecId.");
   }
-  if (!eventSpec && !productionPlan && !purchaseList) {
+  if (!eventSpec && !productionPlan && !purchaseList && recipes.length === 0) {
     errors.push("ProductionDraft enthält keine übernehmbaren Produktartefakte.");
   }
 
@@ -147,6 +165,7 @@ function validateDraftApplyArtifacts(draft: ProductionDraft): {
     eventSpec,
     productionPlan,
     purchaseList,
+    recipes,
     errors
   };
 }
@@ -165,9 +184,15 @@ async function hasUnsafeLinkedIntakeSource(
   return false;
 }
 
+interface RecipeCandidateRepository {
+  get(recipeId: string): Promise<Recipe | undefined>;
+  save(recipe: Recipe): Promise<void>;
+}
+
 export interface ProductionArtifactRouteDependencies {
   store: ProductionStore;
   intakeStore: IntakeStore;
+  repository: RecipeCandidateRepository;
   discoveryService: RecipeDiscoveryService;
   auditLog: AuditLogStore;
   buildLlmAdapter: () => LlmReadinessProviderAdapter;
@@ -198,6 +223,7 @@ export function registerProductionArtifactRoutes(
   const {
     store,
     intakeStore,
+    repository,
     discoveryService,
     auditLog,
     buildLlmAdapter,
@@ -570,7 +596,15 @@ export function registerProductionArtifactRoutes(
             "PurchaseList",
             artifacts.purchaseList.purchaseListId
           )
-          : undefined
+          : undefined,
+        ...(await Promise.all(artifacts.recipes.map(async (recipe) =>
+          assertNoDifferentExistingArtifact(
+            await repository.get(recipe.recipeId),
+            recipe,
+            "Recipe",
+            recipe.recipeId
+          )
+        )))
       ].filter((error): error is string => Boolean(error));
 
       if (conflictErrors.length > 0) {
@@ -589,13 +623,17 @@ export function registerProductionArtifactRoutes(
       if (artifacts.purchaseList) {
         await store.savePurchaseList(artifacts.purchaseList);
       }
+      for (const recipe of artifacts.recipes) {
+        await repository.save(recipe);
+      }
 
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const appliedAt = new Date().toISOString();
       const appliedArtifactIds = {
         ...(artifacts.eventSpec ? { specId: artifacts.eventSpec.specId } : {}),
         ...(artifacts.productionPlan ? { planId: artifacts.productionPlan.planId } : {}),
-        ...(artifacts.purchaseList ? { purchaseListId: artifacts.purchaseList.purchaseListId } : {})
+        ...(artifacts.purchaseList ? { purchaseListId: artifacts.purchaseList.purchaseListId } : {}),
+        ...(artifacts.recipes.length > 0 ? { recipeIds: artifacts.recipes.map((recipe) => recipe.recipeId) } : {})
       };
       const appliedDraft = validateProductionDraft({
         ...draft,
@@ -618,7 +656,7 @@ export function registerProductionArtifactRoutes(
           hasEventSpec: Boolean(artifacts.eventSpec),
           hasProductionPlan: Boolean(artifacts.productionPlan),
           hasPurchaseList: Boolean(artifacts.purchaseList),
-          skippedRecipeCount: draft.draftArtifacts.recipes?.length ?? 0,
+          recipeCandidateCount: artifacts.recipes.length,
           skippedOpenQuestionCount: draft.draftArtifacts.openQuestions?.length ?? 0,
           writesProductObject: true,
           rawProviderPayloadStored: false

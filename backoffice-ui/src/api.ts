@@ -82,6 +82,7 @@ export interface ProductionDraft {
     specId?: string;
     planId?: string;
     purchaseListId?: string;
+    recipeIds?: string[];
   };
   source?: {
     kind?: string;

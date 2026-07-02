@@ -1,8 +1,8 @@
 # C11 10/10-Gap-Audit
 
-Status: Doku-/Vertragstest-only Gap-Audit, keine Runtime-Implementierung
+Status: Runtime-Boundary-Gap-Audit, ProductionDraft-Pfad teilweise umgesetzt
 Stand: 2026-06-05
-Scope: aktueller Weg von belastbarem internem Rehearsal zu echter 10/10-Produktreife; keine echten Daten, kein Deployment, keine Auth-/LLM-/Persistenz-/API-Umsetzung
+Scope: aktueller Weg von belastbarem internem Rehearsal zu echter 10/10-Produktreife; keine echten Daten, kein Deployment, keine Auth-/LLM- oder neue Persistenz-Umsetzung
 
 ## 1. Zweck
 
@@ -58,7 +58,7 @@ fachlichen Entwurfsweg fuer gestaltete Angebots-PDFs.
 | Ruhiges Arbeitsfenster / Produktions-UX | umgesetzt fuer internen MVP-Korridor, weiter verbesserbar | UI-Komponenten, Route-Smokes, Workbench-Smokes | echtes chatzentriertes Agentenfenster bleibt Zielbild, keine grosse UI-Neugestaltung ohne Entscheidung |
 | Codeklarheit im Produktionskern | fortgeschritten, aber nicht final | extrahierte `App.tsx`-Boundaries, kleine Planning-/RecipeDiscovery-Module, viele fokussierte Tests | weitere kleine Boundaries sind moeglich; kein Big-Bang-Refactor |
 | Deterministische Planung, Rezeptsuche, Einkaufsliste | umgesetzt und breit getestet | `production-service/src/rules/*`, `recipe-discovery/*`, Produktions-/Recipe-/Purchase-Tests | weitere synthetische Catering-Faelle und Qualitaetschecks koennen autonom nachziehen |
-| BYO-AI-Harness ProductionDraft-Vertrag | als erster ausfuehrbarer Vertrag mit Import, Review-State, UI-Review und kontrollierter Produktuebernahme vorbereitet | `shared-core/src/schemas/production-draft.ts`, `tests/production-draft-contract.test.ts`, `tests/production-draft-import.test.ts`, `tests/production-draft-review-state.test.ts`, `tests/production-draft-review-panel.test.tsx`, `tests/production-draft-apply.test.ts`, PR #518/#519/#520/#521 | Wissens-Writeback aus geprueften Rezept-/Produktionsfeedbacks fehlt |
+| BYO-AI-Harness ProductionDraft-Vertrag | als erster ausfuehrbarer Vertrag mit Import, Review-State, UI-Review, kontrollierter Produktuebernahme und review-pflichtigem Rezeptkandidaten-Writeback vorbereitet | `shared-core/src/schemas/production-draft.ts`, `tests/production-draft-contract.test.ts`, `tests/production-draft-import.test.ts`, `tests/production-draft-review-state.test.ts`, `tests/production-draft-review-panel.test.tsx`, `tests/production-draft-apply.test.ts`, PR #518/#519/#520/#521/#522 | Produktionsfeedback-Loop und gepruefter Wissensaufbau aus echter Produktion fehlen |
 | Conversation/Rueckfragen | teilweise umgesetzt | `ProductionConversationProjection`, Clarification-Fragen/-Antworten, read-only UI | echte `ConversationSession` als Runtime-Objekt bleibt Entscheidungspflicht |
 | LLM-Readiness ohne Provider | als kleiner Vertrag weitgehend bis Level-9-Vorbereitung umgesetzt | 10/10-Coding-Architektur, PA26-PA40 | nicht-leere Prompt-Artefakte und eine entscheidungsreife Provider-/Daten-/Runtime-Vorlage fehlen noch |
 | LLM-Provider / Modellaufrufe | teilweise lokal umgesetzt, uebergeordnet weiter gate-pflichtig | PA41, PA42-PA50, PA51, PA54, PA55, PA56, PA57, PA58, PA59, PA60, PA61, 10/10-Coding-Architektur, Produktziel | lokaler synthetic-only Korridor ist vorhanden; Alexander-Entscheidung zu Operatorrahmen, Kosten, Logging/Retention/Evidence, Secrets, Datenrahmen, Deployment-/Zielumgebungsrahmen, Human-Approval-/Handover-Rahmen, Tool-/Write-Effect-Grenzen, Runtime-/ConversationSession-Rahmen, Dokument-/Upload-Quellenrahmen und spaeterem Runtime-Scope bleibt erforderlich |
@@ -106,13 +106,14 @@ Dieser Pfad darf:
 - den Draft nach Review als approved oder rejected markieren,
 - diese Review im Produktionsfenster sichtbar und bedienbar machen,
 - approved Draft-Artefakte konfliktgeprueft in bestehende Produktobjekte uebernehmen,
+- Draft-Rezepte als `review_required` Kandidaten in die bestehende Rezeptbibliothek uebernehmen,
 - Audit-Metadaten ohne Raw-Prompt-/Raw-Response-Inhalte schreiben.
 
 Er darf nicht:
 
 - Provider aufrufen,
 - echte Daten freigeben,
-- Rezept-/Wissens-Writeback vorwegnehmen.
+- Rezeptfreigabe oder Produktionsfeedback-Wissensaufbau automatisch vorwegnehmen.
 
 PA41 hat die `Alexander-Entscheidungsvorlage fuer den ersten echten LLM-Slice` bereits geliefert.
 
