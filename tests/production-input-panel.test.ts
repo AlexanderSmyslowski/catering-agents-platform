@@ -69,6 +69,7 @@ function renderPanel(
   sourceInput: ProductionSourceInputValues,
   overrides: {
     focusedProductionSpec?: Record<string, unknown>;
+    hasActiveProductionContext?: boolean;
     productionQuestions?: string[];
     productionAssumptions?: string[];
     intakeRequestDetail?: Parameters<typeof ProductionInputPanel>[0]["intakeRequestDetail"];
@@ -160,6 +161,42 @@ describe("production input panel", () => {
     expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("progress-ring--done");
+    expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
+    expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
+  });
+
+  it("keeps the input surface compact when production data is already in focus", () => {
+    const markup = renderPanel(
+      buildSourceInput(),
+      {
+        focusedProductionSpec: {
+          event: { type: "reception", date: "2026-06-14" },
+          attendees: { expected: 45 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "partial" },
+          menuPlan: [{ componentId: "vitello", label: "Vitello tonnato" }]
+        }
+      }
+    );
+
+    expect(markup).toContain("Weitere Anfrage übernehmen");
+    expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
+    expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
+    expect(markup).not.toContain("Analyse abgeschlossen");
+    expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
+    expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
+  });
+
+  it("keeps the input surface compact when plan artifacts are the active context", () => {
+    const markup = renderPanel(
+      buildSourceInput(),
+      {
+        hasActiveProductionContext: true
+      }
+    );
+
+    expect(markup).toContain("Weitere Anfrage übernehmen");
+    expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
   });
