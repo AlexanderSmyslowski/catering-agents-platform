@@ -731,15 +731,16 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsagent-Chat");
     expect(content).toContain("Was braucht die Produktion als Nächstes?");
     expect(content).toContain("Anfrageeingang");
-    expect(content).toContain("Kundenanfrage übernehmen");
+    expect(content).toContain("Weitere Anfrage übernehmen");
     expect(content).toContain("Maximal 25 MB");
     expect(content).toContain("Der Inhalt wird als Catering-Anfrage erfasst.");
+    expect(content).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
     expect(content).not.toContain("Intake-Pfad");
     expect(content).toContain("Datei auswählen");
     expect(content).toContain("Demo-/Wartungsaktionen");
     expect(content).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(content).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
-    expect(content).toContain("Datei hier ablegen");
+    expect(content).not.toContain("Datei hier ablegen");
     expect(content).toContain("Downloadbereich");
     expect(content).toContain("Produktionsdaten im Fokus");
     expect(rendered.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');

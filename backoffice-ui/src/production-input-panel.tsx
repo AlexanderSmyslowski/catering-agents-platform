@@ -68,6 +68,7 @@ type ProductionInputPanelProps = {
   manualInput: ProductionManualInputValues;
   manualInputActions: ProductionManualInputActions;
   focusedProductionSpec?: Record<string, unknown>;
+  hasActiveProductionContext?: boolean;
   productionQuestions?: string[];
   productionAssumptions?: string[];
   intakeRequestDetail?: IntakeRequestDetail | null;
@@ -92,6 +93,7 @@ export function ProductionInputPanel({
   manualInput,
   manualInputActions,
   focusedProductionSpec,
+  hasActiveProductionContext,
   productionQuestions,
   productionAssumptions,
   intakeRequestDetail
@@ -106,7 +108,8 @@ export function ProductionInputPanel({
   });
   const hasUploadResultSummary = Boolean(panelState.uploadResultSummary);
   const completedDocument = panelState.showCompletedProgress;
-  const compactInputMode = hasUploadResultSummary || completedDocument;
+  const hasFocusedProductionContext = Boolean(focusedProductionSpec) || Boolean(hasActiveProductionContext);
+  const compactInputMode = hasUploadResultSummary || completedDocument || hasFocusedProductionContext;
   const secondaryInputsOpen = !compactInputMode;
 
   return (
