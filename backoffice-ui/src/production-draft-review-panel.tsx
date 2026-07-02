@@ -88,6 +88,46 @@ function eventSpecTitle(draft: ProductionDraft): string {
   return title || "Produktionsentwurf";
 }
 
+function formatCount(count: number, singular: string, plural: string): string {
+  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+}
+
+function optionalArrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+export function formatProductionDraftArtifactSummary(draft: ProductionDraft): string {
+  const artifacts = draft.draftArtifacts;
+  const parts: string[] = [];
+
+  if (artifacts?.eventSpec) {
+    parts.push("Eventdaten");
+  }
+  if (artifacts?.productionPlan) {
+    parts.push("Produktionsplan");
+  }
+  if (artifacts?.purchaseList) {
+    parts.push("Einkaufsliste");
+  }
+
+  const recipeCount = optionalArrayLength(artifacts?.recipes);
+  if (recipeCount > 0) {
+    parts.push(formatCount(recipeCount, "Rezeptkarte", "Rezeptkarten"));
+  }
+
+  const questionCount = optionalArrayLength(artifacts?.openQuestions);
+  if (questionCount > 0) {
+    parts.push(formatCount(questionCount, "Rückfrage", "Rückfragen"));
+  }
+
+  const noteCount = optionalArrayLength(artifacts?.notes);
+  if (noteCount > 0) {
+    parts.push(formatCount(noteCount, "Notiz", "Notizen"));
+  }
+
+  return parts.length > 0 ? parts.join(", ") : "keine Fachartefakte";
+}
+
 function canApproveProductionDraft(draft: ProductionDraft): boolean {
   return draft.status === "pending_review" &&
     draft.reviewCards.length > 0 &&
@@ -200,7 +240,10 @@ export function ProductionDraftReviewPanel({
             <li key={draft.draftId}>
               <strong>{eventSpecTitle(draft)}</strong>
               <p className="helper-text">
-                {formatProductionDraftSourceLabel(draft)} | {formatProductionDraftStatusLabel(draft.status)} | {draft.reviewCards.length} Prüfpunkte
+                {formatProductionDraftSourceLabel(draft)} | {formatProductionDraftStatusLabel(draft.status)} | {formatCount(draft.reviewCards.length, "Prüfpunkt", "Prüfpunkte")}
+              </p>
+              <p className="helper-text">
+                Enthält: {formatProductionDraftArtifactSummary(draft)}.
               </p>
               <ul className="item-list compact">
                 {draft.reviewCards.map((card) => (
