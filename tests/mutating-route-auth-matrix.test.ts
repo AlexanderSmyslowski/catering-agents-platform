@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createEventRequestFromText,
   MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES,
+  SCHEMA_VERSION,
   type MinimalMvpRole,
+  type ProductionDraft,
   normalizeEventRequestToSpec
 } from "@catering/shared-core";
 import { buildIntakeApp } from "../intake-service/src/app.js";
@@ -163,6 +165,13 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "production",
     method: "POST",
+    pathTemplate: "/v1/production/drafts",
+    requiredRole: "production_operator",
+    payload: () => productionDraftPayload()
+  },
+  {
+    service: "production",
+    method: "POST",
     pathTemplate: "/v1/production/specs/:specId/clarification-drafts",
     requiredRole: "production_operator",
     url: "/v1/production/specs/matrix-spec/clarification-drafts"
@@ -279,6 +288,43 @@ function productionEventSpec() {
       rawText: "Lunch am 2026-09-18 fuer 25 Personen mit vegetarischer Tomatensuppe."
     })
   );
+}
+
+function productionDraftPayload(): ProductionDraft {
+  const eventSpec = productionEventSpec();
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    draftId: "matrix-production-draft",
+    status: "pending_review",
+    createdAt: "2026-07-01T12:00:00.000Z",
+    source: {
+      kind: "manual_import",
+      receivedAt: "2026-07-01T12:00:00.000Z",
+      sourceRef: "matrix-test"
+    },
+    guardrails: {
+      draftOnly: true,
+      humanApprovalRequired: true,
+      writesProductObjects: false,
+      rawProviderPayloadStored: false,
+      knowledgeWritePolicy: "reviewed_only"
+    },
+    reviewCards: [
+      {
+        cardId: "matrix-card-event",
+        kind: "event_data",
+        title: "Anfrage",
+        summary: "Schema-valider Testentwurf für die Auth-Matrix.",
+        decision: "pending",
+        targetPath: "$.draftArtifacts.eventSpec",
+        targetId: eventSpec.specId,
+        requiredApproval: true
+      }
+    ],
+    draftArtifacts: {
+      eventSpec
+    }
+  };
 }
 
 function buildAppForRoute(route: MutableRoute, dataRoot: string) {

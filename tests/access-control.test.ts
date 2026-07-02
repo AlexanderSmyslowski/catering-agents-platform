@@ -47,6 +47,7 @@ describe("minimal MVP roles convention", () => {
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/intake/normalize");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/intake/requests/:requestId/archive");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/offers/drafts");
+    expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/production/drafts");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/production/plans");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/production/specs/:specId/clarification-drafts");
     expect(MINIMAL_MVP_PROTECTED_PATHS).toContain("/v1/production/clarification-drafts/:draftId/decision");
@@ -55,6 +56,7 @@ describe("minimal MVP roles convention", () => {
     expect(isMinimalMvpProtectedPath("/v1/intake/specs/spec-1")).toBe(true);
     expect(isMinimalMvpProtectedPath("/v1/intake/requests/request-1/archive")).toBe(true);
     expect(isMinimalMvpProtectedPath("/v1/production/recipes/recipe-1/review")).toBe(true);
+    expect(isMinimalMvpProtectedPath("/v1/production/drafts")).toBe(true);
     expect(isMinimalMvpProtectedPath("/v1/production/specs/spec-1/clarification-drafts")).toBe(true);
     expect(isMinimalMvpProtectedPath("/v1/production/clarification-drafts/draft-1/decision")).toBe(true);
     expect(isMinimalMvpProtectedPath("/v1/production/audit/events")).toBe(true);

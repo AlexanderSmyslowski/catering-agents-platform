@@ -6,6 +6,7 @@ import {
   llmReadinessContractVersion,
   validateAcceptedEventSpec,
   validateLlmReadinessModelOutputCandidate,
+  validateProductionDraft,
   type AcceptedEventSpec,
   type AuditLogStore,
   type LlmReadinessModelInput,
@@ -13,6 +14,7 @@ import {
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterRequest,
   type LlmReadinessProviderAdapterResponse,
+  type ProductionDraft,
   type TrustedActor
 } from "@catering/shared-core";
 import type { IntakeStore } from "@catering/intake-service";
@@ -194,6 +196,71 @@ export function registerProductionArtifactRoutes(
 
     return reply.send({
       items: await store.listPurchaseLists()
+    });
+  });
+
+  app.post<{ Body: ProductionDraft }>("/v1/production/drafts", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+    if (forbidden) {
+      return forbidden;
+    }
+
+    let draft: ProductionDraft;
+    try {
+      draft = validateProductionDraft(request.body);
+    } catch (error) {
+      return reply.code(422).send({
+        message: "ProductionDraft ist nicht schema-valide.",
+        errors: [error instanceof Error ? error.message : "Unbekannter Validierungsfehler."]
+      });
+    }
+
+    if (draft.status !== "pending_review") {
+      return reply.code(422).send({
+        message: "ProductionDraft-Import akzeptiert nur Entwürfe im Status pending_review.",
+        errors: ["status must be pending_review for draft-only import"]
+      });
+    }
+
+    await store.saveProductionDraft(draft);
+    const artifacts = draft.draftArtifacts;
+    await auditLog.log({
+      action: "production.production_draft_imported",
+      entityType: "ProductionDraft",
+      entityId: draft.draftId,
+      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+      summary: "ProductionDraft importiert und zur Review vorgemerkt.",
+      details: compactAuditDetails({
+        draftId: draft.draftId,
+        status: draft.status,
+        sourceKind: draft.source.kind,
+        providerId: draft.source.providerId,
+        modelId: draft.source.modelId,
+        inputHash: draft.source.inputHash,
+        outputHash: draft.source.outputHash,
+        reviewCardCount: draft.reviewCards.length,
+        hasEventSpec: Boolean(artifacts.eventSpec),
+        hasProductionPlan: Boolean(artifacts.productionPlan),
+        hasPurchaseList: Boolean(artifacts.purchaseList),
+        recipeCount: artifacts.recipes?.length ?? 0,
+        openQuestionCount: artifacts.openQuestions?.length ?? 0,
+        noteCount: artifacts.notes?.length ?? 0,
+        humanApprovalRequired: draft.guardrails.humanApprovalRequired,
+        writesProductObject: draft.guardrails.writesProductObjects
+      })
+    });
+
+    return reply.code(201).send({ draft });
+  });
+
+  app.get("/v1/production/drafts", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+    if (forbidden) {
+      return forbidden;
+    }
+
+    return reply.send({
+      items: await store.listProductionDrafts()
     });
   });
 
