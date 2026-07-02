@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  applyProductionDraft,
   decideProductionDraft,
   decideProductionDraftReviewCard,
   loadProductionDrafts,
@@ -93,6 +94,10 @@ function canApproveProductionDraft(draft: ProductionDraft): boolean {
     draft.reviewCards.every((card) => card.decision === "fits" && card.riskLevel !== "blocking");
 }
 
+function canApplyProductionDraft(draft: ProductionDraft): boolean {
+  return draft.status === "approved" && !draft.appliedAt;
+}
+
 function formatReviewCardMeta(card: ProductionDraftReviewCard): string {
   return [
     formatProductionDraftReviewDecisionLabel(card.decision),
@@ -159,7 +164,23 @@ export function ProductionDraftReviewPanel({
     }
   }
 
-  const visibleDrafts = drafts.filter((draft) => draft.status === "pending_review");
+  async function applyDraft(draftId: string) {
+    setLoading(true);
+    try {
+      await applyProductionDraft(draftId);
+      setMessage("Produktionsentwurf übernommen.");
+      await onDraftChanged?.();
+      await reloadDrafts({ clearMessage: false });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht übernommen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const visibleDrafts = drafts.filter((draft) =>
+    draft.status === "pending_review" || canApplyProductionDraft(draft)
+  );
 
   return (
     <section className="form-panel" aria-label="Produktionsentwurf-Prüfung">
@@ -205,20 +226,33 @@ export function ProductionDraftReviewPanel({
                 ))}
               </ul>
               <div className="action-row">
-                <button
-                  className="secondary-button"
-                  disabled={submitting || loading || !canApproveProductionDraft(draft)}
-                  onClick={() => void decideDraft(draft.draftId, true)}
-                >
-                  Entwurf freigeben
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={submitting || loading}
-                  onClick={() => void decideDraft(draft.draftId, false)}
-                >
-                  Entwurf verwerfen
-                </button>
+                {draft.status === "pending_review" ? (
+                  <>
+                    <button
+                      className="secondary-button"
+                      disabled={submitting || loading || !canApproveProductionDraft(draft)}
+                      onClick={() => void decideDraft(draft.draftId, true)}
+                    >
+                      Entwurf freigeben
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={submitting || loading}
+                      onClick={() => void decideDraft(draft.draftId, false)}
+                    >
+                      Entwurf verwerfen
+                    </button>
+                  </>
+                ) : null}
+                {canApplyProductionDraft(draft) ? (
+                  <button
+                    className="secondary-button"
+                    disabled={submitting || loading}
+                    onClick={() => void applyDraft(draft.draftId)}
+                  >
+                    Entwurf übernehmen
+                  </button>
+                ) : null}
               </div>
             </li>
           ))}

@@ -7,6 +7,8 @@ import {
   validateAcceptedEventSpec,
   validateLlmReadinessModelOutputCandidate,
   validateProductionDraft,
+  validateProductionPlan,
+  validatePurchaseList,
   type AcceptedEventSpec,
   type AuditLogStore,
   type LlmReadinessModelInput,
@@ -16,6 +18,8 @@ import {
   type LlmReadinessProviderAdapterResponse,
   type ProductionDraft,
   type ProductionDraftReviewDecision,
+  type ProductionPlan,
+  type PurchaseList,
   type TrustedActor
 } from "@catering/shared-core";
 import type { IntakeStore } from "@catering/intake-service";
@@ -58,6 +62,93 @@ function hasUnsafeDocumentIngestion(
 
     return status === "fallback" || status === "failed" || warnings.length > 0;
   });
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableJson(nested)}`)
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+async function assertNoDifferentExistingArtifact<T>(
+  existing: T | undefined,
+  next: T,
+  label: string,
+  id: string
+): Promise<string | undefined> {
+  if (!existing || stableJson(existing) === stableJson(next)) {
+    return undefined;
+  }
+
+  return `${label} ${id} existiert bereits mit abweichendem Inhalt.`;
+}
+
+function validateDraftApplyArtifacts(draft: ProductionDraft): {
+  eventSpec?: AcceptedEventSpec;
+  productionPlan?: ProductionPlan;
+  purchaseList?: PurchaseList;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  let eventSpec: AcceptedEventSpec | undefined;
+  let productionPlan: ProductionPlan | undefined;
+  let purchaseList: PurchaseList | undefined;
+
+  try {
+    eventSpec = draft.draftArtifacts.eventSpec
+      ? validateAcceptedEventSpec(draft.draftArtifacts.eventSpec)
+      : undefined;
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "eventSpec ist nicht schema-valide.");
+  }
+
+  try {
+    productionPlan = draft.draftArtifacts.productionPlan
+      ? validateProductionPlan(draft.draftArtifacts.productionPlan)
+      : undefined;
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "productionPlan ist nicht schema-valide.");
+  }
+
+  try {
+    purchaseList = draft.draftArtifacts.purchaseList
+      ? validatePurchaseList(draft.draftArtifacts.purchaseList)
+      : undefined;
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "purchaseList ist nicht schema-valide.");
+  }
+
+  const eventSpecId = eventSpec?.specId;
+  const planSpecId = productionPlan?.eventSpecId;
+  const purchaseSpecId = purchaseList?.eventSpecId;
+  if (eventSpecId && planSpecId && eventSpecId !== planSpecId) {
+    errors.push("productionPlan.eventSpecId passt nicht zum eventSpec.specId.");
+  }
+  if (eventSpecId && purchaseSpecId && eventSpecId !== purchaseSpecId) {
+    errors.push("purchaseList.eventSpecId passt nicht zum eventSpec.specId.");
+  }
+  if (planSpecId && purchaseSpecId && planSpecId !== purchaseSpecId) {
+    errors.push("productionPlan.eventSpecId passt nicht zur purchaseList.eventSpecId.");
+  }
+  if (!eventSpec && !productionPlan && !purchaseList) {
+    errors.push("ProductionDraft enthält keine übernehmbaren Produktartefakte.");
+  }
+
+  return {
+    eventSpec,
+    productionPlan,
+    purchaseList,
+    errors
+  };
 }
 
 async function hasUnsafeLinkedIntakeSource(
@@ -425,6 +516,119 @@ export function registerProductionArtifactRoutes(
       });
 
       return reply.send({ draft: decidedDraft });
+    }
+  );
+
+  app.post<{ Params: { draftId: string } }>(
+    "/v1/production/drafts/:draftId/apply",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) {
+        return forbidden;
+      }
+
+      const draft = await store.getProductionDraft(request.params.draftId);
+      if (!draft) {
+        return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+      }
+      if (draft.status !== "approved") {
+        return reply.code(409).send({ message: "ProductionDraft muss vor der Übernahme freigegeben sein." });
+      }
+      if (draft.appliedAt) {
+        return reply.code(409).send({ message: "ProductionDraft wurde bereits übernommen." });
+      }
+
+      const artifacts = validateDraftApplyArtifacts(draft);
+      if (artifacts.errors.length > 0) {
+        return reply.code(422).send({
+          message: "ProductionDraft kann nicht übernommen werden.",
+          errors: artifacts.errors
+        });
+      }
+
+      const conflictErrors = [
+        artifacts.eventSpec
+          ? await assertNoDifferentExistingArtifact(
+            await intakeStore.getSpec(artifacts.eventSpec.specId),
+            artifacts.eventSpec,
+            "AcceptedEventSpec",
+            artifacts.eventSpec.specId
+          )
+          : undefined,
+        artifacts.productionPlan
+          ? await assertNoDifferentExistingArtifact(
+            await store.getPlan(artifacts.productionPlan.planId),
+            artifacts.productionPlan,
+            "ProductionPlan",
+            artifacts.productionPlan.planId
+          )
+          : undefined,
+        artifacts.purchaseList
+          ? await assertNoDifferentExistingArtifact(
+            await store.getPurchaseList(artifacts.purchaseList.purchaseListId),
+            artifacts.purchaseList,
+            "PurchaseList",
+            artifacts.purchaseList.purchaseListId
+          )
+          : undefined
+      ].filter((error): error is string => Boolean(error));
+
+      if (conflictErrors.length > 0) {
+        return reply.code(409).send({
+          message: "ProductionDraft-Übernahme würde bestehende Produktobjekte überschreiben.",
+          errors: conflictErrors
+        });
+      }
+
+      if (artifacts.eventSpec) {
+        await intakeStore.saveSpec(artifacts.eventSpec);
+      }
+      if (artifacts.productionPlan) {
+        await store.savePlan(artifacts.productionPlan);
+      }
+      if (artifacts.purchaseList) {
+        await store.savePurchaseList(artifacts.purchaseList);
+      }
+
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const appliedAt = new Date().toISOString();
+      const appliedArtifactIds = {
+        ...(artifacts.eventSpec ? { specId: artifacts.eventSpec.specId } : {}),
+        ...(artifacts.productionPlan ? { planId: artifacts.productionPlan.planId } : {}),
+        ...(artifacts.purchaseList ? { purchaseListId: artifacts.purchaseList.purchaseListId } : {})
+      };
+      const appliedDraft = validateProductionDraft({
+        ...draft,
+        appliedBy: actor.name,
+        appliedAt,
+        appliedArtifactIds
+      });
+      await store.saveProductionDraft(appliedDraft);
+      await auditLog.log({
+        action: "production.production_draft_applied",
+        entityType: "ProductionDraft",
+        entityId: appliedDraft.draftId,
+        actor,
+        summary: "Freigegebener ProductionDraft in Produktobjekte übernommen.",
+        details: compactAuditDetails({
+          draftId: appliedDraft.draftId,
+          specId: artifacts.eventSpec?.specId,
+          planId: artifacts.productionPlan?.planId,
+          purchaseListId: artifacts.purchaseList?.purchaseListId,
+          hasEventSpec: Boolean(artifacts.eventSpec),
+          hasProductionPlan: Boolean(artifacts.productionPlan),
+          hasPurchaseList: Boolean(artifacts.purchaseList),
+          skippedRecipeCount: draft.draftArtifacts.recipes?.length ?? 0,
+          skippedOpenQuestionCount: draft.draftArtifacts.openQuestions?.length ?? 0,
+          writesProductObject: true,
+          rawProviderPayloadStored: false
+        })
+      });
+
+      return reply.send({
+        draft: appliedDraft,
+        applied: appliedDraft.appliedArtifactIds
+      });
     }
   );
 
