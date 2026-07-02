@@ -212,6 +212,9 @@ describe("production route main layout", () => {
     expect(markup).toContain("vorhanden, Prüfung nötig");
     expect(markup).toContain("Einkauf");
     expect(markup).toContain("1 Liste ohne Positionen");
+    expect(markup).toContain('href="#production-output-anchor"');
+    expect(markup).toContain('id="production-output-anchor"');
+    expect(markup).toContain("Produktionsarbeit prüfen");
     expect(markup).toContain("Freigabe");
     expect(markup).toContain("nicht erteilt");
     expect(markup).toContain("Erkannte Produktionsdaten");
