@@ -145,6 +145,9 @@ describe("production input panel", () => {
 
     expect(markup).toContain("Weitere Anfrage übernehmen");
     expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).toContain('hidden=""');
+    expect(markup).toContain('tabindex="-1"');
     expect(markup).toContain("Analyse abgeschlossen für Angebot_Koepff.pdf.");
     expect(markup).toContain("Quelle wurde verarbeitet; noch keine belastbaren Produktionsdaten erkannt.");
     expect(markup).not.toContain(
