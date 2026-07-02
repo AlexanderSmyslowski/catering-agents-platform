@@ -124,6 +124,11 @@ function reviewCardTargetsPath(targetPath: string | undefined, artifactPath: str
 
 function validateProductionDraftReviewCoverage(value: ProductionDraft): string[] {
   const artifacts = value.draftArtifacts;
+  const recipeRequirements = (artifacts.recipes ?? []).map((_, index) => ({
+    present: true,
+    path: `$.draftArtifacts.recipes[${index}]`,
+    label: `draftArtifacts.recipes[${index}]`
+  }));
   const requirements = [
     {
       present: Boolean(artifacts.eventSpec),
@@ -140,11 +145,7 @@ function validateProductionDraftReviewCoverage(value: ProductionDraft): string[]
       path: "$.draftArtifacts.purchaseList",
       label: "draftArtifacts.purchaseList"
     },
-    {
-      present: (artifacts.recipes?.length ?? 0) > 0,
-      path: "$.draftArtifacts.recipes",
-      label: "draftArtifacts.recipes"
-    }
+    ...recipeRequirements
   ];
 
   return requirements

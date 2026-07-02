@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildProductionApp, ProductionStore } from "@catering/production-service";
+import {
+  buildProductionApp,
+  buildProductionArtifacts,
+  InMemoryRecipeRepository,
+  ProductionStore,
+  RecipeDiscoveryService
+} from "@catering/production-service";
 import {
   AuditLogStore,
   createEventRequestFromText,
@@ -75,6 +81,25 @@ function productionDraft(draftId = "production-draft-import-1"): ProductionDraft
         }
       ],
       notes: ["SECRET_DRAFT_NOTE bleibt nur im gespeicherten Draft."]
+    }
+  };
+}
+
+async function productionDraftWithUnreviewedPlan(): Promise<ProductionDraft> {
+  const draft = productionDraft("production-draft-unreviewed-plan");
+  const discoveryService = new RecipeDiscoveryService(
+    new InMemoryRecipeRepository(),
+    {
+      searchRecipes: async () => []
+    }
+  );
+  const artifacts = await buildProductionArtifacts(draft.draftArtifacts.eventSpec!, discoveryService);
+
+  return {
+    ...draft,
+    draftArtifacts: {
+      ...draft.draftArtifacts,
+      productionPlan: artifacts.productionPlan
     }
   };
 }
@@ -188,6 +213,35 @@ describe("ProductionDraft import", () => {
 
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("pending_review");
+      expect(await store.listProductionDrafts()).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects import when a material draft artifact has no matching review card", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+    const draft = await productionDraftWithUnreviewedPlan();
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts",
+        headers: trustedProductionHeaders,
+        payload: draft
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.body).toContain("Review-Karten");
+      expect(response.body).toContain("productionPlan");
       expect(await store.listProductionDrafts()).toHaveLength(0);
     } finally {
       await app.close();

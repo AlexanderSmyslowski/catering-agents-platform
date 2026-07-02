@@ -415,6 +415,26 @@ describe("ProductionDraft contract", () => {
     );
   });
 
+  it("requires review coverage for every drafted recipe card", () => {
+    expectInvalid(
+      {
+        ...productionDraft(),
+        draftArtifacts: {
+          ...productionDraft().draftArtifacts,
+          recipes: [
+            recipe(),
+            {
+              ...recipe(),
+              recipeId: "recipe-roastbeef",
+              name: "Roastbeef"
+            }
+          ]
+        }
+      },
+      /review coverage missing for draftArtifacts\.recipes\[1\]/
+    );
+  });
+
   it("limits review decisions to the simple operator card states", () => {
     expectInvalid(
       {

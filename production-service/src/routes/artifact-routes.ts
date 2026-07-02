@@ -81,6 +81,14 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function productionDraftImportValidationMessage(errorMessage: string): string {
+  if (errorMessage.includes("review coverage missing")) {
+    return "ProductionDraft deckt nicht alle übernehmbaren Artefakte mit Review-Karten ab.";
+  }
+
+  return "ProductionDraft ist nicht schema-valide.";
+}
+
 async function assertNoDifferentExistingArtifact<T>(
   existing: T | undefined,
   next: T,
@@ -334,9 +342,10 @@ export function registerProductionArtifactRoutes(
     try {
       draft = validateProductionDraft(request.body);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unbekannter Validierungsfehler.";
       return reply.code(422).send({
-        message: "ProductionDraft ist nicht schema-valide.",
-        errors: [error instanceof Error ? error.message : "Unbekannter Validierungsfehler."]
+        message: productionDraftImportValidationMessage(errorMessage),
+        errors: [errorMessage]
       });
     }
 
