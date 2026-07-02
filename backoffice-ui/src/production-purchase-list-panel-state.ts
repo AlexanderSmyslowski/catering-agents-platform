@@ -67,6 +67,14 @@ function buildPurchaseListIds(purchaseList: Record<string, unknown>) {
   };
 }
 
+function formatPurchaseListItemCountLabel(purchaseList: Record<string, unknown>): string {
+  const itemCount = Number((purchaseList.totals as Record<string, unknown> | undefined)?.itemCount);
+  if (!Number.isFinite(itemCount)) {
+    return "Positionen: -";
+  }
+  return itemCount === 0 ? "Keine Einkaufspositionen ermittelt." : `Positionen: ${itemCount}`;
+}
+
 export function buildProductionPurchaseListPanelState(
   purchaseListState: ProductionPurchaseListState
 ): ProductionPurchaseListPanelRenderState {
@@ -79,7 +87,7 @@ export function buildProductionPurchaseListPanelState(
       return {
         key: String(purchaseList.purchaseListId),
         title: buildPurchaseListTitle(purchaseList, purchaseListState.specById),
-        itemCountLabel: `Positionen: ${String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}`,
+        itemCountLabel: formatPurchaseListItemCountLabel(purchaseList),
         contextLabel: "Aktueller Vorgang",
         exportUrl: purchaseListExportUrl(purchaseListId),
         exportContextLabel: "für aktuellen Vorgang",
@@ -105,7 +113,7 @@ export function buildProductionPurchaseListPanelState(
         key: String(purchaseList.purchaseListId),
         title: buildPurchaseListTitle(purchaseList, purchaseListState.specById),
         helperLabel: "Ältere Einkaufsliste aus anderem Vorgang - nicht aktueller Vorgang.",
-        itemCountLabel: `Positionen: ${String((purchaseList.totals as Record<string, unknown>)?.itemCount ?? "-")}`,
+        itemCountLabel: formatPurchaseListItemCountLabel(purchaseList),
         exportUrl: purchaseListExportUrl(purchaseListId),
         exportContextLabel: "aus älterem Vorgang"
       };

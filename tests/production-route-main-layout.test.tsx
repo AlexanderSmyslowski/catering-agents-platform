@@ -39,7 +39,7 @@ function buildProps(
       activeSpecLabel: "Konferenz · 90 Teilnehmer · 2026-09-03",
       readinessLabel: "teilweise vollständig",
       planStatusLabel: "unzureichend",
-      purchaseStatusLabel: "1 Liste · 0 Positionen",
+      purchaseStatusLabel: "1 Liste ohne Positionen",
       questionCount: 0,
       answeredQuestionCount: 0,
       unansweredQuestionCount: 0,
@@ -161,7 +161,7 @@ function buildProps(
       currentPurchaseLists: [],
       archivedPurchaseLists: [],
       specById: new Map(),
-      statusLabel: "1 Liste · 0 Positionen"
+      statusLabel: "1 Liste ohne Positionen"
     },
     handoffState: {
       intakeOriginLabel: "kein Intake-Ursprung verknüpft",
@@ -211,7 +211,7 @@ describe("production route main layout", () => {
     expect(markup).toContain("Plan");
     expect(markup).toContain("vorhanden, Prüfung nötig");
     expect(markup).toContain("Einkauf");
-    expect(markup).toContain("1 Liste · 0 Positionen");
+    expect(markup).toContain("1 Liste ohne Positionen");
     expect(markup).toContain("Freigabe");
     expect(markup).toContain("nicht erteilt");
     expect(markup).toContain("Erkannte Produktionsdaten");
