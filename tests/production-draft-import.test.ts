@@ -193,4 +193,48 @@ describe("ProductionDraft import", () => {
       await app.close();
     }
   });
+
+  it("rejects duplicate draft IDs without overwriting the existing draft", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+    const originalDraft = productionDraft("production-draft-duplicate");
+    const duplicateDraft: ProductionDraft = {
+      ...originalDraft,
+      source: {
+        ...originalDraft.source,
+        outputHash: "sha256:attempted-overwrite"
+      }
+    };
+
+    try {
+      const imported = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts",
+        headers: trustedProductionHeaders,
+        payload: originalDraft
+      });
+      const duplicate = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts",
+        headers: trustedProductionHeaders,
+        payload: duplicateDraft
+      });
+
+      expect(imported.statusCode).toBe(201);
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.body).toContain("ProductionDraft mit dieser ID existiert bereits.");
+      expect((await store.getProductionDraft(originalDraft.draftId))?.source.outputHash).toBe(
+        "sha256:output-structured"
+      );
+    } finally {
+      await app.close();
+    }
+  });
 });
