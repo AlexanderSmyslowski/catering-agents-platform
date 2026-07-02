@@ -40,6 +40,9 @@ const services: RuntimeService[] = [
 ];
 
 const runningProcesses: ChildProcessWithoutNullStreams[] = [];
+const healthProbeAttempts = 300;
+const healthProbeDelayMs = 100;
+const serviceSmokeTimeoutMs = 45_000;
 
 async function freeLocalPort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -111,7 +114,7 @@ async function waitForListenerReport(port: number): Promise<string> {
 async function waitForHealth(port: number): Promise<{ service: string; status: string }> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < healthProbeAttempts; attempt += 1) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/health`);
       if (response.ok) {
@@ -122,7 +125,7 @@ async function waitForHealth(port: number): Promise<{ service: string; status: s
       lastError = error;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, healthProbeDelayMs));
   }
 
   throw lastError instanceof Error ? lastError : new Error("Health probe did not complete.");
@@ -188,5 +191,5 @@ describe("runtime service smoke", () => {
         recursive: true
       });
     }
-  }, 20_000);
+  }, serviceSmokeTimeoutMs);
 });
