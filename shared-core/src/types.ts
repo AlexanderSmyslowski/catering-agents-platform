@@ -549,6 +549,13 @@ export interface ProductionDraft {
   supersedesDraftId?: string;
   approvedBy?: string;
   approvedAt?: string;
+  appliedBy?: string;
+  appliedAt?: string;
+  appliedArtifactIds?: {
+    specId?: string;
+    planId?: string;
+    purchaseListId?: string;
+  };
   source: ProductionDraftSource;
   guardrails: ProductionDraftGuardrails;
   reviewCards: ProductionDraftReviewCard[];

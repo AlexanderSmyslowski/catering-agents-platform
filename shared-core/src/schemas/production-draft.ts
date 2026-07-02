@@ -56,6 +56,17 @@ export const productionDraftSchema = {
     supersedesDraftId: { type: "string", maxLength: 160 },
     approvedBy: { type: "string", maxLength: 160 },
     approvedAt: { type: "string", maxLength: 80 },
+    appliedBy: { type: "string", maxLength: 160 },
+    appliedAt: { type: "string", maxLength: 80 },
+    appliedArtifactIds: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        specId: { type: "string", maxLength: 160 },
+        planId: { type: "string", maxLength: 160 },
+        purchaseListId: { type: "string", maxLength: 160 }
+      }
+    },
     source: {
       type: "object",
       additionalProperties: false,

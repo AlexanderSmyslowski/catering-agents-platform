@@ -76,6 +76,13 @@ export interface ProductionDraft {
   draftId: string;
   status: "pending_review" | "approved" | "rejected" | "superseded";
   createdAt: string;
+  appliedAt?: string;
+  appliedBy?: string;
+  appliedArtifactIds?: {
+    specId?: string;
+    planId?: string;
+    purchaseListId?: string;
+  };
   source?: {
     kind?: string;
     receivedAt?: string;
@@ -424,6 +431,16 @@ export async function decideProductionDraft(draftId: string, approve: boolean) {
     {
       method: "POST",
       body: JSON.stringify({ approve })
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function applyProductionDraft(draftId: string) {
+  return fetchJson<{ draft: ProductionDraft; applied: ProductionDraft["appliedArtifactIds"] }>(
+    `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/apply`,
+    {
+      method: "POST"
     },
     DEFAULT_MUTATION_ACTOR_NAMES.production
   );

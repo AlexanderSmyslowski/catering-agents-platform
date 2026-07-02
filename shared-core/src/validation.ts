@@ -131,6 +131,14 @@ function validateProductionDraftSemantics(value: ProductionDraft): string[] {
     }
   }
 
+  if ((value.appliedAt || value.appliedBy || value.appliedArtifactIds) && value.status !== "approved") {
+    errors.push("applied ProductionDraft metadata requires approved status");
+  }
+
+  if ((value.appliedAt && !value.appliedBy) || (value.appliedBy && !value.appliedAt)) {
+    errors.push("applied ProductionDraft metadata needs appliedBy and appliedAt together");
+  }
+
   return [...new Set(errors)];
 }
 

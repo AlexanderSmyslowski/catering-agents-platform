@@ -118,6 +118,18 @@ describe("ProductionDraftReviewPanel", () => {
         return jsonResponse({ draft });
       }
 
+      if (url === "/api/production/v1/production/drafts/draft-review-ui-1/apply" && method === "POST") {
+        draft = {
+          ...draft,
+          appliedAt: "2026-07-01T12:30:00.000Z",
+          appliedBy: "Produktions-Mitarbeiter",
+          appliedArtifactIds: {
+            specId: "spec-review-ui-1"
+          }
+        };
+        return jsonResponse({ draft, applied: draft.appliedArtifactIds });
+      }
+
       return jsonResponse({ message: "not found" }, 404);
     });
     globalThis.fetch = fetchMock as typeof fetch;
@@ -166,6 +178,24 @@ describe("ProductionDraftReviewPanel", () => {
       })
     );
     expect(document.body.textContent ?? "").toContain("Produktionsentwurf freigegeben.");
+
+    const applyButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Entwurf übernehmen"
+    ) as HTMLButtonElement | undefined;
+    expect(applyButton).toBeDefined();
+
+    await act(async () => {
+      applyButton?.click();
+      await flushPromises();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/production/v1/production/drafts/draft-review-ui-1/apply",
+      expect.objectContaining({
+        method: "POST"
+      })
+    );
+    expect(document.body.textContent ?? "").toContain("Produktionsentwurf übernommen.");
 
     await act(async () => {
       root.unmount();

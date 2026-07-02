@@ -185,6 +185,15 @@ export const dataIngressPaths = [
     requiredGate: "production_operator auth, explicit approve/reject, no product writes"
   },
   {
+    id: "production_draft_apply",
+    service: "production-service",
+    route: "POST /v1/production/drafts/:draftId/apply",
+    source: "operator ProductionDraft takeover decision",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "production_operator auth, approved draft only, conflict check before product writes"
+  },
+  {
     id: "production_recipe_upload",
     service: "production-service",
     route: "POST /v1/production/recipes/import-text and POST /v1/production/recipes/upload",
@@ -454,6 +463,16 @@ export const auditEvidencePaths = [
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "draft_only",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_draft_applied",
+    service: "production-service",
+    route: "POST /v1/production/drafts/:draftId/apply",
+    action: "production.production_draft_applied",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "product_mutation",
     requiredRole: "production_operator"
   },
   {
