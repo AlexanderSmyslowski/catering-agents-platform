@@ -257,7 +257,28 @@ function productionDraft(): ProductionDraft {
         title: "Garparameter offen",
         summary: "Kerntemperatur und Konvektomat-Einstellung sind fachlich zu prüfen.",
         decision: "pending",
+        targetPath: "$.draftArtifacts.productionPlan",
         riskLevel: "blocking",
+        requiredApproval: true
+      },
+      {
+        cardId: "card-purchase-list",
+        kind: "purchase_item",
+        title: "Einkaufsliste prüfen",
+        summary: "Mengen und Warengruppen aus dem KI-Entwurf fachlich prüfen.",
+        decision: "pending",
+        targetPath: "$.draftArtifacts.purchaseList",
+        targetId: "purchase-ai-draft-1",
+        requiredApproval: true
+      },
+      {
+        cardId: "card-recipe-vitello",
+        kind: "recipe",
+        title: "Rezeptkarte Vitello prüfen",
+        summary: "Rezept, Allergene und Garparameter vor Übernahme prüfen.",
+        decision: "pending",
+        targetPath: "$.draftArtifacts.recipes[0]",
+        targetId: "recipe-vitello",
         requiredApproval: true
       }
     ],
@@ -370,6 +391,27 @@ describe("ProductionDraft contract", () => {
         }
       },
       /must be equal to constant/
+    );
+  });
+
+  it("requires review coverage for each materializable draft artifact", () => {
+    expectInvalid(
+      {
+        ...productionDraft(),
+        reviewCards: [
+          {
+            cardId: "card-event-only",
+            kind: "event_data",
+            title: "Eventdaten",
+            summary: "Nur die Eventdaten wurden als Pruefpunkt sichtbar gemacht.",
+            decision: "pending",
+            targetPath: "$.draftArtifacts.eventSpec",
+            targetId: "spec-ai-draft-1",
+            requiredApproval: true
+          }
+        ]
+      },
+      /review coverage missing for draftArtifacts.productionPlan/
     );
   });
 

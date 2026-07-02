@@ -111,8 +111,55 @@ function collectForbiddenPayloadKeyErrors(value: unknown, path = "$"): string[] 
   return errors;
 }
 
+function reviewCardTargetsPath(targetPath: string | undefined, artifactPath: string): boolean {
+  const normalizedPath = targetPath?.trim();
+  if (!normalizedPath) {
+    return false;
+  }
+
+  return normalizedPath === artifactPath ||
+    normalizedPath.startsWith(`${artifactPath}.`) ||
+    normalizedPath.startsWith(`${artifactPath}[`);
+}
+
+function validateProductionDraftReviewCoverage(value: ProductionDraft): string[] {
+  const artifacts = value.draftArtifacts;
+  const requirements = [
+    {
+      present: Boolean(artifacts.eventSpec),
+      path: "$.draftArtifacts.eventSpec",
+      label: "draftArtifacts.eventSpec"
+    },
+    {
+      present: Boolean(artifacts.productionPlan),
+      path: "$.draftArtifacts.productionPlan",
+      label: "draftArtifacts.productionPlan"
+    },
+    {
+      present: Boolean(artifacts.purchaseList),
+      path: "$.draftArtifacts.purchaseList",
+      label: "draftArtifacts.purchaseList"
+    },
+    {
+      present: (artifacts.recipes?.length ?? 0) > 0,
+      path: "$.draftArtifacts.recipes",
+      label: "draftArtifacts.recipes"
+    }
+  ];
+
+  return requirements
+    .filter((requirement) =>
+      requirement.present &&
+      !value.reviewCards.some((card) => reviewCardTargetsPath(card.targetPath, requirement.path))
+    )
+    .map((requirement) => `review coverage missing for ${requirement.label}`);
+}
+
 function validateProductionDraftSemantics(value: ProductionDraft): string[] {
-  const errors = collectForbiddenPayloadKeyErrors(value);
+  const errors = [
+    ...collectForbiddenPayloadKeyErrors(value),
+    ...validateProductionDraftReviewCoverage(value)
+  ];
 
   for (const card of value.reviewCards) {
     if (card.decision !== "pending" && (!card.decidedBy || !card.decidedAt)) {
