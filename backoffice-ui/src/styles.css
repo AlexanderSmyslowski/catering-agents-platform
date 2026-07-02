@@ -1553,6 +1553,26 @@ button:disabled {
   order: -1;
 }
 
+.production-conversation-layout--active-context .production-objects-zone {
+  order: 0;
+}
+
+.production-conversation-layout--active-context .production-purchase-zone {
+  order: 1;
+}
+
+.production-conversation-layout--active-context .production-progressive-zone {
+  order: 2;
+}
+
+.production-conversation-layout--active-context .production-composer {
+  order: 3;
+}
+
+.production-conversation-layout--active-context .production-lower-zones {
+  order: 4;
+}
+
 .production-calm-summary strong {
   display: block;
   margin-bottom: 0.4rem;
