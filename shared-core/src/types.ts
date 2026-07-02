@@ -310,6 +310,56 @@ export interface OfferDraft {
   productionHandoff?: ProductionHandoff;
 }
 
+export type ProductionDraftStatus = "pending_review" | "approved" | "rejected" | "superseded";
+
+export type ProductionDraftReviewCardKind =
+  | "event_data"
+  | "menu_component"
+  | "recipe"
+  | "quantity"
+  | "purchase_item"
+  | "mise_en_place"
+  | "timeline"
+  | "risk"
+  | "open_question"
+  | "source_note";
+
+export type ProductionDraftReviewDecision = "pending" | "fits" | "change_requested" | "unclear" | "blocked";
+
+export interface ProductionDraftSource {
+  kind: "fixture" | "manual_import" | "ai_provider" | "agent_cli" | "local_provider";
+  receivedAt: string;
+  sourceRef?: string;
+  providerId?: string;
+  modelId?: string;
+  inputHash?: string;
+  outputHash?: string;
+  runId?: string;
+}
+
+export interface ProductionDraftGuardrails {
+  draftOnly: true;
+  humanApprovalRequired: true;
+  writesProductObjects: false;
+  rawProviderPayloadStored: false;
+  knowledgeWritePolicy: "none" | "reviewed_only";
+}
+
+export interface ProductionDraftReviewCard {
+  cardId: string;
+  kind: ProductionDraftReviewCardKind;
+  title: string;
+  summary: string;
+  decision: ProductionDraftReviewDecision;
+  targetPath?: string;
+  targetId?: string;
+  riskLevel?: "low" | "medium" | "high" | "blocking";
+  requiredApproval?: boolean;
+  operatorComment?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+}
+
 export interface IngredientLine {
   ingredientId: string;
   name: string;
@@ -480,6 +530,29 @@ export interface PurchaseList {
     itemCount: number;
     groups: string[];
   };
+}
+
+export interface ProductionDraftArtifacts {
+  eventSpec?: AcceptedEventSpec;
+  productionPlan?: ProductionPlan;
+  purchaseList?: PurchaseList;
+  recipes?: Recipe[];
+  openQuestions?: Uncertainty[];
+  notes?: string[];
+}
+
+export interface ProductionDraft {
+  schemaVersion: string;
+  draftId: string;
+  status: ProductionDraftStatus;
+  createdAt: string;
+  supersedesDraftId?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  source: ProductionDraftSource;
+  guardrails: ProductionDraftGuardrails;
+  reviewCards: ProductionDraftReviewCard[];
+  draftArtifacts: ProductionDraftArtifacts;
 }
 
 export interface DocumentInput {

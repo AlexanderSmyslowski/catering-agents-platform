@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.340
-date: 2026-06-01
+version: 5.351
+date: 2026-07-01
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1688,3 +1688,8 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - PA53 Synthetic-Live Preflight Policy Hints ist additiv in `docs/architecture/PA53_SYNTHETIC_LIVE_PREFLIGHT_POLICY_HINTS.md` verankert: Der bestehende PA49-Preflight gibt jetzt zusaetzliche weiche Policy-Hinweise fuer lokalen Operatornamen und Budgetnotiz aus und markiert den Lauf als `policyReady`, ohne daraus ein neues hartes Runtime- oder Deployment-Gate zu machen.
 - PA54 LLM Daten-/PII-Entscheidungsrahmen ist additiv in `docs/architecture/PA54_LLM_DATA_PII_DECISION_FRAME.md` verankert: Nach PA53 ist die naechste offene LLM-Grenze jetzt explizit als Datenrahmen-Vorlage beschrieben: synthetic/demo only oder hoechstens nachweisbar anonymisierte, reduzierte Draft-Inputs; pseudonymisierte oder echte Daten bleiben weiter blockiert.
 - PA55 LLM Trusted-Operator-/Auth-Entscheidungsrahmen ist additiv in `docs/architecture/PA55_LLM_TRUSTED_OPERATOR_AUTH_DECISION_FRAME.md` verankert: Die naechste LLM-Betreibergrenze oberhalb von `synthetic_live` ist jetzt explizit beschrieben: lokal-only oder spaeter nur hinter Trusted-Proxy/IAP-Kontext; freie Client-Header und lokales `x-actor-name` werden nicht zu belastbarer LLM-Auth hochgestuft.
+
+### 5.351 - 2026-07-01
+
+- BYO-AI Catering Harness erster ausfuehrbarer Vertrag ist additiv in `shared-core` verankert: `ProductionDraft` buendelt KI-/CLI-/manuell importierte Produktionsentwuerfe als draft-only Artefakt mit Source-Metadaten, harten Guardrails, Review-Karten und bestehenden Spec-/Plan-/Rezept-/Einkaufslisten-Bausteinen.
+- `tests/production-draft-contract.test.ts` schuetzt gueltige Produktionsentwuerfe, mindestens ein Draft-Artefakt, Raw-Payload-Leak-Verbot, `writesProductObjects: false` und die einfachen Review-Entscheidungen `pending`/`fits`/`change_requested`/`unclear`/`blocked`. Keine neue API, UI, Persistenz, Provider-Abhaengigkeit, Produktwrite-Logik, echte Daten oder automatische Freigabe.
