@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  formatProductionDraftArtifactSummary,
   formatProductionDraftReviewDecisionLabel,
   formatProductionDraftSourceLabel,
   formatProductionDraftStatusLabel,
@@ -36,7 +37,21 @@ function draftFixture(): ProductionDraft {
         event: {
           title: "Kundenbuffet"
         }
-      }
+      },
+      productionPlan: {
+        planId: "plan-review-ui-1"
+      },
+      purchaseList: {
+        purchaseListId: "purchase-review-ui-1"
+      },
+      recipes: [
+        { recipeId: "recipe-review-ui-1" },
+        { recipeId: "recipe-review-ui-2" }
+      ],
+      openQuestions: [
+        { question: "Ist eine vegetarische Alternative gewünscht?" }
+      ],
+      notes: ["Mengen vor Produktion prüfen."]
     }
   };
 }
@@ -74,6 +89,16 @@ describe("ProductionDraftReviewPanel", () => {
     expect(formatProductionDraftStatusLabel("pending_review")).not.toContain("pending_review");
     expect(formatProductionDraftReviewDecisionLabel("change_requested")).toBe("Änderung nötig");
     expect(formatProductionDraftReviewDecisionLabel("change_requested")).not.toContain("change_requested");
+  });
+
+  it("summarizes contained draft artifacts for review before takeover", () => {
+    expect(formatProductionDraftArtifactSummary(draftFixture())).toBe(
+      "Eventdaten, Produktionsplan, Einkaufsliste, 2 Rezeptkarten, 1 Rückfrage, 1 Notiz"
+    );
+    expect(formatProductionDraftArtifactSummary({
+      ...draftFixture(),
+      draftArtifacts: undefined
+    })).toBe("keine Fachartefakte");
   });
 
   it("loads pending ProductionDrafts and calls the draft-only review endpoints", async () => {
@@ -140,6 +165,11 @@ describe("ProductionDraftReviewPanel", () => {
     });
 
     expect(document.body.textContent ?? "").toContain("Kundenbuffet");
+    expect(document.body.textContent ?? "").toContain(
+      "Enthält: Eventdaten, Produktionsplan, Einkaufsliste, 2 Rezeptkarten, 1 Rückfrage, 1 Notiz."
+    );
+    expect(document.body.textContent ?? "").toContain("1 Prüfpunkt");
+    expect(document.body.textContent ?? "").not.toContain("1 Prüfpunkte");
     expect(document.body.textContent ?? "").toContain("Buffetdaten prüfen");
     expect(document.body.textContent ?? "").toContain("offen");
 
