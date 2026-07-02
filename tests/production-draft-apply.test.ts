@@ -15,7 +15,8 @@ import {
   normalizeEventRequestToSpec,
   SCHEMA_VERSION,
   type AcceptedEventSpec,
-  type ProductionDraft
+  type ProductionDraft,
+  type Recipe
 } from "@catering/shared-core";
 
 const TRUSTED_SECRET = "production-draft-apply-secret";
@@ -86,8 +87,53 @@ async function buildDraft(draftId = "production-draft-apply-1"): Promise<Product
       eventSpec: spec,
       productionPlan: artifacts.productionPlan,
       purchaseList: artifacts.purchaseList,
+      recipes: [recipeCandidate()],
       notes: ["SECRET_DRAFT_NOTE"]
     }
+  };
+}
+
+function recipeCandidate(recipeId = "recipe-draft-vitello"): Recipe {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    recipeId,
+    name: "SECRET_RECIPE_NAME",
+    source: {
+      tier: "internal_verified",
+      originType: "internal_db",
+      reference: "KI-Entwurf aus Upload, noch nicht produktionsgeprüft",
+      retrievedAt: "2026-07-01T12:00:00.000Z",
+      approvalState: "approved_internal",
+      qualityScore: 0.92,
+      fitScore: 0.88,
+      extractionCompleteness: 0.9
+    },
+    baseYield: {
+      servings: 45,
+      unit: "Portionen"
+    },
+    ingredients: [
+      {
+        ingredientId: "ingredient-kalbsnuss",
+        name: "Kalbsnuss, roh",
+        quantity: {
+          amount: 3200,
+          unit: "g"
+        },
+        group: "fleisch"
+      }
+    ],
+    steps: [
+      {
+        index: 1,
+        instruction: "Kalbsnuss garen, auskühlen lassen und dünn aufschneiden."
+      }
+    ],
+    scalingRules: {
+      defaultLossFactor: 1.29
+    },
+    allergens: ["fisch", "ei"],
+    dietTags: []
   };
 }
 
@@ -141,10 +187,12 @@ describe("ProductionDraft apply", () => {
   it("materializes approved draft artifacts without leaking review text into audit details", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
+    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
     const store = new ProductionStore({ rootDir: dataRoot });
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
     const app = buildProductionApp({
       dataRoot,
+      repository,
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
@@ -154,7 +202,10 @@ describe("ProductionDraft apply", () => {
 
     try {
       const response = await importApproveAndApply(app, draft);
-      const body = response.json<{ draft: ProductionDraft; applied: { specId?: string; planId?: string; purchaseListId?: string } }>();
+      const body = response.json<{
+        draft: ProductionDraft;
+        applied: { specId?: string; planId?: string; purchaseListId?: string; recipeIds?: string[] };
+      }>();
       const auditJson = JSON.stringify(await auditLog.listRecent(20));
 
       expect(response.statusCode).toBe(200);
@@ -163,7 +214,8 @@ describe("ProductionDraft apply", () => {
       expect(body.applied).toEqual({
         specId: draft.draftArtifacts.eventSpec?.specId,
         planId: draft.draftArtifacts.productionPlan?.planId,
-        purchaseListId: draft.draftArtifacts.purchaseList?.purchaseListId
+        purchaseListId: draft.draftArtifacts.purchaseList?.purchaseListId,
+        recipeIds: ["recipe-draft-vitello"]
       });
       expect(await store.getPlan(draft.draftArtifacts.productionPlan?.planId ?? "")).toEqual(
         draft.draftArtifacts.productionPlan
@@ -171,10 +223,13 @@ describe("ProductionDraft apply", () => {
       expect(await store.getPurchaseList(draft.draftArtifacts.purchaseList?.purchaseListId ?? "")).toEqual(
         draft.draftArtifacts.purchaseList
       );
+      expect((await repository.get("recipe-draft-vitello"))?.source.approvalState).toBe("review_required");
       expect(auditJson).toContain("production.production_draft_applied");
       expect(auditJson).toContain('"writesProductObject":true');
+      expect(auditJson).toContain('"recipeCandidateCount":1');
       expect(auditJson).not.toContain("SECRET_REVIEW_TITLE");
       expect(auditJson).not.toContain("SECRET_REVIEW_SUMMARY");
+      expect(auditJson).not.toContain("SECRET_RECIPE_NAME");
       expect(auditJson).not.toContain("SECRET_OPERATOR_COMMENT");
       expect(auditJson).not.toContain("SECRET_DRAFT_NOTE");
     } finally {
@@ -238,6 +293,32 @@ describe("ProductionDraft apply", () => {
       expect(response.statusCode).toBe(409);
       expect(response.body).toContain("würde bestehende Produktobjekte überschreiben");
       expect(await store.listPurchaseLists()).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("blocks recipe candidate overwrite when the existing recipe differs", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
+    const app = buildProductionApp({
+      dataRoot,
+      repository,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+    const draft = await buildDraft("production-draft-apply-recipe-conflict");
+    await repository.save({
+      ...recipeCandidate(),
+      name: "Bestehendes abweichendes Rezept"
+    });
+
+    try {
+      const response = await importApproveAndApply(app, draft);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.body).toContain("Recipe recipe-draft-vitello existiert bereits");
     } finally {
       await app.close();
     }

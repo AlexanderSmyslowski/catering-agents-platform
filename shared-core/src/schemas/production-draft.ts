@@ -64,7 +64,12 @@ export const productionDraftSchema = {
       properties: {
         specId: { type: "string", maxLength: 160 },
         planId: { type: "string", maxLength: 160 },
-        purchaseListId: { type: "string", maxLength: 160 }
+        purchaseListId: { type: "string", maxLength: 160 },
+        recipeIds: {
+          type: "array",
+          maxItems: 200,
+          items: { type: "string", maxLength: 160 }
+        }
       }
     },
     source: {

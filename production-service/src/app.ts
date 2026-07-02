@@ -174,6 +174,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   registerProductionArtifactRoutes(app, {
     store,
     intakeStore,
+    repository,
     discoveryService,
     auditLog,
     buildLlmAdapter,

@@ -191,7 +191,7 @@ export const dataIngressPaths = [
     source: "operator ProductionDraft takeover decision",
     scope: "operator_supplied_internal",
     externalExposure: "none",
-    requiredGate: "production_operator auth, approved draft only, conflict check before product writes"
+    requiredGate: "production_operator auth, approved draft only, conflict check before product writes, recipes stay review_required"
   },
   {
     id: "production_recipe_upload",
