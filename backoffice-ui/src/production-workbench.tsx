@@ -178,6 +178,8 @@ export function ProductionConversationalWorkbench({
     productionObjectCount,
     purchaseListCount
   });
+  const hasProductionResults = productionObjectCount > 0 || purchaseListCount > 0;
+  const productionOutputAnchorId = "production-output-anchor";
   const summaryFacts = buildProductionSummaryFacts({
     readinessLabel,
     openVisibleQuestionCount,
@@ -230,6 +232,11 @@ export function ProductionConversationalWorkbench({
           Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.
         </p>
         <p className="helper-text">Rückfragen: {formatQuestionStatus(questionCount)}.</p>
+        {hasProductionResults ? (
+          <a className="ghost-link" href={`#${productionOutputAnchorId}`}>
+            {productionOutputAnchor.title}
+          </a>
+        ) : null}
         {activeTechnicalContextLabel ? (
           <details className="technical-context-details">
             <summary>Technische Details</summary>
@@ -272,7 +279,11 @@ export function ProductionConversationalWorkbench({
       </div>
 
       <div className="production-objects-zone">
-        <article className="production-output-anchor" aria-label="Nächster Schritt zur Produktionsarbeit">
+        <article
+          id={productionOutputAnchorId}
+          className="production-output-anchor"
+          aria-label="Nächster Schritt zur Produktionsarbeit"
+        >
           <p className="eyebrow">Nächster Arbeitsschritt</p>
           <h3>{productionOutputAnchor.title}</h3>
           <p className="helper-text">{productionOutputAnchor.description}</p>
