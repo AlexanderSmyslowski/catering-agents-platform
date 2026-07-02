@@ -56,6 +56,43 @@ export interface ClarificationDraft {
   modelMetadata?: Record<string, unknown>;
 }
 
+export type ProductionDraftReviewDecision = "pending" | "fits" | "change_requested" | "unclear" | "blocked";
+
+export interface ProductionDraftReviewCard {
+  cardId: string;
+  kind: string;
+  title: string;
+  summary: string;
+  decision: ProductionDraftReviewDecision;
+  targetId?: string;
+  riskLevel?: "low" | "medium" | "high" | "blocking";
+  requiredApproval?: boolean;
+  operatorComment?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+}
+
+export interface ProductionDraft {
+  draftId: string;
+  status: "pending_review" | "approved" | "rejected" | "superseded";
+  createdAt: string;
+  source?: {
+    kind?: string;
+    receivedAt?: string;
+    providerId?: string;
+    modelId?: string;
+  };
+  reviewCards: ProductionDraftReviewCard[];
+  draftArtifacts?: {
+    eventSpec?: Record<string, unknown>;
+    productionPlan?: Record<string, unknown>;
+    purchaseList?: Record<string, unknown>;
+    recipes?: Array<Record<string, unknown>>;
+    openQuestions?: Array<Record<string, unknown>>;
+    notes?: string[];
+  };
+}
+
 export interface ServiceHealth {
   service: string;
   status: string;
@@ -350,6 +387,40 @@ export async function createClarificationDraft(specId: string) {
 export async function decideClarificationDraft(draftId: string, approve: boolean) {
   return fetchJson<{ draft: ClarificationDraft; acceptedEventSpec?: Record<string, unknown> }>(
     `/api/production/v1/production/clarification-drafts/${encodeURIComponent(draftId)}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify({ approve })
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function loadProductionDrafts() {
+  return fetchJson<{ items: ProductionDraft[] }>(
+    "/api/production/v1/production/drafts",
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function decideProductionDraftReviewCard(
+  draftId: string,
+  cardId: string,
+  decision: Exclude<ProductionDraftReviewDecision, "pending">
+) {
+  return fetchJson<{ draft: ProductionDraft; reviewCard: ProductionDraftReviewCard }>(
+    `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/review-cards/${encodeURIComponent(cardId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ decision })
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function decideProductionDraft(draftId: string, approve: boolean) {
+  return fetchJson<{ draft: ProductionDraft }>(
+    `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/decision`,
     {
       method: "POST",
       body: JSON.stringify({ approve })
