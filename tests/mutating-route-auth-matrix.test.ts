@@ -171,6 +171,36 @@ const mutatingMvpRoutes: MutableRoute[] = [
   },
   {
     service: "production",
+    method: "PATCH",
+    pathTemplate: "/v1/production/drafts/:draftId/review-cards/:cardId",
+    requiredRole: "production_operator",
+    url: "/v1/production/drafts/matrix-production-draft/review-cards/matrix-card-event",
+    payload: { decision: "fits" },
+    prepareCorrectRoleCase: async (app, headers) => {
+      await seedProductionDraftForMatrix(app, headers);
+      return {
+        url: "/v1/production/drafts/matrix-production-draft/review-cards/matrix-card-event",
+        payload: { decision: "fits" }
+      };
+    }
+  },
+  {
+    service: "production",
+    method: "POST",
+    pathTemplate: "/v1/production/drafts/:draftId/decision",
+    requiredRole: "production_operator",
+    url: "/v1/production/drafts/matrix-production-draft/decision",
+    payload: { approve: false },
+    prepareCorrectRoleCase: async (app, headers) => {
+      await seedProductionDraftForMatrix(app, headers);
+      return {
+        url: "/v1/production/drafts/matrix-production-draft/decision",
+        payload: { approve: false }
+      };
+    }
+  },
+  {
+    service: "production",
     method: "POST",
     pathTemplate: "/v1/production/specs/:specId/clarification-drafts",
     requiredRole: "production_operator",
@@ -325,6 +355,16 @@ function productionDraftPayload(): ProductionDraft {
       eventSpec
     }
   };
+}
+
+async function seedProductionDraftForMatrix(app: unknown, headers: Record<string, string>): Promise<void> {
+  const imported = await inject(app, {
+    method: "POST",
+    url: "/v1/production/drafts",
+    headers,
+    payload: productionDraftPayload()
+  });
+  expect(imported.statusCode).toBe(201);
 }
 
 function buildAppForRoute(route: MutableRoute, dataRoot: string) {
