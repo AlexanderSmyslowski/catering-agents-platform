@@ -20,6 +20,8 @@ describe("production route artifact status state", () => {
 
   it("formats purchase zone and handoff export labels", () => {
     expect(formatPurchaseZoneStatusLabel({ purchaseListCount: 0, itemCount: 0 })).toBe("noch keine Liste");
+    expect(formatPurchaseZoneStatusLabel({ purchaseListCount: 1, itemCount: 0 })).toBe("1 Liste ohne Positionen");
+    expect(formatPurchaseZoneStatusLabel({ purchaseListCount: 2, itemCount: 0 })).toBe("2 Listen ohne Positionen");
     expect(formatPurchaseZoneStatusLabel({ purchaseListCount: 2, itemCount: 9 })).toBe("2 Listen · 9 Positionen");
 
     expect(formatProductionHandoffExportLabel({ hasSelectedPlan: false, purchaseListCount: 0 })).toBe(

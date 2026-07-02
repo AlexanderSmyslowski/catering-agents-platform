@@ -16,9 +16,15 @@ export function formatPurchaseZoneStatusLabel(input: {
   purchaseListCount: number;
   itemCount: number;
 }): string {
-  return input.purchaseListCount > 0
-    ? `${input.purchaseListCount} Liste${input.purchaseListCount === 1 ? "" : "n"} · ${input.itemCount} Positionen`
-    : "noch keine Liste";
+  if (input.purchaseListCount === 0) {
+    return "noch keine Liste";
+  }
+
+  if (input.itemCount === 0) {
+    return input.purchaseListCount === 1 ? "1 Liste ohne Positionen" : `${input.purchaseListCount} Listen ohne Positionen`;
+  }
+
+  return `${input.purchaseListCount} Liste${input.purchaseListCount === 1 ? "" : "n"} · ${input.itemCount} Positionen`;
 }
 
 export function formatProductionIntakeOriginLabel(input: {
