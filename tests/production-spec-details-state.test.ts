@@ -57,7 +57,7 @@ describe("production spec details state", () => {
         {
           key: "component-1",
           label: "component-1",
-          detailLabel: "offen · offen"
+          detailLabel: "Kategorie offen · Herstellungsart offen"
         }
       ]
     });

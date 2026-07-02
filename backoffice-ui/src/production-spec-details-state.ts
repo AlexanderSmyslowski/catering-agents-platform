@@ -28,6 +28,16 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+function formatComponentDetailLabel(component: Record<string, unknown>): string {
+  const categoryValue = String(component.menuCategory ?? "").trim();
+  const productionDecision = asRecord(component.productionDecision);
+  const modeValue = String(productionDecision?.mode ?? "").trim();
+  const categoryLabel = categoryValue ? translateMenuCategory(categoryValue) : "Kategorie offen";
+  const modeLabel = modeValue ? translateProductionMode(modeValue) : "Herstellungsart offen";
+
+  return `${categoryLabel} · ${modeLabel}`;
+}
+
 export function buildProductionSpecDetailsState(
   spec?: Record<string, unknown>
 ): ProductionSpecDetailsState | undefined {
@@ -51,9 +61,7 @@ export function buildProductionSpecDetailsState(
       return {
         key: String(component.componentId ?? component.label),
         label: String(component.label ?? component.componentId ?? "-"),
-        detailLabel: `${translateMenuCategory(String(component.menuCategory ?? ""))} · ${translateProductionMode(
-          String((component.productionDecision as Record<string, unknown> | undefined)?.mode ?? "")
-        )}`
+        detailLabel: formatComponentDetailLabel(component)
       };
     })
   };
