@@ -208,7 +208,7 @@ describe("production input panel state", () => {
         {
           key: "coffee",
           label: "Kaffeestation",
-          detailLabel: "offen · offen"
+          detailLabel: "Kategorie offen · Herstellungsart offen"
         }
       ],
       openItems: [
