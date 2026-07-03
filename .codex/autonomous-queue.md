@@ -25,29 +25,26 @@ falls 1.1 noch nicht gemerged ist.)_
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-### 2026-07-03 · Gate 1 Phase-1-Sichtung
+### 2026-07-03 · Gate 1 Freigabe fuer Phase 2
 
-Phase 1 ist leergezogen. Alexander muss #546, #547 und #548 sichten und
-über Merge/Schließung entscheiden; danach ggf. `GATE QUITTIERT: 1`
-eintragen, das echte anonymisierte Angebots-PDF benennen und Provider-
-Budget freigeben. Ohne diese Quittierung bleibt Phase 2 gesperrt.
-
-### 2026-07-03 · Produktfrage #494
-
-PR #494 `codex/production-plan-clarification-gate` bleibt offen: Soll
-Produktionsplanung bei blockierenden Rückfragen hart gesperrt sein? Empfehlung
-aus der Triage: alten PR nicht direkt mergen; wenn fachlich ja, als frischen
-kleinen Loop-Slice neu bauen.
-
-### 2026-07-03 · Optionaler Branch-Cleanup nach Gate 0
-
-Remote-Tracking-Branches ohne offenen PR und zwei lokale unmerged Branches
-bleiben bewusst liegen. Kein autonomes Löschen ohne neuen Cleanup-Auftrag.
+Phase 1 ist leergezogen und die Stack-PRs #546, #547 und #548 sind
+gemerged. Fuer `GATE QUITTIERT: 1` fehlen noch: echtes anonymisiertes
+Angebots-PDF benennen und Provider-Budget freigeben. Ohne diese
+Quittierung bleibt Phase 2 gesperrt.
 
 ---
 
 ## ERLEDIGT
 
+- Gate-1-Merge-Session umgesetzt: #546, #547 und #548 wurden in
+  Stack-Reihenfolge nach `main` gemerged; die drei `loop/*`-Branches
+  wurden lokal und remote geloescht. #494 wurde geschlossen mit
+  Entscheidung: fachlich ja zu einer harten Sperre an der
+  Produktionsuebergabe/Produktionsmappe bei blockierenden Rueckfragen,
+  aber nicht den alten konfligierten PR mergen; bei Bedarf frisch als
+  kleiner Loop-Slice bauen. Lokale alte `codex/*`-Branches wurden
+  bereinigt; `alex/*`, `claude/*`, `side/*` und `slice4-*` blieben
+  unangetastet.
 - Slice 1.5 Ballast-Inventur report-only abgeschlossen, keine Löschung:
   `intake-signals.ts` (300 Zeilen) bleibt jetzt als Runtime-Parser und
   spätere Eval-Baseline bis Phase 2.2; LLM-Readiness-Core (2321 Zeilen)
