@@ -121,6 +121,47 @@ describe("production status summary state", () => {
     expect(JSON.stringify(state)).not.toContain("%PDF Rohinhalt");
   });
 
+  it("does not present an empty purchase-list shell as a usable handoff artifact", () => {
+    const state = buildProductionStatusSummaryState({
+      focusedProductionSpec: {
+        specId: "spec-empty-purchase",
+        readiness: { status: "complete" },
+        event: { type: "lunch", date: "2026-06-01" },
+        attendees: { expected: 80 }
+      },
+      selectedPlan: {
+        planId: "plan-empty-purchase",
+        eventSpecId: "spec-empty-purchase",
+        readiness: { status: "complete" }
+      },
+      selectedPlanSpec: {
+        specId: "spec-empty-purchase",
+        event: { type: "lunch", date: "2026-06-01" },
+        attendees: { expected: 80 }
+      },
+      currentSpecPlans: [{ planId: "plan-empty-purchase", eventSpecId: "spec-empty-purchase" }],
+      currentSpecPurchaseLists: [
+        {
+          purchaseListId: "purchase-empty",
+          eventSpecId: "spec-empty-purchase",
+          totals: { itemCount: 0 },
+          items: []
+        }
+      ],
+      productionQuestions: [],
+      filteredAuditEvents: [],
+      productionWorkspaceCleared: false
+    });
+
+    expect(state).toMatchObject({
+      purchaseZoneStatusLabel: "1 Liste ohne Positionen",
+      productionHandoffExportLabel: "Produktionsblatt vorhanden · Einkaufsliste ohne Positionen",
+      productionHandoffContextLabel:
+        "Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen"
+    });
+    expect(state.productionNextStep.title).toBe("Einkaufspositionen klären");
+  });
+
   it("keeps the empty and cleared production defaults in one state object", () => {
     const state = buildProductionStatusSummaryState({
       currentSpecPlans: [],

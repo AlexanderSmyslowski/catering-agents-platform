@@ -13,6 +13,7 @@ function installProductionAcceptanceMocks(
   options: {
     stalePlanOnly?: boolean;
     withCurrentPurchaseList?: boolean;
+    withEmptyCurrentPurchaseList?: boolean;
     completeSpec?: boolean;
     withoutPlans?: boolean;
     withRecipeReviewStates?: boolean;
@@ -471,28 +472,36 @@ function installProductionAcceptanceMocks(
                   {
                     purchaseListId: "purchase-production-current-1",
                     eventSpecId: purchaseListSpecId,
-                    totals: { itemCount: 2 },
-                    items: [
-                      {
-                        articleName: "Glutenfreies Baguette",
-                        purchaseQty: 4,
-                        purchaseUnit: "Stück"
-                      },
-                      {
-                        articleName: "Olivenöl",
-                        purchaseQty: 1,
-                        purchaseUnit: "l"
-                      },
-                      ...(options.withInstructionLikeCurrentPurchaseItem
-                        ? [
-                            {
-                              articleName: "Mix veal, breadcrumbs and eggs.",
-                              purchaseQty: 16.2,
-                              purchaseUnit: "pcs"
-                            }
-                          ]
-                        : [])
-                    ]
+                    totals: {
+                      itemCount: options.withEmptyCurrentPurchaseList
+                        ? 0
+                        : options.withInstructionLikeCurrentPurchaseItem
+                        ? 3
+                        : 2
+                    },
+                    items: options.withEmptyCurrentPurchaseList
+                      ? []
+                      : [
+                          {
+                            articleName: "Glutenfreies Baguette",
+                            purchaseQty: 4,
+                            purchaseUnit: "Stück"
+                          },
+                          {
+                            articleName: "Olivenöl",
+                            purchaseQty: 1,
+                            purchaseUnit: "l"
+                          },
+                          ...(options.withInstructionLikeCurrentPurchaseItem
+                            ? [
+                                {
+                                  articleName: "Mix veal, breadcrumbs and eggs.",
+                                  purchaseQty: 16.2,
+                                  purchaseUnit: "pcs"
+                                }
+                              ]
+                            : [])
+                        ]
                   },
                   ...(options.withArchivedProductionContext
                     ? [
@@ -1321,6 +1330,27 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
     expect(content).not.toContain("Produktionsplan, Einkaufsliste und Exporte liegen bereit.");
     expect(content).not.toContain("Produktionsplan und Einkaufsliste liegen vor.");
+  });
+
+  it("does not treat an empty purchase-list shell as a complete handoff artifact", async () => {
+    installProductionAcceptanceMocks({
+      completeSpec: true,
+      withCurrentPurchaseList: true,
+      withEmptyCurrentPurchaseList: true
+    });
+
+    const content = await renderProductionRoute();
+
+    expect(content).toContain("Einkaufspositionen klären");
+    expect(content).toContain("1 Liste ohne Positionen");
+    expect(content).toContain("Keine Einkaufspositionen ermittelt.");
+    expect(content).toContain("Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.");
+    expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste ohne Positionen");
+    expect(content).toContain(
+      "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen"
+    );
+    expect(content).not.toContain("Einkaufsliste exportieren für aktuellen Vorgang");
+    expect(content).not.toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
   });
 
   it("shows the next step to inspect downloads when production objects already exist", async () => {

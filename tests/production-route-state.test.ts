@@ -501,6 +501,12 @@ describe("production route state", () => {
     expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1 })).toBe(
       "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
     );
+    expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1, purchaseItemCount: 0 })).toBe(
+      "Produktionsblatt vorhanden · Einkaufsliste ohne Positionen"
+    );
+    expect(formatProductionHandoffExportLabel({ hasSelectedPlan: true, purchaseListCount: 1, purchaseItemCount: 2 })).toBe(
+      "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
+    );
   });
 
   it("formats intake origin and handoff context labels", () => {
@@ -527,7 +533,8 @@ describe("production route state", () => {
       formatProductionHandoffContextLabel({
         selectedPlan: { planId: "plan-1", eventSpecId: "spec-1" },
         selectedPlanSpec: { specId: "spec-fallback" },
-        purchaseLists: [{ purchaseListId: "purchase-1" }]
+        purchaseLists: [{ purchaseListId: "purchase-1" }],
+        purchaseItemCount: 2
       })
     ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden");
     expect(
@@ -541,9 +548,18 @@ describe("production route state", () => {
       formatProductionHandoffContextLabel({
         selectedPlan: { planId: " plan-3 ", eventSpecId: "   " },
         selectedPlanSpec: { specId: " spec-fallback " },
-        purchaseLists: [{ purchaseListId: " purchase-3 " }]
+        purchaseLists: [{ purchaseListId: " purchase-3 " }],
+        purchaseItemCount: 1
       })
     ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden");
+    expect(
+      formatProductionHandoffContextLabel({
+        selectedPlan: { planId: "plan-empty", eventSpecId: "spec-1" },
+        selectedPlanSpec: { specId: "spec-fallback" },
+        purchaseLists: [{ purchaseListId: "purchase-empty", totals: { itemCount: 0 }, items: [] }],
+        purchaseItemCount: 0
+      })
+    ).toBe("Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen");
     expect(formatProductionHandoffContextLabel({ purchaseLists: [] })).toBeUndefined();
   });
 
