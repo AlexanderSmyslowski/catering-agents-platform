@@ -120,7 +120,12 @@ export function ProductionQuestionPanel({
     resetSpecEdit
   } = editorActions;
   const [sourceReviewConfirmed, setSourceReviewConfirmed] = useState(false);
-  const specSwitchItems = buildProductionSpecSwitchItems(filteredSpecs);
+  const focusedSpecId = focusedProductionSpec && focusedProductionSpec.specId != null
+    ? String(focusedProductionSpec.specId)
+    : "";
+  const specSwitchItems = buildProductionSpecSwitchItems(filteredSpecs, {
+    readinessLabelsBySpecId: focusedSpecId ? { [focusedSpecId]: focusedSpecReadinessLabel } : undefined
+  });
   const sourceReviewRequired = hasUnsafeIntakeSource(intakeRequestDetail);
   const actionState = buildProductionQuestionPanelActionState({
     focusedProductionSpec,
@@ -138,7 +143,6 @@ export function ProductionQuestionPanel({
     editingSpecId,
     focusedProductionSpecId: String(focusedProductionSpec?.specId ?? "")
   });
-  const focusedSpecId = actionState.focusedSpecId ?? "";
   const requestId = intakeRequestDetail?.requestId ?? "";
 
   useEffect(() => {
@@ -197,7 +201,7 @@ export function ProductionQuestionPanel({
                 </ul>
               </>
             ) : null}
-            <ProductionSpecDetailsCard spec={focusedProductionSpec} />
+            <ProductionSpecDetailsCard spec={focusedProductionSpec} readinessLabel={focusedSpecReadinessLabel} />
             {intakeRequestDetailError ? (
               <p className="helper-text" role="status">
                 {intakeRequestDetailError}
