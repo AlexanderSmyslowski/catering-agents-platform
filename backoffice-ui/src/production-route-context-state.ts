@@ -40,6 +40,26 @@ export function selectProductionNextStep(input: {
       description: "Die Quelle wurde nur unsicher verarbeitet. Bitte Lesbarkeit und erkannte Daten prüfen."
     };
   }
+  if (input.hasSelectedPlan) {
+    if (input.selectedPlanReadinessLabel === "unzureichend") {
+      return {
+        title: "Produktionsplan nacharbeiten",
+        description: "Der Produktionsplan ist unzureichend. Bitte offene Punkte, Rezeptquellen und Mengen klären."
+      };
+    }
+    if (input.purchaseListCount === 0) {
+      return {
+        title: "Einkaufsliste noch offen",
+        description: "Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch."
+      };
+    }
+    if (input.purchaseItemCount === 0) {
+      return {
+        title: "Einkaufspositionen klären",
+        description: "Einkaufsliste ist vorhanden, enthält aber noch keine Positionen für die Produktion."
+      };
+    }
+  }
   if (input.questionCount > 0) {
     return {
       title: "Rückfragen beantworten",
@@ -50,24 +70,6 @@ export function selectProductionNextStep(input: {
     return {
       title: "Produktionsplan berechnen",
       description: "Aus der Spezifikation kann jetzt ein Produktionsplan mit Einkaufsliste vorbereitet werden."
-    };
-  }
-  if (input.selectedPlanReadinessLabel === "unzureichend") {
-    return {
-      title: "Produktionsplan nacharbeiten",
-      description: "Der Produktionsplan ist unzureichend. Bitte offene Punkte, Rezeptquellen und Mengen klären."
-    };
-  }
-  if (input.purchaseListCount === 0) {
-    return {
-      title: "Einkaufsliste noch offen",
-      description: "Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch."
-    };
-  }
-  if (input.purchaseItemCount === 0) {
-    return {
-      title: "Einkaufspositionen klären",
-      description: "Einkaufsliste ist vorhanden, enthält aber noch keine Positionen für die Produktion."
     };
   }
   return {
