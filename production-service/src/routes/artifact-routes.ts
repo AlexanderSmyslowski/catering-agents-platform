@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   createLlmReadinessAgentAuditRecord,
   findLlmReadinessPromptSchemaEntryByInputKind,
+  llmReadinessForbiddenPayloadKeys,
   llmReadinessContractVersion,
   validateAcceptedEventSpec,
   validateLlmReadinessModelOutputCandidate,
@@ -29,6 +30,7 @@ import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import type {
   ClarificationDraft,
   ClarificationDraftQuestion,
+  ProductionFeedbackDraft,
   ProductionStore
 } from "../repositories/production-store.js";
 import { buildProductionArtifacts } from "../rules/planning.js";
@@ -684,6 +686,163 @@ export function registerProductionArtifactRoutes(
     }
   );
 
+  app.post<{
+    Body: {
+      target?: unknown;
+      feedback?: unknown;
+      summary?: unknown;
+      observations?: unknown;
+      changeRequests?: unknown;
+    };
+  }>(
+    "/v1/production/feedback-drafts",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) {
+        return forbidden;
+      }
+
+      const parsed = productionFeedbackFromBody(request.body);
+      if (parsed.errors.length > 0 || !parsed.feedback) {
+        return reply.code(422).send({
+          message: "Produktionsfeedback-Entwurf ist nicht valide.",
+          errors: [...new Set(parsed.errors)]
+        });
+      }
+
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const now = new Date().toISOString();
+      const draft: ProductionFeedbackDraft = {
+        feedbackId: `production-feedback-${randomUUID()}`,
+        status: "pending_review",
+        createdAt: now,
+        updatedAt: now,
+        createdBy: {
+          name: actor.name,
+          source: actor.source
+        },
+        ...(parsed.target ? { target: parsed.target } : {}),
+        feedback: parsed.feedback,
+        guardrails: {
+          draftOnly: true,
+          humanApprovalRequired: true,
+          rawProviderPayloadStored: false,
+          knowledgeWritePolicy: "reviewed_only"
+        }
+      };
+
+      try {
+        await store.saveProductionFeedbackDraft(draft);
+      } catch (error) {
+        return reply.code(422).send({
+          message: "Produktionsfeedback-Entwurf ist nicht valide.",
+          errors: [error instanceof Error ? error.message : "Unbekannter Validierungsfehler."]
+        });
+      }
+
+      await auditLog.log({
+        action: "production.feedback_draft_created",
+        entityType: "ProductionFeedbackDraft",
+        entityId: draft.feedbackId,
+        actor,
+        summary: "Produktionsfeedback als prüfpflichtiger Entwurf angelegt.",
+        details: compactAuditDetails({
+          feedbackId: draft.feedbackId,
+          status: draft.status,
+          targetSpecId: draft.target?.specId,
+          targetPlanId: draft.target?.planId,
+          targetRecipeId: draft.target?.recipeId,
+          targetComponentId: draft.target?.componentId,
+          feedbackTextHash: hashText(draft.feedback.summary),
+          observationCount: draft.feedback.observations.length,
+          changeRequestCount: draft.feedback.changeRequests.length,
+          humanApprovalRequired: true,
+          writesProductObject: false
+        })
+      });
+
+      return reply.code(201).send({ draft });
+    }
+  );
+
+  app.post<{ Params: { feedbackId: string }; Body: { approve?: unknown } }>(
+    "/v1/production/feedback-drafts/:feedbackId/decision",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) {
+        return forbidden;
+      }
+
+      if (typeof request.body?.approve !== "boolean") {
+        return reply.code(400).send({ message: "approve muss true oder false sein." });
+      }
+
+      const draft = await store.getProductionFeedbackDraft(request.params.feedbackId);
+      if (!draft) {
+        return reply.code(404).send({ message: "ProductionFeedbackDraft nicht gefunden." });
+      }
+      if (draft.status !== "pending_review") {
+        return reply.code(409).send({ message: "ProductionFeedbackDraft wurde bereits entschieden." });
+      }
+
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const now = new Date().toISOString();
+      const decidedDraft: ProductionFeedbackDraft = request.body.approve
+        ? {
+          ...draft,
+          status: "approved",
+          updatedAt: now,
+          approvedBy: {
+            name: actor.name,
+            source: actor.source
+          },
+          approvedAt: now
+        }
+        : {
+          ...draft,
+          status: "rejected",
+          updatedAt: now,
+          rejectedBy: {
+            name: actor.name,
+            source: actor.source
+          },
+          rejectedAt: now
+        };
+
+      await store.saveProductionFeedbackDraft(decidedDraft);
+      await auditLog.log({
+        action: request.body.approve
+          ? "production.feedback_draft_approved"
+          : "production.feedback_draft_rejected",
+        entityType: "ProductionFeedbackDraft",
+        entityId: decidedDraft.feedbackId,
+        actor,
+        summary: request.body.approve
+          ? "Produktionsfeedback nach Review als Wissen freigegeben."
+          : "Produktionsfeedback nach Review verworfen.",
+        details: compactAuditDetails({
+          feedbackId: decidedDraft.feedbackId,
+          status: decidedDraft.status,
+          feedbackTextHash: hashText(decidedDraft.feedback.summary),
+          writesReviewedKnowledge: request.body.approve
+        })
+      });
+
+      return reply.send({ draft: decidedDraft });
+    }
+  );
+
+  app.get("/v1/production/knowledge/production-feedback", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+    if (forbidden) {
+      return forbidden;
+    }
+
+    return reply.send({
+      items: await store.listReviewedProductionFeedbackKnowledge()
+    });
+  });
+
   app.get<{ Params: { specId: string } }>(
     "/v1/production/specs/:specId/clarification-drafts",
     async (request, reply) => {
@@ -1044,6 +1203,109 @@ function applyApprovedDraftToSpec(spec: AcceptedEventSpec, draft: ClarificationD
   return {
     ...spec,
     uncertainties: [...deduped.values()]
+  };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function collectForbiddenProductionFeedbackBodyKeys(value: unknown, path = "$"): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => collectForbiddenProductionFeedbackBodyKeys(item, `${path}[${index}]`));
+  }
+  if (!isPlainRecord(value)) {
+    return [];
+  }
+
+  const errors: string[] = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (llmReadinessForbiddenPayloadKeys.includes(key as (typeof llmReadinessForbiddenPayloadKeys)[number])) {
+      errors.push(`${path}.${key} ist in Produktionsfeedback nicht erlaubt.`);
+    }
+    errors.push(...collectForbiddenProductionFeedbackBodyKeys(nested, `${path}.${key}`));
+  }
+  return errors;
+}
+
+function productionFeedbackText(value: unknown, field: string, errors: string[]): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    errors.push(`${field} muss Text enthalten.`);
+    return "";
+  }
+
+  const text = value.trim();
+  if (text.length > 1000) {
+    errors.push(`${field} darf maximal 1000 Zeichen enthalten.`);
+  }
+  return text;
+}
+
+function productionFeedbackTextList(value: unknown, field: string, errors: string[]): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    errors.push(`${field} muss eine Textliste sein.`);
+    return [];
+  }
+  if (value.length > 50) {
+    errors.push(`${field} darf maximal 50 Einträge enthalten.`);
+  }
+
+  return value
+    .map((item, index) => productionFeedbackText(item, `${field}[${index}]`, errors))
+    .filter(Boolean);
+}
+
+function productionFeedbackTarget(
+  value: unknown,
+  errors: string[]
+): ProductionFeedbackDraft["target"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isPlainRecord(value)) {
+    errors.push("target muss ein Objekt sein.");
+    return undefined;
+  }
+
+  const target: NonNullable<ProductionFeedbackDraft["target"]> = {};
+  for (const key of ["specId", "planId", "recipeId", "componentId"] as const) {
+    if (value[key] !== undefined) {
+      target[key] = productionFeedbackText(value[key], `target.${key}`, errors);
+    }
+  }
+  if (Object.keys(target).length === 0) {
+    errors.push("target muss mindestens eine stabile Referenz enthalten.");
+  }
+  return target;
+}
+
+function productionFeedbackFromBody(body: unknown): {
+  target?: ProductionFeedbackDraft["target"];
+  feedback?: ProductionFeedbackDraft["feedback"];
+  errors: string[];
+} {
+  const errors = collectForbiddenProductionFeedbackBodyKeys(body);
+  if (!isPlainRecord(body)) {
+    return {
+      errors: [...errors, "Body muss ein Objekt sein."]
+    };
+  }
+
+  const feedbackBody = isPlainRecord(body.feedback) ? body.feedback : body;
+  const feedback: ProductionFeedbackDraft["feedback"] = {
+    summary: productionFeedbackText(feedbackBody.summary, "feedback.summary", errors),
+    observations: productionFeedbackTextList(feedbackBody.observations, "feedback.observations", errors),
+    changeRequests: productionFeedbackTextList(feedbackBody.changeRequests, "feedback.changeRequests", errors)
+  };
+  const target = productionFeedbackTarget(body.target, errors);
+
+  return {
+    ...(target ? { target } : {}),
+    feedback,
+    errors
   };
 }
 
