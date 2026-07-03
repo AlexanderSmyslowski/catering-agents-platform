@@ -1030,11 +1030,15 @@ function applyApprovedDraftToSpec(spec: AcceptedEventSpec, draft: ClarificationD
   }));
   const deduped = new Map<string, (typeof additions)[number] | (typeof existing)[number]>();
 
-  for (const uncertainty of [...existing, ...additions]) {
-    deduped.set(
-      [uncertainty.field, uncertainty.suggestedQuestion ?? uncertainty.message].join("::"),
-      uncertainty
-    );
+  for (const uncertainty of existing) {
+    const key = [uncertainty.field, uncertainty.suggestedQuestion ?? uncertainty.message].join("::");
+    deduped.set(key, uncertainty);
+  }
+  for (const uncertainty of additions) {
+    const key = [uncertainty.field, uncertainty.suggestedQuestion ?? uncertainty.message].join("::");
+    if (!deduped.has(key)) {
+      deduped.set(key, uncertainty);
+    }
   }
 
   return {
