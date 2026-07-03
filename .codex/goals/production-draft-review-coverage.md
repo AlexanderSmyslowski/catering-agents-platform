@@ -1,6 +1,6 @@
-ProductionDraft-Review-Abdeckung
+# ProductionDraft Review Coverage
 
-- Ziel: BYO-AI-Produktionsentwuerfe nur importieren/freigeben, wenn jedes materialisierbare Artefakt einen sichtbaren Review-Anker hat.
-- Scope: Validation + bestehende ProductionDraft-Tests; keine Schema-, UI- oder KI-Provider-Aenderung.
-- Risiko: niedrig bis mittel, weil das Draft-Gate strenger wird und bestehende valide Fixtures Review-Pfade brauchen.
-- Erfolg: Drafts mit Plan/Einkaufsliste/Rezept ohne passende Review-Karte werden abgelehnt; gueltige Drafts bleiben gruen.
+- Ziel: BYO-AI/Agent-ProductionDrafts muessen jedes uebernehmbare Artefakt reviewbar machen.
+- Scope: Import-Gate und Tests; keine Produktobjekt-, Planungs- oder UI-Logik.
+- Befund: Ein kompletter KI-Paketentwurf koennte mit zu wenigen Review-Karten importiert werden.
+- Erfolg: Import lehnt Entwuerfe ab, wenn EventSpec, Plan, Einkaufsliste oder einzelne Rezepte keine passende Review-Karte haben.

@@ -30,6 +30,38 @@ function draftFixture(): ProductionDraft {
         summary: "Personenzahl und Datum fachlich bestätigen.",
         decision: "pending",
         targetId: "event"
+      },
+      {
+        cardId: "card-plan",
+        kind: "timeline",
+        title: "Produktionsplan prüfen",
+        summary: "Ablauf und Zeiten fachlich bestätigen.",
+        decision: "pending",
+        targetId: "plan-review-ui-1"
+      },
+      {
+        cardId: "card-purchase",
+        kind: "purchase_item",
+        title: "Einkaufsliste prüfen",
+        summary: "Mengen und Warengruppen fachlich bestätigen.",
+        decision: "pending",
+        targetId: "purchase-review-ui-1"
+      },
+      {
+        cardId: "card-recipe-1",
+        kind: "recipe",
+        title: "Rezeptkarte 1 prüfen",
+        summary: "Rezept, Allergene und Mengen fachlich bestätigen.",
+        decision: "pending",
+        targetId: "recipe-review-ui-1"
+      },
+      {
+        cardId: "card-recipe-2",
+        kind: "recipe",
+        title: "Rezeptkarte 2 prüfen",
+        summary: "Rezept, Allergene und Mengen fachlich bestätigen.",
+        decision: "pending",
+        targetId: "recipe-review-ui-2"
       }
     ],
     draftArtifacts: {
@@ -67,6 +99,16 @@ function jsonResponse(payload: unknown, status = 200): Response {
 
 async function flushPromises() {
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function buttonForReviewCard(cardTitle: string, buttonLabel: string): HTMLButtonElement | undefined {
+  const cardItem = Array.from(document.querySelectorAll("li")).find((item) =>
+    item.querySelector("strong")?.textContent === cardTitle
+  );
+
+  return Array.from(cardItem?.querySelectorAll("button") ?? []).find((button) =>
+    button.textContent === buttonLabel
+  ) as HTMLButtonElement | undefined;
 }
 
 afterEach(() => {
@@ -123,16 +165,17 @@ describe("ProductionDraftReviewPanel", () => {
       }
 
       if (
-        url === "/api/production/v1/production/drafts/draft-review-ui-1/review-cards/card-event" &&
+        url.startsWith("/api/production/v1/production/drafts/draft-review-ui-1/review-cards/") &&
         method === "PATCH"
       ) {
+        const cardId = url.split("/").at(-1);
         draft = {
           ...draft,
           reviewCards: draft.reviewCards.map((card) =>
-            card.cardId === "card-event" ? { ...card, decision: "fits" } : card
+            card.cardId === cardId ? { ...card, decision: "fits" } : card
           )
         };
-        return jsonResponse({ draft, reviewCard: draft.reviewCards[0] });
+        return jsonResponse({ draft, reviewCard: draft.reviewCards.find((card) => card.cardId === cardId) });
       }
 
       if (url === "/api/production/v1/production/drafts/draft-review-ui-1/decision" && method === "POST") {
@@ -168,27 +211,41 @@ describe("ProductionDraftReviewPanel", () => {
     expect(document.body.textContent ?? "").toContain(
       "Enthält: Eventdaten, Produktionsplan, Einkaufsliste, 2 Rezeptkarten, 1 Rückfrage, 1 Notiz."
     );
-    expect(document.body.textContent ?? "").toContain("1 Prüfpunkt");
-    expect(document.body.textContent ?? "").not.toContain("1 Prüfpunkte");
+    expect(document.body.textContent ?? "").toContain("5 Prüfpunkte");
     expect(document.body.textContent ?? "").toContain("Buffetdaten prüfen");
+    expect(document.body.textContent ?? "").toContain("Produktionsplan prüfen");
+    expect(document.body.textContent ?? "").toContain("Einkaufsliste prüfen");
+    expect(document.body.textContent ?? "").toContain("Rezeptkarte 1 prüfen");
+    expect(document.body.textContent ?? "").toContain("Rezeptkarte 2 prüfen");
     expect(document.body.textContent ?? "").toContain("offen");
 
-    const fitsButton = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent === "Passt"
-    ) as HTMLButtonElement | undefined;
-    expect(fitsButton).toBeDefined();
+    for (const card of draft.reviewCards) {
+      const approveButtonBefore = Array.from(document.querySelectorAll("button")).find((button) =>
+        button.textContent === "Entwurf freigeben"
+      ) as HTMLButtonElement | undefined;
+      expect(approveButtonBefore).toBeDefined();
+      expect(approveButtonBefore?.disabled).toBe(true);
+
+      const fitsButton = buttonForReviewCard(card.title, "Passt");
+      expect(fitsButton).toBeDefined();
+
+      await act(async () => {
+        fitsButton?.click();
+        await flushPromises();
+        await flushPromises();
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/production/v1/production/drafts/draft-review-ui-1/review-cards/${card.cardId}`,
+        expect.objectContaining({
+          method: "PATCH"
+        })
+      );
+    }
 
     await act(async () => {
-      fitsButton?.click();
       await flushPromises();
     });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/production/v1/production/drafts/draft-review-ui-1/review-cards/card-event",
-      expect.objectContaining({
-        method: "PATCH"
-      })
-    );
 
     const approveButton = Array.from(document.querySelectorAll("button")).find((button) =>
       button.textContent === "Entwurf freigeben"
