@@ -151,6 +151,68 @@ export const llmReadinessEvalFixtures = [
       "secret",
       "apiKey"
     ]
+  },
+  {
+    fixtureId: "llm-eval-synthetic-flying-buffet-production-draft",
+    title: "Synthetic flying buffet ProductionDraft extraction from operator-approved document",
+    input: {
+      contractVersion: llmReadinessContractVersion,
+      inputId: "input-llm-eval-flying-buffet-001",
+      kind: "production_draft_request",
+      sourceRefs: [
+        {
+          objectType: "safe_source_anchor",
+          objectId: "sha256-synthetic-flying-buffet",
+          label: "synthetic anonymized flying buffet document"
+        }
+      ],
+      policy: {
+        providerCalls: "disabled",
+        dataMode: "synthetic_or_demo_only",
+        allowedToolEffects: ["read", "draft"]
+      }
+    },
+    expectedOutput: {
+      contractVersion: llmReadinessContractVersion,
+      outputId: "output-llm-eval-flying-buffet-001",
+      kind: "production_draft_extraction",
+      sourceRefs: [
+        {
+          objectType: "safe_source_anchor",
+          objectId: "sha256-synthetic-flying-buffet",
+          label: "synthetic anonymized flying buffet document"
+        }
+      ],
+      humanApprovalRequired: true,
+      writesProductObject: false,
+      text: JSON.stringify({
+        eventType: "reception",
+        serviceForm: "flying_buffet",
+        eventDate: "2026-06-14",
+        attendeeCount: 45,
+        components: [
+          { label: "Vitello Tonnato | Riesenkapern | weisser Thunfisch" },
+          { label: "Kokos-Cheesecake | Brombeere" }
+        ],
+        openQuestions: [
+          {
+            field: "recipe.vitello-tonnato",
+            message: "Kein freigegebenes internes Rezept eindeutig zugeordnet.",
+            suggestedQuestion: "Soll Vitello Tonnato als neue Rezeptkarte geprueft werden?"
+          }
+        ]
+      })
+    },
+    disallowedPayloadKeys: [
+      "rawText",
+      "extractedText",
+      "prompt",
+      "messages",
+      "providerResponse",
+      "toolCalls",
+      "secret",
+      "apiKey"
+    ]
   }
 ] as const satisfies readonly LlmReadinessEvalFixture[];
 

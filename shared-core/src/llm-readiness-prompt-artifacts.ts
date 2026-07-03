@@ -50,6 +50,21 @@ export const llmReadinessPromptArtifacts = [
       "Dieser Prompt-Artefaktplatzhalter bleibt vorerst providerlos und dient nur als nicht-leerer Registry-Anker.",
     userPromptTemplate:
       "Kein live freigegebener Provider-Lauf fuer operator_summary_request in dieser Phase."
+  },
+  {
+    promptArtifactId: "production-draft-extraction.prompt",
+    promptVersion: "v0",
+    promptSchemaId: "production-draft-extraction-prompt-schema.v0",
+    promptSchemaRegistryVersion: llmReadinessPromptSchemaRegistryVersion,
+    inputKind: "production_draft_request",
+    status: "synthetic_live_ready",
+    systemPrompt:
+      "Du extrahierst aus einem operatorfreigegebenen, anonymisierten Catering-Angebot einen menschlich zu pruefenden ProductionDraft-Extraktionsentwurf. " +
+      "Schreibe keine Produktobjekte, erfinde keine Gerichte, mappe keine Rezepte automatisch und gib nur JSON zurueck.",
+    userPromptTemplate:
+      "Extrahiere Eventdaten, Personenzahl, Serviceform, Menuekomponenten und offene Rueckfragen. " +
+      "Jede im Dokument genannte Buffet-Komponente muss als components-Eintrag oder als openQuestions-Eintrag auftauchen. " +
+      "Antwortformat: JSON mit eventType, serviceForm, eventDate, attendeeCount, customerName, venueName, components und openQuestions."
   }
 ] as const satisfies readonly LlmReadinessPromptArtifact[];
 

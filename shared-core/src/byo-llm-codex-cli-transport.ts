@@ -47,6 +47,7 @@ interface CodexCliJsonPayload {
   text?: unknown;
   reason?: unknown;
   reasonCode?: unknown;
+  components?: unknown;
 }
 
 const defaultCodexCliTimeoutMs = 120_000;
@@ -116,12 +117,16 @@ export const defaultCodexCliExec: CodexCliExec = ({
 });
 
 function buildCodexPrompt(request: LlmReadinessSyntheticLiveTransportRequest): string {
+  const responseShape = request.outputKind === "production_draft_extraction"
+    ? "{\"eventType\":\"...\",\"serviceForm\":\"...\",\"eventDate\":\"YYYY-MM-DD\",\"attendeeCount\":45,\"components\":[{\"label\":\"...\"}],\"openQuestions\":[{\"field\":\"...\",\"message\":\"...\",\"suggestedQuestion\":\"...\"}]}"
+    : "{\"text\":\"...\",\"reason\":\"...\",\"reasonCode\":\"...\"}";
+
   return [
     request.systemPrompt,
     "",
     "Lokaler Codex-CLI-BYO-Transport: reine Inferenz. Nutze keine Tools, keine Shell, keine Dateien und kein Netzwerk.",
-    "Antworte ausschliesslich mit einem JSON-Objekt mit exakt diesen Feldern:",
-    "{\"text\":\"...\",\"reason\":\"...\",\"reasonCode\":\"...\"}",
+    "Antworte ausschliesslich mit einem JSON-Objekt in diesem Format:",
+    responseShape,
     "",
     request.userPrompt
   ].join("\n");
@@ -204,7 +209,7 @@ function extractLastJsonObject(output: string): unknown | undefined {
   return lastParsed;
 }
 
-function parseCodexCliPayload(output: string): {
+function parseCodexCliPayload(output: string, outputKind: LlmReadinessSyntheticLiveTransportRequest["outputKind"]): {
   ok: boolean;
   errors: string[];
   text?: string;
@@ -217,6 +222,21 @@ function parseCodexCliPayload(output: string): {
     return {
       ok: false,
       errors: ["codex CLI output did not contain a valid JSON object"]
+    };
+  }
+
+  if (outputKind === "production_draft_extraction") {
+    if (!Array.isArray(payload.components)) {
+      return {
+        ok: false,
+        errors: ["codex CLI JSON output must contain components as an array"]
+      };
+    }
+
+    return {
+      ok: true,
+      errors: [],
+      text: JSON.stringify(parsed)
     };
   }
 
@@ -260,10 +280,13 @@ export class CodexCliSyntheticLiveTransport implements LlmReadinessSyntheticLive
   async run(
     request: LlmReadinessSyntheticLiveTransportRequest
   ): Promise<LlmReadinessSyntheticLiveTransportResponse> {
-    if (request.outputKind !== "clarification_question_draft") {
+    if (
+      request.outputKind !== "clarification_question_draft" &&
+      request.outputKind !== "production_draft_extraction"
+    ) {
       return {
         ok: false,
-        errors: ["Codex CLI transport only supports clarification_question_draft"],
+        errors: ["Codex CLI transport only supports clarification_question_draft and production_draft_extraction"],
         providerId: "codex-cli"
       };
     }
@@ -308,7 +331,7 @@ export class CodexCliSyntheticLiveTransport implements LlmReadinessSyntheticLive
         };
       }
 
-      const payload = parseCodexCliPayload(result.stdout);
+      const payload = parseCodexCliPayload(result.stdout, request.outputKind);
       if (!payload.ok) {
         return {
           ok: false,
@@ -350,7 +373,8 @@ export class CodexCliLlmReadinessProviderAdapter implements LlmReadinessProvider
     return this.slice.run({
       providerRunId: `${this.providerRunIdPrefix}-${request.input.inputId}`,
       input: request.input,
-      promptSchemaId: request.promptSchemaId
+      promptSchemaId: request.promptSchemaId,
+      promptContext: request.promptContext
     });
   }
 }

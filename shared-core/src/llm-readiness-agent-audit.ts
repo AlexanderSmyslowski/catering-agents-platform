@@ -156,7 +156,10 @@ function validateResponseConsistency(
       errors.push("response.errors must be empty when response.ok is true");
     }
 
-    if (typeof response.fixtureId !== "string" || response.fixtureId.trim().length === 0) {
+    if (
+      request.input.kind !== "production_draft_request" &&
+      (typeof response.fixtureId !== "string" || response.fixtureId.trim().length === 0)
+    ) {
       errors.push("response.fixtureId must be a non-empty string when response.ok is true");
     }
 
@@ -332,7 +335,7 @@ export function validateLlmReadinessAgentAuditRecord(
   }
 
   if (candidate.status === "matched_provider") {
-    if (candidate.fixtureId === undefined) {
+    if (candidate.inputKind !== "production_draft_request" && candidate.fixtureId === undefined) {
       errors.push("fixtureId is required when status is matched_provider");
     }
 

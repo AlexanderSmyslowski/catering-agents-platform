@@ -45,6 +45,7 @@ export interface LlmReadinessSyntheticLiveSliceRequest {
   providerRunId: string;
   input: LlmReadinessModelInput;
   promptSchemaId?: string;
+  promptContext?: string;
 }
 
 export interface LlmReadinessSyntheticLiveSliceResponse {
@@ -59,7 +60,10 @@ export interface LlmReadinessSyntheticLiveSliceResponse {
   outputCandidate?: LlmReadinessModelOutputCandidate;
 }
 
-const defaultAllowedInputKinds = ["clarification_draft_request"] as const satisfies readonly LlmReadinessModelInputKind[];
+const defaultAllowedInputKinds = [
+  "clarification_draft_request",
+  "production_draft_request"
+] as const satisfies readonly LlmReadinessModelInputKind[];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -117,6 +121,25 @@ function buildUserPrompt(fixture: LlmReadinessEvalFixture): string {
   ].join("\n");
 }
 
+function buildContextPrompt(context: string): string {
+  return [
+    "Operatorfreigegebener Dokumenttext:",
+    context.trim(),
+    "",
+    "Antwortformat:",
+    "{",
+    "  \"eventType\": \"...\",",
+    "  \"serviceForm\": \"...\",",
+    "  \"eventDate\": \"YYYY-MM-DD\",",
+    "  \"attendeeCount\": 45,",
+    "  \"customerName\": \"...\",",
+    "  \"venueName\": \"...\",",
+    "  \"components\": [{\"label\":\"...\",\"course\":\"...\",\"category\":\"classic|vegetarian|vegan\",\"note\":\"...\"}],",
+    "  \"openQuestions\": [{\"field\":\"...\",\"message\":\"...\",\"suggestedQuestion\":\"...\"}]",
+    "}"
+  ].join("\n");
+}
+
 function buildOutputCandidate(
   input: LlmReadinessModelInput,
   outputKind: LlmReadinessModelOutputCandidate["kind"],
@@ -171,6 +194,34 @@ function validateCandidateAgainstSlice(
   const actualStructuredKeys = Object.keys(candidate.structuredCandidate ?? {}).sort();
   if (!sameStringList(expectedStructuredKeys, actualStructuredKeys)) {
     errors.push("outputCandidate.structuredCandidate keys must match the fixture contract");
+  }
+
+  return [...new Set(errors)];
+}
+
+function validateCandidateWithoutFixture(
+  input: LlmReadinessModelInput,
+  outputKind: LlmReadinessModelOutputCandidate["kind"],
+  candidate: LlmReadinessModelOutputCandidate
+): string[] {
+  const errors = validateLlmReadinessModelOutputCandidate(candidate).errors.map((error) =>
+    `outputCandidate.${error}`
+  );
+
+  if (candidate.kind !== outputKind) {
+    errors.push("outputCandidate.kind must match the registered output kind");
+  }
+
+  if (!sameStringList(collectSourceRefKeys(candidate.sourceRefs), collectSourceRefKeys(input.sourceRefs))) {
+    errors.push("outputCandidate.sourceRefs must match input sourceRefs");
+  }
+
+  if (candidate.humanApprovalRequired !== true) {
+    errors.push("outputCandidate.humanApprovalRequired must stay true");
+  }
+
+  if (candidate.writesProductObject !== false) {
+    errors.push("outputCandidate.writesProductObject must stay false");
   }
 
   return [...new Set(errors)];
@@ -236,11 +287,15 @@ export class SyntheticLiveLlmReadinessSlice {
 
     const fixtures = this.options.fixtures ?? llmReadinessEvalFixtures;
     const fixture = fixtures.find((candidateFixture) => fixtureMatchesInput(request.input, candidateFixture));
-    if (!fixture) {
+    const promptContext = request.promptContext?.trim();
+    const usesOperatorApprovedContext = request.input.kind === "production_draft_request" &&
+      Boolean(promptContext);
+
+    if (!fixture && !usesOperatorApprovedContext) {
       errors.push("request.input must match a known synthetic eval fixture");
     }
 
-    if (errors.length > 0 || !promptSchemaEntry || !promptArtifact || !fixture) {
+    if (errors.length > 0 || !promptSchemaEntry || !promptArtifact || (!fixture && !usesOperatorApprovedContext)) {
       return {
         ok: false,
         errors,
@@ -252,13 +307,13 @@ export class SyntheticLiveLlmReadinessSlice {
 
     const transportResponse = await this.options.transport.run({
       providerRunId: request.providerRunId,
-      fixtureId: fixture.fixtureId,
+      fixtureId: fixture?.fixtureId ?? `operator-approved-${request.input.inputId}`,
       promptSchemaId: promptSchemaEntry.promptSchemaId,
       promptArtifactId: promptArtifact.promptArtifactId,
       promptVersion: promptArtifact.promptVersion,
       outputKind: promptSchemaEntry.outputKind,
       systemPrompt: promptArtifact.systemPrompt,
-      userPrompt: buildUserPrompt(fixture)
+      userPrompt: fixture ? buildUserPrompt(fixture) : buildContextPrompt(promptContext!)
     });
 
     if (!transportResponse.ok) {
@@ -267,7 +322,7 @@ export class SyntheticLiveLlmReadinessSlice {
         errors: transportResponse.errors,
         adapterId: this.adapterId,
         adapterMode: this.adapterMode,
-        fixtureId: fixture.fixtureId,
+        fixtureId: fixture?.fixtureId,
         promptSchemaId: promptSchemaEntry.promptSchemaId,
         providerId: transportResponse.providerId,
         providerRequestId: transportResponse.providerRequestId
@@ -275,7 +330,9 @@ export class SyntheticLiveLlmReadinessSlice {
     }
 
     const outputCandidate = buildOutputCandidate(request.input, promptSchemaEntry.outputKind, transportResponse);
-    const candidateErrors = validateCandidateAgainstSlice(fixture, outputCandidate);
+    const candidateErrors = fixture
+      ? validateCandidateAgainstSlice(fixture, outputCandidate)
+      : validateCandidateWithoutFixture(request.input, promptSchemaEntry.outputKind, outputCandidate);
 
     if (candidateErrors.length > 0) {
       return {
@@ -283,7 +340,7 @@ export class SyntheticLiveLlmReadinessSlice {
         errors: candidateErrors,
         adapterId: this.adapterId,
         adapterMode: this.adapterMode,
-        fixtureId: fixture.fixtureId,
+        fixtureId: fixture?.fixtureId,
         promptSchemaId: promptSchemaEntry.promptSchemaId,
         providerId: transportResponse.providerId,
         providerRequestId: transportResponse.providerRequestId
@@ -295,7 +352,7 @@ export class SyntheticLiveLlmReadinessSlice {
       errors: [],
       adapterId: this.adapterId,
       adapterMode: this.adapterMode,
-      fixtureId: fixture.fixtureId,
+      fixtureId: fixture?.fixtureId,
       promptSchemaId: promptSchemaEntry.promptSchemaId,
       providerId: transportResponse.providerId,
       providerRequestId: transportResponse.providerRequestId,

@@ -57,7 +57,8 @@ class OpenAiByoLlmReadinessProviderAdapter implements LlmReadinessProviderAdapte
     return this.slice.run({
       providerRunId: `${this.providerRunIdPrefix}-${request.input.inputId}`,
       input: request.input,
-      promptSchemaId: request.promptSchemaId
+      promptSchemaId: request.promptSchemaId,
+      promptContext: request.promptContext
     });
   }
 }

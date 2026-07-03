@@ -124,9 +124,61 @@ describe("PA42 OpenAI synthetic live transport", () => {
 
     expect(response.ok).toBe(false);
     expect(response.errors).toContain(
-      "OpenAI synthetic live transport only supports clarification_question_draft"
+      "OpenAI synthetic live transport only supports clarification_question_draft and production_draft_extraction"
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the production draft extraction schema and returns JSON text", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.text).toMatchObject({
+        format: {
+          type: "json_schema",
+          name: "production_draft_extraction",
+          strict: true
+        }
+      });
+
+      return new Response(
+        JSON.stringify({
+          id: "resp-production-draft-1",
+          output_text: JSON.stringify({
+            eventType: "reception",
+            serviceForm: "flying_buffet",
+            eventDate: "2026-06-14",
+            attendeeCount: 45,
+            customerName: null,
+            venueName: null,
+            components: [
+              { label: "Vitello Tonnato", course: null, category: null, note: null }
+            ],
+            openQuestions: []
+          })
+        }),
+        {
+          status: 200,
+          headers: {
+            "x-request-id": "req-production-draft-1",
+            "content-type": "application/json"
+          }
+        }
+      );
+    });
+
+    const transport = new OpenAiSyntheticLiveTransport({
+      apiKey: "sk-test",
+      model: "gpt-test",
+      fetchImpl: fetchMock as typeof fetch
+    });
+    const request = buildRequest();
+    request.outputKind = "production_draft_extraction";
+
+    const response = await transport.run(request);
+
+    expect(response.ok).toBe(true);
+    expect(response.text).toContain("Vitello Tonnato");
+    expect(response.structuredCandidate).toBeUndefined();
   });
 
   it("surfaces provider-side errors and malformed JSON cleanly", async () => {

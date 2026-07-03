@@ -90,14 +90,16 @@ export const llmReadinessToolBoundaries = [
 
 export const llmReadinessModelInputKinds = [
   "clarification_draft_request",
-  "operator_summary_request"
+  "operator_summary_request",
+  "production_draft_request"
 ] as const;
 
 export type LlmReadinessModelInputKind = typeof llmReadinessModelInputKinds[number];
 
 export const llmReadinessModelOutputKinds = [
   "clarification_question_draft",
-  "operator_summary_draft"
+  "operator_summary_draft",
+  "production_draft_extraction"
 ] as const;
 
 export type LlmReadinessModelOutputKind = typeof llmReadinessModelOutputKinds[number];
