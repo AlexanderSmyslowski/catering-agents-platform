@@ -10,7 +10,7 @@ export function countRecipeReviewStates(recipes: Array<Record<string, unknown>>)
       const approvalState = String((recipe.source as Record<string, unknown> | undefined)?.approvalState ?? "");
       if (approvalState === "approved_internal") {
         counts.approved += 1;
-      } else if (approvalState === "review_required") {
+      } else if (approvalState === "review_required" || approvalState === "auto_usable") {
         counts.reviewRequired += 1;
       } else if (approvalState === "rejected") {
         counts.rejected += 1;
