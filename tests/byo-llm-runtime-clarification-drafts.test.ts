@@ -279,6 +279,51 @@ describe("BYO LLM runtime clarification drafts", () => {
     }
   });
 
+  it("contains adapter runtime failures without persisting drafts or leaking raw provider text", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    await seedFixtureSpec(intakeStore);
+    const throwingAdapter: LlmReadinessProviderAdapter = {
+      adapterId: "throwing-provider-adapter",
+      adapterMode: "synthetic_live",
+      run: async () => {
+        throw new Error("raw prompt and provider response should never leave the adapter");
+      }
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      intakeStore,
+      store,
+      auditLog,
+      llmAdapter: throwingAdapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/production/specs/${fixtureSpecId}/clarification-drafts`,
+        headers: trustedProductionHeaders
+      });
+      const responseBody = response.body;
+      const auditJson = JSON.stringify(await auditLog.listRecent(5));
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json<{ errors: string[] }>().errors).toContain("BYO-LLM-Aufruf ist fehlgeschlagen.");
+      expect(await store.listClarificationDrafts(fixtureSpecId)).toEqual([]);
+      expect(responseBody).not.toContain("raw prompt");
+      expect(responseBody).not.toContain("provider response");
+      expect(auditJson).not.toContain("raw prompt");
+      expect(auditJson).not.toContain("provider response");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("approves drafts into spec uncertainties and rejects drafts without materializing questions", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

@@ -736,7 +736,31 @@ export function registerProductionArtifactRoutes(
         });
       }
 
-      const adapterResponse = await adapter.run(adapterRequest);
+      const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
+        await auditLog.log({
+          action: "production.clarification_draft_rejected",
+          entityType: "ClarificationDraft",
+          entityId: draftSeed,
+          actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+          summary: `KI-Rückfragen-Entwurf für ${spec.specId} verworfen.`,
+          details: compactAuditDetails({
+            specId: spec.specId,
+            inputId: input.inputId,
+            adapterId: adapter.adapterId,
+            adapterMode: adapter.adapterMode,
+            promptSchemaId: promptSchema.promptSchemaId,
+            errorCount: 1,
+            errorType: error instanceof Error ? error.name : typeof error
+          })
+        });
+        return undefined;
+      });
+      if (!adapterResponse) {
+        return reply.code(422).send({
+          message: "KI-Rückfragen-Entwurf konnte nicht erzeugt werden.",
+          errors: ["BYO-LLM-Aufruf ist fehlgeschlagen."]
+        });
+      }
       const auditBuild = createLlmReadinessAgentAuditRecord({
         auditId: `agent-audit-${draftSeed}`,
         request: adapterRequest,
