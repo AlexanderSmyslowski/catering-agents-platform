@@ -6,7 +6,7 @@ describe("production route view state", () => {
     const focusedSpec = { specId: "spec-1", eventType: "Lunch" };
     const selectedPlan = { planId: "plan-1", eventSpecId: "spec-1" };
     const currentPlan = { planId: "plan-current", eventSpecId: "spec-1" };
-    const currentPurchaseList = { purchaseListId: "purchase-1", eventSpecId: "spec-1" };
+    const currentPurchaseList = { purchaseListId: "purchase-1", eventSpecId: "spec-1", totals: { itemCount: 4 } };
     const specById = new Map([["spec-1", focusedSpec]]);
     const selectedPlanComponentsById = new Map([["component-1", { componentId: "component-1" }]]);
 
@@ -56,6 +56,7 @@ describe("production route view state", () => {
 
     expect(viewState.workbenchSummary).toEqual({
       activeSpecLabel: "Lunch · 42 Pax",
+      activeTechnicalContextLabel: undefined,
       readinessLabel: "vollständig",
       planStatusLabel: "Plan bereit",
       purchaseStatusLabel: "1 Liste",
@@ -64,7 +65,8 @@ describe("production route view state", () => {
       unansweredQuestionCount: 0,
       productionObjectCount: 1,
       productionObjectStatusLabel: "1 Plan",
-      purchaseListCount: 1
+      purchaseListCount: 1,
+      purchaseItemCount: 4
     });
     expect(viewState.workbenchNextStep.title).toBe("Plan prüfen");
     expect(viewState.questionState.focusedProductionSpec).toBe(focusedSpec);

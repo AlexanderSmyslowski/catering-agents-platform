@@ -50,11 +50,42 @@ describe("production route context state", () => {
         hasFocusedProductionSpec: true,
         questionCount: 0,
         hasSelectedPlan: true,
+        selectedPlanReadinessLabel: "vollständig",
         purchaseListCount: 1
       })
     ).toEqual({
       title: "Produktionsarbeit prüfen",
       description: "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen."
+    });
+  });
+
+  it("does not claim production work is ready when plan or purchase data is still insufficient", () => {
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        selectedPlanReadinessLabel: "unzureichend",
+        purchaseListCount: 1,
+        purchaseItemCount: 0
+      })
+    ).toEqual({
+      title: "Produktionsplan nacharbeiten",
+      description: "Der Produktionsplan ist unzureichend. Bitte offene Punkte, Rezeptquellen und Mengen klären."
+    });
+
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        selectedPlanReadinessLabel: "vollständig",
+        purchaseListCount: 1,
+        purchaseItemCount: 0
+      })
+    ).toEqual({
+      title: "Einkaufspositionen klären",
+      description: "Einkaufsliste ist vorhanden, enthält aber noch keine Positionen für die Produktion."
     });
   });
 

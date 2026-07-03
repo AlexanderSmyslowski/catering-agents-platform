@@ -373,9 +373,30 @@ describe("production route state", () => {
         hasFocusedProductionSpec: true,
         questionCount: 0,
         hasSelectedPlan: true,
+        selectedPlanReadinessLabel: "vollständig",
         purchaseListCount: 1
       }).title
     ).toBe("Produktionsarbeit prüfen");
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        selectedPlanReadinessLabel: "unzureichend",
+        purchaseListCount: 1,
+        purchaseItemCount: 0
+      }).title
+    ).toBe("Produktionsplan nacharbeiten");
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 0,
+        hasSelectedPlan: true,
+        selectedPlanReadinessLabel: "vollständig",
+        purchaseListCount: 1,
+        purchaseItemCount: 0
+      }).title
+    ).toBe("Einkaufspositionen klären");
   });
 
   it("formats the existing active production context labels", () => {
