@@ -3356,6 +3356,17 @@ describe("catering agents platform", () => {
     expect(finalExportHealth.json().counts.offerDrafts).toBeGreaterThan(0);
     expect(finalExportHealth.json().counts.productionPlans).toBeGreaterThan(0);
 
+    const productionFolderExport = await exportApp.inject({
+      method: "GET",
+      url: "/v1/exports/production-folders/plan-spec-demo-production-coffee/html",
+      headers: {
+        "x-actor-name": "Produktions-Mitarbeiter"
+      }
+    });
+
+    expect(productionFolderExport.statusCode).toBe(200);
+    expect(productionFolderExport.body).toContain("Produktionsmappe");
+
     await intakeApp.close();
     await offerApp.close();
     await productionApp.close();

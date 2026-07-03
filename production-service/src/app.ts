@@ -195,6 +195,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     const seeded = [];
     for (const spec of getDemoProductionSpecs()) {
       const artifacts = await buildProductionArtifacts(spec, discoveryService);
+      await intakeStore.saveSpec(spec);
       await store.savePlan(artifacts.productionPlan);
       await store.savePurchaseList(artifacts.purchaseList);
       seeded.push({

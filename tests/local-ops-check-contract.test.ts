@@ -159,6 +159,8 @@ describe("local ops check contract", () => {
       "/v1/production/plans",
       "draft-demo-offer-conference-buffet",
       "plan-spec-demo-production-coffee",
+      "production-folders/plan-spec-demo-production-coffee/html",
+      "Produktionsmappe",
       "purchase-spec-demo-production-coffee",
       "Rueckfragenanker -> Export"
     ]) {

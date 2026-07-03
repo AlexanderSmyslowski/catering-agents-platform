@@ -268,6 +268,14 @@ if [[ "${export_body}" != *"${export_anchor}"* ]]; then
 fi
 printf '  Export-Check: erreichbar (%s, enthält %s)\n' "${export_url}" "${export_anchor}"
 
+production_folder_export_url="http://127.0.0.1:3200/api/exports/v1/exports/production-folders/plan-spec-demo-production-coffee/html"
+production_folder_export_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${production_folder_export_url}")"
+if [[ "${production_folder_export_body}" != *"Produktionsmappe"* ]]; then
+  echo "  Export-Check: unerwarteter Inhalt (${production_folder_export_url})" >&2
+  exit 1
+fi
+printf '  Export-Check: erreichbar (%s, enthält Produktionsmappe)\n' "${production_folder_export_url}"
+
 offer_export_url="http://127.0.0.1:3200/api/exports/v1/exports/offers/draft-demo-offer-conference-buffet/html"
 offer_export_body="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -fsS "${offer_export_url}")"
 if [[ "${offer_export_body}" != *"<h1>Angebot</h1>"* ]]; then
