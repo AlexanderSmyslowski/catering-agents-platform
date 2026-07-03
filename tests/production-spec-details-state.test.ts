@@ -62,4 +62,20 @@ describe("production spec details state", () => {
       ]
     });
   });
+
+  it("uses the operator readiness label when open questions make a complete spec review-required", () => {
+    expect(
+      buildProductionSpecDetailsState(
+        {
+          specId: "spec-review",
+          event: { type: "conference", date: "2026-06-01" },
+          attendees: { expected: 90 },
+          servicePlan: { serviceForm: "buffet" },
+          readiness: { status: "complete" },
+          menuPlan: []
+        },
+        { readinessLabel: "Prüfung nötig" }
+      )?.summaryLabel
+    ).toBe("Teilnehmerzahl: 90 · Serviceform: Buffet · Readiness: Prüfung nötig");
+  });
 });

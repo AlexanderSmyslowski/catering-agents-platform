@@ -22,6 +22,10 @@ export type ProductionSpecDetailsState = {
   menuItems: ProductionSpecDetailsMenuItemState[];
 };
 
+export type ProductionSpecDetailsStateOptions = {
+  readinessLabel?: string;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -39,7 +43,8 @@ function formatComponentDetailLabel(component: Record<string, unknown>): string 
 }
 
 export function buildProductionSpecDetailsState(
-  spec?: Record<string, unknown>
+  spec?: Record<string, unknown>,
+  options: ProductionSpecDetailsStateOptions = {}
 ): ProductionSpecDetailsState | undefined {
   if (!spec) {
     return undefined;
@@ -49,13 +54,16 @@ export function buildProductionSpecDetailsState(
   const servicePlan = asRecord(spec.servicePlan);
   const attendees = asRecord(spec.attendees);
   const menuPlan = Array.isArray(spec.menuPlan) ? spec.menuPlan : [];
+  const readinessLabel =
+    options.readinessLabel?.trim()
+    || translateReadiness(String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "-"));
 
   return {
     contextLabel: "Spezifikation im Fokus",
     eventLabel: `Eventtyp: ${translateEventType(String(event?.type ?? servicePlan?.eventType ?? ""))} · ${formatProductionTimingWindow(spec)}`,
     summaryLabel: `Teilnehmerzahl: ${String(attendees?.expected ?? "-")} · Serviceform: ${translateServiceForm(
       String(servicePlan?.serviceForm ?? "")
-    )} · Readiness: ${translateReadiness(String((spec.readiness as Record<string, unknown> | undefined)?.status ?? "-"))}`,
+    )} · Readiness: ${readinessLabel}`,
     menuItems: menuPlan.map((entry) => {
       const component = entry as Record<string, unknown>;
       return {

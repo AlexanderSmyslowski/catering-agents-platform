@@ -52,4 +52,23 @@ describe("production spec switch list state", () => {
       openActionLabel: "Rückfragen öffnen: Besprechung · ? Teilnehmer · offen · Klarheit: -"
     });
   });
+
+  it("uses a focused operator readiness label instead of the raw spec value", () => {
+    const [item] = buildProductionSpecSwitchItems(
+      [
+        {
+          specId: "spec-review",
+          event: { type: "conference", date: "2026-06-01" },
+          attendees: { expected: 90 },
+          readiness: { status: "complete" }
+        }
+      ],
+      { readinessLabelsBySpecId: { "spec-review": "Prüfung nötig" } }
+    );
+
+    expect(item).toMatchObject({
+      readinessLabel: "Klarheit: Prüfung nötig",
+      openActionLabel: "Rückfragen öffnen: Konferenz · 90 Teilnehmer · 2026-06-01 · Klarheit: Prüfung nötig"
+    });
+  });
 });

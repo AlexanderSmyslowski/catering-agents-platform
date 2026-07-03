@@ -2,10 +2,11 @@ import { buildProductionSpecDetailsState } from "./production-spec-details-state
 
 type ProductionSpecDetailsCardProps = {
   spec?: Record<string, unknown>;
+  readinessLabel?: string;
 };
 
-export function ProductionSpecDetailsCard({ spec }: ProductionSpecDetailsCardProps) {
-  const detailsState = buildProductionSpecDetailsState(spec);
+export function ProductionSpecDetailsCard({ spec, readinessLabel }: ProductionSpecDetailsCardProps) {
+  const detailsState = buildProductionSpecDetailsState(spec, { readinessLabel });
 
   if (!detailsState) {
     return null;

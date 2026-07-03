@@ -9,18 +9,24 @@ export type ProductionSpecSwitchItem = {
   openActionLabel: string;
 };
 
+export type ProductionSpecSwitchItemsOptions = {
+  readinessLabelsBySpecId?: Record<string, string | undefined>;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
 }
 
 export function buildProductionSpecSwitchItems(
-  specs: Array<Record<string, unknown>>
+  specs: Array<Record<string, unknown>>,
+  options: ProductionSpecSwitchItemsOptions = {}
 ): ProductionSpecSwitchItem[] {
   return specs.map((spec) => {
     const specId = String(spec.specId ?? "");
     const label = getSpecLabel(spec);
     const readiness = String(asRecord(spec.readiness)?.status ?? "");
-    const readinessLabel = translateReadiness(readiness || undefined);
+    const readinessLabel =
+      options.readinessLabelsBySpecId?.[specId]?.trim() || translateReadiness(readiness || undefined);
 
     return {
       spec,
