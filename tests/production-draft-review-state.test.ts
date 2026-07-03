@@ -181,6 +181,43 @@ describe("ProductionDraft review state", () => {
     }
   });
 
+  it("uses server actor provenance instead of client-supplied review metadata", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const app = buildProductionApp({
+      dataRoot,
+      auditLog,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      await importDraft(app, productionDraft());
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/production/drafts/production-draft-review-1/review-cards/card-event",
+        headers: trustedProductionHeaders,
+        payload: {
+          decision: "unclear",
+          decidedBy: "Client Spoof",
+          decidedAt: "1999-01-01T00:00:00.000Z"
+        }
+      });
+      const card = response.json<{ reviewCard: ProductionDraftReviewCard }>().reviewCard;
+      const auditJson = JSON.stringify(await auditLog.listRecent(5));
+
+      expect(response.statusCode).toBe(200);
+      expect(card.decision).toBe("unclear");
+      expect(card.decidedBy).toBe("Produktions-Mitarbeiter");
+      expect(card.decidedAt).toMatch(/^20/);
+      expect(card.decidedAt).not.toBe("1999-01-01T00:00:00.000Z");
+      expect(auditJson).not.toContain("Client Spoof");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("approves a draft only after all cards fit and does not write production objects", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

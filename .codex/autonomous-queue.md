@@ -21,17 +21,7 @@ _(Befüllt von Fable am 2026-07-03 aus Ziellauf Phase 1. Reihenfolge
 bindend; 1.2 baut auf 1.1 auf und wird auf dessen Branch gestapelt,
 falls 1.1 noch nicht gemerged ist.)_
 
-1. **1.2 Entscheidungs-Provenienz** · Branch
-   `loop/review-decision-provenance` · Jede Kartenentscheidung ≠ pending
-   trägt `decidedBy`/`decidedAt`; die Route setzt beide aus dem
-   Operator-/Actor-Kontext des Servers.
-   Abnahme: (a) Fallklasse über alle vier Entscheidungsarten
-   (fits/change_requested/unclear/blocked): ohne decidedBy/At invalid,
-   mit gültig; (b) Client-Payload kann decidedBy nicht setzen — Server
-   überschreibt aus Actor-Kontext (Spoof-Test); (c) volle Batterie grün,
-   bestehende Fixtures bleiben über pending-Karten gültig.
-
-2. **1.3 Wissenstyp production_feedback** · Branch
+1. **1.3 Wissenstyp production_feedback** · Branch
    `loop/production-feedback-knowledge` · GENAU EIN Wissenstyp,
    draft-only mit Freigabe; Mechanik (Guardrails, forbidden keys,
    maxLength, approvedBy/At) aus ProductionDraft wiederverwendet. Kein
@@ -41,7 +31,7 @@ falls 1.1 noch nicht gemerged ist.)_
    Operator-Kontext, Raw-Payload-Grenzen greifen (Leak-Fallklasse wie
    beim Draft); (c) Ablage im bestehenden production-service-Store.
 
-3. **1.4 Übergabe-Reproduktion (report-or-fix)** · Branch nur bei Befund:
+2. **1.4 Übergabe-Reproduktion (report-or-fix)** · Branch nur bei Befund:
    `loop/offer-production-handoff-root` · Juni-Probe-Blocker Nr. 1
    (übernommene Angebotsvariante wird nicht der aktive Vorgang in
    /produktion) auf frischer Datenwurzel reproduzieren; die früher
@@ -52,7 +42,7 @@ falls 1.1 noch nicht gemerged ist.)_
    das Demo-Szenario; (c) wenn nein: Befund-Notiz unter ERLEDIGT mit
    Beleg, kein Code.
 
-4. **1.5 Ballast-Inventur** · report-only, vom WIP-Limit ausgenommen,
+3. **1.5 Ballast-Inventur** · report-only, vom WIP-Limit ausgenommen,
    kein PR · Klassifikation gegen Pflichtenheft §9: intake-signals-
    Regexe (Eval-Baseline-Status), llm-readiness-Module (eingefroren vs.
    gebraucht), Branch `slice4-codex-procurement-guard` (Procurement-
@@ -81,6 +71,14 @@ bleiben bewusst liegen. Kein autonomes Löschen ohne neuen Cleanup-Auftrag.
 
 ## ERLEDIGT
 
+- Slice 1.2 Entscheidungs-Provenienz abgeschlossen in Branch
+  `loop/review-decision-provenance`, Draft-PR #547
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/547>.
+  Belegt: fits/change_requested/unclear/blocked brauchen
+  `decidedBy`/`decidedAt`; Client-Spoofing dieser Felder wird von der
+  Route ignoriert und durch den Server-Actor ersetzt. Batterie grün:
+  `npm test` 268 Dateien / 1167 Tests, Build, Audit, Hidden/Bidi-Check
+  und Internal-Beta-Gate.
 - Slice 1.1 E2E-Kettentest abgeschlossen in Branch
   `loop/e2e-harness-chain`, Draft-PR #546
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/546>.
