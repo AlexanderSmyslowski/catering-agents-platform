@@ -212,10 +212,38 @@ function extractStructuredMenuSection(text: string): InferredMenuItem[] {
   return [...byLabel.values()];
 }
 
+function inferMenuItemFromLabel(label: string): InferredMenuItem {
+  const menuCategory = inferMenuCategoryFromText(label);
+  return {
+    label,
+    menuCategory,
+    dietaryTags: dietaryTagsForCategory(menuCategory)
+  };
+}
+
+function extractInlineMenuMarkerItems(text: string): InferredMenuItem[] {
+  const markerMatch = text.match(/\b(?:menu|menü)\s*:\s*([^\n.]+)/i);
+  if (!markerMatch?.[1]) {
+    return [];
+  }
+
+  const labels = markerMatch[1]
+    .split(/\s*,\s*|\bund\b|&|\/|;/i)
+    .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
+    .filter((entry) => entry.length > 0 && !isMenuNoise(entry));
+
+  return labels.map((label) => inferMenuItemFromLabel(label));
+}
+
 function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMenuItem[] {
   const structuredSectionLabels = extractStructuredMenuSection(text);
   if (structuredSectionLabels.length > 0) {
     return structuredSectionLabels.slice(0, 12);
+  }
+
+  const inlineMenuMarkerLabels = extractInlineMenuMarkerItems(text);
+  if (inlineMenuMarkerLabels.length > 0) {
+    return inlineMenuMarkerLabels.slice(0, 12);
   }
 
   const lines = text
@@ -231,11 +259,7 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
         .split(/\bund\b|&|\/|;/i)
         .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
         .filter(Boolean)
-        .map((label) => ({
-          label,
-          menuCategory: inferMenuCategoryFromText(label),
-          dietaryTags: dietaryTagsForCategory(inferMenuCategoryFromText(label))
-        }));
+        .map((label) => inferMenuItemFromLabel(label));
     }
 
     return /(buffet|salat|suppe|kaffee|croissant|dessert|fingerfood|wein|snack|menü|baguette|brot|kuchen|curry)/i.test(
