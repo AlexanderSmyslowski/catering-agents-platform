@@ -82,8 +82,76 @@ describe("production objects panel state", () => {
 
     expect(state.showPlanningProgress).toBe(false);
     expect(state.showDoneProgress).toBe(true);
+    expect(state.doneProgressHelperLabel).toBe(
+      "Produktionsplan und Produktionsschritte wurden aktualisiert; Einkaufspositionen bleiben offen."
+    );
     expect(state.currentRunTitle).toBe("Neuester Produktionslauf");
     expect(state.currentRunHelperText).toContain("Ältere geladene Läufe");
+  });
+
+  it("keeps the completed progress copy honest for empty and populated purchase lists", () => {
+    expect(
+      buildProductionObjectsPanelState({
+        progressState: {
+          planPhase: "done",
+          planningSpecLabel: "Konferenz",
+          planProgress: 100
+        },
+        purchaseStatusLabel: "1 Liste ohne Positionen",
+        objectsState: {
+          focusedProductionSpec: undefined,
+          productionWorkspaceCleared: false,
+          currentSpecPlans: [],
+          selectedPlan: undefined,
+          selectedPlanSpec: undefined,
+          selectedPlanComponentsById: new Map(),
+          archivedPlans: [],
+          specById: new Map()
+        }
+      }).doneProgressHelperLabel
+    ).toBe("Produktionsplan und Produktionsschritte wurden aktualisiert; Einkaufspositionen bleiben offen.");
+
+    expect(
+      buildProductionObjectsPanelState({
+        progressState: {
+          planPhase: "done",
+          planningSpecLabel: "Konferenz",
+          planProgress: 100
+        },
+        purchaseStatusLabel: "Einkaufslisten werden geladen",
+        objectsState: {
+          focusedProductionSpec: undefined,
+          productionWorkspaceCleared: false,
+          currentSpecPlans: [],
+          selectedPlan: undefined,
+          selectedPlanSpec: undefined,
+          selectedPlanComponentsById: new Map(),
+          archivedPlans: [],
+          specById: new Map()
+        }
+      }).doneProgressHelperLabel
+    ).toBe("Produktionsplan und Produktionsschritte wurden aktualisiert; Einkaufspositionen bleiben offen.");
+
+    expect(
+      buildProductionObjectsPanelState({
+        progressState: {
+          planPhase: "done",
+          planningSpecLabel: "Konferenz",
+          planProgress: 100
+        },
+        purchaseStatusLabel: "1 Liste · 4 Positionen",
+        objectsState: {
+          focusedProductionSpec: undefined,
+          productionWorkspaceCleared: false,
+          currentSpecPlans: [],
+          selectedPlan: undefined,
+          selectedPlanSpec: undefined,
+          selectedPlanComponentsById: new Map(),
+          archivedPlans: [],
+          specById: new Map()
+        }
+      }).doneProgressHelperLabel
+    ).toBe("Die Rezepte, Produktionsschritte und Einkaufspositionen wurden aktualisiert.");
   });
 });
 

@@ -152,6 +152,7 @@ export function ProductionRouteMainLayout({
               progressState={objectPanelProgress}
               objectsState={objectPanelState}
               objectsActions={objectPanelActions}
+              purchaseStatusLabel={purchaseListState.statusLabel}
               submitting={submitting}
               miniPilotActionState={miniPilotActionState}
               clearMiniPilotResult={showMiniPilotPanel && canClearMiniPilotResult ? () => setMiniPilotRawResult("") : undefined}

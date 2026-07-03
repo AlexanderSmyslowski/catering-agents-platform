@@ -225,4 +225,24 @@ describe("production route main layout", () => {
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).toContain("Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten.");
   });
+
+  it("keeps the completed plan message honest when the purchase list has no positions", () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        ProductionRouteMainLayout,
+        buildProps({
+          objectPanelProgress: {
+            planPhase: "done",
+            planningSpecLabel: "Konferenz · 90 Teilnehmer",
+            planProgress: 100
+          }
+        })
+      )
+    );
+
+    expect(markup).toContain(
+      "Produktionsplan und Produktionsschritte wurden aktualisiert; Einkaufspositionen bleiben offen."
+    );
+    expect(markup).not.toContain("Die Rezepte, Produktionsschritte und Einkaufspositionen wurden aktualisiert.");
+  });
 });

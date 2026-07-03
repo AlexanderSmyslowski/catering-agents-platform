@@ -34,6 +34,7 @@ type ProductionObjectsPanelProps = {
   progressState: ProductionPlanProgressState;
   objectsState: ProductionObjectsState;
   objectsActions: ProductionObjectsActions;
+  purchaseStatusLabel?: string;
   submitting: boolean;
   miniPilotActionState?: ProductionMiniPilotActionState;
   clearMiniPilotResult?: () => void;
@@ -43,13 +44,15 @@ export function ProductionObjectsPanel({
   progressState,
   objectsState,
   objectsActions,
+  purchaseStatusLabel,
   submitting,
   miniPilotActionState,
   clearMiniPilotResult
 }: ProductionObjectsPanelProps) {
   const panelState = buildProductionObjectsPanelState({
     progressState,
-    objectsState
+    objectsState,
+    purchaseStatusLabel
   });
   const {
     focusedProductionSpec,
@@ -112,9 +115,7 @@ export function ProductionObjectsPanel({
               <div className="progress-bar">
                 <div className="progress-bar__fill" style={{ width: "100%" }} />
               </div>
-              <p className="helper-text">
-                Die Rezepte, Produktionsschritte und Einkaufspositionen wurden aktualisiert.
-              </p>
+              <p className="helper-text">{panelState.doneProgressHelperLabel}</p>
             </div>
           </div>
         ) : null}

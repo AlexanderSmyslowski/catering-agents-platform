@@ -4,6 +4,7 @@ import type { ProductionObjectsState, ProductionPlanProgressState } from "./prod
 export type ProductionObjectsPanelStateInput = {
   progressState: ProductionPlanProgressState;
   objectsState: ProductionObjectsState;
+  purchaseStatusLabel?: string;
 };
 
 export type ProductionObjectsPanelState = {
@@ -13,6 +14,7 @@ export type ProductionObjectsPanelState = {
   planEtaSeconds?: number;
   showPlanningProgress: boolean;
   showDoneProgress: boolean;
+  doneProgressHelperLabel: string;
   currentRunTitle: string;
   currentRunHelperText: string;
   showCurrentPlans: boolean;
@@ -29,7 +31,8 @@ export function formatProductionObjectsEta(seconds: number): string {
 
 export function buildProductionObjectsPanelState({
   progressState,
-  objectsState
+  objectsState,
+  purchaseStatusLabel
 }: ProductionObjectsPanelStateInput): ProductionObjectsPanelState {
   const { planPhase, planningSpecLabel, planProgress, planEtaSeconds } = progressState;
   const { focusedProductionSpec, productionWorkspaceCleared, selectedPlan } = objectsState;
@@ -41,6 +44,7 @@ export function buildProductionObjectsPanelState({
     planEtaSeconds,
     showPlanningProgress: planPhase === "planning" && Boolean(planningSpecLabel),
     showDoneProgress: planPhase === "done" && Boolean(planningSpecLabel),
+    doneProgressHelperLabel: formatDoneProgressHelperLabel(purchaseStatusLabel),
     currentRunTitle: focusedProductionSpec
       ? getSpecLabel(focusedProductionSpec)
       : productionWorkspaceCleared
@@ -53,4 +57,13 @@ export function buildProductionObjectsPanelState({
     showSelectedPlanDetails: Boolean(selectedPlan),
     showArchivedPlans: !productionWorkspaceCleared
   };
+}
+
+function formatDoneProgressHelperLabel(purchaseStatusLabel?: string): string {
+  const purchaseStatus = purchaseStatusLabel?.trim() ?? "";
+  if (/\d+\s+Positionen/.test(purchaseStatus) && !purchaseStatus.includes("ohne Positionen")) {
+    return "Die Rezepte, Produktionsschritte und Einkaufspositionen wurden aktualisiert.";
+  }
+
+  return "Produktionsplan und Produktionsschritte wurden aktualisiert; Einkaufspositionen bleiben offen.";
 }
