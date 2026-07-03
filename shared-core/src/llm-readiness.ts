@@ -91,7 +91,8 @@ export const llmReadinessToolBoundaries = [
 export const llmReadinessModelInputKinds = [
   "clarification_draft_request",
   "operator_summary_request",
-  "production_draft_request"
+  "production_draft_request",
+  "intake_shadow_request"
 ] as const;
 
 export type LlmReadinessModelInputKind = typeof llmReadinessModelInputKinds[number];
@@ -99,7 +100,8 @@ export type LlmReadinessModelInputKind = typeof llmReadinessModelInputKinds[numb
 export const llmReadinessModelOutputKinds = [
   "clarification_question_draft",
   "operator_summary_draft",
-  "production_draft_extraction"
+  "production_draft_extraction",
+  "intake_shadow_extraction"
 ] as const;
 
 export type LlmReadinessModelOutputKind = typeof llmReadinessModelOutputKinds[number];

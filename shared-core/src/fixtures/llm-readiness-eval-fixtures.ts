@@ -213,6 +213,58 @@ export const llmReadinessEvalFixtures = [
       "secret",
       "apiKey"
     ]
+  },
+  {
+    fixtureId: "llm-eval-synthetic-intake-shadow-lunch",
+    title: "Synthetic lunch intake shadow extraction from safe source anchor",
+    input: {
+      contractVersion: llmReadinessContractVersion,
+      inputId: "input-llm-eval-intake-shadow-lunch-001",
+      kind: "intake_shadow_request",
+      sourceRefs: [
+        {
+          objectType: "safe_source_anchor",
+          objectId: "sha256-synthetic-intake-shadow-lunch",
+          label: "synthetic anonymized lunch request"
+        }
+      ],
+      policy: {
+        providerCalls: "disabled",
+        dataMode: "synthetic_or_demo_only",
+        allowedToolEffects: ["read", "draft"]
+      }
+    },
+    expectedOutput: {
+      contractVersion: llmReadinessContractVersion,
+      outputId: "output-llm-eval-intake-shadow-lunch-001",
+      kind: "intake_shadow_extraction",
+      sourceRefs: [
+        {
+          objectType: "safe_source_anchor",
+          objectId: "sha256-synthetic-intake-shadow-lunch",
+          label: "synthetic anonymized lunch request"
+        }
+      ],
+      humanApprovalRequired: true,
+      writesProductObject: false,
+      text: JSON.stringify({
+        eventType: "lunch",
+        serviceForm: "buffet",
+        eventDate: null,
+        attendeeCount: 40,
+        menuItems: ["Business Lunch", "Tomatensuppe"]
+      })
+    },
+    disallowedPayloadKeys: [
+      "rawText",
+      "extractedText",
+      "prompt",
+      "messages",
+      "providerResponse",
+      "toolCalls",
+      "secret",
+      "apiKey"
+    ]
   }
 ] as const satisfies readonly LlmReadinessEvalFixture[];
 

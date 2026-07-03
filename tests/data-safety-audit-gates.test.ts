@@ -21,6 +21,7 @@ describe("data safety and audit gates", () => {
       "manual_spec",
       "document_upload",
       "intake_seed_demo",
+      "intake_shadow_extraction",
       "intake_archive_request",
       "intake_spec_update",
       "intake_spec_governance_finalize",
@@ -62,6 +63,11 @@ describe("data safety and audit gates", () => {
       scope: "synthetic_or_demo_only",
       externalExposure: "blocked_until_decision"
     });
+    expect(dataIngressPaths.find((path) => path.id === "intake_shadow_extraction")).toMatchObject({
+      scope: "synthetic_or_demo_only",
+      externalExposure: "blocked_until_decision",
+      requiredGate: expect.stringContaining("no product writes")
+    });
     expect(dataIngressPaths.find((path) => path.id === "production_clarification_draft")).toMatchObject({
       externalExposure: "blocked_until_decision",
       requiredGate: expect.stringContaining("CATERING_SYNTHETIC_LLM_SLICE")
@@ -91,6 +97,7 @@ describe("data safety and audit gates", () => {
         "POST /v1/intake/normalize",
         "POST /v1/intake/specs/manual",
         "POST /v1/intake/seed-demo",
+        "POST /v1/intake/shadow/normalize",
         "POST /v1/intake/documents",
         "POST /v1/intake/documents/upload",
         "POST /v1/intake/requests/:requestId/archive",
@@ -129,6 +136,8 @@ describe("data safety and audit gates", () => {
         "intake_spec_updated",
         "intake_spec_governance_finalized",
         "intake_seed_demo",
+        "intake_shadow_extraction_compared",
+        "intake_shadow_extraction_rejected",
         "offer_draft_created",
         "offer_draft_created_from_text",
         "offer_promoted_variant",
@@ -195,6 +204,8 @@ describe("data safety and audit gates", () => {
         "intake.normalized",
         "intake.request_soft_archived",
         "intake.seed_demo",
+        "intake.shadow_extraction_compared",
+        "intake.shadow_extraction_rejected",
         "intake.spec_governance_finalized",
         "intake.spec_updated",
         "offer.draft_created",

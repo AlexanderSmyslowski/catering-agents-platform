@@ -1,12 +1,17 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
+import { createHash, randomUUID } from "node:crypto";
 import {
   AuditLogStore,
+  buildByoLlmAdapterFromEnv,
   type CollectionStorageOptions,
+  createLlmReadinessAgentAuditRecord,
   createEventRequestFromManualForm,
+  findLlmReadinessPromptSchemaEntryByInputKind,
   getDemoIntakeRequests,
   getDemoProductionAnsweredClarificationAnchor,
   isDevAuthEnabled,
+  llmReadinessContractVersion,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
@@ -14,13 +19,22 @@ import {
   withEvaluatedReadiness,
   validateAcceptedEventSpec,
   validateEventRequest,
+  type LlmReadinessModelOutputCandidate,
+  type LlmReadinessProviderAdapter,
+  type LlmReadinessProviderAdapterResponse,
   type AcceptedEventSpec,
   type EventRequest,
   type EventScheduleItem,
   type OperationalArchiveReasonCode
 } from "@catering/shared-core";
 import { buildEventRequestFromText } from "./extraction.js";
-import { IntakeStore } from "./store.js";
+import {
+  IntakeStore,
+  type IntakeShadowDifference,
+  type IntakeShadowRun,
+  type IntakeShadowSafetyMode,
+  type IntakeShadowValueSummary
+} from "./store.js";
 import {
   registerIntakeWorkItemRoutes,
   type SpecUpdateBody
@@ -36,6 +50,167 @@ interface ManualSpecBody {
   customerName?: string;
   venueName?: string;
   notes?: string;
+}
+
+interface IntakeShadowBody {
+  text?: unknown;
+  channel?: EventRequest["source"]["channel"];
+  requestId?: unknown;
+  safetyMode?: unknown;
+  sourceRef?: unknown;
+}
+
+interface IntakeShadowExtraction {
+  eventType?: string;
+  serviceForm?: string;
+  eventDate?: string;
+  attendeeCount?: number;
+  menuItems: string[];
+}
+
+const intakeShadowSafetyModes = new Set<IntakeShadowSafetyMode>([
+  "synthetic_demo",
+  "anonymized_reference"
+]);
+
+function normalizeOptionalText(value: unknown, maxLength = 240): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  return trimmed.length > 0 ? trimmed.slice(0, maxLength) : undefined;
+}
+
+function hashText(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function stableHash(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  return hashText(JSON.stringify(value));
+}
+
+function summarizeValue(value: string | number | string[] | undefined): IntakeShadowValueSummary {
+  if (typeof value === "number") {
+    return {
+      present: Number.isFinite(value),
+      numericValue: Number.isFinite(value) ? value : undefined,
+      valueHash: Number.isFinite(value) ? stableHash(value) : undefined
+    };
+  }
+
+  if (Array.isArray(value)) {
+    const normalized = value.map((item) => item.trim()).filter(Boolean).sort();
+    return {
+      present: normalized.length > 0,
+      valueHash: normalized.length > 0 ? stableHash(normalized) : undefined
+    };
+  }
+
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  return {
+    present: Boolean(normalized),
+    valueHash: normalized ? stableHash(normalized.toLowerCase()) : undefined
+  };
+}
+
+function summarizeAcceptedSpec(spec: AcceptedEventSpec): Record<IntakeShadowDifference["field"], IntakeShadowValueSummary> {
+  return {
+    eventType: summarizeValue(spec.event.type ?? spec.servicePlan.eventType),
+    serviceForm: summarizeValue(spec.event.serviceForm ?? spec.servicePlan.serviceForm),
+    eventDate: summarizeValue(spec.event.date),
+    attendeeCount: summarizeValue(spec.attendees.expected),
+    menuItems: summarizeValue(spec.menuPlan.map((item) => item.label))
+  };
+}
+
+function summarizeIntakeExtraction(
+  extraction: IntakeShadowExtraction
+): Record<IntakeShadowDifference["field"], IntakeShadowValueSummary> {
+  return {
+    eventType: summarizeValue(extraction.eventType),
+    serviceForm: summarizeValue(extraction.serviceForm),
+    eventDate: summarizeValue(extraction.eventDate),
+    attendeeCount: summarizeValue(extraction.attendeeCount),
+    menuItems: summarizeValue(extraction.menuItems)
+  };
+}
+
+function compareIntakeSummaries(
+  baseline: Record<IntakeShadowDifference["field"], IntakeShadowValueSummary>,
+  llm: Record<IntakeShadowDifference["field"], IntakeShadowValueSummary>
+): IntakeShadowDifference[] {
+  return (["eventType", "serviceForm", "eventDate", "attendeeCount", "menuItems"] as const).map((field) => ({
+    field,
+    matches: baseline[field].present === llm[field].present && baseline[field].valueHash === llm[field].valueHash,
+    baseline: baseline[field],
+    llm: llm[field]
+  }));
+}
+
+function parseIntakeShadowSafetyMode(value: unknown): IntakeShadowSafetyMode | undefined {
+  return typeof value === "string" && intakeShadowSafetyModes.has(value as IntakeShadowSafetyMode)
+    ? value as IntakeShadowSafetyMode
+    : undefined;
+}
+
+function parseIntakeShadowExtraction(outputCandidate?: LlmReadinessModelOutputCandidate): {
+  extraction?: IntakeShadowExtraction;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  if (!outputCandidate) {
+    return { errors: ["outputCandidate is required"] };
+  }
+  if (outputCandidate.kind !== "intake_shadow_extraction") {
+    errors.push("outputCandidate.kind must be intake_shadow_extraction");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(outputCandidate.text);
+  } catch {
+    return {
+      errors: [...errors, "outputCandidate.text must be valid intake shadow extraction JSON"]
+    };
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return {
+      errors: [...errors, "outputCandidate.text must contain a JSON object"]
+    };
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const menuItems = Array.isArray(record.menuItems)
+    ? record.menuItems.map((item) => normalizeOptionalText(item, 320)).filter((item): item is string => Boolean(item))
+    : [];
+  if (!Array.isArray(record.menuItems)) {
+    errors.push("menuItems must be an array");
+  }
+
+  const attendeeCount = typeof record.attendeeCount === "number" && Number.isFinite(record.attendeeCount)
+    ? Math.trunc(record.attendeeCount)
+    : undefined;
+
+  if (errors.length > 0) {
+    return { errors: [...new Set(errors)] };
+  }
+
+  return {
+    extraction: {
+      eventType: normalizeOptionalText(record.eventType, 120),
+      serviceForm: normalizeOptionalText(record.serviceForm, 120),
+      eventDate: normalizeOptionalText(record.eventDate, 40),
+      attendeeCount,
+      menuItems
+    },
+    errors: []
+  };
 }
 
 function normalizeMenuItems(input: string[] | undefined): string[] | undefined {
@@ -231,6 +406,7 @@ function applySpecUpdates(
 export interface IntakeAppOptions extends CollectionStorageOptions {
   store?: IntakeStore;
   auditLog?: AuditLogStore;
+  llmAdapter?: LlmReadinessProviderAdapter;
   trustedActorSecret?: string;
   env?: Record<string, string | undefined>;
 }
@@ -383,6 +559,208 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       });
     }
   );
+
+  app.post<{ Body: IntakeShadowBody }>("/v1/intake/shadow/normalize", async (request, reply) => {
+    if (!isIntakeOperator(request, trustedActorSecret, allowDevActorHeader)) {
+      return reply.code(403).send({
+        message: "Intake-Operator erforderlich."
+      });
+    }
+
+    const body = request.body ?? {};
+    const safetyMode = parseIntakeShadowSafetyMode(body.safetyMode);
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (!safetyMode) {
+      return reply.code(422).send({
+        message: "Intake-Schattenmodus braucht safetyMode synthetic_demo oder anonymized_reference."
+      });
+    }
+    if (text.length === 0) {
+      return reply.code(422).send({
+        message: "Intake-Schattenmodus braucht einen freigegebenen Text."
+      });
+    }
+
+    const inputHash = hashText(text);
+    const channel = body.channel ?? "text";
+    const requestId = normalizeOptionalText(body.requestId, 120) ?? `shadow-${inputHash.slice(7, 23)}`;
+    const sourceRef = normalizeOptionalText(body.sourceRef, 240);
+    const eventRequest = buildEventRequestFromText({
+      requestId,
+      channel,
+      rawText: text
+    });
+    const baselineSpec = validateAcceptedEventSpec(
+      normalizeEventRequestToSpec(eventRequest, {
+        sourceType:
+          eventRequest.source.channel === "pdf_upload"
+            ? "pdf"
+            : eventRequest.source.channel === "email"
+              ? "email"
+              : "manual_input",
+        reference: eventRequest.requestId,
+        commercialState: "manual"
+      })
+    );
+    const baselineSummary = summarizeAcceptedSpec(baselineSpec);
+    const promptSchema = findLlmReadinessPromptSchemaEntryByInputKind("intake_shadow_request");
+    if (!promptSchema) {
+      return reply.code(500).send({ message: "Prompt-Schema für Intake-Schattenmodus nicht registriert." });
+    }
+
+    const input = {
+      contractVersion: llmReadinessContractVersion,
+      inputId: `input-intake-shadow-${inputHash.slice(7, 23)}-${randomUUID()}`,
+      kind: "intake_shadow_request" as const,
+      sourceRefs: [
+        {
+          objectType: "safe_source_anchor" as const,
+          objectId: inputHash,
+          label: `intake-shadow:${safetyMode}`
+        }
+      ],
+      policy: {
+        providerCalls: "disabled" as const,
+        dataMode: "synthetic_or_demo_only" as const,
+        allowedToolEffects: ["read", "draft"] as const
+      }
+    };
+    const adapterRequest = {
+      input,
+      promptSchemaId: promptSchema.promptSchemaId,
+      promptContext: text
+    };
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    let adapter: LlmReadinessProviderAdapter;
+    try {
+      adapter = options.llmAdapter ?? buildByoLlmAdapterFromEnv(env, {
+        providerRunIdPrefix: "intake-shadow"
+      });
+    } catch (error) {
+      return reply.code(500).send({
+        message: error instanceof Error ? error.message : "BYO-LLM-Adapter konnte nicht gestartet werden."
+      });
+    }
+
+    const adapterResponse: LlmReadinessProviderAdapterResponse | undefined = await adapter.run(adapterRequest)
+      .catch(async (error: unknown) => {
+        await auditLog.log({
+          action: "intake.shadow_extraction_rejected",
+          entityType: "IntakeShadowRun",
+          entityId: input.inputId,
+          actor,
+          summary: "Intake-Schattenextraktion verworfen.",
+          details: {
+            inputId: input.inputId,
+            inputHash,
+            safetyMode,
+            errorType: error instanceof Error ? error.name : typeof error
+          }
+        });
+        return undefined;
+      });
+    if (!adapterResponse) {
+      return reply.code(422).send({
+        message: "Intake-Schattenextraktion konnte nicht erzeugt werden.",
+        errors: ["BYO-LLM-Aufruf ist fehlgeschlagen."]
+      });
+    }
+
+    const auditBuild = createLlmReadinessAgentAuditRecord({
+      auditId: `agent-audit-${input.inputId}`,
+      request: adapterRequest,
+      response: adapterResponse
+    });
+    const extractionBuild = parseIntakeShadowExtraction(adapterResponse.outputCandidate);
+    const responseErrors = [
+      ...(adapterResponse.ok ? [] : adapterResponse.errors),
+      ...extractionBuild.errors,
+      ...auditBuild.errors.map((error) => `agentAudit.${error}`)
+    ];
+    if (!adapterResponse.ok || responseErrors.length > 0 || !extractionBuild.extraction || !auditBuild.auditRecord) {
+      await auditLog.log({
+        action: "intake.shadow_extraction_rejected",
+        entityType: "IntakeShadowRun",
+        entityId: input.inputId,
+        actor,
+        summary: "Intake-Schattenextraktion verworfen.",
+        details: {
+          inputId: input.inputId,
+          inputHash,
+          safetyMode,
+          adapterId: adapterResponse.adapterId,
+          adapterMode: adapterResponse.adapterMode,
+          providerId: adapterResponse.providerId,
+          providerRequestId: adapterResponse.providerRequestId,
+          errorCount: responseErrors.length
+        }
+      });
+      return reply.code(422).send({
+        message: "Intake-Schattenextraktion ist nicht schema-valide.",
+        errors: [...new Set(responseErrors)]
+      });
+    }
+
+    const llmSummary = summarizeIntakeExtraction(extractionBuild.extraction);
+    const differences = compareIntakeSummaries(baselineSummary, llmSummary);
+    const shadowRun: IntakeShadowRun = {
+      shadowRunId: `intake-shadow-${randomUUID()}`,
+      createdAt: new Date().toISOString(),
+      status: "pending_review",
+      safetyMode,
+      source: {
+        channel: eventRequest.source.channel,
+        inputHash,
+        sourceRef
+      },
+      baseline: {
+        requestId: eventRequest.requestId,
+        specId: baselineSpec.specId,
+        summary: baselineSummary
+      },
+      llm: {
+        inputId: input.inputId,
+        outputId: adapterResponse.outputCandidate?.outputId,
+        outputHash: adapterResponse.outputCandidate ? hashText(adapterResponse.outputCandidate.text) : undefined,
+        providerId: adapterResponse.providerId,
+        providerRequestId: adapterResponse.providerRequestId,
+        adapterId: adapterResponse.adapterId,
+        adapterMode: adapterResponse.adapterMode,
+        promptSchemaId: adapterResponse.promptSchemaId ?? promptSchema.promptSchemaId,
+        summary: llmSummary
+      },
+      differences,
+      guardrails: {
+        draftOnly: true,
+        humanApprovalRequired: true,
+        writesProductObjects: false,
+        rawPayloadStored: false,
+        dataMode: "synthetic_or_demo_only"
+      }
+    };
+    await store.saveShadowRun(shadowRun);
+    await auditLog.log({
+      action: "intake.shadow_extraction_compared",
+      entityType: "IntakeShadowRun",
+      entityId: shadowRun.shadowRunId,
+      actor,
+      summary: "Intake-Schattenextraktion gegen Regex-Baseline verglichen.",
+      details: {
+        shadowRunId: shadowRun.shadowRunId,
+        inputId: input.inputId,
+        agentAuditId: auditBuild.auditRecord.auditId,
+        inputHash,
+        outputHash: shadowRun.llm.outputHash,
+        safetyMode,
+        differenceCount: differences.filter((difference) => !difference.matches).length,
+        providerId: adapterResponse.providerId,
+        providerRequestId: adapterResponse.providerRequestId,
+        writesProductObject: false
+      }
+    });
+
+    return reply.code(201).send({ shadowRun });
+  });
 
   registerIntakeDocumentRoutes(app, {
     store,

@@ -104,6 +104,29 @@ export const llmReadinessPromptSchemaRegistry = [
     fixtureIds: ["llm-eval-synthetic-flying-buffet-production-draft"],
     forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
     description: "Schema-only prompt, policy and output-schema metadata for ProductionDraft extraction readiness."
+  },
+  {
+    promptSchemaId: "intake-shadow-extraction-prompt-schema.v0",
+    registryVersion: llmReadinessPromptSchemaRegistryVersion,
+    readinessContractVersion: llmReadinessContractVersion,
+    draftContractId: "intake-shadow-extraction.v0",
+    inputKind: "intake_shadow_request",
+    outputKind: "intake_shadow_extraction",
+    status: "schema_contract_only",
+    promptArtifactId: "intake-shadow-extraction.prompt",
+    promptVersion: "v0",
+    policyArtifactId: "intake-shadow-extraction.policy",
+    policyVersion: "v0",
+    outputSchemaId: "intake-shadow-extraction.output-schema.v0",
+    providerCalls: "disabled",
+    dataMode: "synthetic_or_demo_only",
+    allowedToolEffects: ["read", "draft"],
+    requiredSourceObjectTypes: ["safe_source_anchor"],
+    humanApprovalRequired: true,
+    writesProductObject: false,
+    fixtureIds: ["llm-eval-synthetic-intake-shadow-lunch"],
+    forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
+    description: "Schema-only prompt, policy and output-schema metadata for intake shadow extraction readiness."
   }
 ] as const satisfies readonly LlmReadinessPromptSchemaRegistryEntry[];
 

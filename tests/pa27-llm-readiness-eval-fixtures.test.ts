@@ -35,13 +35,15 @@ describe("PA27 LLM readiness eval fixtures", () => {
     expect(llmReadinessEvalFixtures.map((fixture) => fixture.fixtureId)).toEqual([
       "llm-eval-synthetic-coffee-break-missing-attendees",
       "llm-eval-synthetic-buffet-operator-summary",
-      "llm-eval-synthetic-flying-buffet-production-draft"
+      "llm-eval-synthetic-flying-buffet-production-draft",
+      "llm-eval-synthetic-intake-shadow-lunch"
     ]);
 
     expect(llmReadinessEvalFixtures.map((fixture) => fixture.expectedOutput.kind)).toEqual([
       "clarification_question_draft",
       "operator_summary_draft",
-      "production_draft_extraction"
+      "production_draft_extraction",
+      "intake_shadow_extraction"
     ]);
   });
 

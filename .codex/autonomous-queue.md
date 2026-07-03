@@ -17,13 +17,48 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-_(leer)_
+### ERLAUBT · 2.2 Intake-Schattenmodus
+
+Branch: `loop/intake-shadow-mode`.
+Goal: `.codex/goals/intake-shadow-mode.md`.
+
+Scope:
+- LLM-Extraktion parallel zur Regex-Baseline.
+- Nur synthetische/Demo-Anfragen und anonymisierte Referenztexte.
+- Modell: `gpt-4.1` oder stärker; Budget: 5 EUR / 200 Requests.
+- Abweichungslog draft-only; keine Umschaltung und keine echten Kundentexte.
+- Keine Boundary-Änderung.
+
+Abnahmepunkte:
+- Für dieselbe synthetische/anonymisierte Eingabe entstehen Regex-Baseline
+  und LLM-Extraktion nebeneinander als Vergleich, ohne Produktobjekte zu
+  verändern.
+- Abweichungen werden als review-/auditfähige Fakten mit Hash/IDs
+  protokolliert, nie mit Rohprompt, Rohantwort oder Kundentext.
+- Echte oder nicht freigegebene Kundentexte werden für den Schattenmodus
+  abgewiesen.
+
+### ERLAUBT · 2.3a Batch-Pilot
+
+Branch: `loop/batch-classification-pilot`.
+Goal: `.codex/goals/batch-classification-pilot.md`.
+
+Scope:
+- Pseudonymisierung auf Textebene: keine Namen, Kontakte oder Dateinamen
+  zum Provider; nur Menü-/Preis-/Pax-Abschnitte.
+- Sichtbare Contract-Erweiterung `dataMode: pseudonymized_approved`.
+- 20 Angebote klassifizieren, `gpt-4.1` vs. `gpt-4.1-mini` gegen
+  13-Pakete-Ground-Truth, Kostenreport.
+- Budget: 3 EUR / 60 Requests.
+- Der 916er-Nachtlauf bleibt `ZUR SICHTUNG` bis Pilot-Report vorliegt.
 
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-_(leer)_
+- **916er-Nachtlauf freigeben?** · Die Vollklassifikation der 916
+  Altangebote bleibt bis nach Slice 2.3a gesperrt. Mensch nötig wegen
+  Pilot-Qualität, Datenstatus, Kostenkontrolle und Laufzeitfenster.
 
 ---
 

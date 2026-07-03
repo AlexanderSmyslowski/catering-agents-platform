@@ -62,7 +62,8 @@ export interface LlmReadinessSyntheticLiveSliceResponse {
 
 const defaultAllowedInputKinds = [
   "clarification_draft_request",
-  "production_draft_request"
+  "production_draft_request",
+  "intake_shadow_request"
 ] as const satisfies readonly LlmReadinessModelInputKind[];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -121,7 +122,7 @@ function buildUserPrompt(fixture: LlmReadinessEvalFixture): string {
   ].join("\n");
 }
 
-function buildContextPrompt(context: string): string {
+function buildProductionDraftContextPrompt(context: string): string {
   return [
     "Operatorfreigegebener Dokumenttext:",
     context.trim(),
@@ -138,6 +139,28 @@ function buildContextPrompt(context: string): string {
     "  \"openQuestions\": [{\"field\":\"...\",\"message\":\"...\",\"suggestedQuestion\":\"...\"}]",
     "}"
   ].join("\n");
+}
+
+function buildIntakeShadowContextPrompt(context: string): string {
+  return [
+    "Freigegebener synthetischer oder anonymisierter Intake-Text:",
+    context.trim(),
+    "",
+    "Antwortformat:",
+    "{",
+    "  \"eventType\": \"...\",",
+    "  \"serviceForm\": \"...\",",
+    "  \"eventDate\": \"YYYY-MM-DD\",",
+    "  \"attendeeCount\": 45,",
+    "  \"menuItems\": [\"...\"]",
+    "}"
+  ].join("\n");
+}
+
+function buildPromptContextPrompt(inputKind: LlmReadinessModelInputKind, context: string): string {
+  return inputKind === "intake_shadow_request"
+    ? buildIntakeShadowContextPrompt(context)
+    : buildProductionDraftContextPrompt(context);
 }
 
 function buildOutputCandidate(
@@ -288,8 +311,10 @@ export class SyntheticLiveLlmReadinessSlice {
     const fixtures = this.options.fixtures ?? llmReadinessEvalFixtures;
     const fixture = fixtures.find((candidateFixture) => fixtureMatchesInput(request.input, candidateFixture));
     const promptContext = request.promptContext?.trim();
-    const usesOperatorApprovedContext = request.input.kind === "production_draft_request" &&
-      Boolean(promptContext);
+    const usesOperatorApprovedContext = (
+      request.input.kind === "production_draft_request" ||
+      request.input.kind === "intake_shadow_request"
+    ) && Boolean(promptContext);
 
     if (!fixture && !usesOperatorApprovedContext) {
       errors.push("request.input must match a known synthetic eval fixture");
@@ -313,7 +338,7 @@ export class SyntheticLiveLlmReadinessSlice {
       promptVersion: promptArtifact.promptVersion,
       outputKind: promptSchemaEntry.outputKind,
       systemPrompt: promptArtifact.systemPrompt,
-      userPrompt: fixture ? buildUserPrompt(fixture) : buildContextPrompt(promptContext!)
+      userPrompt: fixture ? buildUserPrompt(fixture) : buildPromptContextPrompt(request.input.kind, promptContext!)
     });
 
     if (!transportResponse.ok) {

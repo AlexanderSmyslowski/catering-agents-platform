@@ -76,6 +76,22 @@ export const llmReadinessDraftContracts = [
     writesProductObject: false,
     forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
     description: "Contract for a human-reviewed ProductionDraft extraction from an operator-approved source document."
+  },
+  {
+    contractId: "intake-shadow-extraction.v0",
+    registryVersion: llmReadinessDraftRegistryVersion,
+    readinessContractVersion: llmReadinessContractVersion,
+    inputKind: "intake_shadow_request",
+    outputKind: "intake_shadow_extraction",
+    status: "schema_contract_only",
+    providerCalls: "disabled",
+    dataMode: "synthetic_or_demo_only",
+    allowedToolEffects: ["read", "draft"],
+    requiredSourceObjectTypes: ["safe_source_anchor"],
+    humanApprovalRequired: true,
+    writesProductObject: false,
+    forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
+    description: "Contract for comparing an LLM intake extraction against the regex baseline without writing product objects."
   }
 ] as const satisfies readonly LlmReadinessDraftContract[];
 
