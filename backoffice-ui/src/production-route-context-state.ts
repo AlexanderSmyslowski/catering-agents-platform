@@ -18,7 +18,9 @@ export function selectProductionNextStep(input: {
   questionCount: number;
   hasSourceWarnings?: boolean;
   hasSelectedPlan: boolean;
+  selectedPlanReadinessLabel?: string;
   purchaseListCount: number;
+  purchaseItemCount?: number;
 }): ProductionNextStep {
   if (!input.hasFocusedProductionSpec && !input.hasSelectedPlan) {
     return {
@@ -50,10 +52,22 @@ export function selectProductionNextStep(input: {
       description: "Aus der Spezifikation kann jetzt ein Produktionsplan mit Einkaufsliste vorbereitet werden."
     };
   }
+  if (input.selectedPlanReadinessLabel === "unzureichend") {
+    return {
+      title: "Produktionsplan nacharbeiten",
+      description: "Der Produktionsplan ist unzureichend. Bitte offene Punkte, Rezeptquellen und Mengen klären."
+    };
+  }
   if (input.purchaseListCount === 0) {
     return {
       title: "Einkaufsliste noch offen",
       description: "Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch."
+    };
+  }
+  if (input.purchaseItemCount === 0) {
+    return {
+      title: "Einkaufspositionen klären",
+      description: "Einkaufsliste ist vorhanden, enthält aber noch keine Positionen für die Produktion."
     };
   }
   return {

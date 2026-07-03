@@ -749,7 +749,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Reviewer-Hinweis");
     expect(content).not.toContain("Option-A-Zeitfenster");
     expect(content).toContain("Nächster Arbeitsschritt");
-    expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
+    expect(content).toContain("Produktionsplan nacharbeiten");
+    expect(content).toContain("Produktionsplan ist unzureichend. Bitte offene Punkte, Rezeptquellen und Mengen klären.");
     expect(content).toContain("Produktionsplan");
     expect(content).not.toContain("Produktionsplan und Einkaufsliste liegen vor.");
     expect(content).not.toContain("Nächster Agent-Schritt");
@@ -1187,7 +1188,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Plan plan-production-fallback-1 · Spezifikation spec-production-plan-only-1");
     expect(content).not.toContain("Plan-Kontext geladen: plan-production-fallback-1 · Spezifikation: spec-production-plan-only-1");
     expect(content).toContain("Einzelheiten zu diesem Produktionsplan");
-    expect(content).toContain("Produktionsarbeit prüfen");
+    expect(content).toContain("Produktionsplan nacharbeiten");
+    expect(content).toContain("Der Produktionsplan ist unzureichend. Bitte offene Punkte, Rezeptquellen und Mengen klären.");
     expect(content).toContain("Produktionsblatt exportieren für diesen Produktionsplan");
     expect(content).toContain("Einkaufsliste exportieren");
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");

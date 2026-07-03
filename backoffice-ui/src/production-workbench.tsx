@@ -17,6 +17,7 @@ export type ProductionWorkbenchSummary = {
   productionObjectCount: number;
   productionObjectStatusLabel: string;
   purchaseListCount: number;
+  purchaseItemCount?: number;
 };
 
 export type ProductionWorkbenchNextStep = {
@@ -167,7 +168,8 @@ export function ProductionConversationalWorkbench({
     unansweredQuestionCount,
     productionObjectCount,
     productionObjectStatusLabel,
-    purchaseListCount
+    purchaseListCount,
+    purchaseItemCount
   } = summary;
   const openVisibleQuestionCount = countOpenVisibleQuestions(
     questionCount,
@@ -176,7 +178,9 @@ export function ProductionConversationalWorkbench({
   );
   const productionOutputAnchor = buildProductionWorkbenchOutputAnchorState({
     productionObjectCount,
-    purchaseListCount
+    purchaseListCount,
+    purchaseItemCount,
+    planStatusLabel
   });
   const hasProductionResults = productionObjectCount > 0 || purchaseListCount > 0;
   const productionOutputAnchorId = "production-output-anchor";

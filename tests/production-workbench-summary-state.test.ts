@@ -12,7 +12,7 @@ describe("production workbench summary state", () => {
       clarificationStatusCounts: { answered: 1, unanswered: 2 },
       currentSpecPlans: [{ planId: "plan-1" }, { planId: "plan-2" }],
       productionObjectStatusLabel: "2 aktuelle Pläne",
-      currentSpecPurchaseLists: [{ purchaseListId: "purchase-1" }]
+      currentSpecPurchaseLists: [{ purchaseListId: "purchase-1", totals: { itemCount: 3 } }]
     });
 
     expect(summary).toEqual({
@@ -26,7 +26,8 @@ describe("production workbench summary state", () => {
       unansweredQuestionCount: 2,
       productionObjectCount: 2,
       productionObjectStatusLabel: "2 aktuelle Pläne",
-      purchaseListCount: 1
+      purchaseListCount: 1,
+      purchaseItemCount: 3
     });
   });
 
@@ -48,6 +49,7 @@ describe("production workbench summary state", () => {
     expect(summary.unansweredQuestionCount).toBe(0);
     expect(summary.productionObjectCount).toBe(0);
     expect(summary.purchaseListCount).toBe(0);
+    expect(summary.purchaseItemCount).toBe(0);
     expect(summary.activeSpecLabel).toBe("Kein aktiver Vorgang");
   });
 });

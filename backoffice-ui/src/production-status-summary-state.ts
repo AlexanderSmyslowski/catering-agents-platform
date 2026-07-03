@@ -67,6 +67,9 @@ export function buildProductionStatusSummaryState(
   const currentSpecPurchaseLists = input.productionWorkspaceCleared ? [] : input.currentSpecPurchaseLists;
   const productionQuestions = input.productionWorkspaceCleared ? [] : input.productionQuestions;
   const currentPurchaseListItemCount = countPurchaseListItems(currentSpecPurchaseLists);
+  const selectedPlanReadinessLabel = selectedPlan
+    ? formatProductionReadinessLabel(selectedPlan)
+    : undefined;
   const latestProductionAuditEvent = input.productionWorkspaceCleared ? undefined : input.filteredAuditEvents[0];
   const hasSourceWarnings = input.productionWorkspaceCleared
     ? false
@@ -110,9 +113,7 @@ export function buildProductionStatusSummaryState(
       productionQuestions,
       hasSourceWarnings
     }),
-    selectedPlanReadinessLabel: selectedPlan
-      ? formatProductionReadinessLabel(selectedPlan)
-      : undefined,
+    selectedPlanReadinessLabel,
     productionPlanStatusLabel: formatProductionPlanStatusLabel(selectedPlan),
     productionObjectStatusLabel: formatProductionObjectStatusLabel({
       currentSpecPlanCount: currentSpecPlans.length,
@@ -143,7 +144,9 @@ export function buildProductionStatusSummaryState(
       questionCount: productionQuestions.length,
       hasSourceWarnings,
       hasSelectedPlan: Boolean(selectedPlan),
-      purchaseListCount: currentSpecPurchaseLists.length
+      selectedPlanReadinessLabel,
+      purchaseListCount: currentSpecPurchaseLists.length,
+      purchaseItemCount: currentPurchaseListItemCount
     })
   };
 }

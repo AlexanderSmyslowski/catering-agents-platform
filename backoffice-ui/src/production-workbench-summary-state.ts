@@ -1,4 +1,5 @@
 import type { ProductionWorkbenchSummary } from "./production-workbench.js";
+import { countPurchaseListItems } from "./production-route-artifact-status-state.js";
 
 type ClarificationStatusCounts = {
   answered: number;
@@ -41,6 +42,7 @@ export function buildProductionWorkbenchSummaryState({
     unansweredQuestionCount: clarificationStatusCounts.unanswered,
     productionObjectCount: currentSpecPlans.length,
     productionObjectStatusLabel,
-    purchaseListCount: currentSpecPurchaseLists.length
+    purchaseListCount: currentSpecPurchaseLists.length,
+    purchaseItemCount: countPurchaseListItems(currentSpecPurchaseLists)
   };
 }

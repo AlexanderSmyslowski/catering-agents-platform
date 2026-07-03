@@ -21,7 +21,9 @@ describe("production workbench output anchor state", () => {
     expect(
       buildProductionWorkbenchOutputAnchorState({
         productionObjectCount: 2,
-        purchaseListCount: 1
+        purchaseListCount: 1,
+        purchaseItemCount: 8,
+        planStatusLabel: "vollständig"
       })
     ).toEqual({
       title: "Produktionsarbeit prüfen",
@@ -29,6 +31,38 @@ describe("production workbench output anchor state", () => {
         "Produktionsplan und Einkaufsliste liegen vor. Bitte Mengen, Rezeptquellen und Freigabegrenzen prüfen.",
       grouping:
         "Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar; ältere Vorgänge bleiben eingeklappt."
+    });
+  });
+
+  it("keeps incomplete artifacts out of the production-ready review copy", () => {
+    expect(
+      buildProductionWorkbenchOutputAnchorState({
+        productionObjectCount: 1,
+        purchaseListCount: 1,
+        purchaseItemCount: 0,
+        planStatusLabel: "unzureichend"
+      })
+    ).toEqual({
+      title: "Produktionsplan nacharbeiten",
+      description:
+        "Produktionsplan ist unzureichend. Bitte offene Punkte, Rezeptquellen und Mengen klären.",
+      grouping:
+        "Plan, Einkaufsliste und Exportlinks bleiben sichtbar; die Produktion ist noch nicht freigabereif."
+    });
+
+    expect(
+      buildProductionWorkbenchOutputAnchorState({
+        productionObjectCount: 1,
+        purchaseListCount: 1,
+        purchaseItemCount: 0,
+        planStatusLabel: "vollständig"
+      })
+    ).toEqual({
+      title: "Einkaufspositionen klären",
+      description:
+        "Einkaufsliste ist vorhanden, enthält aber noch keine Positionen für die Produktion.",
+      grouping:
+        "Plan und Exportlinks bleiben sichtbar; Beschaffung bleibt bis zu belastbaren Positionen offen."
     });
   });
 
