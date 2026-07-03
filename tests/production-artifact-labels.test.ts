@@ -110,4 +110,29 @@ describe("production artifact labels", () => {
     expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-dinner/csv"');
     expect(markup).not.toContain("<strong>Einkaufsliste</strong>");
   });
+
+  it("does not offer purchase-list exports for lists without positions", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProductionPurchaseListPanel, {
+        purchaseListState: {
+          currentPurchaseLists: [
+            {
+              purchaseListId: "purchase-empty",
+              eventSpecId: "spec-lunch",
+              totals: { itemCount: 0 },
+              items: []
+            }
+          ],
+          archivedPurchaseLists: [],
+          specById: new Map([["spec-lunch", lunchSpec]]),
+          statusLabel: "1 Liste ohne Positionen"
+        }
+      })
+    );
+
+    expect(markup).toContain("Keine Einkaufspositionen ermittelt.");
+    expect(markup).toContain("Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.");
+    expect(markup).not.toContain("Einkaufsliste exportieren");
+    expect(markup).not.toContain("/api/exports/v1/exports/purchase-lists/purchase-empty/csv");
+  });
 });

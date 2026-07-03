@@ -28,7 +28,9 @@ export type ProductionPurchaseListPanelCurrentListState = {
   title: string;
   itemCountLabel: string;
   contextLabel: string;
-  exportUrl: string;
+  canExport: boolean;
+  exportUnavailableLabel: string;
+  exportUrl: string | undefined;
   exportContextLabel: string;
   warnings: ProductionPurchaseListPanelWarningState[];
   previewItems: ProductionPurchaseListPanelPreviewItemState[];
@@ -39,7 +41,9 @@ export type ProductionPurchaseListPanelArchivedListState = {
   title: string;
   helperLabel: string;
   itemCountLabel: string;
-  exportUrl: string;
+  canExport: boolean;
+  exportUnavailableLabel: string;
+  exportUrl: string | undefined;
   exportContextLabel: string;
 };
 
@@ -67,9 +71,22 @@ function buildPurchaseListIds(purchaseList: Record<string, unknown>) {
   };
 }
 
-function formatPurchaseListItemCountLabel(purchaseList: Record<string, unknown>): string {
+function getPurchaseListItemCount(purchaseList: Record<string, unknown>): number | undefined {
   const itemCount = Number((purchaseList.totals as Record<string, unknown> | undefined)?.itemCount);
-  if (!Number.isFinite(itemCount)) {
+  if (Number.isFinite(itemCount)) {
+    return itemCount;
+  }
+
+  if (Array.isArray(purchaseList.items)) {
+    return purchaseList.items.length;
+  }
+
+  return undefined;
+}
+
+function formatPurchaseListItemCountLabel(purchaseList: Record<string, unknown>): string {
+  const itemCount = getPurchaseListItemCount(purchaseList);
+  if (typeof itemCount !== "number") {
     return "Positionen: -";
   }
   return itemCount === 0 ? "Keine Einkaufspositionen ermittelt." : `Positionen: ${itemCount}`;
@@ -81,6 +98,8 @@ export function buildProductionPurchaseListPanelState(
   return {
     currentLists: purchaseListState.currentPurchaseLists.map((purchaseList) => {
       const { purchaseListId } = buildPurchaseListIds(purchaseList);
+      const itemCount = getPurchaseListItemCount(purchaseList);
+      const canExport = typeof itemCount === "number" && itemCount > 0;
       const previewItems = getPurchaseListPreviewItems(purchaseList);
       const qualityWarnings = getPurchaseListQualityWarnings(purchaseList);
 
@@ -89,7 +108,9 @@ export function buildProductionPurchaseListPanelState(
         title: buildPurchaseListTitle(purchaseList, purchaseListState.specById),
         itemCountLabel: formatPurchaseListItemCountLabel(purchaseList),
         contextLabel: "Aktueller Vorgang",
-        exportUrl: purchaseListExportUrl(purchaseListId),
+        canExport,
+        exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
+        exportUrl: canExport ? purchaseListExportUrl(purchaseListId) : undefined,
         exportContextLabel: "für aktuellen Vorgang",
         warnings: qualityWarnings.map((warning) => ({
           key: warning.code,
@@ -108,13 +129,17 @@ export function buildProductionPurchaseListPanelState(
     }),
     archivedLists: purchaseListState.archivedPurchaseLists.map((purchaseList) => {
       const { purchaseListId } = buildPurchaseListIds(purchaseList);
+      const itemCount = getPurchaseListItemCount(purchaseList);
+      const canExport = typeof itemCount === "number" && itemCount > 0;
 
       return {
         key: String(purchaseList.purchaseListId),
         title: buildPurchaseListTitle(purchaseList, purchaseListState.specById),
         helperLabel: "Ältere Einkaufsliste aus anderem Vorgang - nicht aktueller Vorgang.",
         itemCountLabel: formatPurchaseListItemCountLabel(purchaseList),
-        exportUrl: purchaseListExportUrl(purchaseListId),
+        canExport,
+        exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
+        exportUrl: canExport ? purchaseListExportUrl(purchaseListId) : undefined,
         exportContextLabel: "aus älterem Vorgang"
       };
     }),

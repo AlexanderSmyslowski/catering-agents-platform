@@ -32,15 +32,19 @@ export function ProductionPurchaseListPanel({
             <strong>{purchaseList.title}</strong>
             <p>{purchaseList.itemCountLabel}</p>
             <p className="helper-text">{purchaseList.contextLabel}</p>
-            <a
-              className="ghost-link"
-              href={purchaseList.exportUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Einkaufsliste exportieren
-              <span className="visually-hidden"> {purchaseList.exportContextLabel}</span>
-            </a>
+            {purchaseList.canExport && purchaseList.exportUrl ? (
+              <a
+                className="ghost-link"
+                href={purchaseList.exportUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Einkaufsliste exportieren
+                <span className="visually-hidden"> {purchaseList.exportContextLabel}</span>
+              </a>
+            ) : (
+              <p className="helper-text">{purchaseList.exportUnavailableLabel}</p>
+            )}
             {purchaseList.warnings.map((warning) => (
               <p className="helper-text" key={warning.key}>
                 {warning.label}
@@ -84,15 +88,19 @@ export function ProductionPurchaseListPanel({
                   <strong>{purchaseList.title}</strong>
                   <p className="helper-text">{purchaseList.helperLabel}</p>
                   <p>{purchaseList.itemCountLabel}</p>
-                  <a
-                    className="ghost-link"
-                    href={purchaseList.exportUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Einkaufsliste exportieren
-                    <span className="visually-hidden"> {purchaseList.exportContextLabel}</span>
-                  </a>
+                  {purchaseList.canExport && purchaseList.exportUrl ? (
+                    <a
+                      className="ghost-link"
+                      href={purchaseList.exportUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Einkaufsliste exportieren
+                      <span className="visually-hidden"> {purchaseList.exportContextLabel}</span>
+                    </a>
+                  ) : (
+                    <p className="helper-text">{purchaseList.exportUnavailableLabel}</p>
+                  )}
                 </li>
               ))}
             </ul>
