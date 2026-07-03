@@ -21,18 +21,7 @@ _(Befüllt von Fable am 2026-07-03 aus Ziellauf Phase 1. Reihenfolge
 bindend; 1.2 baut auf 1.1 auf und wird auf dessen Branch gestapelt,
 falls 1.1 noch nicht gemerged ist.)_
 
-1. **1.4 Übergabe-Reproduktion (report-or-fix)** · Branch nur bei Befund:
-   `loop/offer-production-handoff-root` · Juni-Probe-Blocker Nr. 1
-   (übernommene Angebotsvariante wird nicht der aktive Vorgang in
-   /produktion) auf frischer Datenwurzel reproduzieren; die früher
-   teilabdeckenden PRs (#490/#505/#515) sind geschlossen.
-   Abnahme: (a) Reproduktionsprotokoll mit eindeutigem ja/nein;
-   (b) wenn ja: Wurzelfix + Test der Fallklasse „JEDE übernommene
-   Variante wird aktiver, berechenbarer Produktionsvorgang", nicht nur
-   das Demo-Szenario; (c) wenn nein: Befund-Notiz unter ERLEDIGT mit
-   Beleg, kein Code.
-
-2. **1.5 Ballast-Inventur** · report-only, vom WIP-Limit ausgenommen,
+1. **1.5 Ballast-Inventur** · report-only, vom WIP-Limit ausgenommen,
    kein PR · Klassifikation gegen Pflichtenheft §9: intake-signals-
    Regexe (Eval-Baseline-Status), llm-readiness-Module (eingefroren vs.
    gebraucht), Branch `slice4-codex-procurement-guard` (Procurement-
@@ -61,6 +50,17 @@ bleiben bewusst liegen. Kein autonomes Löschen ohne neuen Cleanup-Auftrag.
 
 ## ERLEDIGT
 
+- Slice 1.4 Übergabe-Reproduktion ohne Codefix abgeschlossen: Auf
+  frischer Datenwurzel wurde `draft-demo-offer-conference-buffet`
+  Variante `variant-2` über die UI übernommen. `/produktion` fokussierte
+  danach `Konferenz · 180 Teilnehmer · 2026-11-20` als aktuellen Vorgang.
+  Nach strukturierten Antworten (`classic` + `scratch` für beide
+  Komponenten) erzeugte die UI den Plan
+  `plan-draft-demo-offer-conference-buffet-variant-2` und die Liste
+  `purchase-draft-demo-offer-conference-buffet-variant-2`; Plan-HTML,
+  Produktionsmappe-HTML und Einkaufslisten-CSV lieferten HTTP 200.
+  Ergebnis: Juni-Blocker auf aktuellem Stand nicht reproduziert; kein
+  Branch, kein Code.
 - Slice 1.3 Wissenstyp production_feedback abgeschlossen in Branch
   `loop/production-feedback-knowledge`, Draft-PR #548
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/548>.
