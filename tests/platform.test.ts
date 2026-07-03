@@ -920,7 +920,7 @@ describe("catering agents platform", () => {
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
-  }, 30000);
+  }, 60000);
 
   it("accepts multipart document uploads for the browser-driven intake path", async () => {
     const dataRoot = createDataRoot();

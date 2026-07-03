@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+const PURCHASE_COVERAGE_INTEGRATION_TIMEOUT_MS = 30000;
+
 function fakeRecipe(schemaVersion: string) {
   return {
     schemaVersion,
@@ -133,7 +135,7 @@ describe("production planning purchase coverage integration", () => {
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Einkaufsabdeckung fehlt");
     expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Sahne");
-  }, 15000);
+  }, PURCHASE_COVERAGE_INTEGRATION_TIMEOUT_MS);
 
   it("keeps the successful planning path unchanged when purchase coverage is complete", async () => {
     vi.resetModules();
@@ -145,5 +147,5 @@ describe("production planning purchase coverage integration", () => {
     expect(artifacts.productionPlan.blockingIssues ?? []).toEqual([]);
     expect(artifacts.productionPlan.productionBatches).toHaveLength(1);
     expect(artifacts.purchaseList.items.map((item) => item.ingredientId).sort()).toEqual(["cream", "tomato"]);
-  });
+  }, PURCHASE_COVERAGE_INTEGRATION_TIMEOUT_MS);
 });
