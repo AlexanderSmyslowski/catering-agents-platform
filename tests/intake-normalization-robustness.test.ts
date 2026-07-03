@@ -173,4 +173,25 @@ describe("intake normalization robustness", () => {
       expect.arrayContaining(["vegan", "vegetarian"])
     );
   });
+
+  it("extracts comma-separated dishes after an inline menu marker", () => {
+    const request = createEventRequestFromText({
+      requestId: "inline-menu-marker-1",
+      channel: "text",
+      rawText:
+        "Lunch am 2026-08-12 für 42 Teilnehmer als Buffet. Menü: Tomatensuppe, Pasta, Salat, Kaffee. Lieferung um 11:30 Uhr, Service ab 12:00 Uhr."
+    });
+    const spec = normalizeEventRequestToSpec(request);
+
+    expect(spec.attendees.expected).toBe(42);
+    expect(spec.event.date).toBe("2026-08-12");
+    expect(spec.menuPlan.map((component) => component.label)).toEqual([
+      "Tomatensuppe",
+      "Pasta",
+      "Salat",
+      "Kaffee"
+    ]);
+    expect(spec.menuPlan.map((component) => component.label).join(" ")).not.toContain("Lunch am");
+    expect(spec.menuPlan.map((component) => component.label).join(" ")).not.toContain("Lieferung");
+  });
 });
