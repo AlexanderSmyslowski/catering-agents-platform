@@ -55,6 +55,8 @@ describe("production purchase list panel state", () => {
           title: "Lunch · 40 Teilnehmer · 2026-06-18",
           itemCountLabel: "Positionen: 2",
           contextLabel: "Aktueller Vorgang",
+          canExport: true,
+          exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
           exportUrl: "/api/exports/v1/exports/purchase-lists/purchase-lunch/csv",
           exportContextLabel: "für aktuellen Vorgang",
           warnings: [],
@@ -75,6 +77,8 @@ describe("production purchase list panel state", () => {
           title: "Abendessen · 24 Teilnehmer · 2026-06-19",
           helperLabel: "Ältere Einkaufsliste aus anderem Vorgang - nicht aktueller Vorgang.",
           itemCountLabel: "Positionen: 3",
+          canExport: true,
+          exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
           exportUrl: "/api/exports/v1/exports/purchase-lists/purchase-dinner/csv",
           exportContextLabel: "aus älterem Vorgang"
         }
@@ -121,8 +125,13 @@ describe("production purchase list panel state", () => {
         archivedPurchaseLists: [],
         specById: new Map([["spec-lunch", lunchSpec]]),
         statusLabel: "1 Liste ohne Positionen"
-      }).currentLists[0]?.itemCountLabel
-    ).toBe("Keine Einkaufspositionen ermittelt.");
+      }).currentLists[0]
+    ).toMatchObject({
+      itemCountLabel: "Keine Einkaufspositionen ermittelt.",
+      canExport: false,
+      exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
+      exportUrl: undefined
+    });
   });
 
   it("keeps empty archived lists hidden and preserves current-list fallback labels", () => {
@@ -146,7 +155,9 @@ describe("production purchase list panel state", () => {
           title: "Einkaufsliste",
           itemCountLabel: "Positionen: -",
           contextLabel: "Aktueller Vorgang",
-          exportUrl: "/api/exports/v1/exports/purchase-lists/-/csv",
+          canExport: false,
+          exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
+          exportUrl: undefined,
           exportContextLabel: "für aktuellen Vorgang",
           warnings: [],
           previewItems: []
