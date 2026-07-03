@@ -17,27 +17,6 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-### ERLAUBT · 2.2 Intake-Schattenmodus
-
-Branch: `loop/intake-shadow-mode`.
-Goal: `.codex/goals/intake-shadow-mode.md`.
-
-Scope:
-- LLM-Extraktion parallel zur Regex-Baseline.
-- Nur synthetische/Demo-Anfragen und anonymisierte Referenztexte.
-- Modell: `gpt-4.1` oder stärker; Budget: 5 EUR / 200 Requests.
-- Abweichungslog draft-only; keine Umschaltung und keine echten Kundentexte.
-- Keine Boundary-Änderung.
-
-Abnahmepunkte:
-- Für dieselbe synthetische/anonymisierte Eingabe entstehen Regex-Baseline
-  und LLM-Extraktion nebeneinander als Vergleich, ohne Produktobjekte zu
-  verändern.
-- Abweichungen werden als review-/auditfähige Fakten mit Hash/IDs
-  protokolliert, nie mit Rohprompt, Rohantwort oder Kundentext.
-- Echte oder nicht freigegebene Kundentexte werden für den Schattenmodus
-  abgewiesen.
-
 ### ERLAUBT · 2.3a Batch-Pilot
 
 Branch: `loop/batch-classification-pilot`.
@@ -64,6 +43,18 @@ Scope:
 
 ## ERLEDIGT
 
+- Slice 2.2 Intake-Schattenmodus abgeschlossen in Branch
+  `loop/intake-shadow-mode`, Draft-PR #550
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/550>.
+  Belegt: Sichere synthetische/anonymisierte Eingaben erzeugen Regex-
+  Baseline und BYO-LLM-Extraktion nebeneinander als `pending_review`-
+  Vergleich; EventRequest/AcceptedEventSpec-Zählung bleibt unverändert,
+  der Schattenlauf speichert nur Hashes, IDs, Provider-Metadaten und
+  Feld-Diffs. Nicht freigegebene Safety-Modes werden vor Provider-
+  Ausführung mit 422 abgewiesen. Audit und Store enthalten keinen
+  Rohprompt, keine Rohantwort und keinen Eingabetext. Batterie grün:
+  `npm test` 271 Dateien / 1188 Tests, `tsc`, Build, Audit,
+  Hidden/Bidi-Check und Internal-Beta-Gate.
 - Slice 2.1 PDF→ProductionDraft über BYO-Schiene abgeschlossen in Branch
   `loop/pdf-production-draft-byo`, Draft-PR #549
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/549>.
