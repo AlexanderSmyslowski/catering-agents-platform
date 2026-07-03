@@ -981,7 +981,7 @@ describe("catering agents platform", () => {
       url: `/v1/intake/specs/${createdSpec.specId}`,
       payload: {
         eventType: "conference",
-        eventDate: "2026-09-03",
+        eventSchedule: [{ label: "Service", start: "16:30", end: "23:00" }],
         attendeeCount: 48,
         serviceForm: "buffet",
         menuItems: ["Tomatensuppe", "Lunchbuffet"]
@@ -990,8 +990,15 @@ describe("catering agents platform", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json().acceptedEventSpec.readiness.status).toBe("complete");
+    expect(updateResponse.json().acceptedEventSpec.event.date).toBeUndefined();
+    expect(updateResponse.json().acceptedEventSpec.event.schedule).toEqual([
+      { label: "Service", start: "16:30", end: "23:00" }
+    ]);
     expect(updateResponse.json().acceptedEventSpec.attendees.expected).toBe(48);
     expect(updateResponse.json().acceptedEventSpec.menuPlan).toHaveLength(2);
+    expect(
+      updateResponse.json().acceptedEventSpec.uncertainties.map((item: { field: string }) => item.field)
+    ).not.toEqual(expect.arrayContaining(["event.date_or_schedule", "event.schedule", "attendees.expected"]));
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });

@@ -10,6 +10,7 @@ describe("production spec edit snapshot", () => {
       event: {
         type: "Lunch",
         date: "2026-06-12",
+        schedule: [{ label: "Service", start: "16:30", end: "23:00" }],
         serviceForm: "Buffet"
       },
       attendees: {
@@ -33,6 +34,7 @@ describe("production spec edit snapshot", () => {
     expect(snapshot).toEqual({
       eventType: "Lunch",
       eventDate: "2026-06-12",
+      eventSchedule: "16:30-23:00",
       attendeeCount: "42",
       serviceForm: "Buffet",
       menuItems: "Hummus mit Rohkost",
@@ -55,6 +57,7 @@ describe("production spec edit snapshot", () => {
     const left = normalizedSpecEditSnapshot({
       eventType: " Lunch ",
       eventDate: " 2026-06-12 ",
+      eventSchedule: " 16:30-23:00 ",
       attendeeCount: " 42 ",
       serviceForm: " Buffet ",
       menuItems: " Hummus, Salat ",
@@ -84,6 +87,7 @@ describe("production spec edit snapshot", () => {
     const right = normalizedSpecEditSnapshot({
       eventType: "Lunch",
       eventDate: "2026-06-12",
+      eventSchedule: "16:30-23:00",
       attendeeCount: "42",
       serviceForm: "Buffet",
       menuItems: "Hummus, Salat",

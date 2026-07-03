@@ -111,6 +111,12 @@ function dedupeStructuredQuestions(
   });
 }
 
+function isGenericLocalReadinessQuestion(text: string): boolean {
+  const normalized = normalizedQuestionText(text);
+  return normalized === normalizedQuestionText("Bitte prüfe die Annahmen des Agenten, bevor die Produktion final freigegeben wird.") ||
+    normalized === normalizedQuestionText("Es fehlen noch Angaben, bevor belastbare Mengen und Einkaufslisten berechnet werden können.");
+}
+
 function formatSize(sizeBytes: number): string {
   if (sizeBytes < 1024) {
     return `${sizeBytes} B`;
@@ -333,12 +339,15 @@ export function buildProductionConversationProjection(
     spec: input.spec,
     sourceInputs: input.sourceInputs
   });
+  const localQuestions = clarificationQuestions.length > 0
+    ? input.questions.filter((question) => !isGenericLocalReadinessQuestion(question))
+    : input.questions;
   const structuredQuestions = dedupeStructuredQuestions([
     ...clarificationQuestions.map((clarificationQuestion) => ({
       text: clarificationQuestion.prompt,
       clarificationQuestion
     })),
-    ...input.questions.map((question) => ({ text: question }))
+    ...localQuestions.map((question) => ({ text: question }))
   ]);
 
   structuredQuestions.forEach((question, index) => {

@@ -24,6 +24,17 @@ export type ProductionConversationState = {
   workbenchSpecFacts: WorkbenchSpecFact[];
 };
 
+function openQuestionTextsFromProjection(
+  projection: ProductionConversationProjection
+): string[] {
+  return projection.messages
+    .filter((message) =>
+      message.type === "structured_agent_question" &&
+      message.clarificationAnswerStatus !== "answered"
+    )
+    .map((message) => message.text);
+}
+
 function questionAwareWorkbenchFacts(
   facts: WorkbenchSpecFact[],
   productionQuestions: string[]
@@ -46,7 +57,7 @@ export function buildProductionConversationState(input: {
   currentSpecPlans: Array<Record<string, unknown>>;
   currentSpecPurchaseLists: Array<Record<string, unknown>>;
 }): ProductionConversationState {
-  const productionQuestions = input.focusedProductionSpec
+  const localProductionQuestions = input.focusedProductionSpec
     ? buildProductionQuestions(input.focusedProductionSpec)
     : [];
   const productionAssumptions = buildProductionAssumptions(input.focusedProductionSpec);
@@ -55,7 +66,7 @@ export function buildProductionConversationState(input: {
     : [];
   const productionConversationProjection = buildProductionConversationProjection({
     spec: input.focusedProductionSpec,
-    questions: productionQuestions,
+    questions: localProductionQuestions,
     assumptions: productionAssumptions,
     answerSummary: formatStructuredProductionAnswerSummary(input.focusedProductionSpec),
     clarificationAnswers: focusedClarificationAnswers as Parameters<
@@ -65,6 +76,7 @@ export function buildProductionConversationState(input: {
     productionPlans: input.currentSpecPlans,
     purchaseLists: input.currentSpecPurchaseLists
   });
+  const productionQuestions = openQuestionTextsFromProjection(productionConversationProjection);
 
   return {
     productionQuestions,

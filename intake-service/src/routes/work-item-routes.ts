@@ -10,6 +10,7 @@ import type { IntakeStore } from "../store.js";
 
 export interface SpecUpdateBody {
   eventDate?: string;
+  eventSchedule?: Array<{ label: string; start?: string; end?: string }>;
   attendeeCount?: number;
   serviceForm?: string;
   eventType?: string;

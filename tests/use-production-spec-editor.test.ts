@@ -52,6 +52,7 @@ const lunchSpec = {
   event: {
     type: "Lunch",
     date: "2026-06-12",
+    schedule: [{ label: "Service", start: "12:00", end: "14:00" }],
     serviceForm: "Buffet"
   },
   attendees: {
@@ -82,6 +83,7 @@ describe("useProductionSpecEditor", () => {
 
     expect(probe.editor.editingSpecId).toBe("spec-lunch");
     expect(probe.editor.editingEventType).toBe("Lunch");
+    expect(probe.editor.editingEventSchedule).toBe("12:00-14:00");
     expect(probe.editor.editingAttendeeCount).toBe("42");
     expect(probe.editor.editingComponentStates["component-hummus"]).toEqual({
       menuCategory: "vegan",

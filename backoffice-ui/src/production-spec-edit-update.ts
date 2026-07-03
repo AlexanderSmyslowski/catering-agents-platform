@@ -3,6 +3,7 @@ import type { ComponentEditState } from "./production-answer-types.js";
 export type SpecEditUpdateFormState = {
   eventType: string;
   eventDate: string;
+  eventSchedule?: string;
   attendeeCount: string;
   serviceForm: string;
   menuItems: string;
@@ -20,6 +21,7 @@ export type SpecEditComponentUpdate = {
 
 export type SpecEditUpdateInput = {
   eventDate?: string;
+  eventSchedule?: Array<{ label: string; start?: string; end?: string }>;
   attendeeCount?: number;
   serviceForm?: string;
   eventType?: string;
@@ -32,6 +34,37 @@ function splitCommaList(value: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeTimeToken(value: string): string | undefined {
+  const match = value.trim().match(/^([01]?\d|2[0-3])(?::|\.|h)?(\d{2})?$/i);
+  if (!match) {
+    return undefined;
+  }
+
+  const hour = match[1].padStart(2, "0");
+  const minute = match[2] ?? "00";
+  return `${hour}:${minute}`;
+}
+
+function parseEventSchedule(value: string): SpecEditUpdateInput["eventSchedule"] {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const tokens = Array.from(trimmed.matchAll(/\b([01]?\d|2[0-3])(?::|\.|h)?(\d{2})?\b/gi))
+    .map((match) => normalizeTimeToken(match[0]))
+    .filter((item): item is string => Boolean(item));
+  const [start, end] = tokens;
+
+  return [
+    {
+      label: trimmed,
+      ...(start ? { start } : {}),
+      ...(end ? { end } : {})
+    }
+  ];
 }
 
 function parseMenuCategory(value: string): SpecEditComponentUpdate["menuCategory"] {
@@ -62,6 +95,7 @@ export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEd
   return {
     eventType: state.eventType.trim() || undefined,
     eventDate: state.eventDate.trim() || undefined,
+    eventSchedule: parseEventSchedule(state.eventSchedule ?? ""),
     serviceForm: state.serviceForm.trim() || undefined,
     attendeeCount: state.attendeeCount.trim() ? Number(state.attendeeCount) : undefined,
     menuItems: splitCommaList(state.menuItems),

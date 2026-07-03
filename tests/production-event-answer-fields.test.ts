@@ -21,10 +21,11 @@ function renderProductionEventAnswerFields() {
   const root = createRoot(container);
   roots.push(root);
 
-  const actions = {
-    setEditingEventType: vi.fn((_: string) => undefined),
-    setEditingEventDate: vi.fn((_: string) => undefined),
-    setEditingAttendeeCount: vi.fn((_: string) => undefined),
+    const actions = {
+      setEditingEventType: vi.fn((_: string) => undefined),
+      setEditingEventDate: vi.fn((_: string) => undefined),
+      setEditingEventSchedule: vi.fn((_: string) => undefined),
+      setEditingAttendeeCount: vi.fn((_: string) => undefined),
     setEditingServiceForm: vi.fn((_: string) => undefined),
     setEditingMenuItems: vi.fn((_: string) => undefined)
   };
@@ -34,6 +35,7 @@ function renderProductionEventAnswerFields() {
       createElement(ProductionEventAnswerFields, {
         editingEventType: "",
         editingEventDate: "",
+        editingEventSchedule: "",
         editingAttendeeCount: "",
         editingServiceForm: "",
         editingMenuItems: "",
@@ -66,5 +68,25 @@ describe("production event answer fields", () => {
 
     expect(actions.setEditingEventType).toHaveBeenCalledWith("lunch");
     expect(actions.setEditingServiceForm).toHaveBeenCalledWith("buffet");
+  });
+
+  it("offers a direct answer field for the time-window clarification", () => {
+    const { container, actions } = renderProductionEventAnswerFields();
+    const timeWindowInput = container.querySelector<HTMLInputElement>("input[aria-label='Zeitfenster']");
+
+    expect(timeWindowInput).not.toBeNull();
+
+    act(() => {
+      if (!timeWindowInput) {
+        return;
+      }
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        timeWindowInput,
+        "16:30-23:00"
+      );
+      timeWindowInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(actions.setEditingEventSchedule).toHaveBeenCalledWith("16:30-23:00");
   });
 });

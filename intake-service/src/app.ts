@@ -16,6 +16,7 @@ import {
   validateEventRequest,
   type AcceptedEventSpec,
   type EventRequest,
+  type EventScheduleItem,
   type OperationalArchiveReasonCode
 } from "@catering/shared-core";
 import { buildEventRequestFromText } from "./extraction.js";
@@ -56,6 +57,48 @@ function dietaryTagsForCategory(category?: "classic" | "vegetarian" | "vegan"): 
   return [];
 }
 
+function normalizeEventSchedule(input: SpecUpdateBody["eventSchedule"]): EventScheduleItem[] | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const items = input
+    .map((item) => ({
+      label: String(item.label ?? "").trim() || "Service",
+      start: item.start?.trim() || undefined,
+      end: item.end?.trim() || undefined
+    }))
+    .filter((item) => item.label || item.start || item.end);
+
+  return items.length > 0 ? items : undefined;
+}
+
+function resolvedUncertaintyFields(body: SpecUpdateBody): Set<string> {
+  const fields = new Set<string>();
+  if (body.eventType?.trim()) {
+    fields.add("event.type");
+  }
+  if (body.eventDate?.trim()) {
+    fields.add("event.date");
+    fields.add("event.date_or_schedule");
+  }
+  if (normalizeEventSchedule(body.eventSchedule)?.length) {
+    fields.add("event.schedule");
+    fields.add("event.date_or_schedule");
+  }
+  if (typeof body.attendeeCount === "number" && Number.isFinite(body.attendeeCount) && body.attendeeCount > 0) {
+    fields.add("attendees.expected");
+  }
+  if (body.serviceForm?.trim()) {
+    fields.add("event.serviceForm");
+    fields.add("servicePlan.serviceForm");
+  }
+  if (normalizeMenuItems(body.menuItems)?.length) {
+    fields.add("menuPlan");
+  }
+  return fields;
+}
+
 const archiveReasonCodes = new Set<OperationalArchiveReasonCode>([
   "wrong_upload",
   "duplicate_test_data",
@@ -90,6 +133,10 @@ function applySpecUpdates(
   const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
   const nextAttendeeCount = body.attendeeCount ?? spec.attendees.expected;
   const nextMenuItems = normalizeMenuItems(body.menuItems);
+  const nextEventSchedule = body.eventSchedule !== undefined
+    ? normalizeEventSchedule(body.eventSchedule)
+    : spec.event.schedule;
+  const resolvedFields = resolvedUncertaintyFields(body);
   const componentUpdates = new Map(
     (body.componentUpdates ?? []).map((item) => [item.componentId, item])
   );
@@ -115,6 +162,7 @@ function applySpecUpdates(
       ...spec.event,
       type: nextEventType,
       date: body.eventDate?.trim() || spec.event.date,
+      schedule: nextEventSchedule,
       serviceForm: nextServiceForm
     },
     attendees: {
@@ -126,6 +174,7 @@ function applySpecUpdates(
       eventType: nextEventType ?? spec.servicePlan.eventType,
       serviceForm: nextServiceForm
     },
+    uncertainties: (spec.uncertainties ?? []).filter((uncertainty) => !resolvedFields.has(uncertainty.field)),
     menuPlan:
       nextMenuItems === undefined
         ? spec.menuPlan.map((item) => ({
