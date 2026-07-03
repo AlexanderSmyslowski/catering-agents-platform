@@ -1,4 +1,7 @@
-import type { LlmReadinessStructuredCandidateValue } from "./llm-readiness.js";
+import type {
+  LlmReadinessModelOutputKind,
+  LlmReadinessStructuredCandidateValue
+} from "./llm-readiness.js";
 import type {
   LlmReadinessSyntheticLiveTransport,
   LlmReadinessSyntheticLiveTransportRequest,
@@ -50,6 +53,64 @@ function buildClarificationQuestionSchema() {
   };
 }
 
+function buildProductionDraftExtractionSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      eventType: { type: ["string", "null"] },
+      serviceForm: { type: ["string", "null"] },
+      eventDate: { type: ["string", "null"] },
+      attendeeCount: { type: ["number", "null"] },
+      customerName: { type: ["string", "null"] },
+      venueName: { type: ["string", "null"] },
+      components: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            label: { type: "string" },
+            course: { type: ["string", "null"] },
+            category: { type: ["string", "null"] },
+            note: { type: ["string", "null"] }
+          },
+          required: ["label", "course", "category", "note"]
+        }
+      },
+      openQuestions: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            field: { type: "string" },
+            message: { type: "string" },
+            suggestedQuestion: { type: ["string", "null"] }
+          },
+          required: ["field", "message", "suggestedQuestion"]
+        }
+      }
+    },
+    required: [
+      "eventType",
+      "serviceForm",
+      "eventDate",
+      "attendeeCount",
+      "customerName",
+      "venueName",
+      "components",
+      "openQuestions"
+    ]
+  };
+}
+
+function outputSchemaFor(outputKind: LlmReadinessModelOutputKind) {
+  return outputKind === "production_draft_extraction"
+    ? buildProductionDraftExtractionSchema()
+    : buildClarificationQuestionSchema();
+}
+
 function buildRequestBody(request: LlmReadinessSyntheticLiveTransportRequest, model: string) {
   return {
     model,
@@ -76,9 +137,9 @@ function buildRequestBody(request: LlmReadinessSyntheticLiveTransportRequest, mo
     text: {
       format: {
         type: "json_schema",
-        name: "clarification_question_draft",
+        name: request.outputKind,
         strict: true,
-        schema: buildClarificationQuestionSchema()
+        schema: outputSchemaFor(request.outputKind)
       }
     }
   };
@@ -98,7 +159,7 @@ function collectTextFromOutput(output: OpenAiResponsesBody["output"]): string | 
   return textParts.length > 0 ? textParts.join("\n") : undefined;
 }
 
-function parseResponsePayload(rawText: string): {
+function parseResponsePayload(rawText: string, outputKind: LlmReadinessModelOutputKind): {
   ok: boolean;
   errors: string[];
   text?: string;
@@ -112,6 +173,26 @@ function parseResponsePayload(rawText: string): {
     return {
       ok: false,
       errors: ["provider response must be valid JSON"]
+    };
+  }
+
+  if (outputKind === "production_draft_extraction") {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      !Array.isArray((parsed as { components?: unknown }).components)
+    ) {
+      return {
+        ok: false,
+        errors: ["provider response must contain components as an array"]
+      };
+    }
+
+    return {
+      ok: true,
+      errors: [],
+      text: JSON.stringify(parsed)
     };
   }
 
@@ -191,10 +272,13 @@ export class OpenAiSyntheticLiveTransport implements LlmReadinessSyntheticLiveTr
   async run(
     request: LlmReadinessSyntheticLiveTransportRequest
   ): Promise<LlmReadinessSyntheticLiveTransportResponse> {
-    if (request.outputKind !== "clarification_question_draft") {
+    if (
+      request.outputKind !== "clarification_question_draft" &&
+      request.outputKind !== "production_draft_extraction"
+    ) {
       return {
         ok: false,
-        errors: ["OpenAI synthetic live transport only supports clarification_question_draft"],
+        errors: ["OpenAI synthetic live transport only supports clarification_question_draft and production_draft_extraction"],
         providerId: "openai-responses"
       };
     }
@@ -233,7 +317,7 @@ export class OpenAiSyntheticLiveTransport implements LlmReadinessSyntheticLiveTr
       };
     }
 
-    const payload = parseResponsePayload(rawText);
+    const payload = parseResponsePayload(rawText, request.outputKind);
     if (!payload.ok) {
       return {
         ok: false,

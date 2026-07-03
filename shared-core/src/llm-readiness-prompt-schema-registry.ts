@@ -81,6 +81,29 @@ export const llmReadinessPromptSchemaRegistry = [
     fixtureIds: ["llm-eval-synthetic-buffet-operator-summary"],
     forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
     description: "Schema-only prompt, policy and output-schema metadata for operator summary readiness."
+  },
+  {
+    promptSchemaId: "production-draft-extraction-prompt-schema.v0",
+    registryVersion: llmReadinessPromptSchemaRegistryVersion,
+    readinessContractVersion: llmReadinessContractVersion,
+    draftContractId: "production-draft-extraction.v0",
+    inputKind: "production_draft_request",
+    outputKind: "production_draft_extraction",
+    status: "schema_contract_only",
+    promptArtifactId: "production-draft-extraction.prompt",
+    promptVersion: "v0",
+    policyArtifactId: "production-draft-extraction.policy",
+    policyVersion: "v0",
+    outputSchemaId: "production-draft-extraction.output-schema.v0",
+    providerCalls: "disabled",
+    dataMode: "synthetic_or_demo_only",
+    allowedToolEffects: ["read", "draft"],
+    requiredSourceObjectTypes: ["safe_source_anchor"],
+    humanApprovalRequired: true,
+    writesProductObject: false,
+    fixtureIds: ["llm-eval-synthetic-flying-buffet-production-draft"],
+    forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
+    description: "Schema-only prompt, policy and output-schema metadata for ProductionDraft extraction readiness."
   }
 ] as const satisfies readonly LlmReadinessPromptSchemaRegistryEntry[];
 

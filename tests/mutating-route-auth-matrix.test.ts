@@ -171,6 +171,17 @@ const mutatingMvpRoutes: MutableRoute[] = [
   },
   {
     service: "production",
+    method: "POST",
+    pathTemplate: "/v1/production/drafts/from-document",
+    requiredRole: "production_operator",
+    payload: () => ({
+      filename: "matrix-angebot.txt",
+      mimeType: "text/plain",
+      contentBase64: Buffer.from("Buffet fuer 45 Personen mit Vitello Tonnato.", "utf8").toString("base64")
+    })
+  },
+  {
+    service: "production",
     method: "PATCH",
     pathTemplate: "/v1/production/drafts/:draftId/review-cards/:cardId",
     requiredRole: "production_operator",

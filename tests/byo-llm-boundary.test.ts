@@ -79,6 +79,7 @@ describe("BYO LLM boundary", () => {
   it("keeps all allowed draft use cases human-approved and non-writing", () => {
     expect(byoLlmBoundaryPolicy.allowedDraftUseCases.map((useCase) => useCase.draftType)).toEqual([
       "clarification_question_draft",
+      "production_draft_extraction",
       "recipe_research_summary_draft",
       "search_query_suggestion_draft",
       "uncertainty_summary_draft"
@@ -92,6 +93,9 @@ describe("BYO LLM boundary", () => {
     }
 
     expect(allowedByoLlmDraftUseCaseByType("clarification_question_draft")).toMatchObject({
+      status: "implemented_readiness_contract"
+    });
+    expect(allowedByoLlmDraftUseCaseByType("production_draft_extraction")).toMatchObject({
       status: "implemented_readiness_contract"
     });
     expect(allowedByoLlmDraftUseCaseByType("recipe_research_summary_draft")).toMatchObject({
@@ -147,7 +151,7 @@ describe("BYO LLM boundary", () => {
 
     expect(response.ok).toBe(false);
     expect(response.errors).toContain(
-      "OpenAI synthetic live transport only supports clarification_question_draft"
+      "OpenAI synthetic live transport only supports clarification_question_draft and production_draft_extraction"
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });

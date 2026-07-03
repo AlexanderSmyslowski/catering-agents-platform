@@ -19,6 +19,7 @@ export type LlmReadinessProviderAdapterMode = "fixture_only" | "synthetic_live";
 export interface LlmReadinessProviderAdapterRequest {
   input: LlmReadinessModelInput;
   promptSchemaId?: string;
+  promptContext?: string;
 }
 
 export interface LlmReadinessProviderAdapterResponse {

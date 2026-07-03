@@ -167,6 +167,15 @@ export const dataIngressPaths = [
     requiredGate: "production_operator auth, validateProductionDraft, pending_review only, no product writes"
   },
   {
+    id: "production_draft_document_extraction",
+    service: "production-service",
+    route: "POST /v1/production/drafts/from-document",
+    source: "operator-approved anonymized document and BYO-LLM draft adapter",
+    scope: "synthetic_or_demo_only",
+    externalExposure: "blocked_until_decision",
+    requiredGate: "production_operator auth, PA54-approved source, explicit CATERING_SYNTHETIC_LLM_SLICE opt-in, draft-only, no raw prompt/response persistence"
+  },
+  {
     id: "production_draft_review_card_decision",
     service: "production-service",
     route: "PATCH /v1/production/drafts/:draftId/review-cards/:cardId",
@@ -433,6 +442,26 @@ export const auditEvidencePaths = [
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "draft_only",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_draft_document_created",
+    service: "production-service",
+    route: "POST /v1/production/drafts/from-document",
+    action: "production.production_draft_document_created",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "draft_only",
+    requiredRole: "production_operator"
+  },
+  {
+    id: "production_draft_document_rejected",
+    service: "production-service",
+    route: "POST /v1/production/drafts/from-document",
+    action: "production.production_draft_document_rejected",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "none",
     requiredRole: "production_operator"
   },
   {

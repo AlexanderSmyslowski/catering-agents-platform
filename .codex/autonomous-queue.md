@@ -1,6 +1,6 @@
 # Autonome Queue
 
-**Aktive Phase: 1 (Harness-Kern)** — Phasenfolge, Loop-Regeln und
+**Aktive Phase: 2 (Echte KI-Anbindung)** — Phasenfolge, Loop-Regeln und
 Endziel: `.codex/ziellauf.md` (bindend seit 2026-07-03). Die Queue wird
 nur aus der aktiven Phase gespeist; die nächste Phase öffnet erst mit
 einem `GATE QUITTIERT: <Phase>`-Eintrag von Alexander unter ERLEDIGT.
@@ -17,25 +17,39 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-_(Befüllt von Fable am 2026-07-03 aus Ziellauf Phase 1. Reihenfolge
-bindend; 1.2 baut auf 1.1 auf und wird auf dessen Branch gestapelt,
-falls 1.1 noch nicht gemerged ist.)_
+_(leer)_
 
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-### 2026-07-03 · Gate 1 Freigabe fuer Phase 2
-
-Phase 1 ist leergezogen und die Stack-PRs #546, #547 und #548 sind
-gemerged. Fuer `GATE QUITTIERT: 1` fehlen noch: echtes anonymisiertes
-Angebots-PDF benennen und Provider-Budget freigeben. Ohne diese
-Quittierung bleibt Phase 2 gesperrt.
+_(leer)_
 
 ---
 
 ## ERLEDIGT
 
+- Slice 2.1 PDF→ProductionDraft über BYO-Schiene abgeschlossen in Branch
+  `loop/pdf-production-draft-byo`, Draft-PR #549
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/549>.
+  Belegt: Das Gate-1-PDF wird nach Operator-Gate und BYO-Extraktion als
+  `pending_review`-ProductionDraft angelegt; Buffet-Komponenten werden zu
+  Review-Karten, Nahtreffer wie Vitello Tonnato/Kokos-Cheesecake bleiben
+  ohne automatische Rezeptzuordnung prüfpflichtig; keine Pläne oder
+  Einkaufslisten werden geschrieben, Audit enthält keine Roh-PDF-/Prompt-/
+  Response-Inhalte. Externe Verifikation: echte PDF-Läufe erfüllen die
+  Fallklasse mit `CATERING_LLM_MODEL=gpt-4.1`; `gpt-4o-mini` verlor
+  Komponenten still und ist für diesen Betriebspfad disqualifiziert.
+  Batterie grün: `npm test` 270 Dateien / 1182 Tests, `tsc`, Build,
+  Audit, Hidden/Bidi-Check und Internal-Beta-Gate.
+- **GATE QUITTIERT: 1** · Alexander benannte am 2026-07-03 das
+  anonymisierte PDF
+  `data/gate1/angebot_flying_buffet_45p_anonymisiert.pdf` und gab fuer
+  Slice 2.1 ein Provider-Budget von 10 EUR / 100 Requests frei; das
+  OpenAI-Dashboard-Hardlimit soll bei 20 EUR/Monat liegen. Technischer
+  Check: PDF liegt unter `data/`, ist per `.gitignore` ausgeschlossen,
+  hat 5 A4-Seiten, ist nicht verschluesselt und enthaelt kein
+  JavaScript. Phase 2 ist damit fuer genau Slice 2.1 geoeffnet.
 - Gate-1-Merge-Session umgesetzt: #546, #547 und #548 wurden in
   Stack-Reihenfolge nach `main` gemerged; die drei `loop/*`-Branches
   wurden lokal und remote geloescht. #494 wurde geschlossen mit

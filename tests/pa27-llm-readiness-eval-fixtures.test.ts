@@ -34,12 +34,14 @@ describe("PA27 LLM readiness eval fixtures", () => {
   it("provides the first clarification and operator-summary eval cases", () => {
     expect(llmReadinessEvalFixtures.map((fixture) => fixture.fixtureId)).toEqual([
       "llm-eval-synthetic-coffee-break-missing-attendees",
-      "llm-eval-synthetic-buffet-operator-summary"
+      "llm-eval-synthetic-buffet-operator-summary",
+      "llm-eval-synthetic-flying-buffet-production-draft"
     ]);
 
     expect(llmReadinessEvalFixtures.map((fixture) => fixture.expectedOutput.kind)).toEqual([
       "clarification_question_draft",
-      "operator_summary_draft"
+      "operator_summary_draft",
+      "production_draft_extraction"
     ]);
   });
 

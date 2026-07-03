@@ -1,11 +1,20 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { createHash, randomUUID } from "node:crypto";
 import {
   createLlmReadinessAgentAuditRecord,
+  createEventRequestFromManualForm,
+  createUploadSourceMetadata,
   findLlmReadinessPromptSchemaEntryByInputKind,
+  ingestDocument,
   llmReadinessForbiddenPayloadKeys,
   llmReadinessContractVersion,
+  multipartLimitsForUpload,
+  normalizeEventRequestToSpec,
+  readLimitedUploadBuffer,
+  uploadErrorResponse,
   validateAcceptedEventSpec,
+  validateUploadedDocument,
+  validateUploadedDocumentMetadata,
   validateLlmReadinessModelOutputCandidate,
   validateProductionDraft,
   validateProductionPlan,
@@ -19,6 +28,7 @@ import {
   type LlmReadinessProviderAdapterRequest,
   type LlmReadinessProviderAdapterResponse,
   type ProductionDraft,
+  type ProductionDraftReviewCard,
   type ProductionDraftReviewDecision,
   type ProductionPlan,
   type PurchaseList,
@@ -199,6 +209,42 @@ interface RecipeCandidateRepository {
   save(recipe: Recipe): Promise<void>;
 }
 
+interface ProductionDraftDocumentBody {
+  filename?: unknown;
+  mimeType?: unknown;
+  contentBase64?: unknown;
+}
+
+interface ProductionDraftDocumentInput {
+  filename: string;
+  mimeType: string;
+  content: Buffer;
+}
+
+interface ProductionDraftExtractionComponent {
+  label: string;
+  course?: string;
+  category?: "classic" | "vegetarian" | "vegan";
+  note?: string;
+}
+
+interface ProductionDraftExtractionQuestion {
+  field: string;
+  message: string;
+  suggestedQuestion?: string;
+}
+
+interface ProductionDraftExtraction {
+  eventType?: string;
+  serviceForm?: string;
+  eventDate?: string;
+  attendeeCount?: number;
+  customerName?: string;
+  venueName?: string;
+  components: ProductionDraftExtractionComponent[];
+  openQuestions: ProductionDraftExtractionQuestion[];
+}
+
 export interface ProductionArtifactRouteDependencies {
   store: ProductionStore;
   intakeStore: IntakeStore;
@@ -224,6 +270,286 @@ export interface ProductionArtifactRouteDependencies {
     trustedActorSecret?: string,
     allowDevActorHeader?: boolean
   ) => TrustedActor;
+}
+
+function normalizeOptionalText(value: unknown, maxLength = 240): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  return trimmed.length > 0 ? trimmed.slice(0, maxLength) : undefined;
+}
+
+function normalizeOptionalNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+
+  return Math.trunc(value);
+}
+
+function normalizeMenuCategory(value: unknown): ProductionDraftExtractionComponent["category"] | undefined {
+  return value === "classic" || value === "vegetarian" || value === "vegan" ? value : undefined;
+}
+
+function slugifyForDraft(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80) || "item";
+}
+
+function parseProductionDraftExtraction(outputCandidate?: LlmReadinessModelOutputCandidate): {
+  extraction?: ProductionDraftExtraction;
+  errors: string[];
+} {
+  const errors = validateLlmReadinessModelOutputCandidate(outputCandidate).errors.map((error) =>
+    `outputCandidate.${error}`
+  );
+  if (!outputCandidate) {
+    return { errors };
+  }
+  if (outputCandidate.kind !== "production_draft_extraction") {
+    errors.push("outputCandidate.kind must be production_draft_extraction");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(outputCandidate.text);
+  } catch {
+    errors.push("outputCandidate.text must be valid production draft extraction JSON");
+  }
+
+  if (!isPlainRecord(parsed)) {
+    errors.push("outputCandidate.text must contain a JSON object");
+    return { errors: [...new Set(errors)] };
+  }
+
+  const rawComponents = Array.isArray(parsed.components) ? parsed.components : [];
+  const components = rawComponents.flatMap((component, index): ProductionDraftExtractionComponent[] => {
+    if (!isPlainRecord(component)) {
+      errors.push(`components[${index}] must be an object`);
+      return [];
+    }
+    const label = normalizeOptionalText(component.label, 320);
+    if (!label) {
+      errors.push(`components[${index}].label must be non-empty`);
+      return [];
+    }
+
+    return [{
+      label,
+      course: normalizeOptionalText(component.course, 80),
+      category: normalizeMenuCategory(component.category),
+      note: normalizeOptionalText(component.note, 500)
+    }];
+  });
+
+  const rawQuestions = Array.isArray(parsed.openQuestions) ? parsed.openQuestions : [];
+  const openQuestions = rawQuestions.flatMap((question, index): ProductionDraftExtractionQuestion[] => {
+    if (!isPlainRecord(question)) {
+      errors.push(`openQuestions[${index}] must be an object`);
+      return [];
+    }
+    const field = normalizeOptionalText(question.field, 120);
+    const message = normalizeOptionalText(question.message, 500);
+    if (!field || !message) {
+      errors.push(`openQuestions[${index}] needs field and message`);
+      return [];
+    }
+
+    return [{
+      field,
+      message,
+      suggestedQuestion: normalizeOptionalText(question.suggestedQuestion, 500)
+    }];
+  });
+
+  if (components.length === 0 && openQuestions.length === 0) {
+    errors.push("production draft extraction must contain components or openQuestions");
+  }
+
+  if (errors.length > 0) {
+    return { errors: [...new Set(errors)] };
+  }
+
+  return {
+    extraction: {
+      eventType: normalizeOptionalText(parsed.eventType, 120),
+      serviceForm: normalizeOptionalText(parsed.serviceForm, 120),
+      eventDate: normalizeOptionalText(parsed.eventDate, 40),
+      attendeeCount: normalizeOptionalNumber(parsed.attendeeCount),
+      customerName: normalizeOptionalText(parsed.customerName, 240),
+      venueName: normalizeOptionalText(parsed.venueName, 240),
+      components,
+      openQuestions
+    },
+    errors: []
+  };
+}
+
+async function productionDraftDocumentFromRequest(
+  request: FastifyRequest
+): Promise<ProductionDraftDocumentInput> {
+  const multipartRequest = request as FastifyRequest & {
+    isMultipart: () => boolean;
+    file: (options?: { limits?: { fileSize?: number; files?: number; fields?: number; parts?: number } }) => Promise<
+      | {
+          filename: string;
+          mimetype: string;
+          file: AsyncIterable<Buffer | Uint8Array>;
+          toBuffer: () => Promise<Buffer>;
+        }
+      | undefined
+    >;
+  };
+
+  if (multipartRequest.isMultipart?.()) {
+    const file = await multipartRequest.file({ limits: multipartLimitsForUpload("intake") });
+    if (!file) {
+      throw new Error("No production source file provided.");
+    }
+    validateUploadedDocumentMetadata({ filename: file.filename, mimeType: file.mimetype });
+    const content = await readLimitedUploadBuffer(file.file, "intake");
+    const document = { filename: file.filename, mimeType: file.mimetype, content };
+    validateUploadedDocument(document, "intake");
+    return document;
+  }
+
+  const body = request.body as ProductionDraftDocumentBody | undefined;
+  const filename = normalizeOptionalText(body?.filename, 240);
+  const mimeType = normalizeOptionalText(body?.mimeType, 120);
+  if (!filename || !mimeType || typeof body?.contentBase64 !== "string") {
+    throw new Error("filename, mimeType und contentBase64 sind erforderlich.");
+  }
+  const content = Buffer.from(body.contentBase64, "base64");
+  const document = { filename, mimeType, content };
+  validateUploadedDocument(document, "intake");
+  return document;
+}
+
+function buildProductionDraftFromExtraction(input: {
+  extraction: ProductionDraftExtraction;
+  source: {
+    filename: string;
+    sha256: string;
+    ingestedAt: string;
+  };
+  outputCandidate: LlmReadinessModelOutputCandidate;
+  adapterResponse: LlmReadinessProviderAdapterResponse;
+}): ProductionDraft {
+  const requestId = `production-draft-source-${input.source.sha256.slice(0, 16)}`;
+  const eventRequest = createEventRequestFromManualForm({
+    requestId,
+    eventType: input.extraction.eventType ?? "Buffet",
+    eventDate: input.extraction.eventDate,
+    attendeeCount: input.extraction.attendeeCount,
+    serviceForm: input.extraction.serviceForm ?? "Buffet",
+    menuItems: input.extraction.components.map((component) => component.label),
+    customerName: input.extraction.customerName,
+    venueName: input.extraction.venueName,
+    notes: "KI-Extraktion aus operatorfreigegebenem Angebotsdokument; fachliche Prüfung erforderlich."
+  });
+  const eventSpec = normalizeEventRequestToSpec(eventRequest, {
+    sourceType: "pdf",
+    reference: `sha256:${input.source.sha256}`,
+    commercialState: "provisional"
+  });
+  const menuPlan = input.extraction.components.map((component, index) => ({
+    ...eventSpec.menuPlan[index],
+    componentId: `${slugifyForDraft(component.label)}-${index + 1}`,
+    label: component.label,
+    course: component.course ?? eventSpec.menuPlan[index]?.course,
+    menuCategory: component.category ?? eventSpec.menuPlan[index]?.menuCategory,
+    serviceStyle: input.extraction.serviceForm ?? eventSpec.servicePlan.serviceForm,
+    servings: input.extraction.attendeeCount ?? eventSpec.attendees.expected,
+    ...(component.note
+      ? {
+          productionDecision: {
+            notes: component.note
+          }
+        }
+      : {})
+  }));
+  const openQuestions = input.extraction.openQuestions.map((question) => ({
+    field: question.field,
+    message: question.message,
+    severity: "medium" as const,
+    suggestedQuestion: question.suggestedQuestion
+  }));
+  const draftEventSpec = validateAcceptedEventSpec({
+    ...eventSpec,
+    menuPlan,
+    uncertainties: openQuestions.length > 0
+      ? [...(eventSpec.uncertainties ?? []), ...openQuestions]
+      : eventSpec.uncertainties
+  });
+  const reviewCards: ProductionDraftReviewCard[] = [
+    {
+      cardId: "card-event-data",
+      kind: "event_data",
+      title: "Eventdaten aus PDF prüfen",
+      summary: `${input.extraction.eventType ?? "Event"} · ${input.extraction.attendeeCount ?? "Personenzahl offen"} Personen · ${input.extraction.eventDate ?? "Datum offen"}`,
+      decision: "pending",
+      targetPath: "$.draftArtifacts.eventSpec",
+      targetId: draftEventSpec.specId,
+      requiredApproval: true
+    },
+    ...draftEventSpec.menuPlan.map((component, index): ProductionDraftReviewCard => ({
+      cardId: `card-menu-component-${index + 1}`,
+      kind: "menu_component",
+      title: component.label,
+      summary: "Menükomponente aus PDF-Extraktion prüfen; keine automatische Rezeptzuordnung.",
+      decision: "pending",
+      targetPath: `$.draftArtifacts.eventSpec.menuPlan[${index}]`,
+      targetId: component.componentId,
+      requiredApproval: true
+    })),
+    ...openQuestions.map((question, index): ProductionDraftReviewCard => ({
+      cardId: `card-open-question-${index + 1}`,
+      kind: "open_question",
+      title: question.field,
+      summary: question.suggestedQuestion ?? question.message,
+      decision: "pending",
+      riskLevel: "medium",
+      requiredApproval: true
+    }))
+  ];
+
+  return validateProductionDraft({
+    schemaVersion: draftEventSpec.schemaVersion,
+    draftId: `production-draft-${randomUUID()}`,
+    status: "pending_review",
+    createdAt: new Date().toISOString(),
+    source: {
+      kind: input.adapterResponse.providerId === "codex-cli"
+        ? "agent_cli"
+        : input.adapterResponse.adapterMode === "fixture_only"
+          ? "fixture"
+          : "ai_provider",
+      receivedAt: input.source.ingestedAt,
+      sourceRef: `upload:${input.source.filename}`,
+      providerId: input.adapterResponse.providerId ?? input.adapterResponse.adapterId,
+      modelId: input.adapterResponse.adapterMode,
+      inputHash: `sha256:${input.source.sha256}`,
+      outputHash: hashText(input.outputCandidate.text),
+      runId: input.adapterResponse.providerRequestId
+    },
+    guardrails: {
+      draftOnly: true,
+      humanApprovalRequired: true,
+      writesProductObjects: false,
+      rawProviderPayloadStored: false,
+      knowledgeWritePolicy: "reviewed_only"
+    },
+    reviewCards,
+    draftArtifacts: {
+      eventSpec: draftEventSpec,
+      openQuestions
+    }
+  });
 }
 
 export function registerProductionArtifactRoutes(
@@ -333,6 +659,187 @@ export function registerProductionArtifactRoutes(
       items: await store.listPurchaseLists()
     });
   });
+
+  app.post<{ Body: ProductionDraftDocumentBody }>(
+    "/v1/production/drafts/from-document",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) {
+        return forbidden;
+      }
+
+      let document: ProductionDraftDocumentInput;
+      try {
+        document = await productionDraftDocumentFromRequest(request);
+      } catch (error) {
+        const uploadError = uploadErrorResponse(error, "intake");
+        return reply.code(uploadError.statusCode).send({ message: uploadError.message });
+      }
+
+      const sourceMetadata = createUploadSourceMetadata({
+        filename: document.filename,
+        mimeType: document.mimeType,
+        content: document.content,
+        uploadContext: "production"
+      });
+      const ingestion = await ingestDocument({
+        document: {
+          ...document,
+          sourceMetadata
+        },
+        context: "production"
+      });
+
+      if (ingestion.status !== "extracted" || !ingestion.extractedText?.trim()) {
+        return reply.code(422).send({
+          message: "Angebotsdokument konnte nicht sicher als Text gelesen werden.",
+          errors: ingestion.warnings
+        });
+      }
+
+      const promptSchema = findLlmReadinessPromptSchemaEntryByInputKind("production_draft_request");
+      if (!promptSchema) {
+        return reply.code(500).send({ message: "Prompt-Schema für ProductionDraft-Extraktion nicht registriert." });
+      }
+
+      const input: LlmReadinessModelInput = {
+        contractVersion: llmReadinessContractVersion,
+        inputId: `input-production-draft-${sourceMetadata.sha256.slice(0, 16)}`,
+        kind: "production_draft_request",
+        sourceRefs: [
+          {
+            objectType: "safe_source_anchor",
+            objectId: `sha256:${sourceMetadata.sha256}`,
+            label: sourceMetadata.filename
+          }
+        ],
+        policy: {
+          providerCalls: "disabled",
+          dataMode: "synthetic_or_demo_only",
+          allowedToolEffects: ["read", "draft"]
+        }
+      };
+      const adapterRequest: LlmReadinessProviderAdapterRequest = {
+        input,
+        promptSchemaId: promptSchema.promptSchemaId,
+        promptContext: ingestion.extractedText
+      };
+      const draftSeed = `draft-${sourceMetadata.sha256.slice(0, 16)}-${randomUUID()}`;
+
+      let adapter: LlmReadinessProviderAdapter;
+      try {
+        adapter = buildLlmAdapter();
+      } catch (error) {
+        return reply.code(500).send({
+          message: error instanceof Error ? error.message : "BYO-LLM-Adapter konnte nicht gestartet werden."
+        });
+      }
+
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
+        await auditLog.log({
+          action: "production.production_draft_document_rejected",
+          entityType: "ProductionDraft",
+          entityId: draftSeed,
+          actor,
+          summary: "ProductionDraft-Extraktion aus Dokument verworfen.",
+          details: compactAuditDetails({
+            inputId: input.inputId,
+            adapterId: adapter.adapterId,
+            adapterMode: adapter.adapterMode,
+            promptSchemaId: promptSchema.promptSchemaId,
+            sourceSha256: sourceMetadata.sha256,
+            errorCount: 1,
+            errorType: error instanceof Error ? error.name : typeof error
+          })
+        });
+        return undefined;
+      });
+      if (!adapterResponse) {
+        return reply.code(422).send({
+          message: "ProductionDraft-Extraktion konnte nicht erzeugt werden.",
+          errors: ["BYO-LLM-Aufruf ist fehlgeschlagen."]
+        });
+      }
+
+      const auditBuild = createLlmReadinessAgentAuditRecord({
+        auditId: `agent-audit-${draftSeed}`,
+        request: adapterRequest,
+        response: adapterResponse
+      });
+      const extractionBuild = parseProductionDraftExtraction(adapterResponse.outputCandidate);
+      const responseErrors = [
+        ...(adapterResponse.ok ? [] : adapterResponse.errors),
+        ...extractionBuild.errors,
+        ...auditBuild.errors.map((error) => `agentAudit.${error}`)
+      ];
+
+      if (!adapterResponse.ok || responseErrors.length > 0 || !extractionBuild.extraction || !auditBuild.auditRecord) {
+        await auditLog.log({
+          action: "production.production_draft_document_rejected",
+          entityType: "ProductionDraft",
+          entityId: draftSeed,
+          actor,
+          summary: "ProductionDraft-Extraktion aus Dokument verworfen.",
+          details: compactAuditDetails({
+            inputId: input.inputId,
+            adapterId: adapterResponse.adapterId,
+            adapterMode: adapterResponse.adapterMode,
+            promptSchemaId: adapterResponse.promptSchemaId ?? promptSchema.promptSchemaId,
+            providerId: adapterResponse.providerId,
+            providerRequestId: adapterResponse.providerRequestId,
+            sourceSha256: sourceMetadata.sha256,
+            errorCount: responseErrors.length
+          })
+        });
+        return reply.code(422).send({
+          message: "ProductionDraft-Extraktion ist nicht schema-valide.",
+          errors: [...new Set(responseErrors)]
+        });
+      }
+
+      const draft = buildProductionDraftFromExtraction({
+        extraction: extractionBuild.extraction,
+        source: {
+          filename: sourceMetadata.filename,
+          sha256: sourceMetadata.sha256,
+          ingestedAt: sourceMetadata.ingestedAt
+        },
+        outputCandidate: adapterResponse.outputCandidate!,
+        adapterResponse
+      });
+      await store.saveProductionDraft(draft);
+      await auditLog.log({
+        action: "production.production_draft_document_created",
+        entityType: "ProductionDraft",
+        entityId: draft.draftId,
+        actor,
+        summary: "ProductionDraft aus Dokumentextraktion angelegt.",
+        details: compactAuditDetails({
+          draftId: draft.draftId,
+          agentAuditId: auditBuild.auditRecord.auditId,
+          inputId: input.inputId,
+          outputId: adapterResponse.outputCandidate?.outputId,
+          sourceSha256: sourceMetadata.sha256,
+          adapterId: adapterResponse.adapterId,
+          adapterMode: adapterResponse.adapterMode,
+          promptSchemaId: adapterResponse.promptSchemaId ?? promptSchema.promptSchemaId,
+          providerId: adapterResponse.providerId,
+          providerRequestId: adapterResponse.providerRequestId,
+          reviewCardCount: draft.reviewCards.length,
+          componentCount: draft.draftArtifacts.eventSpec?.menuPlan.length ?? 0,
+          openQuestionCount: draft.draftArtifacts.openQuestions?.length ?? 0,
+          outputTextHash: adapterResponse.outputCandidate
+            ? hashText(adapterResponse.outputCandidate.text)
+            : undefined,
+          humanApprovalRequired: true,
+          writesProductObject: false
+        })
+      });
+
+      return reply.code(201).send({ draft });
+    }
+  );
 
   app.post<{ Body: ProductionDraft }>("/v1/production/drafts", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);

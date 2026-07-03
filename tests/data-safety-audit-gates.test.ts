@@ -30,6 +30,7 @@ describe("data safety and audit gates", () => {
       "offer_seed_demo",
       "production_plan_creation",
       "production_draft_import",
+      "production_draft_document_extraction",
       "production_draft_review_card_decision",
       "production_draft_decision",
       "production_draft_apply",
@@ -103,6 +104,7 @@ describe("data safety and audit gates", () => {
         "POST /v1/offers/recipes/upload",
         "PATCH /v1/offers/recipes/:recipeId/review",
         "POST /v1/production/drafts",
+        "POST /v1/production/drafts/from-document",
         "POST /v1/production/drafts/:draftId/decision",
         "POST /v1/production/drafts/:draftId/apply",
         "PATCH /v1/production/drafts/:draftId/review-cards/:cardId",
@@ -151,6 +153,8 @@ describe("data safety and audit gates", () => {
         "offer_html_export",
         "production_plan_html_export",
         "production_folder_html_export",
+        "production_draft_document_created",
+        "production_draft_document_rejected",
         "purchase_list_csv_export",
         "llm_readiness_agent_audit"
       ])
@@ -204,6 +208,8 @@ describe("data safety and audit gates", () => {
         "production.plan_created",
         "production.production_draft_approved",
         "production.production_draft_applied",
+        "production.production_draft_document_created",
+        "production.production_draft_document_rejected",
         "production.production_draft_imported",
         "production.production_draft_rejected",
         "production.production_draft_review_card_decided",
