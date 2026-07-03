@@ -215,6 +215,35 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "production",
     method: "POST",
+    pathTemplate: "/v1/production/feedback-drafts",
+    requiredRole: "production_operator",
+    payload: () => productionFeedbackPayload()
+  },
+  {
+    service: "production",
+    method: "POST",
+    pathTemplate: "/v1/production/feedback-drafts/:feedbackId/decision",
+    requiredRole: "production_operator",
+    url: "/v1/production/feedback-drafts/matrix-feedback/decision",
+    payload: { approve: false },
+    prepareCorrectRoleCase: async (app, headers) => {
+      const created = await inject(app, {
+        method: "POST",
+        url: "/v1/production/feedback-drafts",
+        headers,
+        payload: productionFeedbackPayload()
+      });
+      expect(created.statusCode).toBe(201);
+      const feedbackId = created.json<{ draft: { feedbackId: string } }>().draft.feedbackId;
+      return {
+        url: `/v1/production/feedback-drafts/${feedbackId}/decision`,
+        payload: { approve: false }
+      };
+    }
+  },
+  {
+    service: "production",
+    method: "POST",
     pathTemplate: "/v1/production/specs/:specId/clarification-drafts",
     requiredRole: "production_operator",
     url: "/v1/production/specs/matrix-spec/clarification-drafts"
@@ -366,6 +395,20 @@ function productionDraftPayload(): ProductionDraft {
     ],
     draftArtifacts: {
       eventSpec
+    }
+  };
+}
+
+function productionFeedbackPayload() {
+  return {
+    target: {
+      specId: "matrix-spec",
+      planId: "matrix-plan"
+    },
+    feedback: {
+      summary: "Mengen passten in der Produktion.",
+      observations: ["Ausgabe lief ruhig."],
+      changeRequests: ["Beim nächsten Lauf mehr Reserve einplanen."]
     }
   };
 }

@@ -21,39 +21,16 @@ _(Befüllt von Fable am 2026-07-03 aus Ziellauf Phase 1. Reihenfolge
 bindend; 1.2 baut auf 1.1 auf und wird auf dessen Branch gestapelt,
 falls 1.1 noch nicht gemerged ist.)_
 
-1. **1.3 Wissenstyp production_feedback** · Branch
-   `loop/production-feedback-knowledge` · GENAU EIN Wissenstyp,
-   draft-only mit Freigabe; Mechanik (Guardrails, forbidden keys,
-   maxLength, approvedBy/At) aus ProductionDraft wiederverwendet. Kein
-   neues Governance-Modul, kein zweiter Typ, keine neue Persistenzwelt.
-   Abnahme: (a) Ungeprüftes Feedback erscheint in keiner Sicht auf
-   geprüftes Wissen — belegt für jede Statusklasse; (b) Freigabe nur mit
-   Operator-Kontext, Raw-Payload-Grenzen greifen (Leak-Fallklasse wie
-   beim Draft); (c) Ablage im bestehenden production-service-Store.
-
-2. **1.4 Übergabe-Reproduktion (report-or-fix)** · Branch nur bei Befund:
-   `loop/offer-production-handoff-root` · Juni-Probe-Blocker Nr. 1
-   (übernommene Angebotsvariante wird nicht der aktive Vorgang in
-   /produktion) auf frischer Datenwurzel reproduzieren; die früher
-   teilabdeckenden PRs (#490/#505/#515) sind geschlossen.
-   Abnahme: (a) Reproduktionsprotokoll mit eindeutigem ja/nein;
-   (b) wenn ja: Wurzelfix + Test der Fallklasse „JEDE übernommene
-   Variante wird aktiver, berechenbarer Produktionsvorgang", nicht nur
-   das Demo-Szenario; (c) wenn nein: Befund-Notiz unter ERLEDIGT mit
-   Beleg, kein Code.
-
-3. **1.5 Ballast-Inventur** · report-only, vom WIP-Limit ausgenommen,
-   kein PR · Klassifikation gegen Pflichtenheft §9: intake-signals-
-   Regexe (Eval-Baseline-Status), llm-readiness-Module (eingefroren vs.
-   gebraucht), Branch `slice4-codex-procurement-guard` (Procurement-
-   Filter-Frage), tote UI-/Import-Pfade.
-   Abnahme: (a) Jeder Löschkandidat mit Beweisführung (Test/Flow/
-   Ersatzartefakt) + Zeilenumfang; (b) Abschluss-Empfehlung je Eintrag:
-   löschbar jetzt / löschbar nach X / behalten; (c) KEINE Löschung.
-
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)
+
+### 2026-07-03 · Gate 1 Phase-1-Sichtung
+
+Phase 1 ist leergezogen. Alexander muss #546, #547 und #548 sichten und
+über Merge/Schließung entscheiden; danach ggf. `GATE QUITTIERT: 1`
+eintragen, das echte anonymisierte Angebots-PDF benennen und Provider-
+Budget freigeben. Ohne diese Quittierung bleibt Phase 2 gesperrt.
 
 ### 2026-07-03 · Produktfrage #494
 
@@ -71,6 +48,41 @@ bleiben bewusst liegen. Kein autonomes Löschen ohne neuen Cleanup-Auftrag.
 
 ## ERLEDIGT
 
+- Slice 1.5 Ballast-Inventur report-only abgeschlossen, keine Löschung:
+  `intake-signals.ts` (300 Zeilen) bleibt jetzt als Runtime-Parser und
+  spätere Eval-Baseline bis Phase 2.2; LLM-Readiness-Core (2321 Zeilen)
+  bleibt, weil BYO-Klarstellungsentwürfe, OpenAI/Codex-Adapter und
+  Audit ihn direkt nutzen; Eval-/Synthetic-Live-Tooling (1866 Zeilen)
+  bleibt eingefroren bis reale Provider-Flows die Fixture-/No-Raw-
+  Prüfungen ersetzen. Mini-Pilot-UI ist der einzige echte spätere
+  Löschkandidat: 630 UI-Zeilen plus Testfläche, verborgen hinter
+  `VITE_SHOW_MINI_PILOT_PANEL`; Empfehlung: löschbar nach Phase 2, wenn
+  BYO-Draft-Review die Pilot-Oberfläche vollständig ersetzt. Procurement
+  Planning (290 Zeilen) bleibt, weil Hybrid/Convenience/externe
+  Fertigprodukte aktuell in Planung und Purchase-Coverage hängen.
+  Import-Scripts (451 Zeilen) bleiben als reproduzierbare Fixture-
+  Generatoren. Branch `slice4-codex-procurement-guard` ist veraltet
+  (über 10k Zeilen Massendiff gegen `main`); Empfehlung: schließen/
+  löschen, keine Rebase. Kein PR, kein Code.
+- Slice 1.4 Übergabe-Reproduktion ohne Codefix abgeschlossen: Auf
+  frischer Datenwurzel wurde `draft-demo-offer-conference-buffet`
+  Variante `variant-2` über die UI übernommen. `/produktion` fokussierte
+  danach `Konferenz · 180 Teilnehmer · 2026-11-20` als aktuellen Vorgang.
+  Nach strukturierten Antworten (`classic` + `scratch` für beide
+  Komponenten) erzeugte die UI den Plan
+  `plan-draft-demo-offer-conference-buffet-variant-2` und die Liste
+  `purchase-draft-demo-offer-conference-buffet-variant-2`; Plan-HTML,
+  Produktionsmappe-HTML und Einkaufslisten-CSV lieferten HTTP 200.
+  Ergebnis: Juni-Blocker auf aktuellem Stand nicht reproduziert; kein
+  Branch, kein Code.
+- Slice 1.3 Wissenstyp production_feedback abgeschlossen in Branch
+  `loop/production-feedback-knowledge`, Draft-PR #548
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/548>.
+  Belegt: pending/rejected erscheinen nicht in geprüfter Wissenssicht,
+  approved erscheint; Approval nur über Produktions-Operator und
+  serverseitige Provenienz; forbidden/raw payloads und zu lange Inhalte
+  werden abgewiesen. Batterie grün: `npm test` 269 Dateien / 1176 Tests,
+  Build, Audit, Hidden/Bidi-Check und Internal-Beta-Gate.
 - Slice 1.2 Entscheidungs-Provenienz abgeschlossen in Branch
   `loop/review-decision-provenance`, Draft-PR #547
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/547>.
