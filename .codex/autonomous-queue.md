@@ -17,8 +17,61 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-_(leer — Phase 1 wird nach Gate-0-Abschluss von Alexander/Fable mit den
-Ziellauf-Slices befüllt.)_
+_(Befüllt von Fable am 2026-07-03 aus Ziellauf Phase 1. Reihenfolge
+bindend; 1.2 baut auf 1.1 auf und wird auf dessen Branch gestapelt,
+falls 1.1 noch nicht gemerged ist.)_
+
+1. **1.1 E2E-Kettentest** · Branch `loop/e2e-harness-chain` · Ein Test
+   fährt die ganze Kette über die echten Routen (inject, keine direkten
+   Funktionsaufrufe): Fixture-Draft → Import → Review-Entscheidungen →
+   Apply → Plan/Einkaufsliste/Mappen-Export. Keine neue API.
+   Abnahme: (a) Draft-only als Fallklasse bewiesen — vor Apply verändert
+   der Import keine Produktobjekt-Zählung (Specs/Pläne/Einkaufslisten),
+   nach approve+apply existieren die Artefakte und der Mappen-Export
+   liefert 200 mit „Produktionsmappe"; (b) Verweigerungsfälle: Apply auf
+   JEDE nicht-approved Statusklasse (pending/rejected/superseded) wird
+   ohne Bestandsänderung abgelehnt; (c) Test läuft in der normalen
+   Batterie ohne Sonder-Setup.
+
+2. **1.2 Entscheidungs-Provenienz** · Branch
+   `loop/review-decision-provenance` · Jede Kartenentscheidung ≠ pending
+   trägt `decidedBy`/`decidedAt`; die Route setzt beide aus dem
+   Operator-/Actor-Kontext des Servers.
+   Abnahme: (a) Fallklasse über alle vier Entscheidungsarten
+   (fits/change_requested/unclear/blocked): ohne decidedBy/At invalid,
+   mit gültig; (b) Client-Payload kann decidedBy nicht setzen — Server
+   überschreibt aus Actor-Kontext (Spoof-Test); (c) volle Batterie grün,
+   bestehende Fixtures bleiben über pending-Karten gültig.
+
+3. **1.3 Wissenstyp production_feedback** · Branch
+   `loop/production-feedback-knowledge` · GENAU EIN Wissenstyp,
+   draft-only mit Freigabe; Mechanik (Guardrails, forbidden keys,
+   maxLength, approvedBy/At) aus ProductionDraft wiederverwendet. Kein
+   neues Governance-Modul, kein zweiter Typ, keine neue Persistenzwelt.
+   Abnahme: (a) Ungeprüftes Feedback erscheint in keiner Sicht auf
+   geprüftes Wissen — belegt für jede Statusklasse; (b) Freigabe nur mit
+   Operator-Kontext, Raw-Payload-Grenzen greifen (Leak-Fallklasse wie
+   beim Draft); (c) Ablage im bestehenden production-service-Store.
+
+4. **1.4 Übergabe-Reproduktion (report-or-fix)** · Branch nur bei Befund:
+   `loop/offer-production-handoff-root` · Juni-Probe-Blocker Nr. 1
+   (übernommene Angebotsvariante wird nicht der aktive Vorgang in
+   /produktion) auf frischer Datenwurzel reproduzieren; die früher
+   teilabdeckenden PRs (#490/#505/#515) sind geschlossen.
+   Abnahme: (a) Reproduktionsprotokoll mit eindeutigem ja/nein;
+   (b) wenn ja: Wurzelfix + Test der Fallklasse „JEDE übernommene
+   Variante wird aktiver, berechenbarer Produktionsvorgang", nicht nur
+   das Demo-Szenario; (c) wenn nein: Befund-Notiz unter ERLEDIGT mit
+   Beleg, kein Code.
+
+5. **1.5 Ballast-Inventur** · report-only, vom WIP-Limit ausgenommen,
+   kein PR · Klassifikation gegen Pflichtenheft §9: intake-signals-
+   Regexe (Eval-Baseline-Status), llm-readiness-Module (eingefroren vs.
+   gebraucht), Branch `slice4-codex-procurement-guard` (Procurement-
+   Filter-Frage), tote UI-/Import-Pfade.
+   Abnahme: (a) Jeder Löschkandidat mit Beweisführung (Test/Flow/
+   Ersatzartefakt) + Zeilenumfang; (b) Abschluss-Empfehlung je Eintrag:
+   löschbar jetzt / löschbar nach X / behalten; (c) KEINE Löschung.
 
 ---
 
