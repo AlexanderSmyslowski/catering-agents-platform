@@ -36,23 +36,24 @@ describe("PA27 LLM readiness eval fixtures", () => {
       "llm-eval-synthetic-coffee-break-missing-attendees",
       "llm-eval-synthetic-buffet-operator-summary",
       "llm-eval-synthetic-flying-buffet-production-draft",
-      "llm-eval-synthetic-intake-shadow-lunch"
+      "llm-eval-synthetic-intake-shadow-lunch",
+      "llm-eval-pseudonymized-offer-package-classification"
     ]);
 
     expect(llmReadinessEvalFixtures.map((fixture) => fixture.expectedOutput.kind)).toEqual([
       "clarification_question_draft",
       "operator_summary_draft",
       "production_draft_extraction",
-      "intake_shadow_extraction"
+      "intake_shadow_extraction",
+      "offer_package_classification_draft"
     ]);
   });
 
-  it("keeps every fixture synthetic or demo only and disables provider calls", () => {
+  it("keeps every fixture in the approved safe data modes and disables provider calls", () => {
     for (const fixture of llmReadinessEvalFixtures) {
-      expect(fixture.fixtureId).toContain("synthetic");
+      expect(fixture.fixtureId).toMatch(/synthetic|pseudonymized/);
       expect(fixture.input.policy.providerCalls).toBe("disabled");
-      expect(fixture.input.policy.dataMode).toBe("synthetic_or_demo_only");
-      expect(JSON.stringify(fixture)).toContain("synthetic");
+      expect(["synthetic_or_demo_only", "pseudonymized_approved"]).toContain(fixture.input.policy.dataMode);
       expect(JSON.stringify(fixture)).not.toMatch(/kunde|customer|email|phone|telefon|@/i);
     }
   });

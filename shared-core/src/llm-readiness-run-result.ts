@@ -11,6 +11,7 @@ import {
   type LlmReadinessModelInputKind,
   type LlmReadinessModelOutputCandidate,
   type LlmReadinessModelOutputKind,
+  type LlmReadinessDataMode,
   type LlmReadinessSourceObjectType,
   type LlmReadinessSourceRef,
   type LlmReadinessToolEffect,
@@ -56,7 +57,7 @@ export interface LlmReadinessRunResult {
   providerId?: string;
   providerRequestId?: string;
   providerCalls: "disabled";
-  dataMode: "synthetic_or_demo_only";
+  dataMode: LlmReadinessDataMode;
   allowedToolEffects: readonly LlmReadinessToolEffect[];
   sourceRefs: readonly LlmReadinessSourceRef[];
   humanApprovalRequired: true;
@@ -99,6 +100,10 @@ function hasAllowedAdapterMode(value: unknown): value is LlmReadinessProviderAda
 
 function hasAllowedInputKind(value: unknown): value is LlmReadinessModelInputKind {
   return typeof value === "string" && llmReadinessModelInputKinds.includes(value as LlmReadinessModelInputKind);
+}
+
+function hasAllowedDataMode(value: unknown): value is LlmReadinessDataMode {
+  return value === "synthetic_or_demo_only" || value === "pseudonymized_approved";
 }
 
 function hasAllowedOutputKind(value: unknown): value is LlmReadinessModelOutputKind {
@@ -309,8 +314,8 @@ export function validateLlmReadinessRunResult(
     errors.push("providerCalls must stay disabled");
   }
 
-  if (candidate.dataMode !== "synthetic_or_demo_only") {
-    errors.push("dataMode must stay synthetic_or_demo_only");
+  if (!hasAllowedDataMode(candidate.dataMode)) {
+    errors.push("dataMode must stay synthetic_or_demo_only or pseudonymized_approved");
   }
 
   if (!hasAllowedInputToolEffects(candidate.allowedToolEffects)) {

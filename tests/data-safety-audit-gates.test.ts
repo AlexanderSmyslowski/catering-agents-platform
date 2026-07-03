@@ -43,12 +43,13 @@ describe("data safety and audit gates", () => {
       "production_seed_demo",
       "export_read",
       "llm_readiness_draft",
+      "offer_package_batch_pilot",
       "web_recipe_search"
     ]);
 
     for (const path of dataIngressPaths) {
       expect(path.requiredGate.trim()).not.toBe("");
-      expect(path.scope).toMatch(/synthetic|operator|uploaded|read_only/);
+      expect(path.scope).toMatch(/synthetic|pseudonymized|operator|uploaded|read_only/);
     }
 
     expect(dataIngressPaths.find((path) => path.id === "intake_seed_demo")).toMatchObject({
@@ -62,6 +63,11 @@ describe("data safety and audit gates", () => {
     expect(dataIngressPaths.find((path) => path.id === "llm_readiness_draft")).toMatchObject({
       scope: "synthetic_or_demo_only",
       externalExposure: "blocked_until_decision"
+    });
+    expect(dataIngressPaths.find((path) => path.id === "offer_package_batch_pilot")).toMatchObject({
+      scope: "pseudonymized_approved",
+      externalExposure: "blocked_until_decision",
+      requiredGate: expect.stringContaining("916-offer run blocked")
     });
     expect(dataIngressPaths.find((path) => path.id === "intake_shadow_extraction")).toMatchObject({
       scope: "synthetic_or_demo_only",
@@ -245,6 +251,7 @@ describe("data safety and audit gates", () => {
         defaultState: "disabled",
         enablementGate: expect.stringContaining("CATERING_SYNTHETIC_LLM_SLICE"),
         allowedDataScope: "synthetic_or_demo_only",
+        additionalAllowedDataScopes: ["pseudonymized_approved"],
         writeEffectsAllowed: false
       }),
       expect.objectContaining({
@@ -260,7 +267,10 @@ describe("data safety and audit gates", () => {
     );
 
     expect(llmReadinessDraftContracts.every((contract) => contract.providerCalls === "disabled")).toBe(true);
-    expect(llmReadinessDraftContracts.every((contract) => contract.dataMode === "synthetic_or_demo_only")).toBe(true);
+    expect(llmReadinessDraftContracts.every((contract) =>
+      contract.dataMode === "synthetic_or_demo_only" ||
+      contract.dataMode === "pseudonymized_approved"
+    )).toBe(true);
     expect(llmReadinessDraftContracts.every((contract) => contract.writesProductObject === false)).toBe(true);
 
     expect(isWebRecipeSearchEnabled({})).toBe(false);
@@ -292,7 +302,7 @@ describe("data safety and audit gates", () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toContain("policy.providerCalls must be disabled");
-    expect(result.errors).toContain("policy.dataMode must be synthetic_or_demo_only");
+    expect(result.errors).toContain("policy.dataMode must be synthetic_or_demo_only or pseudonymized_approved");
     expect(result.errors).toContain("rawText is not allowed in readiness input candidates");
   });
 });

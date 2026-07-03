@@ -265,6 +265,60 @@ export const llmReadinessEvalFixtures = [
       "secret",
       "apiKey"
     ]
+  },
+  {
+    fixtureId: "llm-eval-pseudonymized-offer-package-classification",
+    title: "Pseudonymized offer package classification against curated package ids",
+    input: {
+      contractVersion: llmReadinessContractVersion,
+      inputId: "input-llm-eval-offer-package-classification-001",
+      kind: "offer_package_classification_request",
+      sourceRefs: [
+        {
+          objectType: "safe_source_anchor",
+          objectId: "sha256-pseudonymized-offer-package-classification",
+          label: "pseudonymized approved offer text"
+        }
+      ],
+      policy: {
+        providerCalls: "disabled",
+        dataMode: "pseudonymized_approved",
+        allowedToolEffects: ["read", "draft"]
+      }
+    },
+    expectedOutput: {
+      contractVersion: llmReadinessContractVersion,
+      outputId: "output-llm-eval-offer-package-classification-001",
+      kind: "offer_package_classification_draft",
+      sourceRefs: [
+        {
+          objectType: "safe_source_anchor",
+          objectId: "sha256-pseudonymized-offer-package-classification",
+          label: "pseudonymized approved offer text"
+        }
+      ],
+      humanApprovalRequired: true,
+      writesProductObject: false,
+      text: JSON.stringify({
+        packageId: "business_lunch_basic",
+        confidence: 0.86,
+        rationale: "Lunch-Buffet mit Business-Lunch-Signalen und passender Personenzahl.",
+        signals: ["Lunch", "Buffet", "40 Personen"],
+        alternatives: [
+          { packageId: "brunch_buffet", confidence: 0.18 }
+        ]
+      })
+    },
+    disallowedPayloadKeys: [
+      "rawText",
+      "extractedText",
+      "prompt",
+      "messages",
+      "providerResponse",
+      "toolCalls",
+      "secret",
+      "apiKey"
+    ]
   }
 ] as const satisfies readonly LlmReadinessEvalFixture[];
 
@@ -326,8 +380,8 @@ export function validateLlmReadinessEvalFixture(
     return { valid: false, errors: ["fixture must be an object"] };
   }
 
-  if (typeof fixture.fixtureId !== "string" || !fixture.fixtureId.includes("synthetic")) {
-    errors.push("fixtureId must be a synthetic fixture id");
+  if (typeof fixture.fixtureId !== "string" || !/synthetic|pseudonymized/.test(fixture.fixtureId)) {
+    errors.push("fixtureId must be a synthetic or pseudonymized fixture id");
   }
 
   const inputValidation = validateLlmReadinessModelInputCandidate(fixture.input);

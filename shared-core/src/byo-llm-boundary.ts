@@ -14,6 +14,7 @@ export type ByoLlmDraftUseCase =
   | "clarification_question_draft"
   | "production_draft_extraction"
   | "intake_shadow_extraction"
+  | "offer_package_classification_draft"
   | "recipe_research_summary_draft"
   | "search_query_suggestion_draft"
   | "uncertainty_summary_draft";
@@ -44,7 +45,7 @@ export interface ByoLlmBoundaryPolicy {
   providerCallsDefault: "disabled";
   providerCallsRequireExplicitOptIn: true;
   realCustomerDataDefault: "rejected";
-  allowedDataMode: "synthetic_or_demo_only";
+  allowedDataModes: readonly ["synthetic_or_demo_only", "pseudonymized_approved"];
   schemaValidationRequired: true;
   humanApprovalRequired: true;
   writesProductObject: false;
@@ -70,7 +71,7 @@ export const byoLlmBoundaryPolicy = {
   providerCallsDefault: "disabled",
   providerCallsRequireExplicitOptIn: true,
   realCustomerDataDefault: "rejected",
-  allowedDataMode: "synthetic_or_demo_only",
+  allowedDataModes: ["synthetic_or_demo_only", "pseudonymized_approved"],
   schemaValidationRequired: true,
   humanApprovalRequired: true,
   writesProductObject: false,
@@ -94,6 +95,14 @@ export const byoLlmBoundaryPolicy = {
     },
     {
       draftType: "intake_shadow_extraction",
+      status: "implemented_readiness_contract",
+      providerCallsDefault: "disabled",
+      externalCallsByDefault: false,
+      humanApprovalRequired: true,
+      writesProductObject: false
+    },
+    {
+      draftType: "offer_package_classification_draft",
       status: "implemented_readiness_contract",
       providerCallsDefault: "disabled",
       externalCallsByDefault: false,
@@ -208,8 +217,8 @@ export function validateByoLlmProviderRunBoundary(
     }
   }
 
-  if (request.input.policy.dataMode !== byoLlmBoundaryPolicy.allowedDataMode) {
-    errors.push("input.policy.dataMode must stay synthetic_or_demo_only");
+  if (!byoLlmBoundaryPolicy.allowedDataModes.includes(request.input.policy.dataMode)) {
+    errors.push("input.policy.dataMode must stay synthetic_or_demo_only or pseudonymized_approved");
   }
 
   if (request.outputCandidate !== undefined) {

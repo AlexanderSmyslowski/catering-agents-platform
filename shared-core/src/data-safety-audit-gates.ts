@@ -10,7 +10,8 @@ export type DataSafetyScope =
   | "operator_supplied_internal"
   | "uploaded_internal"
   | "read_only_evidence"
-  | "synthetic_or_demo_only";
+  | "synthetic_or_demo_only"
+  | "pseudonymized_approved";
 
 export type ExternalExposure = "none" | "disabled_by_default" | "blocked_until_decision";
 
@@ -45,6 +46,7 @@ export interface ExternalBoundaryGate {
   defaultState: "disabled";
   enablementGate: string;
   allowedDataScope: DataSafetyScope;
+  additionalAllowedDataScopes?: readonly DataSafetyScope[];
   writeEffectsAllowed: false;
 }
 
@@ -281,6 +283,14 @@ export const dataIngressPaths = [
     scope: "synthetic_or_demo_only",
     externalExposure: "blocked_until_decision",
     requiredGate: "providerCalls disabled and no product writes"
+  },
+  {
+    id: "offer_package_batch_pilot",
+    service: "shared-core",
+    source: "pseudonymized approved offer text batch for 20-offer classification pilot",
+    scope: "pseudonymized_approved",
+    externalExposure: "blocked_until_decision",
+    requiredGate: "human-approved pseudonymization, 20-offer cap, budget cap, no raw prompt/response persistence, 916-offer run blocked"
   },
   {
     id: "web_recipe_search",
@@ -665,8 +675,9 @@ export const externalBoundaryGates = [
     service: "shared-core",
     boundary: "llm_provider",
     defaultState: "disabled",
-    enablementGate: "CATERING_SYNTHETIC_LLM_SLICE explicit opt-in plus providerCalls disabled and synthetic/demo data policy",
+    enablementGate: "CATERING_SYNTHETIC_LLM_SLICE explicit opt-in plus providerCalls disabled and synthetic/demo or pseudonymized-approved data policy",
     allowedDataScope: "synthetic_or_demo_only",
+    additionalAllowedDataScopes: ["pseudonymized_approved"],
     writeEffectsAllowed: false
   },
   {

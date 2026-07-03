@@ -77,7 +77,7 @@ describe("PA29 LLM readiness input validation", () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toContain("policy.providerCalls must be disabled");
-    expect(result.errors).toContain("policy.dataMode must be synthetic_or_demo_only");
+    expect(result.errors).toContain("policy.dataMode must be synthetic_or_demo_only or pseudonymized_approved");
     expect(result.errors).toContain("policy.allowedToolEffects must be read or read+draft only");
   });
 
@@ -103,7 +103,7 @@ describe("PA29 LLM readiness input validation", () => {
     expect(result.errors).toContain("kind must be an allowed draft input kind");
     expect(result.errors).toContain("sourceRefs must contain safe object references");
     expect(result.errors).toContain("policy.providerCalls must be disabled");
-    expect(result.errors).toContain("policy.dataMode must be synthetic_or_demo_only");
+    expect(result.errors).toContain("policy.dataMode must be synthetic_or_demo_only or pseudonymized_approved");
     expect(result.errors).toContain("policy.allowedToolEffects must be read or read+draft only");
     expect(result.errors).toContain("prompt is not allowed in readiness input candidates");
     expect(result.errors).toContain("messages is not allowed in readiness input candidates");

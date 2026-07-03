@@ -33,6 +33,11 @@ interface OpenAiResponsesBody {
   id?: string;
   output_text?: string;
   output?: OpenAiResponsesOutputItem[];
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  };
   error?: {
     message?: string;
   };
@@ -123,12 +128,44 @@ function buildIntakeShadowExtractionSchema() {
   };
 }
 
+function buildOfferPackageClassificationSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      packageId: { type: ["string", "null"] },
+      confidence: { type: "number" },
+      rationale: { type: "string" },
+      signals: {
+        type: "array",
+        items: { type: "string" }
+      },
+      alternatives: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            packageId: { type: "string" },
+            confidence: { type: "number" }
+          },
+          required: ["packageId", "confidence"]
+        }
+      }
+    },
+    required: ["packageId", "confidence", "rationale", "signals", "alternatives"]
+  };
+}
+
 function outputSchemaFor(outputKind: LlmReadinessModelOutputKind) {
   if (outputKind === "production_draft_extraction") {
     return buildProductionDraftExtractionSchema();
   }
   if (outputKind === "intake_shadow_extraction") {
     return buildIntakeShadowExtractionSchema();
+  }
+  if (outputKind === "offer_package_classification_draft") {
+    return buildOfferPackageClassificationSchema();
   }
   return buildClarificationQuestionSchema();
 }
@@ -238,6 +275,27 @@ function parseResponsePayload(rawText: string, outputKind: LlmReadinessModelOutp
     };
   }
 
+  if (outputKind === "offer_package_classification_draft") {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      !Array.isArray((parsed as { signals?: unknown }).signals) ||
+      !Array.isArray((parsed as { alternatives?: unknown }).alternatives)
+    ) {
+      return {
+        ok: false,
+        errors: ["provider response must contain signals and alternatives as arrays"]
+      };
+    }
+
+    return {
+      ok: true,
+      errors: [],
+      text: JSON.stringify(parsed)
+    };
+  }
+
   if (
     typeof parsed !== "object" ||
     parsed === null ||
@@ -317,11 +375,12 @@ export class OpenAiSyntheticLiveTransport implements LlmReadinessSyntheticLiveTr
     if (
       request.outputKind !== "clarification_question_draft" &&
       request.outputKind !== "production_draft_extraction" &&
-      request.outputKind !== "intake_shadow_extraction"
+      request.outputKind !== "intake_shadow_extraction" &&
+      request.outputKind !== "offer_package_classification_draft"
     ) {
       return {
         ok: false,
-        errors: ["OpenAI synthetic live transport only supports clarification_question_draft, production_draft_extraction and intake_shadow_extraction"],
+        errors: ["OpenAI synthetic live transport only supports clarification_question_draft, production_draft_extraction, intake_shadow_extraction and offer_package_classification_draft"],
         providerId: "openai-responses"
       };
     }
@@ -376,7 +435,12 @@ export class OpenAiSyntheticLiveTransport implements LlmReadinessSyntheticLiveTr
       providerId: "openai-responses",
       providerRequestId: providerRequestId ?? body.id,
       text: payload.text,
-      structuredCandidate: payload.structuredCandidate
+      structuredCandidate: payload.structuredCandidate,
+      usage: body.usage ? {
+        inputTokens: body.usage.input_tokens,
+        outputTokens: body.usage.output_tokens,
+        totalTokens: body.usage.total_tokens
+      } : undefined
     };
   }
 }

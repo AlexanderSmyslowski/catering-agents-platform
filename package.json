@@ -28,6 +28,7 @@
   "llm:synthetic-live:probe:strict": "tsx scripts/run-synthetic-live-llm-readiness.ts --fail-on-eval-mismatch",
   "llm:synthetic-live:probe:mini-pilot": "tsx scripts/run-synthetic-live-llm-readiness.ts --fail-on-eval-mismatch --require-mini-pilot-ready",
   "llm:synthetic-live:check:mini-pilot": "tsx scripts/check-synthetic-live-mini-pilot.ts",
+  "llm:offer-package-batch-pilot": "tsx scripts/run-offer-package-batch-pilot.ts",
   "browser:rehearsal": "bash ./scripts/check-browser-rehearsal.sh",
     "browser:rehearsal:answer-submit": "CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS=1 bash ./scripts/check-browser-rehearsal.sh",
     "browser:rehearsal:archive-intake": "CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE=1 bash ./scripts/check-browser-rehearsal.sh",

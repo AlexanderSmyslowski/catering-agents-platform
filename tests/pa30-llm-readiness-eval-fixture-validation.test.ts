@@ -51,7 +51,7 @@ describe("PA30 LLM readiness eval fixture validation", () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toContain("input.policy.providerCalls must be disabled");
-    expect(result.errors).toContain("input.policy.dataMode must be synthetic_or_demo_only");
+    expect(result.errors).toContain("input.policy.dataMode must be synthetic_or_demo_only or pseudonymized_approved");
     expect(result.errors).toContain("input.policy.allowedToolEffects must be read or read+draft only");
     expect(result.errors).toContain("input.policy.providerCalls must match the draft contract");
     expect(result.errors).toContain("input.policy.dataMode must match the draft contract");
