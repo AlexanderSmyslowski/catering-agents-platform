@@ -89,6 +89,36 @@ describe("production route context state", () => {
     });
   });
 
+  it("prioritizes visible artifact blockers over remaining questions once a plan exists", () => {
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 1,
+        hasSelectedPlan: true,
+        selectedPlanReadinessLabel: "vollständig",
+        purchaseListCount: 1,
+        purchaseItemCount: 0
+      })
+    ).toEqual({
+      title: "Einkaufspositionen klären",
+      description: "Einkaufsliste ist vorhanden, enthält aber noch keine Positionen für die Produktion."
+    });
+
+    expect(
+      selectProductionNextStep({
+        hasFocusedProductionSpec: true,
+        questionCount: 1,
+        hasSelectedPlan: true,
+        selectedPlanReadinessLabel: "vollständig",
+        purchaseListCount: 1,
+        purchaseItemCount: 3
+      })
+    ).toEqual({
+      title: "Rückfragen beantworten",
+      description: "Die Produktion braucht noch strukturierte Antworten, bevor Ergebnisse belastbar sind."
+    });
+  });
+
   it("prefers the cleared workspace label over stale focused or selected plan context", () => {
     expect(
       formatActiveProductionContextLabel({
