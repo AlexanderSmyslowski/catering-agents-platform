@@ -174,6 +174,31 @@ describe("production conversation projection", () => {
       });
   });
 
+  it("drops generic local readiness filler when structured readiness questions exist", () => {
+    const projection = buildProductionConversationProjection({
+      spec: {
+        specId: "spec-readiness-filler",
+        readiness: {
+          status: "insufficient",
+          reasons: ["Glutenfrei-Konflikt mit Brot-Baguette und fehlender Ersatzklassifikation."]
+        }
+      },
+      questions: [
+        "Es fehlen noch Angaben, bevor belastbare Mengen und Einkaufslisten berechnet werden können."
+      ],
+      productionPlans: [],
+      purchaseLists: []
+    });
+
+    const questionTexts = projection.messages
+      .filter((message) => message.type === "structured_agent_question")
+      .map((message) => message.text);
+
+    expect(questionTexts).toEqual([
+      "Bitte prüfen: Glutenfrei-Konflikt mit Brot-Baguette und fehlender Ersatzklassifikation."
+    ]);
+  });
+
   it("keeps provenance anchors attached to the production output anchor without leaking raw source text", () => {
     const projection = buildProductionConversationProjection({
       spec: acceptedSpec,

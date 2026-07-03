@@ -306,6 +306,7 @@ export async function updateAcceptedSpec(
   specId: string,
   input: {
     eventDate?: string;
+    eventSchedule?: Array<{ label: string; start?: string; end?: string }>;
     attendeeCount?: number;
     serviceForm?: string;
     eventType?: string;

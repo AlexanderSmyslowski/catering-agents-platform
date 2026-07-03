@@ -19,6 +19,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
   const [dismissedProductionAnswerSpecId, setDismissedProductionAnswerSpecId] = useState<string>();
   const [editingEventType, setEditingEventType] = useState("");
   const [editingEventDate, setEditingEventDate] = useState("");
+  const [editingEventSchedule, setEditingEventSchedule] = useState("");
   const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
   const [editingServiceForm, setEditingServiceForm] = useState("");
   const [editingMenuItems, setEditingMenuItems] = useState("");
@@ -33,6 +34,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     const current: SpecEditSnapshot = {
       eventType: editingEventType,
       eventDate: editingEventDate,
+      eventSchedule: editingEventSchedule,
       attendeeCount: editingAttendeeCount,
       serviceForm: editingServiceForm,
       menuItems: editingMenuItems,
@@ -44,6 +46,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     editingAttendeeCount,
     editingComponentStates,
     editingEventDate,
+    editingEventSchedule,
     editingEventType,
     editingMenuItems,
     editingServiceForm,
@@ -60,6 +63,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     setDismissedProductionAnswerSpecId(undefined);
     setEditingEventType(snapshot.eventType);
     setEditingEventDate(snapshot.eventDate);
+    setEditingEventSchedule(snapshot.eventSchedule ?? "");
     setEditingAttendeeCount(snapshot.attendeeCount);
     setEditingServiceForm(snapshot.serviceForm);
     setEditingMenuItems(snapshot.menuItems);
@@ -81,6 +85,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     setEditingSpecId(undefined);
     setEditingEventType("");
     setEditingEventDate("");
+    setEditingEventSchedule("");
     setEditingAttendeeCount("");
     setEditingServiceForm("");
     setEditingMenuItems("");
@@ -105,6 +110,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     return buildSpecEditUpdateInput({
       eventType: editingEventType,
       eventDate: editingEventDate,
+      eventSchedule: editingEventSchedule,
       attendeeCount: editingAttendeeCount,
       serviceForm: editingServiceForm,
       menuItems: editingMenuItems,
@@ -117,6 +123,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     dismissedProductionAnswerSpecId,
     editingEventType,
     editingEventDate,
+    editingEventSchedule,
     editingAttendeeCount,
     editingServiceForm,
     editingMenuItems,
@@ -124,6 +131,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     hasFocusedSpecEditChanges,
     setEditingEventType,
     setEditingEventDate,
+    setEditingEventSchedule,
     setEditingAttendeeCount,
     setEditingServiceForm,
     setEditingMenuItems,

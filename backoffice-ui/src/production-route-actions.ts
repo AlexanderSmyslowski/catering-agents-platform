@@ -25,6 +25,7 @@ export function buildProductionQuestionEditorActions(
   return {
     setEditingEventType: actions.setEditingEventType,
     setEditingEventDate: actions.setEditingEventDate,
+    setEditingEventSchedule: actions.setEditingEventSchedule,
     setEditingAttendeeCount: actions.setEditingAttendeeCount,
     setEditingServiceForm: actions.setEditingServiceForm,
     setEditingMenuItems: actions.setEditingMenuItems,

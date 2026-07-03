@@ -21,6 +21,7 @@ export type ProductionQuestionEditorState = {
   editingSpecId?: string;
   editingEventType: string;
   editingEventDate: string;
+  editingEventSchedule?: string;
   editingAttendeeCount: string;
   editingServiceForm: string;
   editingMenuItems: string;
@@ -32,6 +33,7 @@ export type ProductionQuestionEditorState = {
 export type ProductionQuestionEditorActions = {
   setEditingEventType: (value: string) => void;
   setEditingEventDate: (value: string) => void;
+  setEditingEventSchedule?: (value: string) => void;
   setEditingAttendeeCount: (value: string) => void;
   setEditingServiceForm: (value: string) => void;
   setEditingMenuItems: (value: string) => void;
@@ -100,6 +102,7 @@ export function ProductionQuestionPanel({
     editingSpecId,
     editingEventType,
     editingEventDate,
+    editingEventSchedule,
     editingAttendeeCount,
     editingServiceForm,
     editingMenuItems,
@@ -110,6 +113,7 @@ export function ProductionQuestionPanel({
   const {
     setEditingEventType,
     setEditingEventDate,
+    setEditingEventSchedule,
     setEditingAttendeeCount,
     setEditingServiceForm,
     setEditingMenuItems,
@@ -176,6 +180,7 @@ export function ProductionQuestionPanel({
                     focusedProductionSpec={focusedProductionSpec}
                     editingEventType={editingEventType}
                     editingEventDate={editingEventDate}
+                    editingEventSchedule={editingEventSchedule ?? ""}
                     editingAttendeeCount={editingAttendeeCount}
                     editingServiceForm={editingServiceForm}
                     editingMenuItems={editingMenuItems}
@@ -183,6 +188,7 @@ export function ProductionQuestionPanel({
                     recipes={recipes}
                     setEditingEventType={setEditingEventType}
                     setEditingEventDate={setEditingEventDate}
+                    setEditingEventSchedule={setEditingEventSchedule}
                     setEditingAttendeeCount={setEditingAttendeeCount}
                     setEditingServiceForm={setEditingServiceForm}
                     setEditingMenuItems={setEditingMenuItems}

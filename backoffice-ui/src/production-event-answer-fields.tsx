@@ -1,11 +1,13 @@
 type ProductionEventAnswerFieldsProps = {
   editingEventType: string;
   editingEventDate: string;
+  editingEventSchedule?: string;
   editingAttendeeCount: string;
   editingServiceForm: string;
   editingMenuItems: string;
   setEditingEventType: (value: string) => void;
   setEditingEventDate: (value: string) => void;
+  setEditingEventSchedule?: (value: string) => void;
   setEditingAttendeeCount: (value: string) => void;
   setEditingServiceForm: (value: string) => void;
   setEditingMenuItems: (value: string) => void;
@@ -14,11 +16,13 @@ type ProductionEventAnswerFieldsProps = {
 export function ProductionEventAnswerFields({
   editingEventType,
   editingEventDate,
+  editingEventSchedule = "",
   editingAttendeeCount,
   editingServiceForm,
   editingMenuItems,
   setEditingEventType,
   setEditingEventDate,
+  setEditingEventSchedule,
   setEditingAttendeeCount,
   setEditingServiceForm,
   setEditingMenuItems
@@ -45,9 +49,19 @@ export function ProductionEventAnswerFields({
         <label className="field-block">
           <span>Datum</span>
           <input
+            aria-label="Datum"
             value={editingEventDate}
             onChange={(event) => setEditingEventDate(event.target.value)}
             placeholder="2026-06-18"
+          />
+        </label>
+        <label className="field-block">
+          <span>Zeitfenster</span>
+          <input
+            aria-label="Zeitfenster"
+            value={editingEventSchedule}
+            onChange={(event) => setEditingEventSchedule?.(event.target.value)}
+            placeholder="16:30-23:00"
           />
         </label>
         <label className="field-block">

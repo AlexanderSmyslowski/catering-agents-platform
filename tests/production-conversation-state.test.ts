@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildProductionConversationState } from "../backoffice-ui/src/production-conversation-state.js";
+import {
+  buildProductionClarificationQuestions,
+  createSubmittedProductionClarificationAnswer
+} from "@catering/shared-core";
 
 describe("production conversation state", () => {
   const focusedProductionSpec = {
@@ -116,6 +120,64 @@ describe("production conversation state", () => {
       label: "Status",
       value: "Prüfung nötig"
     });
+  });
+
+  it("counts only unanswered deduplicated projection questions after a time-window answer exists", () => {
+    const specWithAnsweredTimeWindow = {
+      specId: "spec-time-window-answered",
+      readiness: { status: "complete" },
+      event: {
+        type: "reception",
+        date: "2026-06-01"
+      },
+      attendees: { expected: 80 },
+      servicePlan: { serviceForm: "standing_reception" },
+      menuPlan: [
+        {
+          componentId: "component-fingerfood",
+          label: "Fingerfood",
+          menuCategory: "classic",
+          productionDecision: { mode: "scratch" }
+        }
+      ],
+      uncertainties: [
+        {
+          field: "event.schedule",
+          message: "Zeitangabe wurde nur aus einem Hinweis abgeleitet.",
+          severity: "low",
+          suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?"
+        }
+      ]
+    };
+    const [timeWindowQuestion] = buildProductionClarificationQuestions({ spec: specWithAnsweredTimeWindow });
+    const answer = createSubmittedProductionClarificationAnswer({
+      questions: [timeWindowQuestion],
+      context: {
+        specId: "spec-time-window-answered",
+        productionSessionId: "production-session-spec-time-window-answered"
+      },
+      questionId: timeWindowQuestion.questionId,
+      questionKey: {
+        reason: timeWindowQuestion.reason,
+        reasonCode: timeWindowQuestion.reasonCode
+      },
+      answerType: "shortText",
+      answerText: "16:30-23:00",
+      now: "2026-07-01T10:00:00.000Z"
+    });
+
+    const state = buildProductionConversationState({
+      focusedProductionSpec: specWithAnsweredTimeWindow,
+      focusedProductionSpecRecord: {
+        ...specWithAnsweredTimeWindow,
+        clarificationAnswers: [answer]
+      },
+      currentSpecPlans: [],
+      currentSpecPurchaseLists: []
+    });
+
+    expect(state.productionQuestions).toEqual([]);
+    expect(state.clarificationStatusCounts).toEqual({ answered: 1, unanswered: 0 });
   });
 
   it("keeps empty production focus from creating local UI questions", () => {
