@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 
 const DEFAULT_SOURCE_PATH = `${homedir()}/Documents/Alexander-Wiki/catering/app-transfer/angebote_portfolio_2026-06-01/angebotskatalog_1_0_app_transfer.json`;
 const TARGET_URL = new URL("../shared-core/src/fixtures/curated-offer-packages.json", import.meta.url);
+const TARGET_PATH_ENV = "CATERING_OFFER_PORTFOLIO_TARGET";
 
 interface SourcePortfolioItem {
   id?: unknown;
@@ -155,7 +156,9 @@ function main() {
     .map((item, index) => toFixtureItem(item as SourcePortfolioItem, index))
     .sort((left, right) => left.id.localeCompare(right.id));
 
-  const targetPath = TARGET_URL.pathname;
+  const targetPath = process.env[TARGET_PATH_ENV]
+    ? expandPath(process.env[TARGET_PATH_ENV])
+    : TARGET_URL.pathname;
   mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, `${JSON.stringify(items, null, 2)}\n`);
   console.log(`Wrote ${items.length} curated offer packages to ${targetPath}`);
