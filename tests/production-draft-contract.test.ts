@@ -450,19 +450,43 @@ describe("ProductionDraft contract", () => {
     );
   });
 
-  it("requires decision metadata for non-pending review cards", () => {
-    expectInvalid(
-      {
-        ...productionDraft(),
-        reviewCards: [
-          {
-            ...productionDraft().reviewCards[0],
-            decision: "fits"
-          }
-        ]
-      },
-      /needs decidedBy and decidedAt/
-    );
+  it("requires decision metadata for every non-pending review card state", () => {
+    const decisions = ["fits", "change_requested", "unclear", "blocked"] as const;
+
+    for (const decision of decisions) {
+      const baseDraft = productionDraft();
+      expectInvalid(
+        {
+          ...baseDraft,
+          reviewCards: baseDraft.reviewCards.map((card, index) =>
+            index === 0
+              ? {
+                ...card,
+                decision
+              }
+              : card
+          )
+        },
+        /needs decidedBy and decidedAt/
+      );
+
+      const validBaseDraft = productionDraft();
+      const draft: ProductionDraft = {
+        ...validBaseDraft,
+        reviewCards: validBaseDraft.reviewCards.map((card, index) =>
+          index === 0
+            ? {
+              ...card,
+              decision,
+              decidedBy: "Alexander",
+              decidedAt: "2026-07-01T13:00:00.000Z"
+            }
+            : card
+        )
+      };
+
+      expect(validateProductionDraft(draft)).toEqual(draft);
+    }
   });
 
   it("rejects approved drafts with unresolved or blocking review cards", () => {
