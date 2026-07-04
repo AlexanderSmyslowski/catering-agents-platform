@@ -93,6 +93,9 @@ export const llmReadinessPromptArtifacts = [
       "Nutze nur die angegebenen Paket-IDs, erfinde keine neuen Pakete, schreibe keine Produktobjekte und gib nur JSON zurueck.",
     userPromptTemplate:
       "Waehle die beste packageId aus der Paketliste oder null, wenn kein Paket passt. " +
+      "institution_framework_catering braucht expliziten Rahmenvertrags- oder Serienbeleg; Kundentyp allein reicht nicht. " +
+      "wedding_* Pakete brauchen explizite Hochzeitsbegriffe. " +
+      "Nutze null, wenn die Textbelege fuer ein Paket nicht reichen. " +
       "Gib confidence zwischen 0 und 1, knappe rationale, bis zu drei signals und bis zu drei alternatives zurueck. " +
       "Antwortformat: JSON mit packageId, confidence, rationale, signals und alternatives."
   }

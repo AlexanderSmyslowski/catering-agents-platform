@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { runOfferPackageBatchPilotCli } from "../scripts/run-offer-package-batch-pilot.js";
 import {
   buildOfferPackageClassificationInput,
+  buildOfferPackageClassificationPromptContext,
   buildOfferPackagePilotReport,
   loadCuratedOfferPackages,
   parseOfferPackageClassificationDraft,
@@ -72,7 +73,19 @@ describe("offer package batch pilot", () => {
     }), packageIds).errors).toContain("packageId must be null or one of the curated package ids");
   });
 
-  it("builds a raw-text-free report with request counts, usage and model disagreements", () => {
+  it("states package boundary rules before provider classification", () => {
+    const context = buildOfferPackageClassificationPromptContext({
+      pseudonymizedText: "Catering | 50 Personen | Buffet",
+      packages: loadCuratedOfferPackages()
+    });
+
+    expect(context).toContain("institution_framework_catering nur waehlen");
+    expect(context).toContain("Kundentyp, Institutsname oder Hochschul-/Klinikbezug allein reichen nicht");
+    expect(context).toContain("wedding_buffet_premium und wedding_reception_addon nur waehlen");
+    expect(context).toContain("packageId null ist ein erwuenschtes Ergebnis");
+  });
+
+  it("builds a raw-text-free report with request counts, usage, disagreements and review lists", () => {
     const report = buildOfferPackagePilotReport({
       packageIds: ["business_lunch_basic", "brunch_buffet"],
       maxRequests: 60,
@@ -101,18 +114,39 @@ describe("offer package batch pilot", () => {
           alternatives: ["business_lunch_basic"],
           usage: { inputTokens: 90, outputTokens: 18, totalTokens: 108 },
           errors: []
+        },
+        {
+          sourceId: "offer-02",
+          sourceHash: "sha256:source-2",
+          pseudonymizedHash: "sha256:pseudo-2",
+          model: "gpt-5.5",
+          ok: true,
+          packageId: null,
+          confidence: 0.55,
+          alternatives: ["business_lunch_basic"],
+          usage: { inputTokens: 80, outputTokens: 16, totalTokens: 96 },
+          errors: []
         }
       ]
     });
     const reportJson = JSON.stringify(report);
 
-    expect(report.requestCount).toBe(2);
-    expect(report.providerRequestCount).toBe(2);
+    expect(report.requestCount).toBe(3);
+    expect(report.providerRequestCount).toBe(3);
     expect(report.failedBeforeProviderCount).toBe(0);
-    expect(report.usage).toEqual({ inputTokens: 190, outputTokens: 38, totalTokens: 228 });
+    expect(report.usage).toEqual({ inputTokens: 270, outputTokens: 54, totalTokens: 324 });
     expect(report.disagreements).toEqual([
       { sourceId: "offer-01", packageIds: ["brunch_buffet", "business_lunch_basic"] }
     ]);
+    expect(report.reviewLists).toEqual({
+      lowConfidence: [
+        { sourceId: "offer-01", model: "gpt-5.4", packageId: "brunch_buffet", confidence: 0.65 },
+        { sourceId: "offer-02", model: "gpt-5.5", packageId: null, confidence: 0.55 }
+      ],
+      nullClassifications: [
+        { sourceId: "offer-02", model: "gpt-5.5", confidence: 0.55 }
+      ]
+    });
     expect(report.guardrails).toMatchObject({
       rawTextStored: false,
       rawPromptStored: false,
