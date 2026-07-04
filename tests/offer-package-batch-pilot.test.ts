@@ -82,7 +82,7 @@ describe("offer package batch pilot", () => {
           sourceId: "offer-01",
           sourceHash: "sha256:source",
           pseudonymizedHash: "sha256:pseudo",
-          model: "gpt-4.1",
+          model: "gpt-5.5",
           ok: true,
           packageId: "business_lunch_basic",
           confidence: 0.9,
@@ -94,7 +94,7 @@ describe("offer package batch pilot", () => {
           sourceId: "offer-01",
           sourceHash: "sha256:source",
           pseudonymizedHash: "sha256:pseudo",
-          model: "gpt-4.1-mini",
+          model: "gpt-5.4",
           ok: true,
           packageId: "brunch_buffet",
           confidence: 0.65,
@@ -160,6 +160,8 @@ describe("offer package batch pilot", () => {
     expect(report.providerRequestCount).toBe(0);
     expect(report.failedBeforeProviderCount).toBe(4);
     expect(output).toContain("\"fullBatchRunBlocked\": true");
+    expect(output).toContain("\"model\": \"gpt-5.5\"");
+    expect(output).toContain("\"model\": \"gpt-5.4\"");
     expect(output).not.toContain("Ada");
     expect(output).not.toContain("Grace");
     expect(output).not.toContain("example.test");

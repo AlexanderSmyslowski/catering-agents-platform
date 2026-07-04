@@ -24,16 +24,32 @@ _Keine Einträge._
 ## ZUR SICHTUNG (menschenpflichtig)
 
 - **916er-Nachtlauf freigeben?** · Die Vollklassifikation der 916
-  Altangebote bleibt bis nach Slice 2.3a gesperrt. Mensch nötig wegen
-  Pilot-Qualität, Datenstatus, Kostenkontrolle und Laufzeitfenster.
+  Altangebote bleibt auch nach der Modell-Rebaseline gesperrt. Mensch
+  nötig wegen Modellwahl, Pilot-Qualität, Datenstatus, Kostenkontrolle
+  und Laufzeitfenster. `gpt-4.1` ist nicht mehr die aktuelle
+  Modellbasis; Slice 2.3c vergleicht deshalb `gpt-5.5` mit `gpt-5.4`.
 
 ---
 
 ## ERLEDIGT
 
+- Slice 2.3c Batch-Modell-Rebaseline abgeschlossen in Branch
+  `loop/batch-model-rebaseline`. Belegt: Das Batch-Pilot-Harness
+  defaultet auf `gpt-5.5` und `gpt-5.4`, der 20-Angebote-Deckel und
+  der 916er-Block bleiben aktiv. Dry-Run über die 20 lokalen Angebote:
+  40 geplante Requests, keine Provider-Requests, keine geprüften
+  Leak-Treffer. Realer Provider-Rebaseline-Lauf: 40 geplante Requests,
+  38 Provider-Requests, 2 vor Provider gestoppt wegen fehlender
+  Angebots-Evidenz nach Pseudonymisierung, 96.895 Tokens gesamt.
+  Modellbild: `gpt-5.5` lieferte 19 erfolgreiche Klassifikationen mit
+  7 Konfidenzen unter 0,7; `gpt-5.4` lieferte 19 erfolgreiche
+  Klassifikationen mit 1 Konfidenz unter 0,7, klassifizierte aber 9
+  Fälle als `institution_framework_catering`. 8 Abweichungen bleiben
+  vor einem 916er-Lauf menschlich zu sichten.
 - Slice 2.3a Batch-Pilot abgeschlossen in Branch
-  `loop/batch-classification-pilot`, Draft-PR #551
-  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/551>.
+  `loop/batch-classification-pilot`, gemerged über Ersatz-PR #552
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/552>
+  (Stack-PR #551 wurde nach Merge von #550 automatisch geschlossen).
   Belegt: Pseudonymisierung entfernt Kontakt-/Namens-/Adresszeilen vor
   Provider-Nutzung und speichert im Report keine Dateinamen, Rohtexte,
   Rohprompts oder Rohantworten; sichtbarer BYO-Data-Mode

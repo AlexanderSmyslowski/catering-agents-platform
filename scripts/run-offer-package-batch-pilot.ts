@@ -33,7 +33,7 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
   const options: CliOptions = {
     sourceDir: env.CATERING_OFFER_BATCH_SOURCE_DIR,
     limit: 20,
-    models: ["gpt-4.1", "gpt-4.1-mini"],
+    models: ["gpt-5.5", "gpt-5.4"],
     maxRequests: Number(env.CATERING_OFFER_BATCH_MAX_REQUESTS ?? 60),
     maxEur: env.CATERING_OFFER_BATCH_MAX_EUR ? Number(env.CATERING_OFFER_BATCH_MAX_EUR) : 3,
     dryRun: false
