@@ -71,6 +71,19 @@ export interface OfferPackagePilotReport {
     sourceId: string;
     packageIds: string[];
   }>;
+  reviewLists: {
+    lowConfidence: Array<{
+      sourceId: string;
+      model: string;
+      packageId: string | null;
+      confidence: number;
+    }>;
+    nullClassifications: Array<{
+      sourceId: string;
+      model: string;
+      confidence: number;
+    }>;
+  };
   guardrails: {
     rawTextStored: false;
     rawPromptStored: false;
@@ -193,6 +206,11 @@ export function buildOfferPackageClassificationPromptContext(input: {
     "Pseudonymisierter Angebotstext:",
     input.pseudonymizedText.trim(),
     "",
+    "Abgrenzungsregeln:",
+    "- institution_framework_catering nur waehlen, wenn der Text einen Rahmenvertrag, Serien-/Wiederholungsauftrag oder explizite institutionelle Rahmenvereinbarung belegt. Kundentyp, Institutsname oder Hochschul-/Klinikbezug allein reichen nicht.",
+    "- wedding_buffet_premium und wedding_reception_addon nur waehlen, wenn der Text Hochzeit, Trauung, Brautpaar, Wedding oder eindeutige Hochzeitsbegriffe nennt.",
+    "- packageId null ist ein erwuenschtes Ergebnis, wenn keine Paket-ID mit Textbelegen passt; null ist besser als ein geratenes Paket.",
+    "",
     "Zulaessige Paket-IDs mit Evidenz:",
     packageLines.join("\n")
   ].join("\n");
@@ -291,6 +309,29 @@ export function buildOfferPackagePilotReport(input: {
       return { sourceId, packageIds };
     })
     .filter((item) => item.packageIds.length > 1);
+  const lowConfidence = input.predictions
+    .filter((prediction) =>
+      prediction.ok &&
+      typeof prediction.confidence === "number" &&
+      prediction.confidence < 0.7
+    )
+    .map((prediction) => ({
+      sourceId: prediction.sourceId,
+      model: prediction.model,
+      packageId: prediction.packageId ?? null,
+      confidence: prediction.confidence!
+    }));
+  const nullClassifications = input.predictions
+    .filter((prediction) =>
+      prediction.ok &&
+      prediction.packageId === null &&
+      typeof prediction.confidence === "number"
+    )
+    .map((prediction) => ({
+      sourceId: prediction.sourceId,
+      model: prediction.model,
+      confidence: prediction.confidence!
+    }));
 
   return {
     reportKind: "offer_package_classification_pilot",
@@ -308,6 +349,10 @@ export function buildOfferPackagePilotReport(input: {
     usage,
     predictions: input.predictions.map((prediction) => ({ ...prediction })),
     disagreements,
+    reviewLists: {
+      lowConfidence,
+      nullClassifications
+    },
     guardrails: {
       rawTextStored: false,
       rawPromptStored: false,

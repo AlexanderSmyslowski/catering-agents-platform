@@ -23,6 +23,13 @@ _Keine Einträge._
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
+- **20er-Re-Pilot nach Prompt-Fix freigeben?** · Nach Slice 2.3d soll
+  derselbe 20-Angebote-Pilot einmal solo mit `gpt-5.5` laufen. Mensch
+  nötig wegen Provider-Kosten und pseudonymisierter Echtdaten. Budget-
+  Vorschlag: 2 EUR / 25 Requests. Abnahme vor Nachtlauf: 0
+  Hochzeitspakete ohne Hochzeitsbegriff, 0 `institution_framework`
+  ohne Rahmenvertrags-/Serienbeleg, alle confidence < 0,7 und null-
+  Klassifikationen in Sichtungslisten.
 - **916er-Nachtlauf freigeben?** · Die Vollklassifikation der 916
   Altangebote bleibt auch nach der Modell-Rebaseline gesperrt. Mensch
   nötig wegen Modellwahl, Pilot-Qualität, Datenstatus, Kostenkontrolle
@@ -33,6 +40,15 @@ _Keine Einträge._
 
 ## ERLEDIGT
 
+- Slice 2.3d Package-Classification-Guardrails abgeschlossen in Branch
+  `loop/package-classification-guardrails`. Belegt: Prompt-Kontext und
+  Prompt-Artefakt enthalten negative Abgrenzungsregeln:
+  `institution_framework_catering` nur bei Rahmenvertrags-/Serienbeleg,
+  `wedding_*` nur bei Hochzeitsbegriffen, `null` als erwünschtes
+  Nicht-Match. Der Pilot-Report weist confidence < 0,7 und null-
+  Klassifikationen als eigene Sichtungslisten aus, ohne Rohtexte zu
+  speichern. Der 916er-Lauf bleibt gesperrt bis zum geprüften
+  20er-Re-Pilot.
 - Slice 2.3c Batch-Modell-Rebaseline abgeschlossen in Branch
   `loop/batch-model-rebaseline`. Belegt: Das Batch-Pilot-Harness
   defaultet auf `gpt-5.5` und `gpt-5.4`, der 20-Angebote-Deckel und
