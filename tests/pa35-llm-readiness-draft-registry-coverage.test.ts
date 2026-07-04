@@ -30,7 +30,8 @@ describe("PA35 LLM readiness draft registry coverage", () => {
     expect(llmReadinessDraftContracts.map((contract) => contract.contractId)).toEqual([
       "clarification-question-draft.v0",
       "operator-summary-draft.v0",
-      "production-draft-extraction.v0"
+      "production-draft-extraction.v0",
+      "intake-shadow-extraction.v0"
     ]);
 
     expect(validateLlmReadinessEvalFixtureCoverage()).toEqual({
@@ -46,7 +47,8 @@ describe("PA35 LLM readiness draft registry coverage", () => {
       valid: false,
       errors: [
         "draft contract operator-summary-draft.v0 must have a valid synthetic eval fixture",
-        "draft contract production-draft-extraction.v0 must have a valid synthetic eval fixture"
+        "draft contract production-draft-extraction.v0 must have a valid synthetic eval fixture",
+        "draft contract intake-shadow-extraction.v0 must have a valid synthetic eval fixture"
       ]
     });
   });

@@ -8,6 +8,57 @@ import {
   type OperationalArchiveState
 } from "@catering/shared-core";
 
+export type IntakeShadowSafetyMode = "synthetic_demo" | "anonymized_reference";
+
+export interface IntakeShadowValueSummary {
+  present: boolean;
+  valueHash?: string;
+  numericValue?: number;
+}
+
+export interface IntakeShadowDifference {
+  field: "eventType" | "serviceForm" | "eventDate" | "attendeeCount" | "menuItems";
+  matches: boolean;
+  baseline: IntakeShadowValueSummary;
+  llm: IntakeShadowValueSummary;
+}
+
+export interface IntakeShadowRun {
+  shadowRunId: string;
+  createdAt: string;
+  status: "pending_review";
+  safetyMode: IntakeShadowSafetyMode;
+  source: {
+    channel: EventRequest["source"]["channel"];
+    inputHash: string;
+    sourceRef?: string;
+  };
+  baseline: {
+    requestId: string;
+    specId: string;
+    summary: Record<IntakeShadowDifference["field"], IntakeShadowValueSummary>;
+  };
+  llm: {
+    inputId: string;
+    outputId?: string;
+    outputHash?: string;
+    providerId?: string;
+    providerRequestId?: string;
+    adapterId: string;
+    adapterMode: string;
+    promptSchemaId?: string;
+    summary: Record<IntakeShadowDifference["field"], IntakeShadowValueSummary>;
+  };
+  differences: IntakeShadowDifference[];
+  guardrails: {
+    draftOnly: true;
+    humanApprovalRequired: true;
+    writesProductObjects: false;
+    rawPayloadStored: false;
+    dataMode: "synthetic_or_demo_only";
+  };
+}
+
 interface ArchiveRequestContextInput {
   requestId: string;
   reasonCode: OperationalArchiveReasonCode;
@@ -33,6 +84,8 @@ export class IntakeStore {
 
   private readonly specs: PersistentCollection<AcceptedEventSpec>;
 
+  private readonly shadowRuns: PersistentCollection<IntakeShadowRun>;
+
   readonly storageOptions?: CollectionStorageOptions;
 
   constructor(options?: CollectionStorageOptions) {
@@ -47,6 +100,13 @@ export class IntakeStore {
     this.specs = createPersistentCollection<AcceptedEventSpec>({
       collectionName: "intake/specs",
       getId: (spec) => spec.specId,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    });
+    this.shadowRuns = createPersistentCollection<IntakeShadowRun>({
+      collectionName: "intake/shadow-runs",
+      getId: (run) => run.shadowRunId,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
@@ -75,6 +135,14 @@ export class IntakeStore {
 
   async listSpecs(options?: { includeArchived?: boolean }): Promise<AcceptedEventSpec[]> {
     return activeOnly(await this.specs.list(), options?.includeArchived);
+  }
+
+  async saveShadowRun(run: IntakeShadowRun): Promise<void> {
+    await this.shadowRuns.set(run);
+  }
+
+  async listShadowRuns(): Promise<IntakeShadowRun[]> {
+    return this.shadowRuns.list();
   }
 
   async archiveRequestContext(

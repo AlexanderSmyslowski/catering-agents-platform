@@ -54,6 +54,16 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "intake",
     method: "POST",
+    pathTemplate: "/v1/intake/shadow/normalize",
+    requiredRole: "intake_operator",
+    payload: {
+      text: "Synthetische Demo: Business Lunch fuer 40 Personen.",
+      safetyMode: "synthetic_demo"
+    }
+  },
+  {
+    service: "intake",
+    method: "POST",
     pathTemplate: "/v1/intake/specs/manual",
     requiredRole: "intake_operator",
     payload: { eventType: "Lunch", attendeeCount: 20 }

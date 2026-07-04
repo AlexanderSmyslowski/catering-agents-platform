@@ -129,6 +129,10 @@ function uniqueErrors(errors: readonly string[]): string[] {
   return [...new Set(errors)];
 }
 
+function allowsProviderContextWithoutFixture(inputKind: LlmReadinessModelInputKind): boolean {
+  return inputKind === "production_draft_request" || inputKind === "intake_shadow_request";
+}
+
 function validateResponseConsistency(
   request: LlmReadinessProviderAdapterRequest,
   response: LlmReadinessProviderAdapterResponse,
@@ -157,7 +161,7 @@ function validateResponseConsistency(
     }
 
     if (
-      request.input.kind !== "production_draft_request" &&
+      !allowsProviderContextWithoutFixture(request.input.kind) &&
       (typeof response.fixtureId !== "string" || response.fixtureId.trim().length === 0)
     ) {
       errors.push("response.fixtureId must be a non-empty string when response.ok is true");
@@ -335,7 +339,11 @@ export function validateLlmReadinessAgentAuditRecord(
   }
 
   if (candidate.status === "matched_provider") {
-    if (candidate.inputKind !== "production_draft_request" && candidate.fixtureId === undefined) {
+    if (
+      hasAllowedInputKind(candidate.inputKind) &&
+      !allowsProviderContextWithoutFixture(candidate.inputKind) &&
+      candidate.fixtureId === undefined
+    ) {
       errors.push("fixtureId is required when status is matched_provider");
     }
 

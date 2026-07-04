@@ -86,6 +86,15 @@ export const dataIngressPaths = [
     requiredGate: "operations_audit_operator auth"
   },
   {
+    id: "intake_shadow_extraction",
+    service: "intake-service",
+    route: "POST /v1/intake/shadow/normalize",
+    source: "synthetic/demo or anonymized reference text and BYO-LLM draft adapter",
+    scope: "synthetic_or_demo_only",
+    externalExposure: "blocked_until_decision",
+    requiredGate: "intake_operator auth, explicit safe safetyMode, explicit CATERING_SYNTHETIC_LLM_SLICE opt-in, no product writes, no raw prompt/response persistence"
+  },
+  {
     id: "intake_archive_request",
     service: "intake-service",
     route: "POST /v1/intake/requests/:requestId/archive",
@@ -353,6 +362,26 @@ export const auditEvidencePaths = [
     readOnlyEvidence: true,
     productApprovalEffect: "product_mutation",
     requiredRole: "operations_audit_operator"
+  },
+  {
+    id: "intake_shadow_extraction_compared",
+    service: "intake-service",
+    route: "POST /v1/intake/shadow/normalize",
+    action: "intake.shadow_extraction_compared",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "none",
+    requiredRole: "intake_operator"
+  },
+  {
+    id: "intake_shadow_extraction_rejected",
+    service: "intake-service",
+    route: "POST /v1/intake/shadow/normalize",
+    action: "intake.shadow_extraction_rejected",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "none",
+    requiredRole: "intake_operator"
   },
   {
     id: "offer_draft_created",

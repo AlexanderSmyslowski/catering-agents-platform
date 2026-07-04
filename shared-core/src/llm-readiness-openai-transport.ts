@@ -105,10 +105,32 @@ function buildProductionDraftExtractionSchema() {
   };
 }
 
+function buildIntakeShadowExtractionSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      eventType: { type: ["string", "null"] },
+      serviceForm: { type: ["string", "null"] },
+      eventDate: { type: ["string", "null"] },
+      attendeeCount: { type: ["number", "null"] },
+      menuItems: {
+        type: "array",
+        items: { type: "string" }
+      }
+    },
+    required: ["eventType", "serviceForm", "eventDate", "attendeeCount", "menuItems"]
+  };
+}
+
 function outputSchemaFor(outputKind: LlmReadinessModelOutputKind) {
-  return outputKind === "production_draft_extraction"
-    ? buildProductionDraftExtractionSchema()
-    : buildClarificationQuestionSchema();
+  if (outputKind === "production_draft_extraction") {
+    return buildProductionDraftExtractionSchema();
+  }
+  if (outputKind === "intake_shadow_extraction") {
+    return buildIntakeShadowExtractionSchema();
+  }
+  return buildClarificationQuestionSchema();
 }
 
 function buildRequestBody(request: LlmReadinessSyntheticLiveTransportRequest, model: string) {
@@ -186,6 +208,26 @@ function parseResponsePayload(rawText: string, outputKind: LlmReadinessModelOutp
       return {
         ok: false,
         errors: ["provider response must contain components as an array"]
+      };
+    }
+
+    return {
+      ok: true,
+      errors: [],
+      text: JSON.stringify(parsed)
+    };
+  }
+
+  if (outputKind === "intake_shadow_extraction") {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      !Array.isArray((parsed as { menuItems?: unknown }).menuItems)
+    ) {
+      return {
+        ok: false,
+        errors: ["provider response must contain menuItems as an array"]
       };
     }
 
@@ -274,11 +316,12 @@ export class OpenAiSyntheticLiveTransport implements LlmReadinessSyntheticLiveTr
   ): Promise<LlmReadinessSyntheticLiveTransportResponse> {
     if (
       request.outputKind !== "clarification_question_draft" &&
-      request.outputKind !== "production_draft_extraction"
+      request.outputKind !== "production_draft_extraction" &&
+      request.outputKind !== "intake_shadow_extraction"
     ) {
       return {
         ok: false,
-        errors: ["OpenAI synthetic live transport only supports clarification_question_draft and production_draft_extraction"],
+        errors: ["OpenAI synthetic live transport only supports clarification_question_draft, production_draft_extraction and intake_shadow_extraction"],
         providerId: "openai-responses"
       };
     }

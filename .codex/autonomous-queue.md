@@ -17,18 +17,44 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-_(leer)_
+### ERLAUBT · 2.3a Batch-Pilot
+
+Branch: `loop/batch-classification-pilot`.
+Goal: `.codex/goals/batch-classification-pilot.md`.
+
+Scope:
+- Pseudonymisierung auf Textebene: keine Namen, Kontakte oder Dateinamen
+  zum Provider; nur Menü-/Preis-/Pax-Abschnitte.
+- Sichtbare Contract-Erweiterung `dataMode: pseudonymized_approved`.
+- 20 Angebote klassifizieren, `gpt-4.1` vs. `gpt-4.1-mini` gegen
+  13-Pakete-Ground-Truth, Kostenreport.
+- Budget: 3 EUR / 60 Requests.
+- Der 916er-Nachtlauf bleibt `ZUR SICHTUNG` bis Pilot-Report vorliegt.
 
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-_(leer)_
+- **916er-Nachtlauf freigeben?** · Die Vollklassifikation der 916
+  Altangebote bleibt bis nach Slice 2.3a gesperrt. Mensch nötig wegen
+  Pilot-Qualität, Datenstatus, Kostenkontrolle und Laufzeitfenster.
 
 ---
 
 ## ERLEDIGT
 
+- Slice 2.2 Intake-Schattenmodus abgeschlossen in Branch
+  `loop/intake-shadow-mode`, Draft-PR #550
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/550>.
+  Belegt: Sichere synthetische/anonymisierte Eingaben erzeugen Regex-
+  Baseline und BYO-LLM-Extraktion nebeneinander als `pending_review`-
+  Vergleich; EventRequest/AcceptedEventSpec-Zählung bleibt unverändert,
+  der Schattenlauf speichert nur Hashes, IDs, Provider-Metadaten und
+  Feld-Diffs. Nicht freigegebene Safety-Modes werden vor Provider-
+  Ausführung mit 422 abgewiesen. Audit und Store enthalten keinen
+  Rohprompt, keine Rohantwort und keinen Eingabetext. Batterie grün:
+  `npm test` 271 Dateien / 1188 Tests, `tsc`, Build, Audit,
+  Hidden/Bidi-Check und Internal-Beta-Gate.
 - Slice 2.1 PDF→ProductionDraft über BYO-Schiene abgeschlossen in Branch
   `loop/pdf-production-draft-byo`, Draft-PR #549
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/549>.

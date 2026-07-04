@@ -65,6 +65,21 @@ export const llmReadinessPromptArtifacts = [
       "Extrahiere Eventdaten, Personenzahl, Serviceform, Menuekomponenten und offene Rueckfragen. " +
       "Jede im Dokument genannte Buffet-Komponente muss als components-Eintrag oder als openQuestions-Eintrag auftauchen. " +
       "Antwortformat: JSON mit eventType, serviceForm, eventDate, attendeeCount, customerName, venueName, components und openQuestions."
+  },
+  {
+    promptArtifactId: "intake-shadow-extraction.prompt",
+    promptVersion: "v0",
+    promptSchemaId: "intake-shadow-extraction-prompt-schema.v0",
+    promptSchemaRegistryVersion: llmReadinessPromptSchemaRegistryVersion,
+    inputKind: "intake_shadow_request",
+    status: "synthetic_live_ready",
+    systemPrompt:
+      "Du extrahierst aus einem freigegebenen synthetischen oder anonymisierten Catering-Anfragetext einen Vergleichsentwurf fuer den Intake-Schattenmodus. " +
+      "Schreibe keine Produktobjekte, erfinde keine Fakten und gib nur JSON zurueck.",
+    userPromptTemplate:
+      "Extrahiere eventType, serviceForm, eventDate, attendeeCount und menuItems. " +
+      "Nutze nur den gegebenen Text. Wenn ein Feld fehlt, gib null oder eine leere Liste zurueck. " +
+      "Antwortformat: JSON mit eventType, serviceForm, eventDate, attendeeCount und menuItems."
   }
 ] as const satisfies readonly LlmReadinessPromptArtifact[];
 

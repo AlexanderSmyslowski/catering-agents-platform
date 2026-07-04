@@ -48,6 +48,7 @@ interface CodexCliJsonPayload {
   reason?: unknown;
   reasonCode?: unknown;
   components?: unknown;
+  menuItems?: unknown;
 }
 
 const defaultCodexCliTimeoutMs = 120_000;
@@ -119,7 +120,9 @@ export const defaultCodexCliExec: CodexCliExec = ({
 function buildCodexPrompt(request: LlmReadinessSyntheticLiveTransportRequest): string {
   const responseShape = request.outputKind === "production_draft_extraction"
     ? "{\"eventType\":\"...\",\"serviceForm\":\"...\",\"eventDate\":\"YYYY-MM-DD\",\"attendeeCount\":45,\"components\":[{\"label\":\"...\"}],\"openQuestions\":[{\"field\":\"...\",\"message\":\"...\",\"suggestedQuestion\":\"...\"}]}"
-    : "{\"text\":\"...\",\"reason\":\"...\",\"reasonCode\":\"...\"}";
+    : request.outputKind === "intake_shadow_extraction"
+      ? "{\"eventType\":\"...\",\"serviceForm\":\"...\",\"eventDate\":\"YYYY-MM-DD\",\"attendeeCount\":45,\"menuItems\":[\"...\"]}"
+      : "{\"text\":\"...\",\"reason\":\"...\",\"reasonCode\":\"...\"}";
 
   return [
     request.systemPrompt,
@@ -240,6 +243,21 @@ function parseCodexCliPayload(output: string, outputKind: LlmReadinessSyntheticL
     };
   }
 
+  if (outputKind === "intake_shadow_extraction") {
+    if (!Array.isArray(payload.menuItems)) {
+      return {
+        ok: false,
+        errors: ["codex CLI JSON output must contain menuItems as an array"]
+      };
+    }
+
+    return {
+      ok: true,
+      errors: [],
+      text: JSON.stringify(parsed)
+    };
+  }
+
   if (
     typeof payload.text !== "string" ||
     typeof payload.reason !== "string" ||
@@ -282,11 +300,12 @@ export class CodexCliSyntheticLiveTransport implements LlmReadinessSyntheticLive
   ): Promise<LlmReadinessSyntheticLiveTransportResponse> {
     if (
       request.outputKind !== "clarification_question_draft" &&
-      request.outputKind !== "production_draft_extraction"
+      request.outputKind !== "production_draft_extraction" &&
+      request.outputKind !== "intake_shadow_extraction"
     ) {
       return {
         ok: false,
-        errors: ["Codex CLI transport only supports clarification_question_draft and production_draft_extraction"],
+        errors: ["Codex CLI transport only supports clarification_question_draft, production_draft_extraction and intake_shadow_extraction"],
         providerId: "codex-cli"
       };
     }
