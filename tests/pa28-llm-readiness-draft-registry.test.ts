@@ -45,7 +45,7 @@ describe("PA28 LLM readiness draft registry", () => {
       expect(contract.readinessContractVersion).toBe(llmReadinessContractVersion);
       expect(contract.status).toBe("schema_contract_only");
       expect(contract.providerCalls).toBe("disabled");
-      expect(contract.dataMode).toBe("synthetic_or_demo_only");
+      expect(["synthetic_or_demo_only", "pseudonymized_approved"]).toContain(contract.dataMode);
       expect(contract.humanApprovalRequired).toBe(true);
       expect(contract.writesProductObject).toBe(false);
       expect(contract.allowedToolEffects).not.toContain("write");

@@ -16,6 +16,12 @@ import { validateLlmReadinessEvalOutputCandidateMatch } from "./llm-readiness-ev
 
 export type LlmReadinessProviderAdapterMode = "fixture_only" | "synthetic_live";
 
+export interface LlmReadinessProviderUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
 export interface LlmReadinessProviderAdapterRequest {
   input: LlmReadinessModelInput;
   promptSchemaId?: string;
@@ -31,6 +37,7 @@ export interface LlmReadinessProviderAdapterResponse {
   promptSchemaId?: string;
   providerId?: string;
   providerRequestId?: string;
+  usage?: LlmReadinessProviderUsage;
   outputCandidate?: LlmReadinessModelOutputCandidate;
 }
 

@@ -17,19 +17,7 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-### ERLAUBT · 2.3a Batch-Pilot
-
-Branch: `loop/batch-classification-pilot`.
-Goal: `.codex/goals/batch-classification-pilot.md`.
-
-Scope:
-- Pseudonymisierung auf Textebene: keine Namen, Kontakte oder Dateinamen
-  zum Provider; nur Menü-/Preis-/Pax-Abschnitte.
-- Sichtbare Contract-Erweiterung `dataMode: pseudonymized_approved`.
-- 20 Angebote klassifizieren, `gpt-4.1` vs. `gpt-4.1-mini` gegen
-  13-Pakete-Ground-Truth, Kostenreport.
-- Budget: 3 EUR / 60 Requests.
-- Der 916er-Nachtlauf bleibt `ZUR SICHTUNG` bis Pilot-Report vorliegt.
+_Keine Einträge._
 
 ---
 
@@ -43,6 +31,20 @@ Scope:
 
 ## ERLEDIGT
 
+- Slice 2.3a Batch-Pilot abgeschlossen in Branch
+  `loop/batch-classification-pilot`, Draft-PR #551
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/551>.
+  Belegt: Pseudonymisierung entfernt Kontakt-/Namens-/Adresszeilen vor
+  Provider-Nutzung und speichert im Report keine Dateinamen, Rohtexte,
+  Rohprompts oder Rohantworten; sichtbarer BYO-Data-Mode
+  `pseudonymized_approved`; Klassifikation ist auf die 13 kuratierten
+  Paket-IDs oder `null` begrenzt; der 916er-Lauf bleibt technisch
+  geblockt (`limit > 20`). Realer 20-Angebote-Pilot mit `gpt-4.1` und
+  `gpt-4.1-mini`: 40 geplante Requests, 38 Provider-Requests, 2 vor
+  Provider gestoppt wegen fehlender Angebots-Evidenz nach
+  Pseudonymisierung, 8 Modell-Abweichungen, 90.398 Tokens gesamt.
+  Batterie grün: `npm test` 272 Dateien / 1194 Tests, `tsc`, Build,
+  Audit, Hidden/Bidi-Check und Internal-Beta-Gate.
 - Slice 2.2 Intake-Schattenmodus abgeschlossen in Branch
   `loop/intake-shadow-mode`, Draft-PR #550
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/550>.

@@ -1,6 +1,7 @@
 import {
   llmReadinessContractVersion,
   llmReadinessForbiddenPayloadKeys,
+  type LlmReadinessDataMode,
   type LlmReadinessModelInputKind,
   type LlmReadinessModelOutputKind,
   type LlmReadinessSourceObjectType,
@@ -25,7 +26,7 @@ export interface LlmReadinessPromptSchemaRegistryEntry {
   policyVersion: string;
   outputSchemaId: string;
   providerCalls: "disabled";
-  dataMode: "synthetic_or_demo_only";
+  dataMode: LlmReadinessDataMode;
   allowedToolEffects: readonly LlmReadinessToolEffect[];
   requiredSourceObjectTypes: readonly LlmReadinessSourceObjectType[];
   humanApprovalRequired: true;
@@ -127,6 +128,29 @@ export const llmReadinessPromptSchemaRegistry = [
     fixtureIds: ["llm-eval-synthetic-intake-shadow-lunch"],
     forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
     description: "Schema-only prompt, policy and output-schema metadata for intake shadow extraction readiness."
+  },
+  {
+    promptSchemaId: "offer-package-classification-prompt-schema.v0",
+    registryVersion: llmReadinessPromptSchemaRegistryVersion,
+    readinessContractVersion: llmReadinessContractVersion,
+    draftContractId: "offer-package-classification.v0",
+    inputKind: "offer_package_classification_request",
+    outputKind: "offer_package_classification_draft",
+    status: "schema_contract_only",
+    promptArtifactId: "offer-package-classification.prompt",
+    promptVersion: "v0",
+    policyArtifactId: "offer-package-classification.policy",
+    policyVersion: "v0",
+    outputSchemaId: "offer-package-classification.output-schema.v0",
+    providerCalls: "disabled",
+    dataMode: "pseudonymized_approved",
+    allowedToolEffects: ["read", "draft"],
+    requiredSourceObjectTypes: ["safe_source_anchor"],
+    humanApprovalRequired: true,
+    writesProductObject: false,
+    fixtureIds: ["llm-eval-pseudonymized-offer-package-classification"],
+    forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
+    description: "Schema-only prompt, policy and output-schema metadata for pseudonymized offer package classification."
   }
 ] as const satisfies readonly LlmReadinessPromptSchemaRegistryEntry[];
 

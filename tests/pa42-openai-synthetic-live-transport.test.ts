@@ -124,7 +124,7 @@ describe("PA42 OpenAI synthetic live transport", () => {
 
     expect(response.ok).toBe(false);
     expect(response.errors).toContain(
-      "OpenAI synthetic live transport only supports clarification_question_draft, production_draft_extraction and intake_shadow_extraction"
+      "OpenAI synthetic live transport only supports clarification_question_draft, production_draft_extraction, intake_shadow_extraction and offer_package_classification_draft"
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -226,6 +226,62 @@ describe("PA42 OpenAI synthetic live transport", () => {
     expect(response.ok).toBe(true);
     expect(response.text).toContain("Business Lunch");
     expect(response.structuredCandidate).toBeUndefined();
+  });
+
+  it("sends the offer package classification schema and returns usage metadata", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.text).toMatchObject({
+        format: {
+          type: "json_schema",
+          name: "offer_package_classification_draft",
+          strict: true
+        }
+      });
+
+      return new Response(
+        JSON.stringify({
+          id: "resp-offer-classification-1",
+          output_text: JSON.stringify({
+            packageId: "business_lunch_basic",
+            confidence: 0.86,
+            rationale: "Business-Lunch-Signale.",
+            signals: ["Lunch", "40 Personen"],
+            alternatives: [{ packageId: "brunch_buffet", confidence: 0.18 }]
+          }),
+          usage: {
+            input_tokens: 123,
+            output_tokens: 45,
+            total_tokens: 168
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "x-request-id": "req-offer-classification-1",
+            "content-type": "application/json"
+          }
+        }
+      );
+    });
+
+    const transport = new OpenAiSyntheticLiveTransport({
+      apiKey: "sk-test",
+      model: "gpt-test",
+      fetchImpl: fetchMock as typeof fetch
+    });
+    const request = buildRequest();
+    request.outputKind = "offer_package_classification_draft";
+
+    const response = await transport.run(request);
+
+    expect(response.ok).toBe(true);
+    expect(response.text).toContain("business_lunch_basic");
+    expect(response.usage).toEqual({
+      inputTokens: 123,
+      outputTokens: 45,
+      totalTokens: 168
+    });
   });
 
   it("surfaces provider-side errors and malformed JSON cleanly", async () => {

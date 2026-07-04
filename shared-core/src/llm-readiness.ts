@@ -19,6 +19,10 @@ export const llmReadinessToolEffects = ["read", "draft", "write"] as const;
 
 export type LlmReadinessToolEffect = typeof llmReadinessToolEffects[number];
 
+export const llmReadinessDataModes = ["synthetic_or_demo_only", "pseudonymized_approved"] as const;
+
+export type LlmReadinessDataMode = typeof llmReadinessDataModes[number];
+
 export type LlmReadinessToolStatus = "allowed_without_provider" | "decision_required";
 
 export interface LlmReadinessToolBoundary {
@@ -92,7 +96,8 @@ export const llmReadinessModelInputKinds = [
   "clarification_draft_request",
   "operator_summary_request",
   "production_draft_request",
-  "intake_shadow_request"
+  "intake_shadow_request",
+  "offer_package_classification_request"
 ] as const;
 
 export type LlmReadinessModelInputKind = typeof llmReadinessModelInputKinds[number];
@@ -101,7 +106,8 @@ export const llmReadinessModelOutputKinds = [
   "clarification_question_draft",
   "operator_summary_draft",
   "production_draft_extraction",
-  "intake_shadow_extraction"
+  "intake_shadow_extraction",
+  "offer_package_classification_draft"
 ] as const;
 
 export type LlmReadinessModelOutputKind = typeof llmReadinessModelOutputKinds[number];
@@ -131,7 +137,7 @@ export interface LlmReadinessModelInput {
   sourceRefs: LlmReadinessSourceRef[];
   policy: {
     providerCalls: "disabled";
-    dataMode: "synthetic_or_demo_only";
+    dataMode: LlmReadinessDataMode;
     allowedToolEffects: readonly ["read"] | readonly ["read", "draft"];
   };
 }
@@ -178,6 +184,10 @@ function hasAllowedKind(value: unknown): value is LlmReadinessModelOutputKind {
 
 function hasAllowedInputKind(value: unknown): value is LlmReadinessModelInputKind {
   return typeof value === "string" && llmReadinessModelInputKinds.includes(value as LlmReadinessModelInputKind);
+}
+
+function hasAllowedDataMode(value: unknown): value is LlmReadinessDataMode {
+  return typeof value === "string" && llmReadinessDataModes.includes(value as LlmReadinessDataMode);
 }
 
 function hasAllowedSourceObjectType(value: unknown): value is LlmReadinessSourceObjectType {
@@ -272,8 +282,8 @@ export function validateLlmReadinessModelInputCandidate(
       errors.push("policy.providerCalls must be disabled");
     }
 
-    if (candidate.policy.dataMode !== "synthetic_or_demo_only") {
-      errors.push("policy.dataMode must be synthetic_or_demo_only");
+    if (!hasAllowedDataMode(candidate.policy.dataMode)) {
+      errors.push("policy.dataMode must be synthetic_or_demo_only or pseudonymized_approved");
     }
 
     if (!hasAllowedInputToolEffects(candidate.policy.allowedToolEffects)) {

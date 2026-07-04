@@ -16,6 +16,7 @@ import {
   findLlmReadinessPromptArtifactByInputKind,
   validateLlmReadinessPromptArtifacts
 } from "./llm-readiness-prompt-artifacts.js";
+import type { LlmReadinessProviderUsage } from "./llm-readiness-provider-adapter.js";
 
 export interface LlmReadinessSyntheticLiveTransportRequest {
   providerRunId: string;
@@ -35,6 +36,7 @@ export interface LlmReadinessSyntheticLiveTransportResponse {
   providerRequestId?: string;
   text?: string;
   structuredCandidate?: Record<string, LlmReadinessStructuredCandidateValue>;
+  usage?: LlmReadinessProviderUsage;
 }
 
 export interface LlmReadinessSyntheticLiveTransport {
@@ -57,13 +59,15 @@ export interface LlmReadinessSyntheticLiveSliceResponse {
   promptSchemaId?: string;
   providerId?: string;
   providerRequestId?: string;
+  usage?: LlmReadinessProviderUsage;
   outputCandidate?: LlmReadinessModelOutputCandidate;
 }
 
 const defaultAllowedInputKinds = [
   "clarification_draft_request",
   "production_draft_request",
-  "intake_shadow_request"
+  "intake_shadow_request",
+  "offer_package_classification_request"
 ] as const satisfies readonly LlmReadinessModelInputKind[];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -157,10 +161,30 @@ function buildIntakeShadowContextPrompt(context: string): string {
   ].join("\n");
 }
 
+function buildOfferPackageClassificationContextPrompt(context: string): string {
+  return [
+    "Pseudonymisierter und freigegebener Angebotstext plus Paketliste:",
+    context.trim(),
+    "",
+    "Antwortformat:",
+    "{",
+    "  \"packageId\": \"business_lunch_basic\",",
+    "  \"confidence\": 0.86,",
+    "  \"rationale\": \"...\",",
+    "  \"signals\": [\"...\"],",
+    "  \"alternatives\": [{ \"packageId\": \"brunch_buffet\", \"confidence\": 0.18 }]",
+    "}"
+  ].join("\n");
+}
+
 function buildPromptContextPrompt(inputKind: LlmReadinessModelInputKind, context: string): string {
-  return inputKind === "intake_shadow_request"
-    ? buildIntakeShadowContextPrompt(context)
-    : buildProductionDraftContextPrompt(context);
+  if (inputKind === "intake_shadow_request") {
+    return buildIntakeShadowContextPrompt(context);
+  }
+  if (inputKind === "offer_package_classification_request") {
+    return buildOfferPackageClassificationContextPrompt(context);
+  }
+  return buildProductionDraftContextPrompt(context);
 }
 
 function buildOutputCandidate(
@@ -313,7 +337,8 @@ export class SyntheticLiveLlmReadinessSlice {
     const promptContext = request.promptContext?.trim();
     const usesOperatorApprovedContext = (
       request.input.kind === "production_draft_request" ||
-      request.input.kind === "intake_shadow_request"
+      request.input.kind === "intake_shadow_request" ||
+      request.input.kind === "offer_package_classification_request"
     ) && Boolean(promptContext);
 
     if (!fixture && !usesOperatorApprovedContext) {
@@ -350,7 +375,8 @@ export class SyntheticLiveLlmReadinessSlice {
         fixtureId: fixture?.fixtureId,
         promptSchemaId: promptSchemaEntry.promptSchemaId,
         providerId: transportResponse.providerId,
-        providerRequestId: transportResponse.providerRequestId
+        providerRequestId: transportResponse.providerRequestId,
+        usage: transportResponse.usage
       };
     }
 
@@ -368,7 +394,8 @@ export class SyntheticLiveLlmReadinessSlice {
         fixtureId: fixture?.fixtureId,
         promptSchemaId: promptSchemaEntry.promptSchemaId,
         providerId: transportResponse.providerId,
-        providerRequestId: transportResponse.providerRequestId
+        providerRequestId: transportResponse.providerRequestId,
+        usage: transportResponse.usage
       };
     }
 
@@ -381,6 +408,7 @@ export class SyntheticLiveLlmReadinessSlice {
       promptSchemaId: promptSchemaEntry.promptSchemaId,
       providerId: transportResponse.providerId,
       providerRequestId: transportResponse.providerRequestId,
+      usage: transportResponse.usage,
       outputCandidate
     };
   }

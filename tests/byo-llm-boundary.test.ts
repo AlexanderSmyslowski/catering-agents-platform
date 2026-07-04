@@ -53,7 +53,7 @@ describe("BYO LLM boundary", () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toContain("input.policy.providerCalls must be disabled");
-    expect(result.errors).toContain("input.policy.dataMode must be synthetic_or_demo_only");
+    expect(result.errors).toContain("input.policy.dataMode must be synthetic_or_demo_only or pseudonymized_approved");
     expect(result.errors).toContain("input.rawText is not allowed in readiness input candidates");
   });
 
@@ -81,6 +81,7 @@ describe("BYO LLM boundary", () => {
       "clarification_question_draft",
       "production_draft_extraction",
       "intake_shadow_extraction",
+      "offer_package_classification_draft",
       "recipe_research_summary_draft",
       "search_query_suggestion_draft",
       "uncertainty_summary_draft"
@@ -100,6 +101,9 @@ describe("BYO LLM boundary", () => {
       status: "implemented_readiness_contract"
     });
     expect(allowedByoLlmDraftUseCaseByType("intake_shadow_extraction")).toMatchObject({
+      status: "implemented_readiness_contract"
+    });
+    expect(allowedByoLlmDraftUseCaseByType("offer_package_classification_draft")).toMatchObject({
       status: "implemented_readiness_contract"
     });
     expect(allowedByoLlmDraftUseCaseByType("recipe_research_summary_draft")).toMatchObject({
@@ -155,7 +159,7 @@ describe("BYO LLM boundary", () => {
 
     expect(response.ok).toBe(false);
     expect(response.errors).toContain(
-      "OpenAI synthetic live transport only supports clarification_question_draft, production_draft_extraction and intake_shadow_extraction"
+      "OpenAI synthetic live transport only supports clarification_question_draft, production_draft_extraction, intake_shadow_extraction and offer_package_classification_draft"
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });

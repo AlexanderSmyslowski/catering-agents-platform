@@ -6,6 +6,7 @@ import {
   type LlmReadinessModelInputKind,
   type LlmReadinessModelOutputCandidate,
   type LlmReadinessModelOutputKind,
+  type LlmReadinessDataMode,
   type LlmReadinessSourceObjectType,
   type LlmReadinessSourceRef,
   type LlmReadinessToolEffect,
@@ -50,7 +51,7 @@ export interface LlmReadinessAgentAuditRecord {
   providerId?: string;
   providerRequestId?: string;
   providerCalls: "disabled";
-  dataMode: "synthetic_or_demo_only";
+  dataMode: LlmReadinessDataMode;
   allowedToolEffects: readonly LlmReadinessToolEffect[];
   sourceRefs: readonly LlmReadinessSourceRef[];
   humanApprovalRequired: true;
@@ -93,6 +94,10 @@ function hasAllowedInputKind(value: unknown): value is LlmReadinessModelInputKin
   return typeof value === "string" && llmReadinessModelInputKinds.includes(value as LlmReadinessModelInputKind);
 }
 
+function hasAllowedDataMode(value: unknown): value is LlmReadinessDataMode {
+  return value === "synthetic_or_demo_only" || value === "pseudonymized_approved";
+}
+
 function hasAllowedOutputKind(value: unknown): value is LlmReadinessModelOutputKind {
   return typeof value === "string" && llmReadinessModelOutputKinds.includes(value as LlmReadinessModelOutputKind);
 }
@@ -130,7 +135,11 @@ function uniqueErrors(errors: readonly string[]): string[] {
 }
 
 function allowsProviderContextWithoutFixture(inputKind: LlmReadinessModelInputKind): boolean {
-  return inputKind === "production_draft_request" || inputKind === "intake_shadow_request";
+  return (
+    inputKind === "production_draft_request" ||
+    inputKind === "intake_shadow_request" ||
+    inputKind === "offer_package_classification_request"
+  );
 }
 
 function validateResponseConsistency(
@@ -296,8 +305,8 @@ export function validateLlmReadinessAgentAuditRecord(
     errors.push("providerCalls must stay disabled");
   }
 
-  if (candidate.dataMode !== "synthetic_or_demo_only") {
-    errors.push("dataMode must stay synthetic_or_demo_only");
+  if (!hasAllowedDataMode(candidate.dataMode)) {
+    errors.push("dataMode must stay synthetic_or_demo_only or pseudonymized_approved");
   }
 
   if (!hasAllowedInputToolEffects(candidate.allowedToolEffects)) {

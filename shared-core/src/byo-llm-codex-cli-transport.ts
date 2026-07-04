@@ -49,6 +49,8 @@ interface CodexCliJsonPayload {
   reasonCode?: unknown;
   components?: unknown;
   menuItems?: unknown;
+  signals?: unknown;
+  alternatives?: unknown;
 }
 
 const defaultCodexCliTimeoutMs = 120_000;
@@ -122,7 +124,9 @@ function buildCodexPrompt(request: LlmReadinessSyntheticLiveTransportRequest): s
     ? "{\"eventType\":\"...\",\"serviceForm\":\"...\",\"eventDate\":\"YYYY-MM-DD\",\"attendeeCount\":45,\"components\":[{\"label\":\"...\"}],\"openQuestions\":[{\"field\":\"...\",\"message\":\"...\",\"suggestedQuestion\":\"...\"}]}"
     : request.outputKind === "intake_shadow_extraction"
       ? "{\"eventType\":\"...\",\"serviceForm\":\"...\",\"eventDate\":\"YYYY-MM-DD\",\"attendeeCount\":45,\"menuItems\":[\"...\"]}"
-      : "{\"text\":\"...\",\"reason\":\"...\",\"reasonCode\":\"...\"}";
+      : request.outputKind === "offer_package_classification_draft"
+        ? "{\"packageId\":\"business_lunch_basic\",\"confidence\":0.86,\"rationale\":\"...\",\"signals\":[\"...\"],\"alternatives\":[{\"packageId\":\"brunch_buffet\",\"confidence\":0.18}]}"
+        : "{\"text\":\"...\",\"reason\":\"...\",\"reasonCode\":\"...\"}";
 
   return [
     request.systemPrompt,
@@ -258,6 +262,21 @@ function parseCodexCliPayload(output: string, outputKind: LlmReadinessSyntheticL
     };
   }
 
+  if (outputKind === "offer_package_classification_draft") {
+    if (!Array.isArray(payload.signals) || !Array.isArray(payload.alternatives)) {
+      return {
+        ok: false,
+        errors: ["codex CLI JSON output must contain signals and alternatives as arrays"]
+      };
+    }
+
+    return {
+      ok: true,
+      errors: [],
+      text: JSON.stringify(parsed)
+    };
+  }
+
   if (
     typeof payload.text !== "string" ||
     typeof payload.reason !== "string" ||
@@ -301,11 +320,12 @@ export class CodexCliSyntheticLiveTransport implements LlmReadinessSyntheticLive
     if (
       request.outputKind !== "clarification_question_draft" &&
       request.outputKind !== "production_draft_extraction" &&
-      request.outputKind !== "intake_shadow_extraction"
+      request.outputKind !== "intake_shadow_extraction" &&
+      request.outputKind !== "offer_package_classification_draft"
     ) {
       return {
         ok: false,
-        errors: ["Codex CLI transport only supports clarification_question_draft, production_draft_extraction and intake_shadow_extraction"],
+        errors: ["Codex CLI transport only supports clarification_question_draft, production_draft_extraction, intake_shadow_extraction and offer_package_classification_draft"],
         providerId: "codex-cli"
       };
     }

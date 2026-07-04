@@ -1,6 +1,7 @@
 import {
   llmReadinessContractVersion,
   llmReadinessForbiddenPayloadKeys,
+  type LlmReadinessDataMode,
   type LlmReadinessModelInputKind,
   type LlmReadinessModelOutputKind,
   type LlmReadinessSourceObjectType,
@@ -19,7 +20,7 @@ export interface LlmReadinessDraftContract {
   outputKind: LlmReadinessModelOutputKind;
   status: LlmReadinessDraftContractStatus;
   providerCalls: "disabled";
-  dataMode: "synthetic_or_demo_only";
+  dataMode: LlmReadinessDataMode;
   allowedToolEffects: readonly LlmReadinessToolEffect[];
   requiredSourceObjectTypes: readonly LlmReadinessSourceObjectType[];
   humanApprovalRequired: true;
@@ -92,6 +93,22 @@ export const llmReadinessDraftContracts = [
     writesProductObject: false,
     forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
     description: "Contract for comparing an LLM intake extraction against the regex baseline without writing product objects."
+  },
+  {
+    contractId: "offer-package-classification.v0",
+    registryVersion: llmReadinessDraftRegistryVersion,
+    readinessContractVersion: llmReadinessContractVersion,
+    inputKind: "offer_package_classification_request",
+    outputKind: "offer_package_classification_draft",
+    status: "schema_contract_only",
+    providerCalls: "disabled",
+    dataMode: "pseudonymized_approved",
+    allowedToolEffects: ["read", "draft"],
+    requiredSourceObjectTypes: ["safe_source_anchor"],
+    humanApprovalRequired: true,
+    writesProductObject: false,
+    forbiddenPayloadKeys: llmReadinessForbiddenPayloadKeys,
+    description: "Contract for classifying a pseudonymized approved offer text against curated offer package ids."
   }
 ] as const satisfies readonly LlmReadinessDraftContract[];
 

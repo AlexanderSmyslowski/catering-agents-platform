@@ -41,7 +41,7 @@ describe("PA37 LLM readiness prompt schema registry", () => {
       expect(entry.readinessContractVersion).toBe(llmReadinessContractVersion);
       expect(entry.status).toBe("schema_contract_only");
       expect(entry.providerCalls).toBe("disabled");
-      expect(entry.dataMode).toBe("synthetic_or_demo_only");
+      expect(["synthetic_or_demo_only", "pseudonymized_approved"]).toContain(entry.dataMode);
       expect(entry.humanApprovalRequired).toBe(true);
       expect(entry.writesProductObject).toBe(false);
       expect(entry.allowedToolEffects).not.toContain("write");

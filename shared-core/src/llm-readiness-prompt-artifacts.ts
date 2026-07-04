@@ -80,6 +80,21 @@ export const llmReadinessPromptArtifacts = [
       "Extrahiere eventType, serviceForm, eventDate, attendeeCount und menuItems. " +
       "Nutze nur den gegebenen Text. Wenn ein Feld fehlt, gib null oder eine leere Liste zurueck. " +
       "Antwortformat: JSON mit eventType, serviceForm, eventDate, attendeeCount und menuItems."
+  },
+  {
+    promptArtifactId: "offer-package-classification.prompt",
+    promptVersion: "v0",
+    promptSchemaId: "offer-package-classification-prompt-schema.v0",
+    promptSchemaRegistryVersion: llmReadinessPromptSchemaRegistryVersion,
+    inputKind: "offer_package_classification_request",
+    status: "synthetic_live_ready",
+    systemPrompt:
+      "Du klassifizierst einen pseudonymisierten Catering-Angebotstext gegen eine feste Liste kuratierter Angebotspakete. " +
+      "Nutze nur die angegebenen Paket-IDs, erfinde keine neuen Pakete, schreibe keine Produktobjekte und gib nur JSON zurueck.",
+    userPromptTemplate:
+      "Waehle die beste packageId aus der Paketliste oder null, wenn kein Paket passt. " +
+      "Gib confidence zwischen 0 und 1, knappe rationale, bis zu drei signals und bis zu drei alternatives zurueck. " +
+      "Antwortformat: JSON mit packageId, confidence, rationale, signals und alternatives."
   }
 ] as const satisfies readonly LlmReadinessPromptArtifact[];
 
