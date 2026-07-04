@@ -45,6 +45,7 @@ export interface OfferPackageClassificationPrediction {
   providerId?: string;
   providerRequestId?: string;
   usage?: LlmReadinessProviderUsage;
+  reviewFlags?: string[];
   errors: string[];
 }
 
@@ -83,12 +84,23 @@ export interface OfferPackagePilotReport {
       model: string;
       confidence: number;
     }>;
+    noOfferEvidence: Array<{
+      sourceId: string;
+      model: string;
+    }>;
+    flyingBoilerplateReview: Array<{
+      sourceId: string;
+      model: string;
+      packageId: string;
+      confidence: number;
+      reason: "flying_boilerplate_without_glass_evidence";
+    }>;
   };
   guardrails: {
     rawTextStored: false;
     rawPromptStored: false;
     rawResponseStored: false;
-    fullBatchRunBlocked: true;
+    fullBatchRunBlocked: boolean;
   };
 }
 
@@ -288,6 +300,7 @@ export function buildOfferPackagePilotReport(input: {
   maxRequests: number;
   maxEur?: number;
   predictions: readonly OfferPackageClassificationPrediction[];
+  fullBatchRunAllowed?: boolean;
 }): OfferPackagePilotReport {
   const sourceIds = [...new Set(input.predictions.map((prediction) => prediction.sourceId))];
   const models = [...new Set(input.predictions.map((prediction) => prediction.model))];
@@ -332,6 +345,26 @@ export function buildOfferPackagePilotReport(input: {
       model: prediction.model,
       confidence: prediction.confidence!
     }));
+  const noOfferEvidence = input.predictions
+    .filter((prediction) => prediction.errors.includes("no_offer_evidence_retained"))
+    .map((prediction) => ({
+      sourceId: prediction.sourceId,
+      model: prediction.model
+    }));
+  const flyingBoilerplateReview = input.predictions
+    .filter((prediction) =>
+      prediction.ok &&
+      prediction.packageId === "flying_buffet_premium" &&
+      typeof prediction.confidence === "number" &&
+      prediction.reviewFlags?.includes("flying_boilerplate_without_glass_evidence")
+    )
+    .map((prediction) => ({
+      sourceId: prediction.sourceId,
+      model: prediction.model,
+      packageId: prediction.packageId!,
+      confidence: prediction.confidence!,
+      reason: "flying_boilerplate_without_glass_evidence" as const
+    }));
 
   return {
     reportKind: "offer_package_classification_pilot",
@@ -351,13 +384,15 @@ export function buildOfferPackagePilotReport(input: {
     disagreements,
     reviewLists: {
       lowConfidence,
-      nullClassifications
+      nullClassifications,
+      noOfferEvidence,
+      flyingBoilerplateReview
     },
     guardrails: {
       rawTextStored: false,
       rawPromptStored: false,
       rawResponseStored: false,
-      fullBatchRunBlocked: true
+      fullBatchRunBlocked: !input.fullBatchRunAllowed
     }
   };
 }

@@ -23,19 +23,56 @@ _Keine Einträge._
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **916er-Nachtlauf freigeben?** · Die Vollklassifikation der 916
-  Altangebote bleibt auch nach dem Guardrail-Re-Pilot gesperrt. Mensch
-  nötig wegen Modellwahl, Sichtung der 5 null-Klassifikationen und
-  7 Low-Confidence-Fälle, Datenstatus, Kostenkontrolle und
-  Laufzeitfenster. `gpt-5.5` erfüllt im 20er-Re-Pilot die harten
-  Negativklassen (0 Wedding ohne Hochzeitsbegriff, 0
-  `institution_framework` ohne Rahmenvertrags-/Serienbeleg), liefert
-  aber noch sichtungspflichtige Restfälle.
+- **Provider-Quota für Slice 2.3d weiterhin blockiert.** · Alexander
+  gab am 2026-07-04 den Resume frei (`gpt-5.5`, max. 333 Requests,
+  max. 10 EUR). Der Resume wurde exakt mit der lokalen Liste
+  `/tmp/catering-offer-package-night-run-quota-source-ids.txt`
+  gestartet, aber alle 333 Provider-Versuche kamen ohne Tokenverbrauch
+  mit `current quota exceeded` zurück. Für einen weiteren Versuch muss
+  zuerst im Provider-Dashboard/Billing real Headroom geschaffen werden;
+  vorher keine weiteren Provider-Calls. Die Resume-Liste bleibt gültig
+  (333 IDs, `offer-570` bis `offer-916`).
 
 ---
 
 ## ERLEDIGT
 
+- Slice 2.3d Resume-Versuch ausgeführt in Branch
+  `loop/offer-package-night-run`. Freigabe: `gpt-5.5`, max. 333
+  Requests, max. 10 EUR. Dry-Run belegte exakt 333 Restfälle
+  (`offer-570` bis `offer-916`) und 0 Provider-Requests. Realer Resume:
+  333 Quellen / 333 geplante Requests / 333 Provider-Versuche /
+  0 erfolgreiche Klassifikationen / 333 Provider-Quota-Fehler
+  (`current quota exceeded`, `missing outputCandidate`). Nutzung im
+  Resume: 0 Tokens. Kombinierter Report bleibt dadurch beim Teilstand:
+  916 Quellen / 557 erfolgreiche Klassifikationen / 26
+  `no_offer_evidence_retained` / 333 Quota-Fehler; Sichtungslisten:
+  161 confidence < 0,7, 104 null-Klassifikationen, 26 no-evidence-Fälle,
+  2 Flying-Boilerplate-Fälle. Kombinierter Strukturcheck: keine
+  Rohtext-, Prompt-, Response-, Dateiname- oder Pfadfelder im Report.
+  Lokale Artefakte:
+  `/tmp/catering-offer-package-night-run-resume-gpt55.json`,
+  `/tmp/catering-offer-package-night-run-combined-gpt55.json`,
+  `/tmp/catering-offer-package-night-run-analysis-gpt55.json`.
+- Slice 2.3d 916er-Nachtlauf teilweise ausgeführt in Branch
+  `loop/offer-package-night-run`. Belegt: Full-Run bleibt ohne
+  `--allow-full-run` blockiert; Dry-Run über 916 Quellen plante 916
+  Requests, 0 Provider-Requests, rohtextfreien Report und
+  `fullBatchRunBlocked=false` nur mit Opt-in. Realer Lauf:
+  916 Quellen / 916 geplante Requests / 890 Provider-Versuche /
+  557 erfolgreiche Klassifikationen / 26 `no_offer_evidence_retained` /
+  333 `current quota exceeded`-Fehler. Nutzung bis Quota-Block:
+  1.141.903 Input-Tokens, 300.901 Output-Tokens, 1.442.804 Tokens
+  gesamt. Sichtungslisten im Report: 161 confidence < 0,7,
+  104 null-Klassifikationen, 26 no-evidence-Fälle,
+  2 Flying-Boilerplate-Fälle. Strukturcheck: keine Rohtext-, Prompt-,
+  Response-, Dateiname- oder Pfadfelder im Report. Report lokal:
+  `/tmp/catering-offer-package-night-run-gpt55.json`; kompakte
+  Summary lokal:
+  `/tmp/catering-offer-package-night-run-summary-gpt55.json`.
+  Resume-Fähigkeit per `--source-id-file` ergänzt, damit die 333
+  Quota-Fälle später ohne Re-Run der 557 erfolgreichen Fälle
+  fortgesetzt werden können.
 - 20er-Re-Pilot nach Slice 2.3d ausgeführt mit `gpt-5.5` solo, Budget
   2 EUR / 25 Requests. Ergebnis: 20 geplante Requests, 19
   Provider-Requests, 1 vor Provider gestoppt, 53.275 Tokens gesamt.

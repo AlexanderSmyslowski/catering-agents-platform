@@ -126,15 +126,36 @@ describe("offer package batch pilot", () => {
           alternatives: ["business_lunch_basic"],
           usage: { inputTokens: 80, outputTokens: 16, totalTokens: 96 },
           errors: []
+        },
+        {
+          sourceId: "offer-03",
+          sourceHash: "sha256:source-3",
+          pseudonymizedHash: "sha256:pseudo-3",
+          model: "gpt-5.5",
+          ok: false,
+          errors: ["no_offer_evidence_retained"]
+        },
+        {
+          sourceId: "offer-04",
+          sourceHash: "sha256:source-4",
+          pseudonymizedHash: "sha256:pseudo-4",
+          model: "gpt-5.5",
+          ok: true,
+          packageId: "flying_buffet_premium",
+          confidence: 0.78,
+          alternatives: [],
+          usage: { inputTokens: 70, outputTokens: 14, totalTokens: 84 },
+          reviewFlags: ["flying_boilerplate_without_glass_evidence"],
+          errors: []
         }
       ]
     });
     const reportJson = JSON.stringify(report);
 
-    expect(report.requestCount).toBe(3);
-    expect(report.providerRequestCount).toBe(3);
-    expect(report.failedBeforeProviderCount).toBe(0);
-    expect(report.usage).toEqual({ inputTokens: 270, outputTokens: 54, totalTokens: 324 });
+    expect(report.requestCount).toBe(5);
+    expect(report.providerRequestCount).toBe(4);
+    expect(report.failedBeforeProviderCount).toBe(1);
+    expect(report.usage).toEqual({ inputTokens: 340, outputTokens: 68, totalTokens: 408 });
     expect(report.disagreements).toEqual([
       { sourceId: "offer-01", packageIds: ["brunch_buffet", "business_lunch_basic"] }
     ]);
@@ -145,6 +166,18 @@ describe("offer package batch pilot", () => {
       ],
       nullClassifications: [
         { sourceId: "offer-02", model: "gpt-5.5", confidence: 0.55 }
+      ],
+      noOfferEvidence: [
+        { sourceId: "offer-03", model: "gpt-5.5" }
+      ],
+      flyingBoilerplateReview: [
+        {
+          sourceId: "offer-04",
+          model: "gpt-5.5",
+          packageId: "flying_buffet_premium",
+          confidence: 0.78,
+          reason: "flying_boilerplate_without_glass_evidence"
+        }
       ]
     });
     expect(report.guardrails).toMatchObject({
@@ -202,13 +235,88 @@ describe("offer package batch pilot", () => {
     expect(output).not.toContain("Angebot_Ada_Lovelace");
   });
 
-  it("refuses limits above the approved 20-offer pilot size", async () => {
+  it("refuses limits above the pilot size unless a full run is explicitly allowed", async () => {
     const root = tempRoot();
     roots.push(root);
     await expect(runOfferPackageBatchPilotCli([
       "--source-dir", root,
       "--limit", "21",
       "--dry-run"
-    ], {})).rejects.toThrow("the 916-offer run is blocked");
+    ], {})).rejects.toThrow("requires --allow-full-run");
+  });
+
+  it("allows an explicit full-run dry-run without raw source leakage", async () => {
+    const root = tempRoot();
+    roots.push(root);
+    const sourceDir = path.join(root, "offers");
+    mkdirSync(sourceDir);
+    for (let index = 0; index < 21; index += 1) {
+      writeFileSync(path.join(sourceDir, `Angebot_${index}_SecretCustomer.txt`), [
+        "Kunde: SecretCustomer GmbH",
+        "Business Lunch fuer 40 Personen als Buffet",
+        "Preis 42 EUR p.P. netto"
+      ].join("\n"));
+    }
+    const outputPath = path.join(root, "report.json");
+
+    await expect(runOfferPackageBatchPilotCli([
+      "--source-dir", sourceDir,
+      "--limit", "21",
+      "--models", "gpt-5.5",
+      "--max-requests", "21",
+      "--max-eur", "15",
+      "--dry-run",
+      "--allow-full-run",
+      "--output", outputPath
+    ], {})).resolves.toBe(0);
+    const output = readFileSync(outputPath, "utf8");
+    const report = JSON.parse(output) as {
+      sourceCount: number;
+      requestCount: number;
+      guardrails: { fullBatchRunBlocked: boolean };
+    };
+
+    expect(report.sourceCount).toBe(21);
+    expect(report.requestCount).toBe(21);
+    expect(report.guardrails.fullBatchRunBlocked).toBe(false);
+    expect(output).not.toContain("SecretCustomer");
+    expect(output).not.toContain("Angebot_0_SecretCustomer");
+  });
+
+  it("can resume a batch by explicit source ids without leaking source filenames", async () => {
+    const root = tempRoot();
+    roots.push(root);
+    const sourceDir = path.join(root, "offers");
+    mkdirSync(sourceDir);
+    for (let index = 0; index < 3; index += 1) {
+      writeFileSync(path.join(sourceDir, `Angebot_${index}_PrivateName.txt`), [
+        "Kunde: PrivateName GmbH",
+        `Business Lunch fuer ${40 + index} Personen als Buffet`,
+        "Preis 42 EUR p.P. netto"
+      ].join("\n"));
+    }
+    const outputPath = path.join(root, "report.json");
+
+    await expect(runOfferPackageBatchPilotCli([
+      "--source-dir", sourceDir,
+      "--limit", "3",
+      "--models", "gpt-5.5",
+      "--source-ids", "offer-02",
+      "--max-requests", "1",
+      "--dry-run",
+      "--output", outputPath
+    ], {})).resolves.toBe(0);
+    const output = readFileSync(outputPath, "utf8");
+    const report = JSON.parse(output) as {
+      sourceCount: number;
+      requestCount: number;
+      predictions: Array<{ sourceId: string }>;
+    };
+
+    expect(report.sourceCount).toBe(1);
+    expect(report.requestCount).toBe(1);
+    expect(report.predictions.map((prediction) => prediction.sourceId)).toEqual(["offer-02"]);
+    expect(output).not.toContain("PrivateName");
+    expect(output).not.toContain("Angebot_1_PrivateName");
   });
 });

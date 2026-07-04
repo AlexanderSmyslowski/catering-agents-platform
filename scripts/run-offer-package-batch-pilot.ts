@@ -18,9 +18,11 @@ interface CliOptions {
   sourceDir?: string;
   limit: number;
   models: string[];
+  sourceIds?: string[];
   maxRequests: number;
   maxEur?: number;
   dryRun: boolean;
+  allowFullRun: boolean;
   outputPath?: string;
 }
 
@@ -36,7 +38,8 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
     models: ["gpt-5.5", "gpt-5.4"],
     maxRequests: Number(env.CATERING_OFFER_BATCH_MAX_REQUESTS ?? 60),
     maxEur: env.CATERING_OFFER_BATCH_MAX_EUR ? Number(env.CATERING_OFFER_BATCH_MAX_EUR) : 3,
-    dryRun: false
+    dryRun: false,
+    allowFullRun: env.CATERING_OFFER_BATCH_ALLOW_FULL_RUN === "1"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -51,6 +54,12 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
     } else if (arg === "--models") {
       options.models = next.split(",").map((item) => item.trim()).filter(Boolean);
       index += 1;
+    } else if (arg === "--source-ids") {
+      options.sourceIds = parseSourceIds(next);
+      index += 1;
+    } else if (arg === "--source-id-file") {
+      options.sourceIds = parseSourceIds(readFileSync(next, "utf8"));
+      index += 1;
     } else if (arg === "--max-requests") {
       options.maxRequests = Number(next);
       index += 1;
@@ -62,6 +71,8 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
       index += 1;
     } else if (arg === "--dry-run") {
       options.dryRun = true;
+    } else if (arg === "--allow-full-run") {
+      options.allowFullRun = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -70,8 +81,11 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
   if (!options.sourceDir) {
     throw new Error("Missing --source-dir or CATERING_OFFER_BATCH_SOURCE_DIR.");
   }
-  if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 20) {
-    throw new Error("--limit must be an integer between 1 and 20; the 916-offer run is blocked in Slice 2.3a.");
+  if (!Number.isInteger(options.limit) || options.limit < 1) {
+    throw new Error("--limit must be a positive integer.");
+  }
+  if (options.limit > 20 && !options.allowFullRun) {
+    throw new Error("--limit above 20 requires --allow-full-run after human approval; the 916-offer run remains blocked by default.");
   }
   if (options.models.length === 0) {
     throw new Error("--models must contain at least one model.");
@@ -84,6 +98,10 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
   }
 
   return options;
+}
+
+function parseSourceIds(value: string): string[] {
+  return [...new Set(value.split(/[,\s]+/).map((item) => item.trim()).filter(Boolean))];
 }
 
 function collectTextFiles(rootDir: string): string[] {
@@ -100,15 +118,29 @@ function collectTextFiles(rootDir: string): string[] {
   return files;
 }
 
-function readSources(sourceDir: string, limit: number): SourceText[] {
+function readSources(sourceDir: string, limit: number, sourceIds?: readonly string[]): SourceText[] {
   if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) {
     throw new Error(`Source directory not found: ${sourceDir}`);
   }
 
-  return collectTextFiles(sourceDir).slice(0, limit).map((filePath, index) => ({
+  const sources = collectTextFiles(sourceDir).slice(0, limit).map((filePath, index) => ({
     sourceId: `offer-${String(index + 1).padStart(2, "0")}`,
     text: readFileSync(filePath, "utf8")
   }));
+
+  if (!sourceIds || sourceIds.length === 0) {
+    return sources;
+  }
+
+  const requested = new Set(sourceIds);
+  const filtered = sources.filter((source) => requested.has(source.sourceId));
+  const found = new Set(filtered.map((source) => source.sourceId));
+  const missing = sourceIds.filter((sourceId) => !found.has(sourceId));
+  if (missing.length > 0) {
+    throw new Error(`Requested sourceIds not found within --limit: ${missing.join(", ")}`);
+  }
+
+  return filtered;
 }
 
 function adapterForModel(model: string): LlmReadinessProviderAdapter {
@@ -120,6 +152,22 @@ function adapterForModel(model: string): LlmReadinessProviderAdapter {
   }, {
     providerRunIdPrefix: "offer-package-batch-pilot"
   });
+}
+
+function buildLocalReviewFlags(input: {
+  packageId: string | null;
+  pseudonymizedText: string;
+}): string[] {
+  const flags: string[] = [];
+  const hasFlyingBoilerplate = /flying food buffets zeichnen/i.test(input.pseudonymizedText);
+  const hasGlassEvidence = /\b(?:glaeschen|gläschen|glaeser|gläser|glaesersystem|gläsersystem|im glas|in glaesern|in gläsern)\b/i
+    .test(input.pseudonymizedText);
+
+  if (input.packageId === "flying_buffet_premium" && hasFlyingBoilerplate && !hasGlassEvidence) {
+    flags.push("flying_boilerplate_without_glass_evidence");
+  }
+
+  return flags;
 }
 
 async function classifySource(input: {
@@ -195,6 +243,10 @@ async function classifySource(input: {
     providerId: adapterResponse.providerId,
     providerRequestId: adapterResponse.providerRequestId,
     usage: adapterResponse.usage,
+    reviewFlags: buildLocalReviewFlags({
+      packageId: parsed.draft.packageId,
+      pseudonymizedText: pseudonymized.text
+    }),
     errors: []
   };
 }
@@ -204,7 +256,7 @@ export async function runOfferPackageBatchPilotCli(
   env: Record<string, string | undefined> = process.env
 ): Promise<number> {
   const options = parseArgs(argv, env);
-  const sources = readSources(options.sourceDir!, options.limit);
+  const sources = readSources(options.sourceDir!, options.limit, options.sourceIds);
   const plannedRequests = sources.length * options.models.length;
   if (plannedRequests > options.maxRequests) {
     throw new Error(`Planned ${plannedRequests} requests exceed maxRequests=${options.maxRequests}.`);
@@ -237,7 +289,8 @@ export async function runOfferPackageBatchPilotCli(
     packageIds,
     maxRequests: options.maxRequests,
     maxEur: options.maxEur,
-    predictions
+    predictions,
+    fullBatchRunAllowed: options.allowFullRun
   });
   const output = `${JSON.stringify(report, null, 2)}\n`;
   if (options.outputPath) {
