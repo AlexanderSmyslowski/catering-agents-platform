@@ -23,20 +23,37 @@ _Keine Einträge._
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **Quota-Fortsetzung für Slice 2.3d freigeben?** · Der 916er-Lauf
-  wurde am 2026-07-04 mit `gpt-5.5`, `--allow-full-run`, 15 EUR /
-  1.000 Requests gestartet, lief aber nach 557 erfolgreichen
-  Klassifikationen in Provider-Quota. Für die verbleibenden 333
-  `quota exceeded`-Fälle braucht es eine neue menschliche Freigabe
-  für Dashboard-/Provider-Budget und einen Resume-Lauf. Vorher keine
-  weiteren Provider-Calls. Lokale Resume-Liste:
+- **Provider-Quota für Slice 2.3d weiterhin blockiert.** · Alexander
+  gab am 2026-07-04 den Resume frei (`gpt-5.5`, max. 333 Requests,
+  max. 10 EUR). Der Resume wurde exakt mit der lokalen Liste
   `/tmp/catering-offer-package-night-run-quota-source-ids.txt`
+  gestartet, aber alle 333 Provider-Versuche kamen ohne Tokenverbrauch
+  mit `current quota exceeded` zurück. Für einen weiteren Versuch muss
+  zuerst im Provider-Dashboard/Billing real Headroom geschaffen werden;
+  vorher keine weiteren Provider-Calls. Die Resume-Liste bleibt gültig
   (333 IDs, `offer-570` bis `offer-916`).
 
 ---
 
 ## ERLEDIGT
 
+- Slice 2.3d Resume-Versuch ausgeführt in Branch
+  `loop/offer-package-night-run`. Freigabe: `gpt-5.5`, max. 333
+  Requests, max. 10 EUR. Dry-Run belegte exakt 333 Restfälle
+  (`offer-570` bis `offer-916`) und 0 Provider-Requests. Realer Resume:
+  333 Quellen / 333 geplante Requests / 333 Provider-Versuche /
+  0 erfolgreiche Klassifikationen / 333 Provider-Quota-Fehler
+  (`current quota exceeded`, `missing outputCandidate`). Nutzung im
+  Resume: 0 Tokens. Kombinierter Report bleibt dadurch beim Teilstand:
+  916 Quellen / 557 erfolgreiche Klassifikationen / 26
+  `no_offer_evidence_retained` / 333 Quota-Fehler; Sichtungslisten:
+  161 confidence < 0,7, 104 null-Klassifikationen, 26 no-evidence-Fälle,
+  2 Flying-Boilerplate-Fälle. Kombinierter Strukturcheck: keine
+  Rohtext-, Prompt-, Response-, Dateiname- oder Pfadfelder im Report.
+  Lokale Artefakte:
+  `/tmp/catering-offer-package-night-run-resume-gpt55.json`,
+  `/tmp/catering-offer-package-night-run-combined-gpt55.json`,
+  `/tmp/catering-offer-package-night-run-analysis-gpt55.json`.
 - Slice 2.3d 916er-Nachtlauf teilweise ausgeführt in Branch
   `loop/offer-package-night-run`. Belegt: Full-Run bleibt ohne
   `--allow-full-run` blockiert; Dry-Run über 916 Quellen plante 916
