@@ -287,10 +287,10 @@ export const dataIngressPaths = [
   {
     id: "offer_package_batch_pilot",
     service: "shared-core",
-    source: "pseudonymized approved offer text batch for 20-offer classification pilot",
+    source: "pseudonymized approved offer text batch for package classification pilot or human-approved full batch",
     scope: "pseudonymized_approved",
     externalExposure: "blocked_until_decision",
-    requiredGate: "human-approved pseudonymization, 20-offer cap, budget cap, no raw prompt/response persistence, 916-offer run blocked"
+    requiredGate: "human-approved pseudonymization, explicit full-run opt-in above 20 offers, budget/request cap, no raw prompt/response persistence"
   },
   {
     id: "web_recipe_search",

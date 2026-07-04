@@ -67,7 +67,7 @@ describe("data safety and audit gates", () => {
     expect(dataIngressPaths.find((path) => path.id === "offer_package_batch_pilot")).toMatchObject({
       scope: "pseudonymized_approved",
       externalExposure: "blocked_until_decision",
-      requiredGate: expect.stringContaining("916-offer run blocked")
+      requiredGate: expect.stringContaining("explicit full-run opt-in")
     });
     expect(dataIngressPaths.find((path) => path.id === "intake_shadow_extraction")).toMatchObject({
       scope: "synthetic_or_demo_only",
