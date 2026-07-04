@@ -23,23 +23,28 @@ _Keine Einträge._
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **20er-Re-Pilot nach Prompt-Fix freigeben?** · Nach Slice 2.3d soll
-  derselbe 20-Angebote-Pilot einmal solo mit `gpt-5.5` laufen. Mensch
-  nötig wegen Provider-Kosten und pseudonymisierter Echtdaten. Budget-
-  Vorschlag: 2 EUR / 25 Requests. Abnahme vor Nachtlauf: 0
-  Hochzeitspakete ohne Hochzeitsbegriff, 0 `institution_framework`
-  ohne Rahmenvertrags-/Serienbeleg, alle confidence < 0,7 und null-
-  Klassifikationen in Sichtungslisten.
 - **916er-Nachtlauf freigeben?** · Die Vollklassifikation der 916
-  Altangebote bleibt auch nach der Modell-Rebaseline gesperrt. Mensch
-  nötig wegen Modellwahl, Pilot-Qualität, Datenstatus, Kostenkontrolle
-  und Laufzeitfenster. `gpt-4.1` ist nicht mehr die aktuelle
-  Modellbasis; Slice 2.3c vergleicht deshalb `gpt-5.5` mit `gpt-5.4`.
+  Altangebote bleibt auch nach dem Guardrail-Re-Pilot gesperrt. Mensch
+  nötig wegen Modellwahl, Sichtung der 5 null-Klassifikationen und
+  7 Low-Confidence-Fälle, Datenstatus, Kostenkontrolle und
+  Laufzeitfenster. `gpt-5.5` erfüllt im 20er-Re-Pilot die harten
+  Negativklassen (0 Wedding ohne Hochzeitsbegriff, 0
+  `institution_framework` ohne Rahmenvertrags-/Serienbeleg), liefert
+  aber noch sichtungspflichtige Restfälle.
 
 ---
 
 ## ERLEDIGT
 
+- 20er-Re-Pilot nach Slice 2.3d ausgeführt mit `gpt-5.5` solo, Budget
+  2 EUR / 25 Requests. Ergebnis: 20 geplante Requests, 19
+  Provider-Requests, 1 vor Provider gestoppt, 53.275 Tokens gesamt.
+  Report-Guardrails: keine geprüften Leak-Treffer, keine Rohtexte,
+  Rohprompts oder Rohantworten, 916er-Block weiter aktiv. Fachliche
+  Negativklassen erfüllt: 0 Hochzeitspakete ohne Hochzeitsbegriff,
+  0 `institution_framework_catering` ohne Rahmenvertrags-/Serienbeleg.
+  Sichtungslisten: 5 null-Klassifikationen und 7 confidence < 0,7.
+  Kein Nachtlauf gestartet.
 - Slice 2.3d Package-Classification-Guardrails abgeschlossen in Branch
   `loop/package-classification-guardrails`. Belegt: Prompt-Kontext und
   Prompt-Artefakt enthalten negative Abgrenzungsregeln:
