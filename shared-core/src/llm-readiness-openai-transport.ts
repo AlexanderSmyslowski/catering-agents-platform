@@ -13,12 +13,14 @@ export interface OpenAiSyntheticLiveTransportOptions {
   model: string;
   endpoint?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }
 
 export interface OpenAiSyntheticLiveTransportEnv {
   OPENAI_API_KEY?: string;
   CATERING_SYNTHETIC_LLM_MODEL?: string;
   CATERING_OPENAI_RESPONSES_URL?: string;
+  CATERING_OPENAI_TIMEOUT_MS?: string;
 }
 
 interface OpenAiResponsesOutputItem {
@@ -44,6 +46,7 @@ interface OpenAiResponsesBody {
 }
 
 const defaultOpenAiResponsesEndpoint = "https://api.openai.com/v1/responses";
+const defaultOpenAiTimeoutMs = 120_000;
 
 function buildClarificationQuestionSchema() {
   return {
@@ -336,6 +339,12 @@ export function validateOpenAiSyntheticLiveTransportEnv(
   ) {
     errors.push("CATERING_SYNTHETIC_LLM_MODEL must be set");
   }
+  if (
+    env.CATERING_OPENAI_TIMEOUT_MS !== undefined &&
+    (!Number.isInteger(Number(env.CATERING_OPENAI_TIMEOUT_MS)) || Number(env.CATERING_OPENAI_TIMEOUT_MS) <= 0)
+  ) {
+    errors.push("CATERING_OPENAI_TIMEOUT_MS must be a positive integer when provided.");
+  }
 
   return {
     valid: errors.length === 0,
@@ -356,6 +365,7 @@ export function createOpenAiSyntheticLiveTransportFromEnv(
     apiKey: env.OPENAI_API_KEY!,
     model: env.CATERING_SYNTHETIC_LLM_MODEL!,
     endpoint: env.CATERING_OPENAI_RESPONSES_URL,
+    timeoutMs: env.CATERING_OPENAI_TIMEOUT_MS ? Number(env.CATERING_OPENAI_TIMEOUT_MS) : undefined,
     fetchImpl
   });
 }
@@ -363,10 +373,12 @@ export function createOpenAiSyntheticLiveTransportFromEnv(
 export class OpenAiSyntheticLiveTransport implements LlmReadinessSyntheticLiveTransport {
   private readonly endpoint: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
 
   constructor(private readonly options: OpenAiSyntheticLiveTransportOptions) {
     this.endpoint = options.endpoint ?? defaultOpenAiResponsesEndpoint;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.timeoutMs = options.timeoutMs ?? defaultOpenAiTimeoutMs;
   }
 
   async run(
@@ -385,14 +397,31 @@ export class OpenAiSyntheticLiveTransport implements LlmReadinessSyntheticLiveTr
       };
     }
 
-    const response = await this.fetchImpl(this.endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${this.options.apiKey}`
-      },
-      body: JSON.stringify(buildRequestBody(request, this.options.model))
-    });
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), this.timeoutMs);
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.options.apiKey}`
+        },
+        body: JSON.stringify(buildRequestBody(request, this.options.model)),
+        signal: abortController.signal
+      });
+    } catch (error) {
+      const wasAborted = abortController.signal.aborted || (error instanceof Error && error.name === "AbortError");
+      return {
+        ok: false,
+        errors: [wasAborted
+          ? `OpenAI responses request timed out after ${this.timeoutMs}ms`
+          : error instanceof Error ? error.message : String(error)],
+        providerId: "openai-responses"
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const providerRequestId = response.headers.get("x-request-id") ?? undefined;
     const body = (await response.json()) as OpenAiResponsesBody;

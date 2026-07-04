@@ -23,20 +23,41 @@ _Keine Einträge._
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **Provider-Quota für Slice 2.3d weiterhin blockiert.** · Alexander
-  gab am 2026-07-04 den Resume frei (`gpt-5.5`, max. 333 Requests,
-  max. 10 EUR). Der Resume wurde exakt mit der lokalen Liste
-  `/tmp/catering-offer-package-night-run-quota-source-ids.txt`
-  gestartet, aber alle 333 Provider-Versuche kamen ohne Tokenverbrauch
-  mit `current quota exceeded` zurück. Für einen weiteren Versuch muss
-  zuerst im Provider-Dashboard/Billing real Headroom geschaffen werden;
-  vorher keine weiteren Provider-Calls. Die Resume-Liste bleibt gültig
-  (333 IDs, `offer-570` bis `offer-916`).
+- **Provider-Quota für Slice 2.3d weiterhin blockiert.** · Nach
+  Aufladung lief ein Smoke (`offer-570`) erfolgreich, danach wurden mit
+  Timeout-/Checkpoint-Fix 332 Restfälle fortgesetzt. Ergebnis: 183
+  weitere erfolgreiche Klassifikationen (inkl. Smoke), dann erneut
+  `current quota exceeded`. Kombinierter Stand: 916 Quellen /
+  740 erfolgreiche Klassifikationen / 26 `no_offer_evidence_retained` /
+  150 Quota-Fehler. Für einen weiteren Versuch muss zuerst im
+  Provider-Dashboard/Billing real Headroom geschaffen werden; vorher
+  keine weiteren Provider-Calls. Neue Resume-Liste:
+  `/tmp/catering-offer-package-night-run-remaining-quota-after-topup-source-ids.txt`
+  (150 IDs, `offer-762` bis `offer-916`).
 
 ---
 
 ## ERLEDIGT
 
+- Slice 2.3d Resume nach API-Aufladung teilweise abgeschlossen in Branch
+  `codex/offer-batch-timeout-checkpoint`. Vor dem Vollresume wurde ein
+  hängender Providerlauf ohne Report abgebrochen; Wurzelbefund:
+  OpenAI-Transport hatte keinen Timeout und das Batch-Script schrieb nur
+  am Ende. Fix: OpenAI-Timeout (`CATERING_OPENAI_TIMEOUT_MS`) plus
+  atomischer Report-Checkpoint nach jeder Prediction. Danach erfolgreicher
+  Smoke für `offer-570` und Resume der übrigen 332 IDs. Ergebnis:
+  182/332 im Resume erfolgreich, 150 Quota-Fehler; Nutzung des 332er-
+  Resume: 358.758 Input-Tokens, 90.720 Output-Tokens, 449.478 Tokens
+  gesamt. Kombinierter Report nach Aufladung: 740/916 erfolgreiche
+  Klassifikationen, 26 no-evidence, 150 Quota-Fehler; Sichtungslisten:
+  209 confidence < 0,7, 139 null-Klassifikationen, 26 no-evidence-Fälle,
+  2 Flying-Boilerplate-Fälle. Strukturcheck: keine Rohtext-, Prompt-,
+  Response-, Dateiname- oder Pfadfelder im kombinierten Report. Lokale
+  Artefakte:
+  `/tmp/catering-offer-package-night-run-smoke-after-topup-gpt55.json`,
+  `/tmp/catering-offer-package-night-run-resume-after-timeoutfix-gpt55.json`,
+  `/tmp/catering-offer-package-night-run-combined-after-topup-gpt55.json`,
+  `/tmp/catering-offer-package-night-run-analysis-after-topup-gpt55.json`.
 - Slice 2.3d Resume-Versuch ausgeführt in Branch
   `loop/offer-package-night-run`. Freigabe: `gpt-5.5`, max. 333
   Requests, max. 10 EUR. Dry-Run belegte exakt 333 Restfälle

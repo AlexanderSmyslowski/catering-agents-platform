@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   buildByoLlmAdapterFromEnv,
@@ -143,10 +143,10 @@ function readSources(sourceDir: string, limit: number, sourceIds?: readonly stri
   return filtered;
 }
 
-function adapterForModel(model: string): LlmReadinessProviderAdapter {
+function adapterForModel(model: string, env: Record<string, string | undefined>): LlmReadinessProviderAdapter {
   return buildByoLlmAdapterFromEnv({
-    ...process.env,
-    CATERING_LLM_PROVIDER: process.env.CATERING_LLM_PROVIDER ?? "openai",
+    ...env,
+    CATERING_LLM_PROVIDER: env.CATERING_LLM_PROVIDER ?? "openai",
     CATERING_LLM_MODEL: model,
     CATERING_SYNTHETIC_LLM_SLICE: "1"
   }, {
@@ -168,6 +168,30 @@ function buildLocalReviewFlags(input: {
   }
 
   return flags;
+}
+
+function writeReportCheckpoint(input: {
+  outputPath?: string;
+  packageIds: readonly string[];
+  maxRequests: number;
+  maxEur?: number;
+  predictions: readonly OfferPackageClassificationPrediction[];
+  fullBatchRunAllowed: boolean;
+}): void {
+  if (!input.outputPath) {
+    return;
+  }
+
+  const report = buildOfferPackagePilotReport({
+    packageIds: input.packageIds,
+    maxRequests: input.maxRequests,
+    maxEur: input.maxEur,
+    predictions: input.predictions,
+    fullBatchRunAllowed: input.fullBatchRunAllowed
+  });
+  const tmpPath = `${input.outputPath}.tmp`;
+  writeFileSync(tmpPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  renameSync(tmpPath, input.outputPath);
 }
 
 async function classifySource(input: {
@@ -271,7 +295,7 @@ export async function runOfferPackageBatchPilotCli(
     for (const model of options.models) {
       const adapter = options.dryRun
         ? undefined
-        : adapters.get(model) ?? adapterForModel(model);
+        : adapters.get(model) ?? adapterForModel(model, env);
       if (adapter) {
         adapters.set(model, adapter);
       }
@@ -282,6 +306,14 @@ export async function runOfferPackageBatchPilotCli(
         allowedPackageIds: packageIds,
         dryRun: options.dryRun
       }));
+      writeReportCheckpoint({
+        outputPath: options.outputPath,
+        packageIds,
+        maxRequests: options.maxRequests,
+        maxEur: options.maxEur,
+        predictions,
+        fullBatchRunAllowed: options.allowFullRun
+      });
     }
   }
 
@@ -294,7 +326,14 @@ export async function runOfferPackageBatchPilotCli(
   });
   const output = `${JSON.stringify(report, null, 2)}\n`;
   if (options.outputPath) {
-    writeFileSync(options.outputPath, output, "utf8");
+    writeReportCheckpoint({
+      outputPath: options.outputPath,
+      packageIds,
+      maxRequests: options.maxRequests,
+      maxEur: options.maxEur,
+      predictions,
+      fullBatchRunAllowed: options.allowFullRun
+    });
   } else {
     process.stdout.write(output);
   }

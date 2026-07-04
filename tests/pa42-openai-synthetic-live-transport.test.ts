@@ -21,6 +21,7 @@ function buildRequest(): LlmReadinessSyntheticLiveTransportRequest {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -43,6 +44,17 @@ describe("PA42 OpenAI synthetic live transport", () => {
     ).toEqual({
       valid: true,
       errors: []
+    });
+
+    expect(
+      validateOpenAiSyntheticLiveTransportEnv({
+        OPENAI_API_KEY: "sk-test",
+        CATERING_SYNTHETIC_LLM_MODEL: "gpt-test",
+        CATERING_OPENAI_TIMEOUT_MS: "0"
+      })
+    ).toEqual({
+      valid: false,
+      errors: ["CATERING_OPENAI_TIMEOUT_MS must be a positive integer when provided."]
     });
   });
 
@@ -336,5 +348,35 @@ describe("PA42 OpenAI synthetic live transport", () => {
       providerId: "openai-responses",
       providerRequestId: undefined
     });
+  });
+
+  it("times out stalled OpenAI responses requests", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        signal?.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      })
+    );
+    const transport = new OpenAiSyntheticLiveTransport({
+      apiKey: "sk-test",
+      model: "gpt-test",
+      timeoutMs: 25,
+      fetchImpl: fetchMock as typeof fetch
+    });
+
+    const responsePromise = transport.run(buildRequest());
+    await vi.advanceTimersByTimeAsync(25);
+
+    await expect(responsePromise).resolves.toEqual({
+      ok: false,
+      errors: ["OpenAI responses request timed out after 25ms"],
+      providerId: "openai-responses"
+    });
+    vi.useRealTimers();
   });
 });

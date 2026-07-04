@@ -147,7 +147,8 @@ export function buildByoLlmAdapterFromEnv(
     {
       OPENAI_API_KEY: apiKey,
       CATERING_SYNTHETIC_LLM_MODEL: model,
-      CATERING_OPENAI_RESPONSES_URL: env.CATERING_LLM_BASE_URL
+      CATERING_OPENAI_RESPONSES_URL: env.CATERING_LLM_BASE_URL,
+      CATERING_OPENAI_TIMEOUT_MS: env.CATERING_OPENAI_TIMEOUT_MS
     },
     options.fetchImpl
   );
