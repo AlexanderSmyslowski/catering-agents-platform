@@ -21,6 +21,8 @@ interface CliOptions {
   sourceIds?: string[];
   maxRequests: number;
   maxEur?: number;
+  inputEurPer1M?: number;
+  outputEurPer1M?: number;
   dryRun: boolean;
   allowFullRun: boolean;
   outputPath?: string;
@@ -38,6 +40,8 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
     models: ["gpt-5.5", "gpt-5.4"],
     maxRequests: Number(env.CATERING_OFFER_BATCH_MAX_REQUESTS ?? 60),
     maxEur: env.CATERING_OFFER_BATCH_MAX_EUR ? Number(env.CATERING_OFFER_BATCH_MAX_EUR) : 3,
+    inputEurPer1M: parseOptionalPositiveNumber(env.CATERING_OFFER_BATCH_INPUT_EUR_PER_1M_TOKENS),
+    outputEurPer1M: parseOptionalPositiveNumber(env.CATERING_OFFER_BATCH_OUTPUT_EUR_PER_1M_TOKENS),
     dryRun: false,
     allowFullRun: env.CATERING_OFFER_BATCH_ALLOW_FULL_RUN === "1"
   };
@@ -65,6 +69,12 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
       index += 1;
     } else if (arg === "--max-eur") {
       options.maxEur = Number(next);
+      index += 1;
+    } else if (arg === "--input-eur-per-1m-tokens") {
+      options.inputEurPer1M = Number(next);
+      index += 1;
+    } else if (arg === "--output-eur-per-1m-tokens") {
+      options.outputEurPer1M = Number(next);
       index += 1;
     } else if (arg === "--output") {
       options.outputPath = next;
@@ -96,8 +106,28 @@ function parseArgs(argv: string[], env: Record<string, string | undefined>): Cli
   if (options.maxEur !== undefined && (!Number.isFinite(options.maxEur) || options.maxEur <= 0)) {
     throw new Error("--max-eur must be a positive number when provided.");
   }
+  if (options.inputEurPer1M !== undefined && (!Number.isFinite(options.inputEurPer1M) || options.inputEurPer1M < 0)) {
+    throw new Error("--input-eur-per-1m-tokens must be a non-negative number when provided.");
+  }
+  if (options.outputEurPer1M !== undefined && (!Number.isFinite(options.outputEurPer1M) || options.outputEurPer1M < 0)) {
+    throw new Error("--output-eur-per-1m-tokens must be a non-negative number when provided.");
+  }
+  if (
+    !options.dryRun &&
+    options.maxEur !== undefined &&
+    (options.inputEurPer1M === undefined || options.outputEurPer1M === undefined)
+  ) {
+    throw new Error("--max-eur requires --input-eur-per-1m-tokens and --output-eur-per-1m-tokens (or CATERING_OFFER_BATCH_*_EUR_PER_1M_TOKENS env) for non-dry-run batches.");
+  }
 
   return options;
+}
+
+function parseOptionalPositiveNumber(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim().length === 0) {
+    return undefined;
+  }
+  return Number(value);
 }
 
 function parseSourceIds(value: string): string[] {
@@ -192,6 +222,42 @@ function writeReportCheckpoint(input: {
   const tmpPath = `${input.outputPath}.tmp`;
   writeFileSync(tmpPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   renameSync(tmpPath, input.outputPath);
+}
+
+function estimateSpendEur(
+  predictions: readonly OfferPackageClassificationPrediction[],
+  options: Pick<CliOptions, "inputEurPer1M" | "outputEurPer1M">
+): number {
+  const inputRate = options.inputEurPer1M ?? 0;
+  const outputRate = options.outputEurPer1M ?? 0;
+  return predictions.reduce((total, prediction) =>
+    total +
+    ((prediction.usage?.inputTokens ?? 0) * inputRate / 1_000_000) +
+    ((prediction.usage?.outputTokens ?? 0) * outputRate / 1_000_000)
+  , 0);
+}
+
+function hasProviderPredictionWithoutUsage(predictions: readonly OfferPackageClassificationPrediction[]): boolean {
+  return predictions.some((prediction) =>
+    (prediction.providerId !== undefined || prediction.providerRequestId !== undefined) &&
+    prediction.usage === undefined
+  );
+}
+
+function assertBudgetBeforeNextRequest(
+  predictions: readonly OfferPackageClassificationPrediction[],
+  options: Pick<CliOptions, "maxEur" | "inputEurPer1M" | "outputEurPer1M">
+): void {
+  if (options.maxEur === undefined) {
+    return;
+  }
+  if (hasProviderPredictionWithoutUsage(predictions)) {
+    throw new Error("Cannot enforce --max-eur because at least one provider response omitted usage metadata; checkpoint report was written before stopping.");
+  }
+  const spendEur = estimateSpendEur(predictions, options);
+  if (spendEur >= options.maxEur) {
+    throw new Error(`Estimated spend ${spendEur.toFixed(6)} EUR reached --max-eur ${options.maxEur}; checkpoint report was written before stopping.`);
+  }
 }
 
 async function classifySource(input: {
@@ -293,6 +359,9 @@ export async function runOfferPackageBatchPilotCli(
 
   for (const source of sources) {
     for (const model of options.models) {
+      if (!options.dryRun) {
+        assertBudgetBeforeNextRequest(predictions, options);
+      }
       const adapter = options.dryRun
         ? undefined
         : adapters.get(model) ?? adapterForModel(model, env);

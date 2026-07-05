@@ -337,6 +337,104 @@ describe("offer package batch pilot", () => {
     expect(output).not.toContain("Angebot_1_PrivateName");
   });
 
+  it("fails closed when a non-dry provider run has max-eur without token prices", async () => {
+    const root = tempRoot();
+    roots.push(root);
+    const sourceDir = path.join(root, "offers");
+    mkdirSync(sourceDir);
+    writeFileSync(path.join(sourceDir, "Angebot_PrivateName.txt"), [
+      "Kunde: PrivateName GmbH",
+      "Business Lunch fuer 40 Personen als Buffet",
+      "Preis 42 EUR p.P. netto"
+    ].join("\n"));
+
+    await expect(runOfferPackageBatchPilotCli([
+      "--source-dir", sourceDir,
+      "--limit", "1",
+      "--models", "gpt-5.5",
+      "--max-requests", "1"
+    ], {
+      CATERING_LLM_PROVIDER: "openai",
+      OPENAI_API_KEY: "sk-test",
+      CATERING_LLM_BASE_URL: "http://127.0.0.1:9/v1/responses"
+    })).rejects.toThrow("--max-eur requires --input-eur-per-1m-tokens");
+  });
+
+  it("stops before the next provider request when the hard euro budget is reached", async () => {
+    const root = tempRoot();
+    roots.push(root);
+    const sourceDir = path.join(root, "offers");
+    mkdirSync(sourceDir);
+    writeFileSync(path.join(sourceDir, "Angebot_First_PrivateName.txt"), [
+      "Kunde: PrivateName GmbH",
+      "Business Lunch fuer 40 Personen als Buffet",
+      "Preis 42 EUR p.P. netto"
+    ].join("\n"));
+    writeFileSync(path.join(sourceDir, "Angebot_Second_PrivateName.txt"), [
+      "Kunde: PrivateName GmbH",
+      "Business Lunch fuer 41 Personen als Buffet",
+      "Preis 42 EUR p.P. netto"
+    ].join("\n"));
+    const outputPath = path.join(root, "report.json");
+    let requestCount = 0;
+    const server = createServer((_request, response) => {
+      requestCount += 1;
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "x-request-id": `req-local-${requestCount}`
+      });
+      response.end(JSON.stringify({
+        id: `resp-local-${requestCount}`,
+        output_text: JSON.stringify({
+          packageId: "business_lunch_basic",
+          confidence: 0.91,
+          rationale: "Business-Lunch-Signale.",
+          signals: ["Business Lunch", "40 Personen"],
+          alternatives: []
+        }),
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 1000,
+          total_tokens: 2000
+        }
+      }));
+    });
+    const endpoint = await listen(server);
+
+    try {
+      await expect(runOfferPackageBatchPilotCli([
+        "--source-dir", sourceDir,
+        "--limit", "2",
+        "--models", "gpt-5.5",
+        "--max-requests", "2",
+        "--max-eur", "0.000001",
+        "--input-eur-per-1m-tokens", "1",
+        "--output-eur-per-1m-tokens", "1",
+        "--output", outputPath
+      ], {
+        CATERING_LLM_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test",
+        CATERING_LLM_BASE_URL: endpoint,
+        CATERING_OPENAI_TIMEOUT_MS: "1000"
+      })).rejects.toThrow("reached --max-eur");
+    } finally {
+      await close(server);
+    }
+
+    const output = readFileSync(outputPath, "utf8");
+    const report = JSON.parse(output) as {
+      requestCount: number;
+      providerRequestCount: number;
+      predictions: Array<{ ok: boolean }>;
+    };
+
+    expect(requestCount).toBe(1);
+    expect(report.requestCount).toBe(1);
+    expect(report.providerRequestCount).toBe(1);
+    expect(report.predictions).toHaveLength(1);
+    expect(output).not.toContain("PrivateName");
+  });
+
   it("keeps a valid report when a provider request times out mid-batch", async () => {
     const root = tempRoot();
     roots.push(root);
@@ -395,7 +493,9 @@ describe("offer package batch pilot", () => {
         CATERING_LLM_PROVIDER: "openai",
         OPENAI_API_KEY: "sk-test",
         CATERING_LLM_BASE_URL: endpoint,
-        CATERING_OPENAI_TIMEOUT_MS: "25"
+        CATERING_OPENAI_TIMEOUT_MS: "25",
+        CATERING_OFFER_BATCH_INPUT_EUR_PER_1M_TOKENS: "0",
+        CATERING_OFFER_BATCH_OUTPUT_EUR_PER_1M_TOKENS: "0"
       })).resolves.toBe(0);
     } finally {
       await close(server);
