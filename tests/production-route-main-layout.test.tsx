@@ -204,7 +204,7 @@ describe("production route main layout", () => {
   it("uses the selected plan spec for the upload summary without focusing the question panel", () => {
     const markup = renderToStaticMarkup(createElement(ProductionRouteMainLayout, buildProps()));
 
-    expect(markup).toContain("Produktionsdaten im Fokus");
+    expect(markup).toContain("Bestandsdaten im Hintergrund");
     expect(markup).toContain("Datenstand Produktionsauftrag");
     expect(markup).toContain("Status");
     expect(markup).toContain("teilweise geklärt");

@@ -37,10 +37,10 @@ describe("app feedback shell", () => {
     expect(markup).not.toContain("notice-banner");
   });
 
-  it("keeps the footer loading and loaded copy unchanged", () => {
+  it("keeps the footer loading copy and labels loaded data as context", () => {
     expect(renderFeedback({ loading: true })).toContain("Aktuelle Plattformdaten werden geladen...");
     expect(renderFeedback({ loading: false })).toContain(
-      "Aktuelle Daten aus Erfassung, Angebot und Produktion wurden geladen."
+      "Bestands- und Demo-Kontext ist geladen; neue Produktionsaufträge startest du oben."
     );
   });
 

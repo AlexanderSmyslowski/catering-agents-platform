@@ -208,22 +208,31 @@ export function ProductionConversationalWorkbench({
       <article className="production-composer" aria-label="Zentrale Produktionsarbeit">
         <header className="production-composer__header">
           <p className="eyebrow">Produktionsagent-Chat</p>
-          <h3>Was braucht die Produktion als Nächstes?</h3>
+          <h3>Angebot hochladen oder Produktionsauftrag beschreiben</h3>
           <p className="helper-text">
-            Anfrage als Datei oder Text einfügen; die Produktion zeigt Rückfragen, Status, Produktionsplan, Einkaufsliste und Exporte.
+            Quelle einfügen, dann prüfst du die erkannten Daten. Produktionsplan, Einkaufsliste und Exporte entstehen erst nach diesem Review.
           </p>
-          <div className="production-next-step" aria-label="Nächster Produktionsschritt">
-            <p className="eyebrow">Nächster Schritt</p>
-            <strong>{nextStep.title}</strong>
-            <p className="helper-text">{nextStep.description}</p>
-          </div>
+          <ol className="production-flow-steps" aria-label="Produktionsablauf">
+            <li>Quelle</li>
+            <li>KI-Entwurf</li>
+            <li>Prüfung</li>
+            <li>Plan</li>
+          </ol>
         </header>
         {slots.inputSlot}
+        <div className="production-next-step" aria-label="Nächster Produktionsschritt">
+          <p className="eyebrow">Nächster Schritt</p>
+          <strong>{nextStep.title}</strong>
+          <p className="helper-text">{nextStep.description}</p>
+        </div>
       </article>
 
       <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
-        <p className="eyebrow">Produktionsdaten im Fokus</p>
+        <p className="eyebrow">Bestandsdaten im Hintergrund</p>
         <strong>{activeSpecLabel}</strong>
+        <p className="helper-text">
+          Kontext aus Demo, Bestand oder vorherigem Lauf. Starte oben mit einer Datei oder Texteingabe, wenn du einen neuen Auftrag prüfen willst.
+        </p>
         <ul className="production-calm-summary__facts" aria-label="Datenstand Produktionsauftrag">
           {summaryFacts.map((fact) => (
             <li key={fact.label}>

@@ -15,8 +15,8 @@ describe("production route context state", () => {
         purchaseListCount: 0
       })
     ).toEqual({
-      title: "Auftrag einfügen oder Datei ablegen",
-      description: "Starte mit Angebot, E-Mail, Text oder manuellen Veranstaltungsdaten."
+      title: "Angebot hochladen oder Auftrag beschreiben",
+      description: "Starte mit PDF, E-Mail, Text oder manuellen Veranstaltungsdaten."
     });
 
     expect(

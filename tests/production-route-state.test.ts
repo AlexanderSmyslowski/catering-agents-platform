@@ -343,7 +343,7 @@ describe("production route state", () => {
         hasSelectedPlan: false,
         purchaseListCount: 0
       }).title
-    ).toBe("Auftrag einfügen oder Datei ablegen");
+    ).toBe("Angebot hochladen oder Auftrag beschreiben");
     expect(
       selectProductionNextStep({
         hasFocusedProductionSpec: true,

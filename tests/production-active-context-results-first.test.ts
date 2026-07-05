@@ -12,13 +12,13 @@ function orderFor(selector: string): number {
   return Number(match[1]);
 }
 
-describe("production active context results-first layout", () => {
-  it("orders active production work before input and lower utility zones", () => {
-    expect(orderFor(".production-conversation-layout--active-context .production-calm-summary")).toBe(-1);
-    expect(orderFor(".production-conversation-layout--active-context .production-objects-zone")).toBe(0);
-    expect(orderFor(".production-conversation-layout--active-context .production-purchase-zone")).toBe(1);
+describe("production active context upload-first layout", () => {
+  it("keeps the upload composer before active production context and utility zones", () => {
+    expect(orderFor(".production-conversation-layout--active-context .production-composer")).toBe(0);
+    expect(orderFor(".production-conversation-layout--active-context .production-calm-summary")).toBe(1);
     expect(orderFor(".production-conversation-layout--active-context .production-progressive-zone")).toBe(2);
-    expect(orderFor(".production-conversation-layout--active-context .production-composer")).toBe(3);
-    expect(orderFor(".production-conversation-layout--active-context .production-lower-zones")).toBe(4);
+    expect(orderFor(".production-conversation-layout--active-context .production-objects-zone")).toBe(3);
+    expect(orderFor(".production-conversation-layout--active-context .production-purchase-zone")).toBe(4);
+    expect(orderFor(".production-conversation-layout--active-context .production-lower-zones")).toBe(5);
   });
 });
