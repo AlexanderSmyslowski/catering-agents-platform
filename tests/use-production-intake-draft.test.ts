@@ -44,10 +44,10 @@ function renderProductionIntakeDraft() {
 }
 
 describe("useProductionIntakeDraft", () => {
-  it("keeps the existing text and document channel defaults", () => {
+  it("starts with an empty text draft and document channel defaults", () => {
     const probe = renderProductionIntakeDraft();
 
-    expect(probe.draft.intakeText).toContain("Konferenz am 2026-06-18");
+    expect(probe.draft.intakeText).toBe("");
     expect(probe.draft.intakeChannel).toBe("pdf_upload");
     expect(probe.draft.intakeFile).toBeNull();
     expect(probe.draft.dragActive).toBe(false);

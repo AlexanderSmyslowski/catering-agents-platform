@@ -459,7 +459,7 @@ describe("backoffice internal usage smoke", () => {
       setNativeValue(manualServiceForm, "buffet");
       setNativeValue(manualMenuItems, "Vegetarische Tomatensuppe");
       setNativeValue(manualNotes, "Bitte vegetarisch");
-      findButtonByText("Spezifikation anlegen").click();
+      findButtonByText("Manuellen Auftrag anlegen").click();
       await flush(6);
     });
 
@@ -471,12 +471,14 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Datum: 2026-07-12");
     expect(document.body.textContent ?? "").toContain("Teilnehmerzahl: 24 · Serviceform: Buffet · Readiness: Prüfung nötig");
     expect(document.body.textContent ?? "").toContain("Status: Prüfung nötig");
-    expect(document.body.textContent ?? "").toContain("Speichern und Berechnung starten");
+    expect(document.body.textContent ?? "").toContain("Rückfragen beantworten");
 
     await act(async () => {
-      findButtonByText("Antworten bearbeiten").click();
+      findButtonByText("Rückfragen beantworten").click();
       await flush(2);
     });
+
+    expect(document.body.textContent ?? "").toContain("Speichern und Berechnung starten");
 
     const selects = Array.from(document.querySelectorAll("select")) as HTMLSelectElement[];
     const categorySelect = selects.find((select) => Array.from(select.options).some((option) => option.value === "vegetarian"));

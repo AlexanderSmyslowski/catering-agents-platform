@@ -153,17 +153,54 @@ export function ProductionQuestionPanel({
     setSourceReviewConfirmed(false);
   }, [focusedSpecId, requestId]);
 
+  const questionCountLabel =
+    productionQuestions.length === 1 ? "1 Rückfrage beantworten" : `${productionQuestions.length} Rückfragen beantworten`;
+
   return (
-    <article className="panel form-panel question-panel production-step-card">
+    <article id="production-question-panel" className="panel form-panel question-panel production-step-card">
       <header>
-        <p className="eyebrow">Strukturierte Rückfragen im Chatfluss</p>
-        <h3>Rückfragen des Agenten</h3>
+        <p className="eyebrow">Prüfung vor Berechnung</p>
+        <h3>{productionQuestions.length > 0 ? questionCountLabel : "Erkannte Angaben prüfen"}</h3>
         <p className="helper-text">
-          Assistant-Fragen aus den vorhandenen Produktionsdaten; strukturierte Antwortfelder statt freier LLM-Chat.
+          Beantworte offene Punkte und prüfe die erkannten Komponenten. Erst danach entstehen belastbare Mengen, Rezepte und Einkaufslisten.
         </p>
       </header>
       {focusedProductionSpec ? (
         <>
+          <div className="question-action-panel" aria-label="Nächste Aktion für Rückfragen">
+            <div>
+              <strong>{productionQuestions.length > 0 ? questionCountLabel : "Keine offenen Rückfragen"}</strong>
+              <p className="helper-text">
+                {productionQuestions.length > 0
+                  ? "Öffne die Antwortfelder, ergänze fehlende Angaben und starte danach die Berechnung."
+                  : "Prüfe Herstellungsart, Rezeptbezug und Quelle; die Berechnung bleibt eine bewusste Aktion."}
+              </p>
+            </div>
+            <div className="action-row">
+              <button
+                className="secondary-button"
+                disabled={actionState.editAnswersDisabled}
+                onClick={() => beginSpecEdit(focusedProductionSpec)}
+              >
+                {productionQuestions.length > 0 ? "Rückfragen beantworten" : "Angaben prüfen"}
+              </button>
+              {actionState.showSaveAnswersButton ? (
+                <button
+                  className="secondary-button"
+                  disabled={actionState.saveAnswersDisabled}
+                  onClick={() => void saveSpecEdit()}
+                >
+                  Antworten speichern
+                </button>
+              ) : null}
+              <button
+                disabled={actionState.primaryActionDisabled}
+                onClick={() => void createPlan(focusedProductionSpec, { sourceReviewConfirmed })}
+              >
+                {actionState.primaryActionLabel}
+              </button>
+            </div>
+          </div>
           <div className="question-window">
             <ProductionQuestionThread
               specLabel={getSpecLabel(focusedProductionSpec)}
@@ -234,30 +271,6 @@ export function ProductionQuestionPanel({
               submitting={submitting}
               onDraftChanged={refreshAfterDraftDecision}
             />
-          </div>
-          <div className="action-row">
-            <button
-              className="secondary-button"
-              disabled={actionState.editAnswersDisabled}
-              onClick={() => beginSpecEdit(focusedProductionSpec)}
-            >
-              Antworten bearbeiten
-            </button>
-            {actionState.showSaveAnswersButton ? (
-              <button
-                className="secondary-button"
-                disabled={actionState.saveAnswersDisabled}
-                onClick={() => void saveSpecEdit()}
-              >
-                Antworten speichern
-              </button>
-            ) : null}
-            <button
-              disabled={actionState.primaryActionDisabled}
-              onClick={() => void createPlan(focusedProductionSpec, { sourceReviewConfirmed })}
-            >
-              {actionState.primaryActionLabel}
-            </button>
           </div>
           {actionState.sourceReviewHelperText ? (
             <p className="helper-text" role="status">

@@ -31,24 +31,24 @@ describe("production question auto-open state", () => {
     ).toEqual({ shouldAutoOpen: false });
   });
 
-  it("auto-opens when production questions are present", () => {
+  it("keeps the review editor closed when production questions are present", () => {
     expect(
       buildProductionQuestionAutoOpenState({
         route: "production",
         focusedProductionSpec: spec("complete"),
         productionQuestionCount: 2
       })
-    ).toEqual({ shouldAutoOpen: true, specId: "spec-1" });
+    ).toEqual({ shouldAutoOpen: false, specId: "spec-1" });
   });
 
-  it("auto-opens incomplete readiness even without explicit questions", () => {
+  it("keeps incomplete readiness from jumping into the editor", () => {
     expect(
       buildProductionQuestionAutoOpenState({
         route: "production",
         focusedProductionSpec: spec("partial"),
         productionQuestionCount: 0
       })
-    ).toEqual({ shouldAutoOpen: true, specId: "spec-1" });
+    ).toEqual({ shouldAutoOpen: false, specId: "spec-1" });
   });
 
   it("does not auto-open the currently edited or dismissed spec", () => {

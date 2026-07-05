@@ -16,8 +16,8 @@ export function buildProductionQuestionPanelVisibilityState(input: {
       input.documentPhase === "analysing"
         ? "Der Agent wertet das hochgeladene Dokument gerade aus und erzeugt daraus operative Veranstaltungsdaten."
         : input.productionWorkspaceCleared
-          ? "Der aktuelle Vorgang wurde geleert. Nach einem neuen Upload erscheinen hier wieder die Rückfragen des Agenten."
-          : "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten.",
+          ? "Der aktuelle Vorgang wurde geleert. Nach einem neuen Upload erscheint hier die Prüfung."
+          : "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheint hier die Prüfung vor der Berechnung.",
     showSpecSwitch: !input.productionWorkspaceCleared && input.specSwitchItemCount > 1,
     showDetachedEditor: Boolean(input.editingSpecId) && input.editingSpecId !== input.focusedProductionSpecId
   };

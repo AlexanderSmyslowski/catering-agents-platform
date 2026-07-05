@@ -28,7 +28,7 @@ describe("production question panel visibility state", () => {
       })
     ).toEqual({
       emptyStateMessage:
-        "Der aktuelle Vorgang wurde geleert. Nach einem neuen Upload erscheinen hier wieder die Rückfragen des Agenten.",
+        "Der aktuelle Vorgang wurde geleert. Nach einem neuen Upload erscheint hier die Prüfung.",
       showSpecSwitch: false,
       showDetachedEditor: true
     });
@@ -44,7 +44,7 @@ describe("production question panel visibility state", () => {
         focusedProductionSpecId: "spec-1"
       })
     ).toEqual({
-      emptyStateMessage: "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten.",
+      emptyStateMessage: "Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheint hier die Prüfung vor der Berechnung.",
       showSpecSwitch: true,
       showDetachedEditor: false
     });

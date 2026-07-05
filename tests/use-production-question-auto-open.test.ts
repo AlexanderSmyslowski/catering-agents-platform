@@ -50,14 +50,14 @@ function renderAutoOpen(input: {
 }
 
 describe("useProductionQuestionAutoOpen", () => {
-  it("opens the focused production spec when questions are present", () => {
+  it("keeps the focused production spec closed until the operator opens it", () => {
     const spec = { specId: "spec-open", readiness: { status: "complete" } };
     const { loadSpecIntoEditor } = renderAutoOpen({
       focusedProductionSpec: spec,
       productionQuestionCount: 2
     });
 
-    expect(loadSpecIntoEditor).toHaveBeenCalledWith(spec);
+    expect(loadSpecIntoEditor).not.toHaveBeenCalled();
   });
 
   it("keeps closed routes, edited specs and dismissed specs from auto-opening", () => {

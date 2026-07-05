@@ -98,8 +98,9 @@ describe("production input panel", () => {
     expect(markup).toContain("Datei auswählen");
     expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
     expect(markup).toContain("Anfrage als Datei übernehmen");
-    expect(markup).toContain("PDF / Anfrage");
-    expect(markup).toContain("Weitere Eingaben oder Korrektur");
+    expect(markup).toContain("PDF-Datei");
+    expect(markup).toContain("Weitere Eingabe ohne Datei");
+    expect(markup).toContain("Text auswerten");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs" open=""');
     expect(markup).not.toContain("Intake-Pfad");
     expect(markup).not.toContain("Chat-Eingang");
@@ -158,9 +159,11 @@ describe("production input panel", () => {
     expect(markup).toContain("Quelle wurde verarbeitet; bitte Eckdaten, Gerichte und Rückfragen prüfen.");
     expect(markup).toContain("Noch keine Gerichte erkannt.");
     expect(markup).toContain("Offen: keine Gerichte erkannt.");
-    expect(markup).toContain("Nächster Schritt: erkannte Eckdaten prüfen und fehlende Gerichte ergänzen.");
+    expect(markup).toContain("Eckdaten ergänzen");
+    expect(markup).toContain("Die Datei wurde verarbeitet, aber es fehlen noch belastbare Gerichte oder Eckdaten.");
+    expect(markup).toContain('href="#production-question-panel"');
     expect(markup).toContain('class="upload-result-review-details"');
-    expect(markup).toContain("Prüfpunkte vor Berechnung");
+    expect(markup).toContain("Erkannte Komponenten und Prüfpunkte anzeigen");
     expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("progress-ring--done");
@@ -218,7 +221,8 @@ describe("production input panel", () => {
       })
     );
 
-    expect(markup).toContain("Demo-/Wartungsaktionen");
+    expect(markup).toContain("Lokale Hilfen");
+    expect(markup).toContain("nur für Demo- und Fehlupload-Fälle");
     expect(markup).toContain("Diese Aktionen sind nur für lokale Demo- und Korrekturfälle.");
     expect(markup).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(markup).toContain("für Lunch · 30 Teilnehmer · 2026-06-18");
@@ -242,7 +246,7 @@ describe("production input panel", () => {
   it("keeps the document retry action inactive until a file is available", () => {
     const markup = renderPanel(buildSourceInput());
 
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Erneut mit ausgewähltem Typ verarbeiten<\/button>/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Datei auswerten<\/button>/);
   });
 
   it("keeps the document retry action available for a retained failed file", () => {
@@ -253,7 +257,7 @@ describe("production input panel", () => {
     );
 
     expect(markup).toContain("Ausgewählt: problemangebot.pdf");
-    expect(markup).toMatch(/<button(?:(?!disabled).)*>Erneut mit ausgewähltem Typ verarbeiten<\/button>/);
+    expect(markup).toMatch(/<button(?:(?!disabled).)*>Datei auswerten<\/button>/);
   });
 
   it("shows the recognized production data directly after document analysis", () => {
@@ -298,21 +302,24 @@ describe("production input panel", () => {
     expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("progress-ring--done");
-    expect(markup).toContain("Erkannte Produktionsdaten");
+    expect(markup).toContain("KI-Entwurf aus Angebot");
     expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
     expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");
     expect(markup).toContain("Sofortübersicht Produktionsdaten");
     expect(markup).toContain("2 Komponenten erkannt");
     expect(markup).toContain("2 offene Punkte");
     expect(markup).toContain("noch nicht berechnet");
+    expect(markup).toContain("2 Rückfragen beantworten");
+    expect(markup).toContain("Beantworte die offenen Punkte direkt im Rückfragenbereich.");
+    expect(markup).toContain('href="#production-question-panel"');
+    expect(markup).toContain('class="upload-result-review-details"');
+    expect(markup).toContain("Erkannte Komponenten und Prüfpunkte anzeigen");
+    expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
     expect(markup).toContain("Gerichte und Komponenten:");
     expect(markup).toContain("Lunchbuffet");
     expect(markup).toContain("Kaffeestation");
     expect(markup).toContain("Offen vor Produktion:");
     expect(markup).toContain("Lunchbuffet: Herstellungsentscheidung fehlt.");
-    expect(markup).toContain('class="upload-result-review-details"');
-    expect(markup).toContain("Prüfpunkte vor Berechnung");
-    expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
     expect(markup).toContain("Vorprüfung vor Berechnung:");
     expect(markup).toContain("Personenzahl");
     expect(markup).toContain("90 Personen erkannt.");
@@ -325,7 +332,6 @@ describe("production input panel", () => {
     expect(markup).toContain("Stand der Produktionsartefakte:");
     expect(markup).toContain("Erkannt: Eckdaten, Gerichte/Komponenten, Rückfragen und Annahmen.");
     expect(markup).toContain("Noch nicht berechnet: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe.");
-    expect(markup).toContain("Nächster Schritt: Rückfragen beantworten, dann Berechnung starten.");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
   });
@@ -369,7 +375,8 @@ describe("production input panel", () => {
     expect(markup).toContain(
       "Quelle: Angebot_Koepff.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
     );
-    expect(markup).toContain("Nächster Schritt: Quellenprüfung bestätigen, dann Berechnung starten.");
+    expect(markup).toContain("Quelle prüfen");
+    expect(markup).toContain("Zur Quellenprüfung");
     expect(markup).not.toContain("%PDF Rohinhalt");
   });
 });

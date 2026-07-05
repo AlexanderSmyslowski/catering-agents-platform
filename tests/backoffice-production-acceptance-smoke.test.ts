@@ -748,7 +748,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar.");
     expect(content).not.toContain("Intake-Pfad");
     expect(content).toContain("Datei auswählen");
-    expect(content).toContain("Demo-/Wartungsaktionen");
+    expect(content).toContain("Lokale Hilfen");
     expect(content).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(content).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
     expect(content).toContain("Datei hier ablegen");
@@ -774,9 +774,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).not.toContain("prüfbare Ergebniszonen");
     expect(content).not.toContain("Schritt 3");
-    expect(content).toContain("Workbench-Projektion");
-    expect(content).toContain("Arbeitsverlauf");
-    expect(content).toContain("Aktueller Vorgang");
+    expect(content).toContain("Datenstand anzeigen");
+    expect(content).toContain("Erkannte Eckdaten");
+    expect(content).not.toContain("Workbench-Projektion");
+    expect(content).not.toContain("Arbeitsverlauf");
     expect(content).not.toContain("production-session-");
     expect(content).toContain("Session-Grundlage");
     expect(content).toContain("Strukturierte Veranstaltungsdaten bleiben führend");
@@ -786,13 +787,13 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.");
     expect(content).toContain("Klärbereich");
     expect(content).toContain("1 offene Rückfrage");
-    expect(content).toContain("Strukturierte Rückfragen im Chatfluss");
+    expect(content).toContain("Prüfung vor Berechnung");
     expect(content).toContain("Agent fragt");
     expect(content).toContain("Rückfrage offen");
     expect(content).toContain("Rückfragen beantworten");
-    expect(content).toContain("Deine strukturierte Antwort im Chatfluss");
-    expect(content).toContain("Antwort direkt zur Agentenfrage");
-    expect(content).toContain("kein freier LLM-Chat");
+    expect(content).not.toContain("Deine strukturierte Antwort im Chatfluss");
+    expect(content).not.toContain("Antwort direkt zur Agentenfrage");
+    expect(content).toContain("Kein freier LLM-Chat");
     expect(content).toContain("Status");
     expect(content).toContain("unzureichend");
     expect(content).toContain("Offene Punkte:");
@@ -1137,15 +1138,14 @@ describe("backoffice production acceptance smoke", () => {
     }
   });
 
-  it("does not offer reopening answers while the focused answer editor is already open", async () => {
+  it("keeps the answer editor closed until the operator opens it", async () => {
     installProductionAcceptanceMocks();
 
     const route = await renderProductionRouteMarkup();
 
-    expect(route.text).toContain("Antwort direkt zur Agentenfrage");
-    expect(route.text).toContain("Antworten speichern");
-    expect(route.html).toMatch(/<button[^>]*disabled=""[^>]*>\s*Antworten bearbeiten\s*<\/button>/);
-    expect(route.html).toMatch(/<button[^>]*disabled=""[^>]*>\s*Antworten speichern\s*<\/button>/);
+    expect(route.text).not.toContain("Antwort direkt zur Agentenfrage");
+    expect(route.text).toContain("Rückfragen beantworten");
+    expect(route.html).not.toMatch(/<button[^>]*>\s*Antworten speichern\s*<\/button>/);
   });
 
   it("shows handoff provenance without claiming legal audit certainty", async () => {
