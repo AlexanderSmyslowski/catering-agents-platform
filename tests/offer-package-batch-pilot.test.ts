@@ -1,4 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,6 +17,21 @@ import {
 
 function tempRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-offer-package-pilot-"));
+}
+
+async function listen(server: Server): Promise<string> {
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return `http://127.0.0.1:${address.port}/v1/responses`;
+}
+
+async function close(server: Server): Promise<void> {
+  server.closeAllConnections?.();
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
 }
 
 describe("offer package batch pilot", () => {
@@ -318,5 +335,85 @@ describe("offer package batch pilot", () => {
     expect(report.predictions.map((prediction) => prediction.sourceId)).toEqual(["offer-02"]);
     expect(output).not.toContain("PrivateName");
     expect(output).not.toContain("Angebot_1_PrivateName");
+  });
+
+  it("keeps a valid report when a provider request times out mid-batch", async () => {
+    const root = tempRoot();
+    roots.push(root);
+    const sourceDir = path.join(root, "offers");
+    mkdirSync(sourceDir);
+    writeFileSync(path.join(sourceDir, "Angebot_First_PrivateName.txt"), [
+      "Kunde: PrivateName GmbH",
+      "Business Lunch fuer 40 Personen als Buffet",
+      "Preis 42 EUR p.P. netto"
+    ].join("\n"));
+    writeFileSync(path.join(sourceDir, "Angebot_Second_PrivateName.txt"), [
+      "Kunde: PrivateName GmbH",
+      "Business Lunch fuer 41 Personen als Buffet",
+      "Preis 42 EUR p.P. netto"
+    ].join("\n"));
+    const outputPath = path.join(root, "report.json");
+    let requestCount = 0;
+    const server = createServer((_request, response) => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        response.writeHead(200, {
+          "content-type": "application/json",
+          "x-request-id": "req-local-1"
+        });
+        response.end(JSON.stringify({
+          id: "resp-local-1",
+          output_text: JSON.stringify({
+            packageId: "business_lunch_basic",
+            confidence: 0.91,
+            rationale: "Business-Lunch-Signale.",
+            signals: ["Business Lunch", "40 Personen"],
+            alternatives: []
+          }),
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15
+          }
+        }));
+        return;
+      }
+      // Leave the second response open so the OpenAI transport timeout becomes
+      // a normal prediction error instead of hanging the whole batch.
+      _request.on("close", () => response.destroy());
+    });
+    const endpoint = await listen(server);
+
+    try {
+      await expect(runOfferPackageBatchPilotCli([
+        "--source-dir", sourceDir,
+        "--limit", "2",
+        "--models", "gpt-5.5",
+        "--max-requests", "2",
+        "--output", outputPath
+      ], {
+        CATERING_LLM_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test",
+        CATERING_LLM_BASE_URL: endpoint,
+        CATERING_OPENAI_TIMEOUT_MS: "25"
+      })).resolves.toBe(0);
+    } finally {
+      await close(server);
+    }
+
+    const output = readFileSync(outputPath, "utf8");
+    const report = JSON.parse(output) as {
+      requestCount: number;
+      providerRequestCount: number;
+      predictions: Array<{ ok: boolean; errors: string[] }>;
+    };
+
+    expect(report.requestCount).toBe(2);
+    expect(report.providerRequestCount).toBe(2);
+    expect(report.predictions).toHaveLength(2);
+    expect(report.predictions[1]?.errors).toContain("OpenAI responses request timed out after 25ms");
+    expect(output).not.toContain("PrivateName");
+    expect(output).not.toContain("Angebot_First_PrivateName");
+    expect(output).not.toContain("Angebot_Second_PrivateName");
   });
 });
