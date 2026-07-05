@@ -28,7 +28,7 @@ export function ProductionRouteFilterPanel({
   return (
     <details className="panel secondary-workspace production-filter-details">
       <summary>
-        <span className="eyebrow">Bestand und Suche</span>
+        <span className="eyebrow">Bestand und Demo</span>
         <span className="subsection-title">Pläne, Einkaufslisten und Rezepte finden</span>
         <span className="helper-text">
           {isInitialProductionLoading

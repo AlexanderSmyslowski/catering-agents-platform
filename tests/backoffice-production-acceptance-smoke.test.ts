@@ -738,20 +738,28 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsagent-Chat");
-    expect(content).toContain("Was braucht die Produktion als Nächstes?");
+    expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+    expect(content).toContain("Quelle einfügen, dann prüfst du die erkannten Daten.");
+    expect(content).toContain("QuelleKI-EntwurfPrüfungPlan");
     expect(content).toContain("Anfrageeingang");
-    expect(content).toContain("Weitere Anfrage übernehmen");
+    expect(content).toContain("Kundenanfrage übernehmen");
     expect(content).toContain("Maximal 25 MB");
     expect(content).toContain("Der Inhalt wird als Catering-Anfrage erfasst.");
-    expect(content).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
+    expect(content).toContain("Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar.");
     expect(content).not.toContain("Intake-Pfad");
     expect(content).toContain("Datei auswählen");
     expect(content).toContain("Demo-/Wartungsaktionen");
     expect(content).toContain("Demo-Arbeitsstand zurücksetzen");
     expect(content).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
-    expect(content).not.toContain("Datei hier ablegen");
+    expect(content).toContain("Datei hier ablegen");
     expect(content).toContain("Downloadbereich");
-    expect(content).toContain("Produktionsdaten im Fokus");
+    expect(content).toContain("Bestandsdaten im Hintergrund");
+    expect(content).toContain("Kontext aus Demo, Bestand oder vorherigem Lauf.");
+    expect(content.indexOf("Angebot hochladen oder Produktionsauftrag beschreiben")).toBeLessThan(
+      content.indexOf("Bestandsdaten im Hintergrund")
+    );
+    expect(content.indexOf("Kundenanfrage übernehmen")).toBeLessThan(content.indexOf("Nächster Schritt"));
+    expect(content.indexOf("Kundenanfrage übernehmen")).toBeLessThan(content.indexOf("Produktionsblatt exportieren"));
     expect(rendered.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
     expect(rendered.html).toContain('aria-label="Datenstand Produktionsauftrag"');
     expect(content).toContain("Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.");
@@ -871,7 +879,7 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Upload passt nicht zum Angebot.");
       expect(content).toContain("Ausgewählt: falsches-angebot.txt");
       expect(content).toContain("Kein aktiver Vorgang");
-      expect(content).toContain("Auftrag einfügen oder Datei ablegen");
+      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
       expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
@@ -930,7 +938,7 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Kein aktiver Vorgang");
       expect(content).toContain("Rückfragen: keine offenen Rückfragen");
       expect(content).toContain("Rückfragen: offen 0 · beantwortet 0");
-      expect(content).toContain("Auftrag einfügen oder Datei ablegen");
+      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Rückfragen: 1 offene Rückfrage");
       expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
@@ -999,7 +1007,7 @@ describe("backoffice production acceptance smoke", () => {
 
       expect(content).toContain("Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert.");
       expect(content).toContain("Kein aktiver Vorgang");
-      expect(content).toContain("Auftrag einfügen oder Datei ablegen");
+      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Plan-Kontext: aktueller Produktionsplan");
       expect(content).not.toContain("purchase-production-current-1");
@@ -1176,7 +1184,7 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Produktionsdaten im Fokus");
+    expect(content).toContain("Bestandsdaten im Hintergrund");
     expect(content).toContain("Produktionsplan aus gespeicherter Spezifikation");
     expect(content).toContain("Status: Prüfung nötig");
     expect(content).toContain("Freigabe: nicht erteilt");
@@ -1556,7 +1564,7 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = document.body.textContent ?? "";
 
-    expect(content).toContain("Produktionsdaten im Fokus");
+    expect(content).toContain("Bestandsdaten im Hintergrund");
     expect(content).toContain("Plan: wird geladen");
     expect(content).toContain("Einkauf: Einkaufslisten werden geladen");
     expect(content).toContain("Freigabe: nicht erteilt");

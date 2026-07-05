@@ -168,7 +168,7 @@ describe("production input panel", () => {
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
   });
 
-  it("keeps the input surface compact when production data is already in focus", () => {
+  it("keeps the file import surface visible when production data is already in focus", () => {
     const markup = renderPanel(
       buildSourceInput(),
       {
@@ -182,15 +182,15 @@ describe("production input panel", () => {
       }
     );
 
-    expect(markup).toContain("Weitere Anfrage übernehmen");
-    expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
-    expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
+    expect(markup).toContain("Kundenanfrage übernehmen");
+    expect(markup).toContain("Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar.");
+    expect(markup).toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("Analyse abgeschlossen");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
   });
 
-  it("keeps the input surface compact when plan artifacts are the active context", () => {
+  it("keeps the file import surface visible when plan artifacts are the active context", () => {
     const markup = renderPanel(
       buildSourceInput(),
       {
@@ -198,8 +198,9 @@ describe("production input panel", () => {
       }
     );
 
-    expect(markup).toContain("Weitere Anfrage übernehmen");
-    expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
+    expect(markup).toContain("Kundenanfrage übernehmen");
+    expect(markup).toContain("Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar.");
+    expect(markup).toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
   });

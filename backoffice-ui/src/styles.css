@@ -1512,9 +1512,9 @@ button:disabled {
 
 .production-composer {
   display: grid;
-  gap: 1rem;
-  padding: clamp(1.2rem, 3vw, 2.1rem);
-  border-radius: 2.2rem;
+  gap: 0.8rem;
+  padding: clamp(1rem, 2vw, 1.35rem);
+  border-radius: 1.3rem;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.84);
   box-shadow:
@@ -1526,19 +1526,51 @@ button:disabled {
 
 .production-composer__header {
   display: grid;
-  gap: 0.35rem;
-  text-align: center;
+  gap: 0.3rem;
+  text-align: left;
 }
 
 .production-composer__header h3 {
   margin: 0;
-  font-size: clamp(1.45rem, 2.5vw, 2.25rem);
-  letter-spacing: -0.04em;
+  font-size: 1.55rem;
+  letter-spacing: -0.02em;
 }
 
 .production-composer__header .helper-text {
-  max-width: 44rem;
-  margin: 0 auto;
+  max-width: 52rem;
+}
+
+.production-composer .production-column--input {
+  order: 0;
+  opacity: 1;
+}
+
+.production-composer .production-next-step {
+  order: 1;
+}
+
+.production-flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-flow-steps li {
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.42rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(247, 250, 255, 0.86);
+  border: 1px solid rgba(15, 23, 34, 0.06);
+  color: rgba(15, 23, 34, 0.7);
+  font-size: 0.86rem;
+  font-weight: 650;
 }
 
 .production-calm-summary {
@@ -1550,15 +1582,15 @@ button:disabled {
 }
 
 .production-conversation-layout--active-context .production-calm-summary {
-  order: -1;
+  order: 1;
 }
 
 .production-conversation-layout--active-context .production-objects-zone {
-  order: 0;
+  order: 3;
 }
 
 .production-conversation-layout--active-context .production-purchase-zone {
-  order: 1;
+  order: 4;
 }
 
 .production-conversation-layout--active-context .production-progressive-zone {
@@ -1566,11 +1598,11 @@ button:disabled {
 }
 
 .production-conversation-layout--active-context .production-composer {
-  order: 3;
+  order: 0;
 }
 
 .production-conversation-layout--active-context .production-lower-zones {
-  order: 4;
+  order: 5;
 }
 
 .production-calm-summary strong {
@@ -1682,10 +1714,10 @@ button:disabled {
 .production-next-step {
   display: grid;
   gap: 0.2rem;
-  margin-top: 0.9rem;
-  padding: 0.85rem 1rem;
-  border-radius: 1.15rem;
-  background: rgba(255, 255, 255, 0.72);
+  margin-top: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.9rem;
+  background: rgba(247, 250, 255, 0.72);
   border: 1px solid rgba(15, 23, 34, 0.07);
 }
 

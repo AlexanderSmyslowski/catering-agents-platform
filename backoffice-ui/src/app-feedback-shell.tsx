@@ -17,7 +17,7 @@ export function AppFeedbackShell({ error, notice, loading }: AppFeedbackShellPro
       <footer className="footer-note">
         {loading
           ? "Aktuelle Plattformdaten werden geladen..."
-          : "Aktuelle Daten aus Erfassung, Angebot und Produktion wurden geladen."}
+          : "Bestands- und Demo-Kontext ist geladen; neue Produktionsaufträge startest du oben."}
       </footer>
     </>
   );

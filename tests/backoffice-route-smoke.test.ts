@@ -259,9 +259,9 @@ describe("backoffice route smoke", () => {
 
     const production = await renderRoute("/produktion");
     expect(production.text).toContain("Produktionsagent");
-    expect(production.text).toContain("Was braucht die Produktion als Nächstes?");
-    expect(production.text).toContain("Auftrag einfügen oder Datei ablegen");
-    expect(production.text).toContain("Produktionsdaten im Fokus");
+    expect(production.text).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+    expect(production.text).toContain("Angebot hochladen oder Auftrag beschreiben");
+    expect(production.text).toContain("Bestandsdaten im Hintergrund");
     expect(production.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
     expect(production.text).toContain("Bestehende Aufträge, Pläne, Einkaufslisten und Rezepte durchsuchen.");
   });
@@ -326,8 +326,8 @@ describe("backoffice route smoke", () => {
 
     const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
     expect(production).toContain("Produktionsagent");
-    expect(production).toContain("Was braucht die Produktion als Nächstes?");
-    expect(production).toContain("Produktionsdaten im Fokus");
+    expect(production).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+    expect(production).toContain("Bestandsdaten im Hintergrund");
     expect(production).toContain("Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.");
     expect(production).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
   });

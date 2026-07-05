@@ -183,7 +183,7 @@ describe("production status summary state", () => {
       productionHandoffExportLabel: "Produktionsblatt offen · Einkaufsliste offen",
       productionHandoffContextLabel: undefined
     });
-    expect(state.productionNextStep.title).toBe("Auftrag einfügen oder Datei ablegen");
+    expect(state.productionNextStep.title).toBe("Angebot hochladen oder Auftrag beschreiben");
   });
 
   it("does not surface stale intake origin after the production workspace was cleared", () => {
@@ -258,8 +258,8 @@ describe("production status summary state", () => {
       productionHandoffContextLabel: undefined
     });
     expect(state.productionNextStep).toEqual({
-      title: "Auftrag einfügen oder Datei ablegen",
-      description: "Starte mit Angebot, E-Mail, Text oder manuellen Veranstaltungsdaten."
+      title: "Angebot hochladen oder Auftrag beschreiben",
+      description: "Starte mit PDF, E-Mail, Text oder manuellen Veranstaltungsdaten."
     });
   });
 

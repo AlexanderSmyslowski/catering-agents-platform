@@ -493,7 +493,7 @@ describe("offer package batch pilot", () => {
         CATERING_LLM_PROVIDER: "openai",
         OPENAI_API_KEY: "sk-test",
         CATERING_LLM_BASE_URL: endpoint,
-        CATERING_OPENAI_TIMEOUT_MS: "25",
+        CATERING_OPENAI_TIMEOUT_MS: "250",
         CATERING_OFFER_BATCH_INPUT_EUR_PER_1M_TOKENS: "0",
         CATERING_OFFER_BATCH_OUTPUT_EUR_PER_1M_TOKENS: "0"
       })).resolves.toBe(0);
@@ -511,7 +511,7 @@ describe("offer package batch pilot", () => {
     expect(report.requestCount).toBe(2);
     expect(report.providerRequestCount).toBe(2);
     expect(report.predictions).toHaveLength(2);
-    expect(report.predictions[1]?.errors).toContain("OpenAI responses request timed out after 25ms");
+    expect(report.predictions[1]?.errors).toContain("OpenAI responses request timed out after 250ms");
     expect(output).not.toContain("PrivateName");
     expect(output).not.toContain("Angebot_First_PrivateName");
     expect(output).not.toContain("Angebot_Second_PrivateName");

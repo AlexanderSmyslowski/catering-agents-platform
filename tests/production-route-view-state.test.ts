@@ -95,7 +95,7 @@ describe("production route view state", () => {
       productionObjectStatusLabel: "noch kein Plan",
       currentSpecPurchaseLists: [stalePurchaseList],
       productionNextStep: {
-        title: "Auftrag einfügen oder Datei ablegen",
+        title: "Angebot hochladen oder Auftrag beschreiben",
         description: "Neuen Produktionskontext starten."
       },
       selectedPlan: stalePlan,

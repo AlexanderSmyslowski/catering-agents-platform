@@ -109,8 +109,8 @@ export function ProductionInputPanel({
   const hasUploadResultSummary = Boolean(panelState.uploadResultSummary);
   const completedDocument = panelState.showCompletedProgress;
   const hasFocusedProductionContext = Boolean(focusedProductionSpec) || Boolean(hasActiveProductionContext);
-  const compactInputMode = hasUploadResultSummary || completedDocument || hasFocusedProductionContext;
-  const secondaryInputsOpen = !compactInputMode;
+  const compactInputMode = hasUploadResultSummary || completedDocument;
+  const secondaryInputsOpen = !compactInputMode && !hasFocusedProductionContext;
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
@@ -134,7 +134,9 @@ export function ProductionInputPanel({
             PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der Inhalt wird als Catering-Anfrage erfasst.
             {compactInputMode
               ? " Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar."
-              : " Alternativ kannst du den Text unten direkt einfügen."}
+              : hasFocusedProductionContext
+                ? " Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar."
+                : " Alternativ kannst du den Text unten direkt einfügen."}
           </p>
         </div>
         <div className="action-row">
