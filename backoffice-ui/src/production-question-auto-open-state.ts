@@ -25,17 +25,11 @@ export function buildProductionQuestionAutoOpenState(
     return { shouldAutoOpen: false };
   }
 
-  const readiness = String(
-    (input.focusedProductionSpec.readiness as Record<string, unknown> | undefined)?.status ?? ""
-  );
-  const hasOpenQuestionsOrIncompleteReadiness =
-    input.productionQuestionCount > 0 || readiness !== "complete";
-
+  // The operator probe showed that auto-opening the editor after upload causes a
+  // disorienting jump into component forms. Keep the spec identified, but make
+  // answering a deliberate click from the guided review surface.
   return {
-    shouldAutoOpen:
-      hasOpenQuestionsOrIncompleteReadiness &&
-      input.editingSpecId !== specId &&
-      input.dismissedProductionAnswerSpecId !== specId,
+    shouldAutoOpen: false,
     specId
   };
 }

@@ -224,6 +224,15 @@ export function ProductionConversationalWorkbench({
           <p className="eyebrow">Nächster Schritt</p>
           <strong>{nextStep.title}</strong>
           <p className="helper-text">{nextStep.description}</p>
+          {openVisibleQuestionCount > 0 ? (
+            <a className="ghost-link" href="#production-question-panel">
+              Rückfragen beantworten
+            </a>
+          ) : hasProductionResults ? (
+            <a className="ghost-link" href={`#${productionOutputAnchorId}`}>
+              Ergebnisse prüfen
+            </a>
+          ) : null}
         </div>
       </article>
 

@@ -778,6 +778,22 @@ button:disabled {
   align-content: start;
 }
 
+.question-action-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.95rem;
+  flex-wrap: wrap;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  background: rgba(247, 250, 255, 0.9);
+  border: 1px solid rgba(15, 23, 34, 0.08);
+}
+
+.question-action-panel strong {
+  color: #0f1722;
+}
+
 .question-window__spec {
   margin: 0;
   font-size: 1rem;
@@ -992,8 +1008,10 @@ button:disabled {
 .upload-result-snapshot__item {
   display: grid;
   gap: 0.18rem;
-  padding: 0.15rem 0.65rem;
-  border-left: 3px solid rgba(15, 23, 34, 0.12);
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(15, 23, 34, 0.08);
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .upload-result-snapshot__item span,
@@ -1007,15 +1025,75 @@ button:disabled {
 }
 
 .upload-result-snapshot__item--checked {
-  border-left-color: rgba(32, 112, 61, 0.48);
+  background: rgba(239, 249, 242, 0.82);
+  border-color: rgba(32, 112, 61, 0.18);
 }
 
 .upload-result-snapshot__item--open {
-  border-left-color: rgba(138, 75, 16, 0.52);
+  background: rgba(255, 247, 237, 0.86);
+  border-color: rgba(138, 75, 16, 0.2);
 }
 
 .upload-result-snapshot__item--review {
-  border-left-color: rgba(46, 104, 173, 0.5);
+  background: rgba(239, 246, 255, 0.9);
+  border-color: rgba(46, 104, 173, 0.18);
+}
+
+.upload-review-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  background: rgba(247, 250, 255, 0.9);
+  border: 1px solid rgba(15, 23, 34, 0.08);
+}
+
+.upload-review-action strong {
+  margin: 0;
+}
+
+.source-retry-details,
+.manual-entry-details,
+.question-context-details {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  background: rgba(247, 250, 255, 0.68);
+  border: 1px solid rgba(15, 23, 34, 0.07);
+}
+
+.source-retry-details > summary,
+.manual-entry-details > summary,
+.question-context-details > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.source-retry-details > summary::-webkit-details-marker,
+.manual-entry-details > summary::-webkit-details-marker,
+.question-context-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.source-retry-details > summary strong,
+.manual-entry-details > summary strong,
+.question-context-details > summary strong {
+  color: rgba(15, 23, 34, 0.62);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.manual-entry-details__body,
+.question-context-details[open] {
+  display: grid;
+  gap: 0.85rem;
 }
 
 .upload-result-review-details {

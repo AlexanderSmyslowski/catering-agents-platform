@@ -1,11 +1,8 @@
 import { useState } from "react";
 import type { IntakeDocumentChannel } from "./api.js";
 
-const defaultProductionIntakeText =
-  "Konferenz am 2026-06-18 für 90 Teilnehmer mit Lunchbuffet, Tomatensuppe und Kaffeestation.";
-
 export function useProductionIntakeDraft() {
-  const [intakeText, setIntakeText] = useState(defaultProductionIntakeText);
+  const [intakeText, setIntakeText] = useState("");
   const [intakeFile, setIntakeFile] = useState<File | null>(null);
   const [intakeChannel, setIntakeChannel] = useState<IntakeDocumentChannel>("pdf_upload");
   const [dragActive, setDragActive] = useState(false);

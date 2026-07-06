@@ -399,7 +399,7 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Maximal 25 MB");
     expect(content).toContain("Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar.");
     expect(content).toContain("Datei auswählen");
-    expect(content).toContain("Workbench-Projektion");
+    expect(content).toContain("Erkannte Eckdaten");
     expect(content).toContain("Klärbereich");
     expect(content).toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan");

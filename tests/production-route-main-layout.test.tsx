@@ -223,7 +223,7 @@ describe("production route main layout", () => {
     expect(markup).toContain("Lunchbuffet");
     expect(markup).toContain("Kaffeestation");
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
-    expect(markup).toContain("Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheinen hier die Rückfragen des Agenten.");
+    expect(markup).toContain("Sobald ein Angebot hochgeladen oder eingegeben wurde, erscheint hier die Prüfung vor der Berechnung.");
   });
 
   it("keeps the completed plan message honest when the purchase list has no positions", () => {

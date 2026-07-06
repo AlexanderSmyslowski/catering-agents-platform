@@ -34,12 +34,12 @@ function ReadOnlyWorkbenchProjection({
   readinessLabel: string;
 }) {
   return (
-    <div className="workbench-projection" aria-label="Nur-Lese-Workbench-Projektion">
+    <div className="workbench-projection" aria-label="Erkannte Eckdaten">
       <div>
-        <p className="eyebrow">Workbench-Projektion</p>
+        <p className="eyebrow">Erkannte Eckdaten</p>
         <p className="question-window__spec">{specLabel}</p>
         <p className="helper-text">
-          Strukturierte Veranstaltungsdaten bleiben führend; dieser Bereich ist nur eine ruhige Nur-Lese-Sicht.
+          Diese Angaben stammen aus dem aktuellen Entwurf und bleiben bis zur Prüfung unverbindlich.
         </p>
       </div>
       <dl className="spec-fact-grid">
@@ -72,30 +72,30 @@ export function ProductionQuestionThread({
 }: ProductionQuestionThreadProps) {
   return (
     <>
-      <ReadOnlyWorkbenchProjection
-        specLabel={specLabel}
-        facts={facts}
-        questionCount={questionCount}
-        readinessLabel={readinessLabel}
-      />
-      <div className="component-answer-card" aria-label="Arbeitsverlauf">
-        <p className="eyebrow">Arbeitsverlauf</p>
-        <strong>Aktueller Vorgang</strong>
-        <p className="helper-text">
-          Nur-Lese-Sitzungsverlauf aus vorhandenen Spezifikations-, Rückfrage- und Ergebnisdaten.
-        </p>
-      </div>
-      <div className="result-status-strip" aria-label="Ergebnisstatus aktueller Vorgang">
-        <span>
-          <strong>Ergebnisstatus</strong>
-        </span>
-        <span>Plan: {selectedPlan ? selectedPlanReadinessLabel ?? "-" : "noch nicht berechnet"}</span>
-        <span>Produktionsblatt: {selectedPlan ? "vorhanden" : "offen"}</span>
-        <span>
-          Einkauf: {currentSpecPurchaseLists.length > 0 ? formatPurchaseListCount(currentSpecPurchaseLists.length) : "offen"}
-        </span>
-      </div>
+      <details className="question-context-details">
+        <summary>
+          <span>Datenstand anzeigen</span>
+          <strong>{specLabel}</strong>
+        </summary>
+        <ReadOnlyWorkbenchProjection
+          specLabel={specLabel}
+          facts={facts}
+          questionCount={questionCount}
+          readinessLabel={readinessLabel}
+        />
+        <div className="result-status-strip" aria-label="Ergebnisstatus aktueller Vorgang">
+          <span>
+            <strong>Ergebnisstatus</strong>
+          </span>
+          <span>Plan: {selectedPlan ? selectedPlanReadinessLabel ?? "-" : "noch nicht berechnet"}</span>
+          <span>Produktionsblatt: {selectedPlan ? "vorhanden" : "offen"}</span>
+          <span>
+            Einkauf: {currentSpecPurchaseLists.length > 0 ? formatPurchaseListCount(currentSpecPurchaseLists.length) : "offen"}
+          </span>
+        </div>
+      </details>
       <div className="structured-chat-thread" aria-label="Strukturierte Rückfragen als Chatfluss">
+        {answerEditor}
         {productionConversationProjection.messages.map((message) => {
           if (message.type === "production_output_anchor") {
             return null;
@@ -160,7 +160,6 @@ export function ProductionQuestionThread({
               </div>
             </article>
           ))}
-        {answerEditor}
       </div>
     </>
   );
