@@ -47,7 +47,7 @@ describe("offer draft promote action", () => {
       "clearMessages",
       "promoteOfferDraft:draft-1:balanced",
       "refreshDashboard",
-      "setNotice:Angebotsvariante wurde als operative Spezifikation übernommen.",
+      "setNotice:Angebotsvariante wurde an die Produktion übergeben.",
       "setSubmitting:false"
     ]);
   });
@@ -86,7 +86,7 @@ describe("offer draft promote action", () => {
     expect(actionInput.promoteOfferDraft).toHaveBeenCalledWith("draft-1", undefined);
     expect(actionInput.refreshDashboard).toHaveBeenCalledTimes(1);
     expect(actionInput.setNotice).toHaveBeenCalledWith(
-      "Angebotsvariante wurde als operative Spezifikation übernommen."
+      "Angebotsvariante wurde an die Produktion übergeben."
     );
   });
 

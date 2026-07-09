@@ -366,15 +366,15 @@ describe("backoffice production presentation smoke", () => {
     const content = await renderOfferRoute();
 
     expect(content).toContain("Angebotsagent");
-    expect(content).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(content).toContain("Kundenanfrage einfügen und Entwurf prüfen");
     expect(content).not.toContain("Catering-Betriebssystem");
     expect(content).not.toContain("Demo-Daten laden");
     expect(content).not.toContain("Aktualisieren");
-    expect(content).toContain("Ausgewählter Entwurf");
-    expect(content).toContain("Weitere Eingabewege");
-    expect(content).toContain("Operative Übergabe und Audit");
+    expect(content).toContain("Angebotsentwurf prüfen");
+    expect(content).toContain("Alternative Erfassung");
+    expect(content).toContain("Für die Produktion übernommene Veranstaltungen");
     expect(content).toContain("Lunch-Angebot für 45 Personen · 2 Varianten · 1 offener Punkt");
-    expect(content).toContain("Übergabe: 1 vollständig · 0 teilweise");
+    expect(content).toContain("Produktionsübergabe: 1 vollständig · 0 teilweise");
     expect(content).toContain("presentation-draft-success");
     expect(content).toContain("presentation-spec-success");
     expect(content).toContain("Angebot exportieren");

@@ -1,10 +1,23 @@
+import type { AppRoute } from "./app-shell-state.js";
+
 export interface AppFeedbackShellProps {
   error?: string;
   notice?: string;
   loading: boolean;
+  route: AppRoute;
 }
 
-export function AppFeedbackShell({ error, notice, loading }: AppFeedbackShellProps) {
+function loadedContextLabel(route: AppRoute): string {
+  if (route === "offer") {
+    return "Bestands- und Demo-Kontext ist geladen. Eine neue Anfrage startest du im Eingabefeld.";
+  }
+  if (route === "production") {
+    return "Bestands- und Demo-Kontext ist geladen. Einen neuen Produktionsauftrag startest du im Eingabebereich.";
+  }
+  return "Bestands- und Demo-Kontext ist geladen.";
+}
+
+export function AppFeedbackShell({ error, notice, loading, route }: AppFeedbackShellProps) {
   return (
     <>
       {error || notice ? (
@@ -15,9 +28,7 @@ export function AppFeedbackShell({ error, notice, loading }: AppFeedbackShellPro
       ) : null}
 
       <footer className="footer-note">
-        {loading
-          ? "Aktuelle Plattformdaten werden geladen..."
-          : "Bestands- und Demo-Kontext ist geladen; neue Produktionsaufträge startest du oben."}
+        {loading ? "Aktuelle Plattformdaten werden geladen..." : loadedContextLabel(route)}
       </footer>
     </>
   );
