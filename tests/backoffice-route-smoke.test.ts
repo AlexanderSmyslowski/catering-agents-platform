@@ -821,7 +821,7 @@ describe("backoffice route smoke", () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
-      if (url.endsWith("/api/intake/v1/intake/documents/upload")) {
+      if (url.endsWith("/api/production/v1/production/drafts/from-document")) {
         return new Response(JSON.stringify({ message: "Datei ist zu gross fuer den Import." }), {
           status: 413,
           statusText: "Payload Too Large",

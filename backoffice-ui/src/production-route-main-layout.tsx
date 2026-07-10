@@ -132,6 +132,7 @@ export function ProductionRouteMainLayout({
               productionQuestions={questionState.productionQuestions}
               productionAssumptions={questionState.productionAssumptions}
               intakeRequestDetail={questionState.intakeRequestDetail}
+              onDraftChanged={questionActions.refreshAfterDraftDecision}
             />
           </div>
         ),

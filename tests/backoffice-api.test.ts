@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAcceptedSpecFromText,
   createOfferFromText,
+  createProductionDraftFromDocument,
   createProductionPlan,
   offerExportUrl,
   productionExportUrl,
@@ -96,6 +97,21 @@ describe("backoffice API actor defaults", () => {
       "Betriebs-/Audit-Operator"
     ]);
     expect(calls.map((call) => call.contentType)).toEqual(["application/json", "application/json", "application/json"]);
+  });
+
+  it("uploads production documents as multipart draft requests with the production actor", async () => {
+    const calls = installFetchSpy();
+
+    await createProductionDraftFromDocument(
+      new File(["%PDF-1.4 fixture"], "angebot.pdf", { type: "application/pdf" })
+    );
+
+    expect(calls).toEqual([{
+      url: "/api/production/v1/production/drafts/from-document",
+      method: "POST",
+      actor: "Produktions-Mitarbeiter",
+      contentType: null
+    }]);
   });
 
   it("sends source review confirmation only when production planning confirms it", async () => {

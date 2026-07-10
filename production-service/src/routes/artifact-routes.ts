@@ -390,6 +390,17 @@ function parseProductionDraftExtraction(outputCandidate?: LlmReadinessModelOutpu
   };
 }
 
+function productionDraftExtractionFailureMessage(errors: readonly string[]): string {
+  const providerUnavailable = errors.some((error) =>
+    error.includes("no synthetic fixture matches input") ||
+    error.includes("provider calls require explicit synthetic-live opt-in")
+  );
+
+  return providerUnavailable
+    ? "Keine aktive KI-Verbindung für dieses Dokument. Bitte einen BYO-KI-Provider aktivieren und den Entwurf erneut erstellen."
+    : "ProductionDraft-Extraktion ist nicht schema-valide.";
+}
+
 async function productionDraftDocumentFromRequest(
   request: FastifyRequest
 ): Promise<ProductionDraftDocumentInput> {
@@ -793,7 +804,7 @@ export function registerProductionArtifactRoutes(
           })
         });
         return reply.code(422).send({
-          message: "ProductionDraft-Extraktion ist nicht schema-valide.",
+          message: productionDraftExtractionFailureMessage(responseErrors),
           errors: [...new Set(responseErrors)]
         });
       }

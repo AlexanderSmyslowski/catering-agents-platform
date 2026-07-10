@@ -302,6 +302,23 @@ export async function createAcceptedSpecFromDocument(
   return (await response.json()) as Record<string, unknown>;
 }
 
+export async function createProductionDraftFromDocument(file: File) {
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+
+  const response = await fetch("/api/production/v1/production/drafts/from-document", {
+    method: "POST",
+    body: formData,
+    headers: buildHeaders(undefined, false, DEFAULT_MUTATION_ACTOR_NAMES.production)
+  });
+
+  if (!response.ok) {
+    throw new Error(await responseErrorMessage(response));
+  }
+
+  return (await response.json()) as { draft: ProductionDraft };
+}
+
 export async function updateAcceptedSpec(
   specId: string,
   input: {

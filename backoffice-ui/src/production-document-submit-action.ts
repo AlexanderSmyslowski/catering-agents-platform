@@ -1,5 +1,6 @@
-import type { IntakeDocumentChannel } from "./api.js";
+import type { IntakeDocumentChannel, ProductionDraft } from "./api.js";
 import {
+  completeProductionDraftStateAfterDocumentSuccess,
   completeProductionStateAfterDocumentSuccess,
   type ProductionDocumentSuccessActions
 } from "./production-document-success-state.js";
@@ -14,6 +15,7 @@ export type ProductionDocumentSubmitServices = {
     file: File,
     channel: IntakeDocumentChannel
   ) => Promise<Record<string, unknown>>;
+  createProductionDraftFromDocument: (file: File) => Promise<{ draft: ProductionDraft }>;
 };
 
 export type ProductionDocumentSubmitCallbacks =
@@ -37,11 +39,13 @@ export type ProductionDocumentSubmitActionInput =
 
 export type ProductionDocumentSubmitActions = {
   submitSelectedDocument: () => Promise<void>;
+  submitSelectedIntakeDocument: () => Promise<void>;
   processIncomingProductionFile: (file: File, channel: IntakeDocumentChannel) => Promise<void>;
 };
 
 export function buildProductionDocumentSubmitActions({
   createAcceptedSpecFromDocument,
+  createProductionDraftFromDocument,
   intakeFile,
   intakeChannel,
   setSubmitting,
@@ -63,23 +67,39 @@ export function buildProductionDocumentSubmitActions({
   resetSpecEdit,
   setError
 }: ProductionDocumentSubmitActionInput): ProductionDocumentSubmitActions {
-  async function processIncomingProductionFile(file: File, channel: IntakeDocumentChannel) {
+  async function processFile(
+    file: File,
+    channel: IntakeDocumentChannel,
+    target: "production_draft" | "accepted_spec"
+  ) {
     setSubmitting(true);
     setProductionWorkspaceCleared(false);
     clearMessages();
     startIncomingProductionFile(file, channel);
     startDocumentProgress(file);
-    setNotice(`Dokument ${file.name} wird analysiert...`);
+    setNotice(target === "production_draft"
+      ? `KI erstellt einen prüfbaren Entwurf aus ${file.name} ...`
+      : `Dokument ${file.name} wird analysiert...`);
 
     try {
-      const response = await createAcceptedSpecFromDocument(file, channel);
-      await completeProductionStateAfterDocumentSuccess(file, response, {
-        setFocusedProductionSpecId,
-        completeIncomingProductionFile,
-        completeDocumentProgress,
-        refreshDashboard,
-        setNotice
-      });
+      if (target === "production_draft") {
+        await createProductionDraftFromDocument(file);
+        await completeProductionDraftStateAfterDocumentSuccess(file, {
+          completeIncomingProductionFile,
+          completeDocumentProgress,
+          refreshDashboard,
+          setNotice
+        });
+      } else {
+        const response = await createAcceptedSpecFromDocument(file, channel);
+        await completeProductionStateAfterDocumentSuccess(file, response, {
+          setFocusedProductionSpecId,
+          completeIncomingProductionFile,
+          completeDocumentProgress,
+          refreshDashboard,
+          setNotice
+        });
+      }
     } catch (submitError) {
       resetProductionStateAfterDocumentFailure(file, {
         failIncomingProductionFile,
@@ -92,10 +112,19 @@ export function buildProductionDocumentSubmitActions({
         resetSpecEdit
       });
       clearMessages();
-      setError(formatSubmitErrorMessage(submitError, "Dokument konnte nicht normalisiert werden."));
+      setError(formatSubmitErrorMessage(
+        submitError,
+        target === "production_draft"
+          ? "KI-Entwurf konnte nicht erstellt werden."
+          : "Dokument konnte nicht normalisiert werden."
+      ));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function processIncomingProductionFile(file: File, channel: IntakeDocumentChannel) {
+    await processFile(file, channel, "production_draft");
   }
 
   async function submitSelectedDocument() {
@@ -107,8 +136,18 @@ export function buildProductionDocumentSubmitActions({
     await processIncomingProductionFile(intakeFile, intakeChannel);
   }
 
+  async function submitSelectedIntakeDocument() {
+    if (!intakeFile) {
+      setError("Bitte wähle zuerst ein Dokument aus.");
+      return;
+    }
+
+    await processFile(intakeFile, intakeChannel, "accepted_spec");
+  }
+
   return {
     submitSelectedDocument,
+    submitSelectedIntakeDocument,
     processIncomingProductionFile
   };
 }

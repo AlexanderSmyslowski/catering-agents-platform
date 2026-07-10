@@ -91,12 +91,12 @@ describe("production input panel", () => {
   it("uses operator-facing request copy for the file import card", () => {
     const markup = renderPanel(buildSourceInput());
 
-    expect(markup).toContain("Kundenanfrage übernehmen");
+    expect(markup).toContain("Angebot als KI-Entwurf prüfen");
     expect(markup).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");
     expect(markup).toContain("Datei auswählen");
-    expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
-    expect(markup.match(/Kundenanfrage übernehmen/g)).toHaveLength(1);
-    expect(markup).toContain("PDF-Datei");
+    expect(markup).toContain("Nach der Auswahl erstellt die verbundene KI einen prüfpflichtigen Entwurf.");
+    expect(markup.match(/Angebot als KI-Entwurf prüfen/g)).toHaveLength(1);
+    expect(markup).not.toContain('aria-label="Quellentyp"');
     expect(markup).toContain("Weitere Eingabe ohne Datei");
     expect(markup).toContain("Text auswerten");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs" open=""');
@@ -130,7 +130,7 @@ describe("production input panel", () => {
     expect(rejectedMarkup).not.toContain("Analyse läuft");
     expect(rejectedMarkup).not.toContain("Analyse abgeschlossen");
     expect(analysingMarkup).toContain("Ausgewählt: anfrage.pdf");
-    expect(analysingMarkup).toContain("Analyse läuft für anfrage.pdf");
+    expect(analysingMarkup).toContain("KI liest anfrage.pdf und erstellt den Entwurf");
   });
 
   it("keeps the completed upload surface compact even before recognized data is available", () => {
@@ -147,22 +147,16 @@ describe("production input panel", () => {
     expect(markup).toContain('aria-hidden="true"');
     expect(markup).toContain('hidden=""');
     expect(markup).toContain('tabindex="-1"');
-    expect(markup).toContain("Analyse abgeschlossen für Angebot_Koepff.pdf.");
-    expect(markup).toContain("Quelle wurde verarbeitet; noch keine belastbaren Produktionsdaten erkannt.");
+    expect(markup).toContain("KI-Entwurf erstellt für Angebot_Koepff.pdf.");
+    expect(markup).toContain("Der KI-Entwurf wartet auf deine Prüfung; noch keine Produktionsdaten wurden übernommen.");
     expect(markup).not.toContain(
       "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
     );
     expect(markup).toContain("KI-Entwurf prüfen");
-    expect(markup).toContain("Noch keine Produktionsdaten erkannt");
-    expect(markup).toContain("Quelle wurde verarbeitet; bitte Eckdaten, Gerichte und Rückfragen prüfen.");
-    expect(markup).toContain("Noch keine Gerichte erkannt.");
-    expect(markup).toContain("Offen: keine Gerichte erkannt.");
-    expect(markup).toContain("Eckdaten ergänzen");
-    expect(markup).toContain("Die Datei wurde verarbeitet, aber es fehlen noch belastbare Gerichte oder Eckdaten.");
-    expect(markup).toContain('href="#production-question-panel"');
-    expect(markup).toContain('class="upload-result-review-details"');
-    expect(markup).toContain("Erkannte Komponenten und Prüfpunkte anzeigen");
-    expect(markup).not.toContain('<details class="upload-result-review-details" open="">');
+    expect(markup).toContain("Noch nichts wurde übernommen oder freigegeben.");
+    expect(markup).toContain("Keine Produktionsentwürfe zur Prüfung.");
+    expect(markup).not.toContain("Noch keine Produktionsdaten erkannt");
+    expect(markup).not.toContain("Erkannte Komponenten und Prüfpunkte anzeigen");
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("progress-ring--done");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
@@ -183,7 +177,7 @@ describe("production input panel", () => {
       }
     );
 
-    expect(markup).toContain("Kundenanfrage übernehmen");
+    expect(markup).toContain("Angebot als KI-Entwurf prüfen");
     expect(markup).toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("Analyse abgeschlossen");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
@@ -198,7 +192,7 @@ describe("production input panel", () => {
       }
     );
 
-    expect(markup).toContain("Kundenanfrage übernehmen");
+    expect(markup).toContain("Angebot als KI-Entwurf prüfen");
     expect(markup).toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');
@@ -242,7 +236,7 @@ describe("production input panel", () => {
   it("keeps the document retry action inactive until a file is available", () => {
     const markup = renderPanel(buildSourceInput());
 
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Datei auswerten<\/button>/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>KI-Entwurf erstellen<\/button>/);
   });
 
   it("keeps the document retry action available for a retained failed file", () => {
@@ -253,7 +247,7 @@ describe("production input panel", () => {
     );
 
     expect(markup).toContain("Ausgewählt: problemangebot.pdf");
-    expect(markup).toMatch(/<button(?:(?!disabled).)*>Datei auswerten<\/button>/);
+    expect(markup).toMatch(/<button(?:(?!disabled).)*>KI-Entwurf erstellen<\/button>/);
   });
 
   it("shows the recognized production data directly after document analysis", () => {
@@ -290,7 +284,7 @@ describe("production input panel", () => {
       }
     );
 
-    expect(markup).toContain("Analyse abgeschlossen für Angebot_Koepff.pdf.");
+    expect(markup).toContain("KI-Entwurf erstellt für Angebot_Koepff.pdf.");
     expect(markup).toContain(
       "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
     );

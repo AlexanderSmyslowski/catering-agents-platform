@@ -11,7 +11,9 @@ import {
 
 type ProductionDraftReviewPanelProps = {
   submitting: boolean;
-  onDraftChanged?: () => Promise<void>;
+  embedded?: boolean;
+  latestOnly?: boolean;
+  onDraftChanged?: (appliedSpecId?: string) => Promise<void>;
 };
 
 const reviewDecisionActions = [
@@ -148,6 +150,8 @@ function formatReviewCardMeta(card: ProductionDraftReviewCard): string {
 
 export function ProductionDraftReviewPanel({
   submitting,
+  embedded = false,
+  latestOnly = false,
   onDraftChanged
 }: ProductionDraftReviewPanelProps) {
   const [drafts, setDrafts] = useState<ProductionDraft[]>([]);
@@ -207,9 +211,9 @@ export function ProductionDraftReviewPanel({
   async function applyDraft(draftId: string) {
     setLoading(true);
     try {
-      await applyProductionDraft(draftId);
+      const response = await applyProductionDraft(draftId);
       setMessage("Produktionsentwurf übernommen.");
-      await onDraftChanged?.();
+      await onDraftChanged?.(response.applied?.specId);
       await reloadDrafts({ clearMessage: false });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht übernommen werden.");
@@ -218,25 +222,28 @@ export function ProductionDraftReviewPanel({
     }
   }
 
-  const visibleDrafts = drafts.filter((draft) =>
-    draft.status === "pending_review" || canApplyProductionDraft(draft)
-  );
+  const visibleDrafts = drafts
+    .filter((draft) => draft.status === "pending_review" || canApplyProductionDraft(draft))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const displayedDrafts = latestOnly ? visibleDrafts.slice(0, 1) : visibleDrafts;
 
   return (
-    <section className="form-panel" aria-label="Produktionsentwurf-Prüfung">
-      <header>
-        <p className="eyebrow">Entwurf ohne Übernahme</p>
-        <h3>Produktionsentwürfe prüfen</h3>
-        <p className="helper-text">Produktionsentwürfe werden erst nach Prüfung für eine spätere Übernahme vorbereitet.</p>
-      </header>
+    <section className={embedded ? "production-draft-review" : "form-panel production-draft-review"} aria-label="Produktionsentwurf-Prüfung">
+      {!embedded ? (
+        <header>
+          <p className="eyebrow">Entwurf ohne Übernahme</p>
+          <h3>Produktionsentwürfe prüfen</h3>
+          <p className="helper-text">Produktionsentwürfe werden erst nach Prüfung für eine spätere Übernahme vorbereitet.</p>
+        </header>
+      ) : null}
       {message ? (
         <p className="helper-text" role="status">
           {message}
         </p>
       ) : null}
-      {visibleDrafts.length > 0 ? (
+      {displayedDrafts.length > 0 ? (
         <ul className="item-list compact">
-          {visibleDrafts.map((draft) => (
+          {displayedDrafts.map((draft) => (
             <li key={draft.draftId}>
               <strong>{eventSpecTitle(draft)}</strong>
               <p className="helper-text">

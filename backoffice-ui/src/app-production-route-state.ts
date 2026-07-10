@@ -36,7 +36,8 @@ export function buildAppProductionRouteState(
   input: AppProductionRouteStateInput
 ): AppProductionRouteState {
   const productionQuestionActions = buildProductionQuestionActions({
-    openSpecForQuestions: input.openSpecForQuestions
+    openSpecForQuestions: input.openSpecForQuestions,
+    refreshAfterDraftDecision: input.refreshAfterDraftDecision
   });
   const productionQuestionEditorActions = buildProductionQuestionEditorActions({
     setEditingEventType: input.setEditingEventType,

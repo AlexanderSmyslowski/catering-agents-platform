@@ -3,9 +3,19 @@ import {
   buildProductionIntakeActionsAppBoundary,
   type ProductionIntakeActionsAppBoundaryInput
 } from "../backoffice-ui/src/production-intake-actions-app-boundary.js";
+import type { ProductionDraft } from "../backoffice-ui/src/api.js";
 
 function file(name = "angebot.pdf") {
   return new File(["Lunch fuer 40 Personen"], name, { type: "application/pdf" });
+}
+
+function draft(): ProductionDraft {
+  return {
+    draftId: "production-draft-upload-1",
+    status: "pending_review",
+    reviewCards: [],
+    createdAt: "2026-07-10T10:00:00.000Z"
+  };
 }
 
 function manualInput() {
@@ -30,6 +40,7 @@ function input(
     createAcceptedSpecFromText: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-text-1" } })),
     intakeText: "Lunch fuer 40 Personen mit Tomatensuppe.",
     createAcceptedSpecFromDocument: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-upload-1" } })),
+    createProductionDraftFromDocument: vi.fn(async () => ({ draft: draft() })),
     intakeFile: selectedFile,
     intakeChannel: "pdf_upload",
     createAcceptedSpecFromManualForm: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-manual-1" } })),
@@ -95,11 +106,13 @@ describe("production intake actions app boundary", () => {
     boundary.manualSpecActions.setEventType("lunch");
     await boundary.handleIntakeSubmit();
     await boundary.submitSelectedDocument();
+    await boundary.submitSelectedIntakeDocument();
     await boundary.handleManualSpecSubmit();
 
     expect(boundaryInput.manualSpecForm.setManualEventType).toHaveBeenCalledWith("lunch");
     expect(boundaryInput.createAcceptedSpecFromText).toHaveBeenCalledWith(boundaryInput.intakeText);
     expect(boundaryInput.createAcceptedSpecFromDocument).toHaveBeenCalledWith(selectedFile, "pdf_upload");
+    expect(boundaryInput.createProductionDraftFromDocument).toHaveBeenCalledWith(selectedFile);
     expect(boundaryInput.createAcceptedSpecFromManualForm).toHaveBeenCalledWith(manualInput());
     expect(boundaryInput.resetManualSpecDraft).toHaveBeenCalledTimes(1);
     expect(boundaryInput.setError).not.toHaveBeenCalled();
@@ -113,6 +126,7 @@ describe("production intake actions app boundary", () => {
     await boundary.processIncomingProductionFile(droppedFile, "email");
 
     expect(boundaryInput.startIncomingProductionFile).toHaveBeenCalledWith(droppedFile, "email");
-    expect(boundaryInput.createAcceptedSpecFromDocument).toHaveBeenCalledWith(droppedFile, "email");
+    expect(boundaryInput.createProductionDraftFromDocument).toHaveBeenCalledWith(droppedFile);
+    expect(boundaryInput.createAcceptedSpecFromDocument).not.toHaveBeenCalled();
   });
 });

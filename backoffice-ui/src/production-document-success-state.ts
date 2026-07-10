@@ -22,3 +22,13 @@ export async function completeProductionStateAfterDocumentSuccess(
   await actions.refreshDashboard();
   actions.setNotice(`Dokument ${file.name} wurde übernommen und analysiert.`);
 }
+
+export async function completeProductionDraftStateAfterDocumentSuccess(
+  file: File,
+  actions: Omit<ProductionDocumentSuccessActions, "setFocusedProductionSpecId">
+) {
+  actions.completeIncomingProductionFile();
+  actions.completeDocumentProgress();
+  await actions.refreshDashboard();
+  actions.setNotice(`KI-Entwurf für ${file.name} ist bereit zur Prüfung.`);
+}
