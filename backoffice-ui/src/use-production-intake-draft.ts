@@ -18,7 +18,6 @@ export function useProductionIntakeDraft() {
   }
 
   function completeIncomingProductionFile() {
-    setIntakeFile(null);
     setDragActive(false);
   }
 

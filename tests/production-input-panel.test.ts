@@ -152,7 +152,7 @@ describe("production input panel", () => {
     expect(markup).not.toContain(
       "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe."
     );
-    expect(markup).toContain("Erkannte Produktionsdaten");
+    expect(markup).toContain("KI-Entwurf prüfen");
     expect(markup).toContain("Noch keine Produktionsdaten erkannt");
     expect(markup).toContain("Quelle wurde verarbeitet; bitte Eckdaten, Gerichte und Rückfragen prüfen.");
     expect(markup).toContain("Noch keine Gerichte erkannt.");
@@ -298,7 +298,8 @@ describe("production input panel", () => {
     expect(markup).toContain("Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.");
     expect(markup).not.toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("progress-ring--done");
-    expect(markup).toContain("KI-Entwurf aus Angebot");
+    expect(markup).toContain("KI-Entwurf prüfen");
+    expect(markup).toContain("Noch nichts ist berechnet oder freigegeben.");
     expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
     expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");
     expect(markup).toContain("Sofortübersicht Produktionsdaten");

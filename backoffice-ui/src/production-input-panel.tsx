@@ -1,7 +1,10 @@
 import {
   type CSSProperties,
   type ChangeEvent,
-  type DragEvent
+  type DragEvent,
+  useEffect,
+  useRef,
+  useState
 } from "react";
 import type { IntakeDocumentChannel, IntakeRequestDetail } from "./api.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
@@ -122,6 +125,13 @@ function buildUploadReviewAction(summary: NonNullable<ReturnType<typeof buildPro
   };
 }
 
+function isPdfFile(file: File | null): file is File {
+  if (!file) {
+    return false;
+  }
+  return file.type.toLowerCase().includes("pdf") || file.name.toLowerCase().endsWith(".pdf");
+}
+
 export function ProductionInputPanel({
   submitting,
   sourceInput,
@@ -150,6 +160,33 @@ export function ProductionInputPanel({
   const uploadReviewAction = panelState.uploadResultSummary
     ? buildUploadReviewAction(panelState.uploadResultSummary)
     : undefined;
+  const reviewAnchorRef = useRef<HTMLDivElement>(null);
+  const reviewWasVisibleRef = useRef(hasUploadResultSummary);
+  const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string>();
+
+  useEffect(() => {
+    const reviewBecameVisible = !reviewWasVisibleRef.current && hasUploadResultSummary;
+    reviewWasVisibleRef.current = hasUploadResultSummary;
+    if (!reviewBecameVisible) {
+      return;
+    }
+
+    const reviewAnchor = reviewAnchorRef.current;
+    reviewAnchor?.focus({ preventScroll: true });
+    reviewAnchor?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+  }, [hasUploadResultSummary]);
+
+  useEffect(() => {
+    const file = sourceInput.intakeFile;
+    if (!isPdfFile(file) || typeof URL.createObjectURL !== "function") {
+      setSourcePreviewUrl(undefined);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setSourcePreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [sourceInput.intakeFile]);
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
@@ -246,12 +283,21 @@ export function ProductionInputPanel({
               </p>
               <p className="helper-text">{panelState.completedProgressHelperLabel}</p>
               {panelState.uploadResultSummary ? (
-                <div className="upload-result-summary" aria-label="Erkannte Produktionsdaten">
-                  <div>
-                    <p className="eyebrow">KI-Entwurf aus Angebot</p>
+                <div
+                  ref={reviewAnchorRef}
+                  id="production-upload-review"
+                  className="upload-result-summary"
+                  aria-label="KI-Entwurf prüfen"
+                  tabIndex={-1}
+                >
+                  <header className="upload-result-summary__header">
+                    <h3>KI-Entwurf prüfen</h3>
+                    <p className="helper-text">
+                      Aus {sourceInput.activeDocumentName ?? "der Quelle"} erkannt. Noch nichts ist berechnet oder freigegeben.
+                    </p>
                     <strong>{panelState.uploadResultSummary.eventLabel}</strong>
                     <p className="helper-text">{panelState.uploadResultSummary.summaryLabel}</p>
-                  </div>
+                  </header>
                   <div className="upload-result-snapshot" aria-label="Sofortübersicht Produktionsdaten">
                     {panelState.uploadResultSummary.snapshotItems.map((item) => (
                       <div key={item.key} className={`upload-result-snapshot__item upload-result-snapshot__item--${item.status}`}>
@@ -272,6 +318,25 @@ export function ProductionInputPanel({
                         {uploadReviewAction.cta}
                       </a>
                     </div>
+                  ) : null}
+                  {sourcePreviewUrl && isPdfFile(sourceInput.intakeFile) ? (
+                    <details className="source-preview-details">
+                      <summary>
+                        <span>Originalangebot anzeigen</span>
+                        <strong>{sourceInput.intakeFile.name}</strong>
+                      </summary>
+                      <div className="source-preview-details__body">
+                        <iframe
+                          src={sourcePreviewUrl}
+                          title={`Originalangebot ${sourceInput.intakeFile.name}`}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                        />
+                        <a href={sourcePreviewUrl} target="_blank" rel="noreferrer">
+                          Original in neuem Fenster öffnen
+                        </a>
+                      </div>
+                    </details>
                   ) : null}
                   <details className="upload-result-review-details">
                     <summary>Erkannte Komponenten und Prüfpunkte anzeigen</summary>
