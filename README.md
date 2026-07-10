@@ -61,6 +61,8 @@ Fuer PostgreSQL statt Dateispeicher:
 export CATERING_DATABASE_URL=postgresql://user:password@localhost:5432/catering_agents
 ```
 
+Freigegebene anonymisierte Produktionsdokumente werden mit `CATERING_PRODUCTION_DRAFT_DATA_MODE=pseudonymized_approved` aktiviert; ohne diese explizite Konfiguration bleibt der Modus `synthetic_or_demo_only`.
+
 ## Ports und Proxies
 
 Die UI proxied standardmaessig auf:

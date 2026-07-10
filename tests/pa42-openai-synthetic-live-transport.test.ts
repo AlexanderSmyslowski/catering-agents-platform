@@ -148,7 +148,19 @@ describe("PA42 OpenAI synthetic live transport", () => {
         format: {
           type: "json_schema",
           name: "production_draft_extraction",
-          strict: true
+          strict: true,
+          schema: {
+            properties: {
+              components: {
+                items: {
+                  properties: {
+                    categoryEvidence: { type: ["string", "null"] }
+                  },
+                  required: expect.arrayContaining(["categoryEvidence"])
+                }
+              }
+            }
+          }
         }
       });
 
@@ -163,7 +175,7 @@ describe("PA42 OpenAI synthetic live transport", () => {
             customerName: null,
             venueName: null,
             components: [
-              { label: "Vitello Tonnato", course: null, category: null, note: null }
+              { label: "Vitello Tonnato", course: null, category: null, categoryEvidence: null, note: null }
             ],
             openQuestions: []
           })

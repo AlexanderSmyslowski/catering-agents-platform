@@ -135,6 +135,9 @@ function buildProductionDraftContextPrompt(context: string): string {
     "- Jede kulinarische Quellposition ist genau einmal als Komponente oder offene Frage abgedeckt.",
     "- Ueberschriften, Uhrzeiten und Non-Food sind nicht als Gericht klassifiziert.",
     "- Reihenfolge und zusammengehoerende Angebotsbezeichnungen bleiben erhalten.",
+    "- category nur bei einer ausdruecklichen Quellenstelle fuer genau diese Komponente setzen.",
+    "- Ernaehrungsformen nicht aus Zutaten oder dem Gesamtsortiment ableiten; sonst category und categoryEvidence null setzen und eine offene Frage erzeugen.",
+    "- categoryEvidence muss die woertlich uebernommene Quellenstelle enthalten, die genau eine Kategorie belegt.",
     "",
     "Antwortformat:",
     "{",
@@ -144,7 +147,7 @@ function buildProductionDraftContextPrompt(context: string): string {
     "  \"attendeeCount\": 45,",
     "  \"customerName\": \"...\",",
     "  \"venueName\": \"...\",",
-    "  \"components\": [{\"label\":\"...\",\"course\":\"...\",\"category\":\"classic|vegetarian|vegan\",\"note\":\"...\"}],",
+    "  \"components\": [{\"label\":\"...\",\"course\":\"...\",\"category\":\"classic|vegetarian|vegan\",\"categoryEvidence\":\"woertliche Quellenstelle\",\"note\":\"...\"}],",
     "  \"openQuestions\": [{\"field\":\"...\",\"message\":\"...\",\"suggestedQuestion\":\"...\"}]",
     "}"
   ].join("\n");

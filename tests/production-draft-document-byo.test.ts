@@ -68,10 +68,10 @@ function extractionResponse(request: LlmReadinessProviderAdapterRequest) {
         customerName: "Frau Dr. Muster",
         venueName: "Veranstaltungshaus",
         components: [
-          { label: "Herzhaftes Gebäck zum Wein | Käsegebäck - kleine Brezel", course: "starter", category: "classic", note: null },
-          { label: "Vitello Tonnato | Riesenkapern | weisser Thunfisch", course: "starter", category: "classic", note: null },
-          { label: "Rotgarnelen | Avokado-Wasabi-Creme", course: "main", category: "classic", note: null },
-          { label: "Kokos-Cheesecake | Brombeere", course: "dessert", category: "classic", note: null }
+          { label: "Herzhaftes Gebäck zum Wein | Käsegebäck - kleine Brezel", course: "starter", category: "classic", categoryEvidence: null, note: null },
+          { label: "Vitello Tonnato | Riesenkapern | weisser Thunfisch", course: "starter", category: "classic", categoryEvidence: null, note: null },
+          { label: "Rotgarnelen | Avokado-Wasabi-Creme", course: "main", category: "classic", categoryEvidence: null, note: null },
+          { label: "Kokos-Cheesecake | Brombeere", course: "dessert", category: "classic", categoryEvidence: null, note: null }
         ],
         openQuestions: [
           {
@@ -135,6 +135,7 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(response.statusCode, response.body).toBe(201);
       expect(requests).toHaveLength(1);
       expect(requests[0].input.kind).toBe("production_draft_request");
+      expect(requests[0].input.policy.dataMode).toBe("synthetic_or_demo_only");
       expect(requests[0].promptContext).toContain("VITELLO TONNATO");
       expect(requests[0].promptContext).toContain("WEINGLÄSER");
       expect(requests[0].promptContext).toContain("8 MENÜSCHILDER");
@@ -180,6 +181,162 @@ describe("ProductionDraft document BYO extraction", () => {
     } finally {
       await app.close();
     }
+  });
+
+  it("uses the server-approved pseudonymized mode even when the client claims another mode", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const requests: LlmReadinessProviderAdapterRequest[] = [];
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-byo-production-draft-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => {
+        requests.push(request);
+        return extractionResponse(request);
+      }
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      auditLog,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {
+        CATERING_PRODUCTION_DRAFT_DATA_MODE: "pseudonymized_approved"
+      }
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: {
+          ...documentPayload(),
+          dataMode: "synthetic_or_demo_only"
+        }
+      });
+      const auditJson = JSON.stringify(await auditLog.listRecent(10));
+
+      expect(response.statusCode, response.body).toBe(201);
+      expect(requests).toHaveLength(1);
+      expect(requests[0].input.policy.dataMode).toBe("pseudonymized_approved");
+      expect(auditJson).toContain('"dataMode":"pseudonymized_approved"');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps only source-backed component categories and raises one review question for unsupported claims", async () => {
+    const sourceText = [
+      "VEGAN | GRILLGEMÜSE | RAUKEPESTO",
+      "Das Sortiment ist vegan, vegetarisch und traditionell angelegt.",
+      "RICOTTACREME | BEERENSAUCE",
+      "ORANGEN-MANDELKUCHEN"
+    ].join("\n");
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-category-evidence-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => ({
+        ok: true,
+        errors: [],
+        adapterId: "mock-category-evidence-adapter",
+        adapterMode: "synthetic_live",
+        providerId: "mock-category-evidence-provider",
+        promptSchemaId: request.promptSchemaId,
+        outputCandidate: {
+          contractVersion: llmReadinessContractVersion,
+          outputId: "output-category-evidence",
+          kind: "production_draft_extraction",
+          sourceRefs: request.input.sourceRefs,
+          humanApprovalRequired: true,
+          writesProductObject: false,
+          text: JSON.stringify({
+            eventType: "reception",
+            serviceForm: "buffet",
+            eventDate: null,
+            attendeeCount: 100,
+            customerName: null,
+            venueName: null,
+            components: [
+              {
+                label: "Grillgemüse | Raukepesto",
+                course: null,
+                category: "vegan",
+                categoryEvidence: "VEGAN | GRILLGEMÜSE | RAUKEPESTO",
+                note: null
+              },
+              {
+                label: "Ricottacreme | Beerensauce",
+                course: null,
+                category: "vegetarian",
+                categoryEvidence: "RICOTTACREME | BEERENSAUCE",
+                note: null
+              },
+              {
+                label: "Orangen-Mandelkuchen",
+                course: null,
+                category: "vegan",
+                categoryEvidence: "Das Sortiment ist vegan, vegetarisch und traditionell angelegt.",
+                note: null
+              }
+            ],
+            openQuestions: []
+          })
+        }
+      })
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: documentPayload(sourceText)
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      const draft = response.json<{ draft: ProductionDraft }>().draft;
+      const menuPlan = draft.draftArtifacts.eventSpec?.menuPlan ?? [];
+
+      expect(menuPlan.find((component) => component.label.startsWith("Grillgemüse"))?.menuCategory).toBe("vegan");
+      expect(menuPlan.find((component) => component.label.startsWith("Ricottacreme"))?.menuCategory).toBeUndefined();
+      expect(menuPlan.find((component) => component.label.startsWith("Orangen-Mandelkuchen"))?.menuCategory).toBeUndefined();
+      expect(draft.draftArtifacts.openQuestions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            field: "components.category",
+            message: expect.stringContaining("Ricottacreme | Beerensauce"),
+            suggestedQuestion: expect.stringContaining("Ernährungsformen")
+          })
+        ])
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects an invalid server data-mode configuration at startup", () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+
+    expect(() => buildProductionApp({
+      dataRoot,
+      env: {
+        CATERING_PRODUCTION_DRAFT_DATA_MODE: "raw_customer_data"
+      }
+    })).toThrow(
+      'CATERING_PRODUCTION_DRAFT_DATA_MODE must be "synthetic_or_demo_only" or "pseudonymized_approved".'
+    );
   });
 
   it("rejects invalid BYO extraction output with 422 and persists no draft", async () => {

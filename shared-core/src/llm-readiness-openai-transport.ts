@@ -81,9 +81,10 @@ function buildProductionDraftExtractionSchema() {
             label: { type: "string" },
             course: { type: ["string", "null"] },
             category: { type: ["string", "null"] },
+            categoryEvidence: { type: ["string", "null"] },
             note: { type: ["string", "null"] }
           },
-          required: ["label", "course", "category", "note"]
+          required: ["label", "course", "category", "categoryEvidence", "note"]
         }
       },
       openQuestions: {

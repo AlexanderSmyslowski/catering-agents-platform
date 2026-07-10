@@ -65,9 +65,10 @@ export const llmReadinessPromptArtifacts = [
       "Extrahiere Eventdaten, Personenzahl, Serviceform, alle kulinarischen Angebotspositionen und nur wirklich notwendige Rueckfragen. " +
       "Gehe den Dokumenttext in Quellreihenfolge Zeile fuer Zeile durch. Jedes Gericht, Dessert, jede Sauce, Beilage oder andere kulinarische Position muss genau einmal als components-Eintrag oder bei echter Unlesbarkeit als openQuestions-Eintrag vorkommen. " +
       "Verbinde zusammengehoerende Bezeichnungen einer Position, ohne eigenstaendige Positionen zusammenzufassen. Bewahre die sichtbare Angebotsbezeichnung im label. " +
+      "Setze eine Ernaehrungskategorie nur, wenn eine woertliche Quellenstelle genau diese Kategorie fuer die einzelne Komponente nennt; liefere diese Stelle als categoryEvidence. Leite Kategorien nie aus Zutaten oder einer Aussage zum Gesamtsortiment ab. " +
       "Uhrzeiten, Abschnittsueberschriften, Buffetnamen, Geschirr, Glaeser, Schilder, Mobiliar und andere Non-Food- oder Servicepositionen sind keine Menuekomponenten. Wenn daraus eine Produktionsklaerung folgt, erfasse sie als openQuestions-Eintrag. " +
       "Lasse keine kulinarische Position still weg und fuehre vor der Ausgabe einen Vollstaendigkeitsabgleich gegen jede relevante Quellzeile durch. " +
-      "Antwortformat: JSON mit eventType, serviceForm, eventDate, attendeeCount, customerName, venueName, components und openQuestions."
+      "Antwortformat: JSON mit eventType, serviceForm, eventDate, attendeeCount, customerName, venueName, components inklusive categoryEvidence und openQuestions."
   },
   {
     promptArtifactId: "intake-shadow-extraction.prompt",
