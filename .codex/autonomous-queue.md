@@ -23,22 +23,18 @@ _Keine Einträge._
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **Provider-Quota für Slice 2.3d weiterhin blockiert.** · Nach
-  Aufladung lief ein Smoke (`offer-570`) erfolgreich, danach wurden mit
-  Timeout-/Checkpoint-Fix 332 Restfälle fortgesetzt. Ergebnis: 183
-  weitere erfolgreiche Klassifikationen (inkl. Smoke), dann erneut
-  `current quota exceeded`. Kombinierter Stand: 916 Quellen /
-  740 erfolgreiche Klassifikationen / 26 `no_offer_evidence_retained` /
-  150 Quota-Fehler. Für einen weiteren Versuch muss zuerst im
-  Provider-Dashboard/Billing real Headroom geschaffen werden; vorher
-  keine weiteren Provider-Calls. Neue Resume-Liste:
-  `/tmp/catering-offer-package-night-run-remaining-quota-after-topup-source-ids.txt`
-  (150 IDs, `offer-762` bis `offer-916`).
+_Keine Einträge._
 
 ---
 
 ## ERLEDIGT
 
+- **Slice 2.3d Batch bewusst beendet.** · Alexander entschied am
+  2026-07-10, den Offer-Package-Batch nicht erneut fortzusetzen. Der
+  vorhandene Teilkorpus bleibt bei 916 Quellen / 740 erfolgreichen
+  Klassifikationen / 26 `no_offer_evidence_retained` / 150
+  Quota-Fehlern. Die 150 Restfälle werden nicht erneut an einen Provider
+  gesendet; dafür besteht kein Budget- oder Resume-Auftrag.
 - Slice 2.3d Resume nach API-Aufladung teilweise abgeschlossen in Branch
   `codex/offer-batch-timeout-checkpoint`. Vor dem Vollresume wurde ein
   hängender Providerlauf ohne Report abgebrochen; Wurzelbefund:
