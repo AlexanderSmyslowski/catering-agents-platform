@@ -57,6 +57,7 @@ describe("production route view state", () => {
     expect(viewState.workbenchSummary).toEqual({
       activeSpecLabel: "Lunch · 42 Pax",
       activeTechnicalContextLabel: undefined,
+      hasActiveContext: true,
       readinessLabel: "vollständig",
       planStatusLabel: "Plan bereit",
       purchaseStatusLabel: "1 Liste",

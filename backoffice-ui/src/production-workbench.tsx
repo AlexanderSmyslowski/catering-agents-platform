@@ -6,6 +6,7 @@ import { buildProductionMiniPilotCardState } from "./production-mini-pilot-card-
 import { buildProductionWorkbenchOutputAnchorState } from "./production-workbench-output-anchor-state.js";
 
 export type ProductionWorkbenchSummary = {
+  hasActiveContext?: boolean;
   activeSpecLabel: string;
   activeTechnicalContextLabel?: string;
   readinessLabel: string;
@@ -192,14 +193,15 @@ export function ProductionConversationalWorkbench({
     purchaseStatusLabel,
     productionObjectStatusLabel
   });
-  const layoutClassName = hasVisibleProductionContext({
+  const hasActiveContext = Boolean(summary.hasActiveContext) || hasVisibleProductionContext({
     answeredQuestionCount,
     openVisibleQuestionCount,
     planStatusLabel,
     productionObjectCount,
     purchaseListCount,
     purchaseStatusLabel
-  })
+  });
+  const layoutClassName = hasActiveContext
     ? "production-conversation-layout production-conversation-layout--active-context"
     : "production-conversation-layout";
 
@@ -236,61 +238,63 @@ export function ProductionConversationalWorkbench({
         </div>
       </article>
 
-      <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
-        <p className="eyebrow">Bestandsdaten im Hintergrund</p>
-        <strong>{activeSpecLabel}</strong>
-        <p className="helper-text">
-          Kontext aus Demo, Bestand oder vorherigem Lauf. Starte oben mit einer Datei oder Texteingabe, wenn du einen neuen Auftrag prüfen willst.
-        </p>
-        <ul className="production-calm-summary__facts" aria-label="Datenstand Produktionsauftrag">
-          {summaryFacts.map((fact) => (
-            <li key={fact.label}>
-              <span>{fact.label}: </span>
-              <strong>{fact.value}</strong>
-            </li>
-          ))}
-        </ul>
-        <p className="helper-text">
-          Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.
-        </p>
-        <p className="helper-text">Rückfragen: {formatQuestionStatus(questionCount)}.</p>
-        {hasProductionResults ? (
-          <a className="ghost-link" href={`#${productionOutputAnchorId}`}>
-            {productionOutputAnchor.title}
-          </a>
-        ) : null}
-        {activeTechnicalContextLabel ? (
-          <details className="technical-context-details">
-            <summary>Technische Details</summary>
-            <p className="helper-text">{activeTechnicalContextLabel}</p>
-          </details>
-        ) : null}
-        {showMiniPilotPanel ? (
-          <>
-            <div className="search-trace" aria-label="Interner Draft-Pilot">
-              <p className="eyebrow">{miniPilotCard.eyebrow}</p>
-              <strong>{miniPilotCard.title}</strong>
-              <p className="helper-text">{miniPilotCard.helperText}</p>
-              <ul className="item-list trace-list">
-                {miniPilotCard.steps.map((step) => (
-                  <li key={step.title}>
-                    <strong>{step.title}</strong>
-                    <p className="helper-text">{step.body}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <MiniPilotCheckPanel
-              rawResult={miniPilotRawResult}
-              onRawResultChange={setMiniPilotRawResult}
-              reportState={miniPilotReportState}
-              storageHintLabel={miniPilotStorageHintLabel}
-            />
-          </>
-        ) : null}
-      </aside>
+      {hasActiveContext ? (
+        <>
+          <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
+            <p className="eyebrow">Bestandsdaten im Hintergrund</p>
+            <strong>{activeSpecLabel}</strong>
+            <p className="helper-text">
+              Kontext aus Demo, Bestand oder vorherigem Lauf. Starte oben mit einer Datei oder Texteingabe, wenn du einen neuen Auftrag prüfen willst.
+            </p>
+            <ul className="production-calm-summary__facts" aria-label="Datenstand Produktionsauftrag">
+              {summaryFacts.map((fact) => (
+                <li key={fact.label}>
+                  <span>{fact.label}: </span>
+                  <strong>{fact.value}</strong>
+                </li>
+              ))}
+            </ul>
+            <p className="helper-text">
+              Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.
+            </p>
+            <p className="helper-text">Rückfragen: {formatQuestionStatus(questionCount)}.</p>
+            {hasProductionResults ? (
+              <a className="ghost-link" href={`#${productionOutputAnchorId}`}>
+                {productionOutputAnchor.title}
+              </a>
+            ) : null}
+            {activeTechnicalContextLabel ? (
+              <details className="technical-context-details">
+                <summary>Technische Details</summary>
+                <p className="helper-text">{activeTechnicalContextLabel}</p>
+              </details>
+            ) : null}
+            {showMiniPilotPanel ? (
+              <>
+                <div className="search-trace" aria-label="Interner Draft-Pilot">
+                  <p className="eyebrow">{miniPilotCard.eyebrow}</p>
+                  <strong>{miniPilotCard.title}</strong>
+                  <p className="helper-text">{miniPilotCard.helperText}</p>
+                  <ul className="item-list trace-list">
+                    {miniPilotCard.steps.map((step) => (
+                      <li key={step.title}>
+                        <strong>{step.title}</strong>
+                        <p className="helper-text">{step.body}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <MiniPilotCheckPanel
+                  rawResult={miniPilotRawResult}
+                  onRawResultChange={setMiniPilotRawResult}
+                  reportState={miniPilotReportState}
+                  storageHintLabel={miniPilotStorageHintLabel}
+                />
+              </>
+            ) : null}
+          </aside>
 
-      <div className="production-progressive-zone">
+          <div className="production-progressive-zone">
         <details className="progressive-panel" open={questionCount > 0}>
           <summary>
             <span>Rückfragen und Antworten</span>
@@ -298,9 +302,9 @@ export function ProductionConversationalWorkbench({
           </summary>
           <div className="progressive-panel__body">{slots.questionsSlot}</div>
         </details>
-      </div>
+          </div>
 
-      <div className="production-objects-zone">
+          <div className="production-objects-zone">
         <article
           id={productionOutputAnchorId}
           className="production-output-anchor"
@@ -318,9 +322,9 @@ export function ProductionConversationalWorkbench({
           </summary>
           <div className="progressive-panel__body">{slots.productionObjectsSlot}</div>
         </details>
-      </div>
+          </div>
 
-      <div className="production-purchase-zone">
+          <div className="production-purchase-zone">
         <details className="progressive-panel production-purchase-panel" open={purchaseListCount > 0}>
           <summary>
             <span>Einkaufsliste</span>
@@ -328,9 +332,11 @@ export function ProductionConversationalWorkbench({
           </summary>
           <div className="progressive-panel__body">{slots.purchaseListSlot}</div>
         </details>
-      </div>
+          </div>
 
-      <div className="production-lower-zones">{slots.lowerSlots}</div>
+          <div className="production-lower-zones">{slots.lowerSlots}</div>
+        </>
+      ) : null}
     </section>
   );
 }

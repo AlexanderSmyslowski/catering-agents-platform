@@ -85,26 +85,15 @@ export function selectFocusedProductionSpec(input: {
     return undefined;
   }
 
-  const productionSearchActive = input.route === "production" && input.searchText.trim().length > 0;
   const preferred = input.focusedProductionSpecId
     ? input.filteredSpecs.find((spec) => String(spec.specId) === input.focusedProductionSpecId)
     : undefined;
 
-  if (productionSearchActive) {
-    return preferred ?? input.filteredSpecs[input.filteredSpecs.length - 1];
+  if (input.route === "production") {
+    return preferred;
   }
 
-  const fallback = preferred ?? input.filteredSpecs[input.filteredSpecs.length - 1] ?? input.acceptedSpecs[input.acceptedSpecs.length - 1];
-  const artifactSpecIds = new Set((input.productionArtifactSpecIds ?? []).filter(Boolean).map(String));
-  if (input.route === "production" && !preferred && artifactSpecIds.size > 0) {
-    const visibleSpecs = input.filteredSpecs.length > 0 ? input.filteredSpecs : input.acceptedSpecs;
-    const hasVisibleArtifactSpec = visibleSpecs.some((spec) => artifactSpecIds.has(String(spec.specId ?? "")));
-    if (!hasVisibleArtifactSpec) {
-      return undefined;
-    }
-  }
-
-  return fallback;
+  return preferred ?? input.filteredSpecs[input.filteredSpecs.length - 1] ?? input.acceptedSpecs[input.acceptedSpecs.length - 1];
 }
 
 export function selectCurrentProductionItems<T extends Record<string, unknown>>(input: {

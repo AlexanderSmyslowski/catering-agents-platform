@@ -60,9 +60,24 @@ describe("app dashboard route state", () => {
     expect(state.isInitialProductionLoading).toBe(false);
     expect(state.selectedDraft?.draftId).toBe("draft-old");
     expect(state.activeOfferDraft?.draftId).toBe("draft-old");
-    expect(state.activeOfferSpec?.specId).toBe("spec-current");
+    expect(state.activeOfferSpec).toBeUndefined();
     expect(state.recipeReviewCounts).toEqual({ approved: 1, reviewRequired: 1, rejected: 0 });
     expect(state.recipeReviewStatusLabel).toBe("1 zu prüfen");
+  });
+
+  it("does not open the latest offer data without an explicit selection", () => {
+    const state = buildAppDashboardRouteState({
+      dashboard: dashboard(),
+      route: "offer",
+      loading: false,
+      searchText: "",
+      selectedDraftId: undefined
+    });
+
+    expect(state.filteredOfferDrafts).toHaveLength(2);
+    expect(state.selectedDraft).toBeUndefined();
+    expect(state.activeOfferDraft).toBeUndefined();
+    expect(state.activeOfferSpec).toBeUndefined();
   });
 
   it("keeps the empty home loading and offer fallback behavior", () => {

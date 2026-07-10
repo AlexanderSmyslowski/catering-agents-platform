@@ -336,6 +336,18 @@ async function renderRoute(pathname: "/angebot" | "/produktion"): Promise<string
     await Promise.resolve();
   });
 
+  const historySelector = pathname === "/angebot"
+    ? ".offer-history-details .quiet-list__button"
+    : ".production-filter-details .quiet-list__button";
+  const firstJob = container.querySelector<HTMLButtonElement>(historySelector);
+  if (firstJob) {
+    await act(async () => {
+      firstJob.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
   const content = document.body.textContent ?? "";
 
   await act(async () => {
@@ -394,10 +406,8 @@ describe("backoffice production presentation smoke", () => {
 
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsagent-Chat");
-    expect(content).toContain("Anfrageeingang");
     expect(content).toContain("Kundenanfrage übernehmen");
-    expect(content).toContain("Maximal 25 MB");
-    expect(content).toContain("Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar.");
+    expect(content).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");
     expect(content).toContain("Datei auswählen");
     expect(content).toContain("Erkannte Eckdaten");
     expect(content).toContain("Klärbereich");

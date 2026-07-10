@@ -6,6 +6,7 @@ import {
   isInitialProductionDashboardLoading,
   mapSpecsById,
   selectActiveOfferSpec,
+  selectOfferSpecForDraft,
   selectRecordByStringId
 } from "../backoffice-ui/src/app-dashboard-selectors.js";
 import type { DashboardState } from "../backoffice-ui/src/api.js";
@@ -95,5 +96,17 @@ describe("app dashboard selectors", () => {
     expect(selectRecordByStringId(drafts, "draftId")).toBeUndefined();
     expect(selectActiveOfferSpec(specs, filteredSpecs)).toBe(filteredSpecs[0]);
     expect(selectActiveOfferSpec(specs, [])).toBe(specs[1]);
+  });
+
+  it("links an offer selection only to the spec promoted from that draft", () => {
+    const unrelated = { specId: "spec-unrelated", draftId: "draft-other" };
+    const linked = {
+      specId: "spec-linked",
+      sourceLineage: [{ sourceType: "offer_draft", reference: "draft-selected" }]
+    };
+
+    expect(selectOfferSpecForDraft([unrelated, linked], "draft-selected")).toBe(linked);
+    expect(selectOfferSpecForDraft([unrelated, linked], "draft-missing")).toBeUndefined();
+    expect(selectOfferSpecForDraft([unrelated, linked])).toBeUndefined();
   });
 });

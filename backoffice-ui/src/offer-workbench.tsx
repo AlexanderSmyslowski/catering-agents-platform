@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
@@ -144,7 +144,11 @@ function renderDraftFocusLabel(draft?: Record<string, unknown>): string {
   if (!draft) {
     return "kein Entwurf";
   }
-  return String(draft.eventSummary ?? "Unbenannter Entwurf");
+  const spec = getDraftProposedSpec(draft);
+  const customer = String((spec?.customer as Record<string, unknown> | undefined)?.name ?? "").trim();
+  return spec && customer
+    ? `${customer} · ${getSpecLabel(spec)}`
+    : String(draft.eventSummary ?? "Unbenannter Entwurf");
 }
 
 function renderOfferNextStep(draft?: Record<string, unknown>): string {
@@ -206,6 +210,16 @@ export function OfferConversationalWorkbench({
   const focusedOpenQuestions = Array.isArray(focusedDraft?.openQuestions)
     ? (focusedDraft.openQuestions as string[])
     : [];
+  const [historySearch, setHistorySearch] = useState("");
+  const visibleOfferDrafts = useMemo(() => {
+    const query = historySearch.trim().toLowerCase();
+    if (!query) {
+      return [...filteredOfferDrafts].reverse();
+    }
+    return [...filteredOfferDrafts]
+      .reverse()
+      .filter((draft) => `${renderDraftFocusLabel(draft)} ${renderDraftSummary(draft)}`.toLowerCase().includes(query));
+  }, [filteredOfferDrafts, historySearch]);
 
   return (
     <section className="offer-conversation-layout" aria-label="Angebotsagent Conversational Workbench">
@@ -224,6 +238,27 @@ export function OfferConversationalWorkbench({
           onChange={(event) => setOfferText(event.target.value)}
           placeholder="Kundenanfrage oder E-Mail-Text hier einfügen …"
         />
+        <div className="quiet-action-row" aria-label="Anfrage als Datei übernehmen">
+          <label className="secondary-button">
+            Datei auswählen
+            <input
+              className="visually-hidden"
+              aria-label="Anfragedatei auswählen"
+              type="file"
+              accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                setIntakeChannel("pdf_upload");
+                setIntakeFile(event.target.files?.[0] ?? null);
+              }}
+            />
+          </label>
+          {intakeFile ? <span>{intakeFile.name}</span> : null}
+          {intakeFile ? (
+            <button disabled={submitting} onClick={() => void submitIntakeDocument()}>
+              Datei als Anfrage erfassen
+            </button>
+          ) : null}
+        </div>
         <div className="offer-composer__next-step">
           <button disabled={submitting} onClick={() => void submitOfferText()}>
             Entwurf aus Text erstellen
@@ -232,65 +267,102 @@ export function OfferConversationalWorkbench({
         </div>
       </article>
 
-      <aside className="offer-calm-summary" aria-label="Kompakte Ergebniszusammenfassung">
-        <p className="eyebrow">Zusammenfassung</p>
-        <strong>{renderDraftSummary(focusedDraft)}</strong>
-        <p className="helper-text">Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.</p>
-        <p className="helper-text">
-          Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.
-        </p>
-        <p className="helper-text">
-          Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.
-        </p>
-        <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
-        <p className="helper-text">
-          Produktionsübergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktueller Vorgang:{" "}
-          {summaryActiveSpec ? `${getSpecLabel(summaryActiveSpec)} (${getReadinessLabel(summaryActiveSpec)})` : "keine"}
-        </p>
-        <p className="helper-text">
-          {focusedDraft
-            ? "Export: Angebots-HTML für den aktuellen Entwurf bereit"
-            : "Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden."}
-        </p>
-        {focusedDraft || summaryActiveSpec || focusedDraftSource || latestSourceLabel ? (
-          <details className="technical-context-details">
-            <summary>Technische Details</summary>
-            <p className="helper-text">Entwurf: {focusedDraftId}</p>
-            {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
-            <p className="helper-text">Quelle: {focusedDraftSource ?? latestSourceLabel}</p>
-            {summaryActiveSpec ? (
-              <p className="helper-text">
-                Aktive Spezifikation: {String(summaryActiveSpec.specId ?? "-")} ({getReadinessLabel(summaryActiveSpec)})
-              </p>
-            ) : null}
-          </details>
-        ) : null}
-        {showMiniPilotPanel ? (
-          <>
-            <div className="search-trace" aria-label="Interner Draft-Pilot">
-              <p className="eyebrow">{miniPilotCard.eyebrow}</p>
-              <strong>{miniPilotCard.title}</strong>
-              <p className="helper-text">{miniPilotCard.helperText}</p>
-              <ul className="item-list trace-list">
-                {miniPilotCard.steps.map((step) => (
-                  <li key={step.title}>
-                    <strong>{step.title}</strong>
-                    <p className="helper-text">{step.body}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <MiniPilotCheckPanel
-              rawResult={miniPilotRawResult}
-              onRawResultChange={setMiniPilotRawResult}
-              reportState={miniPilotReportState}
-              storageHintLabel={miniPilotStorageHintLabel}
-            />
-          </>
-        ) : null}
-      </aside>
+      <details className="panel secondary-workspace offer-history-details">
+        <summary>
+          <span className="eyebrow">Aufträge</span>
+          <span className="subsection-title">Frühere Angebotsaufträge öffnen</span>
+          <span className="helper-text">
+            {filteredOfferDrafts.length === 1 ? "1 Auftrag" : `${filteredOfferDrafts.length} Aufträge`}
+          </span>
+        </summary>
+        <div className="secondary-workspace__content">
+          <input
+            className="search"
+            aria-label="Frühere Angebotsaufträge durchsuchen"
+            placeholder="Kunde, Anlass, Datum oder Personen suchen"
+            value={historySearch}
+            onChange={(event) => setHistorySearch(event.target.value)}
+          />
+          <ul className="quiet-list">
+            {visibleOfferDrafts.map((draft) => (
+              <li key={String(draft.draftId)}>
+                <button
+                  type="button"
+                  className="quiet-list__button"
+                  disabled={submitting}
+                  onClick={() => setSelectedDraftId(String(draft.draftId))}
+                >
+                  <strong>{renderDraftFocusLabel(draft)}</strong>
+                  <span>{renderDraftSummary(draft)}</span>
+                </button>
+              </li>
+            ))}
+            {visibleOfferDrafts.length === 0 ? <li>Keine passenden Aufträge gefunden.</li> : null}
+          </ul>
+        </div>
+      </details>
 
-      <div className="offer-progressive-zone">
+      {focusedDraft ? (
+        <>
+          <aside className="offer-calm-summary" aria-label="Kompakte Ergebniszusammenfassung">
+            <p className="eyebrow">Zusammenfassung</p>
+            <strong>{renderDraftSummary(focusedDraft)}</strong>
+            <p className="helper-text">Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.</p>
+            <p className="helper-text">
+              Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.
+            </p>
+            <p className="helper-text">
+              Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.
+            </p>
+            <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
+            <p className="helper-text">
+              Produktionsübergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktueller Vorgang:{" "}
+              {summaryActiveSpec ? `${getSpecLabel(summaryActiveSpec)} (${getReadinessLabel(summaryActiveSpec)})` : "keine"}
+            </p>
+            <p className="helper-text">
+              {focusedDraft
+                ? "Export: Angebots-HTML für den aktuellen Entwurf bereit"
+                : "Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden."}
+            </p>
+            {focusedDraft || summaryActiveSpec || focusedDraftSource || latestSourceLabel ? (
+              <details className="technical-context-details">
+                <summary>Technische Details</summary>
+                <p className="helper-text">Entwurf: {focusedDraftId}</p>
+                {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
+                <p className="helper-text">Quelle: {focusedDraftSource ?? latestSourceLabel}</p>
+                {summaryActiveSpec ? (
+                  <p className="helper-text">
+                    Aktive Spezifikation: {String(summaryActiveSpec.specId ?? "-")} ({getReadinessLabel(summaryActiveSpec)})
+                  </p>
+                ) : null}
+              </details>
+            ) : null}
+            {showMiniPilotPanel ? (
+              <>
+                <div className="search-trace" aria-label="Interner Draft-Pilot">
+                  <p className="eyebrow">{miniPilotCard.eyebrow}</p>
+                  <strong>{miniPilotCard.title}</strong>
+                  <p className="helper-text">{miniPilotCard.helperText}</p>
+                  <ul className="item-list trace-list">
+                    {miniPilotCard.steps.map((step) => (
+                      <li key={step.title}>
+                        <strong>{step.title}</strong>
+                        <p className="helper-text">{step.body}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <MiniPilotCheckPanel
+                  rawResult={miniPilotRawResult}
+                  onRawResultChange={setMiniPilotRawResult}
+                  reportState={miniPilotReportState}
+                  storageHintLabel={miniPilotStorageHintLabel}
+                />
+              </>
+            ) : null}
+          </aside>
+
+          <div className="offer-progressive-zone">
         <details className="progressive-panel" open={Boolean(focusedDraft)}>
           <summary>
             <span>Angebotsentwurf prüfen</span>
@@ -387,29 +459,6 @@ export function OfferConversationalWorkbench({
           ) : (
             <p className="helper-text">Noch kein Entwurf ausgewählt.</p>
           )}
-        </details>
-
-        <details className="progressive-panel">
-          <summary>
-            <span>Weitere Entwürfe</span>
-            <strong>{filteredOfferDrafts.length} Entwürfe</strong>
-          </summary>
-          <ul className="quiet-list">
-            {filteredOfferDrafts.map((draft) => (
-              <li key={String(draft.draftId)}>
-                <button
-                  type="button"
-                  className="quiet-list__button"
-                  disabled={submitting}
-                  onClick={() => setSelectedDraftId(String(draft.draftId))}
-                >
-                  <strong>{String(draft.draftId)}</strong>
-                  <span>{renderDraftSummary(draft)}</span>
-                </button>
-              </li>
-            ))}
-            {filteredOfferDrafts.length === 0 ? <li>Noch keine Angebotsentwürfe vorhanden.</li> : null}
-          </ul>
         </details>
 
         <details className="progressive-panel">
@@ -523,7 +572,9 @@ export function OfferConversationalWorkbench({
             </div>
           ) : null}
         </details>
-      </div>
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }

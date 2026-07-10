@@ -355,6 +355,10 @@ describe("UI critical path rehearsal", () => {
       homeRoute.container.remove();
 
       const offerRoute = await renderAppRoute("/angebot");
+      await act(async () => {
+        findButtonByText("UI Critical Path Lunch").click();
+        await flush();
+      });
       const offerText = document.body.textContent ?? "";
       expect(offerText).toContain("Angebotsagent");
       expect(offerText).toContain("UI Critical Path Lunch");

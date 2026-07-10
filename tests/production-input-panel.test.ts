@@ -91,13 +91,11 @@ describe("production input panel", () => {
   it("uses operator-facing request copy for the file import card", () => {
     const markup = renderPanel(buildSourceInput());
 
-    expect(markup).toContain("Anfrageeingang");
     expect(markup).toContain("Kundenanfrage übernehmen");
-    expect(markup).toContain("Maximal 25 MB");
-    expect(markup).toContain("Der Inhalt wird als Catering-Anfrage erfasst.");
+    expect(markup).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");
     expect(markup).toContain("Datei auswählen");
     expect(markup).toContain("Nach der Auswahl erscheint der Dateiname hier");
-    expect(markup).toContain("Anfrage als Datei übernehmen");
+    expect(markup.match(/Kundenanfrage übernehmen/g)).toHaveLength(1);
     expect(markup).toContain("PDF-Datei");
     expect(markup).toContain("Weitere Eingabe ohne Datei");
     expect(markup).toContain("Text auswerten");
@@ -186,7 +184,6 @@ describe("production input panel", () => {
     );
 
     expect(markup).toContain("Kundenanfrage übernehmen");
-    expect(markup).toContain("Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar.");
     expect(markup).toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).not.toContain("Analyse abgeschlossen");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
@@ -202,7 +199,6 @@ describe("production input panel", () => {
     );
 
     expect(markup).toContain("Kundenanfrage übernehmen");
-    expect(markup).toContain("Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar.");
     expect(markup).toContain("Datei hier ablegen oder Dateiauswahl öffnen");
     expect(markup).toContain('class="secondary-workspace production-secondary-inputs"');
     expect(markup).not.toContain('class="secondary-workspace production-secondary-inputs" open=""');

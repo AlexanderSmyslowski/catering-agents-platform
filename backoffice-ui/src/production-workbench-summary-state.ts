@@ -7,6 +7,7 @@ type ClarificationStatusCounts = {
 };
 
 export type ProductionWorkbenchSummaryStateInput = {
+  hasActiveContext?: boolean;
   activeProductionContextLabel: string;
   activeProductionTechnicalContextLabel?: string;
   focusedSpecReadinessLabel: string;
@@ -20,6 +21,7 @@ export type ProductionWorkbenchSummaryStateInput = {
 };
 
 export function buildProductionWorkbenchSummaryState({
+  hasActiveContext,
   activeProductionContextLabel,
   activeProductionTechnicalContextLabel,
   focusedSpecReadinessLabel,
@@ -32,6 +34,7 @@ export function buildProductionWorkbenchSummaryState({
   currentSpecPurchaseLists
 }: ProductionWorkbenchSummaryStateInput): ProductionWorkbenchSummary {
   return {
+    ...(hasActiveContext === undefined ? {} : { hasActiveContext }),
     activeSpecLabel: activeProductionContextLabel,
     activeTechnicalContextLabel: activeProductionTechnicalContextLabel,
     readinessLabel: focusedSpecReadinessLabel,

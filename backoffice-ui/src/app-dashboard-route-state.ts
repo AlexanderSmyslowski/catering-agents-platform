@@ -8,7 +8,7 @@ import {
   filterDashboardRecords,
   isInitialHomeDashboardLoading,
   isInitialProductionDashboardLoading,
-  selectActiveOfferSpec,
+  selectOfferSpecForDraft,
   selectRecordByStringId,
   type OfferHandoffCounts
 } from "./app-dashboard-selectors.js";
@@ -70,7 +70,10 @@ export function buildAppDashboardRouteState(input: AppDashboardRouteStateInput):
     isInitialHomeLoading: isInitialHomeDashboardLoading({ route, loading, dashboard }),
     isInitialProductionLoading: isInitialProductionDashboardLoading({ route, loading, dashboard }),
     selectedDraft,
-    activeOfferDraft: selectedDraft ?? filteredOfferDrafts[0],
-    activeOfferSpec: selectActiveOfferSpec(dashboard.acceptedSpecs, productionRecords.filteredSpecs)
+    activeOfferDraft: selectedDraft,
+    activeOfferSpec: selectOfferSpecForDraft(
+      dashboard.acceptedSpecs,
+      selectedDraft ? String(selectedDraft.draftId ?? "") : undefined
+    )
   };
 }

@@ -51,7 +51,7 @@ describe("production route state", () => {
     ).toBeUndefined();
   });
 
-  it("keeps active production search constrained to filtered specs", () => {
+  it("does not open a production search result before the operator selects it", () => {
     const filteredSpecs = [{ specId: "spec-current", label: "current" }];
 
     expect(
@@ -63,7 +63,7 @@ describe("production route state", () => {
         route: "production",
         searchText: "current"
       })
-    ).toBe(filteredSpecs[0]);
+    ).toBeUndefined();
   });
 
   it("falls back to the latest accepted spec when production search is not active", () => {
@@ -91,7 +91,7 @@ describe("production route state", () => {
     ).toBeUndefined();
   });
 
-  it("keeps the latest accepted spec when any visible spec matches production artifacts", () => {
+  it("does not infer production focus from existing artifacts", () => {
     expect(
       selectFocusedProductionSpec({
         acceptedSpecs,
@@ -101,7 +101,7 @@ describe("production route state", () => {
         route: "production",
         searchText: ""
       })
-    ).toBe(acceptedSpecs[2]);
+    ).toBeUndefined();
   });
 
   it("splits current and archived production items by focused spec", () => {

@@ -161,6 +161,16 @@ describe("backoffice intake request detail", () => {
       await Promise.resolve();
     });
 
+    const historyJob = container.querySelector<HTMLButtonElement>(
+      ".production-filter-details .quiet-list__button"
+    );
+    expect(historyJob).not.toBeNull();
+    await act(async () => {
+      historyJob?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
     expect(document.body.textContent).toContain("Ursprüngliche Intake-Anfrage");
     expect(document.body.textContent).toContain("Intake-Ursprung: Text · erhalten 2026-04-10T09:30:00.000Z");
     expect(document.body.textContent).not.toContain("requestId: request-detail-1");

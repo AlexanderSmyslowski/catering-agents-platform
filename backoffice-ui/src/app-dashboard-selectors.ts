@@ -82,3 +82,24 @@ export function selectActiveOfferSpec(
 ): Record<string, unknown> | undefined {
   return filteredSpecs[filteredSpecs.length - 1] ?? acceptedSpecs[acceptedSpecs.length - 1];
 }
+
+export function selectOfferSpecForDraft(
+  acceptedSpecs: Array<Record<string, unknown>>,
+  draftId?: string
+): Record<string, unknown> | undefined {
+  const normalizedDraftId = draftId?.trim();
+  if (!normalizedDraftId) {
+    return undefined;
+  }
+
+  return [...acceptedSpecs].reverse().find((spec) => {
+    if (String(spec.draftId ?? "").trim() === normalizedDraftId) {
+      return true;
+    }
+    const sourceLineage = Array.isArray(spec.sourceLineage) ? spec.sourceLineage : [];
+    return sourceLineage.some((source) => {
+      const record = source as Record<string, unknown>;
+      return String(record.reference ?? "").trim() === normalizedDraftId;
+    });
+  });
+}
