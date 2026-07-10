@@ -217,7 +217,7 @@ describe("production route main layout", () => {
     expect(markup).toContain("Produktionsarbeit prüfen");
     expect(markup).toContain("Freigabe");
     expect(markup).toContain("nicht erteilt");
-    expect(markup).toContain("Erkannte Produktionsdaten");
+    expect(markup).toContain("KI-Entwurf prüfen");
     expect(markup).toContain("Eventtyp: Konferenz · Datum: 2026-09-03");
     expect(markup).toContain("Teilnehmerzahl: 90 · Serviceform: Buffet");
     expect(markup).toContain("Lunchbuffet");

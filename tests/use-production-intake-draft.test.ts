@@ -53,7 +53,7 @@ describe("useProductionIntakeDraft", () => {
     expect(probe.draft.dragActive).toBe(false);
   });
 
-  it("tracks incoming file processing without changing the text draft", () => {
+  it("keeps a successfully processed file available for local review until reset", () => {
     const probe = renderProductionIntakeDraft();
     const file = new File(["Angebot"], "angebot.eml");
 
@@ -72,9 +72,15 @@ describe("useProductionIntakeDraft", () => {
       probe.draft.completeIncomingProductionFile();
     });
 
-    expect(probe.draft.intakeFile).toBeNull();
+    expect(probe.draft.intakeFile).toBe(file);
     expect(probe.draft.dragActive).toBe(false);
     expect(probe.draft.intakeChannel).toBe("email");
+
+    act(() => {
+      probe.draft.resetIntakeDraft();
+    });
+
+    expect(probe.draft.intakeFile).toBeNull();
   });
 
   it("restores failed files and clears only file/drag state on reset", () => {

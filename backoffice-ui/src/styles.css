@@ -2208,6 +2208,93 @@ button:disabled {
   background: #f7f7f5;
 }
 
+.app-shell--production-route .upload-result-summary {
+  scroll-margin-top: 4rem;
+  border-radius: 8px;
+  background: #fff;
+  outline: none;
+}
+
+.app-shell--production-route .upload-result-snapshot {
+  gap: 0;
+}
+
+.app-shell--production-route .upload-result-snapshot__item,
+.app-shell--production-route .upload-result-snapshot__item--checked,
+.app-shell--production-route .upload-result-snapshot__item--open,
+.app-shell--production-route .upload-result-snapshot__item--review {
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.app-shell--production-route .upload-review-action {
+  padding: 0.9rem 0;
+  border: 0;
+  border-top: 1px solid #dfe2e5;
+  border-radius: 0;
+  background: transparent;
+}
+
+.app-shell--production-route .upload-result-summary:focus-visible {
+  outline: 2px solid rgba(21, 23, 25, 0.22);
+  outline-offset: 3px;
+}
+
+.upload-result-summary__header {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.upload-result-summary__header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.source-preview-details {
+  padding-top: 0.75rem;
+  border-top: 1px solid #dfe2e5;
+}
+
+.source-preview-details > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.source-preview-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.source-preview-details > summary strong {
+  color: #5f6670;
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.source-preview-details__body {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.75rem;
+}
+
+.source-preview-details__body iframe {
+  width: 100%;
+  height: min(68vh, 680px);
+  border: 1px solid #d8dce1;
+  border-radius: 8px;
+  background: #f7f7f5;
+}
+
+.source-preview-details__body a {
+  width: fit-content;
+  color: #151719;
+}
+
 .app-shell--offer-route .secondary-workspace,
 .app-shell--production-route .secondary-workspace,
 .app-shell--production-route .production-filter-details,
@@ -2281,5 +2368,20 @@ button:disabled {
 
   .app-shell--production-route .production-flow-steps li {
     font-size: 0.75rem;
+  }
+
+  .app-shell--production-route .upload-result-snapshot {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .source-preview-details > summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .source-preview-details__body iframe {
+    height: 55vh;
+    min-height: 22rem;
   }
 }
