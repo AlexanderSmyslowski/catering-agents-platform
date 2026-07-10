@@ -43,7 +43,7 @@ describe("app feedback shell", () => {
     expect(renderFeedback({ loading: false })).toContain("Bestands- und Demo-Kontext ist geladen.");
   });
 
-  it("names the correct entry point for offer and production routes", () => {
+  it("keeps product routes quiet when no feedback is present", () => {
     const offer = renderToStaticMarkup(
       createElement(AppFeedbackShell, { loading: false, route: "offer" })
     );
@@ -51,9 +51,8 @@ describe("app feedback shell", () => {
       createElement(AppFeedbackShell, { loading: false, route: "production" })
     );
 
-    expect(offer).toContain("Eine neue Anfrage startest du im Eingabefeld.");
-    expect(offer).not.toContain("Produktionsauftrag");
-    expect(production).toContain("Einen neuen Produktionsauftrag startest du im Eingabebereich.");
+    expect(offer).toBe("");
+    expect(production).toBe("");
   });
 
   it("keeps feedback before route content so sticky toasts stay near the top", () => {

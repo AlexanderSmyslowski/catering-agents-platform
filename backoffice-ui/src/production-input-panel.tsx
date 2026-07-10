@@ -165,30 +165,27 @@ export function ProductionInputPanel({
           onChange={sourceInputActions.handleFileSelection}
         />
       ) : null}
-      <div className={compactInputMode ? "upload-shortcut-bar upload-shortcut-bar--compact" : "upload-shortcut-bar"}>
-        <div>
-          <p className="eyebrow">Anfrageeingang</p>
-          <strong>{compactInputMode ? "Weitere Anfrage übernehmen" : "Kundenanfrage übernehmen"}</strong>
-          <p className="helper-text">
-            PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der Inhalt wird als Catering-Anfrage erfasst.
-            {compactInputMode
-              ? " Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar."
-              : hasFocusedProductionContext
-                ? " Bestehende Demo- oder Bestandsdaten bleiben darunter als Kontext sichtbar."
-                : " Alternativ kannst du den Text unten direkt einfügen."}
-          </p>
+      {compactInputMode ? (
+        <div className="upload-shortcut-bar upload-shortcut-bar--compact">
+          <div>
+            <p className="eyebrow">Anfrageeingang</p>
+            <strong>Weitere Anfrage übernehmen</strong>
+            <p className="helper-text">
+              PDF, E-Mail oder Textdatei auswählen. Maximal {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Der aktuelle Vorgang bleibt im Arbeitsbereich sichtbar.
+            </p>
+          </div>
+          <div className="action-row">
+            <button type="button" disabled={submitting} onClick={sourceInputActions.openFilePicker}>
+              Datei auswählen
+            </button>
+          </div>
         </div>
-        <div className="action-row">
-          <button type="button" disabled={submitting} onClick={sourceInputActions.openFilePicker}>
-            Datei auswählen
-          </button>
-        </div>
-      </div>
+      ) : null}
       {!compactInputMode ? (
         <>
           <header>
             <p className="eyebrow">Eingabequelle</p>
-            <h3>Anfrage als Datei übernehmen</h3>
+            <h3>Kundenanfrage übernehmen</h3>
           </header>
           <label
             className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}

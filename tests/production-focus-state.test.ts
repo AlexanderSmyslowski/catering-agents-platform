@@ -39,7 +39,7 @@ describe("production focus state", () => {
     expect(state.currentIntakeRequestId).toBeUndefined();
   });
 
-  it("binds the intake archive context to the narrowed production search result", () => {
+  it("keeps a narrowed production search result unfocused until it is selected", () => {
     const state = buildProductionFocusState({
       acceptedSpecs,
       filteredSpecs: [acceptedSpecs[2]],
@@ -50,9 +50,9 @@ describe("production focus state", () => {
       searchText: "other"
     });
 
-    expect(state.focusedProductionSpec).toBe(acceptedSpecs[2]);
-    expect(state.focusedProductionSpecRecord).toBe(acceptedSpecs[2]);
-    expect(state.currentIntakeRequestId).toBe("request-other");
+    expect(state.focusedProductionSpec).toBeUndefined();
+    expect(state.focusedProductionSpecRecord).toBeUndefined();
+    expect(state.currentIntakeRequestId).toBeUndefined();
   });
 
   it("clears focus and intake context when the production workspace is cleared", () => {
@@ -73,7 +73,7 @@ describe("production focus state", () => {
     });
   });
 
-  it("keeps artifact-bound production focus behavior intact", () => {
+  it("does not infer production focus from artifact ownership", () => {
     const state = buildProductionFocusState({
       acceptedSpecs,
       filteredSpecs: acceptedSpecs,
@@ -83,8 +83,8 @@ describe("production focus state", () => {
       searchText: ""
     });
 
-    expect(state.focusedProductionSpec).toBe(acceptedSpecs[2]);
-    expect(state.currentIntakeRequestId).toBe("request-other");
+    expect(state.focusedProductionSpec).toBeUndefined();
+    expect(state.currentIntakeRequestId).toBeUndefined();
 
     expect(
       buildProductionFocusState({

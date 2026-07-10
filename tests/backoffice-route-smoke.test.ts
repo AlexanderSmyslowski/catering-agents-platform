@@ -161,6 +161,36 @@ async function renderRouteLive(pathname: string): Promise<{ root: ReturnType<typ
   return { root, container };
 }
 
+async function renderRouteWithFirstHistorySelection(
+  pathname: "/angebot" | "/produktion"
+): Promise<{ text: string; html: string }> {
+  const { root, container } = await renderRouteLive(pathname);
+  const historySelector = pathname === "/angebot" ? ".offer-history-details" : ".production-filter-details";
+  const history = container.querySelector(historySelector) as HTMLDetailsElement | null;
+  if (history) {
+    history.open = true;
+  }
+  const firstJob = history?.querySelector(".quiet-list__button") as HTMLButtonElement | null;
+  if (!firstJob) {
+    throw new Error(`No history item found on ${pathname}`);
+  }
+
+  await act(async () => {
+    firstJob.click();
+    await flush();
+  });
+
+  const result = {
+    text: document.body.textContent ?? "",
+    html: document.body.innerHTML
+  };
+  await act(async () => {
+    root.unmount();
+  });
+  container.remove();
+  return result;
+}
+
 function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
   const prototype = Object.getPrototypeOf(element);
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
@@ -261,9 +291,9 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Produktionsagent");
     expect(production.text).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
     expect(production.text).toContain("Angebot hochladen oder Auftrag beschreiben");
-    expect(production.text).toContain("Bestandsdaten im Hintergrund");
-    expect(production.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
-    expect(production.text).toContain("Bestehende Aufträge, Pläne, Einkaufslisten und Rezepte durchsuchen.");
+    expect(production.text).toContain("Frühere Produktionsaufträge öffnen");
+    expect(production.text).not.toContain("Bestandsdaten im Hintergrund");
+    expect(production.html).not.toContain('aria-label="Kompakte Produktionszusammenfassung"');
   });
 
   it("keeps the home initial loading state from looking like an empty data set", async () => {
@@ -288,12 +318,10 @@ describe("backoffice route smoke", () => {
     const production = (await renderRoute("/produktion")).text;
 
     expect(production).toContain("Produktionsdaten werden geladen; noch kein Vorgang bewertet.");
-    expect(production).toContain("Arbeitsstand wird geladen · Dienststatus wird geprüft");
+    expect(production).toContain("Aufträge werden geladen");
     expect(production).toContain("Produktionsdaten laden");
-    expect(production).toContain("Produktionspläne werden geladen; noch keine Planbewertung.");
-    expect(production).toContain("Einkaufslisten werden geladen; noch keine Beschaffungsbewertung.");
-    expect(production).toContain("Rezeptbestand wird geladen; noch keine Review-Bewertung.");
-    expect(production).toContain("Healthcheck läuft · Produktionszähler werden geladen");
+    expect(production).not.toContain("Produktionspläne werden geladen; noch keine Planbewertung.");
+    expect(production).not.toContain("Einkaufslisten werden geladen; noch keine Beschaffungsbewertung.");
     expect(production).toContain("Aktuelle Plattformdaten werden geladen...");
     expect(production).not.toContain("Noch kein aktiver Vorgang");
     expect(production).not.toContain("0 Pläne · 0 Einkaufslisten · 0 Rezepte");
@@ -327,8 +355,8 @@ describe("backoffice route smoke", () => {
     const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
     expect(production).toContain("Produktionsagent");
     expect(production).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
-    expect(production).toContain("Bestandsdaten im Hintergrund");
-    expect(production).toContain("Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.");
+    expect(production).toContain("Frühere Produktionsaufträge öffnen");
+    expect(production).not.toContain("Bestandsdaten im Hintergrund");
     expect(production).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
   });
 
@@ -429,7 +457,7 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
     expect(home).toContain("Korridor-Demo vorbereitet · Actor: Betriebs-/Audit-Operator · Action: production.seed_demo");
 
-    const offer = await renderRoute("/angebot");
+    const offer = await renderRouteWithFirstHistorySelection("/angebot");
     expect(offer.text).toContain("Aktueller Entwurf: Korridor Lunchangebot");
     expect(offer.text).toContain("aktueller Vorgang: Lunch · 64 Teilnehmer · 2026-09-15 (teilweise vollständig)");
     expect(offer.text).toContain("Zur Produktion");
@@ -445,7 +473,7 @@ describe("backoffice route smoke", () => {
     expect(offerExportLink?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/corridor-draft-1/html");
     expect(productionHandoffLink?.getAttribute("href")).toBe("/produktion");
 
-    const production = await renderRoute(productionHandoffLink?.getAttribute("href") ?? "");
+    const production = await renderRouteWithFirstHistorySelection("/produktion");
     expect(production.text).toContain("Lunch · 64 Teilnehmer · 2026-09-15");
     expect(production.text).toContain("Rückfragen beantworten");
     expect(production.text).toContain("Intake-Ursprung: Dateiupload · erhalten 2026-08-20T09:00:00.000Z");
@@ -508,7 +536,7 @@ describe("backoffice route smoke", () => {
     expect(home).not.toContain("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd");
   });
 
-  it("keeps the offer route anchored on existing drafts and operative handoff status", async () => {
+  it("keeps existing offer drafts in history until the operator opens one", async () => {
     installBackofficeEnvironmentMocks({
       acceptedSpecs: [
         { specId: "offer-spec-complete", readiness: { status: "complete" }, event: { type: "lunch" } },
@@ -536,33 +564,15 @@ describe("backoffice route smoke", () => {
 
     const offer = (await renderRoute("/angebot")).text;
 
-    expect(offer).toContain("Zusammenfassung");
-    expect(offer).toContain("Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.");
-    expect(offer).toContain("Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.");
-    expect(offer).toContain("Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.");
-    expect(offer).not.toContain("Reviewer-Hinweis");
-    expect(offer).toContain("Jetzt: offene Punkte prüfen und eine Variante übernehmen. Danach kannst du das Angebot exportieren oder an die Produktion übergeben.");
+    expect(offer).toContain("Kundenanfrage einfügen und Entwurf prüfen");
+    expect(offer).toContain("Frühere Angebotsaufträge öffnen");
+    expect(offer).toContain("1 Auftrag");
     expect(offer).toContain("Sommerfest mit Buffet · 1 Variante · 1 offener Punkt");
-    expect(offer).toContain("Produktionsübergabe: 1 vollständig · 1 teilweise");
-    expect(offer).toContain("Technische Details");
-    expect(offer).toContain("aktueller Vorgang: Veranstaltung · ? Teilnehmer · offen (teilweise vollständig)");
-    expect(offer).toContain("Export: Angebots-HTML für den aktuellen Entwurf bereit");
-    expect(offer).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
-    expect(offer).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
-    expect(offer).not.toContain("Status: noch kein Ergebnis");
-    expect(offer).not.toContain("Mini-Pilot-Status vor Uebernahme");
-    expect(offer).not.toContain("Uebernahme erst nach gruenem Mini-Pilot-Check");
-    expect(offer).toContain("offer-draft-buffet");
-    expect(offer).toContain("Entwurfs-Spec: offer-draft-buffet-spec (teilweise vollständig)");
-    expect(offer).toContain("Entwurfs-Quelle: offer_service: offer-draft-buffet");
-    expect(offer).toContain("Angebotsentwurf prüfen");
-    expect(offer).toContain("Variante übernehmen: Basis");
-    expect(offer).toContain("Angebot exportieren");
-    expect(offer).toContain("Für die Produktion übernommene Veranstaltungen");
-    expect(offer).toContain("Status: vollständig");
-    expect(offer).toContain("Status: teilweise vollständig");
-    expect(offer).not.toContain("1 Entwürfe mit Varianten und Export stehen bereit.");
-    expect(offer).not.toContain("Angebotsdienst");
+    expect(offer).not.toContain("Zusammenfassung");
+    expect(offer).not.toContain("Angebotsentwurf prüfen");
+    expect(offer).not.toContain("Variante übernehmen: Basis");
+    expect(offer).not.toContain("Angebot exportieren");
+    expect(offer).not.toContain("offer-draft-buffet-spec");
   });
 
   it("keeps the empty offer route clear about next step and missing export approval artifacts", async () => {
@@ -572,20 +582,18 @@ describe("backoffice route smoke", () => {
 
     expect(offer.text).toContain("Kundenanfrage einfügen und Entwurf prüfen");
     expect(offer.text).toContain("Als Nächstes: Anfrage einfügen");
-    expect(offer.text).toContain("Jetzt: Kundenanfrage einfügen und einen prüfbaren Entwurf erstellen.");
-    expect(offer.text).toContain("Alternative Erfassung");
-    expect(offer.text).toContain("Text als Anfrage übernehmen");
-    expect(offer.text).toContain("Datei als Anfrage übernehmen");
-    expect(offer.text).toContain("Angaben übernehmen");
+    expect(offer.text).toContain("Frühere Angebotsaufträge öffnen");
+    expect(offer.text).toContain("0 Aufträge");
+    expect(offer.text).toContain("Datei auswählen");
     expect(offer.text).not.toContain("normalisieren");
     expect(offer.text).not.toContain("Spezifikation anlegen");
     expect(offer.text).not.toContain("Operative Übergabe und Audit");
-    expect(offer.text).toContain("Noch kein Angebotsentwurf vorhanden.");
-    expect(offer.text).toContain("Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden.");
+    expect(offer.text).not.toContain("Noch kein Angebotsentwurf vorhanden.");
+    expect(offer.text).not.toContain("Export/Freigabe");
     expect(offer.text).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
     expect(offer.text).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
     expect(offer.text).not.toContain("Status: noch kein Ergebnis");
-    expect(offer.text).toContain("Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.");
+    expect(offer.text).not.toContain("Grenze: nur interne Demo- oder Testdaten");
     expect(offer.text).not.toContain("Angebots-HTML für");
     expect(offer.text).not.toContain("Angebot exportieren");
     expect(offer.text).not.toContain("Produktionsfreigabe erteilt");
@@ -736,7 +744,8 @@ describe("backoffice route smoke", () => {
 
     const { root, container } = await renderRouteLive("/angebot");
     expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen und Entwurf prüfen");
-    expect(document.body.textContent ?? "").toContain("Aktueller Entwurf: Bestehender Lunch-Entwurf");
+    expect(document.body.textContent ?? "").not.toContain("Aktueller Entwurf: Bestehender Lunch-Entwurf");
+    expect(document.body.textContent ?? "").toContain("Frühere Angebotsaufträge öffnen");
 
     const offerInput = document.querySelector(
       "textarea[aria-label='Kundenanfrage als Text']"
@@ -793,7 +802,7 @@ describe("backoffice route smoke", () => {
     });
     container.remove();
 
-    const production = await renderRoute("/produktion");
+    const production = await renderRouteWithFirstHistorySelection("/produktion");
     expect(production.text).toContain("sommerfest · 80 Teilnehmer · 2026-08-20");
     expect(production.text).toContain("Spezifikation im Fokus");
     expect(production.text).not.toContain("specId: c3-spec-promoted");
@@ -928,7 +937,7 @@ describe("backoffice route smoke", () => {
       }
     });
 
-    const offer = await renderRoute("/angebot");
+    const offer = await renderRouteWithFirstHistorySelection("/angebot");
 
     expect(offer.text).toContain("Aktueller Entwurf: C4 Sommerbuffet-Angebot");
     expect(offer.text).toContain("aktueller Vorgang: Lunch · 80 Teilnehmer · 2026-08-21 (vollständig)");
@@ -941,7 +950,7 @@ describe("backoffice route smoke", () => {
     ) as HTMLAnchorElement | undefined;
     expect(productionHandoffLink?.getAttribute("href")).toBe("/produktion");
 
-    const production = await renderRoute("/produktion");
+    const production = await renderRouteWithFirstHistorySelection("/produktion");
 
     expect(production.text).toContain("Lunch · 80 Teilnehmer · 2026-08-21");
     expect(production.text).toContain("Spezifikation im Fokus");
@@ -991,7 +1000,7 @@ describe("backoffice route smoke", () => {
       ]
     });
 
-    const production = await renderRoute("/produktion");
+    const production = await renderRouteWithFirstHistorySelection("/produktion");
 
     expect(production.text).toContain("Downloadbereich");
     expect(production.text).toContain("Plan-Kontext: aktueller Produktionsplan");

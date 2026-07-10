@@ -109,10 +109,19 @@ export function App() {
   const [search, setSearch] = useState("");
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
+  const [initialProductionWorkspace] = useState(() => {
+    const focusedSpecId = consumePromotedProductionSpecFocus(route);
+    return {
+      focusedSpecId,
+      cleared: route === "production" && !focusedSpecId
+    };
+  });
   const [focusedProductionSpecId, setFocusedProductionSpecId] = useState<string | undefined>(
-    () => consumePromotedProductionSpecFocus(route)
+    initialProductionWorkspace.focusedSpecId
   );
-  const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(false);
+  const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(
+    initialProductionWorkspace.cleared
+  );
   const {
     intakeText,
     setIntakeText,
@@ -483,6 +492,7 @@ export function App() {
 
   const focusPromotedProductionSpec = (specId: string) => {
     rememberPromotedProductionSpecFocus(specId);
+    setProductionWorkspaceCleared(false);
     setFocusedProductionSpecId(specId);
   };
 
@@ -537,6 +547,7 @@ export function App() {
     reviewRequiredRecipeCount: recipeReviewCounts.reviewRequired,
     productionServiceStatus: serviceHealth.production.status,
     productionServiceCounts: serviceHealth.production.counts,
+    filteredSpecs,
     search,
     setSearch,
     manualInput: manualSpecInput,
