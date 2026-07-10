@@ -443,7 +443,7 @@ describe("backoffice internal usage smoke", () => {
 
     expect(document.body.textContent ?? "").toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
     expect(document.body.textContent ?? "").not.toContain("Bestandsdaten im Hintergrund");
-    expect(document.body.textContent ?? "").toContain("Kundenanfrage übernehmen");
+    expect(document.body.textContent ?? "").toContain("Angebot als KI-Entwurf prüfen");
 
     const manualEventType = findInputByPlaceholder<HTMLInputElement>("Veranstaltungstyp, z. B. Konferenz");
     const manualEventDate = findInputByPlaceholder<HTMLInputElement>("Datum, z. B. 2026-10-10");

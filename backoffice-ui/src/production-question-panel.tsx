@@ -63,7 +63,7 @@ export type ProductionQuestionPanelState = {
 
 export type ProductionQuestionPanelActions = {
   openSpecForQuestions: (specId: string) => void;
-  refreshAfterDraftDecision?: () => Promise<void>;
+  refreshAfterDraftDecision?: (appliedSpecId?: string) => Promise<void>;
 };
 
 type ProductionQuestionPanelProps = {

@@ -350,7 +350,7 @@ function buildUploadResultSummary(input: {
   productionAssumptions: string[];
   intakeRequestDetail?: IntakeRequestDetail | null;
 }): ProductionUploadResultSummaryState | undefined {
-  if (input.documentPhase !== "done") {
+  if (input.documentPhase !== "done" || !input.focusedProductionSpec) {
     return undefined;
   }
 
@@ -405,7 +405,7 @@ function formatCompletedProgressHelperLabel(input: {
     return "Erkannte Daten und Rückfragen wurden aktualisiert; Berechnung und Artefakte folgen erst nach Freigabe.";
   }
 
-  return "Quelle wurde verarbeitet; noch keine belastbaren Produktionsdaten erkannt.";
+  return "Der KI-Entwurf wartet auf deine Prüfung; noch keine Produktionsdaten wurden übernommen.";
 }
 
 export function buildProductionInputPanelState(input: {

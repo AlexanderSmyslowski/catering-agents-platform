@@ -4,14 +4,25 @@ import {
   type ProductionDocumentSubmitActionInput
 } from "../backoffice-ui/src/production-document-submit-action.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_BYTES } from "../backoffice-ui/src/production-document-upload-limit.js";
+import type { ProductionDraft } from "../backoffice-ui/src/api.js";
 
 function file(name = "kundenangebot.pdf") {
   return new File(["Lunch fuer 40 Personen"], name, { type: "application/pdf" });
 }
 
+function draft(): ProductionDraft {
+  return {
+    draftId: "production-draft-upload-1",
+    status: "pending_review",
+    reviewCards: [],
+    createdAt: "2026-07-10T10:00:00.000Z"
+  };
+}
+
 function input(overrides: Partial<ProductionDocumentSubmitActionInput> = {}): ProductionDocumentSubmitActionInput {
   return {
     createAcceptedSpecFromDocument: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-upload-1" } })),
+    createProductionDraftFromDocument: vi.fn(async () => ({ draft: draft() })),
     intakeFile: file(),
     intakeChannel: "pdf_upload",
     setSubmitting: vi.fn(),
@@ -45,10 +56,11 @@ describe("production document submit action", () => {
 
     expect(actionsInput.setError).toHaveBeenCalledWith("Bitte wähle zuerst ein Dokument aus.");
     expect(actionsInput.createAcceptedSpecFromDocument).not.toHaveBeenCalled();
+    expect(actionsInput.createProductionDraftFromDocument).not.toHaveBeenCalled();
     expect(actionsInput.setSubmitting).not.toHaveBeenCalled();
   });
 
-  it("processes the selected document and completes document progress", async () => {
+  it("creates a review draft without focusing product data", async () => {
     const selectedFile = file("angebot.pdf");
     const calls: string[] = [];
     const actionsInput = input({
@@ -71,9 +83,9 @@ describe("production document submit action", () => {
       setNotice: vi.fn((message) => {
         calls.push(`setNotice:${message}`);
       }),
-      createAcceptedSpecFromDocument: vi.fn(async () => {
-        calls.push("createAcceptedSpecFromDocument");
-        return { acceptedEventSpec: { specId: "spec-upload-1" } };
+      createProductionDraftFromDocument: vi.fn(async () => {
+        calls.push("createProductionDraftFromDocument");
+        return { draft: draft() };
       }),
       setFocusedProductionSpecId: vi.fn((specId) => {
         calls.push(`setFocusedProductionSpecId:${specId}`);
@@ -92,7 +104,9 @@ describe("production document submit action", () => {
 
     await submitSelectedDocument();
 
-    expect(actionsInput.createAcceptedSpecFromDocument).toHaveBeenCalledWith(selectedFile, "pdf_upload");
+    expect(actionsInput.createProductionDraftFromDocument).toHaveBeenCalledWith(selectedFile);
+    expect(actionsInput.createAcceptedSpecFromDocument).not.toHaveBeenCalled();
+    expect(actionsInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
     expect(actionsInput.setError).not.toHaveBeenCalled();
     expect(calls).toEqual([
       "setSubmitting:true",
@@ -100,15 +114,26 @@ describe("production document submit action", () => {
       "clearMessages",
       "startIncomingProductionFile:angebot.pdf:pdf_upload",
       "startDocumentProgress:angebot.pdf",
-      "setNotice:Dokument angebot.pdf wird analysiert...",
-      "createAcceptedSpecFromDocument",
-      "setFocusedProductionSpecId:spec-upload-1",
+      "setNotice:KI erstellt einen prüfbaren Entwurf aus angebot.pdf ...",
+      "createProductionDraftFromDocument",
       "completeIncomingProductionFile",
       "completeDocumentProgress",
       "refreshDashboard",
-      "setNotice:Dokument angebot.pdf wurde übernommen und analysiert.",
+      "setNotice:KI-Entwurf für angebot.pdf ist bereit zur Prüfung.",
       "setSubmitting:false"
     ]);
+  });
+
+  it("keeps the offer intake path on accepted-spec creation", async () => {
+    const selectedFile = file("angebot.pdf");
+    const actionsInput = input({ intakeFile: selectedFile });
+    const { submitSelectedIntakeDocument } = buildProductionDocumentSubmitActions(actionsInput);
+
+    await submitSelectedIntakeDocument();
+
+    expect(actionsInput.createAcceptedSpecFromDocument).toHaveBeenCalledWith(selectedFile, "pdf_upload");
+    expect(actionsInput.createProductionDraftFromDocument).not.toHaveBeenCalled();
+    expect(actionsInput.setFocusedProductionSpecId).toHaveBeenCalledWith("spec-upload-1");
   });
 
   it("resets stale production state after a failed document upload", async () => {
@@ -124,7 +149,7 @@ describe("production document submit action", () => {
       setError: vi.fn((message) => {
         calls.push(`setError:${message}`);
       }),
-      createAcceptedSpecFromDocument: vi.fn(async () => {
+      createProductionDraftFromDocument: vi.fn(async () => {
         throw new Error("Dokument leer");
       })
     });
@@ -143,7 +168,7 @@ describe("production document submit action", () => {
     expect(actionsInput.setError).toHaveBeenCalledWith("Dokument leer");
     expect(calls).toEqual([
       "clearMessages",
-      "setNotice:Dokument falsches-angebot.txt wird analysiert...",
+      "setNotice:KI erstellt einen prüfbaren Entwurf aus falsches-angebot.txt ...",
       "clearMessages",
       "setError:Dokument leer"
     ]);
@@ -163,7 +188,7 @@ describe("production document submit action", () => {
       setError: vi.fn((message) => {
         calls.push(`setError:${message}`);
       }),
-      createAcceptedSpecFromDocument: vi.fn(async () => {
+      createProductionDraftFromDocument: vi.fn(async () => {
         throw new Error(`Datei ist zu gross. Maximal erlaubt sind ${PRODUCTION_DOCUMENT_UPLOAD_LIMIT_BYTES} Bytes.`);
       })
     });
@@ -177,7 +202,7 @@ describe("production document submit action", () => {
     );
     expect(calls).toEqual([
       "clearMessages",
-      "setNotice:Dokument zu-gross.pdf wird analysiert...",
+      "setNotice:KI erstellt einen prüfbaren Entwurf aus zu-gross.pdf ...",
       "clearMessages",
       "setError:Die Datei ist zu groß. Maximal erlaubt sind 25 MB."
     ]);

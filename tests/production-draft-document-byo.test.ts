@@ -8,6 +8,7 @@ import {
 } from "@catering/production-service";
 import {
   AuditLogStore,
+  findLlmReadinessPromptArtifactByInputKind,
   llmReadinessContractVersion,
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterRequest,
@@ -21,10 +22,14 @@ const trustedProductionHeaders = {
 };
 
 const documentText = [
+  "AB 16.30 UHR | WELCOME DRINK",
+  "HERZHAFTES GEBÄCK ZUM WEIN | KÄSEGEBÄCK - KLEINE BREZEL",
   "AB 19.00 UHR | BUFFET",
   "VITELLO TONNATO | RIESENKAPERN | WEISSER THUNFISCH",
   "ROTGARNELEN | AVOKADO-WASABI-CREME",
-  "KOKOS-CHEESECAKE | BROMBEERE"
+  "KOKOS-CHEESECAKE | BROMBEERE",
+  "WEINGLÄSER",
+  "8 MENÜSCHILDER | BILDERRAHMEN"
 ].join("\n");
 
 function createDataRoot(): string {
@@ -63,11 +68,17 @@ function extractionResponse(request: LlmReadinessProviderAdapterRequest) {
         customerName: "Frau Dr. Muster",
         venueName: "Veranstaltungshaus",
         components: [
+          { label: "Herzhaftes Gebäck zum Wein | Käsegebäck - kleine Brezel", course: "starter", category: "classic", note: null },
           { label: "Vitello Tonnato | Riesenkapern | weisser Thunfisch", course: "starter", category: "classic", note: null },
           { label: "Rotgarnelen | Avokado-Wasabi-Creme", course: "main", category: "classic", note: null },
           { label: "Kokos-Cheesecake | Brombeere", course: "dessert", category: "classic", note: null }
         ],
         openQuestions: [
+          {
+            field: "service.welcome-drink",
+            message: "Der Welcome Drink ist als Servicezeit erkennbar, sein Produktionsumfang bleibt offen.",
+            suggestedQuestion: "Welche Getränke und Mengen gehören zum Welcome Drink?"
+          },
           {
             field: "recipe.vitello-tonnato",
             message: "Kein freigegebenes internes Rezept eindeutig zugeordnet.",
@@ -125,6 +136,8 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(requests).toHaveLength(1);
       expect(requests[0].input.kind).toBe("production_draft_request");
       expect(requests[0].promptContext).toContain("VITELLO TONNATO");
+      expect(requests[0].promptContext).toContain("WEINGLÄSER");
+      expect(requests[0].promptContext).toContain("8 MENÜSCHILDER");
       expect(draft.status).toBe("pending_review");
       expect(draft.guardrails).toMatchObject({
         draftOnly: true,
@@ -133,18 +146,28 @@ describe("ProductionDraft document BYO extraction", () => {
         rawProviderPayloadStored: false
       });
       expect(draft.draftArtifacts.eventSpec?.menuPlan.map((component) => component.label)).toEqual([
+        "Herzhaftes Gebäck zum Wein | Käsegebäck - kleine Brezel",
         "Vitello Tonnato | Riesenkapern | weisser Thunfisch",
         "Rotgarnelen | Avokado-Wasabi-Creme",
         "Kokos-Cheesecake | Brombeere"
       ]);
+      expect(draft.draftArtifacts.eventSpec?.menuPlan.map((component) => component.label)).not.toEqual(
+        expect.arrayContaining([expect.stringMatching(/Weingläser|Menüschilder|19\.00 Uhr/i)])
+      );
       expect(draft.reviewCards.map((card) => card.title)).toEqual(
         expect.arrayContaining([
+          "Herzhaftes Gebäck zum Wein | Käsegebäck - kleine Brezel",
           "Vitello Tonnato | Riesenkapern | weisser Thunfisch",
           "Rotgarnelen | Avokado-Wasabi-Creme",
           "Kokos-Cheesecake | Brombeere",
-          "recipe.vitello-tonnato"
+          "recipe.vitello-tonnato",
+          "service.welcome-drink"
         ])
       );
+      const promptArtifact = findLlmReadinessPromptArtifactByInputKind("production_draft_request");
+      expect(promptArtifact?.userPromptTemplate).toContain("genau einmal");
+      expect(promptArtifact?.userPromptTemplate).toContain("Glaeser");
+      expect(promptArtifact?.userPromptTemplate).toContain("keine Menuekomponenten");
       expect(draft.draftArtifacts.recipes).toBeUndefined();
       expect(await store.listPlans()).toHaveLength(0);
       expect(await store.listPurchaseLists()).toHaveLength(0);
@@ -202,6 +225,35 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("ProductionDraft-Extraktion ist nicht schema-valide.");
       expect(await store.listProductionDrafts()).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("reports a missing active AI connection without falling back to parser product writes", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: documentPayload("Buffet mit Vitello Tonnato für 45 Personen")
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.body).toContain("Keine aktive KI-Verbindung für dieses Dokument");
+      expect(await store.listProductionDrafts()).toHaveLength(0);
+      expect(await store.listPlans()).toHaveLength(0);
+      expect(await store.listPurchaseLists()).toHaveLength(0);
     } finally {
       await app.close();
     }

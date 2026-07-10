@@ -11,6 +11,7 @@ import {
 
 const noop = () => undefined;
 const noopAsync = async () => undefined;
+const originalFetch = globalThis.fetch;
 
 const sourceInputActions: ProductionSourceInputActions = {
   uploadInputRef: { current: null },
@@ -63,7 +64,11 @@ function sourceInput(file: File, documentPhase: ProductionSourceInputValues["doc
   };
 }
 
-function panel(file: File, documentPhase: ProductionSourceInputValues["documentPhase"]) {
+function panel(
+  file: File,
+  documentPhase: ProductionSourceInputValues["documentPhase"],
+  includeFocusedSpec = true
+) {
   return createElement(ProductionInputPanel, {
     submitting: documentPhase === "analysing",
     sourceInput: sourceInput(file, documentPhase),
@@ -79,13 +84,14 @@ function panel(file: File, documentPhase: ProductionSourceInputValues["documentP
       notes: ""
     },
     manualInputActions,
-    focusedProductionSpec: focusedSpec,
+    focusedProductionSpec: includeFocusedSpec ? focusedSpec : undefined,
     productionQuestions: ["Welche Herstellungsart gilt für Vitello tonnato?"],
     productionAssumptions: []
   });
 }
 
 afterEach(() => {
+  globalThis.fetch = originalFetch;
   document.body.innerHTML = "";
   vi.restoreAllMocks();
 });
@@ -162,6 +168,54 @@ describe("production input panel upload transition", () => {
 
     expect(container.textContent).not.toContain("Originalangebot anzeigen");
     expect(container.querySelector("iframe")).toBeNull();
+    await act(async () => root.unmount());
+  });
+
+  it("shows the newest pending draft instead of invented production data before approval", async () => {
+    const file = new File(["%PDF-1.4 fixture"], "angebot.pdf", { type: "application/pdf" });
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: () => undefined
+      }
+    });
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      items: [{
+        draftId: "draft-from-upload",
+        status: "pending_review",
+        createdAt: "2026-07-10T12:00:00.000Z",
+        source: { kind: "ai_provider" },
+        reviewCards: [{
+          cardId: "card-menu",
+          kind: "menu_component",
+          title: "12 Angebotspositionen prüfen",
+          summary: "Jede kulinarische Position wurde dem Entwurf einmal zugeordnet.",
+          decision: "pending"
+        }],
+        draftArtifacts: {
+          eventSpec: { event: { title: "Flying Buffet · 45 Personen" } }
+        }
+      }]
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    })) as typeof fetch;
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(panel(file, "done", false));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(container.textContent).toContain("KI-Entwurf prüfen");
+    expect(container.textContent).toContain("Flying Buffet · 45 Personen");
+    expect(container.textContent).toContain("12 Angebotspositionen prüfen");
+    expect(container.textContent).toContain("wartet auf Prüfung");
+    expect(container.textContent).not.toContain("Noch keine Produktionsdaten erkannt");
     await act(async () => root.unmount());
   });
 });

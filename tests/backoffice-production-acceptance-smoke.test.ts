@@ -777,7 +777,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
     expect(content).toContain("Quelle einfügen, dann prüfst du die erkannten Daten.");
     expect(content).toContain("QuelleKI-EntwurfPrüfungPlan");
-    expect(content).toContain("Kundenanfrage übernehmen");
+    expect(content).toContain("Angebot als KI-Entwurf prüfen");
     expect(content).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");
     expect(content).not.toContain("Intake-Pfad");
     expect(content).toContain("Datei auswählen");
@@ -873,7 +873,7 @@ describe("backoffice production acceptance smoke", () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
-      if (url.endsWith("/api/intake/v1/intake/documents/upload")) {
+      if (url.endsWith("/api/production/v1/production/drafts/from-document")) {
         return new Response(JSON.stringify({ message: "Upload passt nicht zum Angebot." }), {
           status: 422,
           statusText: "Unprocessable Content",

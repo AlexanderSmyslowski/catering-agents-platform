@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  completeProductionDraftStateAfterDocumentSuccess,
   completeProductionStateAfterDocumentSuccess,
   type ProductionDocumentSuccessActions
 } from "../backoffice-ui/src/production-document-success-state.js";
@@ -61,6 +62,27 @@ describe("production document success state", () => {
       "completeDocumentProgress",
       "refreshDashboard",
       "setNotice:Dokument angebot-ohne-spec.txt wurde übernommen und analysiert."
+    ]);
+  });
+
+  it("completes a draft upload without focusing product data", async () => {
+    const calls: string[] = [];
+    const file = new File(["Angebot"], "angebot.pdf", { type: "application/pdf" });
+    const actions = buildActions(calls);
+
+    await completeProductionDraftStateAfterDocumentSuccess(file, {
+      completeIncomingProductionFile: actions.completeIncomingProductionFile,
+      completeDocumentProgress: actions.completeDocumentProgress,
+      refreshDashboard: actions.refreshDashboard,
+      setNotice: actions.setNotice
+    });
+
+    expect(actions.setFocusedProductionSpecId).not.toHaveBeenCalled();
+    expect(calls).toEqual([
+      "completeIncomingProductionFile",
+      "completeDocumentProgress",
+      "refreshDashboard",
+      "setNotice:KI-Entwurf für angebot.pdf ist bereit zur Prüfung."
     ]);
   });
 });

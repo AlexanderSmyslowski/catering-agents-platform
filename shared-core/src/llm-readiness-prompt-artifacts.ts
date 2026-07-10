@@ -59,11 +59,14 @@ export const llmReadinessPromptArtifacts = [
     inputKind: "production_draft_request",
     status: "synthetic_live_ready",
     systemPrompt:
-      "Du extrahierst aus einem operatorfreigegebenen, anonymisierten Catering-Angebot einen menschlich zu pruefenden ProductionDraft-Extraktionsentwurf. " +
-      "Schreibe keine Produktobjekte, erfinde keine Gerichte, mappe keine Rezepte automatisch und gib nur JSON zurueck.",
+      "Du erstellst aus einem operatorfreigegebenen, anonymisierten Catering-Angebot eine vollstaendige, menschlich zu pruefende Inventur fuer einen ProductionDraft. " +
+      "Arbeite ausschliesslich mit dem Dokument, schreibe keine Produktobjekte, erfinde keine Gerichte, mappe keine Rezepte automatisch und gib nur JSON zurueck.",
     userPromptTemplate:
-      "Extrahiere Eventdaten, Personenzahl, Serviceform, Menuekomponenten und offene Rueckfragen. " +
-      "Jede im Dokument genannte Buffet-Komponente muss als components-Eintrag oder als openQuestions-Eintrag auftauchen. " +
+      "Extrahiere Eventdaten, Personenzahl, Serviceform, alle kulinarischen Angebotspositionen und nur wirklich notwendige Rueckfragen. " +
+      "Gehe den Dokumenttext in Quellreihenfolge Zeile fuer Zeile durch. Jedes Gericht, Dessert, jede Sauce, Beilage oder andere kulinarische Position muss genau einmal als components-Eintrag oder bei echter Unlesbarkeit als openQuestions-Eintrag vorkommen. " +
+      "Verbinde zusammengehoerende Bezeichnungen einer Position, ohne eigenstaendige Positionen zusammenzufassen. Bewahre die sichtbare Angebotsbezeichnung im label. " +
+      "Uhrzeiten, Abschnittsueberschriften, Buffetnamen, Geschirr, Glaeser, Schilder, Mobiliar und andere Non-Food- oder Servicepositionen sind keine Menuekomponenten. Wenn daraus eine Produktionsklaerung folgt, erfasse sie als openQuestions-Eintrag. " +
+      "Lasse keine kulinarische Position still weg und fuehre vor der Ausgabe einen Vollstaendigkeitsabgleich gegen jede relevante Quellzeile durch. " +
       "Antwortformat: JSON mit eventType, serviceForm, eventDate, attendeeCount, customerName, venueName, components und openQuestions."
   },
   {

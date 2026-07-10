@@ -24,6 +24,7 @@ import {
   createAcceptedSpecFromText,
   createOfferFromText,
   createProductionPlan,
+  createProductionDraftFromDocument,
   promoteOfferDraft,
   reviewRecipe,
   seedDemoData,
@@ -386,6 +387,7 @@ export function App() {
   const {
     handleIntakeSubmit,
     submitSelectedDocument: handleIntakeDocumentSubmit,
+    submitSelectedIntakeDocument: handleOfferIntakeDocumentSubmit,
     processIncomingProductionFile,
     manualSpecInput,
     manualSpecActions
@@ -393,6 +395,7 @@ export function App() {
     createAcceptedSpecFromText,
     intakeText,
     createAcceptedSpecFromDocument,
+    createProductionDraftFromDocument,
     intakeFile,
     intakeChannel,
     startIncomingProductionFile,
@@ -496,6 +499,14 @@ export function App() {
     setFocusedProductionSpecId(specId);
   };
 
+  const refreshAfterProductionDraftDecision = async (appliedSpecId?: string) => {
+    if (appliedSpecId) {
+      setProductionWorkspaceCleared(false);
+      setFocusedProductionSpecId(appliedSpecId);
+    }
+    await refreshDashboard();
+  };
+
   const {
     productionRouteFilterState,
     productionRouteMainLayoutState
@@ -553,7 +564,7 @@ export function App() {
     manualInput: manualSpecInput,
     manualInputActions: manualSpecActions,
     openSpecForQuestions,
-    refreshAfterDraftDecision: refreshDashboard,
+    refreshAfterDraftDecision: refreshAfterProductionDraftDecision,
     setEditingEventType,
     setEditingEventDate,
     setEditingEventSchedule,
@@ -592,7 +603,7 @@ export function App() {
     setIntakeChannel,
     intakeFile,
     setIntakeFile,
-    submitIntakeDocument: handleIntakeDocumentSubmit,
+    submitIntakeDocument: handleOfferIntakeDocumentSubmit,
     manualInput: manualSpecInput,
     manualActions: manualSpecActions,
     filteredOfferDrafts,

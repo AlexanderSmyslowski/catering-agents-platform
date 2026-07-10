@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { IntakeDocumentChannel, IntakeRequestDetail } from "./api.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
+import { ProductionDraftReviewPanel } from "./production-draft-review-panel.js";
 import { buildProductionInputPanelState } from "./production-input-panel-state.js";
 
 export type ProductionManualInputValues = {
@@ -75,6 +76,7 @@ type ProductionInputPanelProps = {
   productionQuestions?: string[];
   productionAssumptions?: string[];
   intakeRequestDetail?: IntakeRequestDetail | null;
+  onDraftChanged?: (appliedSpecId?: string) => Promise<void>;
 };
 
 const preflightStatusLabels = {
@@ -142,7 +144,8 @@ export function ProductionInputPanel({
   hasActiveProductionContext,
   productionQuestions,
   productionAssumptions,
-  intakeRequestDetail
+  intakeRequestDetail,
+  onDraftChanged
 }: ProductionInputPanelProps) {
   const panelState = buildProductionInputPanelState({
     submitting,
@@ -154,6 +157,8 @@ export function ProductionInputPanel({
   });
   const hasUploadResultSummary = Boolean(panelState.uploadResultSummary);
   const completedDocument = panelState.showCompletedProgress;
+  const showDraftReview = completedDocument && !hasUploadResultSummary;
+  const hasUploadReview = hasUploadResultSummary || showDraftReview;
   const hasFocusedProductionContext = Boolean(focusedProductionSpec) || Boolean(hasActiveProductionContext);
   const compactInputMode = hasUploadResultSummary || completedDocument;
   const secondaryInputsOpen = !compactInputMode && !hasFocusedProductionContext;
@@ -161,12 +166,12 @@ export function ProductionInputPanel({
     ? buildUploadReviewAction(panelState.uploadResultSummary)
     : undefined;
   const reviewAnchorRef = useRef<HTMLDivElement>(null);
-  const reviewWasVisibleRef = useRef(hasUploadResultSummary);
+  const reviewWasVisibleRef = useRef(hasUploadReview);
   const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string>();
 
   useEffect(() => {
-    const reviewBecameVisible = !reviewWasVisibleRef.current && hasUploadResultSummary;
-    reviewWasVisibleRef.current = hasUploadResultSummary;
+    const reviewBecameVisible = !reviewWasVisibleRef.current && hasUploadReview;
+    reviewWasVisibleRef.current = hasUploadReview;
     if (!reviewBecameVisible) {
       return;
     }
@@ -174,7 +179,7 @@ export function ProductionInputPanel({
     const reviewAnchor = reviewAnchorRef.current;
     reviewAnchor?.focus({ preventScroll: true });
     reviewAnchor?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
-  }, [hasUploadResultSummary]);
+  }, [hasUploadReview]);
 
   useEffect(() => {
     const file = sourceInput.intakeFile;
@@ -222,7 +227,10 @@ export function ProductionInputPanel({
         <>
           <header>
             <p className="eyebrow">Eingabequelle</p>
-            <h3>Kundenanfrage übernehmen</h3>
+            <h3>Angebot als KI-Entwurf prüfen</h3>
+            <p className="helper-text">
+              Die verbundene KI liest die Datei vollständig. Du vergleichst und bestätigst den Entwurf, bevor Produktionsdaten entstehen.
+            </p>
           </header>
           <label
             className={sourceInput.dragActive ? "drag-drop-zone drag-drop-zone--active" : "drag-drop-zone"}
@@ -243,7 +251,7 @@ export function ProductionInputPanel({
             <span className="eyebrow">Drag & Drop</span>
             <strong>Datei hier ablegen oder Dateiauswahl öffnen</strong>
             <p className="helper-text">
-              Unterstützt PDF, E-Mail und Textdateien bis {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Nach der Auswahl erscheint der Dateiname hier, danach bewusst verarbeiten.
+              Unterstützt PDF, E-Mail und Textdateien bis {PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL}. Nach der Auswahl erstellt die verbundene KI einen prüfpflichtigen Entwurf.
             </p>
             <span className="drag-drop-zone__cta">Datei auswählen</span>
           </label>
@@ -264,7 +272,7 @@ export function ProductionInputPanel({
               <span>{sourceInput.documentProgress}%</span>
             </div>
             <div className="progress-panel__content">
-              <p className="processing-note">Analyse läuft für {sourceInput.activeDocumentName} ...</p>
+              <p className="processing-note">KI liest {sourceInput.activeDocumentName} und erstellt den Entwurf ...</p>
               <div className="progress-bar">
                 <div
                   className="progress-bar__fill"
@@ -279,10 +287,10 @@ export function ProductionInputPanel({
           <div className="upload-complete-panel">
             <div className="progress-panel__content">
               <p className="processing-note processing-note--success">
-                Analyse abgeschlossen für {sourceInput.activeDocumentName}.
+                KI-Entwurf erstellt für {sourceInput.activeDocumentName}.
               </p>
               <p className="helper-text">{panelState.completedProgressHelperLabel}</p>
-              {panelState.uploadResultSummary ? (
+              {hasUploadReview ? (
                 <div
                   ref={reviewAnchorRef}
                   id="production-upload-review"
@@ -290,35 +298,54 @@ export function ProductionInputPanel({
                   aria-label="KI-Entwurf prüfen"
                   tabIndex={-1}
                 >
-                  <header className="upload-result-summary__header">
-                    <h3>KI-Entwurf prüfen</h3>
-                    <p className="helper-text">
-                      Aus {sourceInput.activeDocumentName ?? "der Quelle"} erkannt. Noch nichts ist berechnet oder freigegeben.
-                    </p>
-                    <strong>{panelState.uploadResultSummary.eventLabel}</strong>
-                    <p className="helper-text">{panelState.uploadResultSummary.summaryLabel}</p>
-                  </header>
-                  <div className="upload-result-snapshot" aria-label="Sofortübersicht Produktionsdaten">
-                    {panelState.uploadResultSummary.snapshotItems.map((item) => (
-                      <div key={item.key} className={`upload-result-snapshot__item upload-result-snapshot__item--${item.status}`}>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                        <small>{snapshotStatusLabels[item.status]}</small>
+                  {panelState.uploadResultSummary ? (
+                    <>
+                      <header className="upload-result-summary__header">
+                        <h3>KI-Entwurf prüfen</h3>
+                        <p className="helper-text">
+                          Aus {sourceInput.activeDocumentName ?? "der Quelle"} erkannt. Noch nichts ist berechnet oder freigegeben.
+                        </p>
+                        <strong>{panelState.uploadResultSummary.eventLabel}</strong>
+                        <p className="helper-text">{panelState.uploadResultSummary.summaryLabel}</p>
+                      </header>
+                      <div className="upload-result-snapshot" aria-label="Sofortübersicht Produktionsdaten">
+                        {panelState.uploadResultSummary.snapshotItems.map((item) => (
+                          <div key={item.key} className={`upload-result-snapshot__item upload-result-snapshot__item--${item.status}`}>
+                            <span>{item.label}</span>
+                            <strong>{item.value}</strong>
+                            <small>{snapshotStatusLabels[item.status]}</small>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                  {uploadReviewAction ? (
-                    <div className="upload-review-action" aria-label="Nächste Prüfung">
-                      <div>
-                        <p className="eyebrow">Jetzt prüfen</p>
-                        <strong>{uploadReviewAction.title}</strong>
-                        <p className="helper-text">{uploadReviewAction.description}</p>
-                      </div>
-                      <a className="button-link" href={uploadReviewAction.href}>
-                        {uploadReviewAction.cta}
-                      </a>
-                    </div>
-                  ) : null}
+                      {uploadReviewAction ? (
+                        <div className="upload-review-action" aria-label="Nächste Prüfung">
+                          <div>
+                            <p className="eyebrow">Jetzt prüfen</p>
+                            <strong>{uploadReviewAction.title}</strong>
+                            <p className="helper-text">{uploadReviewAction.description}</p>
+                          </div>
+                          <a className="button-link" href={uploadReviewAction.href}>
+                            {uploadReviewAction.cta}
+                          </a>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <header className="upload-result-summary__header">
+                        <h3>KI-Entwurf prüfen</h3>
+                        <p className="helper-text">
+                          Die KI hat {sourceInput.activeDocumentName ?? "die Quelle"} als prüfpflichtigen Entwurf vorbereitet. Noch nichts wurde übernommen oder freigegeben.
+                        </p>
+                      </header>
+                      <ProductionDraftReviewPanel
+                        submitting={submitting}
+                        embedded
+                        latestOnly
+                        onDraftChanged={onDraftChanged}
+                      />
+                    </>
+                  )}
                   {sourcePreviewUrl && isPdfFile(sourceInput.intakeFile) ? (
                     <details className="source-preview-details">
                       <summary>
@@ -338,7 +365,7 @@ export function ProductionInputPanel({
                       </div>
                     </details>
                   ) : null}
-                  <details className="upload-result-review-details">
+                  {panelState.uploadResultSummary ? <details className="upload-result-review-details">
                     <summary>Erkannte Komponenten und Prüfpunkte anzeigen</summary>
                     <div>
                       <p className="helper-text">Gerichte und Komponenten:</p>
@@ -409,7 +436,7 @@ export function ProductionInputPanel({
                         </ul>
                       </div>
                     ) : null}
-                  </details>
+                  </details> : null}
                 </div>
               ) : null}
             </div>
@@ -420,38 +447,18 @@ export function ProductionInputPanel({
         <details className="source-retry-details">
           <summary>Quelle erneut auswerten</summary>
           <p className="helper-text">
-            Nur nutzen, wenn die Datei als falscher Quellentyp erkannt wurde oder du die gleiche Datei bewusst erneut verarbeiten willst.
+            Nur nutzen, wenn du dieselbe Datei bewusst erneut durch die KI prüfen lassen willst.
           </p>
           <div className="action-row">
-            <select
-              className="operator-input"
-              aria-label="Quellentyp für erneute Auswertung"
-              value={sourceInput.intakeChannel}
-              onChange={(event) => sourceInputActions.setIntakeChannel(event.target.value as IntakeDocumentChannel)}
-            >
-              <option value="pdf_upload">PDF-Datei</option>
-              <option value="email">E-Mail</option>
-              <option value="text">Textdatei</option>
-            </select>
             <button disabled={panelState.submitDocumentDisabled} onClick={() => void sourceInputActions.submitDocument()}>
-              Datei erneut auswerten
+              KI-Entwurf erneut erstellen
             </button>
           </div>
         </details>
       ) : (
         <div className="action-row">
-          <select
-            className="operator-input"
-            aria-label="Quellentyp"
-            value={sourceInput.intakeChannel}
-            onChange={(event) => sourceInputActions.setIntakeChannel(event.target.value as IntakeDocumentChannel)}
-          >
-            <option value="pdf_upload">PDF-Datei</option>
-            <option value="email">E-Mail</option>
-            <option value="text">Textdatei</option>
-          </select>
           <button disabled={panelState.submitDocumentDisabled} onClick={() => void sourceInputActions.submitDocument()}>
-            Datei auswerten
+            KI-Entwurf erstellen
           </button>
         </div>
       )}
@@ -464,10 +471,10 @@ export function ProductionInputPanel({
           <div className="divider" />
           <header>
             <p className="eyebrow">{compactInputMode ? "Korrektur zur PDF" : "Texteingabe"}</p>
-            <h3>{compactInputMode ? "PDF-Analyse mit einer Notiz ergänzen" : "Kundenanfrage direkt einfügen"}</h3>
+            <h3>{compactInputMode ? "KI-Entwurf mit einer Notiz ergänzen" : "Kundenanfrage direkt einfügen"}</h3>
             <p className="helper-text">
               {compactInputMode
-                ? "Dieses Feld ergänzt die aktuelle PDF. Es ersetzt die Datei nicht und ist nur nötig, wenn erkannte Angaben korrigiert werden sollen."
+                ? "Dieses Feld ergänzt den aktuellen KI-Entwurf. Es ersetzt die Datei nicht und ist nur nötig, wenn erkannte Angaben korrigiert werden sollen."
                 : "Nutze diesen Weg, wenn keine Datei vorliegt. Für PDFs bleibt der Datei-Upload der normale Start."}
             </p>
           </header>

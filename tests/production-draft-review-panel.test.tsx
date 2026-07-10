@@ -201,9 +201,10 @@ describe("ProductionDraftReviewPanel", () => {
       return jsonResponse({ message: "not found" }, 404);
     });
     globalThis.fetch = fetchMock as typeof fetch;
+    const onDraftChanged = vi.fn(async () => undefined);
 
     await act(async () => {
-      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, onDraftChanged }));
       await flushPromises();
     });
 
@@ -265,6 +266,7 @@ describe("ProductionDraftReviewPanel", () => {
       })
     );
     expect(document.body.textContent ?? "").toContain("Produktionsentwurf freigegeben.");
+    expect(onDraftChanged).toHaveBeenCalledWith();
 
     const applyButton = Array.from(document.querySelectorAll("button")).find((button) =>
       button.textContent === "Entwurf übernehmen"
@@ -283,9 +285,51 @@ describe("ProductionDraftReviewPanel", () => {
       })
     );
     expect(document.body.textContent ?? "").toContain("Produktionsentwurf übernommen.");
+    expect(onDraftChanged).toHaveBeenLastCalledWith("spec-review-ui-1");
 
     await act(async () => {
       root.unmount();
     });
+  });
+
+  it("embeds only the newest actionable draft in the upload flow", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: () => undefined
+      }
+    });
+    const olderDraft = {
+      ...draftFixture(),
+      draftId: "draft-older",
+      createdAt: "2026-07-01T10:00:00.000Z",
+      draftArtifacts: { eventSpec: { event: { title: "Älterer Entwurf" } } }
+    };
+    const newerDraft = {
+      ...draftFixture(),
+      draftId: "draft-newer",
+      createdAt: "2026-07-01T12:00:00.000Z",
+      draftArtifacts: { eventSpec: { event: { title: "Neuer Entwurf" } } }
+    };
+    globalThis.fetch = vi.fn(async () => jsonResponse({ items: [olderDraft, newerDraft] })) as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        embedded: true,
+        latestOnly: true
+      }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent ?? "").toContain("Neuer Entwurf");
+    expect(document.body.textContent ?? "").not.toContain("Älterer Entwurf");
+    expect(document.body.textContent ?? "").not.toContain("Produktionsentwürfe prüfen");
+    await act(async () => root.unmount());
   });
 });

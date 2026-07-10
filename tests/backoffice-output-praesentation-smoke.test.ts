@@ -406,7 +406,7 @@ describe("backoffice production presentation smoke", () => {
 
     expect(content).toContain("Produktionsagent");
     expect(content).toContain("Produktionsagent-Chat");
-    expect(content).toContain("Kundenanfrage übernehmen");
+    expect(content).toContain("Angebot als KI-Entwurf prüfen");
     expect(content).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");
     expect(content).toContain("Datei auswählen");
     expect(content).toContain("Erkannte Eckdaten");

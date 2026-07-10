@@ -164,6 +164,51 @@ describe("Codex CLI BYO LLM provider", () => {
     expect(byoLlmProviderBoundaryByKind("codex_cli")?.operationalNote).toContain("lokalen Operator-Betrieb");
   });
 
+  it("gives Codex CLI the complete ProductionDraft response shape and inventory rules", async () => {
+    const calls: MockCodexExecRequest[] = [];
+    const fixture = llmReadinessEvalFixtures.find((candidate) =>
+      candidate.input.kind === "production_draft_request"
+    );
+    expect(fixture).toBeDefined();
+    const adapter = buildByoLlmAdapterFromEnv(
+      {
+        CATERING_LLM_PROVIDER: "codex_cli",
+        CATERING_SYNTHETIC_LLM_SLICE: "1"
+      },
+      {
+        codexCliExec: async (request) => {
+          calls.push(request);
+          return {
+            exitCode: 0,
+            stdout: fixture?.expectedOutput.text ?? "{}",
+            stderr: ""
+          };
+        }
+      }
+    );
+
+    const input = {
+      ...structuredClone(fixture!.input),
+      inputId: "input-operator-approved-production-draft",
+      sourceRefs: [{
+        objectType: "safe_source_anchor" as const,
+        objectId: "sha256-operator-approved-production-draft",
+        label: "operator approved production document"
+      }]
+    };
+    const response = await adapter.run({
+      input,
+      promptContext: "AB 19.00 UHR | BUFFET\nVITELLO TONNATO\nWEINGLÄSER"
+    });
+
+    expect(response.ok, response.errors.join(" | ")).toBe(true);
+    expect(calls[0].stdin).toContain('"customerName":null');
+    expect(calls[0].stdin).toContain('"venueName":null');
+    expect(calls[0].stdin).toContain('"category":null');
+    expect(calls[0].stdin).toContain("genau einmal");
+    expect(calls[0].stdin).toContain("Non-Food sind nicht als Gericht klassifiziert");
+  });
+
   it("distinguishes missing binary, login and timeout errors without fixture fallback", async () => {
     const missingBinaryAdapter = buildByoLlmAdapterFromEnv(
       { CATERING_LLM_PROVIDER: "codex_cli", CATERING_SYNTHETIC_LLM_SLICE: "1" },

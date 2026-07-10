@@ -75,11 +75,11 @@ describe("production input panel state", () => {
     ).toMatchObject({
       showAnalysingProgress: false,
       showCompletedProgress: true,
-      completedProgressHelperLabel: "Quelle wurde verarbeitet; noch keine belastbaren Produktionsdaten erkannt."
+      completedProgressHelperLabel: "Der KI-Entwurf wartet auf deine Prüfung; noch keine Produktionsdaten wurden übernommen."
     });
   });
 
-  it("keeps a visible no-data summary after analysis when no production spec was recognized", () => {
+  it("does not synthesize a product summary before a draft was approved", () => {
     const summary = buildProductionInputPanelState({
       submitting: false,
       sourceInput: sourceInput({
@@ -88,51 +88,7 @@ describe("production input panel state", () => {
       })
     }).uploadResultSummary;
 
-    expect(summary).toMatchObject({
-      eventLabel: "Noch keine Produktionsdaten erkannt",
-      summaryLabel: "Quelle wurde verarbeitet; bitte Eckdaten, Gerichte und Rückfragen prüfen.",
-      snapshotItems: [
-        {
-          key: "menu",
-          label: "Gerichte",
-          value: "keine Gerichte erkannt",
-          status: "open"
-        },
-        {
-          key: "open-items",
-          label: "Offen",
-          value: "keine blockierenden Punkte",
-          status: "checked"
-        },
-        {
-          key: "source",
-          label: "Quelle",
-          value: "keine Warnung",
-          status: "checked"
-        },
-        {
-          key: "artifacts",
-          label: "Artefakte",
-          value: "noch nicht erzeugt",
-          status: "review"
-        }
-      ],
-      menuItems: [],
-      openItems: [],
-      assumptionItems: [],
-      artifactStatusItems: [
-        "Erkannt: Eckdaten und Rückfragen; Gerichte fehlen noch.",
-        "Noch nicht erzeugt: Mengen, Rezeptkarten, Einkaufsliste und Produktionsmappe."
-      ],
-      sourceCheckItems: [],
-      nextStepLabel: "Nächster Schritt: erkannte Eckdaten prüfen und fehlende Gerichte ergänzen."
-    });
-    expect(summary?.preflightItems).toContainEqual({
-      key: "menu",
-      label: "Gerichte und Komponenten",
-      detailLabel: "Offen: keine Gerichte erkannt.",
-      status: "open"
-    });
+    expect(summary).toBeUndefined();
   });
 
   it("builds a compact visible production summary after document analysis", () => {
