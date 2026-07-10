@@ -93,9 +93,7 @@ export function App() {
     operatorName,
     handleOperatorNameChange
   } = useOperatorNameState();
-  const [offerText, setOfferText] = useState(
-    "Besprechung am 2026-06-25 für 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
-  );
+  const [offerText, setOfferText] = useState("");
   const {
     miniPilotRawResult,
     setMiniPilotRawResult,
@@ -643,7 +641,7 @@ export function App() {
     <DashboardShell {...appRouteShellState.shell}>
       <RouteMasthead {...appRouteShellState.masthead} />
 
-      <AppFeedbackShell error={error} notice={notice} loading={loading} />
+      <AppFeedbackShell error={error} notice={notice} loading={loading} route={route} />
 
       <AppRouteContent {...appRouteContentState} />
     </DashboardShell>

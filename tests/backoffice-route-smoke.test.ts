@@ -250,7 +250,7 @@ describe("backoffice route smoke", () => {
 
     const offer = await renderRoute("/angebot");
     expect(offer.text).toContain("Angebotsagent");
-    expect(offer.text).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(offer.text).toContain("Kundenanfrage einfügen und Entwurf prüfen");
     expect(offer.text).not.toContain("Catering-Betriebssystem");
     expect(offer.html).not.toContain("Bearbeitername");
     expect(offer.text).not.toContain("Demo-Daten laden");
@@ -322,7 +322,7 @@ describe("backoffice route smoke", () => {
 
     const offer = (await renderRoute(offerNav.getAttribute("href") ?? "")).text;
     expect(offer).toContain("Angebotsagent");
-    expect(offer).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(offer).toContain("Kundenanfrage einfügen und Entwurf prüfen");
 
     const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
     expect(production).toContain("Produktionsagent");
@@ -430,8 +430,8 @@ describe("backoffice route smoke", () => {
     expect(home).toContain("Korridor-Demo vorbereitet · Actor: Betriebs-/Audit-Operator · Action: production.seed_demo");
 
     const offer = await renderRoute("/angebot");
-    expect(offer.text).toContain("Aktueller Fokus: Korridor Lunchangebot");
-    expect(offer.text).toContain("aktive Spezifikation: Lunch · 64 Teilnehmer · 2026-09-15 (teilweise vollständig)");
+    expect(offer.text).toContain("Aktueller Entwurf: Korridor Lunchangebot");
+    expect(offer.text).toContain("aktueller Vorgang: Lunch · 64 Teilnehmer · 2026-09-15 (teilweise vollständig)");
     expect(offer.text).toContain("Zur Produktion");
 
     const offerDocument = new DOMParser().parseFromString(offer.html, "text/html");
@@ -537,15 +537,15 @@ describe("backoffice route smoke", () => {
     const offer = (await renderRoute("/angebot")).text;
 
     expect(offer).toContain("Zusammenfassung");
-    expect(offer).toContain("Interner Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.");
+    expect(offer).toContain("Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.");
     expect(offer).toContain("Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.");
     expect(offer).toContain("Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.");
     expect(offer).not.toContain("Reviewer-Hinweis");
-    expect(offer).toContain("Nächster Angebotsschritt: Entwurf prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.");
+    expect(offer).toContain("Jetzt: offene Punkte prüfen und eine Variante übernehmen. Danach kannst du das Angebot exportieren oder an die Produktion übergeben.");
     expect(offer).toContain("Sommerfest mit Buffet · 1 Variante · 1 offener Punkt");
-    expect(offer).toContain("Übergabe: 1 vollständig · 1 teilweise");
+    expect(offer).toContain("Produktionsübergabe: 1 vollständig · 1 teilweise");
     expect(offer).toContain("Technische Details");
-    expect(offer).toContain("aktive Spezifikation: Veranstaltung · ? Teilnehmer · offen (teilweise vollständig)");
+    expect(offer).toContain("aktueller Vorgang: Veranstaltung · ? Teilnehmer · offen (teilweise vollständig)");
     expect(offer).toContain("Export: Angebots-HTML für den aktuellen Entwurf bereit");
     expect(offer).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
     expect(offer).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
@@ -555,10 +555,10 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("offer-draft-buffet");
     expect(offer).toContain("Entwurfs-Spec: offer-draft-buffet-spec (teilweise vollständig)");
     expect(offer).toContain("Entwurfs-Quelle: offer_service: offer-draft-buffet");
-    expect(offer).toContain("Ausgewählter Entwurf");
+    expect(offer).toContain("Angebotsentwurf prüfen");
     expect(offer).toContain("Variante übernehmen: Basis");
     expect(offer).toContain("Angebot exportieren");
-    expect(offer).toContain("Operative Übergabe und Audit");
+    expect(offer).toContain("Für die Produktion übernommene Veranstaltungen");
     expect(offer).toContain("Status: vollständig");
     expect(offer).toContain("Status: teilweise vollständig");
     expect(offer).not.toContain("1 Entwürfe mit Varianten und Export stehen bereit.");
@@ -570,9 +570,16 @@ describe("backoffice route smoke", () => {
 
     const offer = await renderRoute("/angebot");
 
-    expect(offer.text).toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
-    expect(offer.text).toContain("Nächster Schritt: Anfrage einfügen");
-    expect(offer.text).toContain("Nächster Angebotsschritt: Anfrage einfügen oder Demo über Start nutzen, dann Entwurf prüfen.");
+    expect(offer.text).toContain("Kundenanfrage einfügen und Entwurf prüfen");
+    expect(offer.text).toContain("Als Nächstes: Anfrage einfügen");
+    expect(offer.text).toContain("Jetzt: Kundenanfrage einfügen und einen prüfbaren Entwurf erstellen.");
+    expect(offer.text).toContain("Alternative Erfassung");
+    expect(offer.text).toContain("Text als Anfrage übernehmen");
+    expect(offer.text).toContain("Datei als Anfrage übernehmen");
+    expect(offer.text).toContain("Angaben übernehmen");
+    expect(offer.text).not.toContain("normalisieren");
+    expect(offer.text).not.toContain("Spezifikation anlegen");
+    expect(offer.text).not.toContain("Operative Übergabe und Audit");
     expect(offer.text).toContain("Noch kein Angebotsentwurf vorhanden.");
     expect(offer.text).toContain("Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden.");
     expect(offer.text).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
@@ -728,22 +735,23 @@ describe("backoffice route smoke", () => {
     });
 
     const { root, container } = await renderRouteLive("/angebot");
-    expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
-    expect(document.body.textContent ?? "").toContain("Aktueller Fokus: Bestehender Lunch-Entwurf");
+    expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen und Entwurf prüfen");
+    expect(document.body.textContent ?? "").toContain("Aktueller Entwurf: Bestehender Lunch-Entwurf");
 
     const offerInput = document.querySelector(
-      "textarea[placeholder='Kundenanfrage, E-Mail oder Angebotsnotiz hier einfügen ...']"
+      "textarea[aria-label='Kundenanfrage als Text']"
     ) as HTMLTextAreaElement | null;
     if (!offerInput) {
       throw new Error("Central offer request input not found");
     }
+    expect(offerInput.value).toBe("");
 
     await act(async () => {
       setNativeValue(
         offerInput,
         "C3 Sommerfest am 2026-08-20 für 80 Personen mit Buffet, Getränkepaket und Dessertstation."
       );
-      findButtonByText("Angebotsentwurf erzeugen").click();
+      findButtonByText("Entwurf aus Text erstellen").click();
       await flush();
     });
 
@@ -758,12 +766,12 @@ describe("backoffice route smoke", () => {
       }
     ]);
     expect(text).toContain("Angebotsentwurf wurde erstellt.");
-    expect(text).toContain("Aktueller Fokus: C3 Sommerfest-Angebot für 80 Personen");
+    expect(text).toContain("Aktueller Entwurf: C3 Sommerfest-Angebot für 80 Personen");
     expect(text).toContain("C3 Sommerfest-Angebot für 80 Personen · 1 Variante · 1 offener Punkt");
     expect(text).toContain("Getränkepaket noch klären");
     expect(text).toContain("Variante übernehmen: Klassisch");
     expect(createdExport?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/c3-draft-created/html");
-    expect(text).toContain("Operative Übergabe und Audit");
+    expect(text).toContain("Für die Produktion übernommene Veranstaltungen");
     expect(text).toContain("Status: vollständig");
     expect(text).toContain("Zur Produktion");
 
@@ -774,9 +782,9 @@ describe("backoffice route smoke", () => {
 
     const promotedText = document.body.textContent ?? "";
     expect(promotedBodies).toEqual([{ variantId: "classic" }]);
-    expect(promotedText).toContain("Angebotsvariante wurde als operative Spezifikation übernommen.");
-    expect(promotedText).toContain("Übergabe: 1 vollständig · 1 teilweise");
-    expect(promotedText).toContain("aktive Spezifikation: sommerfest · 80 Teilnehmer · 2026-08-20 (teilweise vollständig)");
+    expect(promotedText).toContain("Angebotsvariante wurde an die Produktion übergeben.");
+    expect(promotedText).toContain("Produktionsübergabe: 1 vollständig · 1 teilweise");
+    expect(promotedText).toContain("aktueller Vorgang: sommerfest · 80 Teilnehmer · 2026-08-20 (teilweise vollständig)");
     expect(promotedText).toContain("specId: c3-spec-promoted");
     expect(promotedText).toContain("requestId: c3-request-promoted");
 
@@ -922,8 +930,8 @@ describe("backoffice route smoke", () => {
 
     const offer = await renderRoute("/angebot");
 
-    expect(offer.text).toContain("Aktueller Fokus: C4 Sommerbuffet-Angebot");
-    expect(offer.text).toContain("aktive Spezifikation: Lunch · 80 Teilnehmer · 2026-08-21 (vollständig)");
+    expect(offer.text).toContain("Aktueller Entwurf: C4 Sommerbuffet-Angebot");
+    expect(offer.text).toContain("aktueller Vorgang: Lunch · 80 Teilnehmer · 2026-08-21 (vollständig)");
     expect(offer.text).toContain("specId: c4-spec-handoff");
     expect(offer.text).toContain("requestId: c4-request-handoff");
 

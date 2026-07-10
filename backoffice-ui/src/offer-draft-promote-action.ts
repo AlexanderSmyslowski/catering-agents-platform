@@ -29,7 +29,7 @@ export function buildOfferDraftPromoteAction({
         setFocusedProductionSpecId?.(promotedSpecId);
       }
       await refreshDashboard();
-      setNotice("Angebotsvariante wurde als operative Spezifikation übernommen.");
+      setNotice("Angebotsvariante wurde an die Produktion übergeben.");
     } catch (submitError) {
       setError(formatSubmitErrorMessage(submitError, "Angebotsvariante konnte nicht übernommen werden."));
     } finally {

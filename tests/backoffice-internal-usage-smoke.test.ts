@@ -429,7 +429,7 @@ describe("backoffice internal usage smoke", () => {
     const offerRoute = await renderAppRoute(offerStartLink.getAttribute("href") ?? "/angebot");
 
     expect(document.body.textContent ?? "").toContain("Angebotsagent");
-    expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen und ruhigen Entwurf erzeugen");
+    expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen und Entwurf prüfen");
     expect(document.body.textContent ?? "").toContain("Produktionsagent");
     const productionHandoffLink = findAnchorByText("Produktionsagent");
     expect(productionHandoffLink.getAttribute("href")).toBe("/produktion");

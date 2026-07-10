@@ -8,6 +8,7 @@ function renderFeedback(props: { error?: string; notice?: string; loading?: bool
   return renderToStaticMarkup(
     createElement(AppFeedbackShell, {
       loading: props.loading ?? false,
+      route: "home",
       error: props.error,
       notice: props.notice
     })
@@ -39,9 +40,20 @@ describe("app feedback shell", () => {
 
   it("keeps the footer loading copy and labels loaded data as context", () => {
     expect(renderFeedback({ loading: true })).toContain("Aktuelle Plattformdaten werden geladen...");
-    expect(renderFeedback({ loading: false })).toContain(
-      "Bestands- und Demo-Kontext ist geladen; neue Produktionsaufträge startest du oben."
+    expect(renderFeedback({ loading: false })).toContain("Bestands- und Demo-Kontext ist geladen.");
+  });
+
+  it("names the correct entry point for offer and production routes", () => {
+    const offer = renderToStaticMarkup(
+      createElement(AppFeedbackShell, { loading: false, route: "offer" })
     );
+    const production = renderToStaticMarkup(
+      createElement(AppFeedbackShell, { loading: false, route: "production" })
+    );
+
+    expect(offer).toContain("Eine neue Anfrage startest du im Eingabefeld.");
+    expect(offer).not.toContain("Produktionsauftrag");
+    expect(production).toContain("Einen neuen Produktionsauftrag startest du im Eingabebereich.");
   });
 
   it("keeps feedback before route content so sticky toasts stay near the top", () => {

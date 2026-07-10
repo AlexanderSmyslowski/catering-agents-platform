@@ -26,7 +26,7 @@ export function RouteMasthead({
       href: "/angebot",
       eyebrow: "Angebotsagent",
       title: "Kundenanfrage zu einem belastbaren Angebot verdichten",
-      body: "Erfasst Rahmenbedingungen, schlägt Leistungsbausteine vor, formuliert Varianten und erzeugt operative Spezifikationen für die Übergabe.",
+      body: "Erfasst Rahmenbedingungen, schlägt Leistungsbausteine vor und bereitet die gewählte Variante für die Produktion vor.",
       linkLabel: `${baseUrl}/angebot`
     },
     {

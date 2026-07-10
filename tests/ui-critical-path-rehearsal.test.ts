@@ -361,7 +361,7 @@ describe("UI critical path rehearsal", () => {
       expect(offerText).toContain(offerDraft.draftId);
       expect(offerText).toContain("42 Personen");
       expect(offerText).toContain("Export: Angebots-HTML");
-      expect(offerText).toContain("Entwurfs-Spezifikation");
+      expect(offerText).toContain("Veranstaltungsdaten im Entwurf");
       expect(offerText).toContain("manual_input");
       expect(offerText).toContain("Grenze: nur interne Demo- oder Testdaten");
       expect(findAnchorByText("Angebot exportieren").getAttribute("href")).toBe(
@@ -382,7 +382,7 @@ describe("UI critical path rehearsal", () => {
         ])
       );
       expect(document.body.textContent ?? "").toContain(
-        "Angebotsvariante wurde als operative Spezifikation \u00fcbernommen."
+        "Angebotsvariante wurde an die Produktion \u00fcbergeben."
       );
       expect(findAnchorByText("Zur Produktion").getAttribute("href")).toBe("/produktion");
 

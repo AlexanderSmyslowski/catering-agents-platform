@@ -149,10 +149,10 @@ function renderDraftFocusLabel(draft?: Record<string, unknown>): string {
 
 function renderOfferNextStep(draft?: Record<string, unknown>): string {
   if (!draft) {
-    return "Nächster Angebotsschritt: Anfrage einfügen oder Demo über Start nutzen, dann Entwurf prüfen.";
+    return "Jetzt: Kundenanfrage einfügen und einen prüfbaren Entwurf erstellen.";
   }
 
-  return "Nächster Angebotsschritt: Entwurf prüfen, Variante übernehmen, Angebots-HTML exportieren und zur Produktion wechseln.";
+  return "Jetzt: offene Punkte prüfen und eine Variante übernehmen. Danach kannst du das Angebot exportieren oder an die Produktion übergeben.";
 }
 
 function getSpecRequestId(spec: Record<string, unknown>): string {
@@ -211,30 +211,31 @@ export function OfferConversationalWorkbench({
     <section className="offer-conversation-layout" aria-label="Angebotsagent Conversational Workbench">
       <article className="offer-composer" aria-label="Zentrale Angebotsarbeit">
         <header className="offer-composer__header">
-          <p className="eyebrow">Angebotsarbeit</p>
-          <h3>Kundenanfrage einfügen und ruhigen Entwurf erzeugen</h3>
+          <p className="eyebrow">Neue Anfrage</p>
+          <h3>Kundenanfrage einfügen und Entwurf prüfen</h3>
           <p className="helper-text">
-            Primärfläche für die Anfrage. Bestehende strukturierte Daten bleiben darunter prüfbar, aber nicht im Vordergrund.
+            Die App erstellt einen prüfbaren Angebotsentwurf. Erst eine von dir gewählte Variante wird an die Produktion übergeben.
           </p>
         </header>
         <textarea
           className="offer-composer__textarea"
+          aria-label="Kundenanfrage als Text"
           value={offerText}
           onChange={(event) => setOfferText(event.target.value)}
-          placeholder="Kundenanfrage, E-Mail oder Angebotsnotiz hier einfügen ..."
+          placeholder="Kundenanfrage oder E-Mail-Text hier einfügen …"
         />
         <div className="offer-composer__next-step">
           <button disabled={submitting} onClick={() => void submitOfferText()}>
-            Angebotsentwurf erzeugen
+            Entwurf aus Text erstellen
           </button>
-          <span>{focusedDraft ? `Aktueller Fokus: ${focusedDraftLabel}` : "Nächster Schritt: Anfrage einfügen"}</span>
+          <span>{focusedDraft ? `Aktueller Entwurf: ${focusedDraftLabel}` : "Als Nächstes: Anfrage einfügen"}</span>
         </div>
       </article>
 
       <aside className="offer-calm-summary" aria-label="Kompakte Ergebniszusammenfassung">
         <p className="eyebrow">Zusammenfassung</p>
         <strong>{renderDraftSummary(focusedDraft)}</strong>
-        <p className="helper-text">Interner Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.</p>
+        <p className="helper-text">Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.</p>
         <p className="helper-text">
           Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.
         </p>
@@ -243,7 +244,7 @@ export function OfferConversationalWorkbench({
         </p>
         <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
         <p className="helper-text">
-          Übergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktive Spezifikation:{" "}
+          Produktionsübergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktueller Vorgang:{" "}
           {summaryActiveSpec ? `${getSpecLabel(summaryActiveSpec)} (${getReadinessLabel(summaryActiveSpec)})` : "keine"}
         </p>
         <p className="helper-text">
@@ -292,8 +293,12 @@ export function OfferConversationalWorkbench({
       <div className="offer-progressive-zone">
         <details className="progressive-panel" open={Boolean(focusedDraft)}>
           <summary>
-            <span>Ausgewählter Entwurf</span>
-            <strong>{focusedDraftId}</strong>
+            <span>Angebotsentwurf prüfen</span>
+            <strong>
+              {focusedDraft
+                ? `${formatOfferSummaryCount(focusedVariants.length, "Variante", "Varianten")} · ${formatOfferSummaryCount(focusedOpenQuestions.length, "offener Punkt", "offene Punkte")}`
+                : "noch kein Entwurf"}
+            </strong>
           </summary>
           {focusedDraft ? (
             <div className="progressive-panel__body">
@@ -303,7 +308,7 @@ export function OfferConversationalWorkbench({
               </p>
               {focusedDraftSpec ? (
                 <p className="helper-text">
-                  Entwurfs-Spezifikation: {getSpecLabel(focusedDraftSpec)} ({getReadinessLabel(focusedDraftSpec)})
+                  Veranstaltungsdaten im Entwurf: {getSpecLabel(focusedDraftSpec)} ({getReadinessLabel(focusedDraftSpec)})
                 </p>
               ) : null}
               {focusedDraftSpec || focusedDraftSource ? (
@@ -374,7 +379,7 @@ export function OfferConversationalWorkbench({
                 </a>
               </div>
               <details className="nested-details">
-                <summary>Entwurfstexte anzeigen</summary>
+                <summary>Angebotstexte anzeigen</summary>
                 <pre className="detail-pre">{String(focusedDraft.customerFacingText ?? "")}</pre>
                 <pre className="detail-pre">{String(focusedDraft.internalWorkingText ?? "")}</pre>
               </details>
@@ -386,7 +391,7 @@ export function OfferConversationalWorkbench({
 
         <details className="progressive-panel">
           <summary>
-            <span>Entwurfsübersicht</span>
+            <span>Weitere Entwürfe</span>
             <strong>{filteredOfferDrafts.length} Entwürfe</strong>
           </summary>
           <ul className="quiet-list">
@@ -409,20 +414,29 @@ export function OfferConversationalWorkbench({
 
         <details className="progressive-panel">
           <summary>
-            <span>Weitere Eingabewege</span>
-            <strong>Intake, Datei, Direkterfassung</strong>
+            <span>Alternative Erfassung</span>
+            <strong>Text, Datei oder manuelle Angaben</strong>
           </summary>
           <div className="progressive-panel__body compact-form-grid">
             <section>
-              <p className="eyebrow">Kundenanfrage normalisieren</p>
-              <textarea value={intakeText} onChange={(event) => setIntakeText(event.target.value)} />
+              <h3>Anfrage als Text übernehmen</h3>
+              <p className="helper-text">Für kopierte E-Mails oder Notizen, die zuerst als Anfrage erfasst werden sollen.</p>
+              <textarea
+                aria-label="Anfrage zur Erfassung"
+                value={intakeText}
+                onChange={(event) => setIntakeText(event.target.value)}
+                placeholder="Anfragetext einfügen"
+              />
               <button disabled={submitting} onClick={() => void submitIntakeText()}>
-                Erfassungstext normalisieren
+                Text als Anfrage übernehmen
               </button>
             </section>
             <section>
-              <p className="eyebrow">Dokument übernehmen</p>
+              <h3>Anfrage aus Datei übernehmen</h3>
+              <p className="helper-text">Für ein PDF-Angebot, eine E-Mail-Datei oder eine Textdatei.</p>
+              <label htmlFor="offer-intake-channel">Dateityp</label>
               <select
+                id="offer-intake-channel"
                 className="operator-input"
                 value={intakeChannel}
                 onChange={(event) => setIntakeChannel(event.target.value as IntakeDocumentChannel)}
@@ -433,17 +447,19 @@ export function OfferConversationalWorkbench({
               </select>
               <input
                 className="file-input"
+                aria-label="Anfragedatei auswählen"
                 type="file"
                 accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
                 onChange={(event: ChangeEvent<HTMLInputElement>) => setIntakeFile(event.target.files?.[0] ?? null)}
               />
               <button disabled={submitting} onClick={() => void submitIntakeDocument()}>
-                Dokument normalisieren
+                Datei als Anfrage übernehmen
               </button>
               {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
             </section>
             <section>
-              <p className="eyebrow">Strukturierte Direkterfassung</p>
+              <h3>Veranstaltungsdaten manuell eingeben</h3>
+              <p className="helper-text">Nur nutzen, wenn keine Kundenanfrage als Text oder Datei vorliegt.</p>
               <input value={manualInput.eventType} onChange={(event) => manualActions.setEventType(event.target.value)} placeholder="Veranstaltungstyp" />
               <input value={manualInput.eventDate} onChange={(event) => manualActions.setEventDate(event.target.value)} placeholder="Datum" />
               <input value={manualInput.attendeeCount} onChange={(event) => manualActions.setAttendeeCount(event.target.value)} placeholder="Teilnehmerzahl" />
@@ -453,7 +469,7 @@ export function OfferConversationalWorkbench({
               <input value={manualInput.venueName} onChange={(event) => manualActions.setVenueName(event.target.value)} placeholder="Ort" />
               <textarea value={manualInput.notes} onChange={(event) => manualActions.setNotes(event.target.value)} placeholder="Interne Notizen" />
               <button disabled={submitting} onClick={() => void manualActions.submitManualSpec()}>
-                Spezifikation anlegen
+                Angaben übernehmen
               </button>
             </section>
           </div>
@@ -461,8 +477,8 @@ export function OfferConversationalWorkbench({
 
         <details className="progressive-panel">
           <summary>
-            <span>Operative Übergabe und Audit</span>
-            <strong>{filteredSpecs.length} Spezifikationen</strong>
+            <span>Für die Produktion übernommene Veranstaltungen</span>
+            <strong>{formatOfferSummaryCount(filteredSpecs.length, "Vorgang", "Vorgänge")}</strong>
           </summary>
           <ul className="quiet-list">
             {filteredSpecs.map((spec) => (
@@ -486,12 +502,11 @@ export function OfferConversationalWorkbench({
                 </div>
               </li>
             ))}
-            {filteredSpecs.length === 0 ? <li>Noch keine Spezifikationen vorhanden.</li> : null}
+            {filteredSpecs.length === 0 ? <li>Noch keine Veranstaltungsdaten übernommen.</li> : null}
           </ul>
           {specEdit.editingSpecId ? (
             <div className="compact-edit-form">
-              <p className="eyebrow">Spezifikation bearbeiten</p>
-              <h3>{specEdit.editingSpecId}</h3>
+              <h3>Veranstaltungsdaten bearbeiten</h3>
               <input value={specEdit.eventType} onChange={(event) => specEditActions.setEventType(event.target.value)} placeholder="Veranstaltungstyp" />
               <input value={specEdit.eventDate} onChange={(event) => specEditActions.setEventDate(event.target.value)} placeholder="Datum" />
               <input value={specEdit.attendeeCount} onChange={(event) => specEditActions.setAttendeeCount(event.target.value)} placeholder="Teilnehmerzahl" />
@@ -499,7 +514,7 @@ export function OfferConversationalWorkbench({
               <textarea value={specEdit.menuItems} onChange={(event) => specEditActions.setMenuItems(event.target.value)} placeholder="Menüpunkte" />
               <div className="quiet-action-row">
                 <button disabled={submitting} onClick={() => void specEditActions.saveSpecEdit()}>
-                  Spezifikation speichern
+                  Änderungen speichern
                 </button>
                 <button className="secondary-button" disabled={submitting} onClick={specEditActions.resetSpecEdit}>
                   Abbrechen
