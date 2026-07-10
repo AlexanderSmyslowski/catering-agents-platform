@@ -205,6 +205,9 @@ describe("Codex CLI BYO LLM provider", () => {
     expect(calls[0].stdin).toContain('"customerName":null');
     expect(calls[0].stdin).toContain('"venueName":null');
     expect(calls[0].stdin).toContain('"category":null');
+    expect(calls[0].stdin).toContain('"categoryEvidence":null');
+    expect(calls[0].stdin).toContain("nur bei einer ausdruecklichen Quellenstelle");
+    expect(calls[0].stdin).toContain("nicht aus Zutaten oder dem Gesamtsortiment ableiten");
     expect(calls[0].stdin).toContain("genau einmal");
     expect(calls[0].stdin).toContain("Non-Food sind nicht als Gericht klassifiziert");
   });

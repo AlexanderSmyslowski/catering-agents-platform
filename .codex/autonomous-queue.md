@@ -23,7 +23,9 @@ _Keine Einträge._
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-_Keine Einträge._
+- **PR #565 · Gate-2-Vertrauensgrenzen.** Servergesteuerter Datenmodus
+  fuer anonymisierte Realdokumente und belegpflichtige Ernaehrungskategorien;
+  CI und lokale Batterie gruen. Merge-Entscheidung bei Alexander.
 
 ---
 

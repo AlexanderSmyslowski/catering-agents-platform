@@ -121,7 +121,7 @@ export const defaultCodexCliExec: CodexCliExec = ({
 
 function buildCodexPrompt(request: LlmReadinessSyntheticLiveTransportRequest): string {
   const responseShape = request.outputKind === "production_draft_extraction"
-    ? "{\"eventType\":\"...\",\"serviceForm\":\"...\",\"eventDate\":\"YYYY-MM-DD\",\"attendeeCount\":45,\"customerName\":null,\"venueName\":null,\"components\":[{\"label\":\"...\",\"course\":null,\"category\":null,\"note\":null}],\"openQuestions\":[{\"field\":\"...\",\"message\":\"...\",\"suggestedQuestion\":null}]}"
+    ? "{\"eventType\":\"...\",\"serviceForm\":\"...\",\"eventDate\":\"YYYY-MM-DD\",\"attendeeCount\":45,\"customerName\":null,\"venueName\":null,\"components\":[{\"label\":\"...\",\"course\":null,\"category\":null,\"categoryEvidence\":null,\"note\":null}],\"openQuestions\":[{\"field\":\"...\",\"message\":\"...\",\"suggestedQuestion\":null}]}"
     : request.outputKind === "intake_shadow_extraction"
       ? "{\"eventType\":\"...\",\"serviceForm\":\"...\",\"eventDate\":\"YYYY-MM-DD\",\"attendeeCount\":45,\"menuItems\":[\"...\"]}"
       : request.outputKind === "offer_package_classification_draft"

@@ -8,6 +8,7 @@ import {
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
   type LlmReadinessProviderAdapter,
+  type LlmReadinessDataMode,
   type Queryable,
   type RecipeSearchQuery,
   type WebRecipeCandidate
@@ -58,6 +59,19 @@ export function isWebRecipeSearchEnabled(env: Record<string, string | undefined>
   return value === "1" || value === "true";
 }
 
+function productionDraftDataModeFromEnv(
+  env: Record<string, string | undefined>
+): LlmReadinessDataMode {
+  const value = env.CATERING_PRODUCTION_DRAFT_DATA_MODE?.trim() || "synthetic_or_demo_only";
+  if (value === "synthetic_or_demo_only" || value === "pseudonymized_approved") {
+    return value;
+  }
+
+  throw new Error(
+    'CATERING_PRODUCTION_DRAFT_DATA_MODE must be "synthetic_or_demo_only" or "pseudonymized_approved".'
+  );
+}
+
 function defaultWebRecipeSearchProvider(env: Record<string, string | undefined>): WebRecipeSearchProvider {
   if (isWebRecipeSearchEnabled(env)) {
     return new DuckDuckGoRecipeSearchProvider();
@@ -105,6 +119,7 @@ function requireProductionOperator(
 
 export function buildProductionApp(options: ProductionAppOptions = {}) {
   const env = options.env ?? process.env;
+  const productionDraftDataMode = productionDraftDataModeFromEnv(env);
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
   const repository =
@@ -178,6 +193,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     discoveryService,
     auditLog,
     buildLlmAdapter,
+    productionDraftDataMode,
     trustedActorSecret,
     allowDevActorHeader,
     isProductionOperator,

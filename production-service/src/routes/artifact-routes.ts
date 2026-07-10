@@ -22,6 +22,7 @@ import {
   validateRecipe,
   type AcceptedEventSpec,
   type AuditLogStore,
+  type LlmReadinessDataMode,
   type LlmReadinessModelInput,
   type LlmReadinessModelOutputCandidate,
   type LlmReadinessProviderAdapter,
@@ -252,6 +253,7 @@ export interface ProductionArtifactRouteDependencies {
   discoveryService: RecipeDiscoveryService;
   auditLog: AuditLogStore;
   buildLlmAdapter: () => LlmReadinessProviderAdapter;
+  productionDraftDataMode: LlmReadinessDataMode;
   trustedActorSecret?: string;
   allowDevActorHeader: boolean;
   isProductionOperator: (
@@ -293,6 +295,42 @@ function normalizeMenuCategory(value: unknown): ProductionDraftExtractionCompone
   return value === "classic" || value === "vegetarian" || value === "vegan" ? value : undefined;
 }
 
+function normalizedEvidenceText(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function categoryEvidenceSupports(
+  category: NonNullable<ProductionDraftExtractionComponent["category"]>,
+  evidence: string | undefined,
+  componentLabel: string,
+  normalizedSourceText: string
+): boolean {
+  if (!evidence) {
+    return false;
+  }
+
+  const normalizedEvidence = normalizedEvidenceText(evidence);
+  const normalizedLabel = normalizedEvidenceText(componentLabel);
+  if (
+    !normalizedEvidence ||
+    !normalizedEvidence.includes(normalizedLabel) ||
+    !normalizedSourceText.includes(normalizedEvidence)
+  ) {
+    return false;
+  }
+
+  const categoryTokens = {
+    classic: ["classic", "klassisch", "traditionell"],
+    vegetarian: ["vegetarian", "vegetarisch"],
+    vegan: ["vegan"]
+  } as const;
+  const supportedCategories = Object.entries(categoryTokens)
+    .filter(([, tokens]) => tokens.some((token) => normalizedEvidence.includes(token)))
+    .map(([supportedCategory]) => supportedCategory);
+
+  return supportedCategories.length === 1 && supportedCategories[0] === category;
+}
+
 function slugifyForDraft(value: string): string {
   return value
     .toLowerCase()
@@ -301,7 +339,10 @@ function slugifyForDraft(value: string): string {
     .slice(0, 80) || "item";
 }
 
-function parseProductionDraftExtraction(outputCandidate?: LlmReadinessModelOutputCandidate): {
+function parseProductionDraftExtraction(
+  outputCandidate: LlmReadinessModelOutputCandidate | undefined,
+  sourceText: string
+): {
   extraction?: ProductionDraftExtraction;
   errors: string[];
 } {
@@ -327,6 +368,8 @@ function parseProductionDraftExtraction(outputCandidate?: LlmReadinessModelOutpu
     return { errors: [...new Set(errors)] };
   }
 
+  const unsupportedCategoryLabels: string[] = [];
+  const normalizedSourceText = normalizedEvidenceText(sourceText);
   const rawComponents = Array.isArray(parsed.components) ? parsed.components : [];
   const components = rawComponents.flatMap((component, index): ProductionDraftExtractionComponent[] => {
     if (!isPlainRecord(component)) {
@@ -339,10 +382,24 @@ function parseProductionDraftExtraction(outputCandidate?: LlmReadinessModelOutpu
       return [];
     }
 
+    const claimedCategory = normalizeMenuCategory(component.category);
+    const categoryEvidence = normalizeOptionalText(component.categoryEvidence, 500);
+    const category = claimedCategory && categoryEvidenceSupports(
+      claimedCategory,
+      categoryEvidence,
+      label,
+      normalizedSourceText
+    )
+      ? claimedCategory
+      : undefined;
+    if (claimedCategory && !category) {
+      unsupportedCategoryLabels.push(label);
+    }
+
     return [{
       label,
       course: normalizeOptionalText(component.course, 80),
-      category: normalizeMenuCategory(component.category),
+      category,
       note: normalizeOptionalText(component.note, 500)
     }];
   });
@@ -366,6 +423,22 @@ function parseProductionDraftExtraction(outputCandidate?: LlmReadinessModelOutpu
       suggestedQuestion: normalizeOptionalText(question.suggestedQuestion, 500)
     }];
   });
+
+  if (
+    unsupportedCategoryLabels.length > 0 &&
+    !openQuestions.some((question) => question.field === "components.category")
+  ) {
+    const visibleLabels = unsupportedCategoryLabels.slice(0, 6);
+    const remainingCount = unsupportedCategoryLabels.length - visibleLabels.length;
+    openQuestions.push({
+      field: "components.category",
+      message: [
+        `Ernährungsformen sind nicht eindeutig durch eine einzelne Quellenstelle belegt: ${visibleLabels.join(", ")}.`,
+        remainingCount > 0 ? `${remainingCount} weitere Komponenten sind ebenfalls betroffen.` : ""
+      ].filter(Boolean).join(" "),
+      suggestedQuestion: "Welche Ernährungsformen sind für diese Komponenten ausdrücklich bestätigt?"
+    });
+  }
 
   if (components.length === 0 && openQuestions.length === 0) {
     errors.push("production draft extraction must contain components or openQuestions");
@@ -468,22 +541,27 @@ function buildProductionDraftFromExtraction(input: {
     reference: `sha256:${input.source.sha256}`,
     commercialState: "provisional"
   });
-  const menuPlan = input.extraction.components.map((component, index) => ({
-    ...eventSpec.menuPlan[index],
-    componentId: `${slugifyForDraft(component.label)}-${index + 1}`,
-    label: component.label,
-    course: component.course ?? eventSpec.menuPlan[index]?.course,
-    menuCategory: component.category ?? eventSpec.menuPlan[index]?.menuCategory,
-    serviceStyle: input.extraction.serviceForm ?? eventSpec.servicePlan.serviceForm,
-    servings: input.extraction.attendeeCount ?? eventSpec.attendees.expected,
-    ...(component.note
-      ? {
-          productionDecision: {
-            notes: component.note
+  const menuPlan = input.extraction.components.map((component, index) => {
+    const normalizedComponent = { ...eventSpec.menuPlan[index] };
+    delete normalizedComponent.menuCategory;
+
+    return {
+      ...normalizedComponent,
+      componentId: `${slugifyForDraft(component.label)}-${index + 1}`,
+      label: component.label,
+      course: component.course ?? eventSpec.menuPlan[index]?.course,
+      ...(component.category ? { menuCategory: component.category } : {}),
+      serviceStyle: input.extraction.serviceForm ?? eventSpec.servicePlan.serviceForm,
+      servings: input.extraction.attendeeCount ?? eventSpec.attendees.expected,
+      ...(component.note
+        ? {
+            productionDecision: {
+              notes: component.note
+            }
           }
-        }
-      : {})
-  }));
+        : {})
+    };
+  });
   const openQuestions = input.extraction.openQuestions.map((question) => ({
     field: question.field,
     message: question.message,
@@ -574,6 +652,7 @@ export function registerProductionArtifactRoutes(
     discoveryService,
     auditLog,
     buildLlmAdapter,
+    productionDraftDataMode,
     trustedActorSecret,
     allowDevActorHeader,
     isProductionOperator,
@@ -726,7 +805,7 @@ export function registerProductionArtifactRoutes(
         ],
         policy: {
           providerCalls: "disabled",
-          dataMode: "synthetic_or_demo_only",
+          dataMode: productionDraftDataMode,
           allowedToolEffects: ["read", "draft"]
         }
       };
@@ -759,6 +838,7 @@ export function registerProductionArtifactRoutes(
             adapterId: adapter.adapterId,
             adapterMode: adapter.adapterMode,
             promptSchemaId: promptSchema.promptSchemaId,
+            dataMode: input.policy.dataMode,
             sourceSha256: sourceMetadata.sha256,
             errorCount: 1,
             errorType: error instanceof Error ? error.name : typeof error
@@ -778,7 +858,10 @@ export function registerProductionArtifactRoutes(
         request: adapterRequest,
         response: adapterResponse
       });
-      const extractionBuild = parseProductionDraftExtraction(adapterResponse.outputCandidate);
+      const extractionBuild = parseProductionDraftExtraction(
+        adapterResponse.outputCandidate,
+        ingestion.extractedText
+      );
       const responseErrors = [
         ...(adapterResponse.ok ? [] : adapterResponse.errors),
         ...extractionBuild.errors,
@@ -797,6 +880,7 @@ export function registerProductionArtifactRoutes(
             adapterId: adapterResponse.adapterId,
             adapterMode: adapterResponse.adapterMode,
             promptSchemaId: adapterResponse.promptSchemaId ?? promptSchema.promptSchemaId,
+            dataMode: input.policy.dataMode,
             providerId: adapterResponse.providerId,
             providerRequestId: adapterResponse.providerRequestId,
             sourceSha256: sourceMetadata.sha256,
@@ -835,6 +919,7 @@ export function registerProductionArtifactRoutes(
           adapterId: adapterResponse.adapterId,
           adapterMode: adapterResponse.adapterMode,
           promptSchemaId: adapterResponse.promptSchemaId ?? promptSchema.promptSchemaId,
+          dataMode: input.policy.dataMode,
           providerId: adapterResponse.providerId,
           providerRequestId: adapterResponse.providerRequestId,
           reviewCardCount: draft.reviewCards.length,
