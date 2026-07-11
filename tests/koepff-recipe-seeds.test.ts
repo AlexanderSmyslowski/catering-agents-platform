@@ -110,6 +110,30 @@ describe("Köpff recipe seeds", () => {
     ).toBe(810);
   });
 
+  it("keeps the reviewed Roastbeef and blackberry preparation operationally honest", () => {
+    const recipes = new Map(loadSeeds().map((recipe) => [recipe.recipeId, recipe]));
+    const roastbeef = recipes.get(
+      "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche"
+    )!;
+    const coconut = recipes.get(
+      "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere"
+    )!;
+    const roastbeefInstructions = roastbeef.steps.map((step) => step.instruction).join(" ");
+    const coconutInstructions = coconut.steps.map((step) => step.instruction).join(" ");
+
+    expect(roastbeefInstructions).toContain("als ganzes Stück");
+    expect(roastbeefInstructions).toContain("Pfanne oder Kipper");
+    expect(roastbeefInstructions).toContain("rundum anbraten");
+    expect(roastbeefInstructions).toContain("niedriger Garraumtemperatur");
+    expect(roastbeefInstructions).toContain("fachlich freigegebenen Kerntemperatur");
+
+    expect(coconutInstructions).toMatch(/frische Brombeeren/i);
+    expect(coconutInstructions).not.toMatch(/Topping|erhitzen|binden/i);
+    expect(coconut.ingredients.map((ingredient) => ingredient.name)).not.toContain("Speisestärke");
+    expect(coconut.ingredients.filter((ingredient) => ingredient.name === "Zucker")).toHaveLength(1);
+    expect(coconut.ingredients.filter((ingredient) => ingredient.name === "Zitronensaft")).toHaveLength(1);
+  });
+
   it("keeps every transcribed quantity unchanged at the recipe base yield", () => {
     const recipes = loadSeeds();
 

@@ -90,33 +90,6 @@
         "unit": "g"
       },
       "group": "obst_gemuese"
-    },
-    {
-      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-09-zucker",
-      "name": "Zucker",
-      "quantity": {
-        "amount": 120,
-        "unit": "g"
-      },
-      "group": "trockenlager"
-    },
-    {
-      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-10-zitronensaft",
-      "name": "Zitronensaft",
-      "quantity": {
-        "amount": 35,
-        "unit": "ml"
-      },
-      "group": "obst_gemuese"
-    },
-    {
-      "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-11-speisestarke",
-      "name": "Speisestärke",
-      "quantity": {
-        "amount": 8,
-        "unit": "g"
-      },
-      "group": "trockenlager"
     }
   ],
   "steps": [
@@ -158,15 +131,11 @@
     },
     {
       "index": 10,
-      "instruction": "Für das Topping ca. 900 g Brombeeren mit Zucker und Zitronensaft kurz erhitzen; mit angerührter Speisestärke leicht binden und vollständig kühlen."
+      "instruction": "Frische Brombeeren verlesen, vorsichtig waschen und gut trocknen."
     },
     {
       "index": 11,
-      "instruction": "Restliche Brombeeren für sichtbare Garnitur zurückhalten."
-    },
-    {
-      "index": 12,
-      "instruction": "Kokos-Törtchen ausformen, Brombeer-Topping und frische Brombeere kurz vor Ausgabe aufsetzen."
+      "instruction": "Kokos-Törtchen ausformen und die frischen Brombeeren erst kurz vor Ausgabe dazugeben."
     }
   ],
   "scalingRules": {

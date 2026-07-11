@@ -302,11 +302,11 @@
   "steps": [
     {
       "index": 1,
-      "instruction": "Roastbeef parieren, würzen, dünn mit Senf einreiben und in Öl anbraten."
+      "instruction": "Roastbeef parieren, würzen, dünn mit Senf einreiben und als ganzes Stück je nach Stückgröße und Produktionsmenge in Pfanne oder Kipper rundum anbraten."
     },
     {
       "index": 2,
-      "instruction": "Schonend rosa garen, vollständig auskühlen und kalt stellen."
+      "instruction": "Anschließend bei niedriger Garraumtemperatur bis zur fachlich freigegebenen Kerntemperatur ziehen, vollständig auskühlen und kalt stellen."
     },
     {
       "index": 3,
