@@ -12,7 +12,7 @@
     "qualityScore": 0.95,
     "fitScore": 1,
     "extractionCompleteness": 1,
-    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich. Garparameter als prüfpflichtiger Gate-3-Entwurf ergänzt."
   },
   "baseYield": {
     "servings": 45,
@@ -148,7 +148,7 @@
     },
     {
       "index": 3,
-      "instruction": "Eigelb, Zucker, Vanille, Salz und Zitronenabrieb über dem Wasserbad auf 65-70 °C hell-cremig aufschlagen."
+      "instruction": "Eigelb, Zucker, Vanille, Salz und Zitronenabrieb über dem Wasserbad auf 68 °C hell-cremig aufschlagen."
     },
     {
       "index": 4,

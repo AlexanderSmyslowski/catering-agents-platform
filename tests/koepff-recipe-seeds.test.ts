@@ -124,14 +124,59 @@ describe("Köpff recipe seeds", () => {
     expect(roastbeefInstructions).toContain("als ganzes Stück");
     expect(roastbeefInstructions).toContain("Pfanne oder Kipper");
     expect(roastbeefInstructions).toContain("rundum anbraten");
-    expect(roastbeefInstructions).toContain("niedriger Garraumtemperatur");
-    expect(roastbeefInstructions).toContain("fachlich freigegebenen Kerntemperatur");
 
     expect(coconutInstructions).toMatch(/frische Brombeeren/i);
     expect(coconutInstructions).not.toMatch(/Topping|erhitzen|binden/i);
     expect(coconut.ingredients.map((ingredient) => ingredient.name)).not.toContain("Speisestärke");
     expect(coconut.ingredients.filter((ingredient) => ingredient.name === "Zucker")).toHaveLength(1);
     expect(coconut.ingredients.filter((ingredient) => ingredient.name === "Zitronensaft")).toHaveLength(1);
+  });
+
+  it("carries concrete UNOX XVC305E review parameters for every thermal production step", () => {
+    const recipes = new Map(loadSeeds().map((recipe) => [recipe.recipeId, recipe]));
+    const instructions = (recipeId: string) =>
+      recipes.get(recipeId)!.steps.map((step) => step.instruction).join(" ");
+
+    expect(instructions("koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche"))
+      .toContain("UNOX XVC305E: 80 °C Heißluft, Lüfter 1P, 0 % STEAM.Maxi");
+    expect(instructions("koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche"))
+      .toContain("54 °C Kerntemperatur");
+
+    expect(instructions("koepff-vitello-tonnato-riesenkapern-weisser-thunfisch"))
+      .toContain("UNOX XVC305E: 80 °C Heißluft, Lüfter 1P, 20 % STEAM.Maxi");
+    expect(instructions("koepff-vitello-tonnato-riesenkapern-weisser-thunfisch"))
+      .toContain("60 °C Kerntemperatur");
+
+    expect(instructions("koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips"))
+      .toContain("100 °C Dampf, Lüfter 2, 4 Minuten");
+    expect(instructions("koepff-gruener-spargel-trueffel-hollandaise-parmesan-chips"))
+      .toContain("170 °C Heißluft, Lüfter 1, 100 % DRY.Maxi, 7 Minuten");
+
+    expect(instructions("koepff-tortilla-tarte-getrocknete-tomaten-oliven"))
+      .toContain("165 °C Kombidampf, 20 % STEAM.Maxi, Lüfter 1P");
+    expect(instructions("koepff-tortilla-tarte-getrocknete-tomaten-oliven"))
+      .toContain("82 °C Kerntemperatur");
+
+    expect(instructions("koepff-grillgemuese-raukepesto-schafskaesequader"))
+      .toContain("200 °C Heißluft, Lüfter 2, 100 % DRY.Maxi, 9 Minuten");
+    expect(instructions("koepff-rotgarnelen-avocado-wasabi-creme"))
+      .toContain("180 °C");
+    expect(instructions("koepff-rotgarnelen-avocado-wasabi-creme"))
+      .toContain("63 °C Kerntemperatur");
+
+    expect(instructions("koepff-erdbeer-dolce-tiramisu-ohne-alkohol")).toContain("68 °C");
+    expect(instructions("koepff-kokos-zitronen-panna-cotta-toertchen-brombeere"))
+      .toContain("65 °C");
+
+    const coconut = recipes.get("koepff-kokos-zitronen-panna-cotta-toertchen-brombeere")!;
+    const blackberries = coconut.ingredients.find((ingredient) => ingredient.name === "Brombeeren");
+    expect(blackberries?.quantity).toEqual({ amount: 90, unit: "Stück" });
+    expect(instructions(coconut.recipeId)).toContain("2 Brombeeren pro Törtchen");
+    expect(instructions(coconut.recipeId)).toContain("1 bis 3 Stück");
+
+    for (const recipe of recipes.values()) {
+      expect(recipe.source.approvalState, recipe.recipeId).toBe("review_required");
+    }
   });
 
   it("keeps every transcribed quantity unchanged at the recipe base yield", () => {
@@ -190,7 +235,7 @@ describe("Köpff recipe seeds", () => {
     expect(purchaseList.items.some((item) => item.displayName === "Weißwein trocken")).toBe(true);
   });
 
-  it("keeps positive sub-kilogram quantities readable in grams", () => {
+  it("keeps small and piece-count purchase quantities readable", () => {
     const recipes = loadSeeds();
     const purchaseList = aggregatePurchaseList(
       "spec-koepff-small-quantities",
@@ -207,8 +252,8 @@ describe("Köpff recipe seeds", () => {
       purchaseUnit: "g"
     });
     expect(blackberries).toMatchObject({
-      purchaseQty: 1.2,
-      purchaseUnit: "kg"
+      purchaseQty: 90,
+      purchaseUnit: "Stück"
     });
     expect(csv).toContain('"Cayennepfeffer","0.5","g","0.5","g"');
   });

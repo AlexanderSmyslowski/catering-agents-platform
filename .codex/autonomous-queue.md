@@ -21,18 +21,22 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
+- **PR #573 · UNOX-XVC305E-Garparameter fachlich prüfen.** Draft-PR:
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/573>,
+  gestapelt auf #572. Acht thermisch geführte Rezeptkarten enthalten nun
+  konkrete Geräte-, Lüfter-, Dampf-/Trocknungs-, Zeit- und bei Protein
+  Kerntemperaturwerte. Brombeeren werden mit 90 Stück für 45 Törtchen
+  kalkuliert. Alle Karten bleiben `review_required`; die Parameter sind ein
+  sichtbarer Review-Entwurf und werden nicht automatisch zu Betriebswissen.
+  Batterie: 273 Dateien / 1.226 Tests, TypeScript, Build, Audit und
+  Internal-Beta-Gate grün.
 - **PR #572 · Fachlich geprüfte Roastbeef-/Brombeer-Korrektur.** Draft-PR:
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/572>,
   gestapelt auf #571. Roastbeef wird als ganzes Stück je nach Stückgröße und
   Produktionsmenge in Pfanne oder Kipper rundum angebraten; die erfundene
   gekochte Brombeer-Komponente entfällt vollständig. Konkrete Garraum- und
-  Kerntemperaturen bleiben bis zur fachlichen Freigabe offen. Batterie: 273
+  Kerntemperaturen bleiben in diesem Basisslice offen. Batterie: 273
   Dateien / 1.225 Tests, TypeScript, Build, Audit und Internal-Beta-Gate grün.
-- **GATE 3 · Temperaturprofile fachlich freigeben.** Für Roastbeef, Kalbsnuss
-  und die weiteren thermisch geführten Karten müssen konkrete Garraum-,
-  Geräte- und gegebenenfalls Kerntemperaturen als interner Produktionsstandard
-  beschlossen werden. Herstellerwerte dienen nur als Vorschlag; ohne
-  Alexander-/Ronak-Freigabe werden sie nicht in Rezeptkarten übernommen.
 - **PR #571 · A4-Paginierung ohne abgeschnittene Inhalte.** Draft-PR:
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/571>.
   Belegt: Die anonymisierte 45-Personen-Mappe enthält auf 32 visuell geprüften

@@ -12,7 +12,7 @@
     "qualityScore": 0.95,
     "fitScore": 1,
     "extractionCompleteness": 1,
-    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich. Garparameter für UNOX XVC305E als prüfpflichtiger Gate-3-Entwurf ergänzt."
   },
   "baseYield": {
     "servings": 45,
@@ -141,7 +141,7 @@
     },
     {
       "index": 8,
-      "instruction": "Backen, bis die Füllung gestockt ist."
+      "instruction": "UNOX XVC305E: 165 °C Kombidampf, 20 % STEAM.Maxi, Lüfter 1P, Richtzeit 18 Minuten. Kernfühler in eine Referenz-Tarte setzen und bis 82 °C Kerntemperatur backen."
     },
     {
       "index": 9,

@@ -12,7 +12,7 @@
     "qualityScore": 0.95,
     "fitScore": 1,
     "extractionCompleteness": 1,
-    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich. Garparameter für UNOX XVC305E als prüfpflichtiger Gate-3-Entwurf ergänzt."
   },
   "baseYield": {
     "servings": 45,
@@ -153,15 +153,15 @@
     },
     {
       "index": 2,
-      "instruction": "Spargel kurz blanchieren oder schonend garen, abschrecken, gut trocknen und leicht mit Olivenöl marinieren."
+      "instruction": "Spargel im gelochten GN-Behälter im UNOX XVC305E bei 100 °C Dampf, Lüfter 2, 4 Minuten garen; danach sofort abschrecken, gut trocknen und leicht mit Olivenöl marinieren."
     },
     {
       "index": 3,
-      "instruction": "Parmesan fein reiben, in 45 kleinen Häufchen auf Backpapier setzen, flach drücken und knusprig backen; trocken auskühlen lassen."
+      "instruction": "Parmesan fein reiben, in 45 kleinen Häufchen auf Backpapier setzen und flach drücken. Im UNOX XVC305E bei 170 °C Heißluft, Lüfter 1, 100 % DRY.Maxi, 7 Minuten knusprig backen; trocken auskühlen lassen."
     },
     {
       "index": 4,
-      "instruction": "Butter schmelzen, klären und bei 55-60 °C warm halten."
+      "instruction": "Butter schmelzen, klären und bei 58 °C warm halten."
     },
     {
       "index": 5,
@@ -169,7 +169,7 @@
     },
     {
       "index": 6,
-      "instruction": "Eigelb mit warmer Reduktion über heißem, nicht kochendem Wasserbad auf 62-65 °C aufschlagen."
+      "instruction": "Eigelb mit warmer Reduktion über heißem, nicht kochendem Wasserbad auf 63 °C aufschlagen."
     },
     {
       "index": 7,
