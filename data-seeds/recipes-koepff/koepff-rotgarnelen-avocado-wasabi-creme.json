@@ -12,7 +12,7 @@
     "qualityScore": 0.95,
     "fitScore": 1,
     "extractionCompleteness": 1,
-    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich. Garparameter als prüfpflichtiger Gate-3-Entwurf ergänzt."
   },
   "baseYield": {
     "servings": 45,
@@ -118,7 +118,7 @@
     },
     {
       "index": 2,
-      "instruction": "Kurz in Olivenöl garen/anbraten, mit Salz und Pfeffer würzen."
+      "instruction": "Pfanne oder Kipper auf 180 °C vorheizen. Garnelen in Olivenöl 60-90 Sekunden je Seite anbraten, mit Salz und Pfeffer würzen und an der dicksten Garnele 63 °C Kerntemperatur prüfen."
     },
     {
       "index": 3,

@@ -12,7 +12,7 @@
     "qualityScore": 0.95,
     "fitScore": 1,
     "extractionCompleteness": 1,
-    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich. Garparameter für UNOX XVC305E als prüfpflichtiger Gate-3-Entwurf ergänzt."
   },
   "baseYield": {
     "servings": 45,
@@ -157,7 +157,7 @@
     },
     {
       "index": 3,
-      "instruction": "Bei niedriger Temperatur schonend rosa garen; Kerntemperatur nach interner Vorgabe festlegen."
+      "instruction": "UNOX XVC305E: 80 °C Heißluft, Lüfter 1P, 20 % STEAM.Maxi. Kernfühler mittig in den dicksten Teil setzen und die Kalbsnuss bis 60 °C Kerntemperatur ziehen."
     },
     {
       "index": 4,

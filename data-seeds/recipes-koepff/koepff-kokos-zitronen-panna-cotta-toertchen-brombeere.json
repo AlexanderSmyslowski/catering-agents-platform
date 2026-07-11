@@ -12,7 +12,7 @@
     "qualityScore": 0.95,
     "fitScore": 1,
     "extractionCompleteness": 1,
-    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich. Gar- und Anrichteparameter als prüfpflichtiger Gate-3-Entwurf ergänzt."
   },
   "baseYield": {
     "servings": 45,
@@ -86,8 +86,8 @@
       "ingredientId": "koepff-kokos-zitronen-panna-cotta-toertchen-brombeere-08-brombeeren",
       "name": "Brombeeren",
       "quantity": {
-        "amount": 1200,
-        "unit": "g"
+        "amount": 90,
+        "unit": "Stück"
       },
       "group": "obst_gemuese"
     }
@@ -103,7 +103,7 @@
     },
     {
       "index": 3,
-      "instruction": "Kokoscreme, Zucker, Zitronenabrieb, Salz und Vanille auf ca. 60-70 °C erwärmen; nicht stark kochen."
+      "instruction": "Kokoscreme, Zucker, Zitronenabrieb, Salz und Vanille auf 65 °C erwärmen; nicht kochen."
     },
     {
       "index": 4,
@@ -135,7 +135,7 @@
     },
     {
       "index": 11,
-      "instruction": "Kokos-Törtchen ausformen und die frischen Brombeeren erst kurz vor Ausgabe dazugeben."
+      "instruction": "Kokos-Törtchen ausformen und 2 Brombeeren pro Törtchen als Kalkulationsziel erst kurz vor Ausgabe dazugeben; je nach Fruchtgröße sind 1 bis 3 Stück zulässig."
     }
   ],
   "scalingRules": {

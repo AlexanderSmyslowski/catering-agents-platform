@@ -12,7 +12,7 @@
     "qualityScore": 0.95,
     "fitScore": 1,
     "extractionCompleteness": 1,
-    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich. Garparameter für UNOX XVC305E als prüfpflichtiger Gate-3-Entwurf ergänzt."
   },
   "baseYield": {
     "servings": 45,
@@ -306,7 +306,7 @@
     },
     {
       "index": 2,
-      "instruction": "Anschließend bei niedriger Garraumtemperatur bis zur fachlich freigegebenen Kerntemperatur ziehen, vollständig auskühlen und kalt stellen."
+      "instruction": "UNOX XVC305E: 80 °C Heißluft, Lüfter 1P, 0 % STEAM.Maxi. Kernfühler mittig in den dicksten Teil setzen und bis 54 °C Kerntemperatur ziehen; anschließend nach interner Kühlvorgabe zügig auskühlen und kalt stellen."
     },
     {
       "index": 3,

@@ -12,7 +12,7 @@
     "qualityScore": 0.95,
     "fitScore": 1,
     "extractionCompleteness": 1,
-    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich."
+    "licenseNote": "Einmalig manuell aus der internen Produktionsmappe transkribiert; fachliche Prüfung vor operativer Nutzung erforderlich. Garparameter für UNOX XVC305E als prüfpflichtiger Gate-3-Entwurf ergänzt."
   },
   "baseYield": {
     "servings": 45,
@@ -166,7 +166,7 @@
     },
     {
       "index": 3,
-      "instruction": "Auf Grillplatte oder im heißen Ofen rösten, bis Röstaromen entstehen, aber das Gemüse noch Struktur hat."
+      "instruction": "Gemüse einlagig im UNOX XVC305E bei 200 °C Heißluft, Lüfter 2, 100 % DRY.Maxi, 9 Minuten rösten, bis Röstaromen entstehen und das Gemüse noch Struktur hat."
     },
     {
       "index": 4,
