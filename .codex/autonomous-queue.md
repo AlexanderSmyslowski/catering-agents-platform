@@ -23,10 +23,11 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 - **PR #571 · A4-Paginierung ohne abgeschnittene Inhalte.** Draft-PR:
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/571>.
-  Belegt: Die anonymisierte 45-Personen-Mappe enthält auf 18 visuell geprüften
+  Belegt: Die anonymisierte 45-Personen-Mappe enthält auf 32 visuell geprüften
   A4-Seiten alle 121 Prüfergebnisse, sieben wiederholte Köpfe und keine
-  abgeschnittenen Quellenzeilen. Batterie: 273 Dateien / 1.223 Tests,
-  TypeScript, Build, Audit und Internal-Beta-Gate grün.
+  abgeschnittenen Quellenzeilen. Jedes der elf Rezepte und jede der zwölf
+  Metro-Produktgruppen ist eine eigene Druckeinheit. Batterie: 273 Dateien /
+  1.224 Tests, TypeScript, Build, Audit und Internal-Beta-Gate grün.
 - **GATE 3 · Fachliche Produktionsmappen-Abnahme.** Nach Merge des freigegebenen
   Phase-3-Stacks muss Alexander oder Ronak eine vollständige Mappe aus einem
   realen, anonymisierten Fall fachlich prüfen. Ronak-tauglich heißt: Alle
@@ -34,7 +35,10 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
   Mise-en-Place und Metro-Einkaufsliste sind fachlich plausibel, druckbar und
   ohne technische Nacharbeit nutzbar. Unsicherheiten sind deutlich markiert,
   nichts wird still angenommen. Erst diese Abnahme öffnet Phase 4 und damit
-  Deploy bzw. parallelen Realbetrieb.
+  Deploy bzw. parallelen Realbetrieb. Alexanders Prüfung vom 2026-07-11:
+  Speisen vollständig und Mappe druckbar, aber noch nicht produktionsreif.
+  Konkrete Ofen-/Konvektomaten- und zwingende Kerntemperaturen fehlen; beim
+  Kokos-Törtchen sind frische Brombeeren nur Beigabe, nicht eigene Zubereitung.
 
 ---
 

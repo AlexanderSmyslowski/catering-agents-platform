@@ -435,6 +435,22 @@ describe("production folder export", () => {
     expect(html).not.toContain("section, table, .recipe-card { break-inside: avoid; }");
   });
 
+  it("separates recipes and Metro groups into printable work units", () => {
+    const input = fixture();
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain('<section class="recipe-section">');
+    expect(html).toContain('<section class="purchase-section">');
+    expect(html.match(/<article class="purchase-group">/g)).toHaveLength(3);
+    expect(html).toMatch(/\.recipe-section, \.purchase-section\s*{\s*break-before:\s*page;\s*page-break-before:\s*always;/);
+    expect(html).toMatch(/\.recipe-card, \.purchase-group\s*{\s*break-after:\s*page;\s*page-break-after:\s*always;/);
+  });
+
   it("states honestly when a linked recipe card is unavailable", () => {
     const input = fixture();
     const html = renderProductionFolderHtml({

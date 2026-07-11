@@ -313,14 +313,14 @@ function renderSection7(input: RenderProductionFolderInput, recipeById: Map<stri
   const missingRecipeIds = linkedRecipeIds.filter((recipeId) => !recipeById.has(recipeId));
 
   if (recipeCards.length === 0) {
-    return `<section><h2>7. Rezeptkarten</h2><p>keine freigegebenen Rezeptkarten verknüpft.</p></section>`;
+    return `<section class="recipe-section"><h2>7. Rezeptkarten</h2><p>keine freigegebenen Rezeptkarten verknüpft.</p></section>`;
   }
 
   const missingHint = missingRecipeIds.length > 0
     ? `<p>Fehlende Rezeptkarten: ${escapeHtml(missingRecipeIds.join(", "))}</p>`
     : "";
 
-  return `<section><h2>7. Rezeptkarten</h2>${missingHint}${recipeCards.join("")}</section>`;
+  return `<section class="recipe-section"><h2>7. Rezeptkarten</h2>${missingHint}${recipeCards.join("")}</section>`;
 }
 
 function recipeUseLabel(
@@ -363,21 +363,21 @@ function renderSection8(
   spec: AcceptedEventSpec
 ): string {
   if (!purchaseList) {
-    return `<section><h2>8. Einkaufsliste nach Metro-Logik</h2><p>Keine Einkaufsliste verknüpft.</p></section>`;
+    return `<section class="purchase-section"><h2>8. Einkaufsliste nach Metro-Logik</h2><p>Keine Einkaufsliste verknüpft.</p></section>`;
   }
 
   const groups = groupPurchaseItems(purchaseList.items);
   if (groups.length === 0) {
-    return `<section><h2>8. Einkaufsliste nach Metro-Logik</h2><p>Keine Einkaufspositionen hinterlegt.</p></section>`;
+    return `<section class="purchase-section"><h2>8. Einkaufsliste nach Metro-Logik</h2><p>Keine Einkaufspositionen hinterlegt.</p></section>`;
   }
 
   const content = groups.map(({ group, items }) =>
-    `<h3>${escapeHtml(formatMetroGroupLabel(group))}</h3><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einkaufshinweis</th><th>Verwendung</th></tr></thead><tbody>${items.map((item) =>
+    `<article class="purchase-group"><h3>${escapeHtml(formatMetroGroupLabel(group))}</h3><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einkaufshinweis</th><th>Verwendung</th></tr></thead><tbody>${items.map((item) =>
       `<tr><td>${escapeHtml(item.displayName)}</td><td>${escapeHtml(`${formatNumber(item.purchaseQty)} ${item.purchaseUnit}`)}</td><td>${escapeHtml(item.supplierHint ?? "")}</td><td>${escapeHtml(purchaseItemUsage(item, recipeById, spec))}</td></tr>`
-    ).join("")}</tbody></table>`
+    ).join("")}</tbody></table></article>`
   ).join("");
 
-  return `<section><h2>8. Einkaufsliste nach Metro-Logik</h2>${content}</section>`;
+  return `<section class="purchase-section"><h2>8. Einkaufsliste nach Metro-Logik</h2>${content}</section>`;
 }
 
 function timelineGroup(
@@ -502,6 +502,8 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
   thead { display: table-header-group; }
   tr { break-inside: avoid; page-break-inside: avoid; }
   .coverage-table { break-inside: avoid; page-break-inside: avoid; }
+  .recipe-section, .purchase-section { break-before: page; page-break-before: always; }
+  .recipe-card, .purchase-group { break-after: page; page-break-after: always; }
 }
 </style></head><body><header class="document-header"><h1>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</h1><p>${escapeHtml(headerMeta(input.spec))}</p></header>${[
     renderSection1(input.spec),

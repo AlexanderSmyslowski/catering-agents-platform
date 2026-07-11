@@ -9,7 +9,8 @@ lesbar, ohne angeschnittene Texte oder verschwindende Spalten.
 
 1. Tabellenköpfe werden auf Fortsetzungsseiten wiederholt.
 2. Tabellenzeilen bleiben ungeteilt und vollständig sichtbar.
-3. Rezeptkarten und Abschnitte dürfen kontrolliert über Seiten laufen.
+3. Jedes Rezept und jede Metro-Produktgruppe beginnt auf einer eigenen Seite;
+   lange Einheiten dürfen kontrolliert über Folgeseiten laufen.
 
 ## Grenzen
 
