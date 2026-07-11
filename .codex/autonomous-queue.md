@@ -17,10 +17,7 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-- **Slice 3.3 · Technische IDs aus sichtbaren Hauptflächen entfernen.** Nur
-  nach Reproduktion auf aktuellem `main`; IDs bleiben in technischen Details.
-  Abnahme: Titel und primäre Handlungsflächen verwenden Fachbezeichnungen,
-  während technische Diagnoseinformationen weiter erreichbar bleiben.
+_Keine Einträge._
 
 ---
 
@@ -40,6 +37,12 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLEDIGT
 
+- **Slice 3.3 · Technische IDs aus Hauptflächen nicht reproduziert.** Frische
+  Browserprobe auf Wegwerfdaten: Angebot, Auftragshistorien und Produktion
+  zeigten 0 sichtbare Treffer für `spec-`, `plan-`, `request-`, `draft-`,
+  `purchase-`, `recipe-` und `component-`. Nach bewusstem Öffnen von
+  „Technische Details“ blieb die Plan-ID wie vorgesehen erreichbar. Kein
+  Produktcode und kein dritter PR.
 - **GATE QUITTIERT: 2** · Alexander bestätigte am 2026-07-11 nach Sichtung
   dreier anonymisierter realer Angebotsfälle die Extraktionsqualität und öffnete
   Phase 3. In 57 Komponenten gab es keine stille Auslassung und keine
