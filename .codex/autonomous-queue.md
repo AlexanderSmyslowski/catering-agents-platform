@@ -17,29 +17,35 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-- **Slice 3.2 · Gefüllte Einkaufsliste aus dem Apply-Pfad.** Abnahme: (a) ein
-  freigegebener Plan mit Rezeptzutaten erzeugt mindestens eine Einkaufsposition;
-  (b) Zutatenmengen bleiben auf die Plan-Personenzahl skaliert; (c) nicht
-  freigegebene Entwürfe erzeugen keine Einkaufsliste.
-- **Slice 3.3 · Technische IDs aus sichtbaren Hauptflächen entfernen.** Nur
-  nach Reproduktion auf aktuellem `main`; IDs bleiben in technischen Details.
-  Abnahme: Titel und primäre Handlungsflächen verwenden Fachbezeichnungen,
-  während technische Diagnoseinformationen weiter erreichbar bleiben.
+_Keine Einträge._
 
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **PR #566 · Rezeptkarten aus freigegebenen KI-Entwürfen.** Der bestehende
-  Apply-Pfad war bereits korrekt; der gehärtete E2E-Vertrag beweist jetzt die
-  vollständige Rezeptkarte mit Zutat, Arbeitsschritt und Prüfstatus, die
-  Draft-only-Grenze sowie den ehrlichen Hinweis bei fehlender Verknüpfung.
-  Kein Produktcode geändert; Merge-Entscheidung bei Alexander.
+- **GATE 3 · Fachliche Produktionsmappen-Abnahme.** Nach Merge des freigegebenen
+  Phase-3-Stacks muss Alexander oder Ronak eine vollständige Mappe aus einem
+  realen, anonymisierten Fall fachlich prüfen. Vorab ist der Satz zu ergänzen:
+  „Ronak-tauglich heißt: ____“. Erst diese Abnahme öffnet Phase 4 und damit
+  Deploy bzw. parallelen Realbetrieb.
 
 ---
 
 ## ERLEDIGT
 
+- **PR #566 · Rezeptkarten aus freigegebenen KI-Entwürfen gemergt.** Der
+  E2E-Vertrag beweist vollständige Rezeptkarten, Draft-only und ehrliche
+  Hinweise bei fehlender Verknüpfung; Merge-Commit `6234d61`.
+- **PR #567 · Merge von Alexander freigegeben.** Der gestapelte E2E-Vertrag
+  belegt 0 Einkaufslisten vor Apply und danach 9,45 kg Tomaten für 45 Personen.
+  Retarget auf `main`, CI-Prüfung und Merge erfolgen in derselben freigegebenen
+  Merge-Session.
+- **Slice 3.3 · Technische IDs aus Hauptflächen nicht reproduziert.** Frische
+  Browserprobe auf Wegwerfdaten: Angebot, Auftragshistorien und Produktion
+  zeigten 0 sichtbare Treffer für `spec-`, `plan-`, `request-`, `draft-`,
+  `purchase-`, `recipe-` und `component-`. Nach bewusstem Öffnen von
+  „Technische Details“ blieb die Plan-ID wie vorgesehen erreichbar. Kein
+  Produktcode und kein dritter PR.
 - **GATE QUITTIERT: 2** · Alexander bestätigte am 2026-07-11 nach Sichtung
   dreier anonymisierter realer Angebotsfälle die Extraktionsqualität und öffnete
   Phase 3. In 57 Komponenten gab es keine stille Auslassung und keine
