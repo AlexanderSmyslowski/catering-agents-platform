@@ -17,16 +17,24 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-- **Slice 3.5 · Einkaufsliste wirklich aufsummieren.** Gate-3-Mappe enthält
-  gleiche Artikel wie Olivenöl mehrfach, weil rezeptlokale Ingredient-IDs
-  statt der kanonischen Artikelbezeichnung aggregiert werden. Abnahme:
-  gleiche Bezeichnung + Einheit + Warengruppe wird über Rezepte summiert,
-  unterschiedliche Artikel bleiben getrennt, Herkunftsrezepte vollständig.
+- **Slice 3.6 · Kleinstmengen ohne Null-Rundung.** Die visuelle A4-Prüfung der
+  Gate-3-Mappe zeigt vorhandene Gewürzmengen als `0 kg`, weil Gramm beim
+  Einkaufseinheiten-Export auf zwei Kilogramm-Nachkommastellen gerundet werden.
+  Abnahme: positive Gramm-Mengen bleiben nach der Umrechnung positiv und
+  gramgenau, bestehende Kilogramm-Mengen bleiben unverändert, CSV und HTML
+  zeigen dieselbe Menge.
 
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
+- **PR #569 · Einkaufsliste artikelbasiert aufsummiert.** Gestapelter Draft-PR
+  auf #568:
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/569>.
+  Belegt: acht Olivenöl-Zeilen werden zu einer 970-ml-Position mit allen fünf
+  Herkunftsrezepten; die reale Gate-3-Mappe sinkt von 121 auf 70 Positionen,
+  während 121 von 121 Rezeptzutaten gedeckt bleiben. Batterie: 273 Dateien /
+  1.221 Tests, TypeScript, Build, Audit und Internal-Beta-Gate grün.
 - **PR #568 · Quellenexakte Basismengen.** Draft-PR
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/568>.
   Belegt: Alle elf Köpff-Seeds bleiben bei Base-Yield mengenidentisch,
