@@ -17,10 +17,6 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-- **Slice 3.2 · Gefüllte Einkaufsliste aus dem Apply-Pfad.** Abnahme: (a) ein
-  freigegebener Plan mit Rezeptzutaten erzeugt mindestens eine Einkaufsposition;
-  (b) Zutatenmengen bleiben auf die Plan-Personenzahl skaliert; (c) nicht
-  freigegebene Entwürfe erzeugen keine Einkaufsliste.
 - **Slice 3.3 · Technische IDs aus sichtbaren Hauptflächen entfernen.** Nur
   nach Reproduktion auf aktuellem `main`; IDs bleiben in technischen Details.
   Abnahme: Titel und primäre Handlungsflächen verwenden Fachbezeichnungen,
@@ -35,6 +31,10 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
   vollständige Rezeptkarte mit Zutat, Arbeitsschritt und Prüfstatus, die
   Draft-only-Grenze sowie den ehrlichen Hinweis bei fehlender Verknüpfung.
   Kein Produktcode geändert; Merge-Entscheidung bei Alexander.
+- **PR #567 · Gefüllte Einkaufsliste aus dem Apply-Pfad.** Gestapelt auf #566;
+  der E2E-Vertrag belegt 0 Listen vor Apply und danach 9,45 kg Tomaten für
+  45 Personen aus einem 10-Portionen-Rezept inklusive bestehendem
+  Verlustfaktor. Kein Produktcode geändert; Merge-Entscheidung bei Alexander.
 
 ---
 
