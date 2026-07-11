@@ -17,12 +17,6 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-- **Slice 3.4 · Quellenexakte Basismengen.** Gate-3-Reproduktion mit der
-  45-Personen-Köpff-Mappe: `scaleRecipe` erhöht bei identischem Base-Yield
-  3,2 kg Kalbsnuss auf 4,128 kg und 45 Garnelen auf 59,85 Stück. Abnahme:
-  (a) Basis-Personenzahl erhält alle transkribierten Mengen exakt; (b) lineare
-  Skalierung auf andere Personenzahlen bleibt deterministisch; (c) der
-  Verlustfaktor bleibt als Fachhinweis am Produktionsbatch erhalten.
 - **Slice 3.5 · Einkaufsliste wirklich aufsummieren.** Gate-3-Mappe enthält
   gleiche Artikel wie Olivenöl mehrfach, weil rezeptlokale Ingredient-IDs
   statt der kanonischen Artikelbezeichnung aggregiert werden. Abnahme:
@@ -33,6 +27,12 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
+- **PR #568 · Quellenexakte Basismengen.** Draft-PR
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/568>.
+  Belegt: Alle elf Köpff-Seeds bleiben bei Base-Yield mengenidentisch,
+  30/45/90 Portionen skalieren linear und der Verlustfaktor bleibt als
+  Batch-Metadatum sichtbar. Batterie: 273 Dateien / 1.220 Tests, TypeScript,
+  Build, Audit und Internal-Beta-Gate grün; keine Provider-Aufrufe.
 - **GATE 3 · Fachliche Produktionsmappen-Abnahme.** Nach Merge des freigegebenen
   Phase-3-Stacks muss Alexander oder Ronak eine vollständige Mappe aus einem
   realen, anonymisierten Fall fachlich prüfen. Ronak-tauglich heißt: Alle
