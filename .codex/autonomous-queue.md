@@ -1,6 +1,6 @@
 # Autonome Queue
 
-**Aktive Phase: 2 (Echte KI-Anbindung)** — Phasenfolge, Loop-Regeln und
+**Aktive Phase: 3 (Mappe produktionsreif)** — Phasenfolge, Loop-Regeln und
 Endziel: `.codex/ziellauf.md` (bindend seit 2026-07-03). Die Queue wird
 nur aus der aktiven Phase gespeist; die nächste Phase öffnet erst mit
 einem `GATE QUITTIERT: <Phase>`-Eintrag von Alexander unter ERLEDIGT.
@@ -17,20 +17,37 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-_Keine Einträge._
+- **Slice 3.2 · Gefüllte Einkaufsliste aus dem Apply-Pfad.** Abnahme: (a) ein
+  freigegebener Plan mit Rezeptzutaten erzeugt mindestens eine Einkaufsposition;
+  (b) Zutatenmengen bleiben auf die Plan-Personenzahl skaliert; (c) nicht
+  freigegebene Entwürfe erzeugen keine Einkaufsliste.
+- **Slice 3.3 · Technische IDs aus sichtbaren Hauptflächen entfernen.** Nur
+  nach Reproduktion auf aktuellem `main`; IDs bleiben in technischen Details.
+  Abnahme: Titel und primäre Handlungsflächen verwenden Fachbezeichnungen,
+  während technische Diagnoseinformationen weiter erreichbar bleiben.
 
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **PR #565 · Gate-2-Vertrauensgrenzen.** Servergesteuerter Datenmodus
-  fuer anonymisierte Realdokumente und belegpflichtige Ernaehrungskategorien;
-  CI und lokale Batterie gruen. Merge-Entscheidung bei Alexander.
+- **PR #566 · Rezeptkarten aus freigegebenen KI-Entwürfen.** Der bestehende
+  Apply-Pfad war bereits korrekt; der gehärtete E2E-Vertrag beweist jetzt die
+  vollständige Rezeptkarte mit Zutat, Arbeitsschritt und Prüfstatus, die
+  Draft-only-Grenze sowie den ehrlichen Hinweis bei fehlender Verknüpfung.
+  Kein Produktcode geändert; Merge-Entscheidung bei Alexander.
 
 ---
 
 ## ERLEDIGT
 
+- **GATE QUITTIERT: 2** · Alexander bestätigte am 2026-07-11 nach Sichtung
+  dreier anonymisierter realer Angebotsfälle die Extraktionsqualität und öffnete
+  Phase 3. In 57 Komponenten gab es keine stille Auslassung und keine
+  Fehlklassifikation von Non-Food als Speise; alle Ergebnisse blieben
+  freigabepflichtige Entwürfe ohne Produkt-Write.
+- **PR #565 · Gate-2-Vertrauensgrenzen gemergt.** Servergesteuerter Datenmodus
+  für anonymisierte Realdokumente und belegpflichtige Ernährungskategorien;
+  Merge-Commit `d046413`.
 - **Slice 2.3d Batch bewusst beendet.** · Alexander entschied am
   2026-07-10, den Offer-Package-Batch nicht erneut fortzusetzen. Der
   vorhandene Teilkorpus bleibt bei 916 Quellen / 740 erfolgreichen

@@ -281,8 +281,10 @@ describe("ProductionDraft E2E chain", () => {
   it("keeps imported drafts draft-only until approved apply materializes the production folder chain", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
+    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
     const productionApp = buildProductionApp({
       dataRoot,
+      repository,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
         CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
@@ -309,6 +311,7 @@ describe("ProductionDraft E2E chain", () => {
 
       const importedDraft = await importDraft(productionApp, draft);
       expect(importedDraft.status).toBe("pending_review");
+      await expect(repository.get("recipe-draft-tomato-soup")).resolves.toBeUndefined();
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
         specs: 0,
         plans: 0,
@@ -360,7 +363,15 @@ describe("ProductionDraft E2E chain", () => {
       expect(folderExport.statusCode, folderExport.body).toBe(200);
       expect(folderExport.headers["content-type"]).toContain("text/html");
       expect(folderExport.body).toContain("Produktionsmappe");
-      expect(folderExport.body).toContain("Vegetarische Tomatensuppe");
+      expect(folderExport.body).toContain(
+        '<article class="recipe-card"><h3>Vegetarische Tomatensuppe Bankett</h3>'
+      );
+      expect(folderExport.body).toContain("<td>Tomaten</td>");
+      expect(folderExport.body).toContain(
+        "<li>Tomaten garen, passieren und bis zur Ausgabe heißhalten.</li>"
+      );
+      expect(folderExport.body).toContain("Status: Prüfung nötig");
+      expect(folderExport.body).not.toContain("keine freigegebenen Rezeptkarten verknüpft");
     } finally {
       await Promise.all([
         productionApp.close(),

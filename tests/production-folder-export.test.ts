@@ -402,6 +402,20 @@ describe("production folder export", () => {
     expect(html).not.toContain("review_required");
   });
 
+  it("states honestly when a linked recipe card is unavailable", () => {
+    const input = fixture();
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: []
+    });
+
+    expect(html).toContain("<h2>7. Rezeptkarten</h2>");
+    expect(html).toContain("keine freigegebenen Rezeptkarten verknüpft.");
+    expect(html).not.toContain('<article class="recipe-card">');
+  });
+
   it("returns 404 for an unknown production plan", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
