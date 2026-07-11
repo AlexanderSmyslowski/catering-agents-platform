@@ -21,25 +21,13 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **PR #570 · Kleinstmengen ohne Null-Rundung.** Gestapelter Draft-PR auf #569:
-  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/570>.
-  Belegt: 0,5 g Cayenne bleibt in PurchaseList, CSV und A4-HTML als 0,5 g;
-  1.500 g werden weiterhin zu 1,5 kg und bestehende kg-Mengen bleiben
-  unverändert. Batterie: 273 Dateien / 1.222 Tests, TypeScript, Build, Audit
-  und Internal-Beta-Gate grün; keine Provider-Aufrufe.
-- **PR #569 · Einkaufsliste artikelbasiert aufsummiert.** Gestapelter Draft-PR
-  auf #568:
-  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/569>.
-  Belegt: acht Olivenöl-Zeilen werden zu einer 970-ml-Position mit allen fünf
-  Herkunftsrezepten; die reale Gate-3-Mappe sinkt von 121 auf 70 Positionen,
-  während 121 von 121 Rezeptzutaten gedeckt bleiben. Batterie: 273 Dateien /
-  1.221 Tests, TypeScript, Build, Audit und Internal-Beta-Gate grün.
-- **PR #568 · Quellenexakte Basismengen.** Draft-PR
-  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/568>.
-  Belegt: Alle elf Köpff-Seeds bleiben bei Base-Yield mengenidentisch,
-  30/45/90 Portionen skalieren linear und der Verlustfaktor bleibt als
-  Batch-Metadatum sichtbar. Batterie: 273 Dateien / 1.220 Tests, TypeScript,
-  Build, Audit und Internal-Beta-Gate grün; keine Provider-Aufrufe.
+- **PR #571 · A4-Paginierung ohne abgeschnittene Inhalte.** Draft-PR:
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/571>.
+  Belegt: Die anonymisierte 45-Personen-Mappe enthält auf 32 visuell geprüften
+  A4-Seiten alle 121 Prüfergebnisse, sieben wiederholte Köpfe und keine
+  abgeschnittenen Quellenzeilen. Jedes der elf Rezepte und jede der zwölf
+  Metro-Produktgruppen ist eine eigene Druckeinheit. Batterie: 273 Dateien /
+  1.224 Tests, TypeScript, Build, Audit und Internal-Beta-Gate grün.
 - **GATE 3 · Fachliche Produktionsmappen-Abnahme.** Nach Merge des freigegebenen
   Phase-3-Stacks muss Alexander oder Ronak eine vollständige Mappe aus einem
   realen, anonymisierten Fall fachlich prüfen. Ronak-tauglich heißt: Alle
@@ -47,12 +35,25 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
   Mise-en-Place und Metro-Einkaufsliste sind fachlich plausibel, druckbar und
   ohne technische Nacharbeit nutzbar. Unsicherheiten sind deutlich markiert,
   nichts wird still angenommen. Erst diese Abnahme öffnet Phase 4 und damit
-  Deploy bzw. parallelen Realbetrieb.
+  Deploy bzw. parallelen Realbetrieb. Alexanders Prüfung vom 2026-07-11:
+  Speisen vollständig und Mappe druckbar, aber noch nicht produktionsreif.
+  Konkrete Ofen-/Konvektomaten- und zwingende Kerntemperaturen fehlen; beim
+  Kokos-Törtchen sind frische Brombeeren nur Beigabe, nicht eigene Zubereitung.
+  Der Roastbeef-Ablauf ist fachlich zu korrigieren: das ganze parierte Stück
+  je nach Stückgröße und Produktionsmenge in Pfanne oder Kipper rundum
+  anbraten und anschließend bei niedriger Garraumtemperatur bis zur
+  ausdrücklich freigegebenen Kerntemperatur ziehen.
 
 ---
 
 ## ERLEDIGT
 
+- **PR #570 · Kleinstmengen ohne Null-Rundung gemergt.** 0,5 g bleibt in
+  PurchaseList, CSV und A4-HTML lesbar; Merge-Commit `1891dac`.
+- **PR #569 · Einkaufsliste artikelbasiert aufsummiert gemergt.** 70 Positionen
+  decken weiterhin 121 von 121 Rezeptzutaten; Merge-Commit `a79fa6a`.
+- **PR #568 · Quellenexakte Basismengen gemergt.** Base-Yield bleibt
+  mengenidentisch, Verlustfaktoren sind nur Metadaten; Merge-Commit `3e7c0c9`.
 - **PR #566 · Rezeptkarten aus freigegebenen KI-Entwürfen gemergt.** Der
   E2E-Vertrag beweist vollständige Rezeptkarten, Draft-only und ehrliche
   Hinweise bei fehlender Verknüpfung; Merge-Commit `6234d61`.
