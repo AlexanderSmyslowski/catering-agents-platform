@@ -164,7 +164,7 @@ describe("export source metadata readability", () => {
         "\"source_recipe_references\""
       ].join(",")
     );
-    expect(row).toContain("\"4.2\"");
+    expect(row).toContain("\"4\"");
     expect(row).toContain("\"kg\"");
     expect(row).toContain("\"recipe-tomato-soup\"");
     expect(row).toContain("\"Internes Rezept freigegeben\"");

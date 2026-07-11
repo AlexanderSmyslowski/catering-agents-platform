@@ -16,22 +16,23 @@ export function scaleRecipe(
   recipe: Recipe,
   targetServings: number
 ): ScaledRecipeResult {
-  const effectiveServings = Math.max(targetServings, recipe.baseYield.servings);
+  const effectiveServings = targetServings > 0 ? targetServings : recipe.baseYield.servings;
   const factor = effectiveServings / recipe.baseYield.servings;
-  const lossFactor = recipe.scalingRules.defaultLossFactor;
   const batchSize = recipe.scalingRules.batchSize ?? effectiveServings;
   const batchCount = Math.max(1, Math.ceil(effectiveServings / batchSize));
 
+  // Recipe ingredients already describe the raw inputs for the base yield.
+  // Loss remains batch metadata for kitchen review, not an automatic surcharge.
   return {
     scaledYield: {
-      amount: roundQuantity(effectiveServings * lossFactor),
+      amount: roundQuantity(effectiveServings),
       unit: "servings"
     },
     ingredients: recipe.ingredients.map((ingredient) => ({
       ...ingredient,
       quantity: {
         ...ingredient.quantity,
-        amount: roundQuantity(ingredient.quantity.amount * factor * lossFactor)
+        amount: roundQuantity(ingredient.quantity.amount * factor)
       }
     })),
     steps: recipe.steps,

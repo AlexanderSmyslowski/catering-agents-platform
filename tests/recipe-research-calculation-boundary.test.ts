@@ -183,7 +183,7 @@ describe("recipe research and calculation boundary", () => {
 
     expect(second).toEqual(first);
     expect(first.scaledYield).toEqual({
-      amount: 33,
+      amount: 30,
       unit: "servings"
     });
     expect(first.batchCount).toBe(2);
@@ -191,14 +191,14 @@ describe("recipe research and calculation boundary", () => {
       expect.objectContaining({
         ingredientId: "tomato",
         quantity: {
-          amount: 6.6,
+          amount: 6,
           unit: "kg"
         }
       }),
       expect.objectContaining({
         ingredientId: "onion",
         quantity: {
-          amount: 1650,
+          amount: 1500,
           unit: "g"
         }
       })
@@ -214,17 +214,17 @@ describe("recipe research and calculation boundary", () => {
     expect(first.items).toEqual([
       expect.objectContaining({
         ingredientId: "onion",
-        normalizedQty: 1650,
+        normalizedQty: 1500,
         normalizedUnit: "g",
-        purchaseQty: 1.65,
+        purchaseQty: 1.5,
         purchaseUnit: "kg",
         sourceRecipes: ["recipe-tomato-salad"]
       }),
       expect.objectContaining({
         ingredientId: "tomato",
-        normalizedQty: 6.6,
+        normalizedQty: 6,
         normalizedUnit: "kg",
-        purchaseQty: 6.6,
+        purchaseQty: 6,
         purchaseUnit: "kg",
         sourceRecipes: ["recipe-tomato-salad"]
       })
