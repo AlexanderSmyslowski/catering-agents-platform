@@ -23,20 +23,23 @@ _Keine Einträge._
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **PR #566 · Rezeptkarten aus freigegebenen KI-Entwürfen.** Der bestehende
-  Apply-Pfad war bereits korrekt; der gehärtete E2E-Vertrag beweist jetzt die
-  vollständige Rezeptkarte mit Zutat, Arbeitsschritt und Prüfstatus, die
-  Draft-only-Grenze sowie den ehrlichen Hinweis bei fehlender Verknüpfung.
-  Kein Produktcode geändert; Merge-Entscheidung bei Alexander.
-- **PR #567 · Gefüllte Einkaufsliste aus dem Apply-Pfad.** Gestapelt auf #566;
-  der E2E-Vertrag belegt 0 Listen vor Apply und danach 9,45 kg Tomaten für
-  45 Personen aus einem 10-Portionen-Rezept inklusive bestehendem
-  Verlustfaktor. Kein Produktcode geändert; Merge-Entscheidung bei Alexander.
+- **GATE 3 · Fachliche Produktionsmappen-Abnahme.** Nach Merge des freigegebenen
+  Phase-3-Stacks muss Alexander oder Ronak eine vollständige Mappe aus einem
+  realen, anonymisierten Fall fachlich prüfen. Vorab ist der Satz zu ergänzen:
+  „Ronak-tauglich heißt: ____“. Erst diese Abnahme öffnet Phase 4 und damit
+  Deploy bzw. parallelen Realbetrieb.
 
 ---
 
 ## ERLEDIGT
 
+- **PR #566 · Rezeptkarten aus freigegebenen KI-Entwürfen gemergt.** Der
+  E2E-Vertrag beweist vollständige Rezeptkarten, Draft-only und ehrliche
+  Hinweise bei fehlender Verknüpfung; Merge-Commit `6234d61`.
+- **PR #567 · Merge von Alexander freigegeben.** Der gestapelte E2E-Vertrag
+  belegt 0 Einkaufslisten vor Apply und danach 9,45 kg Tomaten für 45 Personen.
+  Retarget auf `main`, CI-Prüfung und Merge erfolgen in derselben freigegebenen
+  Merge-Session.
 - **Slice 3.3 · Technische IDs aus Hauptflächen nicht reproduziert.** Frische
   Browserprobe auf Wegwerfdaten: Angebot, Auftragshistorien und Produktion
   zeigten 0 sichtbare Treffer für `spec-`, `plan-`, `request-`, `draft-`,
