@@ -17,6 +17,13 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
+- **Slice 3.7 · A4-Paginierung ohne abgeschnittene Inhalte.** Vollständige
+  visuelle Prüfung der 20-seitigen Gate-3-Mappe: Quellenzeilen sind auf den
+  Seiten 8/10 angeschnitten, ein Tabellenkopf fehlt auf Seite 14 und die
+  Ergebnis-Spalte verschwindet auf den Fortsetzungsseiten 18/20. Abnahme:
+  lange Tabellen und Rezeptkarten dürfen seitenweise umbrechen,
+  Tabellenköpfe wiederholen sich und jede Zeile bleibt vollständig sichtbar.
+
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)

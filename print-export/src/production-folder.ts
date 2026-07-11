@@ -416,6 +416,12 @@ function renderTimeline(plan: ProductionPlan, eventDate?: string): string {
   }).join("");
 }
 
+const COVERAGE_ROWS_PER_BLOCK = 20;
+
+function renderCoverageRow(result: string, check: string, purchaseItem: string): string {
+  return `<div class="coverage-row" role="row"><div class="coverage-cell" role="cell">${escapeHtml(result)}</div><div class="coverage-cell" role="cell">${escapeHtml(check)}</div><div class="coverage-cell" role="cell">${escapeHtml(purchaseItem)}</div></div>`;
+}
+
 function renderCoverage(plan: ProductionPlan, purchaseList: PurchaseList | undefined): string {
   if (!purchaseList) {
     return "<p>Zutatenabgleich: keine Einkaufsliste verknüpft.</p>";
@@ -424,10 +430,10 @@ function renderCoverage(plan: ProductionPlan, purchaseList: PurchaseList | undef
   const coverage = checkPurchaseCoverage(plan, purchaseList);
   const rows = [
     ...coverage.coveredIngredients.map((item) =>
-      `<tr><td>gedeckt</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.displayName)}</td></tr>`
+      renderCoverageRow("gedeckt", item.name, item.displayName)
     ),
     ...coverage.missingIngredients.map((item) =>
-      `<tr><td>fehlend</td><td>${escapeHtml(item.name)}</td><td></td></tr>`
+      renderCoverageRow("fehlend", item.name, "")
     )
   ];
 
@@ -435,7 +441,15 @@ function renderCoverage(plan: ProductionPlan, purchaseList: PurchaseList | undef
     return "<p>Zutatenabgleich: keine Zutatenprüfpunkte im Plan.</p>";
   }
 
-  return `<table><thead><tr><th>Ergebnis</th><th>Prüfpunkt</th><th>Einkaufsposition</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  const blocks: string[] = [];
+  // Chromium can drop cells when one table spans several printed pages. Small
+  // semantic grid blocks keep every audit result visible and repeat the head.
+  for (let index = 0; index < rows.length; index += COVERAGE_ROWS_PER_BLOCK) {
+    const blockRows = rows.slice(index, index + COVERAGE_ROWS_PER_BLOCK);
+    blocks.push(`<div class="coverage-table" role="table" aria-label="Zutatenabgleich"><div role="rowgroup"><div class="coverage-row coverage-head" role="row"><div class="coverage-cell" role="columnheader">Ergebnis</div><div class="coverage-cell" role="columnheader">Prüfpunkt</div><div class="coverage-cell" role="columnheader">Einkaufsposition</div></div></div><div role="rowgroup">${blockRows.join("")}</div></div>`);
+  }
+
+  return blocks.join("");
 }
 
 function renderSection9(plan: ProductionPlan, purchaseList: PurchaseList | undefined, eventDate?: string): string {
@@ -476,9 +490,19 @@ table { border-collapse: collapse; margin: 8px 0 12px; width: 100%; }
 th, td { border: 1px solid #d9e2ec; padding: 5px 6px; text-align: left; vertical-align: top; }
 th { background: #f4f7fa; font-weight: 700; }
 .facts th { width: 32%; }
-.recipe-card { break-inside: avoid; margin: 12px 0; }
+.recipe-card { break-inside: auto; margin: 12px 0; }
+.coverage-table { border-left: 1px solid #d9e2ec; margin: 8px 0 12px; }
+.coverage-row { display: grid; grid-template-columns: minmax(78px, .55fr) minmax(0, 2fr) minmax(0, 2fr); }
+.coverage-cell { border-bottom: 1px solid #d9e2ec; border-right: 1px solid #d9e2ec; padding: 5px 6px; }
+.coverage-head .coverage-cell { background: #f4f7fa; border-top: 1px solid #d9e2ec; font-weight: 700; }
 footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; padding-top: 8px; }
-@media print { body { font-size: 11px; } section, table, .recipe-card { break-inside: avoid; } }
+@media print {
+  body { font-size: 11px; }
+  h2, h3, .recipe-card > h3, .recipe-card > h3 + p { break-after: avoid-page; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  .coverage-table { break-inside: avoid; page-break-inside: avoid; }
+}
 </style></head><body><header class="document-header"><h1>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</h1><p>${escapeHtml(headerMeta(input.spec))}</p></header>${[
     renderSection1(input.spec),
     renderSection2(input, recipeById),

@@ -402,6 +402,39 @@ describe("production folder export", () => {
     expect(html).not.toContain("review_required");
   });
 
+  it("paginates long recipe and audit tables by complete rows", () => {
+    const input = fixture();
+    const ingredient = input.recipe.ingredients[0]!;
+    const purchaseItem = input.purchaseList.items[0]!;
+    input.plan.productionBatches[0]!.ingredients = Array.from({ length: 41 }, (_, index) => ({
+      ...ingredient,
+      ingredientId: `ingredient-${index + 1}`,
+      name: `Prüfzutat ${index + 1}`
+    }));
+    input.purchaseList.items = Array.from({ length: 41 }, (_, index) => ({
+      ...purchaseItem,
+      ingredientId: `ingredient-${index + 1}`,
+      displayName: `Einkaufsposition ${index + 1}`
+    }));
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+    const coverageBlocks = html.match(/<div class="coverage-table" role="table"/g) ?? [];
+
+    expect(html).toMatch(/thead\s*{\s*display:\s*table-header-group;/);
+    expect(html).toMatch(/tr\s*{\s*break-inside:\s*avoid;\s*page-break-inside:\s*avoid;/);
+    expect(html).toMatch(/\.recipe-card\s*{\s*break-inside:\s*auto;/);
+    expect(html).toMatch(/\.coverage-table\s*{\s*break-inside:\s*avoid;\s*page-break-inside:\s*avoid;/);
+    expect(coverageBlocks).toHaveLength(3);
+    expect(html.match(/role="columnheader"/g)).toHaveLength(9);
+    expect(html.match(/class="coverage-row" role="row"/g)).toHaveLength(41);
+    expect(html).not.toContain('<table class="coverage-table">');
+    expect(html).not.toContain("section, table, .recipe-card { break-inside: avoid; }");
+  });
+
   it("states honestly when a linked recipe card is unavailable", () => {
     const input = fixture();
     const html = renderProductionFolderHtml({
