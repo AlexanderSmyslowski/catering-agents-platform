@@ -11,6 +11,7 @@ import {
   type ProductionBatch,
   type Recipe
 } from "@catering/shared-core";
+import { renderPurchaseListCsv } from "@catering/print-export";
 
 const seedDir = "data-seeds/recipes-koepff";
 
@@ -163,6 +164,29 @@ describe("Köpff recipe seeds", () => {
     });
     expect([...(oliveOilItems[0]?.sourceRecipes ?? [])].sort()).toEqual(expectedSources);
     expect(purchaseList.items.some((item) => item.displayName === "Weißwein trocken")).toBe(true);
+  });
+
+  it("keeps positive sub-kilogram quantities readable in grams", () => {
+    const recipes = loadSeeds();
+    const purchaseList = aggregatePurchaseList(
+      "spec-koepff-small-quantities",
+      recipes.map(productionBatch)
+    );
+    const cayenne = purchaseList.items.find((item) => item.displayName === "Cayennepfeffer");
+    const blackberries = purchaseList.items.find((item) => item.displayName === "Brombeeren");
+    const csv = renderPurchaseListCsv(purchaseList);
+
+    expect(cayenne).toMatchObject({
+      normalizedQty: 0.5,
+      normalizedUnit: "g",
+      purchaseQty: 0.5,
+      purchaseUnit: "g"
+    });
+    expect(blackberries).toMatchObject({
+      purchaseQty: 1.2,
+      purchaseUnit: "kg"
+    });
+    expect(csv).toContain('"Cayennepfeffer","0.5","g","0.5","g"');
   });
 
   it("sorts purchase items in Metro group order and keeps unknown groups last", () => {
