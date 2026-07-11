@@ -34,8 +34,8 @@ export interface PurchaseCoverageCheck {
   documentedProcurementExceptions: DocumentedProcurementException[];
 }
 
-function purchaseUnitFor(unit: string): string {
-  if (unit === "g") {
+function purchaseUnitFor(amount: number, unit: string): string {
+  if (unit === "g" && amount >= 1000) {
     return "kg";
   }
 
@@ -43,8 +43,8 @@ function purchaseUnitFor(unit: string): string {
 }
 
 function purchaseQtyFor(amount: number, unit: string): number {
-  if (unit === "g") {
-    return Number((amount / 1000).toFixed(2));
+  if (unit === "g" && amount >= 1000) {
+    return Number((amount / 1000).toFixed(5));
   }
 
   return Number(amount.toFixed(2));
@@ -77,7 +77,7 @@ function aggregatePurchaseItem(
     normalizedQty: Number(normalizedQty.toFixed(2)),
     normalizedUnit: item.normalizedUnit,
     purchaseQty: purchaseQtyFor(normalizedQty, item.normalizedUnit),
-    purchaseUnit: purchaseUnitFor(item.normalizedUnit),
+    purchaseUnit: purchaseUnitFor(normalizedQty, item.normalizedUnit),
     group: item.group,
     supplierHint: existing?.supplierHint ?? item.supplierHint,
     sourceRecipes: [...new Set([...(existing?.sourceRecipes ?? []), ...item.sourceRecipes])],
@@ -129,7 +129,7 @@ export function aggregatePurchaseList(
         normalizedQty: ingredient.quantity.amount,
         normalizedUnit: ingredient.quantity.unit,
         purchaseQty: purchaseQtyFor(ingredient.quantity.amount, ingredient.quantity.unit),
-        purchaseUnit: purchaseUnitFor(ingredient.quantity.unit),
+        purchaseUnit: purchaseUnitFor(ingredient.quantity.amount, ingredient.quantity.unit),
         group: ingredient.group,
         supplierHint: ingredient.group === "getraenke_als_zutat" ? "Metro Drinks" : "Metro Fresh",
         sourceRecipes: [batch.recipeId],

@@ -17,17 +17,16 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-- **Slice 3.6 · Kleinstmengen ohne Null-Rundung.** Die visuelle A4-Prüfung der
-  Gate-3-Mappe zeigt vorhandene Gewürzmengen als `0 kg`, weil Gramm beim
-  Einkaufseinheiten-Export auf zwei Kilogramm-Nachkommastellen gerundet werden.
-  Abnahme: positive Gramm-Mengen bleiben nach der Umrechnung positiv und
-  gramgenau, bestehende Kilogramm-Mengen bleiben unverändert, CSV und HTML
-  zeigen dieselbe Menge.
-
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
+- **PR #570 · Kleinstmengen ohne Null-Rundung.** Gestapelter Draft-PR auf #569:
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/570>.
+  Belegt: 0,5 g Cayenne bleibt in PurchaseList, CSV und A4-HTML als 0,5 g;
+  1.500 g werden weiterhin zu 1,5 kg und bestehende kg-Mengen bleiben
+  unverändert. Batterie: 273 Dateien / 1.222 Tests, TypeScript, Build, Audit
+  und Internal-Beta-Gate grün; keine Provider-Aufrufe.
 - **PR #569 · Einkaufsliste artikelbasiert aufsummiert.** Gestapelter Draft-PR
   auf #568:
   <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/569>.
