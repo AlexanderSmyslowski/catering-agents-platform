@@ -50,23 +50,36 @@ function purchaseQtyFor(amount: number, unit: string): number {
   return Number(amount.toFixed(2));
 }
 
+function normalizePurchaseArticleName(value: string): string {
+  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("de-DE");
+}
+
+function purchaseAggregateKey(item: PurchaseItem): string {
+  // Ingredient IDs belong to recipes; the visible article identity belongs to purchasing.
+  return JSON.stringify([
+    normalizePurchaseArticleName(item.displayName),
+    item.normalizedUnit,
+    item.group
+  ]);
+}
+
 function aggregatePurchaseItem(
   aggregate: Map<string, PurchaseItem>,
   item: PurchaseItem
 ) {
-  const key = `${item.ingredientId}:${item.normalizedUnit}`;
+  const key = purchaseAggregateKey(item);
   const existing = aggregate.get(key);
   const normalizedQty = item.normalizedQty + (existing?.normalizedQty ?? 0);
 
   aggregate.set(key, {
-    ingredientId: item.ingredientId,
-    displayName: item.displayName,
+    ingredientId: existing?.ingredientId ?? item.ingredientId,
+    displayName: existing?.displayName ?? item.displayName,
     normalizedQty: Number(normalizedQty.toFixed(2)),
     normalizedUnit: item.normalizedUnit,
     purchaseQty: purchaseQtyFor(normalizedQty, item.normalizedUnit),
     purchaseUnit: purchaseUnitFor(item.normalizedUnit),
     group: item.group,
-    supplierHint: item.supplierHint ?? existing?.supplierHint,
+    supplierHint: existing?.supplierHint ?? item.supplierHint,
     sourceRecipes: [...new Set([...(existing?.sourceRecipes ?? []), ...item.sourceRecipes])],
     sourceRecipeMetadata: mergeRecipeSourceMetadata(
       existing?.sourceRecipeMetadata,
@@ -151,7 +164,7 @@ export function aggregatePurchaseList(
 }
 
 function normalizeCoverageKey(value: string): string {
-  return value.trim().toLowerCase();
+  return normalizePurchaseArticleName(value);
 }
 
 function purchaseItemCoversIngredient(item: PurchaseItem, ingredient: PurchaseCoverageIngredientRef): boolean {

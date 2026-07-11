@@ -22,6 +22,12 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
   statt der kanonischen Artikelbezeichnung aggregiert werden. Abnahme:
   gleiche Bezeichnung + Einheit + Warengruppe wird über Rezepte summiert,
   unterschiedliche Artikel bleiben getrennt, Herkunftsrezepte vollständig.
+- **Slice 3.6 · Kleinstmengen ohne Null-Rundung.** Die visuelle A4-Prüfung der
+  Gate-3-Mappe zeigt vorhandene Gewürzmengen als `0 kg`, weil Gramm beim
+  Einkaufseinheiten-Export auf zwei Kilogramm-Nachkommastellen gerundet werden.
+  Abnahme: positive Gramm-Mengen bleiben nach der Umrechnung positiv und
+  gramgenau, bestehende Kilogramm-Mengen bleiben unverändert, CSV und HTML
+  zeigen dieselbe Menge.
 
 ---
 

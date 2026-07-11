@@ -8,6 +8,7 @@ import {
   toProductionBatch,
   validateRecipe,
   type PurchaseItem,
+  type ProductionBatch,
   type Recipe
 } from "@catering/shared-core";
 
@@ -40,6 +41,16 @@ function purchaseItem(group: string, displayName: string): PurchaseItem {
     supplierHint: "Metro Fresh",
     sourceRecipes: ["recipe-test"],
     mappingConfidence: 0.9
+  };
+}
+
+function productionBatch(recipe: Recipe, index: number): ProductionBatch {
+  return {
+    ...toProductionBatch(recipe, `component-${index}`, recipe.baseYield.servings),
+    batchId: `batch-${index}`,
+    station: "Produktionsküche",
+    prepWindow: "Produktionstag",
+    gnPlan: []
   };
 }
 
@@ -125,6 +136,33 @@ describe("Köpff recipe seeds", () => {
       { ...vitello, ingredients: scaleRecipe(vitello, 30).ingredients },
       "Kalbsnuss, roh"
     )).toBe(2133.33);
+  });
+
+  it("sums the same Metro article across recipe-local ingredient ids", () => {
+    const recipes = loadSeeds();
+    const purchaseList = aggregatePurchaseList(
+      "spec-koepff-aggregate",
+      recipes.map(productionBatch)
+    );
+    const oliveOilItems = purchaseList.items.filter(
+      (item) => item.displayName === "Olivenöl mild"
+    );
+    const expectedSources = recipes
+      .filter((recipe) => recipe.ingredients.some((ingredient) => ingredient.name === "Olivenöl mild"))
+      .map((recipe) => recipe.recipeId)
+      .sort();
+
+    expect(oliveOilItems).toHaveLength(1);
+    expect(oliveOilItems[0]).toMatchObject({
+      displayName: "Olivenöl mild",
+      normalizedQty: 970,
+      normalizedUnit: "ml",
+      purchaseQty: 970,
+      purchaseUnit: "ml",
+      group: "oele_essige_kochwein"
+    });
+    expect([...(oliveOilItems[0]?.sourceRecipes ?? [])].sort()).toEqual(expectedSources);
+    expect(purchaseList.items.some((item) => item.displayName === "Weißwein trocken")).toBe(true);
   });
 
   it("sorts purchase items in Metro group order and keeps unknown groups last", () => {
