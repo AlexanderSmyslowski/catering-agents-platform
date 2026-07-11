@@ -354,6 +354,27 @@ describe("ProductionDraft E2E chain", () => {
         plans: 1,
         purchaseLists: 1
       });
+      const purchaseListResponse = await productionApp.inject({
+        method: "GET",
+        url: `/v1/production/purchase-lists/${applied.applied.purchaseListId}`,
+        headers: trustedHeaders("production_operator")
+      });
+      const purchaseList = expectJsonResponse<PurchaseList>(purchaseListResponse);
+      expect(purchaseList.items).toEqual([
+        expect.objectContaining({
+          ingredientId: "ingredient-tomatoes",
+          displayName: "Tomaten",
+          normalizedQty: 9.45,
+          normalizedUnit: "kg",
+          purchaseQty: 9.45,
+          purchaseUnit: "kg",
+          sourceRecipes: ["recipe-draft-tomato-soup"]
+        })
+      ]);
+      expect(purchaseList.totals).toEqual({
+        itemCount: 1,
+        groups: ["obst_gemuese"]
+      });
 
       const folderExport = await exportApp.inject({
         method: "GET",
