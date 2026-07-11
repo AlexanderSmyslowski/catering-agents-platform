@@ -4,6 +4,8 @@ import {
   aggregatePurchaseList,
   isMetroIngredientGroupId,
   metroIngredientGroups,
+  scaleRecipe,
+  toProductionBatch,
   validateRecipe,
   type PurchaseItem,
   type Recipe
@@ -94,6 +96,35 @@ describe("Köpff recipe seeds", () => {
         "Schafskäse / Feta"
       )
     ).toBe(810);
+  });
+
+  it("keeps every transcribed quantity unchanged at the recipe base yield", () => {
+    const recipes = loadSeeds();
+
+    for (const recipe of recipes) {
+      const scaled = scaleRecipe(recipe, recipe.baseYield.servings);
+      expect(scaled.scaledYield, recipe.recipeId).toEqual({
+        amount: recipe.baseYield.servings,
+        unit: "servings"
+      });
+      expect(scaled.ingredients, recipe.recipeId).toEqual(recipe.ingredients);
+    }
+
+    const vitello = recipes.find((recipe) =>
+      recipe.recipeId === "koepff-vitello-tonnato-riesenkapern-weisser-thunfisch"
+    )!;
+    const batch = toProductionBatch(vitello, "component-vitello", 45);
+    expect(batch.lossFactor).toBe(1.29);
+    expect(ingredientAmount({ ...vitello, ingredients: batch.ingredients }, "Kalbsnuss, roh")).toBe(3200);
+
+    expect(ingredientAmount(
+      { ...vitello, ingredients: scaleRecipe(vitello, 90).ingredients },
+      "Kalbsnuss, roh"
+    )).toBe(6400);
+    expect(ingredientAmount(
+      { ...vitello, ingredients: scaleRecipe(vitello, 30).ingredients },
+      "Kalbsnuss, roh"
+    )).toBe(2133.33);
   });
 
   it("sorts purchase items in Metro group order and keeps unknown groups last", () => {

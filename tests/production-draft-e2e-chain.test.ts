@@ -364,9 +364,9 @@ describe("ProductionDraft E2E chain", () => {
         expect.objectContaining({
           ingredientId: "ingredient-tomatoes",
           displayName: "Tomaten",
-          normalizedQty: 9.45,
+          normalizedQty: 9,
           normalizedUnit: "kg",
-          purchaseQty: 9.45,
+          purchaseQty: 9,
           purchaseUnit: "kg",
           sourceRecipes: ["recipe-draft-tomato-soup"]
         })

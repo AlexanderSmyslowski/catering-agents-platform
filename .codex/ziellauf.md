@@ -92,8 +92,11 @@ GATE 2: Alexander sichtet Draft-Qualität an 3 realen Fällen.
     approved Plan mit Rezepten — Fallklasse, nicht Einzelfall).
 3.3 Technische IDs vollständig aus sichtbaren Titeln/Flächen.
 GATE 3: Ronak/Alexander nehmen EINE Mappe fachlich ab.
-    Abnahmekriterium formuliert Alexander vorab in einer Zeile hier:
-    TODO(Alexander): "Ronak-tauglich heißt: ____"
+    Abnahmekriterium: "Ronak-tauglich heißt: Alle angebotenen Speisen sind
+    vollständig enthalten; Mengen, Produktionsrezepte, Mise-en-Place und
+    Metro-Einkaufsliste sind fachlich plausibel, druckbar und ohne technische
+    Nacharbeit nutzbar. Unsicherheiten sind deutlich markiert, nichts wird
+    still angenommen."
 
 ## Phase 4 — Realbetrieb (gated)
 
