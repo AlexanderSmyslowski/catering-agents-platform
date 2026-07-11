@@ -17,12 +17,6 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
-- **Slice 3.1 · Rezeptkarten aus freigegebenen KI-Entwürfen.** Der bestehende
-  Apply-Pfad muss verknüpfte, geprüfte Rezepte bis in die Produktionsmappe
-  tragen. Abnahme: (a) ein freigegebener Entwurf mit Rezeptzuordnung zeigt die
-  vollständige Rezeptkarte in der Mappe; (b) ein nicht freigegebener Entwurf
-  materialisiert weiterhin weder Plan noch Rezeptkarte; (c) fehlende Rezepte
-  bleiben als ehrlicher offener Hinweis sichtbar.
 - **Slice 3.2 · Gefüllte Einkaufsliste aus dem Apply-Pfad.** Abnahme: (a) ein
   freigegebener Plan mit Rezeptzutaten erzeugt mindestens eine Einkaufsposition;
   (b) Zutatenmengen bleiben auf die Plan-Personenzahl skaliert; (c) nicht
@@ -36,7 +30,11 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-_Keine Einträge._
+- **PR #566 · Rezeptkarten aus freigegebenen KI-Entwürfen.** Der bestehende
+  Apply-Pfad war bereits korrekt; der gehärtete E2E-Vertrag beweist jetzt die
+  vollständige Rezeptkarte mit Zutat, Arbeitsschritt und Prüfstatus, die
+  Draft-only-Grenze sowie den ehrlichen Hinweis bei fehlender Verknüpfung.
+  Kein Produktcode geändert; Merge-Entscheidung bei Alexander.
 
 ---
 
