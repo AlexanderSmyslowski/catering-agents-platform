@@ -39,6 +39,10 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
   Speisen vollständig und Mappe druckbar, aber noch nicht produktionsreif.
   Konkrete Ofen-/Konvektomaten- und zwingende Kerntemperaturen fehlen; beim
   Kokos-Törtchen sind frische Brombeeren nur Beigabe, nicht eigene Zubereitung.
+  Der Roastbeef-Ablauf ist fachlich zu korrigieren: das ganze parierte Stück
+  je nach Stückgröße und Produktionsmenge in Pfanne oder Kipper rundum
+  anbraten und anschließend bei niedriger Garraumtemperatur bis zur
+  ausdrücklich freigegebenen Kerntemperatur ziehen.
 
 ---
 
