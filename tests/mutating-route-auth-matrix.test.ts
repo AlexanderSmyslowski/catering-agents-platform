@@ -208,6 +208,21 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "production",
     method: "POST",
+    pathTemplate: "/v1/production/drafts/:draftId/revise",
+    requiredRole: "production_operator",
+    url: "/v1/production/drafts/matrix-production-draft/revise",
+    payload: {},
+    prepareCorrectRoleCase: async (app, headers) => {
+      await seedChangeRequestedProductionDraftForMatrix(app, headers);
+      return {
+        url: "/v1/production/drafts/matrix-production-draft/revise",
+        payload: {}
+      };
+    }
+  },
+  {
+    service: "production",
+    method: "POST",
     pathTemplate: "/v1/production/drafts/:draftId/decision",
     requiredRole: "production_operator",
     url: "/v1/production/drafts/matrix-production-draft/decision",
@@ -442,6 +457,23 @@ async function seedProductionDraftForMatrix(app: unknown, headers: Record<string
     payload: productionDraftPayload()
   });
   expect(imported.statusCode).toBe(201);
+}
+
+async function seedChangeRequestedProductionDraftForMatrix(
+  app: unknown,
+  headers: Record<string, string>
+): Promise<void> {
+  await seedProductionDraftForMatrix(app, headers);
+  const reviewed = await inject(app, {
+    method: "PATCH",
+    url: "/v1/production/drafts/matrix-production-draft/review-cards/matrix-card-event",
+    headers,
+    payload: {
+      decision: "change_requested",
+      operatorComment: "Personenzahl im neuen Entwurf anpassen."
+    }
+  });
+  expect(reviewed.statusCode).toBe(200);
 }
 
 async function seedApprovedProductionDraftForMatrix(app: unknown, headers: Record<string, string>): Promise<void> {

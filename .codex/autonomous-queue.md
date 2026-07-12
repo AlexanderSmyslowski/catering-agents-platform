@@ -33,6 +33,19 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLEDIGT
 
+- **Phase 4.2d · Review-Kommentare als neue ProductionDraft-Revision.**
+  Draft-PR #586 auf `loop/production-draft-revision`. Kommentierte
+  `change_requested`-Karten fuer Eckdaten, Menuekomponenten und offene Fragen
+  erzeugen ueber den bestehenden BYO-Adapter einen neuen `pending_review`-
+  Entwurf mit `supersedesDraftId`; erst nach valider Speicherung wird der alte
+  Entwurf `superseded`. Rezept- und Planwuensche bleiben ehrlich als
+  Pruefnotiz gespeichert und starten nicht den ungeeigneten Extraktionsweg.
+  Die erste echte lokale Subscription-Revision uebernahm Alexanders
+  Brombeer-Hinweis in den neuen Entwurf; die UI zeigt Aenderungswunsch und
+  Ergebnis direkt am betroffenen Pruefpunkt. Vollstaendigkeit, Quellenlinie,
+  Operator-Gate und rohtextfreies Audit sind belegt. Batterie: 274 Dateien /
+  1.249 Tests, TypeScript, Build, Audits und internes Beta-Gate gruen;
+  Desktop-/Mobilprobe ohne Konsolenfehler.
 - **Phase 4.2b · Probestand gesichert und operativ geleert.** Alexander gab
   die Bereinigung frei. Vollbackup auf dem Server:
   `/opt/catering-agents-platform-backups/pre-pilot-20260712T144926Z.dump`,

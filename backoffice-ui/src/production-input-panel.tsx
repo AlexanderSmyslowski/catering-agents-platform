@@ -162,6 +162,7 @@ export function ProductionInputPanel({
   const hasFocusedProductionContext = Boolean(focusedProductionSpec) || Boolean(hasActiveProductionContext);
   const compactInputMode = hasUploadResultSummary || completedDocument;
   const secondaryInputsOpen = !compactInputMode && !hasFocusedProductionContext;
+  const showPersistedDraftReview = !hasUploadReview && !hasFocusedProductionContext;
   const uploadReviewAction = panelState.uploadResultSummary
     ? buildUploadReviewAction(panelState.uploadResultSummary)
     : undefined;
@@ -195,6 +196,15 @@ export function ProductionInputPanel({
 
   return (
     <article className="panel form-panel" aria-label="Arbeitsauftrag und Eingabe">
+      {showPersistedDraftReview ? (
+        <ProductionDraftReviewPanel
+          submitting={submitting}
+          embedded
+          latestOnly
+          resumeMode
+          onDraftChanged={onDraftChanged}
+        />
+      ) : null}
       {compactInputMode ? (
         <input
           ref={sourceInputActions.uploadInputRef}

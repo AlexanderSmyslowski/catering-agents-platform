@@ -9,7 +9,10 @@ import {
   formatProductionDraftStatusLabel,
   ProductionDraftReviewPanel
 } from "../backoffice-ui/src/production-draft-review-panel.js";
-import type { ProductionDraft } from "../backoffice-ui/src/api.js";
+import type {
+  ProductionDraft,
+  ProductionDraftReviewDecision
+} from "../backoffice-ui/src/api.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -290,6 +293,223 @@ describe("ProductionDraftReviewPanel", () => {
     await act(async () => {
       root.unmount();
     });
+  });
+
+  it("collects one concrete change request before offering a new AI revision", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: () => undefined
+      }
+    });
+    let draft = draftFixture();
+    let predecessor: ProductionDraft | undefined;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+        return jsonResponse({ items: predecessor ? [draft, predecessor] : [draft] });
+      }
+      if (
+        url === "/api/production/v1/production/drafts/draft-review-ui-1/review-cards/card-event" &&
+        method === "PATCH"
+      ) {
+        const body = JSON.parse(String(init?.body)) as {
+          decision: ProductionDraft["reviewCards"][number]["decision"];
+          operatorComment?: string;
+        };
+        draft = {
+          ...draft,
+          reviewCards: draft.reviewCards.map((card) =>
+            card.cardId === "card-event"
+              ? { ...card, decision: body.decision, operatorComment: body.operatorComment }
+              : card
+          )
+        };
+        return jsonResponse({ draft, reviewCard: draft.reviewCards[0] });
+      }
+      if (
+        url === "/api/production/v1/production/drafts/draft-review-ui-1/revise" &&
+        method === "POST"
+      ) {
+        predecessor = {
+          ...draft,
+          status: "superseded"
+        };
+        draft = {
+          ...draft,
+          draftId: "draft-review-ui-2",
+          createdAt: "2026-07-01T12:30:00.000Z",
+          supersedesDraftId: predecessor.draftId,
+          reviewCards: draft.reviewCards.map((card) => ({
+            ...card,
+            summary: card.cardId === "card-event"
+              ? "120 Personen und Datum fachlich bestätigen."
+              : card.summary,
+            decision: "pending",
+            operatorComment: undefined
+          })),
+          draftArtifacts: {
+            ...draft.draftArtifacts,
+            eventSpec: {
+              event: { title: "Kundenbuffet" },
+              attendees: { expected: 120 }
+            }
+          }
+        };
+        return jsonResponse({ draft }, 201);
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      await flushPromises();
+    });
+
+    const changeButton = buttonForReviewCard("Buffetdaten prüfen", "Änderung nötig");
+    expect(changeButton).toBeDefined();
+    await act(async () => {
+      changeButton?.click();
+      await flushPromises();
+    });
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/review-cards/card-event"),
+      expect.anything()
+    );
+    const commentField = document.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Was soll geändert werden?"]'
+    );
+    expect(commentField).not.toBeNull();
+    const changeRequest = "Statt 100 kommen 120 Gäste.";
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        "value"
+      )?.set;
+      valueSetter?.call(commentField, changeRequest);
+      commentField?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const rememberButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Änderung vormerken"
+    );
+    expect(rememberButton).toBeDefined();
+    await act(async () => {
+      rememberButton?.click();
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/production/v1/production/drafts/draft-review-ui-1/review-cards/card-event",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          decision: "change_requested",
+          operatorComment: changeRequest
+        })
+      })
+    );
+    const reviseButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Änderungen von KI einarbeiten"
+    );
+    expect(reviseButton).toBeDefined();
+
+    await act(async () => {
+      reviseButton?.click();
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/production/v1/production/drafts/draft-review-ui-1/revise",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(document.body.textContent ?? "").toContain(
+      "Neuer KI-Entwurf erstellt. Änderungswunsch und Ergebnis sind markiert."
+    );
+    expect(document.body.textContent ?? "").toContain(`Dein Änderungswunsch: ${changeRequest}`);
+    expect(document.body.textContent ?? "").toContain("Im neuen Entwurf: 120 Personen und Datum fachlich bestätigen.");
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", inline: "nearest", behavior: "auto" });
+
+    await act(async () => root.unmount());
+  });
+
+  it("stores a recipe comment without offering the source-extraction revision action", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: () => undefined
+      }
+    });
+    let draft = draftFixture();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+        return jsonResponse({ items: [draft] });
+      }
+      if (url.endsWith("/review-cards/card-recipe-1") && method === "PATCH") {
+        const body = JSON.parse(String(init?.body)) as { decision: ProductionDraftReviewDecision; operatorComment: string };
+        draft = {
+          ...draft,
+          reviewCards: draft.reviewCards.map((card) =>
+            card.cardId === "card-recipe-1" ? { ...card, ...body } : card
+          )
+        };
+        return jsonResponse({ draft, reviewCard: draft.reviewCards[3] });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    }) as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      await flushPromises();
+    });
+    await act(async () => {
+      buttonForReviewCard("Rezeptkarte 1 prüfen", "Änderung nötig")?.click();
+      await flushPromises();
+    });
+    const commentField = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Was soll geändert werden?"]');
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+      valueSetter?.call(commentField, "Kerntemperatur ergänzen.");
+      commentField?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const rememberButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Änderung vormerken"
+    );
+    await act(async () => {
+      rememberButton?.click();
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(document.body.textContent ?? "").toContain(
+      "Rezept- und Planänderungen bleiben als Prüfnotiz gespeichert"
+    );
+    expect(document.body.textContent ?? "").not.toContain("Änderungen von KI einarbeiten");
+    await act(async () => root.unmount());
   });
 
   it("embeds only the newest actionable draft in the upload flow", async () => {

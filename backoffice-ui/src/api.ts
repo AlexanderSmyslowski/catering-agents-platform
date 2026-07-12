@@ -76,6 +76,7 @@ export interface ProductionDraft {
   draftId: string;
   status: "pending_review" | "approved" | "rejected" | "superseded";
   createdAt: string;
+  supersedesDraftId?: string;
   appliedAt?: string;
   appliedBy?: string;
   appliedArtifactIds?: {
@@ -432,13 +433,28 @@ export async function loadProductionDrafts() {
 export async function decideProductionDraftReviewCard(
   draftId: string,
   cardId: string,
-  decision: Exclude<ProductionDraftReviewDecision, "pending">
+  decision: Exclude<ProductionDraftReviewDecision, "pending">,
+  operatorComment?: string
 ) {
   return fetchJson<{ draft: ProductionDraft; reviewCard: ProductionDraftReviewCard }>(
     `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/review-cards/${encodeURIComponent(cardId)}`,
     {
       method: "PATCH",
-      body: JSON.stringify({ decision })
+      body: JSON.stringify({
+        decision,
+        ...(operatorComment ? { operatorComment } : {})
+      })
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function reviseProductionDraft(draftId: string) {
+  return fetchJson<{ draft: ProductionDraft }>(
+    `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/revise`,
+    {
+      method: "POST",
+      body: "{}"
     },
     DEFAULT_MUTATION_ACTOR_NAMES.production
   );
