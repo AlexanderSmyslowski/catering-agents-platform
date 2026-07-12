@@ -1627,28 +1627,11 @@ button:disabled {
   order: 1;
 }
 
-.production-flow-steps {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 0.45rem;
+.production-flow-summary {
   margin: 0.35rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.production-flow-steps li {
-  min-height: 2rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.42rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(247, 250, 255, 0.86);
-  border: 1px solid rgba(15, 23, 34, 0.06);
   color: rgba(15, 23, 34, 0.7);
   font-size: 0.86rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .production-calm-summary {
@@ -2185,22 +2168,9 @@ button:disabled {
 }
 
 .app-shell--production-route .drag-drop-zone__cta,
-.app-shell--production-route .production-flow-steps li,
 .app-shell--production-route .production-next-step {
   border-radius: 8px;
   box-shadow: none;
-}
-
-.app-shell--production-route .production-flow-steps {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  width: min(100%, 34rem);
-}
-
-.app-shell--production-route .production-flow-steps li {
-  padding: 0.4rem 0.35rem;
-  background: #f3f3f1;
-  font-weight: 600;
 }
 
 .app-shell--production-route .production-next-step {
@@ -2331,6 +2301,22 @@ button:disabled {
   margin: 0.25rem 0 0;
 }
 
+.production-draft-revision-result {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.7rem 0 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid #2d7b4f;
+}
+
+.production-draft-revision-result--unchanged {
+  border-left-color: #9a651f;
+}
+
+.production-draft-revision-result p {
+  margin: 0;
+}
+
 @media (max-width: 720px) {
   .production-draft-revision-action {
     align-items: stretch;
@@ -2450,10 +2436,6 @@ button:disabled {
   .app-shell--offer-route .quiet-action-row > *,
   .app-shell--offer-route .offer-composer__next-step > * {
     width: 100%;
-  }
-
-  .app-shell--production-route .production-flow-steps li {
-    font-size: 0.75rem;
   }
 
   .app-shell--production-route .upload-result-snapshot {

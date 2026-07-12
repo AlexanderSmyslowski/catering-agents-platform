@@ -214,12 +214,9 @@ export function ProductionConversationalWorkbench({
           <p className="helper-text">
             Quelle einfügen, dann prüfst du die erkannten Daten. Produktionsplan, Einkaufsliste und Exporte entstehen erst nach diesem Review.
           </p>
-          <ol className="production-flow-steps" aria-label="Produktionsablauf">
-            <li>Quelle</li>
-            <li>KI-Entwurf</li>
-            <li>Prüfung</li>
-            <li>Plan</li>
-          </ol>
+          <p className="production-flow-summary" aria-label="Produktionsablauf">
+            Ablauf: Quelle → KI-Entwurf → Prüfung → Plan
+          </p>
         </header>
         {slots.inputSlot}
         <div className="production-next-step" aria-label="Nächster Produktionsschritt">

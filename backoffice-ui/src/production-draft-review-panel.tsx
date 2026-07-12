@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   applyProductionDraft,
   decideProductionDraft,
@@ -171,6 +171,91 @@ function formatReviewCardMeta(card: ProductionDraftReviewCard): string {
   ].filter(Boolean).join(" | ");
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function revisedMenuComponentNote(
+  draft: ProductionDraft,
+  card: ProductionDraftReviewCard
+): string | undefined {
+  if (card.kind !== "menu_component") {
+    return undefined;
+  }
+
+  const eventSpec = asRecord(draft.draftArtifacts?.eventSpec);
+  const menuPlan = Array.isArray(eventSpec?.menuPlan) ? eventSpec.menuPlan : [];
+  const component = menuPlan
+    .map(asRecord)
+    .find((candidate) => candidate?.componentId === card.targetId || candidate?.label === card.title);
+  const productionDecision = asRecord(component?.productionDecision);
+  return typeof productionDecision?.notes === "string" && productionDecision.notes.trim()
+    ? productionDecision.notes.trim()
+    : undefined;
+}
+
+function revisionReviewDetails(
+  drafts: readonly ProductionDraft[],
+  draft: ProductionDraft,
+  card: ProductionDraftReviewCard
+): { request: string; result: string; changed: boolean } | undefined {
+  if (!draft.supersedesDraftId) {
+    return undefined;
+  }
+
+  const predecessor = drafts.find((candidate) => candidate.draftId === draft.supersedesDraftId);
+  const previousCard = predecessor?.reviewCards.find((candidate) => candidate.cardId === card.cardId);
+  const request = previousCard?.decision === "change_requested"
+    ? previousCard.operatorComment?.trim()
+    : undefined;
+  if (!request || !previousCard) {
+    return undefined;
+  }
+
+  const componentNote = revisedMenuComponentNote(draft, card);
+  if (componentNote) {
+    return { request, result: componentNote, changed: true };
+  }
+  if (card.title !== previousCard.title) {
+    return { request, result: `${previousCard.title} → ${card.title}`, changed: true };
+  }
+  if (card.summary !== previousCard.summary) {
+    return { request, result: card.summary, changed: true };
+  }
+  return {
+    request,
+    result: "Keine sichtbare Änderung erkannt. Bitte erneut beanstanden.",
+    changed: false
+  };
+}
+
+function ProductionDraftRevisionResult({
+  drafts,
+  draft,
+  card
+}: {
+  drafts: readonly ProductionDraft[];
+  draft: ProductionDraft;
+  card: ProductionDraftReviewCard;
+}) {
+  const details = revisionReviewDetails(drafts, draft, card);
+  if (!details) {
+    return null;
+  }
+
+  return (
+    <div className={details.changed
+      ? "production-draft-revision-result"
+      : "production-draft-revision-result production-draft-revision-result--unchanged"}
+    >
+      <p><strong>Dein Änderungswunsch:</strong> {details.request}</p>
+      <p><strong>Im neuen Entwurf:</strong> {details.result}</p>
+    </div>
+  );
+}
+
 export function ProductionDraftReviewPanel({
   submitting,
   embedded = false,
@@ -183,6 +268,7 @@ export function ProductionDraftReviewPanel({
   const [message, setMessage] = useState<string>();
   const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
   const [changeRequest, setChangeRequest] = useState("");
+  const panelRef = useRef<HTMLElement>(null);
 
   async function reloadDrafts(options?: { clearMessage?: boolean }) {
     setLoading(true);
@@ -232,8 +318,10 @@ export function ProductionDraftReviewPanel({
     setLoading(true);
     try {
       await reviseProductionDraft(draftId);
-      setMessage("Neuer KI-Entwurf ist bereit zur Prüfung.");
+      setMessage("Neuer KI-Entwurf erstellt. Änderungswunsch und Ergebnis sind markiert.");
       await reloadDrafts({ clearMessage: false });
+      panelRef.current?.focus({ preventScroll: true });
+      panelRef.current?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Änderungen konnten nicht eingearbeitet werden.");
     } finally {
@@ -285,7 +373,12 @@ export function ProductionDraftReviewPanel({
       : "form-panel production-draft-review";
 
   return (
-    <section className={className} aria-label="Produktionsentwurf-Prüfung">
+    <section
+      ref={panelRef}
+      className={className}
+      aria-label="Produktionsentwurf-Prüfung"
+      tabIndex={-1}
+    >
       {resumeMode && displayedDrafts.length > 0 ? (
         <header className="upload-result-summary__header">
           <p className="eyebrow">Offener Entwurf</p>
@@ -323,6 +416,7 @@ export function ProductionDraftReviewPanel({
                     <strong>{card.title}</strong>
                     <p className="helper-text">{card.summary}</p>
                     <p className="helper-text">{formatReviewCardMeta(card)}</p>
+                    <ProductionDraftRevisionResult drafts={drafts} draft={draft} card={card} />
                     {card.decision === "change_requested" && card.operatorComment && !(
                       changeEditor?.draftId === draft.draftId && changeEditor.cardId === card.cardId
                     ) ? (

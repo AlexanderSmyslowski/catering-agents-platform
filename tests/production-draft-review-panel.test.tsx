@@ -308,12 +308,18 @@ describe("ProductionDraftReviewPanel", () => {
       }
     });
     let draft = draftFixture();
+    let predecessor: ProductionDraft | undefined;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
       if (url === "/api/production/v1/production/drafts" && method === "GET") {
-        return jsonResponse({ items: [draft] });
+        return jsonResponse({ items: predecessor ? [draft, predecessor] : [draft] });
       }
       if (
         url === "/api/production/v1/production/drafts/draft-review-ui-1/review-cards/card-event" &&
@@ -337,15 +343,30 @@ describe("ProductionDraftReviewPanel", () => {
         url === "/api/production/v1/production/drafts/draft-review-ui-1/revise" &&
         method === "POST"
       ) {
+        predecessor = {
+          ...draft,
+          status: "superseded"
+        };
         draft = {
           ...draft,
           draftId: "draft-review-ui-2",
           createdAt: "2026-07-01T12:30:00.000Z",
+          supersedesDraftId: predecessor.draftId,
           reviewCards: draft.reviewCards.map((card) => ({
             ...card,
+            summary: card.cardId === "card-event"
+              ? "120 Personen und Datum fachlich bestätigen."
+              : card.summary,
             decision: "pending",
             operatorComment: undefined
-          }))
+          })),
+          draftArtifacts: {
+            ...draft.draftArtifacts,
+            eventSpec: {
+              event: { title: "Kundenbuffet" },
+              attendees: { expected: 120 }
+            }
+          }
         };
         return jsonResponse({ draft }, 201);
       }
@@ -419,7 +440,12 @@ describe("ProductionDraftReviewPanel", () => {
       "/api/production/v1/production/drafts/draft-review-ui-1/revise",
       expect.objectContaining({ method: "POST" })
     );
-    expect(document.body.textContent ?? "").toContain("Neuer KI-Entwurf ist bereit zur Prüfung.");
+    expect(document.body.textContent ?? "").toContain(
+      "Neuer KI-Entwurf erstellt. Änderungswunsch und Ergebnis sind markiert."
+    );
+    expect(document.body.textContent ?? "").toContain(`Dein Änderungswunsch: ${changeRequest}`);
+    expect(document.body.textContent ?? "").toContain("Im neuen Entwurf: 120 Personen und Datum fachlich bestätigen.");
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", inline: "nearest", behavior: "auto" });
 
     await act(async () => root.unmount());
   });

@@ -776,7 +776,8 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsagent-Chat");
     expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
     expect(content).toContain("Quelle einfügen, dann prüfst du die erkannten Daten.");
-    expect(content).toContain("QuelleKI-EntwurfPrüfungPlan");
+    expect(content).toContain("Ablauf: Quelle → KI-Entwurf → Prüfung → Plan");
+    expect(rendered.html).not.toContain('class="production-flow-steps"');
     expect(content).toContain("Angebot als KI-Entwurf prüfen");
     expect(content).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");
     expect(content).not.toContain("Intake-Pfad");
