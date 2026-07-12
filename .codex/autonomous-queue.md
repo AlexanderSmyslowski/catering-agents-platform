@@ -40,7 +40,7 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
   ausschliesslich bekannte operative Collections transaktional geleert:
   6 Erfassungen, 6 Spezifikationen, 3 Plaene, 3 Einkaufslisten und 11
   Audit-Eintraege. Live-APIs belegen jeweils 0; 35 Rezepte blieben erhalten.
-- **Phase 4.2b · Lokaler Subscription-Betriebsweg belegt.** Branch
+- **Phase 4.2b · Lokaler Subscription-Betriebsweg belegt.** PR #585 auf
   `loop/local-subscription-runtime` ignoriert private Codex-Konfigurationen,
   prueft CLI und ChatGPT-Login vor dem Start und stellt
   `npm run local:start:subscription` bereit. Echter synthetischer HTTP-Smoke:
