@@ -17,6 +17,15 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
+- **Phase 4.2d · Review-Kommentare als neue ProductionDraft-Revision.**
+  Alexander gab am 2026-07-12 sichere Arbeiten vor seiner spaeteren
+  fachlichen Sichtung frei. Kommentierte `change_requested`-Karten erzeugen
+  ueber den bestehenden BYO-Adapter einen neuen `pending_review`-Entwurf mit
+  `supersedesDraftId`; erst nach erfolgreicher Erzeugung wird der alte Entwurf
+  `superseded`. Fehlende Kommentare, falsche Statusklassen und invalide
+  Provider-Ausgaben bleiben folgenlos. Kein echter Datensatz, kein
+  Produkt-Write und kein echter Provider-Aufruf in diesem Slice.
+
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)

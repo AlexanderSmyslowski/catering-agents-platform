@@ -4,6 +4,7 @@ import {
   decideProductionDraft,
   decideProductionDraftReviewCard,
   loadProductionDrafts,
+  reviseProductionDraft,
   type ProductionDraft,
   type ProductionDraftReviewCard,
   type ProductionDraftReviewDecision
@@ -157,6 +158,8 @@ export function ProductionDraftReviewPanel({
   const [drafts, setDrafts] = useState<ProductionDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
+  const [changeRequest, setChangeRequest] = useState("");
 
   async function reloadDrafts(options?: { clearMessage?: boolean }) {
     setLoading(true);
@@ -180,15 +183,36 @@ export function ProductionDraftReviewPanel({
   async function decideCard(
     draftId: string,
     cardId: string,
-    decision: Exclude<ProductionDraftReviewDecision, "pending">
+    decision: Exclude<ProductionDraftReviewDecision, "pending">,
+    operatorComment?: string
   ) {
     setLoading(true);
     try {
-      await decideProductionDraftReviewCard(draftId, cardId, decision);
+      await decideProductionDraftReviewCard(draftId, cardId, decision, operatorComment);
+      setChangeEditor(undefined);
+      setChangeRequest("");
       setMessage("Prüfpunkt aktualisiert.");
       await reloadDrafts({ clearMessage: false });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Prüfpunkt konnte nicht aktualisiert werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function openChangeEditor(draft: ProductionDraft, card: ProductionDraftReviewCard) {
+    setChangeEditor({ draftId: draft.draftId, cardId: card.cardId });
+    setChangeRequest(card.operatorComment ?? "");
+  }
+
+  async function reviseDraft(draftId: string) {
+    setLoading(true);
+    try {
+      await reviseProductionDraft(draftId);
+      setMessage("Neuer KI-Entwurf ist bereit zur Prüfung.");
+      await reloadDrafts({ clearMessage: false });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Änderungen konnten nicht eingearbeitet werden.");
     } finally {
       setLoading(false);
     }
@@ -258,14 +282,68 @@ export function ProductionDraftReviewPanel({
                     <strong>{card.title}</strong>
                     <p className="helper-text">{card.summary}</p>
                     <p className="helper-text">{formatReviewCardMeta(card)}</p>
-                    {draft.status === "pending_review" ? (
+                    {card.decision === "change_requested" && card.operatorComment && !(
+                      changeEditor?.draftId === draft.draftId && changeEditor.cardId === card.cardId
+                    ) ? (
+                      <p className="production-draft-change-summary">
+                        <strong>Änderungswunsch:</strong> {card.operatorComment}
+                      </p>
+                    ) : null}
+                    {draft.status === "pending_review" &&
+                    changeEditor?.draftId === draft.draftId && changeEditor.cardId === card.cardId ? (
+                      <div className="production-draft-change-editor">
+                        <label htmlFor={`change-request-${draft.draftId}-${card.cardId}`}>
+                          Was soll geändert werden?
+                        </label>
+                        <textarea
+                          id={`change-request-${draft.draftId}-${card.cardId}`}
+                          aria-label="Was soll geändert werden?"
+                          value={changeRequest}
+                          maxLength={1000}
+                          rows={3}
+                          onChange={(event) => setChangeRequest(event.currentTarget.value)}
+                        />
+                        <p className="helper-text">
+                          Die KI erstellt daraus einen neuen Entwurf. Der aktuelle Stand wird nicht direkt überschrieben.
+                        </p>
+                        <div className="action-row">
+                          <button
+                            disabled={submitting || loading || changeRequest.trim().length === 0}
+                            onClick={() => void decideCard(
+                              draft.draftId,
+                              card.cardId,
+                              "change_requested",
+                              changeRequest.trim()
+                            )}
+                          >
+                            Änderung vormerken
+                          </button>
+                          <button
+                            className="secondary-button"
+                            disabled={submitting || loading}
+                            onClick={() => {
+                              setChangeEditor(undefined);
+                              setChangeRequest("");
+                            }}
+                          >
+                            Abbrechen
+                          </button>
+                        </div>
+                      </div>
+                    ) : draft.status === "pending_review" ? (
                       <div className="action-row">
                         {reviewDecisionActions.map((action) => (
                           <button
                             key={action.decision}
                             className="secondary-button"
                             disabled={submitting || loading}
-                            onClick={() => void decideCard(draft.draftId, card.cardId, action.decision)}
+                            onClick={() => {
+                              if (action.decision === "change_requested") {
+                                openChangeEditor(draft, card);
+                                return;
+                              }
+                              void decideCard(draft.draftId, card.cardId, action.decision);
+                            }}
                           >
                             {action.label}
                           </button>
@@ -275,6 +353,24 @@ export function ProductionDraftReviewPanel({
                   </li>
                 ))}
               </ul>
+              {draft.status === "pending_review" && draft.reviewCards.some((card) =>
+                card.decision === "change_requested" && Boolean(card.operatorComment?.trim())
+              ) ? (
+                <div className="production-draft-revision-action">
+                  <div>
+                    <strong>Änderungen sind vorgemerkt.</strong>
+                    <p className="helper-text">
+                      Die KI arbeitet alle kommentierten Punkte in einen neuen, erneut zu prüfenden Entwurf ein.
+                    </p>
+                  </div>
+                  <button
+                    disabled={submitting || loading}
+                    onClick={() => void reviseDraft(draft.draftId)}
+                  >
+                    Änderungen von KI einarbeiten
+                  </button>
+                </div>
+              ) : null}
               <div className="action-row">
                 {draft.status === "pending_review" ? (
                   <>

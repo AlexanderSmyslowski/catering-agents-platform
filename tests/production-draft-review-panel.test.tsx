@@ -292,6 +292,135 @@ describe("ProductionDraftReviewPanel", () => {
     });
   });
 
+  it("collects one concrete change request before offering a new AI revision", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: () => undefined
+      }
+    });
+    let draft = draftFixture();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+        return jsonResponse({ items: [draft] });
+      }
+      if (
+        url === "/api/production/v1/production/drafts/draft-review-ui-1/review-cards/card-event" &&
+        method === "PATCH"
+      ) {
+        const body = JSON.parse(String(init?.body)) as {
+          decision: ProductionDraft["reviewCards"][number]["decision"];
+          operatorComment?: string;
+        };
+        draft = {
+          ...draft,
+          reviewCards: draft.reviewCards.map((card) =>
+            card.cardId === "card-event"
+              ? { ...card, decision: body.decision, operatorComment: body.operatorComment }
+              : card
+          )
+        };
+        return jsonResponse({ draft, reviewCard: draft.reviewCards[0] });
+      }
+      if (
+        url === "/api/production/v1/production/drafts/draft-review-ui-1/revise" &&
+        method === "POST"
+      ) {
+        draft = {
+          ...draft,
+          draftId: "draft-review-ui-2",
+          createdAt: "2026-07-01T12:30:00.000Z",
+          reviewCards: draft.reviewCards.map((card) => ({
+            ...card,
+            decision: "pending",
+            operatorComment: undefined
+          }))
+        };
+        return jsonResponse({ draft }, 201);
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      await flushPromises();
+    });
+
+    const changeButton = buttonForReviewCard("Buffetdaten prüfen", "Änderung nötig");
+    expect(changeButton).toBeDefined();
+    await act(async () => {
+      changeButton?.click();
+      await flushPromises();
+    });
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/review-cards/card-event"),
+      expect.anything()
+    );
+    const commentField = document.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Was soll geändert werden?"]'
+    );
+    expect(commentField).not.toBeNull();
+    const changeRequest = "Statt 100 kommen 120 Gäste.";
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        "value"
+      )?.set;
+      valueSetter?.call(commentField, changeRequest);
+      commentField?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const rememberButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Änderung vormerken"
+    );
+    expect(rememberButton).toBeDefined();
+    await act(async () => {
+      rememberButton?.click();
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/production/v1/production/drafts/draft-review-ui-1/review-cards/card-event",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          decision: "change_requested",
+          operatorComment: changeRequest
+        })
+      })
+    );
+    const reviseButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Änderungen von KI einarbeiten"
+    );
+    expect(reviseButton).toBeDefined();
+
+    await act(async () => {
+      reviseButton?.click();
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/production/v1/production/drafts/draft-review-ui-1/revise",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(document.body.textContent ?? "").toContain("Neuer KI-Entwurf ist bereit zur Prüfung.");
+
+    await act(async () => root.unmount());
+  });
+
   it("embeds only the newest actionable draft in the upload flow", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);

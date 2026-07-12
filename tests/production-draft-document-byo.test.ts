@@ -183,6 +183,310 @@ describe("ProductionDraft document BYO extraction", () => {
     }
   });
 
+  it("creates a new pending revision from a commented change request without product writes", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const requests: LlmReadinessProviderAdapterRequest[] = [];
+    const changeRequest = "CHEESECAKE_CHANGE_REQUEST_MARKER: Je Törtchen nur zwei frische Brombeeren anlegen.";
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-byo-production-draft-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => {
+        requests.push(request);
+        if (requests.length === 1) {
+          return extractionResponse(request);
+        }
+
+        const response = extractionResponse(request);
+        const extraction = JSON.parse(response.outputCandidate.text) as {
+          components: Array<{ label: string; note: string | null }>;
+        };
+        extraction.components = extraction.components.map((component) =>
+          component.label.startsWith("Kokos-Cheesecake")
+            ? { ...component, note: "Je Törtchen zwei frische Brombeeren anlegen." }
+            : component
+        );
+        return {
+          ...response,
+          providerRequestId: "req-production-draft-revision-2",
+          outputCandidate: {
+            ...response.outputCandidate,
+            outputId: "output-production-draft-revision-2",
+            text: JSON.stringify(extraction)
+          }
+        };
+      }
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      auditLog,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: documentPayload()
+      });
+      const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
+      const reviewed = await app.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${originalDraft.draftId}/review-cards/card-menu-component-4`,
+        headers: trustedProductionHeaders,
+        payload: {
+          decision: "change_requested",
+          operatorComment: changeRequest
+        }
+      });
+      const revised = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${originalDraft.draftId}/revise`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
+      const revision = revised.json<{ draft: ProductionDraft }>().draft;
+      const storedOriginal = await store.getProductionDraft(originalDraft.draftId);
+      const auditJson = JSON.stringify(await auditLog.listRecent(20));
+
+      expect(created.statusCode, created.body).toBe(201);
+      expect(reviewed.statusCode, reviewed.body).toBe(200);
+      expect(revised.statusCode, revised.body).toBe(201);
+      expect(requests).toHaveLength(2);
+      expect(requests[1].input.kind).toBe("production_draft_request");
+      expect(requests[1].promptContext).toContain(changeRequest);
+      expect(requests[1].promptContext).toContain("Vitello Tonnato");
+      expect(revision.status).toBe("pending_review");
+      expect(revision.supersedesDraftId).toBe(originalDraft.draftId);
+      expect(revision.draftId).not.toBe(originalDraft.draftId);
+      expect(revision.reviewCards.every((card) => card.decision === "pending")).toBe(true);
+      expect(revision.draftArtifacts.eventSpec?.menuPlan).toHaveLength(4);
+      expect(revision.draftArtifacts.eventSpec?.sourceLineage).toEqual(
+        expect.arrayContaining(originalDraft.draftArtifacts.eventSpec?.sourceLineage ?? [])
+      );
+      expect(storedOriginal?.status).toBe("superseded");
+      expect(await store.listPlans()).toHaveLength(0);
+      expect(await store.listPurchaseLists()).toHaveLength(0);
+      expect(auditJson).toContain("production.production_draft_revision_created");
+      expect(auditJson).not.toContain(changeRequest);
+      expect(auditJson).not.toContain("promptContext");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not call the provider when a requested change has no operator comment", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const requests: LlmReadinessProviderAdapterRequest[] = [];
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-byo-production-draft-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => {
+        requests.push(request);
+        return extractionResponse(request);
+      }
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: documentPayload()
+      });
+      const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
+      await app.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${originalDraft.draftId}/review-cards/card-menu-component-4`,
+        headers: trustedProductionHeaders,
+        payload: { decision: "change_requested" }
+      });
+
+      const revised = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${originalDraft.draftId}/revise`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
+      const storedDrafts = await store.listProductionDrafts();
+
+      expect(revised.statusCode, revised.body).toBe(422);
+      expect(revised.body).toContain("konkret kommentierter Änderungswunsch");
+      expect(requests).toHaveLength(1);
+      expect(storedDrafts).toHaveLength(1);
+      expect(storedDrafts[0].status).toBe("pending_review");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps the original draft pending when the revision output is invalid", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const requests: LlmReadinessProviderAdapterRequest[] = [];
+    const changeRequest = "INVALID_REVISION_COMMENT_MARKER";
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-byo-production-draft-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => {
+        requests.push(request);
+        if (requests.length === 1) {
+          return extractionResponse(request);
+        }
+
+        const response = extractionResponse(request);
+        return {
+          ...response,
+          outputCandidate: {
+            ...response.outputCandidate,
+            outputId: "invalid-production-draft-revision-output",
+            text: JSON.stringify({ components: [], openQuestions: [] })
+          }
+        };
+      }
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      auditLog,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: documentPayload()
+      });
+      const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
+      await app.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${originalDraft.draftId}/review-cards/card-menu-component-4`,
+        headers: trustedProductionHeaders,
+        payload: {
+          decision: "change_requested",
+          operatorComment: changeRequest
+        }
+      });
+
+      const revised = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${originalDraft.draftId}/revise`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
+      const storedDrafts = await store.listProductionDrafts();
+      const auditJson = JSON.stringify(await auditLog.listRecent(20));
+
+      expect(revised.statusCode, revised.body).toBe(422);
+      expect(requests).toHaveLength(2);
+      expect(storedDrafts).toHaveLength(1);
+      expect(storedDrafts[0]).toMatchObject({
+        draftId: originalDraft.draftId,
+        status: "pending_review"
+      });
+      expect(auditJson).toContain("production.production_draft_revision_rejected");
+      expect(auditJson).not.toContain(changeRequest);
+      expect(auditJson).not.toContain("promptContext");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a revision that silently drops an unchanged menu component", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const requests: LlmReadinessProviderAdapterRequest[] = [];
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-byo-production-draft-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => {
+        requests.push(request);
+        const response = extractionResponse(request);
+        if (requests.length === 1) {
+          return response;
+        }
+
+        const extraction = JSON.parse(response.outputCandidate.text) as {
+          components: Array<{ label: string }>;
+        };
+        extraction.components = extraction.components.filter((component) =>
+          !component.label.startsWith("Vitello Tonnato")
+        );
+        return {
+          ...response,
+          outputCandidate: {
+            ...response.outputCandidate,
+            outputId: "incomplete-production-draft-revision-output",
+            text: JSON.stringify(extraction)
+          }
+        };
+      }
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: documentPayload()
+      });
+      const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
+      await app.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${originalDraft.draftId}/review-cards/card-menu-component-4`,
+        headers: trustedProductionHeaders,
+        payload: {
+          decision: "change_requested",
+          operatorComment: "Cheesecake mit zwei frischen Brombeeren anrichten."
+        }
+      });
+
+      const revised = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${originalDraft.draftId}/revise`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
+      const storedDrafts = await store.listProductionDrafts();
+
+      expect(revised.statusCode, revised.body).toBe(422);
+      expect(revised.body).toContain("Vitello Tonnato");
+      expect(storedDrafts).toHaveLength(1);
+      expect(storedDrafts[0].status).toBe("pending_review");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("uses the server-approved pseudonymized mode even when the client claims another mode", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

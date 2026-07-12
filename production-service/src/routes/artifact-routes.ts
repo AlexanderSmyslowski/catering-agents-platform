@@ -523,6 +523,8 @@ function buildProductionDraftFromExtraction(input: {
   };
   outputCandidate: LlmReadinessModelOutputCandidate;
   adapterResponse: LlmReadinessProviderAdapterResponse;
+  supersedesDraftId?: string;
+  inheritedSourceLineage?: AcceptedEventSpec["sourceLineage"];
 }): ProductionDraft {
   const requestId = `production-draft-source-${input.source.sha256.slice(0, 16)}`;
   const eventRequest = createEventRequestFromManualForm({
@@ -541,6 +543,13 @@ function buildProductionDraftFromExtraction(input: {
     reference: `sha256:${input.source.sha256}`,
     commercialState: "provisional"
   });
+  const inheritedLineageKeys = new Set(
+    (input.inheritedSourceLineage ?? []).map((source) => stableJson(source))
+  );
+  const sourceLineage = [
+    ...(input.inheritedSourceLineage ?? []),
+    ...eventSpec.sourceLineage.filter((source) => !inheritedLineageKeys.has(stableJson(source)))
+  ];
   const menuPlan = input.extraction.components.map((component, index) => {
     const normalizedComponent = { ...eventSpec.menuPlan[index] };
     delete normalizedComponent.menuCategory;
@@ -570,6 +579,7 @@ function buildProductionDraftFromExtraction(input: {
   }));
   const draftEventSpec = validateAcceptedEventSpec({
     ...eventSpec,
+    sourceLineage,
     menuPlan,
     uncertainties: openQuestions.length > 0
       ? [...(eventSpec.uncertainties ?? []), ...openQuestions]
@@ -612,6 +622,7 @@ function buildProductionDraftFromExtraction(input: {
     draftId: `production-draft-${randomUUID()}`,
     status: "pending_review",
     createdAt: new Date().toISOString(),
+    ...(input.supersedesDraftId ? { supersedesDraftId: input.supersedesDraftId } : {}),
     source: {
       kind: input.adapterResponse.providerId === "codex-cli"
         ? "agent_cli"
@@ -639,6 +650,53 @@ function buildProductionDraftFromExtraction(input: {
       openQuestions
     }
   });
+}
+
+function productionDraftRevisionPromptContext(
+  draft: ProductionDraft,
+  changeRequests: readonly ProductionDraftReviewCard[]
+): string {
+  const eventSpec = draft.draftArtifacts.eventSpec;
+  return [
+    "Revisionsauftrag für einen vorhandenen, menschlich zu prüfenden ProductionDraft.",
+    "Gib den vollständigen überarbeiteten Stand im production_draft_extraction-Format zurück.",
+    "Behalte alle nicht beanstandeten Eventdaten, Menükomponenten und offenen Fragen bei.",
+    "Ändere nur Punkte, die durch einen Operator-Kommentar verlangt werden. Erfinde nichts hinzu.",
+    "",
+    "Ausgangsentwurf:",
+    stableJson({
+      event: eventSpec?.event,
+      attendees: eventSpec?.attendees,
+      servicePlan: eventSpec?.servicePlan,
+      menuPlan: eventSpec?.menuPlan,
+      openQuestions: draft.draftArtifacts.openQuestions ?? eventSpec?.uncertainties ?? []
+    }),
+    "",
+    "Verbindliche Änderungswünsche:",
+    stableJson(changeRequests.map((card) => ({
+      cardId: card.cardId,
+      kind: card.kind,
+      title: card.title,
+      targetId: card.targetId,
+      operatorComment: card.operatorComment
+    })))
+  ].join("\n");
+}
+
+function productionDraftRevisionCoverageErrors(
+  draft: ProductionDraft,
+  changeRequests: readonly ProductionDraftReviewCard[],
+  extraction: ProductionDraftExtraction
+): string[] {
+  const changedTargetIds = new Set(
+    changeRequests.map((card) => card.targetId).filter((targetId): targetId is string => Boolean(targetId))
+  );
+  const revisedLabels = new Set(extraction.components.map((component) => normalizedEvidenceText(component.label)));
+
+  return (draft.draftArtifacts.eventSpec?.menuPlan ?? [])
+    .filter((component) => !changedTargetIds.has(component.componentId))
+    .filter((component) => !revisedLabels.has(normalizedEvidenceText(component.label)))
+    .map((component) => `revision missing unchanged component: ${component.label}`);
 }
 
 export function registerProductionArtifactRoutes(
@@ -1087,6 +1145,185 @@ export function registerProductionArtifactRoutes(
         draft: reviewedDraft,
         reviewCard: card
       });
+    }
+  );
+
+  app.post<{ Params: { draftId: string } }>(
+    "/v1/production/drafts/:draftId/revise",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) {
+        return forbidden;
+      }
+
+      const draft = await store.getProductionDraft(request.params.draftId);
+      if (!draft) {
+        return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+      }
+      if (draft.status !== "pending_review") {
+        return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann überarbeitet werden." });
+      }
+
+      const requestedChanges = draft.reviewCards.filter((card) => card.decision === "change_requested");
+      const missingComments = requestedChanges.filter((card) => !card.operatorComment?.trim());
+      if (requestedChanges.length === 0 || missingComments.length > 0) {
+        return reply.code(422).send({
+          message: "Für eine Überarbeitung ist mindestens ein konkret kommentierter Änderungswunsch erforderlich.",
+          errors: missingComments.map((card) => `reviewCard ${card.cardId} needs operatorComment`)
+        });
+      }
+
+      const promptSchema = findLlmReadinessPromptSchemaEntryByInputKind("production_draft_request");
+      if (!promptSchema) {
+        return reply.code(500).send({ message: "Prompt-Schema für ProductionDraft-Extraktion nicht registriert." });
+      }
+
+      const promptContext = productionDraftRevisionPromptContext(draft, requestedChanges);
+      const contextHash = hashText(promptContext);
+      const input: LlmReadinessModelInput = {
+        contractVersion: llmReadinessContractVersion,
+        inputId: `input-production-draft-revision-${contextHash.slice(0, 16)}-${randomUUID()}`,
+        kind: "production_draft_request",
+        sourceRefs: [
+          {
+            objectType: "safe_source_anchor",
+            objectId: draft.draftId,
+            label: "production draft revision source"
+          }
+        ],
+        policy: {
+          providerCalls: "disabled",
+          dataMode: productionDraftDataMode,
+          allowedToolEffects: ["read", "draft"]
+        }
+      };
+      const adapterRequest: LlmReadinessProviderAdapterRequest = {
+        input,
+        promptSchemaId: promptSchema.promptSchemaId,
+        promptContext
+      };
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const revisionSeed = `revision-${draft.draftId}-${randomUUID()}`;
+
+      let adapter: LlmReadinessProviderAdapter;
+      try {
+        adapter = buildLlmAdapter();
+      } catch (error) {
+        return reply.code(500).send({
+          message: error instanceof Error ? error.message : "BYO-LLM-Adapter konnte nicht gestartet werden."
+        });
+      }
+
+      const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
+        await auditLog.log({
+          action: "production.production_draft_revision_rejected",
+          entityType: "ProductionDraft",
+          entityId: draft.draftId,
+          actor,
+          summary: "ProductionDraft-Revision verworfen.",
+          details: compactAuditDetails({
+            draftId: draft.draftId,
+            inputId: input.inputId,
+            adapterId: adapter.adapterId,
+            adapterMode: adapter.adapterMode,
+            promptSchemaId: promptSchema.promptSchemaId,
+            dataMode: input.policy.dataMode,
+            changeRequestCount: requestedChanges.length,
+            changeRequestHash: hashText(requestedChanges.map((card) => card.operatorComment).join("\n")),
+            errorCount: 1,
+            errorType: error instanceof Error ? error.name : typeof error
+          })
+        });
+        return undefined;
+      });
+      if (!adapterResponse) {
+        return reply.code(422).send({
+          message: "ProductionDraft-Revision konnte nicht erzeugt werden.",
+          errors: ["BYO-LLM-Aufruf ist fehlgeschlagen."]
+        });
+      }
+
+      const auditBuild = createLlmReadinessAgentAuditRecord({
+        auditId: `agent-audit-${revisionSeed}`,
+        request: adapterRequest,
+        response: adapterResponse
+      });
+      const extractionBuild = parseProductionDraftExtraction(
+        adapterResponse.outputCandidate,
+        promptContext
+      );
+      const coverageErrors = extractionBuild.extraction
+        ? productionDraftRevisionCoverageErrors(draft, requestedChanges, extractionBuild.extraction)
+        : [];
+      const responseErrors = [
+        ...(adapterResponse.ok ? [] : adapterResponse.errors),
+        ...extractionBuild.errors,
+        ...coverageErrors,
+        ...auditBuild.errors.map((error) => `agentAudit.${error}`)
+      ];
+      if (!adapterResponse.ok || responseErrors.length > 0 || !extractionBuild.extraction || !auditBuild.auditRecord) {
+        await auditLog.log({
+          action: "production.production_draft_revision_rejected",
+          entityType: "ProductionDraft",
+          entityId: draft.draftId,
+          actor,
+          summary: "ProductionDraft-Revision verworfen.",
+          details: compactAuditDetails({
+            draftId: draft.draftId,
+            inputId: input.inputId,
+            providerId: adapterResponse.providerId,
+            providerRequestId: adapterResponse.providerRequestId,
+            changeRequestCount: requestedChanges.length,
+            changeRequestHash: hashText(requestedChanges.map((card) => card.operatorComment).join("\n")),
+            errorCount: responseErrors.length
+          })
+        });
+        return reply.code(422).send({
+          message: productionDraftExtractionFailureMessage(responseErrors),
+          errors: [...new Set(responseErrors)]
+        });
+      }
+
+      const sourceFilename = draft.source.sourceRef?.replace(/^upload:/, "") || "production-draft-revision.json";
+      const revision = buildProductionDraftFromExtraction({
+        extraction: extractionBuild.extraction,
+        source: {
+          filename: sourceFilename,
+          sha256: contextHash,
+          ingestedAt: new Date().toISOString()
+        },
+        outputCandidate: adapterResponse.outputCandidate!,
+        adapterResponse,
+        supersedesDraftId: draft.draftId,
+        inheritedSourceLineage: draft.draftArtifacts.eventSpec?.sourceLineage
+      });
+      await store.saveProductionDraft(revision);
+      await store.saveProductionDraft(validateProductionDraft({
+        ...draft,
+        status: "superseded"
+      }));
+      await auditLog.log({
+        action: "production.production_draft_revision_created",
+        entityType: "ProductionDraft",
+        entityId: revision.draftId,
+        actor,
+        summary: "Neue ProductionDraft-Revision zur Prüfung angelegt.",
+        details: compactAuditDetails({
+          draftId: revision.draftId,
+          supersedesDraftId: draft.draftId,
+          agentAuditId: auditBuild.auditRecord.auditId,
+          inputId: input.inputId,
+          providerId: adapterResponse.providerId,
+          providerRequestId: adapterResponse.providerRequestId,
+          changeRequestCount: requestedChanges.length,
+          changeRequestHash: hashText(requestedChanges.map((card) => card.operatorComment).join("\n")),
+          reviewCardCount: revision.reviewCards.length,
+          humanApprovalRequired: true,
+          writesProductObject: false
+        })
+      });
+
+      return reply.code(201).send({ draft: revision });
     }
   );
 
