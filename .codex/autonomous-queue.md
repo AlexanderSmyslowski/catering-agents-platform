@@ -21,15 +21,30 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **Phase 4.1 · Hetzner-Deployment freigeben.** Deployment mit
-  `platform-infra` und anschließendem Smoke-Test gegen die Instanz ist ein
-  Human-Gate. Der erste Lauf verwendet ausschließlich synthetische oder
-  anonymisierte Daten; echte Kundendaten benötigen eine separate Freigabe.
+- **Phase 4.2a · Zugriffsschicht wählen und freigeben.** Die Hetzner-App ist
+  bewusst ohne Operator-Kontext gesperrt. Vor einer realen Parallel-Anfrage
+  braucht sie eine vorgeschaltete Anmeldung, entfernt extern gesetzte
+  Actor-/Trusted-Header und injiziert Rollen plus Secret ausschließlich
+  serverseitig. Echte Kundendaten und beliebige Uploads bleiben bis zu einer
+  separaten Daten-/Upload-Freigabe gesperrt.
 
 ---
 
 ## ERLEDIGT
 
+- **Phase 4.1 · Hetzner-Deployment und Smoke abgeschlossen.** `main`-Commit
+  `adca7e6` läuft unter <https://agents.the-one.catering>. Rollback-Snapshot
+  `20260712T114154Z` ist vorhanden, die serverseitige `.env` blieb bytegleich,
+  alle sechs Compose-Dienste laufen. Drei UI-Routen und vier echte
+  JSON-Healthchecks sind grün. Intake, Angebot und Produktion antworten ohne
+  vertrauenswürdigen Operator-Kontext sowie bei frei gesetztem Dev-Header mit
+  `403 application/json`. Der Browser zeigt deshalb die leere Arbeitsfläche,
+  aber noch keine operativ nutzbare Sitzung. Es wurden keine echten
+  Kundendaten übertragen oder geschrieben.
+- **PRs #576 bis #579 · Deployment-Wurzelfixes gemergt.** Remote-Konfiguration
+  wird vor `rsync` geprüft und vor Löschung geschützt; privilegierter Remote-
+  `rsync` ist explizit konfigurierbar; Caddy routet APIs vor dem SPA-Fallback;
+  der Smoke prüft JSON-Inhalte und toleriert begrenzte Start-Races.
 - **GATE QUITTIERT: 3** · Alexander nahm am 2026-07-12 die finale
   anonymisierte 45-Personen-Produktionsmappe fachlich ab und öffnete Phase 4.
   Belegt: 32 A4-Seiten, 11 Rezeptkarten, 70 Einkaufspositionen und 117/117
