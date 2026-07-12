@@ -69,8 +69,13 @@ describe("Hetzner deployment script", () => {
     const root = createTempDir();
     const binDir = path.join(root, "bin");
     const rsyncLog = path.join(root, "rsync.log");
+    const sshLog = path.join(root, "ssh.log");
     mkdirSync(binDir);
-    writeExecutable(path.join(binDir, "ssh"), "#!/usr/bin/env bash\nexit 0\n");
+    writeFileSync(sshLog, "", "utf8");
+    writeExecutable(
+      path.join(binDir, "ssh"),
+      "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SSH_LOG\"\nexit 0\n"
+    );
     writeExecutable(
       path.join(binDir, "rsync"),
       "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > \"$RSYNC_LOG\"\nexit 0\n"
@@ -82,7 +87,8 @@ describe("Hetzner deployment script", () => {
 
     const result = runDeploy(binDir, {
       DEPLOY_RSYNC_PATH: "sudo rsync",
-      RSYNC_LOG: rsyncLog
+      RSYNC_LOG: rsyncLog,
+      SSH_LOG: sshLog
     });
 
     expect(result.status).toBe(0);
@@ -90,6 +96,9 @@ describe("Hetzner deployment script", () => {
     expect(rsyncArguments).toContain("platform-infra/.env");
     expect(rsyncArguments).toContain("platform-infra/sites");
     expect(rsyncArguments).toContain("--rsync-path=sudo rsync");
+    expect(readFileSync(sshLog, "utf8")).toContain(
+      "sudo chmod 755 '/opt/catering-agents-platform'"
+    );
   });
 
   test("rejects an HTML fallback returned from a health endpoint", () => {
