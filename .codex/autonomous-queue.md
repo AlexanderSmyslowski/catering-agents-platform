@@ -1,6 +1,6 @@
 # Autonome Queue
 
-**Aktive Phase: 3 (Mappe produktionsreif)** — Phasenfolge, Loop-Regeln und
+**Aktive Phase: 4 (Realbetrieb)** — Phasenfolge, Loop-Regeln und
 Endziel: `.codex/ziellauf.md` (bindend seit 2026-07-03). Die Queue wird
 nur aus der aktiven Phase gespeist; die nächste Phase öffnet erst mit
 einem `GATE QUITTIERT: <Phase>`-Eintrag von Alexander unter ERLEDIGT.
@@ -21,30 +21,25 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **PR #574 · Meersalzdrillinge nach realem Küchenablauf.** Draft-PR:
-  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/574>.
-  GN 1/1, 120 ml Rapsöl-Olivenöl-Mix, 230 °C Heißluft, 0 % Dampf und
-  30-35 Minuten ersetzen Kochen und Marinieren. Der im Angebot nicht genannte
-  Drillinge-Pfeffer entfällt; andere Pfeffermengen bleiben erhalten. Die
-  gerenderte Mappe enthält 70 Einkaufspositionen und deckt 117/117 Zutaten.
-  Batterie: 273 Dateien / 1.227 Tests, TypeScript, Build, Audit und
-  Internal-Beta-Gate grün.
-- **GATE 3 · Fachliche Produktionsmappen-Abnahme.** Nach Merge des freigegebenen
-  Phase-3-Stacks muss Alexander oder Ronak eine vollständige Mappe aus einem
-  realen, anonymisierten Fall fachlich prüfen. Ronak-tauglich heißt: Alle
-  angebotenen Speisen sind vollständig enthalten; Mengen, Produktionsrezepte,
-  Mise-en-Place und Metro-Einkaufsliste sind fachlich plausibel, druckbar und
-  ohne technische Nacharbeit nutzbar. Unsicherheiten sind deutlich markiert,
-  nichts wird still angenommen. Erst diese Abnahme öffnet Phase 4 und damit
-  Deploy bzw. parallelen Realbetrieb. Alexanders erneute Prüfung vom
-  2026-07-12 bewertet die Mappe insgesamt als gut. Letzter Restbefund:
-  Meersalzdrillinge werden bei THE ONE im GN 1/1 mit Rapsöl und Olivenöl bei
-  230 °C ohne Dampf gegart; dieser Ablauf liegt in PR #574 zur Sichtung.
+- **Phase 4.1 · Hetzner-Deployment freigeben.** Deployment mit
+  `platform-infra` und anschließendem Smoke-Test gegen die Instanz ist ein
+  Human-Gate. Der erste Lauf verwendet ausschließlich synthetische oder
+  anonymisierte Daten; echte Kundendaten benötigen eine separate Freigabe.
 
 ---
 
 ## ERLEDIGT
 
+- **GATE QUITTIERT: 3** · Alexander nahm am 2026-07-12 die finale
+  anonymisierte 45-Personen-Produktionsmappe fachlich ab und öffnete Phase 4.
+  Belegt: 32 A4-Seiten, 11 Rezeptkarten, 70 Einkaufspositionen und 117/117
+  gedeckte Rezeptzutaten. Roastbeef, Brombeeren, UNOX-Parameter und
+  Meersalzdrillinge wurden gegen den realen Küchenablauf geprüft.
+  Unsicherheiten bleiben sichtbar; es erfolgt keine automatische
+  Rezeptfreigabe.
+- **PR #574 · Meersalzdrillinge nach realem Küchenablauf gemergt.** GN 1/1,
+  Rapsöl-Olivenöl-Mix, 230 °C Heißluft, 0 % Dampf und 30-35 Minuten sind auf
+  `main`; Merge-Commit `9663e30`.
 - **PRs #571, #572 und #573 · Gate-3-Mappenstack gemergt.** A4-Druckeinheiten,
   fachlich korrigierte Roastbeef-/Brombeer-Abläufe sowie konkrete
   XVC305E-Parameter und Kerntemperaturen sind auf `main`; letzter Merge-Commit
