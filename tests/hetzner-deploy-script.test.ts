@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const deployScript = path.join(repoRoot, "platform-infra/scripts/deploy-hetzner.sh");
+const smokeScript = path.join(repoRoot, "platform-infra/scripts/smoke-check.sh");
 const tempDirs: string[] = [];
 
 function createTempDir(): string {
@@ -72,7 +73,10 @@ describe("Hetzner deployment script", () => {
       path.join(binDir, "rsync"),
       "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > \"$RSYNC_LOG\"\nexit 0\n"
     );
-    writeExecutable(path.join(binDir, "curl"), "#!/usr/bin/env bash\nexit 0\n");
+    writeExecutable(
+      path.join(binDir, "curl"),
+      "#!/usr/bin/env bash\nprintf '{\"status\":\"ok\"}'\nexit 0\n"
+    );
 
     const result = runDeploy(binDir, {
       DEPLOY_RSYNC_PATH: "sudo rsync",
@@ -83,5 +87,35 @@ describe("Hetzner deployment script", () => {
     const rsyncArguments = readFileSync(rsyncLog, "utf8");
     expect(rsyncArguments).toContain("platform-infra/.env");
     expect(rsyncArguments).toContain("--rsync-path=sudo rsync");
+  });
+
+  test("rejects an HTML fallback returned from a health endpoint", () => {
+    const root = createTempDir();
+    const binDir = path.join(root, "bin");
+    mkdirSync(binDir);
+    writeExecutable(
+      path.join(binDir, "curl"),
+      "#!/usr/bin/env bash\nprintf '<!doctype html><title>Catering</title>'\nexit 0\n"
+    );
+
+    const result = spawnSync("bash", [smokeScript, "https://deployment.test"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`
+      }
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain("did not return service status ok");
+  });
+
+  test("keeps API handlers ahead of the SPA fallback in an explicit Caddy route", () => {
+    const caddyfile = readFileSync(path.join(repoRoot, "platform-infra/Caddyfile"), "utf8");
+
+    expect(caddyfile).toMatch(
+      /route\s*\{[\s\S]*handle_path \/api\/intake\/\*[\s\S]*handle\s*\{[\s\S]*try_files/
+    );
   });
 });
