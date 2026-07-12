@@ -93,6 +93,7 @@ services:
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+      - "${CADDY_SITES_DIR:-./sites}:/etc/caddy/sites:ro"
 
 volumes:
   postgres_data:

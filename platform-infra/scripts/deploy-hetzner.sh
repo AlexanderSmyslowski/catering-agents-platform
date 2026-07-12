@@ -37,6 +37,7 @@ rsync -az --delete \
   --exclude "backoffice-ui/dist" \
   --exclude "Kochbücher" \
   --exclude "platform-infra/.env" \
+  --exclude "platform-infra/sites" \
   "${REPO_ROOT}/" "${REMOTE}:${DEPLOY_PATH}/"
 
 echo "Starting Docker Compose on ${REMOTE}..."

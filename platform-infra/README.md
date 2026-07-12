@@ -42,6 +42,27 @@ Die beiden Agenten sind dann unter eigenen URLs erreichbar:
 - `https://app.example.com/angebot`
 - `https://app.example.com/produktion`
 
+## Zusaetzliche Sites am gemeinsamen Proxy
+
+Zusaetzliche Anwendungen erhalten je eine serverseitige `*.caddy`-Datei im
+Verzeichnis aus `CADDY_SITES_DIR` (Standard: `platform-infra/sites`). Dieses
+Verzeichnis wird nur lesbar in den Caddy-Container eingebunden, ist nicht Teil
+des Repositories und wird beim Deployment-Sync nicht geloescht. Dadurch bleiben
+anwendungseigene Hostbloecke auch erhalten, wenn das Plattform-Image neu gebaut
+wird.
+
+Vor dem ersten Start muss das Verzeichnis auf dem Zielserver existieren. Eine
+Site-Datei darf nur ihren eigenen Hostblock enthalten. Beispiel:
+
+```caddyfile
+app2.example.com {
+	reverse_proxy app2:3000
+}
+```
+
+Nach Aenderungen die Gesamtkonfiguration validieren und Caddy neu laden oder den
+`web`-Container kontrolliert neu erstellen.
+
 ## Reproduzierbarer Deploy-Run
 
 Lokal:

@@ -86,6 +86,7 @@ describe("Hetzner deployment script", () => {
     expect(result.status).toBe(0);
     const rsyncArguments = readFileSync(rsyncLog, "utf8");
     expect(rsyncArguments).toContain("platform-infra/.env");
+    expect(rsyncArguments).toContain("platform-infra/sites");
     expect(rsyncArguments).toContain("--rsync-path=sudo rsync");
   });
 
@@ -150,6 +151,16 @@ describe("Hetzner deployment script", () => {
 
     expect(caddyfile).toMatch(
       /route\s*\{[\s\S]*handle_path \/api\/intake\/\*[\s\S]*handle\s*\{[\s\S]*try_files/
+    );
+  });
+
+  test("loads server-owned Caddy sites from a persistent read-only directory", () => {
+    const caddyfile = readFileSync(path.join(repoRoot, "platform-infra/Caddyfile"), "utf8");
+    const compose = readFileSync(path.join(repoRoot, "platform-infra/docker-compose.yml"), "utf8");
+
+    expect(caddyfile).toContain("import /etc/caddy/sites/*.caddy");
+    expect(compose).toContain(
+      '${CADDY_SITES_DIR:-./sites}:/etc/caddy/sites:ro'
     );
   });
 });
