@@ -40,6 +40,9 @@ rsync -az --delete \
   --exclude "platform-infra/sites" \
   "${REPO_ROOT}/" "${REMOTE}:${DEPLOY_PATH}/"
 
+echo "Ensuring remote deployment directory access..."
+ssh "${REMOTE}" "sudo chmod 755 '${DEPLOY_PATH}'"
+
 echo "Starting Docker Compose on ${REMOTE}..."
 ssh "${REMOTE}" "
   set -euo pipefail
