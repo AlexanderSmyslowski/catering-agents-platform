@@ -2,25 +2,76 @@
 	email {$CADDY_EMAIL}
 }
 
+(trusted_actor_headers) {
+	header_up -Authorization
+	header_up -X-Actor-Name
+	header_up X-Catering-Actor-Name {args[0]}
+	header_up X-Catering-Trusted-Secret {$CATERING_TRUSTED_ACTOR_SECRET}
+}
+
 {$CATERING_SITE_ADDRESS::80} {
 	root * /srv
 	encode zstd gzip
 
 	route {
+		basic_auth {
+			{$CATERING_BASIC_AUTH_USER} {$CATERING_BASIC_AUTH_PASSWORD_HASH}
+		}
+
+		@intakeAudit path /api/intake/v1/intake/seed-demo /api/intake/v1/intake/spec-governance/finalize
+		handle @intakeAudit {
+			uri strip_prefix /api/intake
+			reverse_proxy intake:3101 {
+				import trusted_actor_headers "Betriebs-/Audit-Operator"
+			}
+		}
+
 		handle_path /api/intake/* {
-			reverse_proxy intake:3101
+			reverse_proxy intake:3101 {
+				import trusted_actor_headers "Intake-Mitarbeiter"
+			}
+		}
+
+		@offerAudit path /api/offers/v1/offers/seed-demo
+		handle @offerAudit {
+			uri strip_prefix /api/offers
+			reverse_proxy offer:3102 {
+				import trusted_actor_headers "Betriebs-/Audit-Operator"
+			}
 		}
 
 		handle_path /api/offers/* {
-			reverse_proxy offer:3102
+			reverse_proxy offer:3102 {
+				import trusted_actor_headers "Angebots-Mitarbeiter"
+			}
+		}
+
+		@productionAudit path /api/production/v1/production/seed-demo /api/production/v1/production/audit/events
+		handle @productionAudit {
+			uri strip_prefix /api/production
+			reverse_proxy production:3103 {
+				import trusted_actor_headers "Betriebs-/Audit-Operator"
+			}
 		}
 
 		handle_path /api/production/* {
-			reverse_proxy production:3103
+			reverse_proxy production:3103 {
+				import trusted_actor_headers "Produktions-Mitarbeiter"
+			}
+		}
+
+		@offerExports path /api/exports/v1/exports/offers/*
+		handle @offerExports {
+			uri strip_prefix /api/exports
+			reverse_proxy exports:3104 {
+				import trusted_actor_headers "Angebots-Mitarbeiter"
+			}
 		}
 
 		handle_path /api/exports/* {
-			reverse_proxy exports:3104
+			reverse_proxy exports:3104 {
+				import trusted_actor_headers "Produktions-Mitarbeiter"
+			}
 		}
 
 		handle {

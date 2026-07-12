@@ -7,6 +7,8 @@ import { afterEach, describe, expect, test } from "vitest";
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const deployScript = path.join(repoRoot, "platform-infra/scripts/deploy-hetzner.sh");
 const smokeScript = path.join(repoRoot, "platform-infra/scripts/smoke-check.sh");
+const caddyfilePath = path.join(repoRoot, "platform-infra/Caddyfile");
+const composePath = path.join(repoRoot, "platform-infra/docker-compose.yml");
 const tempDirs: string[] = [];
 
 function createTempDir(): string {
@@ -146,8 +148,62 @@ describe("Hetzner deployment script", () => {
     expect(readFileSync(curlCount, "utf8")).toBe("8\n");
   });
 
+  test("authenticates smoke requests without printing the password", () => {
+    const root = createTempDir();
+    const binDir = path.join(root, "bin");
+    const curlLog = path.join(root, "curl.log");
+    mkdirSync(binDir);
+    writeFileSync(curlLog, "", "utf8");
+    writeExecutable(
+      path.join(binDir, "curl"),
+      "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> \"$CURL_LOG\"\nprintf '{\"status\":\"ok\"}'\n"
+    );
+
+    const result = spawnSync("bash", [smokeScript, "https://deployment.test"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CURL_LOG: curlLog,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        SMOKE_BASIC_AUTH_USER: "alexander",
+        SMOKE_BASIC_AUTH_PASSWORD: "test-login-secret"
+      }
+    });
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(curlLog, "utf8")).toContain("alexander:test-login-secret");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("test-login-secret");
+  });
+
+  test("fails closed when only half of the smoke login is configured", () => {
+    const root = createTempDir();
+    const binDir = path.join(root, "bin");
+    mkdirSync(binDir);
+    writeExecutable(
+      path.join(binDir, "curl"),
+      "#!/usr/bin/env bash\nprintf '{\"status\":\"ok\"}'\n"
+    );
+
+    const result = spawnSync("bash", [smokeScript, "https://deployment.test"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        SMOKE_BASIC_AUTH_USER: "alexander",
+        SMOKE_BASIC_AUTH_PASSWORD: ""
+      }
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain(
+      "SMOKE_BASIC_AUTH_USER and SMOKE_BASIC_AUTH_PASSWORD must be set together"
+    );
+  });
+
   test("keeps API handlers ahead of the SPA fallback in an explicit Caddy route", () => {
-    const caddyfile = readFileSync(path.join(repoRoot, "platform-infra/Caddyfile"), "utf8");
+    const caddyfile = readFileSync(caddyfilePath, "utf8");
 
     expect(caddyfile).toMatch(
       /route\s*\{[\s\S]*handle_path \/api\/intake\/\*[\s\S]*handle\s*\{[\s\S]*try_files/
@@ -155,12 +211,41 @@ describe("Hetzner deployment script", () => {
   });
 
   test("loads server-owned Caddy sites from a persistent read-only directory", () => {
-    const caddyfile = readFileSync(path.join(repoRoot, "platform-infra/Caddyfile"), "utf8");
-    const compose = readFileSync(path.join(repoRoot, "platform-infra/docker-compose.yml"), "utf8");
+    const caddyfile = readFileSync(caddyfilePath, "utf8");
+    const compose = readFileSync(composePath, "utf8");
 
     expect(caddyfile).toContain("import /etc/caddy/sites/*.caddy");
     expect(compose).toContain(
       '${CADDY_SITES_DIR:-./sites}:/etc/caddy/sites:ro'
+    );
+  });
+
+  test("protects the site and replaces browser identity headers with route-scoped actors", () => {
+    const caddyfile = readFileSync(caddyfilePath, "utf8");
+
+    expect(caddyfile).toContain("basic_auth");
+    expect(caddyfile).toContain("{$CATERING_BASIC_AUTH_USER} {$CATERING_BASIC_AUTH_PASSWORD_HASH}");
+    expect(caddyfile).toContain("header_up -Authorization");
+    expect(caddyfile).toContain("header_up -X-Actor-Name");
+    expect(caddyfile).not.toContain("header_up -X-Catering-Actor-Name");
+    expect(caddyfile).not.toContain("header_up -X-Catering-Trusted-Secret");
+    expect(caddyfile).toContain("header_up X-Catering-Actor-Name {args[0]}");
+    expect(caddyfile).toContain("header_up X-Catering-Trusted-Secret {$CATERING_TRUSTED_ACTOR_SECRET}");
+    expect(caddyfile).toContain('import trusted_actor_headers "Intake-Mitarbeiter"');
+    expect(caddyfile).toContain('import trusted_actor_headers "Angebots-Mitarbeiter"');
+    expect(caddyfile).toContain('import trusted_actor_headers "Produktions-Mitarbeiter"');
+    expect(caddyfile).toContain('import trusted_actor_headers "Betriebs-/Audit-Operator"');
+  });
+
+  test("requires the trusted proxy secret in every runtime service", () => {
+    const compose = readFileSync(composePath, "utf8");
+
+    expect(compose.match(/^\s+CATERING_TRUSTED_ACTOR_SECRET:/gm)).toHaveLength(5);
+    expect(compose).toContain(
+      "CATERING_BASIC_AUTH_USER: ${CATERING_BASIC_AUTH_USER:?Set CATERING_BASIC_AUTH_USER}"
+    );
+    expect(compose).toContain(
+      "CATERING_BASIC_AUTH_PASSWORD_HASH: ${CATERING_BASIC_AUTH_PASSWORD_HASH:?Set CATERING_BASIC_AUTH_PASSWORD_HASH}"
     );
   });
 });

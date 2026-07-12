@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     environment:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
       INTAKE_PORT: 3101
       INTAKE_HOST: 0.0.0.0
     depends_on:
@@ -39,6 +40,7 @@ services:
     restart: unless-stopped
     environment:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
       OFFER_PORT: 3102
       OFFER_HOST: 0.0.0.0
     depends_on:
@@ -53,6 +55,7 @@ services:
     restart: unless-stopped
     environment:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
       PRODUCTION_PORT: 3103
       PRODUCTION_HOST: 0.0.0.0
     depends_on:
@@ -67,6 +70,7 @@ services:
     restart: unless-stopped
     environment:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
       PRINT_EXPORT_PORT: 3104
       PRINT_EXPORT_HOST: 0.0.0.0
     depends_on:
@@ -90,6 +94,9 @@ services:
     environment:
       CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}
       CADDY_EMAIL: ${CADDY_EMAIL:-ops@example.com}
+      CATERING_BASIC_AUTH_USER: ${CATERING_BASIC_AUTH_USER:?Set CATERING_BASIC_AUTH_USER}
+      CATERING_BASIC_AUTH_PASSWORD_HASH: ${CATERING_BASIC_AUTH_PASSWORD_HASH:?Set CATERING_BASIC_AUTH_PASSWORD_HASH}
+      CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
     volumes:
       - caddy_data:/data
       - caddy_config:/config

@@ -6,6 +6,17 @@ BASE_URL="${1:-${DEPLOY_BASE_URL:-http://localhost:8080}}"
 BASE_URL="${BASE_URL%/}"
 SMOKE_MAX_ATTEMPTS="${SMOKE_MAX_ATTEMPTS:-15}"
 SMOKE_RETRY_DELAY_SECONDS="${SMOKE_RETRY_DELAY_SECONDS:-2}"
+SMOKE_BASIC_AUTH_USER="${SMOKE_BASIC_AUTH_USER:-}"
+SMOKE_BASIC_AUTH_PASSWORD="${SMOKE_BASIC_AUTH_PASSWORD:-}"
+CURL_ARGS=(-fsS)
+
+if [[ -n "${SMOKE_BASIC_AUTH_USER}" || -n "${SMOKE_BASIC_AUTH_PASSWORD}" ]]; then
+  if [[ -z "${SMOKE_BASIC_AUTH_USER}" || -z "${SMOKE_BASIC_AUTH_PASSWORD}" ]]; then
+    echo "SMOKE_BASIC_AUTH_USER and SMOKE_BASIC_AUTH_PASSWORD must be set together." >&2
+    exit 1
+  fi
+  CURL_ARGS+=(--user "${SMOKE_BASIC_AUTH_USER}:${SMOKE_BASIC_AUTH_PASSWORD}")
+fi
 
 fetch_with_retry() {
   local label="$1"
@@ -13,7 +24,7 @@ fetch_with_retry() {
   local attempt
   local body
   for ((attempt = 1; attempt <= SMOKE_MAX_ATTEMPTS; attempt += 1)); do
-    if body="$(curl -fsS "${url}")"; then
+    if body="$(curl "${CURL_ARGS[@]}" "${url}")"; then
       printf '%s' "${body}"
       return 0
     fi
