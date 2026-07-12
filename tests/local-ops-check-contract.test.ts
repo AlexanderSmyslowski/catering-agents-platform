@@ -10,6 +10,7 @@ const c8AcceptanceDoc = readFileSync("docs/product/C8_INTERNER_DEMO_DURCHLAUF_AB
 const readmeDoc = readFileSync("README.md", "utf8");
 const testingDoc = readFileSync("TESTING.md", "utf8");
 const freshStartScript = readFileSync("scripts/start-fresh-local-stack.sh", "utf8");
+const startScript = readFileSync("scripts/start-local-stack.sh", "utf8");
 
 describe("local ops check contract", () => {
   it("keeps the audit window wide enough for a running local stack and reports missing seed evidence deterministically", () => {
@@ -43,7 +44,6 @@ describe("local ops check contract", () => {
   });
 
   it("keeps local checks tied to the data root of the running local stack", () => {
-    const startScript = readFileSync("scripts/start-local-stack.sh", "utf8");
     const statusScript = readFileSync("scripts/status-local-stack.sh", "utf8");
     const stopScript = readFileSync("scripts/stop-local-stack.sh", "utf8");
 
@@ -63,6 +63,19 @@ describe("local ops check contract", () => {
     expect(checkScript).toContain("Bitte dieselbe Datenwurzel nutzen oder den Stack mit npm run local:stop kontrolliert neu starten");
     expect(statusScript).toContain("Datenwurzel:");
     expect(stopScript).toContain("rm -f \"${DATA_ROOT_FILE}\"");
+  });
+
+  it("starts an empty local operator stack through the ChatGPT subscription transport", () => {
+    expect(packageJson.scripts["local:start:subscription"]).toBe(
+      "npm run local:stop && CATERING_LLM_PROVIDER=codex_cli CATERING_SYNTHETIC_LLM_SLICE=1 CATERING_PRODUCTION_DRAFT_DATA_MODE=pseudonymized_approved bash ./scripts/start-local-stack.sh"
+    );
+    expect(packageJson.scripts["local:start:subscription"]).not.toContain("--seed-demo");
+    expect(startScript).toContain('if [[ "${CATERING_LLM_PROVIDER:-fixture}" == "codex_cli" ]]');
+    expect(startScript).toContain("command -v \"${CATERING_LLM_CLI_BIN:-codex}\"");
+    expect(startScript).toContain('"${CATERING_LLM_CLI_BIN}" login status');
+    expect(startScript).toContain('export CATERING_LLM_PROVIDER="${LLM_PROVIDER}"');
+    expect(startScript).toContain('export CATERING_SYNTHETIC_LLM_SLICE="${LLM_OPT_IN}"');
+    expect(startScript).toContain('export CATERING_PRODUCTION_DRAFT_DATA_MODE="${PRODUCTION_DRAFT_DATA_MODE}"');
   });
 
   it("provides a controlled fresh local rehearsal start without deleting repo data", () => {
@@ -86,6 +99,9 @@ describe("local ops check contract", () => {
 
   it("documents the compact local demo runbook commands and their bounded roles", () => {
     expect(testingDoc).toContain("`npm run local:start` startet den lokalen Stack mit Demo-Seeding");
+    expect(readmeDoc).toContain("`npm run local:start:subscription`");
+    expect(testingDoc).toContain("`npm run local:start:subscription` startet den leeren lokalen Operator-Stack");
+    expect(testingDoc).toContain("operatorfreigegebene, anonymisierte Dokumente");
     expect(testingDoc).toContain("`npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert");
     expect(testingDoc).toContain("`npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht");
     expect(testingDoc).toContain("`npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg");

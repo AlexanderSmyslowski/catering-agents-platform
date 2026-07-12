@@ -21,22 +21,34 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **Phase 4.2b · Persistenten Probestand vor dem Pilot entscheiden.** Die
-  Live-Datenbank enthaelt 6 fruehere Erfassungen (2 PDF, 3 Text, 1 manuell)
-  und 3 Plaene aus vorangegangenen Proben, aber nicht aus den aktuellen
-  Fixture-IDs. Behalten oder bewusst leeren ist eine menschliche
-  Datenentscheidung; Codex loescht nichts automatisch.
-- **Phase 4.2c · Einen anonymisierten echten Parallelauftrag freigeben.**
-  Derselbe bereits anonymisierte Angebotsfall soll einmal in der Live-App und
-  einmal mit Alexanders GPT-5.6-Produktionsprompt laufen. Erst der fachliche
-  Vergleich von Vollstaendigkeit, Rezepten, Einkauf, Aenderungen und
-  Druckmappe entscheidet ueber den ersten operativen Pilot. Echte
-  Kundendaten und beliebige Uploads bleiben bis dahin gesperrt.
+- **Phase 4.2c · Lokalen Subscription-Entwurf fachlich vergleichen.** Das
+  bereits freigegebene anonymisierte 45-Personen-Angebot liegt lokal ueber
+  `codex_cli` als `pending_review`-Entwurf vor: 11 Komponenten, 1 offene Frage
+  und 13 Review-Karten; noch 0 Spezifikationen, Plaene und Einkaufslisten.
+  Alexander vergleicht Vollstaendigkeit, Rezepte, Einkauf, Aenderungen und
+  Druckmappe mit seinem bisherigen GPT-Arbeitsweg. Echte Kundendaten und
+  beliebige Uploads bleiben bis zu dieser Sichtung gesperrt.
 
 ---
 
 ## ERLEDIGT
 
+- **Phase 4.2b · Probestand gesichert und operativ geleert.** Alexander gab
+  die Bereinigung frei. Vollbackup auf dem Server:
+  `/opt/catering-agents-platform-backups/pre-pilot-20260712T144926Z.dump`,
+  Modus `600`, 7.180.067 Bytes, `pg_restore`-Katalog lesbar. Danach wurden
+  ausschliesslich bekannte operative Collections transaktional geleert:
+  6 Erfassungen, 6 Spezifikationen, 3 Plaene, 3 Einkaufslisten und 11
+  Audit-Eintraege. Live-APIs belegen jeweils 0; 35 Rezepte blieben erhalten.
+- **Phase 4.2b · Lokaler Subscription-Betriebsweg belegt.** PR #585 auf
+  `loop/local-subscription-runtime` ignoriert private Codex-Konfigurationen,
+  prueft CLI und ChatGPT-Login vor dem Start und stellt
+  `npm run local:start:subscription` bereit. Echter synthetischer HTTP-Smoke:
+  `201`, Provider `codex-cli`, 4 Komponenten, 8 Review-Karten,
+  `pending_review`, keine Produkt-Schreibwirkung. Dauerhafter lokaler
+  Pilotbestand liegt ausserhalb des Repos unter
+  `~/Library/Application Support/Catering Agents/local-pilot` und enthaelt
+  23 Rezepte bei 0 alten operativen Objekten.
 - **Phase 4.2a · Interner Login und Trusted-Proxy live.** PRs #582 und #583
   sind gemergt; Merge-Commit `f2e8b26` laeuft unter
   <https://agents.the-one.catering>. Caddys Open-Source-Basic-Auth schuetzt

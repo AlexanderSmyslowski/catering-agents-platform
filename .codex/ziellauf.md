@@ -8,8 +8,10 @@ quittiert ist (Queue-Eintrag `GATE QUITTIERT: <Phase>`).
 
 ## Endziel (Definition of Done)
 
-Eine echte Kundenanfrage (PDF oder Freitext) läuft auf der
-Hetzner-Instanz ohne Code-Handarbeit durch:
+Eine echte Kundenanfrage (PDF oder Freitext) laeuft in einer kontrollierten
+Operator-Instanz ohne Code-Handarbeit durch. Fuer den internen Betrieb ist die
+lokale App mit dem ChatGPT-Subscription-Login ueber Codex CLI der bevorzugte
+Pfad; die Hetzner-Instanz bleibt der geschuetzte, API-faehige Serverpfad:
 Import → KI-Entwurf (BYO, draft-only) → Review-Karten-Entscheidung
 durch Operator → Freigabe (`approvedBy`/`approvedAt`) → Angebot +
 Produktionsübergabe → Produktionsmappe mit Rezeptkarten und gefüllter
@@ -101,8 +103,9 @@ GATE 3: Ronak/Alexander nehmen EINE Mappe fachlich ab.
 ## Phase 4 — Realbetrieb (gated)
 
 4.1 Hetzner-Deploy mit platform-infra; Smoke gegen die Instanz.
-4.2 Eine echte Anfrage parallel zu rechner.commcats.de; Mappe an
-    Ronak aus dem System.
+4.2 Eine echte Anfrage lokal ueber den Subscription-Pfad parallel zum
+    bisherigen GPT-Arbeitsweg; Mappe an Ronak aus dem System. Der Serverpfad
+    wird nur mit bewusst freigegebenem API-Provider genutzt.
 4.3 Feedback-Writeback: erste reale production_feedback-Einträge.
 GATE 4 = Endziel-Prüfung gegen die Definition oben.
 

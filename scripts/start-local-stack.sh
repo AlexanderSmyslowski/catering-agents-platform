@@ -17,6 +17,28 @@ required_sessions=(
   "catering-exports"
 )
 
+if [[ "${CATERING_LLM_PROVIDER:-fixture}" == "codex_cli" ]]; then
+  if ! CATERING_LLM_CLI_BIN="$(command -v "${CATERING_LLM_CLI_BIN:-codex}")"; then
+    echo "Codex CLI wurde nicht gefunden. Bitte Codex lokal installieren." >&2
+    exit 1
+  fi
+  export CATERING_LLM_CLI_BIN
+
+  if ! "${CATERING_LLM_CLI_BIN}" login status 2>&1 | grep -q "Logged in using ChatGPT"; then
+    echo "Codex CLI ist nicht mit ChatGPT angemeldet. Bitte zuerst 'codex login' ausfuehren." >&2
+    exit 1
+  fi
+
+  echo "Lokale KI: ChatGPT-Subscription ueber Codex CLI (draft-only)."
+fi
+
+LLM_PROVIDER="${CATERING_LLM_PROVIDER:-fixture}"
+LLM_OPT_IN="${CATERING_SYNTHETIC_LLM_SLICE:-0}"
+PRODUCTION_DRAFT_DATA_MODE="${CATERING_PRODUCTION_DRAFT_DATA_MODE:-synthetic_or_demo_only}"
+LLM_CLI_BIN="${CATERING_LLM_CLI_BIN:-codex}"
+LLM_MODEL="${CATERING_LLM_MODEL:-}"
+LLM_CLI_TIMEOUT_MS="${CATERING_LLM_CLI_TIMEOUT_MS:-120000}"
+
 mkdir -p "${LOG_DIR}"
 
 if ! command -v screen >/dev/null 2>&1; then
@@ -94,6 +116,12 @@ start_service() {
 cd "${ROOT_DIR}"
 export CATERING_DATA_ROOT="${DATA_ROOT}"
 export CATERING_DEV_AUTH=1
+export CATERING_LLM_PROVIDER="${LLM_PROVIDER}"
+export CATERING_SYNTHETIC_LLM_SLICE="${LLM_OPT_IN}"
+export CATERING_PRODUCTION_DRAFT_DATA_MODE="${PRODUCTION_DRAFT_DATA_MODE}"
+export CATERING_LLM_CLI_BIN="${LLM_CLI_BIN}"
+export CATERING_LLM_MODEL="${LLM_MODEL}"
+export CATERING_LLM_CLI_TIMEOUT_MS="${LLM_CLI_TIMEOUT_MS}"
 while true; do
   ${command} >>"${log_file}" 2>&1
   code=\$?
