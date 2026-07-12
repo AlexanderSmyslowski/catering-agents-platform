@@ -111,6 +111,40 @@ describe("Hetzner deployment script", () => {
     expect(`${result.stdout}${result.stderr}`).toContain("did not return service status ok");
   });
 
+  test("retries a transient health failure during service startup", () => {
+    const root = createTempDir();
+    const binDir = path.join(root, "bin");
+    const curlCount = path.join(root, "curl-count");
+    mkdirSync(binDir);
+    writeFileSync(curlCount, "0\n", "utf8");
+    writeExecutable(
+      path.join(binDir, "curl"),
+      [
+        "#!/usr/bin/env bash",
+        "count=$(cat \"$CURL_COUNT\")",
+        "count=$((count + 1))",
+        "printf '%s\\n' \"$count\" > \"$CURL_COUNT\"",
+        "if [[ \"$count\" -eq 4 ]]; then exit 22; fi",
+        "printf '{\"status\":\"ok\"}'"
+      ].join("\n") + "\n"
+    );
+
+    const result = spawnSync("bash", [smokeScript, "https://deployment.test"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CURL_COUNT: curlCount,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        SMOKE_MAX_ATTEMPTS: "2",
+        SMOKE_RETRY_DELAY_SECONDS: "0"
+      }
+    });
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(curlCount, "utf8")).toBe("8\n");
+  });
+
   test("keeps API handlers ahead of the SPA fallback in an explicit Caddy route", () => {
     const caddyfile = readFileSync(path.join(repoRoot, "platform-infra/Caddyfile"), "utf8");
 
