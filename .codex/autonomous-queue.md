@@ -21,17 +21,34 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **Phase 4.2a · Zugriffsschicht wählen und freigeben.** Die Hetzner-App ist
-  bewusst ohne Operator-Kontext gesperrt. Vor einer realen Parallel-Anfrage
-  braucht sie eine vorgeschaltete Anmeldung, entfernt extern gesetzte
-  Actor-/Trusted-Header und injiziert Rollen plus Secret ausschließlich
-  serverseitig. Echte Kundendaten und beliebige Uploads bleiben bis zu einer
-  separaten Daten-/Upload-Freigabe gesperrt.
+- **Phase 4.2b · Persistenten Probestand vor dem Pilot entscheiden.** Die
+  Live-Datenbank enthaelt 6 fruehere Erfassungen (2 PDF, 3 Text, 1 manuell)
+  und 3 Plaene aus vorangegangenen Proben, aber nicht aus den aktuellen
+  Fixture-IDs. Behalten oder bewusst leeren ist eine menschliche
+  Datenentscheidung; Codex loescht nichts automatisch.
+- **Phase 4.2c · Einen anonymisierten echten Parallelauftrag freigeben.**
+  Derselbe bereits anonymisierte Angebotsfall soll einmal in der Live-App und
+  einmal mit Alexanders GPT-5.6-Produktionsprompt laufen. Erst der fachliche
+  Vergleich von Vollstaendigkeit, Rezepten, Einkauf, Aenderungen und
+  Druckmappe entscheidet ueber den ersten operativen Pilot. Echte
+  Kundendaten und beliebige Uploads bleiben bis dahin gesperrt.
 
 ---
 
 ## ERLEDIGT
 
+- **Phase 4.2a · Interner Login und Trusted-Proxy live.** PRs #582 und #583
+  sind gemergt; Merge-Commit `f2e8b26` laeuft unter
+  <https://agents.the-one.catering>. Caddys Open-Source-Basic-Auth schuetzt
+  UI und APIs mit `401`; mit dem im macOS-Schluesselbund unter
+  `agents.the-one.catering` hinterlegten Konto sind UI, Health und alle
+  rollenbezogenen Lesewege erreichbar. Frei gesetzte Actor-/Trusted-Header
+  werden serverseitig ueberschrieben. Browserprobe: Einstieg und Historie
+  sichtbar, keine Konsolen- oder Rollenfehler. Deployment aus einem
+  absichtlich auf `700` gesetzten Archiv endete mit Remote-Pfad `755`; der
+  externe Eventos-Caddy-Site blieb erhalten und antwortete weiter mit `200`.
+  Rollback-Snapshot: `20260712T134436Z`. Keine echten Kundendaten wurden in
+  diesem Slice uebertragen.
 - **Phase 4.1 · Hetzner-Deployment und Smoke abgeschlossen.** `main`-Commit
   `adca7e6` läuft unter <https://agents.the-one.catering>. Rollback-Snapshot
   `20260712T114154Z` ist vorhanden, die serverseitige `.env` blieb bytegleich,
