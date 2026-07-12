@@ -290,7 +290,7 @@ describe("backoffice route smoke", () => {
     const production = await renderRoute("/produktion");
     expect(production.text).toContain("Produktionsagent");
     expect(production.text).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
-    expect(production.text).toContain("Angebot hochladen oder Auftrag beschreiben");
+    expect(production.text).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
     expect(production.text).toContain("Frühere Produktionsaufträge öffnen");
     expect(production.text).not.toContain("Bestandsdaten im Hintergrund");
     expect(production.html).not.toContain('aria-label="Kompakte Produktionszusammenfassung"');
@@ -319,7 +319,7 @@ describe("backoffice route smoke", () => {
 
     expect(production).toContain("Produktionsdaten werden geladen; noch kein Vorgang bewertet.");
     expect(production).toContain("Aufträge werden geladen");
-    expect(production).toContain("Produktionsdaten laden");
+    expect(production).toContain("Aktuelle Plattformdaten werden geladen...");
     expect(production).not.toContain("Produktionspläne werden geladen; noch keine Planbewertung.");
     expect(production).not.toContain("Einkaufslisten werden geladen; noch keine Beschaffungsbewertung.");
     expect(production).toContain("Aktuelle Plattformdaten werden geladen...");

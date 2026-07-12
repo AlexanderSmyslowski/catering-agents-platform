@@ -17,6 +17,14 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLAUBT
 
+- **Phase 4.2e · Nächster Schritt folgt dem sichtbaren Arbeitskontext.**
+  Reproduzierter Befund aus der lokalen Subscription-Probe nach #586: Ein
+  offener `pending_review`-Entwurf wird oben korrekt zur Prüfung angeboten,
+  während der globale Abschluss des leeren Produktkontexts weiterhin zum
+  erneuten Upload auffordert. Der Workbench-Nächste-Schritt wird nur bei
+  aktivem Produktionskontext gezeigt; Entwurf und Leerzustand bleiben im
+  Eingabebereich. Kein Providerlauf und keine Produkt-Schreibwirkung.
+
 ---
 
 ## ZUR SICHTUNG (menschenpflichtig)

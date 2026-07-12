@@ -219,20 +219,22 @@ export function ProductionConversationalWorkbench({
           </p>
         </header>
         {slots.inputSlot}
-        <div className="production-next-step" aria-label="Nächster Produktionsschritt">
-          <p className="eyebrow">Nächster Schritt</p>
-          <strong>{nextStep.title}</strong>
-          <p className="helper-text">{nextStep.description}</p>
-          {openVisibleQuestionCount > 0 ? (
-            <a className="ghost-link" href="#production-question-panel">
-              Rückfragen beantworten
-            </a>
-          ) : hasProductionResults ? (
-            <a className="ghost-link" href={`#${productionOutputAnchorId}`}>
-              Ergebnisse prüfen
-            </a>
-          ) : null}
-        </div>
+        {hasActiveContext ? (
+          <div className="production-next-step" aria-label="Nächster Produktionsschritt">
+            <p className="eyebrow">Nächster Schritt</p>
+            <strong>{nextStep.title}</strong>
+            <p className="helper-text">{nextStep.description}</p>
+            {openVisibleQuestionCount > 0 ? (
+              <a className="ghost-link" href="#production-question-panel">
+                Rückfragen beantworten
+              </a>
+            ) : hasProductionResults ? (
+              <a className="ghost-link" href={`#${productionOutputAnchorId}`}>
+                Ergebnisse prüfen
+              </a>
+            ) : null}
+          </div>
+        ) : null}
       </article>
 
       {hasActiveContext ? (
