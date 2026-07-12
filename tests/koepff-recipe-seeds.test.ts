@@ -179,6 +179,30 @@ describe("Köpff recipe seeds", () => {
     }
   });
 
+  it("uses the reviewed UNOX GN method for Meersalzdrillinge", () => {
+    const roastbeef = loadSeeds().find(
+      (recipe) => recipe.recipeId === "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche"
+    )!;
+    const oilMix = roastbeef.ingredients.find(
+      (ingredient) => ingredient.name === "Rapsöl-Olivenöl-Mix"
+    );
+    const potatoPepper = roastbeef.ingredients.find((ingredient) =>
+      ingredient.ingredientId.endsWith("-09-pfeffer")
+    );
+    const potatoStep = roastbeef.steps.find((step) => step.index === 3)?.instruction ?? "";
+
+    expect(oilMix?.quantity).toEqual({ amount: 120, unit: "ml" });
+    expect(potatoPepper).toBeUndefined();
+    expect(potatoStep).toContain("GN 1/1");
+    expect(potatoStep).toContain("Rapsöl und Olivenöl");
+    expect(potatoStep).toContain("rundum benetzen");
+    expect(potatoStep).toContain("230 °C Heißluft");
+    expect(potatoStep).toContain("0 % STEAM.Maxi");
+    expect(potatoStep).toContain("30-35 Minuten");
+    expect(potatoStep).toContain("nur ergänzen, wenn sie im Angebot ausdrücklich benannt sind");
+    expect(potatoStep).not.toContain("Pfeffer");
+  });
+
   it("keeps every transcribed quantity unchanged at the recipe base yield", () => {
     const recipes = loadSeeds();
 
@@ -217,6 +241,9 @@ describe("Köpff recipe seeds", () => {
     const oliveOilItems = purchaseList.items.filter(
       (item) => item.displayName === "Olivenöl mild"
     );
+    const oilMix = purchaseList.items.find(
+      (item) => item.displayName === "Rapsöl-Olivenöl-Mix"
+    );
     const expectedSources = recipes
       .filter((recipe) => recipe.ingredients.some((ingredient) => ingredient.name === "Olivenöl mild"))
       .map((recipe) => recipe.recipeId)
@@ -225,13 +252,20 @@ describe("Köpff recipe seeds", () => {
     expect(oliveOilItems).toHaveLength(1);
     expect(oliveOilItems[0]).toMatchObject({
       displayName: "Olivenöl mild",
-      normalizedQty: 970,
+      normalizedQty: 850,
       normalizedUnit: "ml",
-      purchaseQty: 970,
+      purchaseQty: 850,
       purchaseUnit: "ml",
       group: "oele_essige_kochwein"
     });
     expect([...(oliveOilItems[0]?.sourceRecipes ?? [])].sort()).toEqual(expectedSources);
+    expect(oilMix).toMatchObject({
+      normalizedQty: 120,
+      normalizedUnit: "ml",
+      purchaseQty: 120,
+      purchaseUnit: "ml",
+      group: "oele_essige_kochwein"
+    });
     expect(purchaseList.items.some((item) => item.displayName === "Weißwein trocken")).toBe(true);
   });
 
