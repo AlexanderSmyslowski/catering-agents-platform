@@ -9,7 +9,10 @@ import {
   formatProductionDraftStatusLabel,
   ProductionDraftReviewPanel
 } from "../backoffice-ui/src/production-draft-review-panel.js";
-import type { ProductionDraft } from "../backoffice-ui/src/api.js";
+import type {
+  ProductionDraft,
+  ProductionDraftReviewDecision
+} from "../backoffice-ui/src/api.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -418,6 +421,68 @@ describe("ProductionDraftReviewPanel", () => {
     );
     expect(document.body.textContent ?? "").toContain("Neuer KI-Entwurf ist bereit zur Prüfung.");
 
+    await act(async () => root.unmount());
+  });
+
+  it("stores a recipe comment without offering the source-extraction revision action", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: () => undefined
+      }
+    });
+    let draft = draftFixture();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+        return jsonResponse({ items: [draft] });
+      }
+      if (url.endsWith("/review-cards/card-recipe-1") && method === "PATCH") {
+        const body = JSON.parse(String(init?.body)) as { decision: ProductionDraftReviewDecision; operatorComment: string };
+        draft = {
+          ...draft,
+          reviewCards: draft.reviewCards.map((card) =>
+            card.cardId === "card-recipe-1" ? { ...card, ...body } : card
+          )
+        };
+        return jsonResponse({ draft, reviewCard: draft.reviewCards[3] });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    }) as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      await flushPromises();
+    });
+    await act(async () => {
+      buttonForReviewCard("Rezeptkarte 1 prüfen", "Änderung nötig")?.click();
+      await flushPromises();
+    });
+    const commentField = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Was soll geändert werden?"]');
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+      valueSetter?.call(commentField, "Kerntemperatur ergänzen.");
+      commentField?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const rememberButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Änderung vormerken"
+    );
+    await act(async () => {
+      rememberButton?.click();
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(document.body.textContent ?? "").toContain(
+      "Rezept- und Planänderungen bleiben als Prüfnotiz gespeichert"
+    );
+    expect(document.body.textContent ?? "").not.toContain("Änderungen von KI einarbeiten");
     await act(async () => root.unmount());
   });
 

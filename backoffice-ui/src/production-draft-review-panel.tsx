@@ -27,6 +27,12 @@ const reviewDecisionActions = [
   label: string;
 }[];
 
+const productionDraftExtractionRevisionCardKinds = new Set([
+  "event_data",
+  "menu_component",
+  "open_question"
+]);
+
 export function formatProductionDraftStatusLabel(status: ProductionDraft["status"]): string {
   if (status === "pending_review") {
     return "wartet auf Prüfung";
@@ -139,6 +145,21 @@ function canApproveProductionDraft(draft: ProductionDraft): boolean {
 
 function canApplyProductionDraft(draft: ProductionDraft): boolean {
   return draft.status === "approved" && !draft.appliedAt;
+}
+
+function canReviseProductionDraft(draft: ProductionDraft): boolean {
+  const requestedChanges = draft.reviewCards.filter((card) => card.decision === "change_requested");
+  return requestedChanges.length > 0 && requestedChanges.every((card) =>
+    productionDraftExtractionRevisionCardKinds.has(card.kind) && Boolean(card.operatorComment?.trim())
+  );
+}
+
+function hasDeferredArtifactChanges(draft: ProductionDraft): boolean {
+  return draft.reviewCards.some((card) =>
+    card.decision === "change_requested" &&
+    Boolean(card.operatorComment?.trim()) &&
+    !productionDraftExtractionRevisionCardKinds.has(card.kind)
+  );
 }
 
 function formatReviewCardMeta(card: ProductionDraftReviewCard): string {
@@ -353,9 +374,12 @@ export function ProductionDraftReviewPanel({
                   </li>
                 ))}
               </ul>
-              {draft.status === "pending_review" && draft.reviewCards.some((card) =>
-                card.decision === "change_requested" && Boolean(card.operatorComment?.trim())
-              ) ? (
+              {draft.status === "pending_review" && hasDeferredArtifactChanges(draft) ? (
+                <p className="helper-text production-draft-deferred-change-note">
+                  Rezept- und Planänderungen bleiben als Prüfnotiz gespeichert. Der aktuelle KI-Revisionsweg verändert diese Artefakte noch nicht.
+                </p>
+              ) : null}
+              {draft.status === "pending_review" && canReviseProductionDraft(draft) ? (
                 <div className="production-draft-revision-action">
                   <div>
                     <strong>Änderungen sind vorgemerkt.</strong>

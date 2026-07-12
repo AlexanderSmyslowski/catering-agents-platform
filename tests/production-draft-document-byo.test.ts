@@ -335,6 +335,69 @@ describe("ProductionDraft document BYO extraction", () => {
     }
   });
 
+  it("does not use the extraction revision path for recipe or planning cards", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const requests: LlmReadinessProviderAdapterRequest[] = [];
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-byo-production-draft-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => {
+        requests.push(request);
+        return extractionResponse(request);
+      }
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: documentPayload()
+      });
+      const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
+      await store.saveProductionDraft({
+        ...originalDraft,
+        reviewCards: [
+          ...originalDraft.reviewCards,
+          {
+            cardId: "card-recipe-change",
+            kind: "recipe",
+            title: "Rezept ändern",
+            summary: "Kerntemperatur ergänzen.",
+            decision: "change_requested",
+            operatorComment: "Kerntemperatur im Rezept ergänzen.",
+            decidedBy: "Produktions-Mitarbeiter",
+            decidedAt: new Date().toISOString(),
+            requiredApproval: true
+          }
+        ]
+      });
+
+      const revised = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${originalDraft.draftId}/revise`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
+
+      expect(revised.statusCode, revised.body).toBe(422);
+      expect(revised.body).toContain("Rezept- und Planänderungen");
+      expect(requests).toHaveLength(1);
+      expect(await store.listProductionDrafts()).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("keeps the original draft pending when the revision output is invalid", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

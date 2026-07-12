@@ -53,6 +53,12 @@ const operatorProductionDraftReviewDecisions = [
   "blocked"
 ] as const satisfies readonly Exclude<ProductionDraftReviewDecision, "pending">[];
 
+const productionDraftExtractionRevisionCardKinds = [
+  "event_data",
+  "menu_component",
+  "open_question"
+] as const satisfies readonly ProductionDraftReviewCard["kind"][];
+
 function sourceLineageRequestIds(eventSpec: AcceptedEventSpec): string[] {
   const ids = new Set<string>();
 
@@ -1170,6 +1176,17 @@ export function registerProductionArtifactRoutes(
         return reply.code(422).send({
           message: "Für eine Überarbeitung ist mindestens ein konkret kommentierter Änderungswunsch erforderlich.",
           errors: missingComments.map((card) => `reviewCard ${card.cardId} needs operatorComment`)
+        });
+      }
+      const unsupportedChanges = requestedChanges.filter((card) =>
+        !productionDraftExtractionRevisionCardKinds.includes(
+          card.kind as typeof productionDraftExtractionRevisionCardKinds[number]
+        )
+      );
+      if (unsupportedChanges.length > 0) {
+        return reply.code(422).send({
+          message: "Rezept- und Planänderungen können mit dem Extraktions-Revisionsweg noch nicht sicher eingearbeitet werden.",
+          errors: unsupportedChanges.map((card) => `reviewCard ${card.cardId} kind ${card.kind} is not revision-supported`)
         });
       }
 
