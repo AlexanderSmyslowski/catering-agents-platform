@@ -21,6 +21,12 @@ if ! command -v ssh >/dev/null 2>&1; then
   exit 1
 fi
 
+echo "Checking remote deployment configuration..."
+if ! ssh "${REMOTE}" "test -f '${DEPLOY_PATH}/platform-infra/.env'"; then
+  echo "Missing platform-infra/.env on server."
+  exit 1
+fi
+
 echo "Syncing repository to ${REMOTE}:${DEPLOY_PATH}..."
 rsync -az --delete \
   --exclude ".git" \
@@ -28,6 +34,7 @@ rsync -az --delete \
   --exclude "data" \
   --exclude "backoffice-ui/dist" \
   --exclude "Kochbücher" \
+  --exclude "platform-infra/.env" \
   "${REPO_ROOT}/" "${REMOTE}:${DEPLOY_PATH}/"
 
 echo "Starting Docker Compose on ${REMOTE}..."
