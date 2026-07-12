@@ -84,21 +84,12 @@
     },
     {
       "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-08-olivenol-mild",
-      "name": "Olivenöl mild",
+      "name": "Rapsöl-Olivenöl-Mix",
       "quantity": {
         "amount": 120,
         "unit": "ml"
       },
       "group": "oele_essige_kochwein"
-    },
-    {
-      "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-09-pfeffer",
-      "name": "Pfeffer",
-      "quantity": {
-        "amount": 5,
-        "unit": "g"
-      },
-      "group": "gewuerze_wuerzmittel"
     },
     {
       "ingredientId": "koepff-roastbeef-meersalzdrillinge-tomaten-rauke-salsa-gribiche-10-tomaten",
@@ -310,7 +301,7 @@
     },
     {
       "index": 3,
-      "instruction": "Drillinge in Salzwasser garen, ausdampfen lassen und mit Olivenöl, Meersalz und Pfeffer marinieren."
+      "instruction": "Drillinge im GN 1/1 mit einem Mix aus Rapsöl und Olivenöl rundum benetzen und mit Meersalz mischen. Im UNOX XVC305E bei 230 °C Heißluft, 0 % STEAM.Maxi, 30-35 Minuten garen. Kräuter oder Gewürze nur ergänzen, wenn sie im Angebot ausdrücklich benannt sind."
     },
     {
       "index": 4,
