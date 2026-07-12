@@ -14,6 +14,7 @@ type ProductionDraftReviewPanelProps = {
   submitting: boolean;
   embedded?: boolean;
   latestOnly?: boolean;
+  resumeMode?: boolean;
   onDraftChanged?: (appliedSpecId?: string) => Promise<void>;
 };
 
@@ -174,6 +175,7 @@ export function ProductionDraftReviewPanel({
   submitting,
   embedded = false,
   latestOnly = false,
+  resumeMode = false,
   onDraftChanged
 }: ProductionDraftReviewPanelProps) {
   const [drafts, setDrafts] = useState<ProductionDraft[]>([]);
@@ -272,9 +274,27 @@ export function ProductionDraftReviewPanel({
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const displayedDrafts = latestOnly ? visibleDrafts.slice(0, 1) : visibleDrafts;
 
+  if (resumeMode && displayedDrafts.length === 0 && !message) {
+    return null;
+  }
+
+  const className = resumeMode
+    ? "upload-result-summary production-draft-review production-draft-review--resume"
+    : embedded
+      ? "production-draft-review"
+      : "form-panel production-draft-review";
+
   return (
-    <section className={embedded ? "production-draft-review" : "form-panel production-draft-review"} aria-label="Produktionsentwurf-Prüfung">
-      {!embedded ? (
+    <section className={className} aria-label="Produktionsentwurf-Prüfung">
+      {resumeMode && displayedDrafts.length > 0 ? (
+        <header className="upload-result-summary__header">
+          <p className="eyebrow">Offener Entwurf</p>
+          <h3>Offenen KI-Entwurf weiter prüfen</h3>
+          <p className="helper-text">
+            Dieser Entwurf wartet auf deine Prüfung. Noch nichts wurde freigegeben oder in die Produktion übernommen.
+          </p>
+        </header>
+      ) : !embedded ? (
         <header>
           <p className="eyebrow">Entwurf ohne Übernahme</p>
           <h3>Produktionsentwürfe prüfen</h3>

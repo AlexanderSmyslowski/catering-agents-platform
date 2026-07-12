@@ -218,4 +218,77 @@ describe("production input panel upload transition", () => {
     expect(container.textContent).not.toContain("Noch keine Produktionsdaten erkannt");
     await act(async () => root.unmount());
   });
+
+  it("shows a persisted pending draft after reload without requiring the original upload state", async () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: () => undefined
+      }
+    });
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      items: [{
+        draftId: "draft-after-reload",
+        status: "pending_review",
+        createdAt: "2026-07-12T20:00:00.000Z",
+        source: { kind: "ai_provider" },
+        reviewCards: [{
+          cardId: "card-menu",
+          kind: "menu_component",
+          title: "Kokos-Cheesecake | Brombeere",
+          summary: "Als Angebotskomponente erkannt.",
+          decision: "pending"
+        }],
+        draftArtifacts: {
+          eventSpec: { event: { title: "Flying Buffet · 45 Personen" } }
+        }
+      }]
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    })) as typeof fetch;
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(ProductionInputPanel, {
+        submitting: false,
+        sourceInput: {
+          dragActive: false,
+          intakeFile: null,
+          intakeChannel: "pdf_upload",
+          documentPhase: "idle",
+          documentProgress: 0,
+          intakeText: "",
+          canClearWorkspace: false,
+          canArchiveCurrentIntake: false,
+          clearWorkspaceTitle: "Kein aktiver Produktionsarbeitsbereich",
+          archiveCurrentIntakeTitle: "Kein Intake-Kontext"
+        },
+        sourceInputActions,
+        manualInput: {
+          eventType: "",
+          eventDate: "",
+          attendeeCount: "",
+          serviceForm: "",
+          menuItems: "",
+          customerName: "",
+          venueName: "",
+          notes: ""
+        },
+        manualInputActions,
+        productionQuestions: [],
+        productionAssumptions: []
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(container.textContent).toContain("Offenen KI-Entwurf weiter prüfen");
+    expect(container.textContent).toContain("Flying Buffet · 45 Personen");
+    expect(container.textContent).toContain("Kokos-Cheesecake | Brombeere");
+    await act(async () => root.unmount());
+  });
 });
