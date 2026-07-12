@@ -74,9 +74,14 @@ describe("Hetzner deployment script", () => {
     );
     writeExecutable(path.join(binDir, "curl"), "#!/usr/bin/env bash\nexit 0\n");
 
-    const result = runDeploy(binDir, { RSYNC_LOG: rsyncLog });
+    const result = runDeploy(binDir, {
+      DEPLOY_RSYNC_PATH: "sudo rsync",
+      RSYNC_LOG: rsyncLog
+    });
 
     expect(result.status).toBe(0);
-    expect(readFileSync(rsyncLog, "utf8")).toContain("platform-infra/.env");
+    const rsyncArguments = readFileSync(rsyncLog, "utf8");
+    expect(rsyncArguments).toContain("platform-infra/.env");
+    expect(rsyncArguments).toContain("--rsync-path=sudo rsync");
   });
 });
