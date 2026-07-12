@@ -131,6 +131,7 @@ describe("Codex CLI BYO LLM provider", () => {
     });
     expect(calls[0].args).toEqual(expect.arrayContaining([
       "exec",
+      "--ignore-user-config",
       "--sandbox",
       "read-only",
       "--ephemeral",

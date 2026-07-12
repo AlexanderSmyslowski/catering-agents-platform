@@ -18,6 +18,7 @@
     "import:recipes:koepff": "tsx scripts/import-koepff-recipes.ts",
     "import:offer-portfolio": "tsx scripts/import-offer-portfolio.ts",
     "local:start": "bash ./scripts/start-local-stack.sh --seed-demo",
+    "local:start:subscription": "npm run local:stop && CATERING_LLM_PROVIDER=codex_cli CATERING_SYNTHETIC_LLM_SLICE=1 CATERING_PRODUCTION_DRAFT_DATA_MODE=pseudonymized_approved bash ./scripts/start-local-stack.sh",
     "local:start:fresh": "bash ./scripts/start-fresh-local-stack.sh",
     "local:stop": "bash ./scripts/stop-local-stack.sh",
     "local:status": "bash ./scripts/status-local-stack.sh",

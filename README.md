@@ -35,6 +35,7 @@ Die interne Web-App laeuft im Dev-Modus ueber Vite auf Port `3200`.
 
 ```bash
 npm run local:start
+npm run local:start:subscription
 npm run local:start:fresh
 npm run local:status
 npm run local:check
@@ -42,6 +43,7 @@ npm run local:stop
 ```
 
 - `npm run local:start` startet den lokalen Stack mit Demo-Seeding.
+- `npm run local:start:subscription` startet den leeren lokalen Operator-Stack mit dem angemeldeten ChatGPT-Konto ueber Codex CLI.
 - `npm run local:start:fresh` stoppt den laufenden Stack und startet mit temporaerer synthetischer Datenwurzel neu.
 - `npm run local:status` zeigt lokale Prozess- und Erreichbarkeitsdaten fuer die erwarteten Services.
 - `npm run local:check` prueft UI-Routen, Health-Endpunkte, read-only Exportpfade und lokale Auditbelege gegen den laufenden Stack.

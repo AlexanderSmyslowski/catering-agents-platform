@@ -310,6 +310,7 @@ Bestehender lokaler Stack:
 
 ```bash
 npm run local:start
+npm run local:start:subscription
 npm run local:start:fresh
 npm run local:status
 npm run local:check
@@ -330,6 +331,7 @@ Der minimale lokale Smoke-Korridor umfasst:
 Abgrenzung der lokalen Befehle:
 
 - `npm run local:start` startet den lokalen Stack mit Demo-Seeding in den bestehenden `screen`-Sitzungen. Der Befehl nutzt die vorhandenen Services und Demo-Fixtures; er ist kein Deployment und keine Produktionsfreigabe.
+- `npm run local:start:subscription` startet den leeren lokalen Operator-Stack nach einem kontrollierten Neustart ueber das mit ChatGPT angemeldete Codex CLI. Der Provider erzeugt nur pruefpflichtige Entwuerfe; erlaubt sind weiterhin nur synthetische oder operatorfreigegebene, anonymisierte Dokumente.
 - `npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert und startet ihn mit einer temporaeren synthetischen Datenwurzel neu. Der Befehl loescht keine Repo-Daten unter `./data`; er ist der bevorzugte Startweg, wenn `local:check` einen aufgefuellten Datenbestand oder moegliche Rezept-Arbeitsschritte in Einkaufslisten gemeldet hat und ein sauberer Browser-Frischlauf gebraucht wird.
 - `npm run local:status` ist eine lokale Prozess- und Erreichbarkeitsuebersicht fuer die erwarteten `screen`-Sitzungen und Service-Ports. Der Befehl zeigt, ob der lokale Stack gerade plausibel laeuft; er belegt noch keinen vollstaendigen Betriebsweg.
 - `npm run local:check` ist der lokale Betriebs-/Seed-/Export-/Auditbeleg gegen einen bereits laufenden lokalen Stack. Der Check prueft Startweg, Status, UI-Routen, Health-Endpunkte, read-only Exportpfade, den synthetischen Rueckfragenanker mit partial-Readiness und einen vorhandenen Demo-Start-/Auditbeleg.

@@ -142,6 +142,7 @@ function buildCodexPrompt(request: LlmReadinessSyntheticLiveTransportRequest): s
 function buildCodexExecArgs(model: string | undefined, workDir: string): string[] {
   const args = [
     "exec",
+    "--ignore-user-config",
     "--sandbox",
     "read-only",
     "--ephemeral",
