@@ -21,29 +21,14 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ZUR SICHTUNG (menschenpflichtig)
 
-- **PR #573 · UNOX-XVC305E-Garparameter fachlich prüfen.** Draft-PR:
-  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/573>,
-  gestapelt auf #572. Acht thermisch geführte Rezeptkarten enthalten nun
-  konkrete Geräte-, Lüfter-, Dampf-/Trocknungs-, Zeit- und bei Protein
-  Kerntemperaturwerte. Brombeeren werden mit 90 Stück für 45 Törtchen
-  kalkuliert. Alle Karten bleiben `review_required`; die Parameter sind ein
-  sichtbarer Review-Entwurf und werden nicht automatisch zu Betriebswissen.
-  Batterie: 273 Dateien / 1.226 Tests, TypeScript, Build, Audit und
+- **PR #574 · Meersalzdrillinge nach realem Küchenablauf.** Draft-PR:
+  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/574>.
+  GN 1/1, 120 ml Rapsöl-Olivenöl-Mix, 230 °C Heißluft, 0 % Dampf und
+  30-35 Minuten ersetzen Kochen und Marinieren. Der im Angebot nicht genannte
+  Drillinge-Pfeffer entfällt; andere Pfeffermengen bleiben erhalten. Die
+  gerenderte Mappe enthält 70 Einkaufspositionen und deckt 117/117 Zutaten.
+  Batterie: 273 Dateien / 1.227 Tests, TypeScript, Build, Audit und
   Internal-Beta-Gate grün.
-- **PR #572 · Fachlich geprüfte Roastbeef-/Brombeer-Korrektur.** Draft-PR:
-  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/572>,
-  gestapelt auf #571. Roastbeef wird als ganzes Stück je nach Stückgröße und
-  Produktionsmenge in Pfanne oder Kipper rundum angebraten; die erfundene
-  gekochte Brombeer-Komponente entfällt vollständig. Konkrete Garraum- und
-  Kerntemperaturen bleiben in diesem Basisslice offen. Batterie: 273
-  Dateien / 1.225 Tests, TypeScript, Build, Audit und Internal-Beta-Gate grün.
-- **PR #571 · A4-Paginierung ohne abgeschnittene Inhalte.** Draft-PR:
-  <https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/571>.
-  Belegt: Die anonymisierte 45-Personen-Mappe enthält auf 32 visuell geprüften
-  A4-Seiten alle 121 Prüfergebnisse, sieben wiederholte Köpfe und keine
-  abgeschnittenen Quellenzeilen. Jedes der elf Rezepte und jede der zwölf
-  Metro-Produktgruppen ist eine eigene Druckeinheit. Batterie: 273 Dateien /
-  1.224 Tests, TypeScript, Build, Audit und Internal-Beta-Gate grün.
 - **GATE 3 · Fachliche Produktionsmappen-Abnahme.** Nach Merge des freigegebenen
   Phase-3-Stacks muss Alexander oder Ronak eine vollständige Mappe aus einem
   realen, anonymisierten Fall fachlich prüfen. Ronak-tauglich heißt: Alle
@@ -51,19 +36,19 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
   Mise-en-Place und Metro-Einkaufsliste sind fachlich plausibel, druckbar und
   ohne technische Nacharbeit nutzbar. Unsicherheiten sind deutlich markiert,
   nichts wird still angenommen. Erst diese Abnahme öffnet Phase 4 und damit
-  Deploy bzw. parallelen Realbetrieb. Alexanders Prüfung vom 2026-07-11:
-  Speisen vollständig und Mappe druckbar, aber noch nicht produktionsreif.
-  Konkrete Ofen-/Konvektomaten- und zwingende Kerntemperaturen fehlen; beim
-  Kokos-Törtchen sind frische Brombeeren nur Beigabe, nicht eigene Zubereitung.
-  Der Roastbeef-Ablauf ist fachlich zu korrigieren: das ganze parierte Stück
-  je nach Stückgröße und Produktionsmenge in Pfanne oder Kipper rundum
-  anbraten und anschließend bei niedriger Garraumtemperatur bis zur
-  ausdrücklich freigegebenen Kerntemperatur ziehen.
+  Deploy bzw. parallelen Realbetrieb. Alexanders erneute Prüfung vom
+  2026-07-12 bewertet die Mappe insgesamt als gut. Letzter Restbefund:
+  Meersalzdrillinge werden bei THE ONE im GN 1/1 mit Rapsöl und Olivenöl bei
+  230 °C ohne Dampf gegart; dieser Ablauf liegt in PR #574 zur Sichtung.
 
 ---
 
 ## ERLEDIGT
 
+- **PRs #571, #572 und #573 · Gate-3-Mappenstack gemergt.** A4-Druckeinheiten,
+  fachlich korrigierte Roastbeef-/Brombeer-Abläufe sowie konkrete
+  XVC305E-Parameter und Kerntemperaturen sind auf `main`; letzter Merge-Commit
+  `2326928`.
 - **PR #570 · Kleinstmengen ohne Null-Rundung gemergt.** 0,5 g bleibt in
   PurchaseList, CSV und A4-HTML lesbar; Merge-Commit `1891dac`.
 - **PR #569 · Einkaufsliste artikelbasiert aufsummiert gemergt.** 70 Positionen
