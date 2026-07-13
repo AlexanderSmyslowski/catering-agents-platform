@@ -914,7 +914,7 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Upload passt nicht zum Angebot.");
       expect(content).toContain("Ausgewählt: falsches-angebot.txt");
       expect(content).toContain("Kein aktiver Vorgang");
-      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
+      expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
       expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
@@ -973,7 +973,7 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Kein aktiver Vorgang");
       expect(content).not.toContain("Rückfragen: keine offenen Rückfragen");
       expect(content).not.toContain("Rückfragen: offen 0 · beantwortet 0");
-      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
+      expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Rückfragen: 1 offene Rückfrage");
       expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
@@ -1042,7 +1042,7 @@ describe("backoffice production acceptance smoke", () => {
 
       expect(content).toContain("Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert.");
       expect(content).toContain("Kein aktiver Vorgang");
-      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
+      expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Plan-Kontext: aktueller Produktionsplan");
       expect(content).not.toContain("purchase-production-current-1");
@@ -1598,6 +1598,58 @@ describe("backoffice production acceptance smoke", () => {
     expect(document.querySelector(".production-conversation-layout")?.classList.contains(
       "production-conversation-layout--active-context"
     )).toBe(false);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("does not contradict an open production draft with a new-upload next step", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(ProductionConversationalWorkbench, {
+          summary: {
+            activeSpecLabel: "Noch kein aktiver Vorgang",
+            readinessLabel: "-",
+            planStatusLabel: "offen",
+            purchaseStatusLabel: "noch keine Liste",
+            questionCount: 0,
+            answeredQuestionCount: 0,
+            unansweredQuestionCount: 0,
+            productionObjectCount: 0,
+            productionObjectStatusLabel: "noch kein Plan",
+            purchaseListCount: 0
+          },
+          nextStep: {
+            title: "Angebot hochladen oder Auftrag beschreiben",
+            description: "Starte mit PDF, E-Mail, Text oder manuellen Veranstaltungsdaten."
+          },
+          miniPilotRawResult: "",
+          setMiniPilotRawResult: () => undefined,
+          miniPilotReportState: {
+            statusLabel: "noch kein Ergebnis",
+            reasonLabel: "JSON-Ausgabe aus dem lokalen Mini-Pilot-Check fehlt noch.",
+            nextStepLabel: "Check lokal ausfuehren.",
+            commandLabel: "npm run llm:synthetic-live:check:mini-pilot",
+            errorLabels: []
+          },
+          slots: {
+            inputSlot: createElement("div", null, "Offenen KI-Entwurf weiter prüfen"),
+            questionsSlot: createElement("div", null),
+            productionObjectsSlot: createElement("div", null),
+            purchaseListSlot: createElement("div", null),
+            lowerSlots: createElement("div", null)
+          }
+        })
+      );
+    });
+
+    expect(container.textContent).toContain("Offenen KI-Entwurf weiter prüfen");
+    expect(container.querySelector(".production-next-step")).toBeNull();
 
     await act(async () => {
       root.unmount();

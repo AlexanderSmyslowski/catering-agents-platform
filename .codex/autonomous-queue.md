@@ -33,6 +33,13 @@ menschliche Entscheidung) · `ERLEDIGT` (mit Branch-/PR-Referenz).
 
 ## ERLEDIGT
 
+- **Phase 4.2e · Nächster Schritt folgt dem sichtbaren Arbeitskontext.**
+  Draft-PR #587 auf `loop/production-next-step-context`. Der globale
+  Handlungshinweis erscheint nur bei aktivem Produktionskontext; offener
+  `pending_review`-Entwurf und Leerzustand behalten ihre eindeutige Führung im
+  Eingabebereich. Ein rot-grüner UI-Test belegt den zuvor widersprüchlichen
+  Upload-Hinweis. Batterie: 274 Dateien / 1.250 Tests, TypeScript, Build,
+  Audits, vier Fresh-Browserpfade und internes Beta-Gate grün.
 - **Phase 4.2d · Review-Kommentare als neue ProductionDraft-Revision.**
   Draft-PR #586 auf `loop/production-draft-revision`. Kommentierte
   `change_requested`-Karten fuer Eckdaten, Menuekomponenten und offene Fragen
