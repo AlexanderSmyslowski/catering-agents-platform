@@ -45,11 +45,12 @@ Die beiden Agenten sind dann unter eigenen URLs erreichbar:
 ## Zusaetzliche Sites am gemeinsamen Proxy
 
 Zusaetzliche Anwendungen erhalten je eine serverseitige `*.caddy`-Datei im
-Verzeichnis aus `CADDY_SITES_DIR` (Standard: `platform-infra/sites`). Dieses
-Verzeichnis wird nur lesbar in den Caddy-Container eingebunden, ist nicht Teil
-des Repositories und wird beim Deployment-Sync nicht geloescht. Dadurch bleiben
-anwendungseigene Hostbloecke auch erhalten, wenn das Plattform-Image neu gebaut
-wird.
+festen Verzeichnis `platform-infra/sites`. Dieses Verzeichnis wird nur lesbar
+in den Caddy-Container eingebunden, ist nicht Teil des Repositories und wird
+beim Deployment-Sync nicht geloescht. Der feste Pfad stellt sicher, dass der
+Sync-Schutz und der Compose-Mount immer dasselbe servereigene Verzeichnis
+verwenden. Dadurch bleiben anwendungseigene Hostbloecke auch erhalten, wenn das
+Plattform-Image neu gebaut wird.
 
 Vor dem ersten Start muss das Verzeichnis auf dem Zielserver existieren. Eine
 Site-Datei darf nur ihren eigenen Hostblock enthalten. Beispiel:

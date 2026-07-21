@@ -9,6 +9,8 @@ const deployScript = path.join(repoRoot, "platform-infra/scripts/deploy-hetzner.
 const smokeScript = path.join(repoRoot, "platform-infra/scripts/smoke-check.sh");
 const caddyfilePath = path.join(repoRoot, "platform-infra/Caddyfile");
 const composePath = path.join(repoRoot, "platform-infra/docker-compose.yml");
+const envExamplePath = path.join(repoRoot, "platform-infra/.env.example");
+const platformReadmePath = path.join(repoRoot, "platform-infra/README.md");
 const tempDirs: string[] = [];
 
 function createTempDir(): string {
@@ -219,14 +221,18 @@ describe("Hetzner deployment script", () => {
     );
   });
 
-  test("loads server-owned Caddy sites from a persistent read-only directory", () => {
+  test("uses the fixed server-owned Caddy directory protected by deployment sync", () => {
     const caddyfile = readFileSync(caddyfilePath, "utf8");
     const compose = readFileSync(composePath, "utf8");
+    const envExample = readFileSync(envExamplePath, "utf8");
+    const readme = readFileSync(platformReadmePath, "utf8");
 
     expect(caddyfile).toContain("import /etc/caddy/sites/*.caddy");
-    expect(compose).toContain(
-      '${CADDY_SITES_DIR:-./sites}:/etc/caddy/sites:ro'
-    );
+    expect(compose).toContain("./sites:/etc/caddy/sites:ro");
+    expect(compose).not.toContain("CADDY_SITES_DIR");
+    expect(envExample).not.toContain("CADDY_SITES_DIR");
+    expect(readme).not.toContain("CADDY_SITES_DIR");
+    expect(readme).toContain("platform-infra/sites");
   });
 
   test("protects the site and replaces browser identity headers with route-scoped actors", () => {
