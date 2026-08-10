@@ -7,7 +7,9 @@ const maliciousText = `<script>alert("xss")</script><img src=x onerror="alert('x
 function minimalOfferDraft(overrides: Partial<OfferDraft> = {}): OfferDraft {
   return {
     schemaVersion: "1.0.0",
+    businessId: "local",
     draftId: `draft-${maliciousText}`,
+    revision: 1,
     eventSummary: `Summary ${maliciousText}`,
     serviceModules: [
       {

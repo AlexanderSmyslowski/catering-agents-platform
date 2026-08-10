@@ -7,6 +7,7 @@ RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
 LOG_DIR="${RUNTIME_DIR}/logs"
 DATA_ROOT="${CATERING_DATA_ROOT:-${ROOT_DIR}/data}"
 DEFAULT_BUSINESS_ID="${CATERING_DEFAULT_BUSINESS_ID:-local}"
+TRUSTED_ACTOR_SECRET="${CATERING_TRUSTED_ACTOR_SECRET:-local-development-service-secret}"
 DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 
@@ -67,11 +68,17 @@ wait_for_url() {
 seed_demo_data() {
   local audit_actor_name="Betriebs-/Audit-Operator"
   curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3101/v1/intake/seed-demo \
-    -H "x-actor-name: ${audit_actor_name}" >/dev/null
+    -H "x-catering-trusted-secret: ${TRUSTED_ACTOR_SECRET}" \
+    -H "x-catering-actor-name: ${audit_actor_name}" \
+    -H "x-catering-business-id: ${DEFAULT_BUSINESS_ID}" >/dev/null
   curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3102/v1/offers/seed-demo \
-    -H "x-actor-name: ${audit_actor_name}" >/dev/null
+    -H "x-catering-trusted-secret: ${TRUSTED_ACTOR_SECRET}" \
+    -H "x-catering-actor-name: ${audit_actor_name}" \
+    -H "x-catering-business-id: ${DEFAULT_BUSINESS_ID}" >/dev/null
   curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3103/v1/production/seed-demo \
-    -H "x-actor-name: ${audit_actor_name}" >/dev/null
+    -H "x-catering-trusted-secret: ${TRUSTED_ACTOR_SECRET}" \
+    -H "x-catering-actor-name: ${audit_actor_name}" \
+    -H "x-catering-business-id: ${DEFAULT_BUSINESS_ID}" >/dev/null
   echo "Demo-Daten geladen."
 }
 
@@ -90,17 +97,16 @@ stack_session_exists() {
   return 1
 }
 
-recorded_data_root="$(cat "${DATA_ROOT_FILE}" 2>/dev/null || true)"
-if stack_session_exists && [[ -n "${recorded_data_root}" && "${recorded_data_root}" != "${DATA_ROOT}" ]]; then
-  echo "Lokaler Stack laeuft bereits mit Datenwurzel: ${recorded_data_root}"
-  echo "Angefragte Datenwurzel wird fuer diesen laufenden Stack nicht uebernommen: ${DATA_ROOT}"
-  echo "Bitte npm run local:stop ausfuehren, bevor die lokale Datenwurzel gewechselt wird."
-  DATA_ROOT="${recorded_data_root}"
+# Scoped migrations snapshot legacy collections; an older live service could otherwise publish after completion.
+if stack_session_exists; then
+  echo "Lokaler Stack laeuft bereits; Business-Scope-Migration erfordert ruhende Schreibprozesse." >&2
+  echo "Bitte npm run local:stop ausfuehren und den Stack danach erneut starten." >&2
+  exit 1
 fi
 
 printf '%s\n' "${DATA_ROOT}" >"${DATA_ROOT_FILE}"
 echo "Lokale Datenwurzel: ${DATA_ROOT}"
-CATERING_DATA_ROOT="${DATA_ROOT}" npm run migrate:business-scope -- --business-id "${DEFAULT_BUSINESS_ID}"
+CATERING_DATA_ROOT="${DATA_ROOT}" npm run migrate:business-scope -- --business-id "${DEFAULT_BUSINESS_ID}" --confirm-legacy-file-writers-quiesced
 
 start_service() {
   local name="$1"
@@ -119,6 +125,8 @@ cd "${ROOT_DIR}"
 export CATERING_DATA_ROOT="${DATA_ROOT}"
 export CATERING_DEV_AUTH=1
 export CATERING_DEFAULT_BUSINESS_ID="${DEFAULT_BUSINESS_ID}"
+export CATERING_TRUSTED_ACTOR_SECRET="${TRUSTED_ACTOR_SECRET}"
+export CATERING_OFFER_SERVICE_URL="${CATERING_OFFER_SERVICE_URL:-http://127.0.0.1:3102}"
 export CATERING_LLM_PROVIDER="${LLM_PROVIDER}"
 export CATERING_SYNTHETIC_LLM_SLICE="${LLM_OPT_IN}"
 export CATERING_PRODUCTION_DRAFT_DATA_MODE="${PRODUCTION_DRAFT_DATA_MODE}"

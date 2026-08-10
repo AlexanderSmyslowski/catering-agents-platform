@@ -3,7 +3,13 @@ import { createBusinessScopedPersistentCollection, type CollectionStorageOptions
 import type { BusinessContext } from "./business-context.js";
 import type { AuditEntry } from "./types.js";
 
-function auditIdFor(entry: Omit<AuditEntry, "auditId">): string {
+function auditIdFor(entry: Omit<AuditEntry, "auditId">, idempotencyKey?: string): string {
+  if (idempotencyKey) {
+    const fingerprint = createHash("sha256")
+      .update([entry.businessId, entry.action, entry.entityType, entry.entityId, idempotencyKey].join(":"))
+      .digest("hex");
+    return `audit-stable-${fingerprint}`;
+  }
   const fingerprint = createHash("sha1")
     .update(
       [
@@ -48,18 +54,24 @@ export class AuditLogStore {
 
   async logFor(
     context: BusinessContext,
-    input: Omit<AuditEntry, "auditId" | "at" | "businessId"> & { at?: string }
+    input: Omit<AuditEntry, "auditId" | "at" | "businessId"> & { at?: string; idempotencyKey?: string }
   ): Promise<AuditEntry> {
+    const { idempotencyKey, ...auditInput } = input;
     const entryWithoutId: Omit<AuditEntry, "auditId"> = {
-      ...input,
+      ...auditInput,
       businessId: context.businessId,
-      at: input.at ?? new Date().toISOString()
+      at: auditInput.at ?? new Date().toISOString()
     };
     const entry: AuditEntry = {
       ...entryWithoutId,
-      auditId: auditIdFor(entryWithoutId)
+      auditId: auditIdFor(entryWithoutId, idempotencyKey)
     };
-    await this.entries.set(context, entry);
+    if (idempotencyKey) {
+      const inserted = await this.entries.insert(context, entry);
+      if (inserted === "exists") return (await this.entries.get(context, entry.auditId))!;
+    } else {
+      await this.entries.set(context, entry);
+    }
     return entry;
   }
 

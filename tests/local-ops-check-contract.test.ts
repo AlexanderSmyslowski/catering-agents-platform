@@ -49,7 +49,8 @@ describe("local ops check contract", () => {
 
     expect(startScript).toContain("DATA_ROOT_FILE");
     expect(startScript).toContain("Lokale Datenwurzel");
-    expect(startScript).toContain("Bitte npm run local:stop ausfuehren, bevor die lokale Datenwurzel gewechselt wird");
+    expect(startScript).toContain("Business-Scope-Migration erfordert ruhende Schreibprozesse");
+    expect(startScript).toContain("Bitte npm run local:stop ausfuehren");
     expect(checkScript).toContain("recorded_data_root");
     expect(checkScript).toContain("requested_data_root");
     expect(startScript).toContain("CURL_MAX_TIME_SECONDS");

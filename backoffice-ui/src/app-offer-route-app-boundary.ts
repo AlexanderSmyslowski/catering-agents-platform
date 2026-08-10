@@ -3,25 +3,25 @@ import {
   type AppOfferRouteState,
   type AppOfferRouteStateInput
 } from "./app-offer-route-state.js";
-import {
-  buildOfferDraftPromoteAction,
-  type OfferDraftPromoteActionInput
-} from "./offer-draft-promote-action.js";
+import { buildOfferApprovalAction, type OfferApprovalActionInput } from "./offer-approval-action.js";
 import {
   buildOfferTextSubmitAction,
   type OfferTextSubmitActionInput
 } from "./offer-text-submit-action.js";
 
 export type AppOfferRouteAppBoundaryInput =
-  Omit<AppOfferRouteStateInput, "submitOfferText" | "promoteDraft"> & {
+  Omit<AppOfferRouteStateInput, "submitOfferText" | "approveDraft" | "createHandoff"> & {
     createOfferFromText: OfferTextSubmitActionInput["createOfferFromText"];
-    promoteOfferDraft: OfferDraftPromoteActionInput["promoteOfferDraft"];
+    decideOfferDraft: OfferApprovalActionInput["decideOfferDraft"];
+    createProductionHandoff: OfferApprovalActionInput["createProductionHandoff"];
+    createProductionDraftFromHandoff: OfferApprovalActionInput["createProductionDraftFromHandoff"];
     setSubmitting: OfferTextSubmitActionInput["setSubmitting"];
     clearMessages: OfferTextSubmitActionInput["clearMessages"];
-    setFocusedProductionSpecId?: OfferDraftPromoteActionInput["setFocusedProductionSpecId"];
     refreshDashboard: OfferTextSubmitActionInput["refreshDashboard"];
     setNotice: OfferTextSubmitActionInput["setNotice"];
     setError: OfferTextSubmitActionInput["setError"];
+    setApprovalBinding?: OfferApprovalActionInput["setApprovalBinding"];
+    openProductionEntry: OfferApprovalActionInput["openProductionEntry"];
   };
 
 export function buildAppOfferRouteAppBoundary(
@@ -37,19 +37,23 @@ export function buildAppOfferRouteAppBoundary(
     setNotice: input.setNotice,
     setError: input.setError
   });
-  const promoteDraft = buildOfferDraftPromoteAction({
-    promoteOfferDraft: input.promoteOfferDraft,
+  const approvalAction = buildOfferApprovalAction({
+    decideOfferDraft: input.decideOfferDraft,
+    createProductionHandoff: input.createProductionHandoff,
+    createProductionDraftFromHandoff: input.createProductionDraftFromHandoff,
     setSubmitting: input.setSubmitting,
     clearMessages: input.clearMessages,
-    setFocusedProductionSpecId: input.setFocusedProductionSpecId,
     refreshDashboard: input.refreshDashboard,
     setNotice: input.setNotice,
-    setError: input.setError
+    setError: input.setError,
+    setApprovalBinding: input.setApprovalBinding,
+    openProductionEntry: input.openProductionEntry
   });
 
   return buildAppOfferRouteState({
     ...input,
     submitOfferText,
-    promoteDraft
+    approveDraft: approvalAction.approve,
+    createHandoff: approvalAction.createHandoff
   });
 }

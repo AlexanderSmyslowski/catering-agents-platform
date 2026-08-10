@@ -1,11 +1,13 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
+import { productionDraftEntryUrl } from "./production-entry-focus.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildOfferMiniPilotActionState } from "./offer-mini-pilot-action-state.js";
 import { buildOfferMiniPilotCardState } from "./offer-mini-pilot-card-state.js";
 import { getSpecLabel } from "./production-language.js";
+import type { OfferApprovalBinding } from "./offer-approval-action.js";
 
 type ManualSpecInput = {
   eventType: string;
@@ -70,7 +72,9 @@ export type OfferWorkbenchProps = {
   activeDraft?: Record<string, unknown>;
   selectedDraft?: Record<string, unknown>;
   setSelectedDraftId: (draftId: string) => void;
-  promoteDraft: (draftId: string, variantId: string) => Promise<void>;
+  approveDraft: (draftId: string, revision: number, variantId: string) => Promise<void>;
+  approvalBinding?: OfferApprovalBinding;
+  createHandoff?: (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
   activeSpec?: Record<string, unknown>;
   completeSpecCount: number;
@@ -106,6 +110,11 @@ function getDraftVariants(draft?: Record<string, unknown>): Array<Record<string,
 
 function getDraftId(draft?: Record<string, unknown>): string {
   return draft ? String(draft.draftId ?? "-") : "kein Entwurf";
+}
+
+function getDraftRevision(draft?: Record<string, unknown>): number | undefined {
+  const revision = draft?.revision;
+  return Number.isInteger(revision) && Number(revision) > 0 ? Number(revision) : undefined;
 }
 
 function getDraftProposedSpec(draft?: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -184,7 +193,9 @@ export function OfferConversationalWorkbench({
   activeDraft,
   selectedDraft,
   setSelectedDraftId,
-  promoteDraft,
+  approveDraft,
+  approvalBinding,
+  createHandoff,
   filteredSpecs,
   activeSpec,
   completeSpecCount,
@@ -202,6 +213,11 @@ export function OfferConversationalWorkbench({
   const focusedDraft = selectedDraft ?? activeDraft;
   const miniPilotCard = buildOfferMiniPilotCardState();
   const focusedDraftId = getDraftId(focusedDraft);
+  const focusedDraftRevision = getDraftRevision(focusedDraft);
+  const focusedApprovalBinding = approvalBinding?.offerDraftId === focusedDraftId
+    && approvalBinding.offerDraftRevision === focusedDraftRevision
+    ? approvalBinding
+    : undefined;
   const focusedDraftLabel = renderDraftFocusLabel(focusedDraft);
   const focusedDraftSpec = getDraftProposedSpec(focusedDraft);
   const focusedDraftSource = formatDraftSourceLineage(focusedDraftSpec);
@@ -440,15 +456,31 @@ export function OfferConversationalWorkbench({
                   <button
                     key={String(variant.variantId)}
                     className="secondary-button"
-                    disabled={submitting}
-                    onClick={() => void promoteDraft(focusedDraftId, String(variant.variantId))}
+                    disabled={submitting || focusedDraftRevision === undefined}
+                    onClick={() => focusedDraftRevision === undefined
+                      ? undefined
+                      : void approveDraft(focusedDraftId, focusedDraftRevision, String(variant.variantId))}
                   >
-                    {`Variante übernehmen: ${String(variant.label ?? variant.variantId)}`}
+                    {`Variante freigeben: ${String(variant.label ?? variant.variantId)}`}
                   </button>
                 ))}
                 <a className="ghost-link" href={offerExportUrl(focusedDraftId)} target="_blank" rel="noreferrer">
                   Angebot exportieren
                 </a>
+                {focusedApprovalBinding && createHandoff ? (
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.offerDraftRevision, focusedApprovalBinding.approvedOfferId)}
+                  >
+                    An Produktion übergeben
+                  </button>
+                ) : null}
+                {focusedApprovalBinding?.productionDraftId ? (
+                  <a className="ghost-link" href={productionDraftEntryUrl(focusedApprovalBinding.productionDraftId)}>
+                    Produktionsentwurf öffnen
+                  </a>
+                ) : null}
               </div>
               <details className="nested-details">
                 <summary>Angebotstexte anzeigen</summary>

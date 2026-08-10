@@ -16,6 +16,7 @@ import {
 } from "@catering/shared-core";
 
 const TRUSTED_SECRET = "production-draft-document-byo-secret";
+const localBusiness = { businessId: "local" };
 const trustedProductionHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
   "x-catering-trusted-secret": TRUSTED_SECRET
@@ -252,7 +253,7 @@ describe("ProductionDraft document BYO extraction", () => {
         payload: {}
       });
       const revision = revised.json<{ draft: ProductionDraft }>().draft;
-      const storedOriginal = await store.getProductionDraft(originalDraft.draftId);
+      const storedOriginal = await store.getProductionDraft(localBusiness, originalDraft.draftId);
       const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 20));
 
       expect(created.statusCode, created.body).toBe(201);
@@ -323,7 +324,7 @@ describe("ProductionDraft document BYO extraction", () => {
         headers: trustedProductionHeaders,
         payload: {}
       });
-      const storedDrafts = await store.listProductionDrafts();
+      const storedDrafts = await store.listProductionDrafts(localBusiness);
 
       expect(revised.statusCode, revised.body).toBe(422);
       expect(revised.body).toContain("konkret kommentierter Änderungswunsch");
@@ -364,7 +365,7 @@ describe("ProductionDraft document BYO extraction", () => {
         payload: documentPayload()
       });
       const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
-      await store.saveProductionDraft({
+      await store.saveProductionDraft(localBusiness, {
         ...originalDraft,
         reviewCards: [
           ...originalDraft.reviewCards,
@@ -392,7 +393,7 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(revised.statusCode, revised.body).toBe(422);
       expect(revised.body).toContain("Rezept- und Planänderungen");
       expect(requests).toHaveLength(1);
-      expect(await store.listProductionDrafts()).toHaveLength(1);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(1);
     } finally {
       await app.close();
     }
@@ -458,7 +459,7 @@ describe("ProductionDraft document BYO extraction", () => {
         headers: trustedProductionHeaders,
         payload: {}
       });
-      const storedDrafts = await store.listProductionDrafts();
+      const storedDrafts = await store.listProductionDrafts(localBusiness);
       const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 20));
 
       expect(revised.statusCode, revised.body).toBe(422);
@@ -539,7 +540,7 @@ describe("ProductionDraft document BYO extraction", () => {
         headers: trustedProductionHeaders,
         payload: {}
       });
-      const storedDrafts = await store.listProductionDrafts();
+      const storedDrafts = await store.listProductionDrafts(localBusiness);
 
       expect(revised.statusCode, revised.body).toBe(422);
       expect(revised.body).toContain("Vitello Tonnato");
@@ -748,7 +749,7 @@ describe("ProductionDraft document BYO extraction", () => {
 
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("ProductionDraft-Extraktion ist nicht schema-valide.");
-      expect(await store.listProductionDrafts()).toHaveLength(0);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }
@@ -775,7 +776,7 @@ describe("ProductionDraft document BYO extraction", () => {
 
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("Keine aktive KI-Verbindung für dieses Dokument");
-      expect(await store.listProductionDrafts()).toHaveLength(0);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
       expect(await store.listPlans()).toHaveLength(0);
       expect(await store.listPurchaseLists()).toHaveLength(0);
     } finally {

@@ -20,8 +20,8 @@ import {
   type CollectionStorageOptions,
   validateOfferDraft
 } from "@catering/shared-core";
-import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "./store.js";
+import { registerOfferApprovalRoutes } from "./routes/approval-routes.js";
 import { registerOfferDraftRoutes } from "./routes/draft-routes.js";
 
 interface RecipeTextImportBody {
@@ -39,7 +39,6 @@ interface RecipeReviewBody {
 
 export interface OfferAppOptions extends CollectionStorageOptions {
   store?: OfferStore;
-  intakeStore?: IntakeStore;
   recipeLibrary?: RecipeLibrary;
   auditLog?: AuditLogStore;
   trustedActorSecret?: string;
@@ -135,6 +134,16 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   ): unknown | undefined => isOfferOperator(request)
     ? undefined
     : reply.code(403).send({ message: "Angebots-Operator erforderlich." });
+  const requireHandoffReader = (
+    request: { headers: Record<string, string | string[] | undefined> },
+    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }
+  ): unknown | undefined => {
+    const actor = actorForRequest(request);
+    const role = resolveMinimalMvpRoleFromTrustedActor(actor);
+    return role === "offer_operator" || (actor.trusted && role === "production_operator")
+      ? undefined
+      : reply.code(403).send({ message: "Leseberechtigung für Produktionsübergaben erforderlich." });
+  };
   const isOperationsAuditOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
     resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
   const storageOptions = isOfferStore(input) ? input.storageOptions : options;
@@ -144,13 +153,6 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       rootDir: options.rootDir,
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
-    });
-  const intakeStore =
-    options.intakeStore ??
-    new IntakeStore({
-      rootDir: storageOptions?.rootDir,
-      databaseUrl: storageOptions?.databaseUrl,
-      pgPool: storageOptions?.pgPool
     });
   const recipeLibrary =
     options.recipeLibrary ??
@@ -182,7 +184,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       return reply.send({ service: "offer-service", status: "ok", timestamp: new Date().toISOString() });
     }
     const [drafts, recipes, auditEvents] = await Promise.all([
-      store.listDrafts(),
+      store.listDrafts(defaultBusinessContext),
       recipeLibrary.list(),
       auditLog.countFor(defaultBusinessContext)
     ]);
@@ -200,7 +202,6 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
 
   registerOfferDraftRoutes(app, {
     store,
-    intakeStore,
     auditLog,
     trustedActorSecret,
     allowDevActorHeader,
@@ -208,6 +209,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     requireOfferOperator,
     actorForRequest
   });
+  registerOfferApprovalRoutes(app, { store, auditLog, requireOfferOperator, requireHandoffReader, actorForRequest });
 
   app.post("/v1/offers/seed-demo", async (request, reply) => {
     if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {
@@ -218,8 +220,9 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
 
     const seeded = [];
     for (const eventRequest of getDemoOfferRequests()) {
-      const draft = validateOfferDraft(createOfferDraft(eventRequest));
-      await store.saveDraft(draft);
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const draft = validateOfferDraft({ ...createOfferDraft(eventRequest), businessId: actor.businessId, revision: 1 });
+      await store.saveDraft(actor, draft);
       seeded.push({
         requestId: eventRequest.requestId,
         draftId: draft.draftId
@@ -239,7 +242,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     return reply.code(201).send({
       seeded,
       counts: {
-        offerDrafts: (await store.listDrafts()).length
+        offerDrafts: (await store.listDrafts(actorForRequest(request, trustedActorSecret, allowDevActorHeader))).length
       }
     });
   });

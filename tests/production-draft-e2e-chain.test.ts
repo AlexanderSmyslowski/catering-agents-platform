@@ -25,6 +25,7 @@ import {
 } from "@catering/shared-core";
 
 const TRUSTED_SECRET = "production-draft-e2e-chain-secret";
+const localBusiness = { businessId: "local" };
 
 function trustedHeaders(role: keyof typeof MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES) {
   return {
@@ -432,7 +433,7 @@ describe("ProductionDraft E2E chain", () => {
         if (arrange === "store") {
           // Superseded is a persisted draft status with no public transition route yet;
           // this setup arranges only the stored state, then exercises the real Apply route.
-          await store.saveProductionDraft({
+          await store.saveProductionDraft(localBusiness, {
             ...draft,
             status: "superseded",
             supersedesDraftId: `${draft.draftId}-newer`

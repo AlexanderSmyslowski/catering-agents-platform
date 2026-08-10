@@ -31,7 +31,10 @@ function input(
 
   return {
     createOfferFromText: vi.fn(async () => ({ draftId: "draft-offer-1" })),
-    promoteOfferDraft: vi.fn(async () => ({})),
+    decideOfferDraft: vi.fn(async () => ({ approvedOffer: { approvedOfferId: "offer-1" } })),
+    createProductionHandoff: vi.fn(async () => ({ handoff: { handoffId: "handoff-1" } })),
+    createProductionDraftFromHandoff: vi.fn(async () => ({ draft: { draftId: "production-draft-1" } })),
+    openProductionEntry: vi.fn(),
     submitting: false,
     setSubmitting: vi.fn(),
     clearMessages: vi.fn(),
@@ -129,15 +132,12 @@ describe("app offer route app boundary", () => {
     ]);
   });
 
-  it("wires draft promotion through the same app boundary", async () => {
+  it("wires explicit draft approval through the same app boundary", async () => {
     const calls: string[] = [];
     const boundaryInput = input({
-      promoteOfferDraft: vi.fn(async (draftId, variantId) => {
-        calls.push(`promoteOfferDraft:${draftId}:${variantId}`);
-        return { specId: "spec-promoted" };
-      }),
-      setFocusedProductionSpecId: vi.fn((specId) => {
-        calls.push(`setFocusedProductionSpecId:${specId}`);
+      decideOfferDraft: vi.fn(async (draftId, revision, variantId) => {
+        calls.push(`decideOfferDraft:${draftId}:${revision}:${variantId}`);
+        return { approvedOffer: { approvedOfferId: "offer-approved" } };
       }),
       refreshDashboard: vi.fn(async () => {
         calls.push("refreshDashboard");
@@ -148,14 +148,39 @@ describe("app offer route app boundary", () => {
     });
     const state = buildAppOfferRouteAppBoundary(boundaryInput);
 
-    await state.offerWorkbenchState.promoteDraft("draft-1", "balanced");
+    await state.offerWorkbenchState.approveDraft("draft-1", 3, "balanced");
 
     expect(boundaryInput.setError).not.toHaveBeenCalled();
     expect(calls).toEqual([
-      "promoteOfferDraft:draft-1:balanced",
-      "setFocusedProductionSpecId:spec-promoted",
-      "refreshDashboard",
-      "setNotice:Angebotsvariante wurde an die Produktion übergeben."
+      "decideOfferDraft:draft-1:3:balanced",
+      "setNotice:Angebotsvariante wurde freigegeben.",
+      "refreshDashboard"
+    ]);
+  });
+
+  it("wires a returned handoff into the focused production entry", async () => {
+    const calls: string[] = [];
+    const boundaryInput = input({
+      createProductionHandoff: vi.fn(async (approvedOfferId) => {
+        calls.push(`handoff:${approvedOfferId}`);
+        return { handoff: { handoffId: "handoff-created" } };
+      }),
+      createProductionDraftFromHandoff: vi.fn(async (handoffId) => {
+        calls.push(`production:${handoffId}`);
+        return { draft: { draftId: "production-created" } };
+      }),
+      setApprovalBinding: vi.fn((binding) => calls.push(`binding:${JSON.stringify(binding)}`)),
+      openProductionEntry: vi.fn((draftId) => calls.push(`open:${draftId}`))
+    });
+    const state = buildAppOfferRouteAppBoundary(boundaryInput);
+
+    await state.offerWorkbenchState.createHandoff?.("draft-1", 3, "approved-1");
+
+    expect(calls).toEqual([
+      "handoff:approved-1",
+      "production:handoff-created",
+      'binding:{"offerDraftId":"draft-1","offerDraftRevision":3,"approvedOfferId":"approved-1","handoffId":"handoff-created","productionDraftId":"production-created"}',
+      "open:production-created"
     ]);
   });
 });

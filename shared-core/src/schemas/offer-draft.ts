@@ -5,7 +5,9 @@ export const offerDraftSchema = {
   additionalProperties: false,
   required: [
     "schemaVersion",
+    "businessId",
     "draftId",
+    "revision",
     "eventSummary",
     "serviceModules",
     "pricingSummary",
@@ -18,7 +20,9 @@ export const offerDraftSchema = {
   ],
   properties: {
     schemaVersion: { type: "string" },
+    businessId: { type: "string", pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" },
     draftId: { type: "string" },
+    revision: { type: "integer", minimum: 1, maximum: 2147483647 },
     eventSummary: { type: "string" },
     serviceModules: {
       type: "array",
@@ -114,48 +118,6 @@ export const offerDraftSchema = {
         hygieneTemperatureReviewStatus: { enum: ["verified", "review_required"] },
         sourceSecured: { type: "boolean" },
         publishApproved: { type: "boolean" }
-      }
-    },
-    productionHandoff: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "handoffId",
-        "draftId",
-        "specId",
-        "status",
-        "reviewStatus",
-        "customerOfferVisible",
-        "internalCalculationVisible"
-      ],
-      properties: {
-        handoffId: { type: "string" },
-        draftId: { type: "string" },
-        specId: { type: "string" },
-        status: { enum: ["review_required", "ready_for_production"] },
-        sourcePackageId: { type: "string" },
-        reviewStatus: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "priceReviewStatus",
-            "taxReviewStatus",
-            "allergenReviewStatus",
-            "hygieneTemperatureReviewStatus",
-            "sourceSecured",
-            "publishApproved"
-          ],
-          properties: {
-            priceReviewStatus: { enum: ["verified", "review_required"] },
-            taxReviewStatus: { enum: ["verified", "review_required"] },
-            allergenReviewStatus: { enum: ["verified", "review_required"] },
-            hygieneTemperatureReviewStatus: { enum: ["verified", "review_required"] },
-            sourceSecured: { type: "boolean" },
-            publishApproved: { type: "boolean" }
-          }
-        },
-        customerOfferVisible: { type: "boolean" },
-        internalCalculationVisible: { type: "boolean" }
       }
     }
   }

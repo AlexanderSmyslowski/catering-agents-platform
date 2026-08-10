@@ -1177,9 +1177,11 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
-  it("creates an offer draft and promotes a structured variant", async () => {
+  it("creates an offer draft and creates a handoff only after variant approval", async () => {
     const dataRoot = createDataRoot();
-    const app = buildOfferApp(new OfferStore({ rootDir: dataRoot }));
+    const offerSecret = "platform-offer-approval";
+    const app = buildOfferApp({ store: new OfferStore({ rootDir: dataRoot }), trustedActorSecret: offerSecret });
+    const offerHeaders = { "x-catering-trusted-secret": offerSecret, "x-catering-actor-name": "Angebots-Mitarbeiter", "x-catering-business-id": "local" };
     const request = baseEventRequest(
       "Meeting am 2026-06-03 fuer 35 Teilnehmer mit Kaffeepause und Croissants."
     );
@@ -1187,6 +1189,7 @@ describe("catering agents platform", () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/v1/offers/drafts",
+      headers: offerHeaders,
       payload: request
     });
 
@@ -1202,17 +1205,22 @@ describe("catering agents platform", () => {
     expect(draft.customerFacingText).not.toContain("fuer");
     expect(draft.eventSummary).toContain("Besprechung für 35 Teilnehmer als Kaffeepause");
 
-    const promoteResponse = await app.inject({
+    const approvalResponse = await app.inject({
       method: "POST",
-      url: `/v1/offers/drafts/${draft.draftId}/promote`,
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: offerHeaders,
       payload: {
+        decision: "approved",
+        revision: 1,
         variantId: draft.variantSet[1].variantId
       }
     });
 
-    expect(promoteResponse.statusCode).toBe(201);
-    const spec = promoteResponse.json();
-    expect(spec.sourceLineage[0].sourceType).toBe("offer_service");
+    expect(approvalResponse.statusCode).toBe(201);
+    const approvedOffer = approvalResponse.json().approvedOffer;
+    const handoffResponse = await app.inject({ method: "POST", url: `/v1/offers/approved/${approvedOffer.approvedOfferId}/handoffs`, headers: offerHeaders, payload: {} });
+    expect(handoffResponse.statusCode).toBe(201);
+    const spec = handoffResponse.json().handoff.eventSpecSnapshot;
     expect(spec.servicePlan.modules.length).toBeGreaterThan(0);
 
     const intakeApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
@@ -1222,7 +1230,7 @@ describe("catering agents platform", () => {
     });
 
     expect(specsResponse.statusCode).toBe(200);
-    expect(specsResponse.json().items.map((item: AcceptedEventSpec) => item.specId)).toContain(spec.specId);
+    expect(specsResponse.json().items.map((item: AcceptedEventSpec) => item.specId)).not.toContain(spec.specId);
     await intakeApp.close();
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });

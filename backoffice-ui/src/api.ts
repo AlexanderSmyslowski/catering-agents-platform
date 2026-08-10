@@ -372,11 +372,24 @@ export async function createOfferFromText(text: string) {
   }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 
-export async function promoteOfferDraft(draftId: string, variantId?: string) {
-  return fetchJson<Record<string, unknown>>(`/api/offers/v1/offers/drafts/${draftId}/promote`, {
+export async function decideOfferDraft(draftId: string, revision: number, variantId: string) {
+  return fetchJson<{ approval: Record<string, unknown>; approvedOffer?: { approvedOfferId: string } }>(`/api/offers/v1/offers/drafts/${draftId}/decision`, {
     method: "POST",
-    body: JSON.stringify(variantId ? { variantId } : {})
+    body: JSON.stringify({ decision: "approved", revision, variantId })
   }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+}
+
+export async function createProductionHandoff(approvedOfferId: string) {
+  return fetchJson<{ handoff?: { handoffId: string } }>(`/api/offers/v1/offers/approved/${approvedOfferId}/handoffs`, {
+    method: "POST", body: "{}"
+  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+}
+
+export async function createProductionDraftFromHandoff(handoffId: string) {
+  return fetchJson<{ draft?: { draftId: string } }>(`/api/production/v1/production/drafts/from-handoff/${encodeURIComponent(handoffId)}`, {
+    method: "POST",
+    body: "{}"
+  }, DEFAULT_MUTATION_ACTOR_NAMES.production);
 }
 
 export async function createProductionPlan(

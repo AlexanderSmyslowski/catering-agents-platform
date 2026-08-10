@@ -8,7 +8,6 @@ import type {
   OfferReviewStatus,
   OfferVariant,
   PricingSummary,
-  ProductionHandoff,
   ServiceModule
 } from "../types.js";
 import { SCHEMA_VERSION } from "../types.js";
@@ -180,24 +179,6 @@ function createPortfolioMapping(packagePreset: CuratedOfferPackagePreset): Offer
   };
 }
 
-function createProductionHandoff(
-  draftId: string,
-  specId: string,
-  packagePreset: CuratedOfferPackagePreset,
-  reviewStatus: OfferReviewStatus
-): ProductionHandoff {
-  return {
-    handoffId: `handoff-${draftId}`,
-    draftId,
-    specId,
-    status: "review_required",
-    sourcePackageId: packagePreset.id,
-    reviewStatus,
-    customerOfferVisible: reviewStatus.publishApproved,
-    internalCalculationVisible: false
-  };
-}
-
 export function createOfferDraft(request: EventRequest): OfferDraft {
   const baseSpec = normalizeEventRequestToSpec(request, {
     sourceType: "offer_service",
@@ -278,7 +259,9 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId: `draft-${request.requestId}`,
+    revision: 1,
     eventSummary,
     serviceModules: modules,
     pricingSummary,
@@ -395,31 +378,6 @@ export function createCuratedOfferDraft(
     ].join("\n"),
     proposedEventSpec,
     portfolioMapping,
-    reviewStatus,
-    productionHandoff: createProductionHandoff(draftId, proposedEventSpec.specId, packagePreset, reviewStatus)
-  };
-}
-
-export function promoteOfferVariant(
-  draft: OfferDraft,
-  variantId?: string
-): AcceptedEventSpec {
-  const variant =
-    draft.variantSet.find((item) => item.variantId === variantId) ??
-    draft.variantSet.find((item) => item.qualityTier === "standard") ??
-    draft.variantSet[0];
-
-  return {
-    ...variant.proposedEventSpec,
-    specId: `${draft.draftId}-${variant.variantId}`,
-    lifecycle: {
-      commercialState: "quoted"
-    },
-    sourceLineage: [
-      {
-        sourceType: "offer_service",
-        reference: draft.draftId
-      }
-    ]
+    reviewStatus
   };
 }

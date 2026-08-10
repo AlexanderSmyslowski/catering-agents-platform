@@ -55,7 +55,7 @@ function loadCuratedBusinessLunchPackage(): CuratedOfferPackagePreset {
 }
 
 describe("offer gold run", () => {
-  it("maps a curated business lunch request into review-gated customer offer and production handoff", () => {
+  it("maps a curated business lunch request into a review-gated customer offer without a production handoff", () => {
     const packagePreset = loadCuratedBusinessLunchPackage();
     const request = createEventRequestFromManualForm({
       requestId: "goldrun-offer-business-lunch-1",
@@ -122,16 +122,7 @@ describe("offer gold run", () => {
     expect(draft.internalWorkingText).toContain("Prüfstatus Preis: review_required");
     expect(draft.internalWorkingText).toContain("Publish-Freigabe: false");
 
-    expect(draft.productionHandoff).toMatchObject({
-      handoffId: "handoff-draft-goldrun-offer-business-lunch-1",
-      draftId: "draft-goldrun-offer-business-lunch-1",
-      specId: draft.proposedEventSpec.specId,
-      status: "review_required",
-      sourcePackageId: "business_lunch_basic",
-      customerOfferVisible: false,
-      internalCalculationVisible: false
-    });
-    expect(draft.productionHandoff?.reviewStatus.publishApproved).toBe(false);
+    expect(draft).not.toHaveProperty("productionHandoff");
     expect(draft.assumptions.map((assumption) => assumption.code)).toContain(
       "curated_app_transfer_offer_package"
     );

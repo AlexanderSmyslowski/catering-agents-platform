@@ -1,2 +1,2 @@
 export * from "./app.js";
-export * from "./store.js";
+export { OfferStore } from "./store.js";

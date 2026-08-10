@@ -9,6 +9,7 @@ import {
   type ProductionDraftReviewCard,
   type ProductionDraftReviewDecision
 } from "./api.js";
+import { productionDraftEntryId } from "./production-entry-focus.js";
 
 type ProductionDraftReviewPanelProps = {
   submitting: boolean;
@@ -265,13 +266,19 @@ export function ProductionDraftReviewPanel({
 }: ProductionDraftReviewPanelProps) {
   const [drafts, setDrafts] = useState<ProductionDraft[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
   const [changeRequest, setChangeRequest] = useState("");
   const panelRef = useRef<HTMLElement>(null);
+  const focusedDraftId = typeof window === "undefined"
+    ? undefined
+    : new URLSearchParams(window.location.search).get("productionDraftId")?.trim() || undefined;
 
   async function reloadDrafts(options?: { clearMessage?: boolean }) {
     setLoading(true);
+    setLoadError(undefined);
     try {
       const response = await loadProductionDrafts();
       setDrafts(response.items);
@@ -279,8 +286,9 @@ export function ProductionDraftReviewPanel({
         setMessage(undefined);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Produktionsentwürfe konnten nicht geladen werden.");
+      setLoadError(error instanceof Error ? error.message : "Unbekannter Ladefehler.");
     } finally {
+      setHasLoaded(true);
       setLoading(false);
     }
   }
@@ -288,6 +296,13 @@ export function ProductionDraftReviewPanel({
   useEffect(() => {
     void reloadDrafts();
   }, []);
+
+  useEffect(() => {
+    if (!focusedDraftId || !drafts.some((draft) => draft.draftId === focusedDraftId)) return;
+    const entry = document.getElementById(productionDraftEntryId(focusedDraftId));
+    entry?.focus({ preventScroll: true });
+    entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+  }, [drafts, focusedDraftId]);
 
   async function decideCard(
     draftId: string,
@@ -360,9 +375,17 @@ export function ProductionDraftReviewPanel({
   const visibleDrafts = drafts
     .filter((draft) => draft.status === "pending_review" || canApplyProductionDraft(draft))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  const displayedDrafts = latestOnly ? visibleDrafts.slice(0, 1) : visibleDrafts;
+  const focusedDraft = focusedDraftId
+    ? visibleDrafts.find((draft) => draft.draftId === focusedDraftId)
+    : undefined;
+  const displayedDrafts = focusedDraftId
+    ? (focusedDraft ? [focusedDraft] : [])
+    : latestOnly
+      ? visibleDrafts.slice(0, 1)
+      : visibleDrafts;
+  const focusedDraftUnavailable = Boolean(focusedDraftId && hasLoaded && !loading && !loadError && !focusedDraft);
 
-  if (resumeMode && displayedDrafts.length === 0 && !message) {
+  if (resumeMode && displayedDrafts.length === 0 && !message && !loadError && !focusedDraftId) {
     return null;
   }
 
@@ -399,10 +422,28 @@ export function ProductionDraftReviewPanel({
           {message}
         </p>
       ) : null}
-      {displayedDrafts.length > 0 ? (
+      {loadError ? (
+        <div className="production-draft-state production-draft-load-error" role="alert">
+          <strong>Produktionsentwürfe konnten nicht geladen werden.</strong>
+          <p>{loadError}</p>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={submitting || loading}
+            onClick={() => void reloadDrafts()}
+          >
+            Erneut versuchen
+          </button>
+        </div>
+      ) : focusedDraftUnavailable ? (
+        <div className="production-draft-state production-draft-unavailable" role="status">
+          <strong>Der angeforderte Produktionsentwurf ist nicht verfügbar.</strong>
+          <p>Er wurde möglicherweise bereits übernommen, verworfen oder ersetzt.</p>
+        </div>
+      ) : displayedDrafts.length > 0 ? (
         <ul className="item-list compact">
           {displayedDrafts.map((draft) => (
-            <li key={draft.draftId}>
+            <li key={draft.draftId} id={productionDraftEntryId(draft.draftId)} tabIndex={-1}>
               <strong>{eventSpecTitle(draft)}</strong>
               <p className="helper-text">
                 {formatProductionDraftSourceLabel(draft)} | {formatProductionDraftStatusLabel(draft.status)} | {formatCount(draft.reviewCards.length, "Prüfpunkt", "Prüfpunkte")}

@@ -308,20 +308,11 @@ export interface OfferPortfolioMapping {
   evidenceSummary?: string;
 }
 
-export interface ProductionHandoff {
-  handoffId: string;
-  draftId: string;
-  specId: string;
-  status: "review_required" | "ready_for_production";
-  sourcePackageId?: string;
-  reviewStatus: OfferReviewStatus;
-  customerOfferVisible: boolean;
-  internalCalculationVisible: boolean;
-}
-
 export interface OfferDraft {
   schemaVersion: string;
+  businessId: BusinessId;
   draftId: string;
+  revision: number;
   eventSummary: string;
   serviceModules: ServiceModule[];
   pricingSummary: PricingSummary;
@@ -333,7 +324,33 @@ export interface OfferDraft {
   proposedEventSpec: AcceptedEventSpec;
   portfolioMapping?: OfferPortfolioMapping;
   reviewStatus?: OfferReviewStatus;
-  productionHandoff?: ProductionHandoff;
+}
+
+export interface ApprovedOffer {
+  schemaVersion: "1.0";
+  businessId: BusinessId;
+  approvedOfferId: string;
+  sourceDraft: { draftId: string; revision: number };
+  selectedVariantId: string;
+  approvalRequestId: string;
+  approvedAt: string;
+  eventSummary: string;
+  customerFacingText: string;
+  serviceModules: ServiceModule[];
+  pricingSummary: PricingSummary;
+  selectedVariant: OfferVariant;
+}
+
+export interface ProductionHandoff {
+  schemaVersion: "1.0";
+  businessId: BusinessId;
+  handoffId: string;
+  approvedOfferId: string;
+  approvalRequestId: string;
+  createdAt: string;
+  eventSpecSnapshot: AcceptedEventSpec;
+  pricingSnapshot: PricingSummary;
+  source: { draftId: string; revision: number; selectedVariantId: string };
 }
 
 export type ProductionDraftStatus = "pending_review" | "approved" | "rejected" | "superseded";
@@ -569,6 +586,7 @@ export interface ProductionDraftArtifacts {
 
 export interface ProductionDraft {
   schemaVersion: string;
+  businessId?: BusinessId;
   draftId: string;
   status: ProductionDraftStatus;
   createdAt: string;

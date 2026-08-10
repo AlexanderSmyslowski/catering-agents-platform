@@ -142,13 +142,13 @@ export const dataIngressPaths = [
     requiredGate: "offer_operator auth and upload validation"
   },
   {
-    id: "offer_variant_promotion",
+    id: "offer_variant_approval",
     service: "offer-service",
-    route: "POST /v1/offers/drafts/:draftId/promote",
+    route: "POST /v1/offers/drafts/:draftId/decision and POST /v1/offers/approved/:approvedOfferId/handoffs",
     source: "operator selected offer variant",
     scope: "operator_supplied_internal",
     externalExposure: "none",
-    requiredGate: "offer_operator auth"
+    requiredGate: "offer_operator auth and trusted final approval actor"
   },
   {
     id: "offer_seed_demo",
@@ -423,10 +423,10 @@ export const auditEvidencePaths = [
     requiredRole: "offer_operator"
   },
   {
-    id: "offer_promoted_variant",
+    id: "offer_approved",
     service: "offer-service",
-    route: "POST /v1/offers/drafts/:draftId/promote",
-    action: "offer.promoted_variant",
+    route: "POST /v1/offers/drafts/:draftId/decision",
+    action: "offer.approved",
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "product_mutation",
