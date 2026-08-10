@@ -7,6 +7,7 @@ import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildOfferMiniPilotActionState } from "./offer-mini-pilot-action-state.js";
 import { buildOfferMiniPilotCardState } from "./offer-mini-pilot-card-state.js";
 import { getSpecLabel } from "./production-language.js";
+import type { OfferApprovalBinding } from "./offer-approval-action.js";
 
 type ManualSpecInput = {
   eventType: string;
@@ -72,9 +73,8 @@ export type OfferWorkbenchProps = {
   selectedDraft?: Record<string, unknown>;
   setSelectedDraftId: (draftId: string) => void;
   approveDraft: (draftId: string, variantId: string) => Promise<void>;
-  approvedOfferId?: string;
-  productionDraftId?: string;
-  createHandoff?: (approvedOfferId: string) => Promise<void>;
+  approvalBinding?: OfferApprovalBinding;
+  createHandoff?: (offerDraftId: string, approvedOfferId: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
   activeSpec?: Record<string, unknown>;
   completeSpecCount: number;
@@ -189,8 +189,7 @@ export function OfferConversationalWorkbench({
   selectedDraft,
   setSelectedDraftId,
   approveDraft,
-  approvedOfferId,
-  productionDraftId,
+  approvalBinding,
   createHandoff,
   filteredSpecs,
   activeSpec,
@@ -209,6 +208,9 @@ export function OfferConversationalWorkbench({
   const focusedDraft = selectedDraft ?? activeDraft;
   const miniPilotCard = buildOfferMiniPilotCardState();
   const focusedDraftId = getDraftId(focusedDraft);
+  const focusedApprovalBinding = approvalBinding?.offerDraftId === focusedDraftId
+    ? approvalBinding
+    : undefined;
   const focusedDraftLabel = renderDraftFocusLabel(focusedDraft);
   const focusedDraftSpec = getDraftProposedSpec(focusedDraft);
   const focusedDraftSource = formatDraftSourceLineage(focusedDraftSpec);
@@ -456,13 +458,17 @@ export function OfferConversationalWorkbench({
                 <a className="ghost-link" href={offerExportUrl(focusedDraftId)} target="_blank" rel="noreferrer">
                   Angebot exportieren
                 </a>
-                {approvedOfferId && createHandoff ? (
-                  <button className="secondary-button" disabled={submitting} onClick={() => void createHandoff(approvedOfferId)}>
+                {focusedApprovalBinding && createHandoff ? (
+                  <button
+                    className="secondary-button"
+                    disabled={submitting}
+                    onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.approvedOfferId)}
+                  >
                     An Produktion übergeben
                   </button>
                 ) : null}
-                {productionDraftId ? (
-                  <a className="ghost-link" href={productionDraftEntryUrl(productionDraftId)}>
+                {focusedApprovalBinding?.productionDraftId ? (
+                  <a className="ghost-link" href={productionDraftEntryUrl(focusedApprovalBinding.productionDraftId)}>
                     Produktionsentwurf öffnen
                   </a>
                 ) : null}

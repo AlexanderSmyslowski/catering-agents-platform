@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { createHash, randomUUID } from "node:crypto";
 import {
+  areJsonValuesEqual,
   createLlmReadinessAgentAuditRecord,
   createEventRequestFromManualForm,
   createUploadSourceMetadata,
@@ -741,8 +742,6 @@ export function registerProductionArtifactRoutes(
       return reply.code(502).send({ message: "Angebotsübergabe passt nicht zum angeforderten Betriebskontext." });
     }
     const draftId = `production-draft-handoff-${handoff.handoffId}`;
-    const existing = await store.getProductionDraft(draftId);
-    if (existing) return reply.code(201).send({ draft: existing });
     const draft = validateProductionDraft({
       schemaVersion: handoff.eventSpecSnapshot.schemaVersion, businessId: actor.businessId, draftId, status: "pending_review", createdAt: handoff.createdAt,
       source: { kind: "manual_import", receivedAt: handoff.createdAt, sourceRef: `offer-handoff:${handoff.handoffId}` },
@@ -750,8 +749,19 @@ export function registerProductionArtifactRoutes(
       reviewCards: [{ cardId: "card-event-handoff", kind: "event_data", title: "Freigegebenes Angebot prüfen", summary: "Unveränderliche Angebotsübergabe für die Produktionsprüfung.", decision: "pending", targetPath: "$.draftArtifacts.eventSpec", targetId: handoff.eventSpecSnapshot.specId, requiredApproval: true }],
       draftArtifacts: { eventSpec: handoff.eventSpecSnapshot }
     });
-    await store.saveProductionDraft(draft);
-    await auditLog.logFor(actor, { action: "production.draft_created_from_handoff", entityType: "ProductionDraft", entityId: draft.draftId, actor, summary: "ProductionDraft aus unveränderlicher Angebotsübergabe angelegt.", details: { handoffId: handoff.handoffId } });
+    const inserted = await store.insertProductionDraft(draft);
+    if (inserted === "exists") {
+      const existing = await store.getProductionDraft(draftId);
+      if (!areJsonValuesEqual(existing, draft)) {
+        return reply.code(409).send({ message: "Bestehender ProductionDraft stimmt nicht mit der angeforderten Angebotsübergabe überein." });
+      }
+    }
+    await auditLog.logFor(actor, {
+      action: "production.draft_created_from_handoff", entityType: "ProductionDraft", entityId: draft.draftId,
+      actor, at: draft.createdAt, idempotencyKey: `production-draft-from-handoff:${draft.draftId}`,
+      summary: "ProductionDraft aus unveränderlicher Angebotsübergabe angelegt.",
+      details: { handoffId: handoff.handoffId }
+    });
     return reply.code(201).send({ draft });
   });
 
@@ -1061,7 +1071,11 @@ export function registerProductionArtifactRoutes(
       });
     }
 
-    await store.saveProductionDraft(draft);
+    if (await store.insertProductionDraft(draft) === "exists") {
+      return reply.code(409).send({
+        message: "ProductionDraft mit dieser ID existiert bereits."
+      });
+    }
     const artifacts = draft.draftArtifacts;
     await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "production.production_draft_imported",

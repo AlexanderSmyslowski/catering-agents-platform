@@ -2247,6 +2247,30 @@ button:disabled {
   margin-bottom: 0.35rem;
 }
 
+.production-draft-state {
+  display: grid;
+  justify-items: start;
+  gap: 0.55rem;
+  padding: 0.9rem;
+  border: 1px solid #dfe2e5;
+  border-radius: 8px;
+}
+
+.production-draft-state p {
+  margin: 0;
+}
+
+.production-draft-load-error {
+  color: #7c2015;
+  background: #fff1ef;
+  border-color: #e7b9b2;
+}
+
+.production-draft-unavailable {
+  color: #343a40;
+  background: #f5f6f7;
+}
+
 .production-draft-review--resume > .item-list,
 .production-draft-review--resume .item-list .item-list {
   margin: 0;

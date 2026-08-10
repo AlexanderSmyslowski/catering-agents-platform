@@ -416,6 +416,10 @@ export class ProductionStore {
     await this.productionDrafts.set(validateProductionDraft(draft));
   }
 
+  async insertProductionDraft(draft: ProductionDraft): Promise<"created" | "exists"> {
+    return this.productionDrafts.insert(validateProductionDraft(draft));
+  }
+
   async getProductionDraft(draftId: string): Promise<ProductionDraft | undefined> {
     return this.productionDrafts.get(draftId);
   }

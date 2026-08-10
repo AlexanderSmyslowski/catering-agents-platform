@@ -169,19 +169,17 @@ describe("app offer route app boundary", () => {
         calls.push(`production:${handoffId}`);
         return { draft: { draftId: "production-created" } };
       }),
-      setHandoffId: vi.fn((handoffId) => calls.push(`preserve:${handoffId}`)),
-      setProductionDraftId: vi.fn((draftId) => calls.push(`draft:${draftId}`)),
+      setApprovalBinding: vi.fn((binding) => calls.push(`binding:${JSON.stringify(binding)}`)),
       openProductionEntry: vi.fn((draftId) => calls.push(`open:${draftId}`))
     });
     const state = buildAppOfferRouteAppBoundary(boundaryInput);
 
-    await state.offerWorkbenchState.createHandoff?.("approved-1");
+    await state.offerWorkbenchState.createHandoff?.("draft-1", "approved-1");
 
     expect(calls).toEqual([
       "handoff:approved-1",
-      "preserve:handoff-created",
       "production:handoff-created",
-      "draft:production-created",
+      'binding:{"offerDraftId":"draft-1","approvedOfferId":"approved-1","handoffId":"handoff-created","productionDraftId":"production-created"}',
       "open:production-created"
     ]);
   });

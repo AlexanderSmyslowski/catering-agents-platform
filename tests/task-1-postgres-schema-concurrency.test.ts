@@ -52,7 +52,7 @@ async function schemaVersion(client: PoolClient): Promise<number | undefined> {
   return result.rows[0]?.version_number;
 }
 
-describeWithPostgres("PostgreSQL scoped-record schema v2 concurrency", () => {
+describeWithPostgres("PostgreSQL scoped-record schema v3 concurrency", () => {
   it("serializes two fresh-schema initializers from separate sessions", async () => {
     await withIsolatedSchema("fresh", async (first, second) => {
       let initializersStarted = 0;
@@ -79,11 +79,11 @@ describeWithPostgres("PostgreSQL scoped-record schema v2 concurrency", () => {
         collection(queryable(first)).list({ businessId: "alpha" }),
         collection(queryable(second)).list({ businessId: "alpha" })
       ])).resolves.toEqual([[], []]);
-      await expect(schemaVersion(first)).resolves.toBe(2);
+      await expect(schemaVersion(first)).resolves.toBe(3);
     });
   });
 
-  it("serializes two old-schema backfills and records version 2 once", async () => {
+  it("serializes two old-schema backfills and records version 3 once", async () => {
     await withIsolatedSchema("old", async (first, second) => {
       await first.query("CREATE TABLE catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))");
       const versions: Array<[string, unknown, number | null]> = [
@@ -105,6 +105,9 @@ describeWithPostgres("PostgreSQL scoped-record schema v2 concurrency", () => {
           [id, JSON.stringify(payload)]
         );
       }
+      await first.query(
+        "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload) VALUES ('alpha', 'concurrency', 'revision-one', '{\"id\":\"revision-one\",\"revision\":1}')"
+      );
       let initializersStarted = 0;
       let releaseInitializers!: () => void;
       const bothInitializersStarted = new Promise<void>((resolve) => { releaseInitializers = resolve; });
@@ -129,17 +132,20 @@ describeWithPostgres("PostgreSQL scoped-record schema v2 concurrency", () => {
         collection(queryable(first)).list({ businessId: "alpha" }),
         collection(queryable(second)).list({ businessId: "alpha" })
       ])).resolves.toHaveLength(2);
-      await expect(schemaVersion(first)).resolves.toBe(2);
+      await expect(schemaVersion(first)).resolves.toBe(3);
       const markers = await first.query("SELECT count(*)::integer AS count FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'");
       expect(markers.rows[0]?.count).toBe(1);
       const stored = await first.query("SELECT record_id, version_number FROM catering_business_records ORDER BY record_id");
       expect(Object.fromEntries(stored.rows.map((row) => [row.record_id, row.version_number]))).toEqual(
-        Object.fromEntries(versions.map(([id, , expected]) => [id, expected]))
+        {
+          ...Object.fromEntries(versions.map(([id, , expected]) => [id, expected])),
+          "revision-one": 1
+        }
       );
     });
   });
 
-  it("does not overwrite a regular version-2 set started during backfill", async () => {
+  it("does not overwrite a regular set started during the version-3 backfill", async () => {
     await withIsolatedSchema("writer", async (migratorClient, writerClient) => {
       await migratorClient.query("CREATE TABLE catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))");
       await migratorClient.query("INSERT INTO catering_business_records (business_id, collection_name, record_id, payload) VALUES ('alpha', 'concurrency', 'same', '{\"id\":\"same\",\"version\":1}')");
@@ -196,7 +202,7 @@ describeWithPostgres("PostgreSQL scoped-record schema v2 concurrency", () => {
       const stored = await migratorClient.query("SELECT payload, version_number FROM catering_business_records WHERE record_id = 'same'");
       expect(stored.rows[0]?.payload).toMatchObject({ version: 2 });
       expect(stored.rows[0]?.version_number).toBe(2);
-      await expect(schemaVersion(migratorClient)).resolves.toBe(2);
+      await expect(schemaVersion(migratorClient)).resolves.toBe(3);
     });
   });
 

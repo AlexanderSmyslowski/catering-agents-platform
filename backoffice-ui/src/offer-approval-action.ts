@@ -1,5 +1,12 @@
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
+export type OfferApprovalBinding = {
+  offerDraftId: string;
+  approvedOfferId: string;
+  handoffId?: string;
+  productionDraftId?: string;
+};
+
 export type OfferApprovalActionInput = {
   decideOfferDraft: (draftId: string, variantId: string) => Promise<{ approvedOffer?: { approvedOfferId: string } }>;
   createProductionHandoff: (approvedOfferId: string) => Promise<{ handoff?: { handoffId: string } }>;
@@ -9,9 +16,7 @@ export type OfferApprovalActionInput = {
   refreshDashboard: () => Promise<void>;
   setNotice: (message: string) => void;
   setError: (message: string) => void;
-  setApprovedOfferId?: (approvedOfferId: string) => void;
-  setHandoffId?: (handoffId: string) => void;
-  setProductionDraftId?: (draftId: string) => void;
+  setApprovalBinding?: (binding: OfferApprovalBinding) => void;
   openProductionEntry: (draftId: string) => void;
 };
 
@@ -26,16 +31,23 @@ export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
     approve: async (draftId: string, variantId: string) => run(async () => {
       const result = await input.decideOfferDraft(draftId, variantId);
       if (!result.approvedOffer?.approvedOfferId) throw new Error("Freigegebenes Angebot fehlt.");
-      input.setApprovedOfferId?.(result.approvedOffer.approvedOfferId);
+      input.setApprovalBinding?.({
+        offerDraftId: draftId,
+        approvedOfferId: result.approvedOffer.approvedOfferId
+      });
       input.setNotice("Angebotsvariante wurde freigegeben.");
     }, "Angebotsvariante konnte nicht freigegeben werden."),
-    createHandoff: async (approvedOfferId: string) => run(async () => {
+    createHandoff: async (offerDraftId: string, approvedOfferId: string) => run(async () => {
       const result = await input.createProductionHandoff(approvedOfferId);
       if (!result.handoff?.handoffId) throw new Error("Produktionsübergabe fehlt.");
-      input.setHandoffId?.(result.handoff.handoffId);
       const productionResult = await input.createProductionDraftFromHandoff(result.handoff.handoffId);
       if (!productionResult.draft?.draftId) throw new Error("Produktionsentwurf fehlt.");
-      input.setProductionDraftId?.(productionResult.draft.draftId);
+      input.setApprovalBinding?.({
+        offerDraftId,
+        approvedOfferId,
+        handoffId: result.handoff.handoffId,
+        productionDraftId: productionResult.draft.draftId
+      });
       input.setNotice("Freigegebenes Angebot wurde an die Produktion übergeben.");
       input.openProductionEntry(productionResult.draft.draftId);
     }, "Produktionsübergabe konnte nicht erstellt werden.")

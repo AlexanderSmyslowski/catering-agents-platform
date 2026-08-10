@@ -17,7 +17,12 @@ describe("offer approval action", () => {
         calls.push(`production:${handoffId}`);
         return { draft: { draftId: "production-draft-1" } };
       },
-      setHandoffId: (handoffId: string) => calls.push(`handoffId:${handoffId}`),
+      setApprovalBinding: (binding: {
+        offerDraftId: string;
+        approvedOfferId: string;
+        handoffId?: string;
+        productionDraftId?: string;
+      }) => calls.push(`binding:${JSON.stringify(binding)}`),
       openProductionEntry: (draftId: string) => calls.push(`open:${draftId}`),
       setSubmitting: () => undefined,
       clearMessages: () => undefined,
@@ -26,18 +31,27 @@ describe("offer approval action", () => {
       setError: () => undefined
     } as Parameters<typeof buildOfferApprovalAction>[0] & {
       createProductionDraftFromHandoff: (handoffId: string) => Promise<{ draft: { draftId: string } }>;
-      setHandoffId: (handoffId: string) => void;
+      setApprovalBinding: (binding: {
+        offerDraftId: string;
+        approvedOfferId: string;
+        handoffId?: string;
+        productionDraftId?: string;
+      }) => void;
       openProductionEntry: (draftId: string) => void;
     });
 
     await action.approve("draft-1", "variant-1");
-    expect(calls).toEqual(["decision"]);
-    await action.createHandoff("offer-1");
     expect(calls).toEqual([
       "decision",
+      'binding:{"offerDraftId":"draft-1","approvedOfferId":"offer-1"}'
+    ]);
+    await action.createHandoff("draft-1", "offer-1");
+    expect(calls).toEqual([
+      "decision",
+      'binding:{"offerDraftId":"draft-1","approvedOfferId":"offer-1"}',
       "handoff",
-      "handoffId:handoff-1",
       "production:handoff-1",
+      'binding:{"offerDraftId":"draft-1","approvedOfferId":"offer-1","handoffId":"handoff-1","productionDraftId":"production-draft-1"}',
       "open:production-draft-1"
     ]);
   });

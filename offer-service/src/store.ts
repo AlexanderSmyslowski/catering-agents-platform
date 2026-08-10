@@ -54,6 +54,12 @@ export class OfferStore {
   async getDraft(context: BusinessContext, draftId: string): Promise<OfferDraft | undefined> { return this.drafts.get(context, draftId); }
   async listDrafts(context: BusinessContext): Promise<OfferDraft[]> { return this.drafts.list(context); }
   async insertApproval(context: BusinessContext, record: ApprovalRequestRecord): Promise<"created" | "exists"> { return this.approvals.insert(context, record); }
+  async getApproval(context: BusinessContext, approvalRequestId: string): Promise<ApprovalRequestRecord | undefined> { return this.approvals.get(context, approvalRequestId); }
+  async listApprovalsForDraft(context: BusinessContext, draftId: string): Promise<ApprovalRequestRecord[]> {
+    return (await this.approvals.list(context)).filter(
+      (record) => record.target.kind === "offer_draft" && record.target.artifactId === draftId
+    );
+  }
   async listApprovalsForTarget(context: BusinessContext, target: ApprovalRequestRecord["target"]): Promise<ApprovalRequestRecord[]> {
     return (await this.approvals.list(context)).filter((record) => record.target.kind === target.kind && record.target.artifactId === target.artifactId && record.target.revision === target.revision);
   }

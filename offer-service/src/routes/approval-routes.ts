@@ -5,6 +5,7 @@ import {
   createApprovalRequestRecord,
   validateApprovedOffer,
   validateProductionHandoff,
+  type ApprovalRequestRecord,
   type AuditLogStore,
   type TrustedActor
 } from "@catering/shared-core";
@@ -22,8 +23,16 @@ function deterministicId(prefix: string, value: unknown): string {
   return `${prefix}-${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
-function sameDecision(left: { decision: string; selectedVariantId?: string }, right: { decision: string; selectedVariantId?: string }): boolean {
-  return left.decision === right.decision && left.selectedVariantId === right.selectedVariantId;
+function sameDecision(
+  left: { decision: string; selectedVariantId?: string; comment?: string; decidedBy: { name: string; role: string; source: string } },
+  right: { decision: string; selectedVariantId?: string; comment?: string; decidedBy: { name: string; role: string; source: string } }
+): boolean {
+  return left.decision === right.decision
+    && left.selectedVariantId === right.selectedVariantId
+    && left.comment === right.comment
+    && left.decidedBy.name === right.decidedBy.name
+    && left.decidedBy.role === right.decidedBy.role
+    && left.decidedBy.source === right.decidedBy.source;
 }
 
 export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApprovalRouteDependencies) {
@@ -39,6 +48,14 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       if (!draft) return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
       const decision = request.body?.decision;
       if (decision !== "approved" && decision !== "rejected") return reply.code(422).send({ message: "Explizite Freigabeentscheidung erforderlich." });
+      const existing = await store.listApprovalsForDraft(actor, draft.draftId);
+      if (existing.length > 1) {
+        return reply.code(409).send({ message: "Für diesen Entwurf liegen widersprüchliche Entscheidungen vor." });
+      }
+      let stored: ApprovalRequestRecord | undefined = existing[0];
+      if (stored && stored.target.revision !== draft.revision) {
+        return reply.code(409).send({ message: "Die gespeicherte Entscheidung gehört zu einer anderen Angebotsrevision." });
+      }
       const selectedVariant = decision === "approved" ? draft.variantSet.find((variant) => variant.variantId === request.body.variantId) : undefined;
       if (decision === "approved" && !selectedVariant) return reply.code(422).send({ message: "Eine vorhandene Angebotsvariante muss explizit gewählt werden." });
 
@@ -55,12 +72,17 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       } catch (error) {
         return reply.code(403).send({ message: error instanceof Error ? error.message : "Freigabe nicht zulässig." });
       }
-      const existing = await store.listApprovalsForTarget(actor, approval.target);
-      const stored = existing[0];
-      if (stored && !sameDecision(stored, approval)) return reply.code(409).send({ message: "Für diesen Entwurf liegt bereits eine Entscheidung vor." });
+      if (stored && !sameDecision(stored, approval)) {
+        return reply.code(409).send({ message: "Für diesen Entwurf liegt bereits eine andere Entscheidung vor." });
+      }
       if (!stored) {
         const inserted = await store.insertApproval(actor, approval);
-        if (inserted === "exists") return reply.code(409).send({ message: "Für diesen Entwurf liegt bereits eine Entscheidung vor." });
+        if (inserted === "exists") {
+          stored = await store.getApproval(actor, approval.approvalRequestId);
+          if (!stored || !sameDecision(stored, approval)) {
+            return reply.code(409).send({ message: "Für diesen Entwurf liegt bereits eine andere Entscheidung vor." });
+          }
+        }
       }
       const finalApproval = stored ?? approval;
       if (finalApproval.decision === "rejected") return reply.code(201).send({ approval: finalApproval });
@@ -83,7 +105,13 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
         const existingOffer = await store.getApprovedOffer(actor, approvedOffer.approvedOfferId);
         if (!areJsonValuesEqual(existingOffer, approvedOffer)) return reply.code(409).send({ message: "Freigegebenes Angebot stimmt nicht mit dem bestehenden Artefakt überein." });
       }
-      if (created === "created") await auditLog.logFor(actor, { action: "offer.approved", entityType: "ApprovedOffer", entityId: approvedOffer.approvedOfferId, actor, summary: "Angebotsvariante explizit freigegeben.", details: { draftId: draft.draftId, variantId: selectedVariant!.variantId } });
+      await auditLog.logFor(actor, {
+        action: "offer.approved", entityType: "ApprovedOffer", entityId: approvedOffer.approvedOfferId,
+        actor: finalApproval.decidedBy, at: approvedOffer.approvedAt,
+        idempotencyKey: `approved-offer:${approvedOffer.approvedOfferId}`,
+        summary: "Angebotsvariante explizit freigegeben.",
+        details: { draftId: draft.draftId, variantId: selectedVariant!.variantId }
+      });
       return reply.code(201).send({ approval: finalApproval, approvedOffer });
     }
   );
@@ -107,7 +135,12 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       const existing = await store.getHandoff(actor, handoff.handoffId);
       if (!areJsonValuesEqual(existing, handoff)) return reply.code(409).send({ message: "Bestehende Produktionsübergabe stimmt nicht überein." });
     }
-    if (inserted === "created") await auditLog.logFor(actor, { action: "offer.production_handoff_created", entityType: "ProductionHandoff", entityId: handoff.handoffId, actor, summary: "Freigegebenes Angebot an die Produktion übergeben.", details: { approvedOfferId: approvedOffer.approvedOfferId } });
+    await auditLog.logFor(actor, {
+      action: "offer.production_handoff_created", entityType: "ProductionHandoff", entityId: handoff.handoffId,
+      actor, at: handoff.createdAt, idempotencyKey: `production-handoff:${handoff.handoffId}`,
+      summary: "Freigegebenes Angebot an die Produktion übergeben.",
+      details: { approvedOfferId: approvedOffer.approvedOfferId }
+    });
     return reply.code(201).send({ handoff });
   });
 

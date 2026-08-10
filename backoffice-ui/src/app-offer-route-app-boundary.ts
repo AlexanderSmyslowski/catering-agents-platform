@@ -20,9 +20,7 @@ export type AppOfferRouteAppBoundaryInput =
     refreshDashboard: OfferTextSubmitActionInput["refreshDashboard"];
     setNotice: OfferTextSubmitActionInput["setNotice"];
     setError: OfferTextSubmitActionInput["setError"];
-    setApprovedOfferId?: OfferApprovalActionInput["setApprovedOfferId"];
-    setHandoffId?: OfferApprovalActionInput["setHandoffId"];
-    setProductionDraftId?: OfferApprovalActionInput["setProductionDraftId"];
+    setApprovalBinding?: OfferApprovalActionInput["setApprovalBinding"];
     openProductionEntry: OfferApprovalActionInput["openProductionEntry"];
   };
 
@@ -48,9 +46,7 @@ export function buildAppOfferRouteAppBoundary(
     refreshDashboard: input.refreshDashboard,
     setNotice: input.setNotice,
     setError: input.setError,
-    setApprovedOfferId: input.setApprovedOfferId,
-    setHandoffId: input.setHandoffId,
-    setProductionDraftId: input.setProductionDraftId,
+    setApprovalBinding: input.setApprovalBinding,
     openProductionEntry: input.openProductionEntry
   });
 

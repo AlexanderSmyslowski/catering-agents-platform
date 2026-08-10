@@ -4,6 +4,7 @@ import path from "node:path";
 import { newDb } from "pg-mem";
 import { describe, expect, it } from "vitest";
 import {
+  AuditLogStore,
   createEventRequestFromText,
   createOfferDraft,
   validateOfferDraft,
@@ -86,6 +87,46 @@ describe("offer production handoff", () => {
     expect(handoff.statusCode).toBe(201);
     expect(handoff.json<{ handoff: { pricingSnapshot: unknown } }>().handoff.pricingSnapshot)
       .toEqual(selectedVariant.proposedEventSpec.budgetContext.pricingSummary);
+    await app.close();
+  });
+
+  it("repairs handoff audit evidence after publication and keeps concurrent retries idempotent", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-offer-handoff-audit-"));
+    const store = new OfferStore({ rootDir });
+    const auditLog = new AuditLogStore({ rootDir });
+    const app = buildOfferApp({ rootDir, store, auditLog, trustedActorSecret: trustedSecret });
+    const draftResponse = await app.inject({
+      method: "POST", url: "/v1/offers/from-text", headers: trustedHeaders,
+      payload: { text: "Business Lunch fuer 35 Personen." }
+    });
+    const draft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
+    const decision = await app.inject({
+      method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders,
+      payload: { decision: "approved", variantId: draft.variantSet[0]!.variantId }
+    });
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
+    const logFor = auditLog.logFor.bind(auditLog);
+    let injectFailure = true;
+    auditLog.logFor = async (...args) => {
+      if (injectFailure && args[1].action === "offer.production_handoff_created") {
+        injectFailure = false;
+        throw new Error("injected handoff audit failure");
+      }
+      return logFor(...args);
+    };
+    const request = () => app.inject({
+      method: "POST" as const, url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: trustedHeaders, payload: {}
+    });
+
+    const first = await request();
+    const retries = await Promise.all([request(), request()]);
+
+    expect(first.statusCode).toBe(500);
+    expect(retries.map((response) => response.statusCode)).toEqual([201, 201]);
+    const audits = (await auditLog.listRecentFor({ businessId: "local" }, 20))
+      .filter((entry) => entry.action === "offer.production_handoff_created");
+    expect(audits).toHaveLength(1);
     await app.close();
   });
 

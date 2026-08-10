@@ -60,6 +60,7 @@ import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useOperatorNameState } from "./use-operator-name-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 import { openProductionDraftEntry } from "./production-entry-focus.js";
+import type { OfferApprovalBinding } from "./offer-approval-action.js";
 
 const PROMOTED_PRODUCTION_SPEC_FOCUS_KEY = "catering.promotedProductionSpecFocus";
 
@@ -112,9 +113,7 @@ export function App() {
   } = useRecipeUploadDraft();
   const [search, setSearch] = useState("");
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
-  const [approvedOfferId, setApprovedOfferId] = useState<string>();
-  const [, setHandoffId] = useState<string>();
-  const [productionDraftId, setProductionDraftId] = useState<string>();
+  const [offerApprovalBinding, setOfferApprovalBinding] = useState<OfferApprovalBinding>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [initialProductionWorkspace] = useState(() => {
     const focusedSpecId = consumePromotedProductionSpecFocus(route);
@@ -600,9 +599,7 @@ export function App() {
     refreshDashboard,
     setNotice,
     setError,
-    setApprovedOfferId,
-    setHandoffId,
-    setProductionDraftId,
+    setApprovalBinding: setOfferApprovalBinding,
     openProductionEntry: openProductionDraftEntry,
     latestSourceLabel: latestIntakeRequestSummary,
     offerText,
@@ -620,8 +617,7 @@ export function App() {
     filteredOfferDrafts,
     activeDraft: activeOfferDraft,
     selectedDraft,
-    approvedOfferId,
-    productionDraftId,
+    approvalBinding: offerApprovalBinding,
     setSelectedDraftId,
     filteredSpecs,
     activeSpec: activeOfferSpec,

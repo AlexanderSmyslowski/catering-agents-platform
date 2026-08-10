@@ -586,4 +586,103 @@ describe("ProductionDraftReviewPanel", () => {
     expect(document.activeElement?.id).toBe("production-draft-draft-from-handoff");
     await act(async () => root.unmount());
   });
+
+  it.each([
+    ["missing", undefined],
+    ["rejected", "rejected"],
+    ["already applied", "applied"]
+  ] as const)("shows an unavailable state for a %s requested production draft", async (_case, targetState) => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+    });
+    const requestedDraft = targetState
+      ? {
+          ...draftFixture(),
+          draftId: "draft-requested",
+          status: targetState === "rejected" ? "rejected" as const : "approved" as const,
+          appliedAt: targetState === "applied" ? "2026-07-01T12:30:00.000Z" : undefined,
+          draftArtifacts: { eventSpec: { event: { title: "Nicht mehr verfügbarer Entwurf" } } }
+        }
+      : undefined;
+    const unrelatedDraft = {
+      ...draftFixture(),
+      draftId: "draft-unrelated",
+      createdAt: "2026-07-01T13:00:00.000Z",
+      draftArtifacts: { eventSpec: { event: { title: "Fremder neuer Entwurf" } } }
+    };
+    window.history.pushState({}, "", "/produktion?productionDraftId=draft-requested");
+    globalThis.fetch = vi.fn(async () => jsonResponse({
+      items: requestedDraft ? [requestedDraft, unrelatedDraft] : [unrelatedDraft]
+    })) as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        embedded: true,
+        latestOnly: true
+      }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent ?? "").toContain("angeforderte Produktionsentwurf ist nicht verfügbar");
+    expect(document.body.textContent ?? "").not.toContain("Fremder neuer Entwurf");
+    expect(document.body.textContent ?? "").not.toContain("Keine Produktionsentwürfe zur Prüfung");
+    expect(document.body.textContent ?? "").not.toContain("draft-requested");
+
+    await act(async () => root.unmount());
+  });
+
+  it("distinguishes a load failure and retries the requested production draft locally", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+    });
+    const requestedDraft = {
+      ...draftFixture(),
+      draftId: "draft-requested",
+      draftArtifacts: { eventSpec: { event: { title: "Erneut geladener Entwurf" } } }
+    };
+    window.history.pushState({}, "", "/produktion?productionDraftId=draft-requested");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ message: "Dienst vorübergehend nicht erreichbar." }, 503))
+      .mockResolvedValueOnce(jsonResponse({ items: [requestedDraft] }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        embedded: true,
+        latestOnly: true
+      }));
+      await flushPromises();
+    });
+
+    expect(document.querySelector('[role="alert"]')?.textContent ?? "").toContain(
+      "Produktionsentwürfe konnten nicht geladen werden"
+    );
+    expect(document.body.textContent ?? "").not.toContain("Keine Produktionsentwürfe zur Prüfung");
+    expect(document.body.textContent ?? "").not.toContain("angeforderte Produktionsentwurf ist nicht verfügbar");
+    const retryButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Erneut versuchen"
+    );
+    expect(retryButton).toBeDefined();
+
+    await act(async () => {
+      retryButton?.click();
+      await flushPromises();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(document.body.textContent ?? "").toContain("Erneut geladener Entwurf");
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+
+    await act(async () => root.unmount());
+  });
 });

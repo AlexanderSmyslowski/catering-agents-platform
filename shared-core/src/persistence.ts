@@ -8,9 +8,11 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  statSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Pool, type PoolConfig } from "pg";
 import { assertBusinessId, type BusinessContext } from "./business-context.js";
@@ -48,6 +50,7 @@ export interface PersistentCollection<T> {
   list(): Promise<T[]>;
   get(id: string): Promise<T | undefined>;
   set(item: T): Promise<void>;
+  insert(item: T): Promise<"created" | "exists">;
 }
 
 function sanitizeKey(key: string): string {
@@ -76,7 +79,7 @@ BEGIN
     SELECT 1
     FROM catering_schema_migrations
     WHERE unit_name = 'catering_business_records'
-      AND version_number >= 2
+      AND version_number >= 3
   ) THEN
     CREATE TABLE IF NOT EXISTS catering_business_records (
       business_id TEXT NOT NULL,
@@ -104,8 +107,22 @@ BEGIN
         ELSE FALSE
       END;
 
+    UPDATE catering_business_records
+    SET version_number = ((payload ->> 'revision')::numeric)::integer
+    WHERE version_number IS NULL
+      AND NOT (payload ? 'version')
+      AND CASE
+        WHEN jsonb_typeof(payload -> 'revision') = 'number' THEN
+          CASE
+            WHEN (payload ->> 'revision')::numeric BETWEEN 0 AND 2147483647 THEN
+              (payload ->> 'revision')::numeric = trunc((payload ->> 'revision')::numeric)
+            ELSE FALSE
+          END
+        ELSE FALSE
+      END;
+
     INSERT INTO catering_schema_migrations (unit_name, version_number, completed_at)
-    VALUES ('catering_business_records', 2, NOW())
+    VALUES ('catering_business_records', 3, NOW())
     ON CONFLICT (unit_name) DO UPDATE
     SET version_number = GREATEST(catering_schema_migrations.version_number, EXCLUDED.version_number),
         completed_at = NOW();
@@ -137,12 +154,13 @@ async function createPgMemTable(queryable: Queryable, relationName: string, sql:
 }
 
 async function runPgMemBusinessRecordsMigration(queryable: Queryable): Promise<void> {
-  // pg-mem cannot parse PostgreSQL DO blocks; this adapter-only path mirrors schema v2 without becoming a production fallback.
+  // pg-mem cannot parse PostgreSQL DO blocks; this adapter-only path mirrors schema v3 without becoming a production fallback.
   await createPgMemTable(queryable, "catering_schema_migrations", "CREATE TABLE catering_schema_migrations (unit_name TEXT PRIMARY KEY, version_number INTEGER NOT NULL, completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await createPgMemTable(queryable, "catering_business_records", "CREATE TABLE catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, version_number INTEGER, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))");
   await queryable.query("ALTER TABLE catering_business_records ADD COLUMN IF NOT EXISTS version_number INTEGER");
   await queryable.query("UPDATE catering_business_records SET version_number = (payload ->> 'version')::numeric::integer WHERE version_number IS NULL AND CASE WHEN payload -> 'version' BETWEEN '0'::jsonb AND '2147483647'::jsonb AND (payload -> 'version')::text <> 'null' THEN (payload ->> 'version')::numeric = (payload ->> 'version')::numeric::integer ELSE FALSE END");
-  await queryable.query("INSERT INTO catering_schema_migrations (unit_name, version_number, completed_at) VALUES ('catering_business_records', 2, NOW()) ON CONFLICT (unit_name) DO UPDATE SET version_number = 2, completed_at = NOW()");
+  await queryable.query("UPDATE catering_business_records SET version_number = (payload ->> 'revision')::numeric::integer WHERE version_number IS NULL AND payload -> 'version' IS NULL AND CASE WHEN payload -> 'revision' BETWEEN '0'::jsonb AND '2147483647'::jsonb AND (payload -> 'revision')::text <> 'null' THEN (payload ->> 'revision')::numeric = (payload ->> 'revision')::numeric::integer ELSE FALSE END");
+  await queryable.query("INSERT INTO catering_schema_migrations (unit_name, version_number, completed_at) VALUES ('catering_business_records', 3, NOW()) ON CONFLICT (unit_name) DO UPDATE SET version_number = 3, completed_at = NOW()");
 }
 
 async function runBusinessRecordsSchemaMigration(queryable: Queryable): Promise<void> {
@@ -226,6 +244,15 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
     const id = this.getId(normalized);
     this.items.set(id, normalized);
     this.writeToDisk(id, normalized);
+  }
+
+  async insert(item: T): Promise<"created" | "exists"> {
+    const normalized = this.validate ? this.validate(item) : item;
+    const id = this.getId(normalized);
+    const filePath = path.join(this.directory, `${sanitizeKey(id)}.json`);
+    const inserted = atomicInsert(filePath, JSON.stringify(normalized, null, 2));
+    if (inserted === "created") this.items.set(id, normalized);
+    return inserted;
   }
 
   private ensureSeed(seed: T[]): void {
@@ -336,6 +363,21 @@ class PostgresBackedCollection<T> implements PersistentCollection<T> {
     );
   }
 
+  async insert(item: T): Promise<"created" | "exists"> {
+    await this.ensureInitialized();
+    const normalized = this.validate ? this.validate(item) : item;
+    const result = await this.queryable.query(
+      `
+        INSERT INTO catering_records (collection_name, record_id, payload, updated_at)
+        VALUES ($1, $2, $3::jsonb, NOW())
+        ON CONFLICT DO NOTHING
+        RETURNING record_id
+      `,
+      [this.collectionName, this.getId(normalized), JSON.stringify(normalized)]
+    );
+    return result.rows.length === 1 ? "created" : "exists";
+  }
+
   private async ensureInitialized(): Promise<void> {
     const key = this.queryable as object;
     const initializers = initCache.get(key) ?? new Map<string, Promise<void>>();
@@ -436,6 +478,146 @@ function cleanupTemporaryFile(temporaryPath: string): void {
   fsyncDirectory(path.dirname(temporaryPath));
 }
 
+interface FileLockMetadata {
+  token: string;
+  pid: number;
+  acquiredAt: string;
+}
+
+// The lock spans the version read and atomic rename; owner metadata lets a later process recover crash residue without stealing from a live writer.
+const FILE_LOCK_RETRY_MS = 10;
+const FILE_LOCK_TIMEOUT_MS = 30_000;
+const INCOMPLETE_FILE_LOCK_GRACE_MS = 30_000;
+const fileLockSleeper = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+
+function waitForFileLock(): void {
+  Atomics.wait(fileLockSleeper, 0, 0, FILE_LOCK_RETRY_MS);
+}
+
+function readFileLockMetadata(lockPath: string): FileLockMetadata | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(lockPath, "utf8")) as Partial<FileLockMetadata>;
+    if (
+      typeof parsed.token !== "string"
+      || !Number.isSafeInteger(parsed.pid)
+      || Number(parsed.pid) <= 0
+      || typeof parsed.acquiredAt !== "string"
+    ) {
+      return undefined;
+    }
+    return parsed as FileLockMetadata;
+  } catch {
+    return undefined;
+  }
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function isAbandonedFileLock(lockPath: string): boolean {
+  const metadata = readFileLockMetadata(lockPath);
+  if (metadata) return !isProcessRunning(metadata.pid);
+  try {
+    return Date.now() - statSync(lockPath).mtimeMs >= INCOMPLETE_FILE_LOCK_GRACE_MS;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function createFileLock(lockPath: string, token: string): boolean {
+  let fd: number;
+  try {
+    fd = openSync(lockPath, "wx", 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+
+  try {
+    const metadata: FileLockMetadata = {
+      token,
+      pid: process.pid,
+      acquiredAt: new Date().toISOString()
+    };
+    writeFileSync(fd, JSON.stringify(metadata));
+    fsyncSync(fd);
+  } catch (error) {
+    try {
+      unlinkSync(lockPath);
+    } catch (cleanupError) {
+      if ((cleanupError as NodeJS.ErrnoException).code !== "ENOENT") throw cleanupError;
+    }
+    throw error;
+  } finally {
+    closeSync(fd);
+  }
+  fsyncDirectory(path.dirname(lockPath));
+  return true;
+}
+
+function releaseFileLock(lockPath: string, token: string): void {
+  const metadata = readFileLockMetadata(lockPath);
+  if (!metadata || metadata.token !== token) return;
+  try {
+    unlinkSync(lockPath);
+    fsyncDirectory(path.dirname(lockPath));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+
+function reclaimAbandonedFileLock(lockPath: string): boolean {
+  if (!isAbandonedFileLock(lockPath)) return false;
+  // Stale-lock cleanup is itself serialized so competing recoverers cannot both unlink the same ownership path.
+  const recoveryPath = `${lockPath}.recovery`;
+  const recoveryToken = randomUUID();
+  if (!createFileLock(recoveryPath, recoveryToken)) {
+    if (isAbandonedFileLock(recoveryPath)) {
+      try {
+        unlinkSync(recoveryPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    return false;
+  }
+
+  try {
+    if (!existsSync(lockPath) || !isAbandonedFileLock(lockPath)) return false;
+    try {
+      unlinkSync(lockPath);
+      fsyncDirectory(path.dirname(lockPath));
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+      throw error;
+    }
+  } finally {
+    releaseFileLock(recoveryPath, recoveryToken);
+  }
+}
+
+function acquireFileLock(filePath: string): () => void {
+  const lockPath = `${filePath}.lock`;
+  const token = randomUUID();
+  const deadline = Date.now() + FILE_LOCK_TIMEOUT_MS;
+  while (!createFileLock(lockPath, token)) {
+    if (reclaimAbandonedFileLock(lockPath)) continue;
+    if (Date.now() >= deadline) {
+      throw new Error(`Dateisperre konnte nicht innerhalb von ${FILE_LOCK_TIMEOUT_MS} ms erworben werden: ${filePath}`);
+    }
+    waitForFileLock();
+  }
+  return () => releaseFileLock(lockPath, token);
+}
+
 function atomicWrite(filePath: string, payload: string, beforePublish?: () => void, afterPublish?: () => void): void {
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   try {
@@ -530,12 +712,17 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     assertIncomingVersion(normalized, this.options.getVersion);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
     mkdirSync(path.dirname(filePath), { recursive: true });
-    atomicWrite(
-      filePath,
-      JSON.stringify(normalized, null, 2),
-      () => this.options.fileFaultInjector?.("before_record_replace"),
-      () => this.options.fileFaultInjector?.("after_record_replace")
-    );
+    const releaseLock = acquireFileLock(filePath);
+    try {
+      atomicWrite(
+        filePath,
+        JSON.stringify(normalized, null, 2),
+        () => this.options.fileFaultInjector?.("before_record_replace"),
+        () => this.options.fileFaultInjector?.("after_record_replace")
+      );
+    } finally {
+      releaseLock();
+    }
   }
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
@@ -555,18 +742,24 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     assertExpectedVersion(expectedVersion);
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
-    const filePath = this.filePathFor(context, id);
-    if (!existsSync(filePath)) return "missing";
-    const existing = this.normalizeForContext(context, JSON.parse(readFileSync(filePath, "utf8")) as T, id);
-    if (collectionVersion(existing, this.options.getVersion) !== expectedVersion) return "conflict";
     if (this.options.getId(normalized) !== id) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
-    atomicWrite(
-      filePath,
-      JSON.stringify(normalized, null, 2),
-      () => this.options.fileFaultInjector?.("before_record_replace"),
-      () => this.options.fileFaultInjector?.("after_record_replace")
-    );
-    return "updated";
+    const filePath = this.filePathFor(context, id);
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    const releaseLock = acquireFileLock(filePath);
+    try {
+      if (!existsSync(filePath)) return "missing";
+      const existing = this.normalizeForContext(context, JSON.parse(readFileSync(filePath, "utf8")) as T, id);
+      if (collectionVersion(existing, this.options.getVersion) !== expectedVersion) return "conflict";
+      atomicWrite(
+        filePath,
+        JSON.stringify(normalized, null, 2),
+        () => this.options.fileFaultInjector?.("before_record_replace"),
+        () => this.options.fileFaultInjector?.("after_record_replace")
+      );
+      return "updated";
+    } finally {
+      releaseLock();
+    }
   }
 
   private directoryFor(context: BusinessContext): string {
@@ -660,7 +853,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
     const key = this.queryable as object;
     const initializers = initCache.get(key) ?? new Map<string, Promise<void>>();
     initCache.set(key, initializers);
-    const schemaUnit = "catering_business_records:v2";
+    const schemaUnit = "catering_business_records:v3";
     if (!initializers.has(schemaUnit)) {
       initializers.set(schemaUnit, runBusinessRecordsSchemaMigration(this.queryable));
     }

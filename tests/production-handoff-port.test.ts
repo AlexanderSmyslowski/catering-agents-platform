@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  AuditLogStore,
   createEventRequestFromText,
   createOfferDraft,
+  validateProductionDraft,
   type ProductionHandoff
 } from "@catering/shared-core";
 import { buildOfferApp } from "../offer-service/src/app.js";
@@ -15,6 +17,11 @@ import { ProductionStore } from "../production-service/src/repositories/producti
 const sharedSecret = "shared-secret";
 const localBusiness = { businessId: "local" };
 const requestedHandoffId = `handoff-${"a".repeat(64)}`;
+const productionHeaders = {
+  "x-catering-trusted-secret": sharedSecret,
+  "x-catering-actor-name": "Produktions-Mitarbeiter",
+  "x-catering-business-id": "local"
+};
 
 function buildHandoff(overrides: Partial<ProductionHandoff> = {}): ProductionHandoff {
   const draft = createOfferDraft(createEventRequestFromText({
@@ -34,6 +41,30 @@ function buildHandoff(overrides: Partial<ProductionHandoff> = {}): ProductionHan
     source: { draftId: draft.draftId, revision: 1, selectedVariantId: draft.variantSet[0]!.variantId },
     ...overrides
   };
+}
+
+function buildPoisonedProductionDraft(handoff: ProductionHandoff) {
+  return validateProductionDraft({
+    schemaVersion: handoff.eventSpecSnapshot.schemaVersion,
+    businessId: "other",
+    draftId: `production-draft-handoff-${handoff.handoffId}`,
+    status: "pending_review",
+    createdAt: handoff.createdAt,
+    source: { kind: "manual_import", receivedAt: handoff.createdAt, sourceRef: "manual-poison" },
+    guardrails: { draftOnly: true, humanApprovalRequired: true, writesProductObjects: false, rawProviderPayloadStored: false, knowledgeWritePolicy: "reviewed_only" },
+    reviewCards: [{
+      cardId: "card-poison", kind: "event_data", title: "Poisoned draft",
+      summary: "This record must never satisfy a handoff identity.", decision: "pending",
+      targetPath: "$.draftArtifacts.eventSpec", targetId: handoff.eventSpecSnapshot.specId,
+      requiredApproval: true
+    }],
+    draftArtifacts: {
+      eventSpec: {
+        ...structuredClone(handoff.eventSpecSnapshot),
+        event: { ...handoff.eventSpecSnapshot.event, title: "Substituted event" }
+      }
+    }
+  });
 }
 
 function injectedFetch(app: ReturnType<typeof buildOfferApp>): typeof fetch {
@@ -149,6 +180,141 @@ describe("production handoff port", () => {
 
     expect(response.statusCode).toBe(502);
     await expect(store.listProductionDrafts()).resolves.toHaveLength(0);
+    await app.close();
+  });
+
+  it("fails closed when the deterministic handoff draft ID is occupied by divergent content", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-handoff-collision-"));
+    const store = new ProductionStore({ rootDir });
+    const handoff = buildHandoff();
+    const poison = buildPoisonedProductionDraft(handoff);
+    await store.saveProductionDraft(poison);
+    const app = buildProductionApp({
+      dataRoot: rootDir, store, trustedActorSecret: sharedSecret,
+      handoffReader: { async getHandoff() { return handoff; } }
+    });
+
+    const response = await app.inject({
+      method: "POST", url: `/v1/production/drafts/from-handoff/${handoff.handoffId}`,
+      headers: productionHeaders
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).not.toHaveProperty("draft");
+    await expect(store.getProductionDraft(poison.draftId)).resolves.toEqual(poison);
+    await app.close();
+  });
+
+  it("prevents a concurrent manual import from overwriting the handoff draft identity", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-handoff-manual-race-"));
+    const store = new ProductionStore({ rootDir });
+    const handoff = buildHandoff();
+    const poison = buildPoisonedProductionDraft(handoff);
+    const getProductionDraft = store.getProductionDraft.bind(store);
+    let releaseManualLookup!: () => void;
+    const releaseManual = new Promise<void>((resolve) => { releaseManualLookup = resolve; });
+    let manualLookupObserved!: () => void;
+    const manualLookup = new Promise<void>((resolve) => { manualLookupObserved = resolve; });
+    let blockFirstLookup = true;
+    store.getProductionDraft = async (draftId) => {
+      const captured = await getProductionDraft(draftId);
+      if (blockFirstLookup && draftId === poison.draftId) {
+        blockFirstLookup = false;
+        manualLookupObserved();
+        await releaseManual;
+      }
+      return captured;
+    };
+    const app = buildProductionApp({
+      dataRoot: rootDir, store, trustedActorSecret: sharedSecret,
+      handoffReader: { async getHandoff() { return handoff; } }
+    });
+
+    const manualImportPromise = app.inject({
+      method: "POST", url: "/v1/production/drafts", headers: productionHeaders, payload: poison
+    });
+    await manualLookup;
+    const handoffEntry = await app.inject({
+      method: "POST", url: `/v1/production/drafts/from-handoff/${handoff.handoffId}`,
+      headers: productionHeaders
+    });
+    releaseManualLookup();
+    const manualImport = await manualImportPromise;
+
+    expect(handoffEntry.statusCode).toBe(201);
+    expect(manualImport.statusCode).toBe(409);
+    await expect(getProductionDraft(poison.draftId)).resolves.toMatchObject({
+      businessId: "local",
+      source: { sourceRef: `offer-handoff:${handoff.handoffId}` }
+    });
+    await app.close();
+  });
+
+  it("creates a handoff draft insert-only and emits one audit under concurrent entry", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-handoff-concurrent-"));
+    const store = new ProductionStore({ rootDir });
+    const auditLog = new AuditLogStore({ rootDir });
+    const handoff = buildHandoff();
+    let waitingReaders = 0;
+    let releaseReaders!: () => void;
+    const readerBarrier = new Promise<void>((resolve) => { releaseReaders = resolve; });
+    const handoffReader = { async getHandoff() {
+      waitingReaders += 1;
+      if (waitingReaders === 2) releaseReaders();
+      await readerBarrier;
+      return handoff;
+    } };
+    const app = buildProductionApp({
+      dataRoot: rootDir, store, auditLog, trustedActorSecret: sharedSecret,
+      handoffReader
+    });
+    const request = () => app.inject({
+      method: "POST" as const, url: `/v1/production/drafts/from-handoff/${handoff.handoffId}`,
+      headers: productionHeaders
+    });
+
+    const responses = await Promise.all([request(), request()]);
+
+    expect(responses.map((response) => response.statusCode)).toEqual([201, 201]);
+    await expect(store.listProductionDrafts()).resolves.toHaveLength(1);
+    const audits = (await auditLog.listRecentFor({ businessId: "local" }, 20))
+      .filter((entry) => entry.action === "production.draft_created_from_handoff");
+    expect(audits).toHaveLength(1);
+    await app.close();
+  });
+
+  it("repairs production handoff-entry audit evidence after draft publication", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-handoff-audit-retry-"));
+    const store = new ProductionStore({ rootDir });
+    const auditLog = new AuditLogStore({ rootDir });
+    const handoff = buildHandoff();
+    const logFor = auditLog.logFor.bind(auditLog);
+    let injectFailure = true;
+    auditLog.logFor = async (...args) => {
+      if (injectFailure && args[1].action === "production.draft_created_from_handoff") {
+        injectFailure = false;
+        throw new Error("injected production handoff audit failure");
+      }
+      return logFor(...args);
+    };
+    const app = buildProductionApp({
+      dataRoot: rootDir, store, auditLog, trustedActorSecret: sharedSecret,
+      handoffReader: { async getHandoff() { return handoff; } }
+    });
+    const request = () => app.inject({
+      method: "POST" as const, url: `/v1/production/drafts/from-handoff/${handoff.handoffId}`,
+      headers: productionHeaders
+    });
+
+    const first = await request();
+    const retry = await request();
+
+    expect(first.statusCode).toBe(500);
+    expect(retry.statusCode).toBe(201);
+    await expect(store.listProductionDrafts()).resolves.toHaveLength(1);
+    const audits = (await auditLog.listRecentFor({ businessId: "local" }, 20))
+      .filter((entry) => entry.action === "production.draft_created_from_handoff");
+    expect(audits).toHaveLength(1);
     await app.close();
   });
 });
