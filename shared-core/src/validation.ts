@@ -2,9 +2,11 @@ import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import type { ErrorObject } from "ajv";
 import { llmReadinessForbiddenPayloadKeys } from "./llm-readiness.js";
+import { assertApprovalRequestRecordSemantics } from "./approval-request-identity.js";
 import { schemaBundle } from "./schemas/index.js";
 import type {
   AcceptedEventSpec,
+  ApprovalRequestRecord,
   EventRequest,
   OfferDraft,
   ProductionDraft,
@@ -34,6 +36,7 @@ const addFormats = (
   (addFormatsModule as unknown as (ajv: unknown) => void);
 
 type SchemaName =
+  | "approvalRequest"
   | "eventRequest"
   | "offerDraft"
   | "acceptedEventSpec"
@@ -47,6 +50,7 @@ type Validator = ((value: unknown) => boolean) & {
 };
 
 const schemaIds: Record<SchemaName, string> = {
+  approvalRequest: "https://schemas.catering.local/approval-request.json",
   eventRequest: "https://schemas.catering.local/event-request.json",
   offerDraft: "https://schemas.catering.local/offer-draft.json",
   acceptedEventSpec: "https://schemas.catering.local/accepted-event-spec.json",
@@ -192,6 +196,12 @@ function validateProductionDraftSemantics(value: ProductionDraft): string[] {
 
 export function validateEventRequest(value: EventRequest): EventRequest {
   return assertValid("eventRequest", value);
+}
+
+export function validateApprovalRequestRecord(value: ApprovalRequestRecord): ApprovalRequestRecord {
+  const record = assertValid("approvalRequest", value);
+  assertApprovalRequestRecordSemantics(record);
+  return record;
 }
 
 export function validateOfferDraft(value: OfferDraft): OfferDraft {
