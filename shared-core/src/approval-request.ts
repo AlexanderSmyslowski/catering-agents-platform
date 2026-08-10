@@ -4,10 +4,10 @@ import {
   type TrustedActor
 } from "./access-control.js";
 import {
-  approvalRequestIdForTarget,
-  assertApprovalRequestRecordSemantics
+  approvalRequestIdForTarget
 } from "./approval-request-identity.js";
 import type { ApprovalRequestRecord } from "./types.js";
+import { validateApprovalRequestRecord } from "./validation.js";
 
 export { approvalRequestIdForTarget } from "./approval-request-identity.js";
 
@@ -50,6 +50,5 @@ export function createApprovalRequestRecord(
     ...(input.comment === undefined ? {} : { comment: input.comment })
   };
 
-  assertApprovalRequestRecordSemantics(record);
-  return record;
+  return validateApprovalRequestRecord(record);
 }

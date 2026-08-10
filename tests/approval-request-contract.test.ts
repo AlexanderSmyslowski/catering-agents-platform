@@ -28,6 +28,13 @@ const roles = [
   "operations_audit_operator"
 ] as const;
 
+const trustedFactoryActor = {
+  name: "Angebots-Mitarbeiter",
+  businessId: "alpha",
+  source: "trusted-proxy:x-catering-actor-name" as const,
+  trusted: true
+};
+
 type ApprovalOverrides = Omit<Partial<ApprovalRequestRecord>, "target" | "decidedBy"> & {
   target?: Partial<ApprovalRequestRecord["target"]>;
   decidedBy?: Partial<ApprovalRequestRecord["decidedBy"]>;
@@ -56,6 +63,22 @@ function validApproval(
     },
     ...recordOverrides
   } as ApprovalRequestRecord;
+}
+
+function createFactoryRecord(overrides: {
+  actor?: Record<string, unknown>;
+  target?: Record<string, unknown>;
+  selectedVariantId?: string;
+  comment?: string;
+} = {}): ApprovalRequestRecord {
+  return createApprovalRequestRecord({
+    actor: { ...trustedFactoryActor, ...overrides.actor },
+    role: "offer_operator",
+    target: { ...target, ...overrides.target },
+    decision: "approved",
+    ...(overrides.selectedVariantId === undefined ? {} : { selectedVariantId: overrides.selectedVariantId }),
+    ...(overrides.comment === undefined ? {} : { comment: overrides.comment })
+  } as never);
 }
 
 describe("ApprovalRequestRecord contract", () => {
@@ -162,6 +185,32 @@ describe("ApprovalRequestRecord contract", () => {
       },
       comment: "Freigegeben."
     });
+  });
+
+  it("always returns a record accepted by the public validator", () => {
+    const record = createFactoryRecord({
+      selectedVariantId: "variant-standard",
+      comment: "Freigegeben."
+    });
+
+    expect(validateApprovalRequestRecord(record)).toEqual(record);
+  });
+
+  it.each(["", "x".repeat(161)])("rejects an invalid runtime actor name", (name) => {
+    expect(() => createFactoryRecord({ actor: { name } })).toThrow();
+  });
+
+  it.each(["", "   ", "x".repeat(161)])("rejects an invalid selected variant ID", (selectedVariantId) => {
+    expect(() => createFactoryRecord({ selectedVariantId })).toThrow();
+  });
+
+  it("rejects an overlong runtime comment", () => {
+    expect(() => createFactoryRecord({ comment: "x".repeat(1001) })).toThrow();
+  });
+
+  it("rejects runtime unknown target and actor fields", () => {
+    expect(() => createFactoryRecord({ target: { clientTargetField: "untrusted-client" } })).toThrow();
+    expect(() => createFactoryRecord({ actor: { clientActorField: "untrusted-client" } })).toThrow();
   });
 
   it("does not create a final approval from an untrusted actor", () => {
@@ -282,7 +331,7 @@ describe("ApprovalRequestRecord contract", () => {
     const approvalModule = readFileSync("shared-core/src/approval-request.ts", "utf8");
     const validationModule = readFileSync("shared-core/src/validation.ts", "utf8");
 
-    expect(approvalModule).not.toContain('from "./validation.js"');
+    expect(approvalModule).toContain('from "./validation.js"');
     expect(validationModule).not.toContain('from "./approval-request.js"');
     await expect(import("../shared-core/src/approval-request.js")).resolves.toHaveProperty("createApprovalRequestRecord");
     await expect(import("../shared-core/src/validation.js")).resolves.toHaveProperty("validateApprovalRequestRecord");

@@ -35,7 +35,12 @@ export function assertTrustedFinalApprovalActor(
   actor: TrustedActor
 ): asserts actor is TrustedActor & { source: TrustedFinalApprovalActorSource; trusted: true } {
   // The resolver alone authenticates proxy headers; this guard only preserves its trusted provenance invariant.
-  if (!actor.trusted || !isTrustedFinalApprovalSource(actor.source)) {
+  const allowedActorKeys = ["name", "businessId", "source", "trusted"];
+  if (
+    Object.keys(actor).some((key) => !allowedActorKeys.includes(key)) ||
+    !actor.trusted ||
+    !isTrustedFinalApprovalSource(actor.source)
+  ) {
     throw new Error("Vertrauenswürdiger Proxy-Actor für finale Freigaben erforderlich.");
   }
 }
