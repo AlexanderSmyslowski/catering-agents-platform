@@ -282,6 +282,24 @@ describe("Task 1 review fixes", () => {
     await expect(scoped.list({ businessId: "alpha" })).resolves.toEqual([]);
   });
 
+  it("does not mask a real postgres initialization error as pg-mem compatibility", async () => {
+    const databaseError = Object.assign(new Error("permission denied"), { code: "42501" });
+    let queryCount = 0;
+    const scoped = createBusinessScopedPersistentCollection({
+      collectionName: "database-error",
+      getId: (record: { id: string }) => record.id,
+      pgPool: {
+        async query() {
+          queryCount += 1;
+          throw databaseError;
+        }
+      }
+    });
+
+    await expect(scoped.list({ businessId: "alpha" })).rejects.toBe(databaseError);
+    expect(queryCount).toBe(1);
+  });
+
   it("backfills only valid legacy Int32 versions", async () => {
     const { Pool } = newDb().adapters.createPg();
     const pool = new Pool();
@@ -290,7 +308,10 @@ describe("Task 1 review fixes", () => {
       ["zero", 0, 0],
       ["max", 2_147_483_647, 2_147_483_647],
       ["missing", undefined, null],
+      ["null", null, null],
       ["string", "1", null],
+      ["text", "not-a-number", null],
+      ["boolean", true, null],
       ["fraction", 1.5, null],
       ["negative", -1, null],
       ["overflow", 2_147_483_648, null]

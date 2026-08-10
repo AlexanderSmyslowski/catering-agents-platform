@@ -60,6 +60,100 @@ function parsePayload<T>(value: unknown): T {
 const poolCache = new Map<string, Pool>();
 const initCache = new WeakMap<object, Map<string, Promise<void>>>();
 
+const BUSINESS_RECORDS_SCHEMA_MIGRATION = `
+DO $migration$
+BEGIN
+  PERFORM pg_advisory_xact_lock(1128355397, 2);
+
+  CREATE TABLE IF NOT EXISTS catering_schema_migrations (
+    unit_name TEXT PRIMARY KEY,
+    version_number INTEGER NOT NULL,
+    completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM catering_schema_migrations
+    WHERE unit_name = 'catering_business_records'
+      AND version_number >= 2
+  ) THEN
+    CREATE TABLE IF NOT EXISTS catering_business_records (
+      business_id TEXT NOT NULL,
+      collection_name TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      version_number INTEGER,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (business_id, collection_name, record_id)
+    );
+
+    ALTER TABLE catering_business_records
+      ADD COLUMN IF NOT EXISTS version_number INTEGER;
+
+    UPDATE catering_business_records
+    SET version_number = ((payload ->> 'version')::numeric)::integer
+    WHERE version_number IS NULL
+      AND CASE
+        WHEN jsonb_typeof(payload -> 'version') = 'number' THEN
+          CASE
+            WHEN (payload ->> 'version')::numeric BETWEEN 0 AND 2147483647 THEN
+              (payload ->> 'version')::numeric = trunc((payload ->> 'version')::numeric)
+            ELSE FALSE
+          END
+        ELSE FALSE
+      END;
+
+    INSERT INTO catering_schema_migrations (unit_name, version_number, completed_at)
+    VALUES ('catering_business_records', 2, NOW())
+    ON CONFLICT (unit_name) DO UPDATE
+    SET version_number = GREATEST(catering_schema_migrations.version_number, EXCLUDED.version_number),
+        completed_at = NOW();
+  END IF;
+END
+$migration$;
+`;
+
+function isPgMemDoParserError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const stack = error.stack ?? "";
+  return stack.includes("node_modules/pg-mem/")
+    && error.message.includes("invalid syntax")
+    && error.message.includes("Unexpected input");
+}
+
+function isPgMemDuplicateRelation(error: unknown, relationName: string): boolean {
+  if (!(error instanceof Error)) return false;
+  return (error.stack ?? "").includes("node_modules/pg-mem/")
+    && error.message.startsWith(`relation "${relationName}" already exists`);
+}
+
+async function createPgMemTable(queryable: Queryable, relationName: string, sql: string): Promise<void> {
+  try {
+    await queryable.query(sql);
+  } catch (error) {
+    if (!isPgMemDuplicateRelation(error, relationName)) throw error;
+  }
+}
+
+async function runPgMemBusinessRecordsMigration(queryable: Queryable): Promise<void> {
+  // pg-mem cannot parse PostgreSQL DO blocks; this adapter-only path mirrors schema v2 without becoming a production fallback.
+  await createPgMemTable(queryable, "catering_schema_migrations", "CREATE TABLE catering_schema_migrations (unit_name TEXT PRIMARY KEY, version_number INTEGER NOT NULL, completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+  await createPgMemTable(queryable, "catering_business_records", "CREATE TABLE catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, version_number INTEGER, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))");
+  await queryable.query("ALTER TABLE catering_business_records ADD COLUMN IF NOT EXISTS version_number INTEGER");
+  await queryable.query("UPDATE catering_business_records SET version_number = (payload ->> 'version')::numeric::integer WHERE version_number IS NULL AND CASE WHEN payload -> 'version' BETWEEN '0'::jsonb AND '2147483647'::jsonb AND (payload -> 'version')::text <> 'null' THEN (payload ->> 'version')::numeric = (payload ->> 'version')::numeric::integer ELSE FALSE END");
+  await queryable.query("INSERT INTO catering_schema_migrations (unit_name, version_number, completed_at) VALUES ('catering_business_records', 2, NOW()) ON CONFLICT (unit_name) DO UPDATE SET version_number = 2, completed_at = NOW()");
+}
+
+async function runBusinessRecordsSchemaMigration(queryable: Queryable): Promise<void> {
+  try {
+    // One statement pins arbitrary pool/wrapper implementations to one PostgreSQL transaction and session.
+    await queryable.query(BUSINESS_RECORDS_SCHEMA_MIGRATION);
+  } catch (error) {
+    if (!isPgMemDoParserError(error)) throw error;
+    await runPgMemBusinessRecordsMigration(queryable);
+  }
+}
+
 function getCachedPool(connectionString: string): Pool {
   const existing = poolCache.get(connectionString);
   if (existing) {
@@ -561,21 +655,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
     initCache.set(key, initializers);
     const schemaUnit = "catering_business_records:v2";
     if (!initializers.has(schemaUnit)) {
-      initializers.set(schemaUnit, (async () => {
-        const existing = await this.queryable.query("SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'catering_business_records'");
-        if (existing.rows.length === 0) {
-          await this.queryable.query("CREATE TABLE IF NOT EXISTS catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, version_number INTEGER, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))");
-        }
-        await this.queryable.query("ALTER TABLE catering_business_records ADD COLUMN IF NOT EXISTS version_number INTEGER");
-        // JSON payloads predate the denormalized CAS column; only safe integers are backfilled.
-        const records = await this.queryable.query("SELECT business_id, collection_name, record_id, payload, version_number FROM catering_business_records");
-        for (const record of records.rows) {
-          if (record.version_number === null || record.version_number === undefined) {
-            const version = versionOf(parsePayload<unknown>(record.payload));
-            if (version !== undefined) await this.queryable.query("UPDATE catering_business_records SET version_number = $4 WHERE business_id = $1 AND collection_name = $2 AND record_id = $3", [record.business_id, record.collection_name, record.record_id, version]);
-          }
-        }
-      })());
+      initializers.set(schemaUnit, runBusinessRecordsSchemaMigration(this.queryable));
     }
     await initializers.get(schemaUnit);
   }
