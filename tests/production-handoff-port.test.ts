@@ -46,7 +46,7 @@ function buildHandoff(overrides: Partial<ProductionHandoff> = {}): ProductionHan
 function buildPoisonedProductionDraft(handoff: ProductionHandoff) {
   return validateProductionDraft({
     schemaVersion: handoff.eventSpecSnapshot.schemaVersion,
-    businessId: "other",
+    businessId: handoff.businessId,
     draftId: `production-draft-handoff-${handoff.handoffId}`,
     status: "pending_review",
     createdAt: handoff.createdAt,
@@ -141,7 +141,7 @@ describe("production handoff port", () => {
     };
     const createdDraft = await offerApp.inject({ method: "POST", url: "/v1/offers/from-text", headers: offerHeaders, payload: { text: "Business Lunch fuer 35 Personen." } });
     const draft = createdDraft.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
-    const approved = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: offerHeaders, payload: { decision: "approved", variantId: draft.variantSet[0]!.variantId } });
+    const approved = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: offerHeaders, payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId } });
     const approvedOfferId = approved.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
     const createdHandoff = await offerApp.inject({ method: "POST", url: `/v1/offers/approved/${approvedOfferId}/handoffs`, headers: offerHeaders, payload: {} });
     const handoffId = createdHandoff.json<{ handoff: { handoffId: string } }>().handoff.handoffId;
@@ -152,7 +152,7 @@ describe("production handoff port", () => {
     expect(entered.statusCode).toBe(201);
     expect(entered.json()).toMatchObject({ draft: { businessId: "local", source: { sourceRef: `offer-handoff:${handoffId}` } } });
 
-    const forbiddenMutation = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: productionHeaders, payload: { decision: "rejected" } });
+    const forbiddenMutation = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: productionHeaders, payload: { decision: "rejected", revision: 1 } });
     expect(forbiddenMutation.statusCode).toBe(403);
 
     await productionApp.close();
@@ -179,7 +179,84 @@ describe("production handoff port", () => {
     });
 
     expect(response.statusCode).toBe(502);
-    await expect(store.listProductionDrafts()).resolves.toHaveLength(0);
+    await expect(store.listProductionDrafts(localBusiness)).resolves.toHaveLength(0);
+    await app.close();
+  });
+
+  it("isolates handoff-derived drafts from every other business read and mutation path", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-handoff-draft-scope-"));
+    const store = new ProductionStore({ rootDir });
+    const handoff = buildHandoff({ businessId: "alpha" });
+    const app = buildProductionApp({
+      dataRoot: rootDir,
+      store,
+      trustedActorSecret: sharedSecret,
+      handoffReader: { async getHandoff() { return handoff; } }
+    });
+    const headersFor = (businessId: string) => ({
+      "x-catering-trusted-secret": sharedSecret,
+      "x-catering-actor-name": "Produktions-Mitarbeiter",
+      "x-catering-business-id": businessId
+    });
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/production/drafts/from-handoff/${handoff.handoffId}`,
+      headers: headersFor("alpha")
+    });
+    expect(created.statusCode).toBe(201);
+    const draft = created.json<{ draft: ReturnType<typeof buildPoisonedProductionDraft> }>().draft;
+
+    const alphaList = await app.inject({
+      method: "GET",
+      url: "/v1/production/drafts",
+      headers: headersFor("alpha")
+    });
+    const betaList = await app.inject({
+      method: "GET",
+      url: "/v1/production/drafts",
+      headers: headersFor("beta")
+    });
+    const betaReview = await app.inject({
+      method: "PATCH",
+      url: `/v1/production/drafts/${draft.draftId}/review-cards/${draft.reviewCards[0]!.cardId}`,
+      headers: headersFor("beta"),
+      payload: { decision: "fits" }
+    });
+    const betaRevision = await app.inject({
+      method: "POST",
+      url: `/v1/production/drafts/${draft.draftId}/revise`,
+      headers: headersFor("beta")
+    });
+    const betaDecision = await app.inject({
+      method: "POST",
+      url: `/v1/production/drafts/${draft.draftId}/decision`,
+      headers: headersFor("beta"),
+      payload: { approve: false }
+    });
+    const betaApply = await app.inject({
+      method: "POST",
+      url: `/v1/production/drafts/${draft.draftId}/apply`,
+      headers: headersFor("beta")
+    });
+    const betaImport = await app.inject({
+      method: "POST",
+      url: "/v1/production/drafts",
+      headers: headersFor("beta"),
+      payload: {
+        ...draft,
+        draftId: "production-draft-alpha-imported-by-beta",
+        source: { ...draft.source, sourceRef: "manual-cross-business-import" }
+      }
+    });
+    expect(alphaList.json<{ items: unknown[] }>().items).toHaveLength(1);
+    expect(betaList.json<{ items: unknown[] }>().items).toHaveLength(0);
+    expect(await store.getProductionDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
+    expect(await store.getProductionDraft({ businessId: "beta" }, draft.draftId)).toBeUndefined();
+    expect([betaReview.statusCode, betaRevision.statusCode, betaDecision.statusCode, betaApply.statusCode])
+      .toEqual([404, 404, 404, 404]);
+    expect(betaImport.statusCode).toBe(422);
+
     await app.close();
   });
 
@@ -188,7 +265,7 @@ describe("production handoff port", () => {
     const store = new ProductionStore({ rootDir });
     const handoff = buildHandoff();
     const poison = buildPoisonedProductionDraft(handoff);
-    await store.saveProductionDraft(poison);
+    await store.saveProductionDraft(localBusiness, poison);
     const app = buildProductionApp({
       dataRoot: rootDir, store, trustedActorSecret: sharedSecret,
       handoffReader: { async getHandoff() { return handoff; } }
@@ -201,7 +278,7 @@ describe("production handoff port", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).not.toHaveProperty("draft");
-    await expect(store.getProductionDraft(poison.draftId)).resolves.toEqual(poison);
+    await expect(store.getProductionDraft(localBusiness, poison.draftId)).resolves.toEqual(poison);
     await app.close();
   });
 
@@ -216,8 +293,8 @@ describe("production handoff port", () => {
     let manualLookupObserved!: () => void;
     const manualLookup = new Promise<void>((resolve) => { manualLookupObserved = resolve; });
     let blockFirstLookup = true;
-    store.getProductionDraft = async (draftId) => {
-      const captured = await getProductionDraft(draftId);
+    store.getProductionDraft = async (context, draftId) => {
+      const captured = await getProductionDraft(context, draftId);
       if (blockFirstLookup && draftId === poison.draftId) {
         blockFirstLookup = false;
         manualLookupObserved();
@@ -243,7 +320,7 @@ describe("production handoff port", () => {
 
     expect(handoffEntry.statusCode).toBe(201);
     expect(manualImport.statusCode).toBe(409);
-    await expect(getProductionDraft(poison.draftId)).resolves.toMatchObject({
+    await expect(getProductionDraft(localBusiness, poison.draftId)).resolves.toMatchObject({
       businessId: "local",
       source: { sourceRef: `offer-handoff:${handoff.handoffId}` }
     });
@@ -276,7 +353,7 @@ describe("production handoff port", () => {
     const responses = await Promise.all([request(), request()]);
 
     expect(responses.map((response) => response.statusCode)).toEqual([201, 201]);
-    await expect(store.listProductionDrafts()).resolves.toHaveLength(1);
+    await expect(store.listProductionDrafts(localBusiness)).resolves.toHaveLength(1);
     const audits = (await auditLog.listRecentFor({ businessId: "local" }, 20))
       .filter((entry) => entry.action === "production.draft_created_from_handoff");
     expect(audits).toHaveLength(1);
@@ -311,7 +388,7 @@ describe("production handoff port", () => {
 
     expect(first.statusCode).toBe(500);
     expect(retry.statusCode).toBe(201);
-    await expect(store.listProductionDrafts()).resolves.toHaveLength(1);
+    await expect(store.listProductionDrafts(localBusiness)).resolves.toHaveLength(1);
     const audits = (await auditLog.listRecentFor({ businessId: "local" }, 20))
       .filter((entry) => entry.action === "production.draft_created_from_handoff");
     expect(audits).toHaveLength(1);

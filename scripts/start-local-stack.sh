@@ -97,12 +97,11 @@ stack_session_exists() {
   return 1
 }
 
-recorded_data_root="$(cat "${DATA_ROOT_FILE}" 2>/dev/null || true)"
-if stack_session_exists && [[ -n "${recorded_data_root}" && "${recorded_data_root}" != "${DATA_ROOT}" ]]; then
-  echo "Lokaler Stack laeuft bereits mit Datenwurzel: ${recorded_data_root}"
-  echo "Angefragte Datenwurzel wird fuer diesen laufenden Stack nicht uebernommen: ${DATA_ROOT}"
-  echo "Bitte npm run local:stop ausfuehren, bevor die lokale Datenwurzel gewechselt wird."
-  DATA_ROOT="${recorded_data_root}"
+# Scoped migrations snapshot legacy collections; an older live service could otherwise publish after completion.
+if stack_session_exists; then
+  echo "Lokaler Stack laeuft bereits; Business-Scope-Migration erfordert ruhende Schreibprozesse." >&2
+  echo "Bitte npm run local:stop ausfuehren und den Stack danach erneut starten." >&2
+  exit 1
 fi
 
 printf '%s\n' "${DATA_ROOT}" >"${DATA_ROOT_FILE}"

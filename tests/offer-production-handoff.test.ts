@@ -22,6 +22,26 @@ const trustedHeaders = {
 };
 
 describe("offer production handoff", () => {
+  it("rejects duplicate variant IDs in an OfferDraft", () => {
+    const draft = {
+      ...createOfferDraft(createEventRequestFromText({
+        requestId: "duplicate-variant-schema",
+        channel: "text",
+        rawText: "Lunch fuer 20 Personen."
+      })),
+      businessId: "local" as const,
+      revision: 1
+    };
+    const duplicateVariantId = draft.variantSet[0]!.variantId;
+
+    expect(() => validateOfferDraft({
+      ...draft,
+      variantSet: draft.variantSet.map((variant, index) => index === 1
+        ? { ...structuredClone(variant), variantId: duplicateVariantId }
+        : structuredClone(variant))
+    })).toThrow("OfferDraft-Varianten müssen eindeutige variantId-Werte besitzen.");
+  });
+
   it("creates an idempotent immutable snapshot from an approved offer", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-offer-handoff-"));
     const store = new OfferStore({ rootDir });
@@ -41,7 +61,7 @@ describe("offer production handoff", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: trustedHeaders,
-      payload: { decision: "approved", variantId: draft.variantSet[0]?.variantId }
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]?.variantId }
     });
     const approvedOfferId = decisionResponse.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
     const originalDraft = await store.getDraft({ businessId: "local" }, draft.draftId);
@@ -78,7 +98,7 @@ describe("offer production handoff", () => {
     const selectedVariant = draft.variantSet[0]!;
     expect(selectedVariant.proposedEventSpec.budgetContext.pricingSummary.subtotal.amount).not.toBe(draft.pricingSummary.subtotal.amount);
 
-    const decision = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders, payload: { decision: "approved", variantId: selectedVariant.variantId } });
+    const decision = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders, payload: { decision: "approved", revision: 1, variantId: selectedVariant.variantId } });
     expect(decision.statusCode).toBe(201);
     const approvedOffer = decision.json<{ approvedOffer: { approvedOfferId: string; pricingSummary: unknown } }>().approvedOffer;
     expect(approvedOffer.pricingSummary).toEqual(selectedVariant.proposedEventSpec.budgetContext.pricingSummary);
@@ -102,7 +122,7 @@ describe("offer production handoff", () => {
     const draft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
     const decision = await app.inject({
       method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders,
-      payload: { decision: "approved", variantId: draft.variantSet[0]!.variantId }
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
     const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
     const logFor = auditLog.logFor.bind(auditLog);

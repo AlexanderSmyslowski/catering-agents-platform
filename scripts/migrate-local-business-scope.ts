@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { assertBusinessId, validateOfferDraft, type AuditEntry, type OfferDraft } from "../shared-core/src/index.js";
+import {
+  assertBusinessId,
+  validateOfferDraft,
+  validateProductionDraft,
+  type AuditEntry,
+  type OfferDraft,
+  type ProductionDraft
+} from "../shared-core/src/index.js";
 import {
   createBusinessScopedPersistentCollection,
   createPersistentCollection,
@@ -16,13 +23,19 @@ interface MigrationManifest {
 }
 
 interface MigrationUnitResult {
-  name: "stage-a-001-audit" | "stage-a-002-offers";
+  name: "stage-a-001-audit" | "stage-a-002-offers" | "stage-a-003-production-drafts";
   status: "migrated" | "already_migrated";
 }
 
 export interface LocalBusinessScopeMigrationOptions extends CollectionStorageOptions {
   businessId: string;
-  faultInjector?: (phase: "after_record_publish" | "after_offer_record_publish" | "before_manifest_publish" | "after_manifest_publish") => void;
+  faultInjector?: (phase:
+    | "after_record_publish"
+    | "after_offer_record_publish"
+    | "after_production_draft_record_publish"
+    | "before_manifest_publish"
+    | "after_manifest_publish"
+  ) => void;
 }
 
 function stableJson(value: unknown): string {
@@ -108,6 +121,75 @@ async function recordPgCompletion(
   );
 }
 
+async function migrateProductionDrafts(
+  options: LocalBusinessScopeMigrationOptions,
+  businessId: string,
+  queryable: Queryable | undefined,
+  manifest: MigrationManifest | undefined
+): Promise<MigrationUnitResult> {
+  const name = "stage-a-003-production-drafts" as const;
+  if (queryable ? await pgCompletion(queryable, businessId, name) : manifest?.completed[name]) {
+    return { name, status: "already_migrated" };
+  }
+
+  const legacy = createPersistentCollection<Record<string, unknown>>({
+    collectionName: "production/drafts",
+    getId: (draft) => String(draft.draftId),
+    rootDir: queryable ? undefined : options.rootDir,
+    pgPool: queryable
+  });
+  const target = createBusinessScopedPersistentCollection<ProductionDraft>({
+    collectionName: "production/drafts",
+    getId: (draft) => draft.draftId,
+    validate: validateProductionDraft,
+    rootDir: queryable ? undefined : options.rootDir,
+    pgPool: queryable
+  });
+  const sourceDrafts = await legacy.list();
+  const transformed = sourceDrafts.map((draft) => {
+    if (draft.businessId !== undefined && draft.businessId !== businessId) {
+      throw new Error("Legacy-ProductionDraft passt nicht zum konfigurierten Betriebskontext.");
+    }
+    return validateProductionDraft({ ...draft, businessId } as unknown as ProductionDraft);
+  });
+  for (const draft of transformed) {
+    await target.insert({ businessId }, draft);
+  }
+
+  const targetDrafts = await target.list({ businessId });
+  const expectedHash = hashRecords(
+    [...transformed].sort((left, right) => left.draftId.localeCompare(right.draftId))
+  );
+  const actualHash = hashRecords(
+    [...targetDrafts].sort((left, right) => left.draftId.localeCompare(right.draftId))
+  );
+  if (transformed.length !== targetDrafts.length || expectedHash !== actualHash) {
+    throw new Error("ProductionDraft-Migration konnte nicht verifiziert werden.");
+  }
+
+  options.faultInjector?.("after_production_draft_record_publish");
+  const completion = {
+    completedAt: new Date().toISOString(),
+    sourceCount: sourceDrafts.length,
+    targetCount: targetDrafts.length,
+    hash: actualHash
+  };
+  if (queryable) {
+    await recordPgCompletion(
+      queryable,
+      businessId,
+      name,
+      sourceDrafts.length,
+      targetDrafts.length,
+      actualHash
+    );
+  } else {
+    manifest!.completed[name] = completion;
+    writeManifest(options, businessId, manifest!);
+  }
+  return { name, status: "migrated" };
+}
+
 export async function runLocalBusinessScopeMigration(options: LocalBusinessScopeMigrationOptions): Promise<{ units: MigrationUnitResult[] }> {
   const businessId = assertBusinessId(options.businessId);
   const name = "stage-a-001-audit" as const;
@@ -178,6 +260,7 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
       writeManifest(options, businessId, manifest!);
     }
     units.push({ name: offerName, status: "already_migrated" });
+    units.push(await migrateProductionDrafts(options, businessId, queryable, manifest));
     return { units };
   }
   const scopedOffers = createBusinessScopedPersistentCollection<OfferDraft>({ collectionName: "offers/drafts", getId: (draft) => draft.draftId, getVersion: (draft) => draft.revision, validate: validateOfferDraft, rootDir: queryable ? undefined : options.rootDir, pgPool: queryable });
@@ -195,6 +278,7 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
   if (queryable) await recordPgCompletion(queryable, businessId, offerName, sourceOffers.length, targetOffers.length, actualOfferHash, { discarded: strippedHandoffs.length > 0, count: strippedHandoffs.length, hash: strippedHandoffHash });
   else { manifest!.completed[offerName] = offerCompletion; writeManifest(options, businessId, manifest!); }
   units.push({ name: offerName, status: "migrated" });
+  units.push(await migrateProductionDrafts(options, businessId, queryable, manifest));
   return { units };
 }
 

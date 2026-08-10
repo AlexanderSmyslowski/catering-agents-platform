@@ -372,10 +372,10 @@ export async function createOfferFromText(text: string) {
   }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 
-export async function decideOfferDraft(draftId: string, variantId: string) {
+export async function decideOfferDraft(draftId: string, revision: number, variantId: string) {
   return fetchJson<{ approval: Record<string, unknown>; approvedOffer?: { approvedOfferId: string } }>(`/api/offers/v1/offers/drafts/${draftId}/decision`, {
     method: "POST",
-    body: JSON.stringify({ decision: "approved", variantId })
+    body: JSON.stringify({ decision: "approved", revision, variantId })
   }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 

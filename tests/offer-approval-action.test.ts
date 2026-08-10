@@ -19,6 +19,7 @@ describe("offer approval action", () => {
       },
       setApprovalBinding: (binding: {
         offerDraftId: string;
+        offerDraftRevision: number;
         approvedOfferId: string;
         handoffId?: string;
         productionDraftId?: string;
@@ -33,6 +34,7 @@ describe("offer approval action", () => {
       createProductionDraftFromHandoff: (handoffId: string) => Promise<{ draft: { draftId: string } }>;
       setApprovalBinding: (binding: {
         offerDraftId: string;
+        offerDraftRevision: number;
         approvedOfferId: string;
         handoffId?: string;
         productionDraftId?: string;
@@ -40,18 +42,18 @@ describe("offer approval action", () => {
       openProductionEntry: (draftId: string) => void;
     });
 
-    await action.approve("draft-1", "variant-1");
+    await action.approve("draft-1", 2, "variant-1");
     expect(calls).toEqual([
       "decision",
-      'binding:{"offerDraftId":"draft-1","approvedOfferId":"offer-1"}'
+      'binding:{"offerDraftId":"draft-1","offerDraftRevision":2,"approvedOfferId":"offer-1"}'
     ]);
-    await action.createHandoff("draft-1", "offer-1");
+    await action.createHandoff("draft-1", 2, "offer-1");
     expect(calls).toEqual([
       "decision",
-      'binding:{"offerDraftId":"draft-1","approvedOfferId":"offer-1"}',
+      'binding:{"offerDraftId":"draft-1","offerDraftRevision":2,"approvedOfferId":"offer-1"}',
       "handoff",
       "production:handoff-1",
-      'binding:{"offerDraftId":"draft-1","approvedOfferId":"offer-1","handoffId":"handoff-1","productionDraftId":"production-draft-1"}',
+      'binding:{"offerDraftId":"draft-1","offerDraftRevision":2,"approvedOfferId":"offer-1","handoffId":"handoff-1","productionDraftId":"production-draft-1"}',
       "open:production-draft-1"
     ]);
   });

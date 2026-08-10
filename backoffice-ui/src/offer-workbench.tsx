@@ -72,9 +72,9 @@ export type OfferWorkbenchProps = {
   activeDraft?: Record<string, unknown>;
   selectedDraft?: Record<string, unknown>;
   setSelectedDraftId: (draftId: string) => void;
-  approveDraft: (draftId: string, variantId: string) => Promise<void>;
+  approveDraft: (draftId: string, revision: number, variantId: string) => Promise<void>;
   approvalBinding?: OfferApprovalBinding;
-  createHandoff?: (offerDraftId: string, approvedOfferId: string) => Promise<void>;
+  createHandoff?: (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
   activeSpec?: Record<string, unknown>;
   completeSpecCount: number;
@@ -110,6 +110,11 @@ function getDraftVariants(draft?: Record<string, unknown>): Array<Record<string,
 
 function getDraftId(draft?: Record<string, unknown>): string {
   return draft ? String(draft.draftId ?? "-") : "kein Entwurf";
+}
+
+function getDraftRevision(draft?: Record<string, unknown>): number | undefined {
+  const revision = draft?.revision;
+  return Number.isInteger(revision) && Number(revision) > 0 ? Number(revision) : undefined;
 }
 
 function getDraftProposedSpec(draft?: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -208,7 +213,9 @@ export function OfferConversationalWorkbench({
   const focusedDraft = selectedDraft ?? activeDraft;
   const miniPilotCard = buildOfferMiniPilotCardState();
   const focusedDraftId = getDraftId(focusedDraft);
+  const focusedDraftRevision = getDraftRevision(focusedDraft);
   const focusedApprovalBinding = approvalBinding?.offerDraftId === focusedDraftId
+    && approvalBinding.offerDraftRevision === focusedDraftRevision
     ? approvalBinding
     : undefined;
   const focusedDraftLabel = renderDraftFocusLabel(focusedDraft);
@@ -449,8 +456,10 @@ export function OfferConversationalWorkbench({
                   <button
                     key={String(variant.variantId)}
                     className="secondary-button"
-                    disabled={submitting}
-                    onClick={() => void approveDraft(focusedDraftId, String(variant.variantId))}
+                    disabled={submitting || focusedDraftRevision === undefined}
+                    onClick={() => focusedDraftRevision === undefined
+                      ? undefined
+                      : void approveDraft(focusedDraftId, focusedDraftRevision, String(variant.variantId))}
                   >
                     {`Variante freigeben: ${String(variant.label ?? variant.variantId)}`}
                   </button>
@@ -462,7 +471,7 @@ export function OfferConversationalWorkbench({
                   <button
                     className="secondary-button"
                     disabled={submitting}
-                    onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.approvedOfferId)}
+                    onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.offerDraftRevision, focusedApprovalBinding.approvedOfferId)}
                   >
                     An Produktion übergeben
                   </button>

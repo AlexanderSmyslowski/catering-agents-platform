@@ -608,6 +608,7 @@ describe("backoffice route smoke", () => {
     const offerDrafts: Array<Record<string, unknown>> = [
       {
         draftId: "c3-draft-existing",
+        revision: 1,
         eventSummary: "Bestehender Lunch-Entwurf",
         variantSet: [{ variantId: "existing", label: "Bestehend" }],
         openQuestions: []
@@ -625,6 +626,7 @@ describe("backoffice route smoke", () => {
         postedBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
         const createdDraft = {
           draftId: "c3-draft-created",
+          revision: 1,
           eventSummary: "C3 Sommerfest-Angebot für 80 Personen",
           variantSet: [{ variantId: "classic", label: "Klassisch" }],
           openQuestions: ["Getränkepaket noch klären"],
@@ -772,7 +774,7 @@ describe("backoffice route smoke", () => {
     });
 
     const approvedText = document.body.textContent ?? "";
-    expect(approvalBodies).toEqual([{ decision: "approved", variantId: "classic" }]);
+    expect(approvalBodies).toEqual([{ decision: "approved", revision: 1, variantId: "classic" }]);
     expect(approvedText).toContain("Angebotsvariante wurde freigegeben.");
 
     await act(async () => {

@@ -18,6 +18,7 @@ import {
 } from "@catering/shared-core";
 
 const TRUSTED_SECRET = "production-draft-import-secret";
+const localBusiness = { businessId: "local" };
 const trustedProductionHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
   "x-catering-trusted-secret": TRUSTED_SECRET
@@ -182,7 +183,7 @@ describe("ProductionDraft import", () => {
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("ProductionDraft ist nicht schema-valide.");
       expect(response.body).not.toContain("SECRET_RAW_PROMPT_PAYLOAD");
-      expect(await store.listProductionDrafts()).toHaveLength(0);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }
@@ -213,7 +214,7 @@ describe("ProductionDraft import", () => {
 
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("pending_review");
-      expect(await store.listProductionDrafts()).toHaveLength(0);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }
@@ -242,7 +243,7 @@ describe("ProductionDraft import", () => {
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("Review-Karten");
       expect(response.body).toContain("productionPlan");
-      expect(await store.listProductionDrafts()).toHaveLength(0);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }
@@ -284,7 +285,7 @@ describe("ProductionDraft import", () => {
       expect(imported.statusCode).toBe(201);
       expect(duplicate.statusCode).toBe(409);
       expect(duplicate.body).toContain("ProductionDraft mit dieser ID existiert bereits.");
-      expect((await store.getProductionDraft(originalDraft.draftId))?.source.outputHash).toBe(
+      expect((await store.getProductionDraft(localBusiness, originalDraft.draftId))?.source.outputHash).toBe(
         "sha256:output-structured"
       );
     } finally {

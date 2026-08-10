@@ -6,6 +6,7 @@ import {
   validateApprovedOffer,
   validateProductionHandoff,
   type ApprovalRequestRecord,
+  type ApprovedOffer,
   type AuditLogStore,
   type TrustedActor
 } from "@catering/shared-core";
@@ -35,10 +36,36 @@ function sameDecision(
     && left.decidedBy.source === right.decidedBy.source;
 }
 
+function matchesStoredApproval(offer: ApprovedOffer, approval: ApprovalRequestRecord): boolean {
+  const selectedVariantId = approval.selectedVariantId;
+  const selectedPricing = offer.selectedVariant.proposedEventSpec.budgetContext?.pricingSummary;
+  return approval.decision === "approved"
+    && selectedVariantId !== undefined
+    && offer.businessId === approval.businessId
+    && offer.approvalRequestId === approval.approvalRequestId
+    && offer.sourceDraft.draftId === approval.target.artifactId
+    && offer.sourceDraft.revision === approval.target.revision
+    && offer.selectedVariantId === selectedVariantId
+    && offer.selectedVariant.variantId === selectedVariantId
+    && offer.approvedAt === approval.decidedAt
+    && selectedPricing !== undefined
+    && areJsonValuesEqual(offer.pricingSummary, selectedPricing);
+}
+
 export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApprovalRouteDependencies) {
   const { store, auditLog, requireOfferOperator, requireHandoffReader, actorForRequest } = deps;
+  const logApprovedOfferAudit = (actor: TrustedActor, approval: ApprovalRequestRecord, approvedOffer: ApprovedOffer) => auditLog.logFor(actor, {
+    action: "offer.approved",
+    entityType: "ApprovedOffer",
+    entityId: approvedOffer.approvedOfferId,
+    actor: approval.decidedBy,
+    at: approvedOffer.approvedAt,
+    idempotencyKey: `approved-offer:${approvedOffer.approvedOfferId}`,
+    summary: "Angebotsvariante explizit freigegeben.",
+    details: { draftId: approvedOffer.sourceDraft.draftId, variantId: approvedOffer.selectedVariantId }
+  });
 
-  app.post<{ Params: { draftId: string }; Body: { decision?: "approved" | "rejected"; variantId?: string; comment?: string } }>(
+  app.post<{ Params: { draftId: string }; Body: { decision?: "approved" | "rejected"; revision?: number; variantId?: string; comment?: string } }>(
     "/v1/offers/drafts/:draftId/decision",
     async (request, reply) => {
       const forbidden = requireOfferOperator(request, reply);
@@ -48,13 +75,51 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       if (!draft) return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
       const decision = request.body?.decision;
       if (decision !== "approved" && decision !== "rejected") return reply.code(422).send({ message: "Explizite Freigabeentscheidung erforderlich." });
-      const existing = await store.listApprovalsForDraft(actor, draft.draftId);
+      const requestedRevision = request.body?.revision;
+      if (!Number.isInteger(requestedRevision) || requestedRevision! < 1 || requestedRevision! > 2_147_483_647) {
+        return reply.code(422).send({ message: "Eine gültige Angebotsrevision ist für die Entscheidung erforderlich." });
+      }
+      const target = { kind: "offer_draft" as const, artifactId: draft.draftId, revision: requestedRevision! };
+      const existing = await store.listApprovalsForTarget(actor, target);
       if (existing.length > 1) {
         return reply.code(409).send({ message: "Für diesen Entwurf liegen widersprüchliche Entscheidungen vor." });
       }
       let stored: ApprovalRequestRecord | undefined = existing[0];
-      if (stored && stored.target.revision !== draft.revision) {
-        return reply.code(409).send({ message: "Die gespeicherte Entscheidung gehört zu einer anderen Angebotsrevision." });
+      if (draft.revision !== requestedRevision) {
+        if (!stored) {
+          return reply.code(409).send({ message: "Die angeforderte Angebotsrevision ist nicht mehr der aktuelle Entwurf." });
+        }
+        let retryApproval: ApprovalRequestRecord;
+        try {
+          retryApproval = createApprovalRequestRecord({
+            actor,
+            role: "offer_operator",
+            target,
+            decision,
+            ...(decision === "approved" && request.body.variantId !== undefined
+              ? { selectedVariantId: request.body.variantId }
+              : {}),
+            ...(request.body?.comment?.trim() ? { comment: request.body.comment.trim() } : {})
+          });
+        } catch (error) {
+          return reply.code(403).send({ message: error instanceof Error ? error.message : "Freigabe nicht zulässig." });
+        }
+        if (!sameDecision(stored, retryApproval)) {
+          return reply.code(409).send({ message: "Für diesen Entwurf liegt bereits eine andere Entscheidung vor." });
+        }
+        if (stored.decision === "rejected") {
+          return reply.code(201).send({ approval: stored });
+        }
+        const approvedOfferId = deterministicId("approved-offer", {
+          businessId: actor.businessId,
+          approvalRequestId: stored.approvalRequestId
+        });
+        const approvedOffer = await store.getApprovedOffer(actor, approvedOfferId);
+        if (!approvedOffer || !matchesStoredApproval(approvedOffer, stored)) {
+          return reply.code(409).send({ message: "Die ältere Angebotsentscheidung kann nicht aus ihrem unveränderlichen Freigabestand wiederhergestellt werden." });
+        }
+        await logApprovedOfferAudit(actor, stored, approvedOffer);
+        return reply.code(201).send({ approval: stored, approvedOffer });
       }
       const selectedVariant = decision === "approved" ? draft.variantSet.find((variant) => variant.variantId === request.body.variantId) : undefined;
       if (decision === "approved" && !selectedVariant) return reply.code(422).send({ message: "Eine vorhandene Angebotsvariante muss explizit gewählt werden." });
@@ -64,7 +129,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
         approval = createApprovalRequestRecord({
           actor,
           role: "offer_operator",
-          target: { kind: "offer_draft", artifactId: draft.draftId, revision: draft.revision },
+          target,
           decision,
           ...(selectedVariant ? { selectedVariantId: selectedVariant.variantId } : {}),
           ...(request.body?.comment?.trim() ? { comment: request.body.comment.trim() } : {})
@@ -74,6 +139,34 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       }
       if (stored && !sameDecision(stored, approval)) {
         return reply.code(409).send({ message: "Für diesen Entwurf liegt bereits eine andere Entscheidung vor." });
+      }
+      const buildApprovedOffer = (finalApproval: ApprovalRequestRecord) => {
+        const pricingSummary = selectedVariant?.proposedEventSpec.budgetContext?.pricingSummary;
+        if (!selectedVariant || !pricingSummary) {
+          throw new Error("The selected variant has no approvable pricing snapshot.");
+        }
+        return validateApprovedOffer({
+          schemaVersion: "1.0",
+          businessId: actor.businessId,
+          approvedOfferId: deterministicId("approved-offer", { businessId: actor.businessId, approvalRequestId: finalApproval.approvalRequestId }),
+          sourceDraft: { draftId: draft.draftId, revision: requestedRevision! },
+          selectedVariantId: selectedVariant.variantId,
+          approvalRequestId: finalApproval.approvalRequestId,
+          approvedAt: finalApproval.decidedAt,
+          eventSummary: draft.eventSummary,
+          customerFacingText: draft.customerFacingText,
+          serviceModules: structuredClone(draft.serviceModules),
+          pricingSummary: structuredClone(pricingSummary),
+          selectedVariant: structuredClone(selectedVariant)
+        });
+      };
+      let candidateApprovedOffer;
+      if (approval.decision === "approved") {
+        try {
+          candidateApprovedOffer = buildApprovedOffer(approval);
+        } catch {
+          return reply.code(422).send({ message: "Die gewählte Angebotsvariante enthält keinen vollständigen freigabefähigen Preis-Snapshot." });
+        }
       }
       if (!stored) {
         const inserted = await store.insertApproval(actor, approval);
@@ -86,32 +179,13 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       }
       const finalApproval = stored ?? approval;
       if (finalApproval.decision === "rejected") return reply.code(201).send({ approval: finalApproval });
-      const approvedOffer = validateApprovedOffer({
-        schemaVersion: "1.0",
-        businessId: actor.businessId,
-        approvedOfferId: deterministicId("approved-offer", { businessId: actor.businessId, approvalRequestId: finalApproval.approvalRequestId }),
-        sourceDraft: { draftId: draft.draftId, revision: draft.revision },
-        selectedVariantId: selectedVariant!.variantId,
-        approvalRequestId: finalApproval.approvalRequestId,
-        approvedAt: finalApproval.decidedAt,
-        eventSummary: draft.eventSummary,
-        customerFacingText: draft.customerFacingText,
-        serviceModules: structuredClone(draft.serviceModules),
-        pricingSummary: structuredClone(selectedVariant!.proposedEventSpec.budgetContext!.pricingSummary!),
-        selectedVariant: structuredClone(selectedVariant!)
-      });
+      const approvedOffer = stored ? buildApprovedOffer(finalApproval) : candidateApprovedOffer!;
       const created = await store.insertApprovedOffer(actor, approvedOffer);
       if (created === "exists") {
         const existingOffer = await store.getApprovedOffer(actor, approvedOffer.approvedOfferId);
         if (!areJsonValuesEqual(existingOffer, approvedOffer)) return reply.code(409).send({ message: "Freigegebenes Angebot stimmt nicht mit dem bestehenden Artefakt überein." });
       }
-      await auditLog.logFor(actor, {
-        action: "offer.approved", entityType: "ApprovedOffer", entityId: approvedOffer.approvedOfferId,
-        actor: finalApproval.decidedBy, at: approvedOffer.approvedAt,
-        idempotencyKey: `approved-offer:${approvedOffer.approvedOfferId}`,
-        summary: "Angebotsvariante explizit freigegeben.",
-        details: { draftId: draft.draftId, variantId: selectedVariant!.variantId }
-      });
+      await logApprovedOfferAudit(actor, finalApproval, approvedOffer);
       return reply.code(201).send({ approval: finalApproval, approvedOffer });
     }
   );

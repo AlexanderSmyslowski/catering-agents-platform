@@ -1,7 +1,10 @@
 import {
+  createBusinessScopedPersistentCollection,
   createPersistentCollection,
   llmReadinessForbiddenPayloadKeys,
   productionClarificationAnswerTextMaxLength,
+  type BusinessContext,
+  type BusinessScopedPersistentCollection,
   type CollectionStorageOptions,
   type LlmReadinessAgentAuditRecord,
   type LlmReadinessProviderAdapterMode,
@@ -303,7 +306,7 @@ export class ProductionStore {
   private readonly purchaseLists: PersistentCollection<PurchaseList>;
   private readonly clarificationAnswers: PersistentCollection<ProductionClarificationAnswer>;
   private readonly clarificationDrafts: PersistentCollection<ClarificationDraft>;
-  private readonly productionDrafts: PersistentCollection<ProductionDraft>;
+  private readonly productionDrafts: BusinessScopedPersistentCollection<ProductionDraft>;
   private readonly productionFeedbackDrafts: PersistentCollection<ProductionFeedbackDraft>;
 
   constructor(options?: CollectionStorageOptions) {
@@ -335,7 +338,7 @@ export class ProductionStore {
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
     });
-    this.productionDrafts = createPersistentCollection<ProductionDraft>({
+    this.productionDrafts = createBusinessScopedPersistentCollection<ProductionDraft>({
       collectionName: "production/drafts",
       getId: (draft) => draft.draftId,
       validate: validateProductionDraft,
@@ -412,21 +415,30 @@ export class ProductionStore {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
-  async saveProductionDraft(draft: ProductionDraft): Promise<void> {
-    await this.productionDrafts.set(validateProductionDraft(draft));
+  async saveProductionDraft(context: BusinessContext, draft: ProductionDraft): Promise<void> {
+    await this.productionDrafts.set(context, productionDraftForContext(context, draft));
   }
 
-  async insertProductionDraft(draft: ProductionDraft): Promise<"created" | "exists"> {
-    return this.productionDrafts.insert(validateProductionDraft(draft));
+  async insertProductionDraft(
+    context: BusinessContext,
+    draft: ProductionDraft
+  ): Promise<"created" | "exists"> {
+    return this.productionDrafts.insert(context, productionDraftForContext(context, draft));
   }
 
-  async getProductionDraft(draftId: string): Promise<ProductionDraft | undefined> {
-    return this.productionDrafts.get(draftId);
+  async getProductionDraft(
+    context: BusinessContext,
+    draftId: string
+  ): Promise<ProductionDraft | undefined> {
+    const draft = await this.productionDrafts.get(context, draftId);
+    return draft ? productionDraftForContext(context, draft) : undefined;
   }
 
-  async listProductionDrafts(): Promise<ProductionDraft[]> {
-    const drafts = await this.productionDrafts.list();
-    return drafts.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  async listProductionDrafts(context: BusinessContext): Promise<ProductionDraft[]> {
+    const drafts = await this.productionDrafts.list(context);
+    return drafts
+      .map((draft) => productionDraftForContext(context, draft))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
   async saveProductionFeedbackDraft(draft: ProductionFeedbackDraft): Promise<void> {
@@ -448,6 +460,20 @@ export class ProductionStore {
       draft.status === "approved" && Boolean(draft.approvedBy) && Boolean(draft.approvedAt)
     );
   }
+}
+
+function productionDraftForContext(
+  context: BusinessContext,
+  draft: ProductionDraft
+): ProductionDraft {
+  const normalized = validateProductionDraft({
+    ...draft,
+    businessId: draft.businessId ?? context.businessId
+  });
+  if (normalized.businessId !== context.businessId) {
+    throw new Error("ProductionDraft passt nicht zum vertrauenswürdigen Betriebskontext.");
+  }
+  return normalized;
 }
 
 function isClarificationDraftQuestion(question: unknown): question is ClarificationDraftQuestion {

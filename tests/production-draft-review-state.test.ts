@@ -13,6 +13,7 @@ import {
 } from "@catering/shared-core";
 
 const TRUSTED_SECRET = "production-draft-review-secret";
+const localBusiness = { businessId: "local" };
 const trustedProductionHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
   "x-catering-trusted-secret": TRUSTED_SECRET
@@ -297,7 +298,7 @@ describe("ProductionDraft review state", () => {
 
       expect(blockingResponse.statusCode).toBe(422);
       expect(blockingResponse.body).toContain("reviewCard card-blocking has blocking risk");
-      expect((await store.getProductionDraft("production-draft-blocking"))?.status).toBe("pending_review");
+      expect((await store.getProductionDraft(localBusiness, "production-draft-blocking"))?.status).toBe("pending_review");
     } finally {
       await app.close();
     }

@@ -1211,6 +1211,7 @@ describe("catering agents platform", () => {
       headers: offerHeaders,
       payload: {
         decision: "approved",
+        revision: 1,
         variantId: draft.variantSet[1].variantId
       }
     });

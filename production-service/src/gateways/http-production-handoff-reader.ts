@@ -11,10 +11,18 @@ export class HttpProductionHandoffReader implements ProductionHandoffReader {
   private readonly fetcher: typeof globalThis.fetch;
   constructor(private readonly options: HttpProductionHandoffReaderOptions) { this.fetcher = options.fetch ?? globalThis.fetch; }
   async getHandoff(context: BusinessContext, handoffId: string): Promise<ProductionHandoff | undefined> {
-    const response = await this.fetcher(`${this.options.offerServiceUrl.replace(/\/$/, "")}/v1/offers/handoffs/${encodeURIComponent(handoffId)}`, { headers: {
-      "x-catering-actor-name": "Produktions-Mitarbeiter", "x-catering-business-id": context.businessId,
-      ...(this.options.trustedServiceSecret ? { "x-catering-trusted-secret": this.options.trustedServiceSecret } : {})
-    } });
+    let response: Response;
+    try {
+      response = await this.fetcher(`${this.options.offerServiceUrl.replace(/\/$/, "")}/v1/offers/handoffs/${encodeURIComponent(handoffId)}`, {
+        redirect: "error",
+        headers: {
+          "x-catering-actor-name": "Produktions-Mitarbeiter", "x-catering-business-id": context.businessId,
+          ...(this.options.trustedServiceSecret ? { "x-catering-trusted-secret": this.options.trustedServiceSecret } : {})
+        }
+      });
+    } catch (error) {
+      throw new Error("Produktionsübergabe konnte nicht geladen werden.", { cause: error });
+    }
     if (response.status === 404) return undefined;
     if (!response.ok) throw new Error("Produktionsübergabe konnte nicht geladen werden.");
     const payload = await response.json() as { handoff?: ProductionHandoff };

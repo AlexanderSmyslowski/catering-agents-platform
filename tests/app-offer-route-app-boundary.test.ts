@@ -135,8 +135,8 @@ describe("app offer route app boundary", () => {
   it("wires explicit draft approval through the same app boundary", async () => {
     const calls: string[] = [];
     const boundaryInput = input({
-      decideOfferDraft: vi.fn(async (draftId, variantId) => {
-        calls.push(`decideOfferDraft:${draftId}:${variantId}`);
+      decideOfferDraft: vi.fn(async (draftId, revision, variantId) => {
+        calls.push(`decideOfferDraft:${draftId}:${revision}:${variantId}`);
         return { approvedOffer: { approvedOfferId: "offer-approved" } };
       }),
       refreshDashboard: vi.fn(async () => {
@@ -148,11 +148,11 @@ describe("app offer route app boundary", () => {
     });
     const state = buildAppOfferRouteAppBoundary(boundaryInput);
 
-    await state.offerWorkbenchState.approveDraft("draft-1", "balanced");
+    await state.offerWorkbenchState.approveDraft("draft-1", 3, "balanced");
 
     expect(boundaryInput.setError).not.toHaveBeenCalled();
     expect(calls).toEqual([
-      "decideOfferDraft:draft-1:balanced",
+      "decideOfferDraft:draft-1:3:balanced",
       "setNotice:Angebotsvariante wurde freigegeben.",
       "refreshDashboard"
     ]);
@@ -174,12 +174,12 @@ describe("app offer route app boundary", () => {
     });
     const state = buildAppOfferRouteAppBoundary(boundaryInput);
 
-    await state.offerWorkbenchState.createHandoff?.("draft-1", "approved-1");
+    await state.offerWorkbenchState.createHandoff?.("draft-1", 3, "approved-1");
 
     expect(calls).toEqual([
       "handoff:approved-1",
       "production:handoff-created",
-      'binding:{"offerDraftId":"draft-1","approvedOfferId":"approved-1","handoffId":"handoff-created","productionDraftId":"production-created"}',
+      'binding:{"offerDraftId":"draft-1","offerDraftRevision":3,"approvedOfferId":"approved-1","handoffId":"handoff-created","productionDraftId":"production-created"}',
       "open:production-created"
     ]);
   });

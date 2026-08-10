@@ -211,7 +211,12 @@ export function validateApprovalRequestRecord(value: ApprovalRequestRecord): App
 }
 
 export function validateOfferDraft(value: OfferDraft): OfferDraft {
-  return assertValid("offerDraft", value);
+  const draft = assertValid("offerDraft", value);
+  const variantIds = draft.variantSet.map((variant) => variant.variantId);
+  if (new Set(variantIds).size !== variantIds.length) {
+    throw new Error("OfferDraft-Varianten müssen eindeutige variantId-Werte besitzen.");
+  }
+  return draft;
 }
 
 export function validateApprovedOffer(value: ApprovedOffer): ApprovedOffer {

@@ -195,6 +195,7 @@ describe("critical path rehearsal", () => {
           headers: trustedHeaders("offer_operator"),
           payload: {
             decision: "approved",
+            revision: 1,
             variantId: "variant-2"
           }
         })

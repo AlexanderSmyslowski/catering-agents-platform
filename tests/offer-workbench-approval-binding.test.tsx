@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   OfferConversationalWorkbench,
@@ -11,9 +12,10 @@ import {
   type OfferApprovalBinding
 } from "../backoffice-ui/src/offer-approval-action.js";
 
-function draft(draftId: string, eventSummary: string) {
+function draft(draftId: string, eventSummary: string, revision = 1) {
   return {
     draftId,
+    revision,
     eventSummary,
     openQuestions: [],
     variantSet: [{ variantId: "classic", label: "Klassisch" }],
@@ -191,5 +193,27 @@ describe("offer workbench approval binding", () => {
     expect(document.body.textContent ?? "").not.toContain("production-a");
 
     await act(async () => root.unmount());
+  });
+
+  it("hides revision 1 handoff state while revision 2 of the same draft is focused", () => {
+    const revisionTwo = draft("draft-a", "Angebot A, korrigiert", 2);
+    const revisionOneBinding = {
+      offerDraftId: "draft-a",
+      offerDraftRevision: 1,
+      approvedOfferId: "approved-a-revision-1",
+      handoffId: "handoff-a-revision-1",
+      productionDraftId: "production-a-revision-1"
+    } as OfferApprovalBinding & { offerDraftRevision: number };
+
+    const markup = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
+      activeDraft: revisionTwo,
+      selectedDraft: revisionTwo,
+      approvalBinding: revisionOneBinding
+    })));
+
+    expect(markup).toContain("Angebot A, korrigiert");
+    expect(markup).not.toContain("An Produktion übergeben");
+    expect(markup).not.toContain("Produktionsentwurf öffnen");
+    expect(markup).not.toContain("production-a-revision-1");
   });
 });
