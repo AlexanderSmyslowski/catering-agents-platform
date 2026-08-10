@@ -238,7 +238,7 @@ describe("ProductionDraft apply", () => {
         draft: ProductionDraft;
         applied: { specId?: string; planId?: string; purchaseListId?: string; recipeIds?: string[] };
       }>();
-      const auditJson = JSON.stringify(await auditLog.listRecent(20));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 20));
 
       expect(response.statusCode).toBe(200);
       expect(body.draft.appliedBy).toBe("Produktions-Mitarbeiter");

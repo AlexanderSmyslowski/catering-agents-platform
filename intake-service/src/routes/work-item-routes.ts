@@ -125,7 +125,7 @@ export function registerIntakeWorkItemRoutes(
         return reply.code(404).send({ message: "EventRequest nicht gefunden." });
       }
 
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.request_soft_archived",
         entityType: "EventRequest",
         entityId: archived.request.requestId,
@@ -206,7 +206,7 @@ export function registerIntakeWorkItemRoutes(
 
       const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
       await store.saveSpec(updatedSpec);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.spec_updated",
         entityType: "AcceptedEventSpec",
         entityId: updatedSpec.specId,
@@ -242,7 +242,7 @@ export function registerIntakeWorkItemRoutes(
       });
     }
 
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.spec_governance_finalized",
       entityType: "AcceptedEventSpec",
       entityId: specId ?? changeSetId ?? "unknown",

@@ -94,7 +94,7 @@ describe("intake shadow mode", () => {
       });
       const body = response.json();
       const shadowRuns = await store.listShadowRuns();
-      const auditJson = JSON.stringify(await auditLog.listRecent(10));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
 
       expect(response.statusCode, response.body).toBe(201);
       expect(requests).toHaveLength(1);

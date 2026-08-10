@@ -255,7 +255,7 @@ export function registerIntakeDocumentRoutes(
 
       await store.saveRequest(normalized.eventRequest);
       await store.saveSpec(normalized.acceptedEventSpec);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.documents_normalized",
         entityType: "AcceptedEventSpec",
         entityId: normalized.acceptedEventSpec.specId,
@@ -291,7 +291,7 @@ export function registerIntakeDocumentRoutes(
 
       await store.saveRequest(normalized.eventRequest);
       await store.saveSpec(normalized.acceptedEventSpec);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.documents_normalized",
         entityType: "AcceptedEventSpec",
         entityId: normalized.acceptedEventSpec.specId,

@@ -3,10 +3,11 @@ import multipart from "@fastify/multipart";
 import {
   AuditLogStore,
   buildByoLlmAdapterFromEnv,
+  createTrustedActorResolver,
   getDemoProductionSpecs,
+  hostedMultiBusinessReady,
   isDevAuthEnabled,
   resolveMinimalMvpRoleFromTrustedActor,
-  trustedActorFromHeaders,
   type LlmReadinessProviderAdapter,
   type LlmReadinessDataMode,
   type Queryable,
@@ -22,16 +23,6 @@ import { ProductionStore } from "./repositories/production-store.js";
 import { buildProductionArtifacts } from "./rules/planning.js";
 import { registerProductionArtifactRoutes } from "./routes/artifact-routes.js";
 import { registerProductionRecipeRoutes } from "./routes/recipe-routes.js";
-
-function isOperationsAuditOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
-  ) === "operations_audit_operator";
-}
 
 export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
@@ -80,48 +71,31 @@ function defaultWebRecipeSearchProvider(env: Record<string, string | undefined>)
   return new DisabledWebRecipeSearchProvider();
 }
 
-function actorForRequest(
-  request: { headers: Record<string, string | string[] | undefined> },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-) {
-  return trustedActorFromHeaders(request.headers, {
-    fallbackActorName: "Produktions-Mitarbeiter",
-    trustedActorSecret,
-    allowDevActorHeader
-  });
-}
-
-function isProductionOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
-  ) === "production_operator";
-}
-
-function requireProductionOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): unknown | undefined {
-  if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
-    return reply.code(403).send({
-      message: "Produktions-Operator erforderlich."
-    });
-  }
-
-  return undefined;
-}
-
 export function buildProductionApp(options: ProductionAppOptions = {}) {
   const env = options.env ?? process.env;
+  const defaultBusinessContext = { businessId: env.CATERING_DEFAULT_BUSINESS_ID ?? "local" };
+  const hosted = env.CATERING_DEPLOYMENT_PROFILE === "hosted";
+  if (hosted && !hostedMultiBusinessReady) {
+    throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
+  }
   const productionDraftDataMode = productionDraftDataModeFromEnv(env);
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
+  const resolveActor = createTrustedActorResolver({
+    fallbackActorName: "Produktions-Mitarbeiter", fallbackBusinessId: defaultBusinessContext.businessId, requireTrustedBusinessId: hosted, trustedActorSecret, allowDevActorHeader
+  });
+  const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
+  const isProductionOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "production_operator";
+  const requireProductionOperator = (
+    request: { headers: Record<string, string | string[] | undefined> },
+    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+    ..._ignored: unknown[]
+  ): unknown | undefined => isProductionOperator(request)
+    ? undefined
+    : reply.code(403).send({ message: "Produktions-Operator erforderlich." });
+  const isOperationsAuditOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
   const repository =
     options.repository ??
     new InMemoryRecipeRepository(undefined, {
@@ -163,14 +137,21 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     logger: false
   });
 
+  app.addHook("onRequest", async (request) => {
+    if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
+  });
+
   app.register(multipart);
 
   app.get("/health", async (_request, reply) => {
+    if (hosted) {
+      return reply.send({ service: "production-service", status: "ok", timestamp: new Date().toISOString() });
+    }
     const [plans, purchaseLists, recipes, auditEvents] = await Promise.all([
       store.listPlans(),
       store.listPurchaseLists(),
       repository.list(),
-      auditLog.count()
+      auditLog.countFor(defaultBusinessContext)
     ]);
 
     return reply.send({
@@ -220,7 +201,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
         purchaseListId: artifacts.purchaseList.purchaseListId
       });
     }
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "production.seed_demo",
       entityType: "SeedBatch",
       entityId: `production-demo-${Date.now()}`,
@@ -252,7 +233,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       ? Math.max(1, Math.min(200, Math.trunc(limit)))
       : 50;
     return reply.send({
-      items: await auditLog.listRecent(safeLimit)
+      items: await auditLog.listRecentFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), safeLimit)
     });
   });
 

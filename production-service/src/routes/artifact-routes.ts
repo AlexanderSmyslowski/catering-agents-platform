@@ -743,7 +743,7 @@ export function registerProductionArtifactRoutes(
       const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
       await store.savePlan(artifacts.productionPlan);
       await store.savePurchaseList(artifacts.purchaseList);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.plan_created",
         entityType: "ProductionPlan",
         entityId: artifacts.productionPlan.planId,
@@ -891,7 +891,7 @@ export function registerProductionArtifactRoutes(
 
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
-        await auditLog.log({
+        await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.production_draft_document_rejected",
           entityType: "ProductionDraft",
           entityId: draftSeed,
@@ -933,7 +933,7 @@ export function registerProductionArtifactRoutes(
       ];
 
       if (!adapterResponse.ok || responseErrors.length > 0 || !extractionBuild.extraction || !auditBuild.auditRecord) {
-        await auditLog.log({
+        await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.production_draft_document_rejected",
           entityType: "ProductionDraft",
           entityId: draftSeed,
@@ -968,7 +968,7 @@ export function registerProductionArtifactRoutes(
         adapterResponse
       });
       await store.saveProductionDraft(draft);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.production_draft_document_created",
         entityType: "ProductionDraft",
         entityId: draft.draftId,
@@ -1032,7 +1032,7 @@ export function registerProductionArtifactRoutes(
 
     await store.saveProductionDraft(draft);
     const artifacts = draft.draftArtifacts;
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "production.production_draft_imported",
       entityType: "ProductionDraft",
       entityId: draft.draftId,
@@ -1130,7 +1130,7 @@ export function registerProductionArtifactRoutes(
 
       await store.saveProductionDraft(reviewedDraft);
       const card = reviewedDraft.reviewCards[cardIndex];
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.production_draft_review_card_decided",
         entityType: "ProductionDraft",
         entityId: reviewedDraft.draftId,
@@ -1232,7 +1232,7 @@ export function registerProductionArtifactRoutes(
       }
 
       const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
-        await auditLog.log({
+        await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.production_draft_revision_rejected",
           entityType: "ProductionDraft",
           entityId: draft.draftId,
@@ -1279,7 +1279,7 @@ export function registerProductionArtifactRoutes(
         ...auditBuild.errors.map((error) => `agentAudit.${error}`)
       ];
       if (!adapterResponse.ok || responseErrors.length > 0 || !extractionBuild.extraction || !auditBuild.auditRecord) {
-        await auditLog.log({
+        await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.production_draft_revision_rejected",
           entityType: "ProductionDraft",
           entityId: draft.draftId,
@@ -1319,7 +1319,7 @@ export function registerProductionArtifactRoutes(
         ...draft,
         status: "superseded"
       }));
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.production_draft_revision_created",
         entityType: "ProductionDraft",
         entityId: revision.draftId,
@@ -1393,7 +1393,7 @@ export function registerProductionArtifactRoutes(
       }
 
       await store.saveProductionDraft(decidedDraft);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: request.body.approve
           ? "production.production_draft_approved"
           : "production.production_draft_rejected",
@@ -1515,7 +1515,7 @@ export function registerProductionArtifactRoutes(
         appliedArtifactIds
       });
       await store.saveProductionDraft(appliedDraft);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.production_draft_applied",
         entityType: "ProductionDraft",
         entityId: appliedDraft.draftId,
@@ -1597,7 +1597,7 @@ export function registerProductionArtifactRoutes(
         });
       }
 
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.feedback_draft_created",
         entityType: "ProductionFeedbackDraft",
         entityId: draft.feedbackId,
@@ -1667,7 +1667,7 @@ export function registerProductionArtifactRoutes(
         };
 
       await store.saveProductionFeedbackDraft(decidedDraft);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: request.body.approve
           ? "production.feedback_draft_approved"
           : "production.feedback_draft_rejected",
@@ -1753,7 +1753,7 @@ export function registerProductionArtifactRoutes(
       }
 
       const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
-        await auditLog.log({
+        await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.clarification_draft_rejected",
           entityType: "ClarificationDraft",
           entityId: draftSeed,
@@ -1790,7 +1790,7 @@ export function registerProductionArtifactRoutes(
       ];
 
       if (!adapterResponse.ok || responseErrors.length > 0 || !questionsBuild.questions || !auditBuild.auditRecord) {
-        await auditLog.log({
+        await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.clarification_draft_rejected",
           entityType: "ClarificationDraft",
           entityId: draftSeed,
@@ -1841,7 +1841,7 @@ export function registerProductionArtifactRoutes(
         agentAudit: auditBuild.auditRecord
       };
       await store.saveClarificationDraft(draft);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.clarification_draft_created",
         entityType: "ClarificationDraft",
         entityId: draft.draftId,
@@ -1913,7 +1913,7 @@ export function registerProductionArtifactRoutes(
       }
 
       await store.saveClarificationDraft(decidedDraft);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: request.body.approve
           ? "production.clarification_draft_approved"
           : "production.clarification_draft_rejected_by_operator",

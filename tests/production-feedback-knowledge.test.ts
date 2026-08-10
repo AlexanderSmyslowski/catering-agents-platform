@@ -122,7 +122,7 @@ describe("production feedback knowledge", () => {
       });
 
       const knowledge = await listReviewedKnowledge(app);
-      const auditJson = JSON.stringify(await auditLog.listRecent(20));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 20));
       expect(knowledge).toHaveLength(1);
       expect(knowledge[0]).toMatchObject({
         feedbackId: approvedDraft.feedbackId,

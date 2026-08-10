@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc --noEmit && npm --workspace @catering/backoffice-ui run build",
     "test": "vitest run",
+    "migrate:business-scope": "tsx scripts/migrate-local-business-scope.ts",
     "checkpoint": "bash ./scripts/create-checkpoint.sh",
     "import:recipes:caterings": "tsx scripts/import-catering-recipes.ts",
     "import:recipes:koepff": "tsx scripts/import-koepff-recipes.ts",

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { createPersistentCollection, type CollectionStorageOptions } from "./persistence.js";
+import { createBusinessScopedPersistentCollection, type CollectionStorageOptions } from "./persistence.js";
+import type { BusinessContext } from "./business-context.js";
 import type { AuditEntry } from "./types.js";
 
 function auditIdFor(entry: Omit<AuditEntry, "auditId">): string {
@@ -7,6 +8,7 @@ function auditIdFor(entry: Omit<AuditEntry, "auditId">): string {
     .update(
       [
         entry.at,
+        entry.businessId,
         entry.action,
         entry.entityType,
         entry.entityId,
@@ -35,7 +37,7 @@ export class AuditLogStore {
   private readonly entries;
 
   constructor(options?: CollectionStorageOptions) {
-    this.entries = createPersistentCollection<AuditEntry>({
+    this.entries = createBusinessScopedPersistentCollection<AuditEntry>({
       collectionName: "audit/events",
       getId: (entry) => entry.auditId,
       rootDir: options?.rootDir,
@@ -44,28 +46,32 @@ export class AuditLogStore {
     });
   }
 
-  async log(input: Omit<AuditEntry, "auditId" | "at"> & { at?: string }): Promise<AuditEntry> {
+  async logFor(
+    context: BusinessContext,
+    input: Omit<AuditEntry, "auditId" | "at" | "businessId"> & { at?: string }
+  ): Promise<AuditEntry> {
     const entryWithoutId: Omit<AuditEntry, "auditId"> = {
       ...input,
+      businessId: context.businessId,
       at: input.at ?? new Date().toISOString()
     };
     const entry: AuditEntry = {
       ...entryWithoutId,
       auditId: auditIdFor(entryWithoutId)
     };
-    await this.entries.set(entry);
+    await this.entries.set(context, entry);
     return entry;
   }
 
-  async listRecent(limit = 50): Promise<AuditEntry[]> {
-    const items = await this.entries.list();
+  async listRecentFor(context: BusinessContext, limit = 50): Promise<AuditEntry[]> {
+    const items = await this.entries.list(context);
     return items
       .sort((left, right) => right.at.localeCompare(left.at))
       .slice(0, limit);
   }
 
-  async count(): Promise<number> {
-    const items = await this.entries.list();
+  async countFor(context: BusinessContext): Promise<number> {
+    const items = await this.entries.list(context);
     return items.length;
   }
 }

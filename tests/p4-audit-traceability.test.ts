@@ -139,7 +139,7 @@ describe("P4 audit and review traceability", () => {
 
       expect(finalizeResponse.statusCode).toBe(200);
 
-      const items = await auditLog.listRecent(20);
+      const items = await auditLog.listRecentFor({ businessId: "local" }, 20);
       const finalizeEntry = items.find(
         (entry) => entry.action === "intake.spec_governance_finalized" && entry.entityId === "p4-finalize-spec-1"
       );
@@ -200,7 +200,7 @@ describe("P4 audit and review traceability", () => {
       expect(reviewResponse.statusCode).toBe(200);
       expect(reviewResponse.json().recipe.source.approvalState).toBe("approved_internal");
 
-      const items = await auditLog.listRecent(20);
+      const items = await auditLog.listRecentFor({ businessId: "local" }, 20);
       const reviewEntry = items.find((entry) => entry.action === "recipe.reviewed" && entry.entityId === recipeId);
 
       expect(reviewEntry).toBeDefined();

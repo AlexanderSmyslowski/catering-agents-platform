@@ -4,17 +4,18 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   AuditLogStore,
   buildByoLlmAdapterFromEnv,
+  createTrustedActorResolver,
   type CollectionStorageOptions,
   createLlmReadinessAgentAuditRecord,
   createEventRequestFromManualForm,
   findLlmReadinessPromptSchemaEntryByInputKind,
   getDemoIntakeRequests,
   getDemoProductionAnsweredClarificationAnchor,
+  hostedMultiBusinessReady,
   isDevAuthEnabled,
   llmReadinessContractVersion,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
-  trustedActorFromHeaders,
   DOCUMENT_UPLOAD_LIMITS,
   withEvaluatedReadiness,
   validateAcceptedEventSpec,
@@ -415,58 +416,35 @@ function isIntakeStore(value: IntakeStore | IntakeAppOptions | undefined): value
   return value instanceof IntakeStore;
 }
 
-function actorForRequest(
-  request: { headers: Record<string, string | string[] | undefined> },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-) {
-  return trustedActorFromHeaders(request.headers, {
-    fallbackActorName: "Intake-Mitarbeiter",
-    trustedActorSecret,
-    allowDevActorHeader
-  });
-}
-
-function isIntakeOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
-  ) === "intake_operator";
-}
-
-function requireIntakeOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): unknown | undefined {
-  if (!isIntakeOperator(request, trustedActorSecret, allowDevActorHeader)) {
-    return reply.code(403).send({
-      message: "Intake-Operator erforderlich."
-    });
-  }
-
-  return undefined;
-}
-
-function isOperationsAuditOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
-  ) === "operations_audit_operator";
-}
-
 export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   const options = isIntakeStore(input) ? { store: input } : input;
   const env = options.env ?? process.env;
+  const defaultBusinessContext = { businessId: env.CATERING_DEFAULT_BUSINESS_ID ?? "local" };
+  const hosted = env.CATERING_DEPLOYMENT_PROFILE === "hosted";
+  if (hosted && !hostedMultiBusinessReady) {
+    throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
+  }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
+  const resolveActor = createTrustedActorResolver({
+      fallbackActorName: "Intake-Mitarbeiter",
+      fallbackBusinessId: defaultBusinessContext.businessId,
+      requireTrustedBusinessId: hosted,
+      trustedActorSecret,
+      allowDevActorHeader
+    });
+  const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
+  const isIntakeOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "intake_operator";
+  const requireIntakeOperator = (
+    request: { headers: Record<string, string | string[] | undefined> },
+    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+    ..._ignored: unknown[]
+  ): unknown | undefined => isIntakeOperator(request)
+    ? undefined
+    : reply.code(403).send({ message: "Intake-Operator erforderlich." });
+  const isOperationsAuditOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
   const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
   const store =
     options.store ??
@@ -487,13 +465,20 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     bodyLimit: DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes
   });
 
+  app.addHook("onRequest", async (request) => {
+    if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
+  });
+
   app.register(multipart);
 
   app.get("/health", async (_request, reply) => {
+    if (hosted) {
+      return reply.send({ service: "intake-service", status: "ok", timestamp: new Date().toISOString() });
+    }
     const [requests, specs, auditEvents] = await Promise.all([
       store.listRequests(),
       store.listSpecs(),
-      auditLog.count()
+      auditLog.countFor(defaultBusinessContext)
     ]);
     return reply.send({
       service: "intake-service",
@@ -541,7 +526,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       );
 
       await store.saveSpec(spec);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.normalized",
         entityType: "AcceptedEventSpec",
         entityId: spec.specId,
@@ -644,7 +629,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     const adapterResponse: LlmReadinessProviderAdapterResponse | undefined = await adapter.run(adapterRequest)
       .catch(async (error: unknown) => {
-        await auditLog.log({
+        await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "intake.shadow_extraction_rejected",
           entityType: "IntakeShadowRun",
           entityId: input.inputId,
@@ -678,7 +663,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       ...auditBuild.errors.map((error) => `agentAudit.${error}`)
     ];
     if (!adapterResponse.ok || responseErrors.length > 0 || !extractionBuild.extraction || !auditBuild.auditRecord) {
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.shadow_extraction_rejected",
         entityType: "IntakeShadowRun",
         entityId: input.inputId,
@@ -739,7 +724,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       }
     };
     await store.saveShadowRun(shadowRun);
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.shadow_extraction_compared",
       entityType: "IntakeShadowRun",
       entityId: shadowRun.shadowRunId,
@@ -795,7 +780,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     await store.saveRequest(eventRequest);
     await store.saveSpec(spec);
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.manual_spec_created",
       entityType: "AcceptedEventSpec",
       entityId: spec.specId,
@@ -850,7 +835,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       requestId: answeredClarificationAnchor.request.requestId,
       specId: answeredClarificationSpec.specId
     });
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.seed_demo",
       entityType: "SeedBatch",
       entityId: `intake-demo-${Date.now()}`,

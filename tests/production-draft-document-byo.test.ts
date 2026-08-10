@@ -130,7 +130,7 @@ describe("ProductionDraft document BYO extraction", () => {
         payload: documentPayload()
       });
       const draft = response.json<{ draft: ProductionDraft }>().draft;
-      const auditJson = JSON.stringify(await auditLog.listRecent(10));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
 
       expect(response.statusCode, response.body).toBe(201);
       expect(requests).toHaveLength(1);
@@ -253,7 +253,7 @@ describe("ProductionDraft document BYO extraction", () => {
       });
       const revision = revised.json<{ draft: ProductionDraft }>().draft;
       const storedOriginal = await store.getProductionDraft(originalDraft.draftId);
-      const auditJson = JSON.stringify(await auditLog.listRecent(20));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 20));
 
       expect(created.statusCode, created.body).toBe(201);
       expect(reviewed.statusCode, reviewed.body).toBe(200);
@@ -459,7 +459,7 @@ describe("ProductionDraft document BYO extraction", () => {
         payload: {}
       });
       const storedDrafts = await store.listProductionDrafts();
-      const auditJson = JSON.stringify(await auditLog.listRecent(20));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 20));
 
       expect(revised.statusCode, revised.body).toBe(422);
       expect(requests).toHaveLength(2);
@@ -583,7 +583,7 @@ describe("ProductionDraft document BYO extraction", () => {
           dataMode: "synthetic_or_demo_only"
         }
       });
-      const auditJson = JSON.stringify(await auditLog.listRecent(10));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
 
       expect(response.statusCode, response.body).toBe(201);
       expect(requests).toHaveLength(1);
