@@ -1,10 +1,13 @@
 import {
+  constants,
   existsSync,
+  fchmodSync,
   mkdirSync,
   openSync,
   closeSync,
   fsyncSync,
   linkSync,
+  lstatSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -63,6 +66,8 @@ function parsePayload<T>(value: unknown): T {
 
 const poolCache = new Map<string, Pool>();
 const initCache = new WeakMap<object, Map<string, Promise<void>>>();
+const LEGACY_WRITE_FENCE_FILENAME = ".business-scope-migration-write-fence";
+const LEGACY_WRITE_FENCE_TABLE = "catering_legacy_collection_write_fences";
 
 const BUSINESS_RECORDS_SCHEMA_MIGRATION = `
 DO $migration$
@@ -205,6 +210,232 @@ export function resolveDatabaseUrl(databaseUrl?: string): string | undefined {
   );
 }
 
+function legacyWriteFencePath(directory: string): string {
+  return path.join(directory, LEGACY_WRITE_FENCE_FILENAME);
+}
+
+function collectionWriteLockTarget(directory: string): string {
+  return `${directory}.collection-write`;
+}
+
+function lstatIfPresent(filePath: string) {
+  try {
+    return lstatSync(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+function ensureSafeCollectionDirectory(rootDir: string | undefined, collectionName: string): string {
+  const root = path.resolve(resolveDataRoot(rootDir));
+  mkdirSync(root, { recursive: true });
+  const directory = path.resolve(root, collectionName);
+  const relative = path.relative(root, directory);
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("Legacy collection path must remain beneath the data root.");
+  }
+
+  let current = root;
+  for (const segment of relative.split(path.sep)) {
+    current = path.join(current, segment);
+    const existing = lstatIfPresent(current);
+    if (!existing) {
+      mkdirSync(current);
+      continue;
+    }
+    if (existing.isSymbolicLink()) {
+      throw new Error(`Legacy collection path contains a symbolic link: ${current}`);
+    }
+    if (!existing.isDirectory()) {
+      throw new Error(`Legacy collection path is not a directory: ${current}`);
+    }
+  }
+  return directory;
+}
+
+function assertSafeCollectionEntries(directory: string): string[] {
+  const filenames = readdirSync(directory);
+  for (const filename of filenames) {
+    const filePath = path.join(directory, filename);
+    const stats = lstatSync(filePath);
+    if (stats.isSymbolicLink()) {
+      throw new Error(`Legacy collection entry is a symbolic link: ${filePath}`);
+    }
+    if (!stats.isFile()) {
+      throw new Error(`Legacy collection entry is not a regular file: ${filePath}`);
+    }
+  }
+  return filenames;
+}
+
+function establishFileLegacyWriteFence(options: CollectionStorageOptions & { collectionName: string }): void {
+  const directory = ensureSafeCollectionDirectory(options.rootDir, options.collectionName);
+  const releaseCollectionLock = acquireFileLock(collectionWriteLockTarget(directory));
+  try {
+    const filenames = assertSafeCollectionEntries(directory);
+    const markerPath = legacyWriteFencePath(directory);
+    if (!lstatIfPresent(markerPath)) {
+      const markerFd = openSync(
+        markerPath,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        0o444
+      );
+      try {
+        writeFileSync(markerFd, "business-scope-migration-v1\n");
+        fsyncSync(markerFd);
+      } finally {
+        closeSync(markerFd);
+      }
+      filenames.push(LEGACY_WRITE_FENCE_FILENAME);
+    }
+
+    for (const filename of filenames) {
+      const filePath = path.join(directory, filename);
+      const fd = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        fchmodSync(fd, 0o444);
+      } finally {
+        closeSync(fd);
+      }
+    }
+    const directoryFd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    try {
+      fchmodSync(directoryFd, 0o555);
+      fsyncSync(directoryFd);
+    } finally {
+      closeSync(directoryFd);
+    }
+  } finally {
+    releaseCollectionLock();
+  }
+}
+
+function sqlLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function legacyWriteFenceMigrationSql(collectionName: string): string {
+  const collection = sqlLiteral(collectionName);
+  return `
+DO $migration$
+DECLARE
+  target_schema TEXT := pg_catalog.current_schema();
+BEGIN
+  CREATE TABLE IF NOT EXISTS catering_records (
+    collection_name TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (collection_name, record_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS ${LEGACY_WRITE_FENCE_TABLE} (
+    collection_name TEXT PRIMARY KEY,
+    fenced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE OR REPLACE FUNCTION catering_guard_legacy_collection_write()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  AS $function$
+  DECLARE
+    first_collection TEXT;
+    second_collection TEXT;
+    fenced_collection TEXT;
+  BEGIN
+    IF TG_OP = 'UPDATE' THEN
+      first_collection := LEAST(OLD.collection_name, NEW.collection_name);
+      second_collection := GREATEST(OLD.collection_name, NEW.collection_name);
+    ELSIF TG_OP = 'DELETE' THEN
+      first_collection := OLD.collection_name;
+    ELSE
+      first_collection := NEW.collection_name;
+    END IF;
+
+    PERFORM pg_advisory_xact_lock(1128355397, hashtext(first_collection));
+    IF second_collection IS NOT NULL AND second_collection <> first_collection THEN
+      PERFORM pg_advisory_xact_lock(1128355397, hashtext(second_collection));
+    END IF;
+
+    EXECUTE pg_catalog.format(
+      'SELECT collection_name FROM %I.${LEGACY_WRITE_FENCE_TABLE} WHERE collection_name = $1 OR collection_name = $2 ORDER BY collection_name LIMIT 1',
+      TG_TABLE_SCHEMA
+    )
+    INTO fenced_collection
+    USING first_collection, second_collection;
+    IF fenced_collection IS NOT NULL THEN
+      RAISE EXCEPTION 'Legacy collection % is fenced for business-scope migration', fenced_collection
+        USING ERRCODE = '55000';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
+    RETURN NEW;
+  END
+  $function$;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger
+    WHERE tgname = 'catering_legacy_collection_write_guard'
+      AND tgrelid = pg_catalog.to_regclass(
+        pg_catalog.format('%I.%I', target_schema, 'catering_records')
+      )
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER catering_legacy_collection_write_guard
+      BEFORE INSERT OR UPDATE OR DELETE ON catering_records
+      FOR EACH ROW EXECUTE FUNCTION catering_guard_legacy_collection_write();
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(1128355397, hashtext(${collection}));
+  INSERT INTO ${LEGACY_WRITE_FENCE_TABLE} (collection_name)
+  VALUES (${collection})
+  ON CONFLICT (collection_name) DO NOTHING;
+END
+$migration$;
+`;
+}
+
+async function establishPgMemLegacyWriteFence(queryable: Queryable, collectionName: string): Promise<void> {
+  // pg-mem has no PL/pgSQL triggers; current writers still exercise the same database-resident fence row.
+  await createPgMemTable(queryable, "catering_records", "CREATE TABLE catering_records (collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (collection_name, record_id))");
+  await createPgMemTable(queryable, LEGACY_WRITE_FENCE_TABLE, `CREATE TABLE ${LEGACY_WRITE_FENCE_TABLE} (collection_name TEXT PRIMARY KEY, fenced_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  await queryable.query(
+    `INSERT INTO ${LEGACY_WRITE_FENCE_TABLE} (collection_name) VALUES ($1) ON CONFLICT (collection_name) DO NOTHING`,
+    [collectionName]
+  );
+}
+
+export async function establishLegacyCollectionWriteFence(
+  options: CollectionStorageOptions & {
+    collectionName: string;
+    legacyFileWritersQuiesced?: boolean;
+    testOnlyAllowPgMemCooperativeFence?: boolean;
+  }
+): Promise<void> {
+  const queryable = resolveCollectionQueryable(options);
+  if (!queryable) {
+    if (options.legacyFileWritersQuiesced !== true) {
+      throw new Error("Legacy file writers must be confirmed quiescent before migration.");
+    }
+    establishFileLegacyWriteFence(options);
+    return;
+  }
+
+  try {
+    // One statement remains atomic both as its own transaction and inside a caller-owned transaction.
+    await queryable.query(legacyWriteFenceMigrationSql(options.collectionName));
+  } catch (error) {
+    if (!isPgMemDoParserError(error)) throw error;
+    if (options.testOnlyAllowPgMemCooperativeFence !== true) {
+      throw new Error("Real PostgreSQL is required for raw-SQL migration fencing; the pg-mem cooperative fallback is test-only.");
+    }
+    await establishPgMemLegacyWriteFence(queryable, options.collectionName);
+  }
+}
+
 class FileBackedCollection<T> implements PersistentCollection<T> {
   private readonly directory: string;
 
@@ -214,9 +445,12 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
 
   private readonly validate?: (value: T) => T;
 
+  private readonly fileFaultInjector?: PersistentCollectionOptions<T>["fileFaultInjector"];
+
   constructor(options: PersistentCollectionOptions<T>) {
     this.getId = options.getId;
     this.validate = options.validate;
+    this.fileFaultInjector = options.fileFaultInjector;
     this.directory = path.join(resolveDataRoot(options.rootDir), options.collectionName);
     mkdirSync(this.directory, {
       recursive: true
@@ -240,19 +474,52 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
   }
 
   async set(item: T): Promise<void> {
-    const normalized = this.validate ? this.validate(item) : item;
-    const id = this.getId(normalized);
-    this.items.set(id, normalized);
-    this.writeToDisk(id, normalized);
+    const releaseCollectionLock = acquireFileLock(collectionWriteLockTarget(this.directory));
+    try {
+      this.assertWritable();
+      const normalized = this.validate ? this.validate(item) : item;
+      const id = this.getId(normalized);
+      const filePath = path.join(this.directory, `${sanitizeKey(id)}.json`);
+      const releaseRecordLock = acquireFileLock(filePath);
+      try {
+        atomicWrite(
+          filePath,
+          JSON.stringify(normalized, null, 2),
+          () => this.fileFaultInjector?.("before_record_replace"),
+          () => this.fileFaultInjector?.("after_record_replace")
+        );
+        this.items.set(id, normalized);
+      } finally {
+        releaseRecordLock();
+      }
+    } finally {
+      releaseCollectionLock();
+    }
   }
 
   async insert(item: T): Promise<"created" | "exists"> {
-    const normalized = this.validate ? this.validate(item) : item;
-    const id = this.getId(normalized);
-    const filePath = path.join(this.directory, `${sanitizeKey(id)}.json`);
-    const inserted = atomicInsert(filePath, JSON.stringify(normalized, null, 2));
-    if (inserted === "created") this.items.set(id, normalized);
-    return inserted;
+    const releaseCollectionLock = acquireFileLock(collectionWriteLockTarget(this.directory));
+    try {
+      this.assertWritable();
+      const normalized = this.validate ? this.validate(item) : item;
+      const id = this.getId(normalized);
+      const filePath = path.join(this.directory, `${sanitizeKey(id)}.json`);
+      const releaseRecordLock = acquireFileLock(filePath);
+      try {
+        const inserted = atomicInsert(
+          filePath,
+          JSON.stringify(normalized, null, 2),
+          () => this.fileFaultInjector?.("before_record_publish"),
+          () => this.fileFaultInjector?.("after_record_publish")
+        );
+        if (inserted === "created") this.items.set(id, normalized);
+        return inserted;
+      } finally {
+        releaseRecordLock();
+      }
+    } finally {
+      releaseCollectionLock();
+    }
   }
 
   private ensureSeed(seed: T[]): void {
@@ -260,9 +527,15 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
       const normalized = this.validate ? this.validate(item) : item;
       const id = this.getId(normalized);
       if (!this.items.has(id)) {
-        this.items.set(id, normalized);
         this.writeToDisk(id, normalized);
+        this.items.set(id, normalized);
       }
+    }
+  }
+
+  private assertWritable(): void {
+    if (lstatIfPresent(legacyWriteFencePath(this.directory))) {
+      throw new Error("Legacy collection is fenced for business-scope migration.");
     }
   }
 
@@ -278,7 +551,16 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
 
     for (const filename of filenames) {
       const filePath = path.join(this.directory, filename);
-      const raw = readFileSync(filePath, "utf8");
+      const stats = lstatSync(filePath);
+      if (stats.isSymbolicLink()) throw new Error(`Collection entry is a symbolic link: ${filePath}`);
+      if (!stats.isFile()) throw new Error(`Collection entry is not a regular file: ${filePath}`);
+      const fd = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+      let raw: string;
+      try {
+        raw = readFileSync(fd, "utf8");
+      } finally {
+        closeSync(fd);
+      }
       const parsed = JSON.parse(raw) as T;
       const normalized = this.validate ? this.validate(parsed) : parsed;
       this.items.set(this.getId(normalized), normalized);
@@ -286,9 +568,21 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
   }
 
   private writeToDisk(id: string, item: T): void {
-    const filePath = path.join(this.directory, `${sanitizeKey(id)}.json`);
-    writeFileSync(filePath, JSON.stringify(item, null, 2));
+    const releaseCollectionLock = acquireFileLock(collectionWriteLockTarget(this.directory));
+    try {
+      this.assertWritable();
+      const filePath = path.join(this.directory, `${sanitizeKey(id)}.json`);
+      const releaseRecordLock = acquireFileLock(filePath);
+      try {
+        atomicWrite(filePath, JSON.stringify(item, null, 2));
+      } finally {
+        releaseRecordLock();
+      }
+    } finally {
+      releaseCollectionLock();
+    }
   }
+
 }
 
 class PostgresBackedCollection<T> implements PersistentCollection<T> {
@@ -352,15 +646,22 @@ class PostgresBackedCollection<T> implements PersistentCollection<T> {
   async set(item: T): Promise<void> {
     await this.ensureInitialized();
     const normalized = this.validate ? this.validate(item) : item;
-    await this.queryable.query(
+    const result = await this.queryable.query(
       `
         INSERT INTO catering_records (collection_name, record_id, payload, updated_at)
-        VALUES ($1, $2, $3::jsonb, NOW())
+        SELECT $1, $2, $3::jsonb, NOW()
+        WHERE NOT EXISTS (
+          SELECT 1 FROM ${LEGACY_WRITE_FENCE_TABLE} WHERE collection_name = $1
+        )
         ON CONFLICT (collection_name, record_id)
         DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()
+        RETURNING record_id
       `,
       [this.collectionName, this.getId(normalized), JSON.stringify(normalized)]
     );
+    if (result.rows.length === 0) {
+      throw new Error("Legacy collection is fenced for business-scope migration.");
+    }
   }
 
   async insert(item: T): Promise<"created" | "exists"> {
@@ -369,13 +670,24 @@ class PostgresBackedCollection<T> implements PersistentCollection<T> {
     const result = await this.queryable.query(
       `
         INSERT INTO catering_records (collection_name, record_id, payload, updated_at)
-        VALUES ($1, $2, $3::jsonb, NOW())
+        SELECT $1, $2, $3::jsonb, NOW()
+        WHERE NOT EXISTS (
+          SELECT 1 FROM ${LEGACY_WRITE_FENCE_TABLE} WHERE collection_name = $1
+        )
         ON CONFLICT DO NOTHING
         RETURNING record_id
       `,
       [this.collectionName, this.getId(normalized), JSON.stringify(normalized)]
     );
-    return result.rows.length === 1 ? "created" : "exists";
+    if (result.rows.length === 1) return "created";
+    const fenced = await this.queryable.query(
+      `SELECT collection_name FROM ${LEGACY_WRITE_FENCE_TABLE} WHERE collection_name = $1`,
+      [this.collectionName]
+    );
+    if (fenced.rows.length > 0) {
+      throw new Error("Legacy collection is fenced for business-scope migration.");
+    }
+    return "exists";
   }
 
   private async ensureInitialized(): Promise<void> {
@@ -393,6 +705,11 @@ class PostgresBackedCollection<T> implements PersistentCollection<T> {
               payload JSONB NOT NULL,
               updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
               PRIMARY KEY (collection_name, record_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS ${LEGACY_WRITE_FENCE_TABLE} (
+              collection_name TEXT PRIMARY KEY,
+              fenced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
           `
         ).then(async () => {
@@ -405,7 +722,10 @@ class PostgresBackedCollection<T> implements PersistentCollection<T> {
             await this.queryable.query(
               `
                 INSERT INTO catering_records (collection_name, record_id, payload, updated_at)
-                VALUES ($1, $2, $3::jsonb, NOW())
+                SELECT $1, $2, $3::jsonb, NOW()
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM ${LEGACY_WRITE_FENCE_TABLE} WHERE collection_name = $1
+                )
                 ON CONFLICT (collection_name, record_id)
                 DO NOTHING
               `,

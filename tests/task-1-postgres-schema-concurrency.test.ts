@@ -1,6 +1,11 @@
 import { Pool, type PoolClient } from "pg";
 import { afterAll, describe, expect, it } from "vitest";
-import { createBusinessScopedPersistentCollection, type Queryable } from "../shared-core/src/persistence.js";
+import {
+  createBusinessScopedPersistentCollection,
+  createPersistentCollection,
+  establishLegacyCollectionWriteFence,
+  type Queryable
+} from "../shared-core/src/persistence.js";
 
 const connectionString = process.env.CATERING_TEST_POSTGRES_URL;
 const describeWithPostgres = connectionString ? describe : describe.skip;
@@ -53,6 +58,180 @@ async function schemaVersion(client: PoolClient): Promise<number | undefined> {
 }
 
 describeWithPostgres("PostgreSQL scoped-record schema v3 concurrency", () => {
+  it("drains an in-flight legacy write before fencing every later raw write", async () => {
+    await withIsolatedSchema("legacy_fence", async (migratorClient, writerClient) => {
+      const legacy = createPersistentCollection<{ id: string }>({
+        collectionName: "legacy/fenced",
+        getId: (record) => record.id,
+        pgPool: migratorClient
+      });
+      await legacy.set({ id: "before" });
+      await writerClient.query("BEGIN");
+      await writerClient.query(
+        "INSERT INTO catering_records (collection_name, record_id, payload) VALUES ('legacy/fenced', 'in-flight', '{\"id\":\"in-flight\"}')"
+      );
+
+      let fenceSettled = false;
+      const fence = establishLegacyCollectionWriteFence({
+        collectionName: "legacy/fenced",
+        pgPool: migratorClient
+      }).finally(() => { fenceSettled = true; });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(fenceSettled).toBe(false);
+
+      await writerClient.query("COMMIT");
+      await fence;
+      await expect(legacy.list()).resolves.toEqual([{ id: "before" }, { id: "in-flight" }]);
+      await expect(writerClient.query(
+        "INSERT INTO catering_records (collection_name, record_id, payload) VALUES ('legacy/fenced', 'late', '{\"id\":\"late\"}')"
+      )).rejects.toThrow("fenced for business-scope migration");
+    });
+  });
+
+  it("rejects moving a record out of a fenced collection", async () => {
+    await withIsolatedSchema("legacy_fence_move", async (migratorClient, writerClient) => {
+      const legacy = createPersistentCollection<{ id: string }>({
+        collectionName: "legacy/fenced",
+        getId: (record) => record.id,
+        pgPool: migratorClient
+      });
+      await legacy.set({ id: "before" });
+      await establishLegacyCollectionWriteFence({ collectionName: "legacy/fenced", pgPool: migratorClient });
+
+      await expect(writerClient.query(
+        "UPDATE catering_records SET collection_name = 'legacy/open' WHERE collection_name = 'legacy/fenced' AND record_id = 'before'"
+      )).rejects.toThrow("fenced for business-scope migration");
+      await expect(legacy.list()).resolves.toEqual([{ id: "before" }]);
+    });
+  });
+
+  it("installs a relation-local guard in two simultaneously live schemas", async () => {
+    const suffix = `${process.pid}_${Date.now()}`;
+    const firstSchema = `task1_h8_fence_s1_${suffix}`;
+    const secondSchema = `task1_h8_fence_s2_${suffix}`;
+    await pool!.query(`CREATE SCHEMA ${quotedIdentifier(firstSchema)}`);
+    await pool!.query(`CREATE SCHEMA ${quotedIdentifier(secondSchema)}`);
+    const first = await pool!.connect();
+    const second = await pool!.connect();
+    try {
+      await first.query(`SET search_path TO ${quotedIdentifier(firstSchema)}`);
+      await second.query(`SET search_path TO ${quotedIdentifier(secondSchema)}`);
+      await establishLegacyCollectionWriteFence({ collectionName: "legacy/fenced", pgPool: first });
+      await establishLegacyCollectionWriteFence({ collectionName: "legacy/fenced", pgPool: second });
+
+      await expect(first.query(
+        "INSERT INTO catering_records (collection_name, record_id, payload) VALUES ('legacy/fenced', 'late-s1', '{\"id\":\"late-s1\"}')"
+      )).rejects.toThrow("fenced for business-scope migration");
+      await expect(second.query(
+        "INSERT INTO catering_records (collection_name, record_id, payload) VALUES ('legacy/fenced', 'late-s2', '{\"id\":\"late-s2\"}')"
+      )).rejects.toThrow("fenced for business-scope migration");
+      const triggerCount = await pool!.query(
+        `SELECT count(*)::integer AS count
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE t.tgname = 'catering_legacy_collection_write_guard'
+           AND n.nspname = ANY($1::text[])`,
+        [[firstSchema, secondSchema]]
+      );
+      expect(triggerCount.rows[0]?.count).toBe(2);
+    } finally {
+      first.release();
+      second.release();
+      await pool!.query(`DROP SCHEMA IF EXISTS ${quotedIdentifier(firstSchema)} CASCADE`);
+      await pool!.query(`DROP SCHEMA IF EXISTS ${quotedIdentifier(secondSchema)} CASCADE`);
+    }
+  });
+
+  it("uses the fenced table schema when a differently scoped session writes through a qualified name", async () => {
+    const suffix = `${process.pid}_${Date.now()}`;
+    const fencedSchema = `task1_h8_fence_target_${suffix}`;
+    const writerSchema = `task1_h8_fence_writer_${suffix}`;
+    await pool!.query(`CREATE SCHEMA ${quotedIdentifier(fencedSchema)}`);
+    await pool!.query(`CREATE SCHEMA ${quotedIdentifier(writerSchema)}`);
+    const migrator = await pool!.connect();
+    const writer = await pool!.connect();
+    try {
+      await migrator.query(`SET search_path TO ${quotedIdentifier(fencedSchema)}`);
+      await writer.query(`SET search_path TO ${quotedIdentifier(writerSchema)}`);
+      await establishLegacyCollectionWriteFence({ collectionName: "legacy/fenced", pgPool: migrator });
+      await establishLegacyCollectionWriteFence({ collectionName: "legacy/other", pgPool: writer });
+
+      await expect(writer.query(
+        `INSERT INTO ${quotedIdentifier(fencedSchema)}.catering_records (collection_name, record_id, payload)
+         VALUES ('legacy/fenced', 'cross-schema-bypass', '{"id":"cross-schema-bypass"}')`
+      )).rejects.toThrow("fenced for business-scope migration");
+      await expect(writer.query(
+        `INSERT INTO ${quotedIdentifier(fencedSchema)}.catering_records (collection_name, record_id, payload)
+         VALUES ('legacy/open', 'cross-schema-open', '{"id":"cross-schema-open"}')`
+      )).resolves.toMatchObject({ rowCount: 1 });
+    } finally {
+      migrator.release();
+      writer.release();
+      await pool!.query(`DROP SCHEMA IF EXISTS ${quotedIdentifier(fencedSchema)} CASCADE`);
+      await pool!.query(`DROP SCHEMA IF EXISTS ${quotedIdentifier(writerSchema)} CASCADE`);
+    }
+  });
+
+  it("ignores a temporary shadow fence table when guarding a durable schema", async () => {
+    await withIsolatedSchema("legacy_fence_temp_shadow", async (migratorClient, writerClient, schema) => {
+      await establishLegacyCollectionWriteFence({ collectionName: "legacy/fenced", pgPool: migratorClient });
+      await writerClient.query(
+        "CREATE TEMP TABLE catering_legacy_collection_write_fences (collection_name TEXT PRIMARY KEY)"
+      );
+      try {
+        await expect(writerClient.query(
+          `INSERT INTO ${quotedIdentifier(schema)}.catering_records (collection_name, record_id, payload)
+           VALUES ('legacy/fenced', 'temp-shadow-bypass', '{"id":"temp-shadow-bypass"}')`
+        )).rejects.toThrow("fenced for business-scope migration");
+        await expect(writerClient.query(
+          `INSERT INTO ${quotedIdentifier(schema)}.catering_records (collection_name, record_id, payload)
+           VALUES ('legacy/open', 'temp-shadow-open', '{"id":"temp-shadow-open"}')`
+        )).resolves.toMatchObject({ rowCount: 1 });
+      } finally {
+        await writerClient.query("DROP TABLE IF EXISTS pg_temp.catering_legacy_collection_write_fences");
+      }
+    });
+  });
+
+  it("participates in and can be rolled back with an existing caller transaction", async () => {
+    await withIsolatedSchema("legacy_fence_nested", async (client) => {
+      await client.query("BEGIN");
+      await establishLegacyCollectionWriteFence({ collectionName: "legacy/fenced", pgPool: client });
+      await client.query("ROLLBACK");
+
+      const relations = await client.query(
+        "SELECT to_regclass('catering_records') AS records, to_regclass('catering_legacy_collection_write_fences') AS fences"
+      );
+      expect(relations.rows[0]).toEqual({ records: null, fences: null });
+    });
+  });
+
+  it("keeps normal application and raw SQL writes working for unfenced collections", async () => {
+    await withIsolatedSchema("legacy_fence_unfenced", async (migratorClient, writerClient) => {
+      await establishLegacyCollectionWriteFence({ collectionName: "legacy/fenced", pgPool: migratorClient });
+      const open = createPersistentCollection<{ id: string; value: string }>({
+        collectionName: "legacy/open",
+        getId: (record) => record.id,
+        pgPool: writerClient
+      });
+
+      await open.set({ id: "application", value: "created" });
+      await writerClient.query(
+        "INSERT INTO catering_records (collection_name, record_id, payload) VALUES ('legacy/open', 'raw', '{\"id\":\"raw\",\"value\":\"created\"}')"
+      );
+      await writerClient.query(
+        "UPDATE catering_records SET payload = '{\"id\":\"raw\",\"value\":\"updated\"}' WHERE collection_name = 'legacy/open' AND record_id = 'raw'"
+      );
+      await expect(open.list()).resolves.toEqual([
+        { id: "application", value: "created" },
+        { id: "raw", value: "updated" }
+      ]);
+      await writerClient.query("DELETE FROM catering_records WHERE collection_name = 'legacy/open' AND record_id = 'raw'");
+      await expect(open.list()).resolves.toEqual([{ id: "application", value: "created" }]);
+    });
+  });
+
   it("serializes two fresh-schema initializers from separate sessions", async () => {
     await withIsolatedSchema("fresh", async (first, second) => {
       let initializersStarted = 0;

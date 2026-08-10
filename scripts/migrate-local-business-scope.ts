@@ -12,6 +12,7 @@ import {
 import {
   createBusinessScopedPersistentCollection,
   createPersistentCollection,
+  establishLegacyCollectionWriteFence,
   resolveCollectionQueryable,
   resolveDataRoot,
   type CollectionStorageOptions,
@@ -29,6 +30,8 @@ interface MigrationUnitResult {
 
 export interface LocalBusinessScopeMigrationOptions extends CollectionStorageOptions {
   businessId: string;
+  legacyFileWritersQuiesced?: boolean;
+  testOnlyAllowPgMemCooperativeFence?: boolean;
   faultInjector?: (phase:
     | "after_record_publish"
     | "after_offer_record_publish"
@@ -195,6 +198,18 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
   const name = "stage-a-001-audit" as const;
   const offerName = "stage-a-002-offers" as const;
   const queryable = resolveCollectionQueryable(options);
+  if (!queryable && options.legacyFileWritersQuiesced !== true) {
+    throw new Error("Legacy file writers must be confirmed quiescent before migration.");
+  }
+  for (const collectionName of ["audit/events", "offers/drafts", "production/drafts"] as const) {
+    await establishLegacyCollectionWriteFence({
+      collectionName,
+      rootDir: queryable ? undefined : options.rootDir,
+      pgPool: queryable,
+      legacyFileWritersQuiesced: options.legacyFileWritersQuiesced,
+      testOnlyAllowPgMemCooperativeFence: options.testOnlyAllowPgMemCooperativeFence
+    });
+  }
   const manifest = queryable ? undefined : readManifest(options, businessId);
   const units: MigrationUnitResult[] = [];
 
@@ -285,11 +300,12 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
 if (import.meta.url === `file://${process.argv[1]}`) {
   const index = process.argv.indexOf("--business-id");
   const businessId = index >= 0 ? process.argv[index + 1] : undefined;
+  const legacyFileWritersQuiesced = process.argv.includes("--confirm-legacy-file-writers-quiesced");
   if (!businessId) {
     console.error("--business-id ist erforderlich.");
     process.exitCode = 1;
   } else {
-    runLocalBusinessScopeMigration({ businessId })
+    runLocalBusinessScopeMigration({ businessId, legacyFileWritersQuiesced })
       .then((result) => console.log(JSON.stringify(result)))
       .catch((error: unknown) => {
         console.error(error instanceof Error ? error.message : String(error));

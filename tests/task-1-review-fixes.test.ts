@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,7 +12,23 @@ import { createBusinessScopedPersistentCollection, createPersistentCollection } 
 import { runLocalBusinessScopeMigration } from "../scripts/migrate-local-business-scope.js";
 
 const roots: string[] = [];
-afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
+
+function makeFixtureWritable(filePath: string): void {
+  if (!existsSync(filePath)) return;
+  const stats = lstatSync(filePath);
+  if (stats.isSymbolicLink()) return;
+  if (!stats.isDirectory()) {
+    chmodSync(filePath, 0o644);
+    return;
+  }
+  chmodSync(filePath, 0o755);
+  for (const entry of readdirSync(filePath)) makeFixtureWritable(path.join(filePath, entry));
+}
+
+afterEach(async () => Promise.all(roots.splice(0).map((root) => {
+  makeFixtureWritable(root);
+  return rm(root, { recursive: true, force: true });
+})));
 
 function root(): string {
   const value = mkdtempSync(path.join(tmpdir(), "task-1-review-"));
@@ -148,8 +164,8 @@ describe("Task 1 review fixes", () => {
       { name: "stage-a-002-offers", status: "migrated" },
       { name: "stage-a-003-production-drafts", status: "migrated" }
     ];
-    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha" })).resolves.toEqual({ units: migratedUnits });
-    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "beta" })).resolves.toEqual({ units: migratedUnits });
+    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha", legacyFileWritersQuiesced: true })).resolves.toEqual({ units: migratedUnits });
+    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "beta", legacyFileWritersQuiesced: true })).resolves.toEqual({ units: migratedUnits });
   });
 
   it("leaves no false file record after an injected pre-publish failure", async () => {
@@ -199,8 +215,8 @@ describe("Task 1 review fixes", () => {
     const dataRoot = root();
     const legacy = createPersistentCollection<{ auditId: string; at: string }>({ collectionName: "audit/events", getId: (entry) => entry.auditId, rootDir: dataRoot });
     await legacy.set({ auditId: "legacy", at: "2026-08-10T00:00:00.000Z" });
-    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha", faultInjector: (phase) => { if (phase === "before_manifest_publish") throw new Error("stop"); } })).rejects.toThrow("stop");
-    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha" })).resolves.toEqual({
+    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha", legacyFileWritersQuiesced: true, faultInjector: (phase) => { if (phase === "before_manifest_publish") throw new Error("stop"); } })).rejects.toThrow("stop");
+    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha", legacyFileWritersQuiesced: true })).resolves.toEqual({
       units: [
         { name: "stage-a-001-audit", status: "migrated" },
         { name: "stage-a-002-offers", status: "migrated" },
@@ -222,10 +238,11 @@ describe("Task 1 review fixes", () => {
     await expect(runLocalBusinessScopeMigration({
       rootDir: dataRoot,
       businessId: "alpha",
+      legacyFileWritersQuiesced: true,
       faultInjector: (seenPhase) => { if (seenPhase === phase) throw new Error("stop"); }
     })).rejects.toThrow("stop");
     expectNoTemporaryFiles(dataRoot);
-    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha" })).resolves.toEqual({
+    await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha", legacyFileWritersQuiesced: true })).resolves.toEqual({
       units: [
         { name: "stage-a-001-audit", status: retryStatus },
         { name: "stage-a-002-offers", status: "migrated" },
