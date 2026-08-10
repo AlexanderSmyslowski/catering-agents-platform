@@ -30,7 +30,7 @@ function isOperationsAuditOperator(
   allowDevActorHeader = false
 ): boolean {
   return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+    baseActorForRequest(request, trustedActorSecret, allowDevActorHeader)
   ) === "operations_audit_operator";
 }
 
@@ -81,14 +81,14 @@ function defaultWebRecipeSearchProvider(env: Record<string, string | undefined>)
   return new DisabledWebRecipeSearchProvider();
 }
 
-function actorForRequest(
+function baseActorForRequest(
   request: { headers: Record<string, string | string[] | undefined> },
   trustedActorSecret?: string,
   allowDevActorHeader = false
 ) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName: "Produktions-Mitarbeiter",
-    fallbackBusinessId: process.env.CATERING_DEFAULT_BUSINESS_ID ?? "local",
+    fallbackBusinessId: "local",
     trustedActorSecret,
     allowDevActorHeader
   });
@@ -100,7 +100,7 @@ function isProductionOperator(
   allowDevActorHeader = false
 ): boolean {
   return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+    baseActorForRequest(request, trustedActorSecret, allowDevActorHeader)
   ) === "production_operator";
 }
 
@@ -128,6 +128,9 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   const productionDraftDataMode = productionDraftDataModeFromEnv(env);
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
+  const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => trustedActorFromHeaders(request.headers, {
+    fallbackActorName: "Produktions-Mitarbeiter", fallbackBusinessId: defaultBusinessContext.businessId, requireTrustedBusinessId: env.CATERING_DEPLOYMENT_PROFILE === "hosted", trustedActorSecret, allowDevActorHeader
+  });
   const repository =
     options.repository ??
     new InMemoryRecipeRepository(undefined, {

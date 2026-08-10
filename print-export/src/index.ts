@@ -16,6 +16,7 @@ import {
   formatDocumentIngestionWarningLabel,
   formatMetroGroupLabel,
   isDevAuthEnabled,
+  hostedMultiBusinessReady,
   RecipeLibrary,
   recipeSourceOriginLabel,
   recipeSourceReferenceLabel,
@@ -303,7 +304,7 @@ function actorForRequest(
 ) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName,
-    fallbackBusinessId: process.env.CATERING_DEFAULT_BUSINESS_ID ?? "local",
+    fallbackBusinessId: "local",
     trustedActorSecret,
     allowDevActorHeader
   });
@@ -361,6 +362,9 @@ function requireProductionOperator(
 
 export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   const env = options.env ?? process.env;
+  if (env.CATERING_DEPLOYMENT_PROFILE === "hosted" && !hostedMultiBusinessReady) {
+    throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
+  }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
   const app = Fastify({

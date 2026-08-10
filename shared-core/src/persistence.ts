@@ -3,8 +3,11 @@ import {
   mkdirSync,
   openSync,
   closeSync,
+  linkSync,
   readdirSync,
   readFileSync,
+  renameSync,
+  unlinkSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
@@ -31,6 +34,7 @@ export interface PersistentCollectionOptions<T> extends CollectionStorageOptions
   getId: (item: T) => string;
   validate?: (value: T) => T;
   seed?: T[];
+  fileFaultInjector?: (phase: "before_record_publish" | "before_record_replace") => void;
 }
 
 export interface PersistentCollection<T> {
@@ -303,11 +307,33 @@ function assertScopedPayload<T>(context: BusinessContext, item: T): T {
   assertBusinessId(context.businessId);
   if (item && typeof item === "object" && "businessId" in item) {
     const embeddedBusinessId = (item as { businessId?: unknown }).businessId;
-    if (typeof embeddedBusinessId === "string" && embeddedBusinessId !== context.businessId) {
+    if (embeddedBusinessId !== context.businessId) {
       throw new Error("Payload passt nicht zum vertrauenswürdigen Betriebskontext.");
     }
   }
   return item;
+}
+
+function atomicWrite(filePath: string, payload: string, beforePublish?: () => void): void {
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(temporaryPath, payload, { flag: "wx" });
+  beforePublish?.();
+  renameSync(temporaryPath, filePath);
+}
+
+function atomicInsert(filePath: string, payload: string, beforePublish?: () => void): "created" | "exists" {
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(temporaryPath, payload, { flag: "wx" });
+  try {
+    beforePublish?.();
+    linkSync(temporaryPath, filePath);
+    return "created";
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return "exists";
+    throw error;
+  } finally {
+    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+  }
 }
 
 function versionOf(value: unknown): number | undefined {
@@ -326,47 +352,37 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     return readdirSync(directory)
       .filter((filename) => filename.endsWith(".json"))
       .sort((left, right) => left.localeCompare(right))
-      .map((filename) => this.normalize(JSON.parse(readFileSync(path.join(directory, filename), "utf8")) as T));
+      .map((filename) => this.normalizeForContext(context, JSON.parse(readFileSync(path.join(directory, filename), "utf8")) as T));
   }
 
   async get(context: BusinessContext, id: string): Promise<T | undefined> {
     const filePath = this.filePathFor(context, id);
     if (!existsSync(filePath)) return undefined;
-    return this.normalize(JSON.parse(readFileSync(filePath, "utf8")) as T);
+    return this.normalizeForContext(context, JSON.parse(readFileSync(filePath, "utf8")) as T, id);
   }
 
   async set(context: BusinessContext, item: T): Promise<void> {
-    const normalized = this.normalize(assertScopedPayload(context, item));
+    const normalized = this.normalizeForContext(context, item);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
     mkdirSync(path.dirname(filePath), { recursive: true });
-    writeFileSync(filePath, JSON.stringify(normalized, null, 2));
+    atomicWrite(filePath, JSON.stringify(normalized, null, 2), () => this.options.fileFaultInjector?.("before_record_replace"));
   }
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
-    const normalized = this.normalize(assertScopedPayload(context, item));
+    const normalized = this.normalizeForContext(context, item);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
     mkdirSync(path.dirname(filePath), { recursive: true });
-    try {
-      const fd = openSync(filePath, "wx");
-      try {
-        writeFileSync(fd, JSON.stringify(normalized, null, 2));
-      } finally {
-        closeSync(fd);
-      }
-      return "created";
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") return "exists";
-      throw error;
-    }
+    return atomicInsert(filePath, JSON.stringify(normalized, null, 2), () => this.options.fileFaultInjector?.("before_record_publish"));
   }
 
   async compareAndSet(context: BusinessContext, id: string, expectedVersion: number, item: T): Promise<"updated" | "conflict" | "missing"> {
-    const normalized = this.normalize(assertScopedPayload(context, item));
+    const normalized = this.normalizeForContext(context, item);
     const filePath = this.filePathFor(context, id);
     if (!existsSync(filePath)) return "missing";
-    const existing = this.normalize(JSON.parse(readFileSync(filePath, "utf8")) as T);
+    const existing = this.normalizeForContext(context, JSON.parse(readFileSync(filePath, "utf8")) as T, id);
     if (versionOf(existing) !== expectedVersion) return "conflict";
-    writeFileSync(filePath, JSON.stringify(normalized, null, 2));
+    if (this.options.getId(normalized) !== id) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
+    atomicWrite(filePath, JSON.stringify(normalized, null, 2), () => this.options.fileFaultInjector?.("before_record_replace"));
     return "updated";
   }
 
@@ -382,6 +398,12 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
   private normalize(value: T): T {
     return this.options.validate ? this.options.validate(value) : value;
   }
+
+  private normalizeForContext(context: BusinessContext, value: T, expectedId?: string): T {
+    const normalized = assertScopedPayload(context, this.normalize(value));
+    if (expectedId && this.options.getId(normalized) !== expectedId) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
+    return normalized;
+  }
 }
 
 class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersistentCollection<T> {
@@ -393,7 +415,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
       "SELECT payload FROM catering_business_records WHERE business_id = $1 AND collection_name = $2 ORDER BY record_id",
       [assertBusinessId(context.businessId), this.options.collectionName]
     );
-    return result.rows.map((row) => this.normalize(parsePayload<T>(row.payload)));
+    return result.rows.map((row) => this.normalizeForContext(context, parsePayload<T>(row.payload)));
   }
 
   async get(context: BusinessContext, id: string): Promise<T | undefined> {
@@ -402,35 +424,36 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
       "SELECT payload FROM catering_business_records WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 LIMIT 1",
       [assertBusinessId(context.businessId), this.options.collectionName, id]
     );
-    return result.rows[0] ? this.normalize(parsePayload<T>(result.rows[0].payload)) : undefined;
+    return result.rows[0] ? this.normalizeForContext(context, parsePayload<T>(result.rows[0].payload), id) : undefined;
   }
 
   async set(context: BusinessContext, item: T): Promise<void> {
     await this.ensureInitialized();
-    const normalized = this.normalize(assertScopedPayload(context, item));
+    const normalized = this.normalizeForContext(context, item);
     await this.queryable.query(
-      "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, updated_at) VALUES ($1, $2, $3, $4::jsonb, NOW()) ON CONFLICT (business_id, collection_name, record_id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-      [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized)]
+      "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, version_number, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5, NOW()) ON CONFLICT (business_id, collection_name, record_id) DO UPDATE SET payload = EXCLUDED.payload, version_number = EXCLUDED.version_number, updated_at = NOW()",
+      [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized), versionOf(normalized) ?? null]
     );
   }
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
     await this.ensureInitialized();
-    const normalized = this.normalize(assertScopedPayload(context, item));
+    const normalized = this.normalizeForContext(context, item);
     const result = await this.queryable.query(
-      "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, updated_at) VALUES ($1, $2, $3, $4::jsonb, NOW()) ON CONFLICT DO NOTHING RETURNING record_id",
-      [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized)]
+      "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, version_number, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5, NOW()) ON CONFLICT DO NOTHING RETURNING record_id",
+      [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized), versionOf(normalized) ?? null]
     );
     return result.rows.length === 1 ? "created" : "exists";
   }
 
   async compareAndSet(context: BusinessContext, id: string, expectedVersion: number, item: T): Promise<"updated" | "conflict" | "missing"> {
     await this.ensureInitialized();
-    const normalized = this.normalize(assertScopedPayload(context, item));
+    const normalized = this.normalizeForContext(context, item);
+    if (this.options.getId(normalized) !== id) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     const businessId = assertBusinessId(context.businessId);
     const result = await this.queryable.query(
-      "UPDATE catering_business_records SET payload = $4::jsonb, updated_at = NOW() WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 AND (payload->>'version')::integer = $5 RETURNING record_id",
-      [businessId, this.options.collectionName, id, JSON.stringify(normalized), expectedVersion]
+      "UPDATE catering_business_records SET payload = $4::jsonb, version_number = $5, updated_at = NOW() WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 AND version_number = $6 RETURNING record_id",
+      [businessId, this.options.collectionName, id, JSON.stringify(normalized), versionOf(normalized) ?? null, expectedVersion]
     );
     if (result.rows.length === 1) return "updated";
     return (await this.get(context, id)) ? "conflict" : "missing";
@@ -440,13 +463,19 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
     return this.options.validate ? this.options.validate(value) : value;
   }
 
+  private normalizeForContext(context: BusinessContext, value: T, expectedId?: string): T {
+    const normalized = assertScopedPayload(context, this.normalize(value));
+    if (expectedId && this.options.getId(normalized) !== expectedId) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
+    return normalized;
+  }
+
   private async ensureInitialized(): Promise<void> {
     const key = this.queryable as object;
     const initializers = initCache.get(key) ?? new Map<string, Promise<void>>();
     initCache.set(key, initializers);
     if (!initializers.has("catering_business_records")) {
       initializers.set("catering_business_records", this.queryable.query(
-        "CREATE TABLE IF NOT EXISTS catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))"
+        "CREATE TABLE IF NOT EXISTS catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, version_number INTEGER, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))"
       ).then(() => undefined));
     }
     await initializers.get("catering_business_records");

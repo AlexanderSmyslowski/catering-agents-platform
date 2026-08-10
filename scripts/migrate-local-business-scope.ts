@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { assertBusinessId, type AuditEntry } from "../shared-core/src/index.js";
 import {
   createBusinessScopedPersistentCollection,
   createPersistentCollection,
   resolveDataRoot,
-  type CollectionStorageOptions
+  type CollectionStorageOptions,
+  type Queryable
 } from "../shared-core/src/persistence.js";
 
 interface MigrationManifest {
@@ -20,6 +21,7 @@ interface MigrationUnitResult {
 
 export interface LocalBusinessScopeMigrationOptions extends CollectionStorageOptions {
   businessId: string;
+  faultInjector?: (phase: "after_record_publish" | "before_manifest_publish") => void;
 }
 
 function stableJson(value: unknown): string {
@@ -37,28 +39,42 @@ function hashRecords(records: unknown[]): string {
   return createHash("sha256").update(stableJson(records)).digest("hex");
 }
 
-function manifestPath(options: LocalBusinessScopeMigrationOptions): string {
-  return path.join(resolveDataRoot(options.rootDir), "migrations", "business-scope-manifest.json");
+function manifestPath(options: LocalBusinessScopeMigrationOptions, businessId: string): string {
+  return path.join(resolveDataRoot(options.rootDir), "businesses", businessId, "migrations", "business-scope-manifest.json");
 }
 
-function readManifest(options: LocalBusinessScopeMigrationOptions): MigrationManifest {
-  const filePath = manifestPath(options);
+function readManifest(options: LocalBusinessScopeMigrationOptions, businessId: string): MigrationManifest {
+  const filePath = manifestPath(options, businessId);
   return existsSync(filePath)
     ? JSON.parse(readFileSync(filePath, "utf8")) as MigrationManifest
     : { completed: {} };
 }
 
-function writeManifest(options: LocalBusinessScopeMigrationOptions, manifest: MigrationManifest): void {
-  const filePath = manifestPath(options);
+function writeManifest(options: LocalBusinessScopeMigrationOptions, businessId: string, manifest: MigrationManifest): void {
+  const filePath = manifestPath(options, businessId);
   mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify(manifest, null, 2));
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(temporaryPath, JSON.stringify(manifest, null, 2), { flag: "wx" });
+  renameSync(temporaryPath, filePath);
+}
+
+async function pgCompletion(queryable: Queryable, businessId: string, name: string): Promise<boolean> {
+  await queryable.query("CREATE TABLE IF NOT EXISTS catering_business_migrations (business_id TEXT NOT NULL, unit_name TEXT NOT NULL, completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), source_count INTEGER NOT NULL, target_count INTEGER NOT NULL, hash TEXT NOT NULL, PRIMARY KEY (business_id, unit_name))");
+  return (await queryable.query("SELECT unit_name FROM catering_business_migrations WHERE business_id = $1 AND unit_name = $2", [businessId, name])).rows.length > 0;
+}
+
+async function recordPgCompletion(queryable: Queryable, businessId: string, name: string, sourceCount: number, targetCount: number, hash: string): Promise<void> {
+  await queryable.query("INSERT INTO catering_business_migrations (business_id, unit_name, source_count, target_count, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING", [businessId, name, sourceCount, targetCount, hash]);
 }
 
 export async function runLocalBusinessScopeMigration(options: LocalBusinessScopeMigrationOptions): Promise<{ units: MigrationUnitResult[] }> {
   const businessId = assertBusinessId(options.businessId);
-  const manifest = readManifest(options);
   const name = "stage-a-001-audit" as const;
-  if (manifest.completed[name]) return { units: [{ name, status: "already_migrated" }] };
+  const queryable = options.pgPool;
+  const manifest = queryable ? undefined : readManifest(options, businessId);
+  if (queryable ? await pgCompletion(queryable, businessId, name) : manifest?.completed[name]) {
+    return { units: [{ name, status: "already_migrated" }] };
+  }
 
   const legacy = createPersistentCollection<AuditEntry>({
     collectionName: "audit/events",
@@ -84,13 +100,21 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
     throw new Error("Audit-Migration konnte nicht verifiziert werden.");
   }
 
-  manifest.completed[name] = {
+  options.faultInjector?.("after_record_publish");
+
+  const completion = {
     completedAt: new Date().toISOString(),
     sourceCount: sourceEntries.length,
     targetCount: targetEntries.length,
     hash: actualHash
   };
-  writeManifest(options, manifest);
+  if (queryable) {
+    await recordPgCompletion(queryable, businessId, name, sourceEntries.length, targetEntries.length, actualHash);
+  } else {
+    manifest!.completed[name] = completion;
+    options.faultInjector?.("before_manifest_publish");
+    writeManifest(options, businessId, manifest!);
+  }
   return { units: [{ name, status: "migrated" }] };
 }
 

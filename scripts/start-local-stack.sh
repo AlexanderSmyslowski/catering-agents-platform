@@ -100,7 +100,7 @@ fi
 
 printf '%s\n' "${DATA_ROOT}" >"${DATA_ROOT_FILE}"
 echo "Lokale Datenwurzel: ${DATA_ROOT}"
-npm run migrate:business-scope -- --business-id "${DEFAULT_BUSINESS_ID}"
+CATERING_DATA_ROOT="${DATA_ROOT}" npm run migrate:business-scope -- --business-id "${DEFAULT_BUSINESS_ID}"
 
 start_service() {
   local name="$1"

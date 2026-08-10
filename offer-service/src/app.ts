@@ -56,7 +56,7 @@ function isOfferOperator(
   allowDevActorHeader = false
 ): boolean {
   return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+    baseActorForRequest(request, trustedActorSecret, allowDevActorHeader)
   ) === "offer_operator";
 }
 
@@ -81,7 +81,7 @@ function isOperationsAuditOperator(
   allowDevActorHeader = false
 ): boolean {
   return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+    baseActorForRequest(request, trustedActorSecret, allowDevActorHeader)
   ) === "operations_audit_operator";
 }
 
@@ -147,14 +147,14 @@ async function recipeImportFromMultipart(
   };
 }
 
-function actorForRequest(
+function baseActorForRequest(
   request: { headers: Record<string, string | string[] | undefined> },
   trustedActorSecret?: string,
   allowDevActorHeader = false
 ) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName: "Angebots-Mitarbeiter",
-    fallbackBusinessId: process.env.CATERING_DEFAULT_BUSINESS_ID ?? "local",
+    fallbackBusinessId: "local",
     trustedActorSecret,
     allowDevActorHeader
   });
@@ -169,6 +169,9 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
+  const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => trustedActorFromHeaders(request.headers, {
+    fallbackActorName: "Angebots-Mitarbeiter", fallbackBusinessId: defaultBusinessContext.businessId, requireTrustedBusinessId: env.CATERING_DEPLOYMENT_PROFILE === "hosted", trustedActorSecret, allowDevActorHeader
+  });
   const storageOptions = isOfferStore(input) ? input.storageOptions : options;
   const store =
     options.store ??
