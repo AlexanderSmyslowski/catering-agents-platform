@@ -305,6 +305,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
   const defaultBusinessId = env.CATERING_DEFAULT_BUSINESS_ID ?? "local";
+  const defaultBusinessContext = { businessId: defaultBusinessId };
   type PrintExportRequest = { headers: Record<string, string | string[] | undefined>; url?: string };
   const resolveActor = createTrustedActorResolver<PrintExportRequest>((request) => ({
     fallbackActorName: request.url?.startsWith("/v1/exports/offers/")
@@ -366,7 +367,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       return reply.send({ service: "print-export", status: "ok", timestamp: new Date().toISOString() });
     }
     const [offerDrafts, productionPlans, purchaseLists] = await Promise.all([
-      offerStore.listDrafts(),
+      offerStore.listDrafts(defaultBusinessContext),
       productionStore.listPlans(),
       productionStore.listPurchaseLists()
     ]);
@@ -391,7 +392,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
-      const draft = await offerStore.getDraft(request.params.draftId);
+      const draft = await offerStore.getDraft(actorForRequest(request), request.params.draftId);
       if (!draft) {
         return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
       }

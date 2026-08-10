@@ -188,24 +188,22 @@ describe("critical path rehearsal", () => {
       expect(draft.variantSet.length).toBeGreaterThan(0);
       expect(draft.pricingSummary.notes?.join(" ")).toContain("Calculated for 80 attendees.");
 
-      const promotedSpec = await expectJsonResponse<AcceptedEventSpec>(
+      const approval = await expectJsonResponse<{ approvedOffer: { approvedOfferId: string } }>(
         await offerApp.inject({
           method: "POST",
-          url: `/v1/offers/drafts/${draft.draftId}/promote`,
+          url: `/v1/offers/drafts/${draft.draftId}/decision`,
           headers: trustedHeaders("offer_operator"),
           payload: {
+            decision: "approved",
             variantId: "variant-2"
           }
         })
       );
-
-      expect(promotedSpec.specId).toBe(`${draft.draftId}-variant-2`);
-      expect(promotedSpec.sourceLineage).toEqual([
-        {
-          sourceType: "offer_service",
-          reference: draft.draftId
-        }
-      ]);
+      const handoffResponse = await expectJsonResponse<{ handoff: { eventSpecSnapshot: AcceptedEventSpec } }>(
+        await offerApp.inject({ method: "POST", url: `/v1/offers/approved/${approval.approvedOffer.approvedOfferId}/handoffs`, headers: trustedHeaders("offer_operator"), payload: {} })
+      );
+      const promotedSpec = handoffResponse.handoff.eventSpecSnapshot;
+      expect(promotedSpec.lifecycle.commercialState).toBe("accepted");
       expect(promotedSpec.attendees.expected).toBe(80);
 
       const productionSpec = withProductionDecisions(promotedSpec);

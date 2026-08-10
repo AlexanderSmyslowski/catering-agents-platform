@@ -4,6 +4,9 @@ import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const trustedHeaders = env.CATERING_TRUSTED_ACTOR_SECRET
+    ? { "x-catering-trusted-secret": env.CATERING_TRUSTED_ACTOR_SECRET, "x-catering-actor-name": "Angebots-Mitarbeiter", "x-catering-business-id": env.CATERING_DEFAULT_BUSINESS_ID ?? "local" }
+    : {};
 
   return {
     plugins: [react()],
@@ -24,7 +27,8 @@ export default defineConfig(({ mode }) => {
         "/api/offers": {
           target: env.VITE_OFFERS_PROXY_TARGET ?? "http://localhost:3102",
           changeOrigin: true,
-          rewrite: (input) => input.replace(/^\/api\/offers/, "")
+          rewrite: (input) => input.replace(/^\/api\/offers/, ""),
+          headers: trustedHeaders
         },
         "/api/production": {
           target: env.VITE_PRODUCTION_PROXY_TARGET ?? "http://localhost:3103",

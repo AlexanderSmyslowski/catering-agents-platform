@@ -91,7 +91,7 @@ function MiniPilotFlowHarness() {
           }}
           selectedDraft={undefined}
           setSelectedDraftId={() => undefined}
-          promoteDraft={async () => undefined}
+          approveDraft={async () => undefined}
           filteredSpecs={[]}
           activeSpec={{ specId: "spec-1", readiness: { status: "complete" } }}
           completeSpecCount={1}

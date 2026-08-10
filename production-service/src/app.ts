@@ -23,6 +23,8 @@ import { ProductionStore } from "./repositories/production-store.js";
 import { buildProductionArtifacts } from "./rules/planning.js";
 import { registerProductionArtifactRoutes } from "./routes/artifact-routes.js";
 import { registerProductionRecipeRoutes } from "./routes/recipe-routes.js";
+import type { ProductionHandoffReader } from "./ports/production-handoff-reader.js";
+import { HttpProductionHandoffReader } from "./gateways/http-production-handoff-reader.js";
 
 export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
@@ -36,6 +38,7 @@ export interface ProductionAppOptions {
   databaseUrl?: string;
   pgPool?: Queryable;
   trustedActorSecret?: string;
+  handoffReader?: ProductionHandoffReader;
   env?: Record<string, string | undefined>;
 }
 
@@ -132,6 +135,9 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     (options.llmAdapter
       ? () => options.llmAdapter as LlmReadinessProviderAdapter
       : () => buildByoLlmAdapterFromEnv(env));
+  const handoffReader = options.handoffReader ?? (env.CATERING_OFFER_SERVICE_URL
+    ? new HttpProductionHandoffReader({ offerServiceUrl: env.CATERING_OFFER_SERVICE_URL, trustedServiceSecret: trustedActorSecret })
+    : undefined);
 
   const app = Fastify({
     logger: false
@@ -175,6 +181,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     auditLog,
     buildLlmAdapter,
     productionDraftDataMode,
+    handoffReader,
     trustedActorSecret,
     allowDevActorHeader,
     isProductionOperator,

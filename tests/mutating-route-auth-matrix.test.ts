@@ -158,14 +158,6 @@ const mutatingMvpRoutes: MutableRoute[] = [
     }
   },
   {
-    service: "offer",
-    method: "POST",
-    pathTemplate: "/v1/offers/drafts/:draftId/promote",
-    requiredRole: "offer_operator",
-    url: "/v1/offers/drafts/matrix-draft/promote",
-    payload: { variantId: "variant-2" }
-  },
-  {
     service: "production",
     method: "POST",
     pathTemplate: "/v1/production/plans",
@@ -189,6 +181,14 @@ const mutatingMvpRoutes: MutableRoute[] = [
       mimeType: "text/plain",
       contentBase64: Buffer.from("Buffet fuer 45 Personen mit Vitello Tonnato.", "utf8").toString("base64")
     })
+  },
+  {
+    service: "production",
+    method: "POST",
+    pathTemplate: "/v1/production/drafts/from-handoff/:handoffId",
+    requiredRole: "production_operator",
+    url: "/v1/production/drafts/from-handoff/matrix-handoff",
+    payload: {}
   },
   {
     service: "production",

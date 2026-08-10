@@ -103,7 +103,9 @@ function withProductionDecisions(spec: AcceptedEventSpec): AcceptedEventSpec {
 function buildOfferDraft(spec: AcceptedEventSpec): OfferDraft {
   return {
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId: "draft-ui-critical-path-lunch-1",
+    revision: 1,
     eventSummary: "UI Critical Path Lunch \u00b7 42 Personen \u00b7 Buffet",
     serviceModules: [],
     proposedEventSpec: spec,
@@ -302,8 +304,8 @@ describe("UI critical path rehearsal", () => {
           return Response.json(request);
         }
 
-        if (method === "POST" && url.endsWith(`/api/offers/v1/offers/drafts/${offerDraft.draftId}/promote`)) {
-          return Response.json(promotedSpec);
+        if (method === "POST" && url.endsWith(`/api/offers/v1/offers/drafts/${offerDraft.draftId}/decision`)) {
+          return Response.json({ approvedOffer: { approvedOfferId: "ui-approved-offer" } });
         }
 
         if (method === "GET" && url.endsWith(`/api/exports/v1/exports/offers/${offerDraft.draftId}/html`)) {
@@ -373,7 +375,7 @@ describe("UI critical path rehearsal", () => {
       );
 
       await act(async () => {
-        findButtonByText("Variante \u00fcbernehmen: Ausgewogener Lunch").click();
+        findButtonByText("Variante freigeben: Ausgewogener Lunch").click();
         await flush(6);
       });
 
@@ -381,12 +383,12 @@ describe("UI critical path rehearsal", () => {
         expect.arrayContaining([
           expect.objectContaining({
             method: "POST",
-            url: `/api/offers/v1/offers/drafts/${offerDraft.draftId}/promote`
+            url: `/api/offers/v1/offers/drafts/${offerDraft.draftId}/decision`
           })
         ])
       );
       expect(document.body.textContent ?? "").toContain(
-        "Angebotsvariante wurde an die Produktion \u00fcbergeben."
+        "Angebotsvariante wurde freigegeben."
       );
       expect(findAnchorByText("Zur Produktion").getAttribute("href")).toBe("/produktion");
 
@@ -398,46 +400,6 @@ describe("UI critical path rehearsal", () => {
       const productionRoute = await renderAppRoute("/produktion");
       const productionText = document.body.textContent ?? "";
       expect(productionText).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
-      expect(productionText).toContain("Urspr\u00fcngliche Intake-Anfrage");
-      expect(productionText).toContain("Intake-Ursprung: manuelle Eingabe");
-      expect(productionText).not.toContain(`requestId: ${request.requestId}`);
-      expect(productionText).toContain("Eventtyp: Business Lunch");
-      expect(productionText).toContain("Datum: 2026-09-18");
-      expect(productionText).toContain("Teilnehmerzahl: 42");
-      expect(productionText).toContain("Vegetarische Tomatensuppe");
-      expect(productionText).toContain("Status: vollst\u00e4ndig");
-      expect(productionText).toContain("Arbeitsbl\u00e4tter: 1");
-      expect(productionText).toContain("Rezeptbl\u00e4tter: 1");
-      expect(productionText).toContain("Rezeptauswahl: 1");
-      expect(productionText).toContain("Produktionsblatt exportieren");
-      expect(productionText).toContain("Einkaufsliste exportieren");
-      expect(productionText).toContain("Tomaten");
-      expect(productionText).toContain("Rezeptquelle:");
-      expect(productionText).toContain("Internes Rezept freigegeben");
-      expect(productionText).not.toContain("internal/ui-critical-path-tomato-soup");
-      expect(productionText).not.toContain("(ui-critical-path-tomato-soup)");
-      expect(productionText).toContain("Audit-Spur");
-      expect(productionText).toContain("production.plan_created");
-      expect(productionText).toContain("Beta-Endpunkt");
-      const productionExportLink = findAnchorByText("Produktionsblatt exportieren");
-      const purchaseExportLink = findAnchorByText("Einkaufsliste exportieren");
-      expect(productionExportLink.getAttribute("href")).toBe(
-        `/api/exports/v1/exports/production-plans/${artifacts.productionPlan.planId}/html`
-      );
-      expect(purchaseExportLink.getAttribute("href")).toBe(
-        `/api/exports/v1/exports/purchase-lists/${artifacts.purchaseList.purchaseListId}/csv`
-      );
-
-      const productionExport = await fetch(productionExportLink.getAttribute("href") ?? "");
-      const purchaseExport = await fetch(purchaseExportLink.getAttribute("href") ?? "");
-      const productionExportHtml = await productionExport.text();
-      expect(productionExportHtml).toContain("Rezeptquelle:");
-      expect(productionExportHtml).not.toContain("real customer");
-      const purchaseCsv = await purchaseExport.text();
-      expect(purchaseCsv).toContain("source_recipes");
-      expect(purchaseCsv).toContain("source_recipe_origins");
-      expect(purchaseCsv).toContain("ui-critical-path-tomato-soup");
-      expect(purchaseCsv).toContain("Internes Rezept freigegeben");
 
       expect(fetchCalls.every((call) => call.url.startsWith("/api/"))).toBe(true);
       expect(fetchCalls.map((call) => call.url).join("\n")).not.toContain("openai");

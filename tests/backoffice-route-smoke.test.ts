@@ -614,7 +614,7 @@ describe("backoffice route smoke", () => {
       }
     ];
     const postedBodies: Array<Record<string, unknown>> = [];
-    const promotedBodies: Array<Record<string, unknown>> = [];
+    const approvalBodies: Array<Record<string, unknown>> = [];
 
     installBackofficeEnvironmentMocks({ acceptedSpecs, offerDrafts });
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
@@ -638,27 +638,9 @@ describe("backoffice route smoke", () => {
         });
       }
 
-      if (url.endsWith("/api/offers/v1/offers/drafts/c3-draft-created/promote")) {
-        promotedBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
-        acceptedSpecs.push({
-          specId: "c3-spec-promoted",
-          requestId: "c3-request-promoted",
-          draftId: "c3-draft-created",
-          sourceLineage: [{ sourceType: "offer_draft", reference: "c3-draft-created" }],
-          readiness: { status: "partial", reasons: ["Getränkepaket noch klären"] },
-          event: { type: "sommerfest", date: "2026-08-20" },
-          servicePlan: { serviceForm: "buffet" },
-          attendees: { expected: 80 },
-          menuPlan: [
-            {
-              componentId: "c3-component-buffet",
-              label: "Buffet und Dessertstation",
-              menuCategory: "classic",
-              productionDecision: { mode: "scratch" }
-            }
-          ]
-        });
-        return new Response(JSON.stringify({ specId: "c3-spec-promoted" }), {
+      if (url.endsWith("/api/offers/v1/offers/drafts/c3-draft-created/decision")) {
+        approvalBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+        return new Response(JSON.stringify({ approvedOffer: { approvedOfferId: "c3-offer-approved" } }), {
           status: 201,
           headers: { "content-type": "application/json" }
         });
@@ -778,24 +760,20 @@ describe("backoffice route smoke", () => {
     expect(text).toContain("Aktueller Entwurf: C3 Sommerfest-Angebot für 80 Personen");
     expect(text).toContain("C3 Sommerfest-Angebot für 80 Personen · 1 Variante · 1 offener Punkt");
     expect(text).toContain("Getränkepaket noch klären");
-    expect(text).toContain("Variante übernehmen: Klassisch");
+    expect(text).toContain("Variante freigeben: Klassisch");
     expect(createdExport?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/c3-draft-created/html");
     expect(text).toContain("Für die Produktion übernommene Veranstaltungen");
     expect(text).toContain("Status: vollständig");
     expect(text).toContain("Zur Produktion");
 
     await act(async () => {
-      findButtonByText("Variante übernehmen: Klassisch").click();
+      findButtonByText("Variante freigeben: Klassisch").click();
       await flush();
     });
 
-    const promotedText = document.body.textContent ?? "";
-    expect(promotedBodies).toEqual([{ variantId: "classic" }]);
-    expect(promotedText).toContain("Angebotsvariante wurde an die Produktion übergeben.");
-    expect(promotedText).toContain("Produktionsübergabe: 1 vollständig · 1 teilweise");
-    expect(promotedText).toContain("aktueller Vorgang: sommerfest · 80 Teilnehmer · 2026-08-20 (teilweise vollständig)");
-    expect(promotedText).toContain("specId: c3-spec-promoted");
-    expect(promotedText).toContain("requestId: c3-request-promoted");
+    const approvedText = document.body.textContent ?? "";
+    expect(approvalBodies).toEqual([{ decision: "approved", variantId: "classic" }]);
+    expect(approvedText).toContain("Angebotsvariante wurde freigegeben.");
 
     await act(async () => {
       root.unmount();
@@ -803,15 +781,7 @@ describe("backoffice route smoke", () => {
     container.remove();
 
     const production = await renderRouteWithFirstHistorySelection("/produktion");
-    expect(production.text).toContain("sommerfest · 80 Teilnehmer · 2026-08-20");
-    expect(production.text).toContain("Spezifikation im Fokus");
-    expect(production.text).not.toContain("specId: c3-spec-promoted");
-    expect(production.text).not.toContain("requestId: c3-request-promoted");
-    expect(production.text).toContain("Ursprüngliche Intake-AnfrageIntake-Ursprung: Angebotsagent · erhalten 2026-08-20T09:00:00.000Z");
-    expect(production.text).toContain("Intake-UrsprungAngebotsagent · 2026-08-20T09:00:00.000Z · Intake-Anfrage verknüpft");
-    expect(production.text).not.toContain("Die ursprüngliche Intake-Anfrage konnte nicht geladen werden");
-    expect(production.text).toContain("Nächster SchrittRückfragen beantworten");
-    expect(production.text).toContain("Produktionsplannoch kein Plan");
+    expect(production.text).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
   });
 
   it("keeps production upload limit errors visible in the workbench", async () => {

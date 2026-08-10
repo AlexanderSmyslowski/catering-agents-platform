@@ -6,9 +6,11 @@ import { assertApprovalRequestRecordSemantics } from "./approval-request-identit
 import { schemaBundle } from "./schemas/index.js";
 import type {
   AcceptedEventSpec,
+  ApprovedOffer,
   ApprovalRequestRecord,
   EventRequest,
   OfferDraft,
+  ProductionHandoff,
   ProductionDraft,
   ProductionPlan,
   PurchaseList,
@@ -37,12 +39,14 @@ const addFormats = (
 
 type SchemaName =
   | "approvalRequest"
+  | "approvedOffer"
   | "eventRequest"
   | "offerDraft"
   | "acceptedEventSpec"
   | "productionDraft"
   | "recipe"
   | "productionPlan"
+  | "productionHandoff"
   | "purchaseList";
 
 type Validator = ((value: unknown) => boolean) & {
@@ -51,12 +55,14 @@ type Validator = ((value: unknown) => boolean) & {
 
 const schemaIds: Record<SchemaName, string> = {
   approvalRequest: "https://schemas.catering.local/approval-request.json",
+  approvedOffer: "https://schemas.catering.local/approved-offer.json",
   eventRequest: "https://schemas.catering.local/event-request.json",
   offerDraft: "https://schemas.catering.local/offer-draft.json",
   acceptedEventSpec: "https://schemas.catering.local/accepted-event-spec.json",
   productionDraft: "https://schemas.catering.local/production-draft.json",
   recipe: "https://schemas.catering.local/recipe.json",
   productionPlan: "https://schemas.catering.local/production-plan.json",
+  productionHandoff: "https://schemas.catering.local/production-handoff.json",
   purchaseList: "https://schemas.catering.local/purchase-list.json"
 };
 
@@ -206,6 +212,14 @@ export function validateApprovalRequestRecord(value: ApprovalRequestRecord): App
 
 export function validateOfferDraft(value: OfferDraft): OfferDraft {
   return assertValid("offerDraft", value);
+}
+
+export function validateApprovedOffer(value: ApprovedOffer): ApprovedOffer {
+  return assertValid("approvedOffer", value);
+}
+
+export function validateProductionHandoff(value: ProductionHandoff): ProductionHandoff {
+  return assertValid("productionHandoff", value);
 }
 
 export function validateAcceptedEventSpec(

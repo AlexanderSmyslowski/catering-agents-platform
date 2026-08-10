@@ -63,7 +63,7 @@ describe("offer workbench state", () => {
       activeDraft: { draftId: "draft-active" },
       selectedDraft: { draftId: "draft-selected" },
       setSelectedDraftId: (_draftId) => undefined,
-      promoteDraft: async (_draftId, _variantId) => undefined,
+      approveDraft: async (_draftId, _variantId) => undefined,
       filteredSpecs: [{ specId: "spec-1" }],
       activeSpec: { specId: "spec-active" },
       completeSpecCount: 2,

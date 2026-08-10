@@ -25,7 +25,8 @@ import {
   createOfferFromText,
   createProductionPlan,
   createProductionDraftFromDocument,
-  promoteOfferDraft,
+  decideOfferDraft,
+  createProductionHandoff,
   reviewRecipe,
   seedDemoData,
   updateAcceptedSpec,
@@ -109,6 +110,7 @@ export function App() {
   } = useRecipeUploadDraft();
   const [search, setSearch] = useState("");
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
+  const [approvedOfferId, setApprovedOfferId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [initialProductionWorkspace] = useState(() => {
     const focusedSpecId = consumePromotedProductionSpecFocus(route);
@@ -585,14 +587,15 @@ export function App() {
   });
   const { offerWorkbenchState } = buildAppOfferRouteAppBoundary({
     createOfferFromText,
-    promoteOfferDraft,
+    decideOfferDraft,
+    createProductionHandoff,
     submitting,
     setSubmitting,
     clearMessages,
-    setFocusedProductionSpecId: focusPromotedProductionSpec,
     refreshDashboard,
     setNotice,
     setError,
+    setApprovedOfferId,
     latestSourceLabel: latestIntakeRequestSummary,
     offerText,
     setOfferText,
@@ -609,6 +612,7 @@ export function App() {
     filteredOfferDrafts,
     activeDraft: activeOfferDraft,
     selectedDraft,
+    approvedOfferId,
     setSelectedDraftId,
     filteredSpecs,
     activeSpec: activeOfferSpec,

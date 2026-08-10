@@ -32,6 +32,7 @@ import {
   type ProductionDraftReviewCard,
   type ProductionDraftReviewDecision,
   type ProductionPlan,
+  type ProductionHandoff,
   type PurchaseList,
   type Recipe,
   type TrustedActor
@@ -45,6 +46,7 @@ import type {
   ProductionStore
 } from "../repositories/production-store.js";
 import { buildProductionArtifacts } from "../rules/planning.js";
+import type { ProductionHandoffReader } from "../ports/production-handoff-reader.js";
 
 const operatorProductionDraftReviewDecisions = [
   "fits",
@@ -260,6 +262,7 @@ export interface ProductionArtifactRouteDependencies {
   auditLog: AuditLogStore;
   buildLlmAdapter: () => LlmReadinessProviderAdapter;
   productionDraftDataMode: LlmReadinessDataMode;
+  handoffReader?: ProductionHandoffReader;
   trustedActorSecret?: string;
   allowDevActorHeader: boolean;
   isProductionOperator: (
@@ -717,12 +720,37 @@ export function registerProductionArtifactRoutes(
     auditLog,
     buildLlmAdapter,
     productionDraftDataMode,
+    handoffReader,
     trustedActorSecret,
     allowDevActorHeader,
     isProductionOperator,
     requireProductionOperator,
     actorForRequest
   } = deps;
+
+  app.post<{ Params: { handoffId: string } }>("/v1/production/drafts/from-handoff/:handoffId", async (request, reply) => {
+    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+    if (forbidden) return forbidden;
+    if (!handoffReader) return reply.code(503).send({ message: "Angebotsübergabe ist nicht konfiguriert." });
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    let handoff: ProductionHandoff | undefined;
+    try { handoff = await handoffReader.getHandoff(actor, request.params.handoffId); }
+    catch { return reply.code(502).send({ message: "Angebotsübergabe konnte nicht geladen werden." }); }
+    if (!handoff) return reply.code(404).send({ message: "Produktionsübergabe nicht gefunden." });
+    const draftId = `production-draft-handoff-${handoff.handoffId}`;
+    const existing = await store.getProductionDraft(draftId);
+    if (existing) return reply.code(201).send({ draft: existing });
+    const draft = validateProductionDraft({
+      schemaVersion: handoff.eventSpecSnapshot.schemaVersion, draftId, status: "pending_review", createdAt: handoff.createdAt,
+      source: { kind: "manual_import", receivedAt: handoff.createdAt, sourceRef: `offer-handoff:${handoff.handoffId}` },
+      guardrails: { draftOnly: true, humanApprovalRequired: true, writesProductObjects: false, rawProviderPayloadStored: false, knowledgeWritePolicy: "reviewed_only" },
+      reviewCards: [{ cardId: "card-event-handoff", kind: "event_data", title: "Freigegebenes Angebot prüfen", summary: "Unveränderliche Angebotsübergabe für die Produktionsprüfung.", decision: "pending", targetPath: "$.draftArtifacts.eventSpec", targetId: handoff.eventSpecSnapshot.specId, requiredApproval: true }],
+      draftArtifacts: { eventSpec: handoff.eventSpecSnapshot }
+    });
+    await store.saveProductionDraft(draft);
+    await auditLog.logFor(actor, { action: "production.draft_created_from_handoff", entityType: "ProductionDraft", entityId: draft.draftId, actor, summary: "ProductionDraft aus unveränderlicher Angebotsübergabe angelegt.", details: { handoffId: handoff.handoffId } });
+    return reply.code(201).send({ draft });
+  });
 
   app.post<{ Body: { eventSpec: AcceptedEventSpec; sourceReviewConfirmed?: boolean } }>(
     "/v1/production/plans",

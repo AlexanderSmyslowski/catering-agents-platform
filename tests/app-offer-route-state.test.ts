@@ -45,7 +45,7 @@ describe("app offer route state", () => {
       activeDraft: { draftId: "draft-active" },
       selectedDraft: { draftId: "draft-selected" },
       setSelectedDraftId: (_draftId) => undefined,
-      promoteDraft: async (_draftId, _variantId) => undefined,
+      approveDraft: async (_draftId, _variantId) => undefined,
       filteredSpecs: [{ specId: "spec-1" }],
       activeSpec: { specId: "spec-active" },
       completeSpecCount: 2,
@@ -94,7 +94,7 @@ describe("app offer route state", () => {
     expect(state.offerWorkbenchState.filteredOfferDrafts).toBe(input.filteredOfferDrafts);
     expect(state.offerWorkbenchState.filteredSpecs).toBe(input.filteredSpecs);
     expect(state.offerWorkbenchState.setOfferText).toBe(input.setOfferText);
-    expect(state.offerWorkbenchState.promoteDraft).toBe(input.promoteDraft);
+    expect(state.offerWorkbenchState.approveDraft).toBe(input.approveDraft);
     expect(state.offerWorkbenchState.setMiniPilotRawResult).toBe(input.setMiniPilotRawResult);
     expect(state.offerWorkbenchState.miniPilotReportState).toBe(input.miniPilotReportState);
   });

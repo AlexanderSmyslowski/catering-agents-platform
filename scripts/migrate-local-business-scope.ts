@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { assertBusinessId, type AuditEntry } from "../shared-core/src/index.js";
+import { assertBusinessId, validateOfferDraft, type AuditEntry, type OfferDraft } from "../shared-core/src/index.js";
 import {
   createBusinessScopedPersistentCollection,
   createPersistentCollection,
@@ -12,11 +12,11 @@ import {
 } from "../shared-core/src/persistence.js";
 
 interface MigrationManifest {
-  completed: Record<string, { completedAt: string; sourceCount: number; targetCount: number; hash: string }>;
+  completed: Record<string, { completedAt: string; sourceCount: number; targetCount: number; hash: string; legacyHandoffDiscarded?: boolean; strippedHandoffHash?: string }>;
 }
 
 interface MigrationUnitResult {
-  name: "stage-a-001-audit";
+  name: "stage-a-001-audit" | "stage-a-002-offers";
   status: "migrated" | "already_migrated";
 }
 
@@ -97,12 +97,12 @@ async function recordPgCompletion(queryable: Queryable, businessId: string, name
 export async function runLocalBusinessScopeMigration(options: LocalBusinessScopeMigrationOptions): Promise<{ units: MigrationUnitResult[] }> {
   const businessId = assertBusinessId(options.businessId);
   const name = "stage-a-001-audit" as const;
+  const offerName = "stage-a-002-offers" as const;
   const queryable = resolveCollectionQueryable(options);
   const manifest = queryable ? undefined : readManifest(options, businessId);
-  if (queryable ? await pgCompletion(queryable, businessId, name) : manifest?.completed[name]) {
-    return { units: [{ name, status: "already_migrated" }] };
-  }
+  const units: MigrationUnitResult[] = [];
 
+  if (!(queryable ? await pgCompletion(queryable, businessId, name) : manifest?.completed[name])) {
   const legacy = createPersistentCollection<AuditEntry>({
     collectionName: "audit/events",
     getId: (entry) => entry.auditId,
@@ -139,7 +139,32 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
     manifest!.completed[name] = completion;
     writeManifest(options, businessId, manifest!);
   }
-  return { units: [{ name, status: "migrated" }] };
+  units.push({ name, status: "migrated" });
+  } else {
+    units.push({ name, status: "already_migrated" });
+  }
+
+  if (queryable ? await pgCompletion(queryable, businessId, offerName) : manifest?.completed[offerName]) {
+    return { units };
+  }
+  const legacyOffers = createPersistentCollection<Record<string, unknown>>({ collectionName: "offers/drafts", getId: (draft) => String(draft.draftId), rootDir: queryable ? undefined : options.rootDir, pgPool: queryable });
+  const scopedOffers = createBusinessScopedPersistentCollection<OfferDraft>({ collectionName: "offers/drafts", getId: (draft) => draft.draftId, validate: validateOfferDraft, rootDir: queryable ? undefined : options.rootDir, pgPool: queryable });
+  const sourceOffers = await legacyOffers.list();
+  const strippedHandoffs = sourceOffers.map((draft) => draft.productionHandoff).filter((handoff) => handoff !== undefined);
+  const transformed = sourceOffers.map((legacyDraft) => {
+    const { productionHandoff: _discarded, ...draft } = legacyDraft;
+    return validateOfferDraft({ ...draft, businessId, revision: typeof draft.revision === "number" ? draft.revision : 1 } as OfferDraft);
+  });
+  for (const draft of transformed) await scopedOffers.insert({ businessId }, draft);
+  const targetOffers = await scopedOffers.list({ businessId });
+  const expectedOfferHash = hashRecords(transformed.sort((left, right) => left.draftId.localeCompare(right.draftId)));
+  const actualOfferHash = hashRecords(targetOffers.sort((left, right) => left.draftId.localeCompare(right.draftId)));
+  if (transformed.length !== targetOffers.length || expectedOfferHash !== actualOfferHash) throw new Error("Offer-Migration konnte nicht verifiziert werden.");
+  const offerCompletion = { completedAt: new Date().toISOString(), sourceCount: sourceOffers.length, targetCount: targetOffers.length, hash: actualOfferHash, legacyHandoffDiscarded: strippedHandoffs.length > 0, strippedHandoffHash: hashRecords(strippedHandoffs) };
+  if (queryable) await recordPgCompletion(queryable, businessId, offerName, sourceOffers.length, targetOffers.length, actualOfferHash);
+  else { manifest!.completed[offerName] = offerCompletion; writeManifest(options, businessId, manifest!); }
+  if (sourceOffers.length > 0) units.push({ name: offerName, status: "migrated" });
+  return { units };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

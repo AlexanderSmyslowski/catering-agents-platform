@@ -4,21 +4,17 @@ import {
   createCuratedOfferDraft,
   createOfferDraft,
   normalizeEventRequestToSpec,
-  promoteOfferVariant,
-  validateAcceptedEventSpec,
   validateEventRequest,
   validateOfferDraft,
   type AuditLogStore,
   type EventRequest,
   type TrustedActor
 } from "@catering/shared-core";
-import type { IntakeStore } from "@catering/intake-service";
 import { selectCuratedPackage } from "../../../shared-core/src/rules/curated-offer-selection.js";
 import type { OfferStore } from "../store.js";
 
 export interface OfferDraftRouteDependencies {
   store: OfferStore;
-  intakeStore: IntakeStore;
   auditLog: AuditLogStore;
   trustedActorSecret?: string;
   allowDevActorHeader: boolean;
@@ -46,7 +42,6 @@ export function registerOfferDraftRoutes(
 ) {
   const {
     store,
-    intakeStore,
     auditLog,
     trustedActorSecret,
     allowDevActorHeader,
@@ -73,13 +68,14 @@ export function registerOfferDraftRoutes(
     }
 
     const eventRequest = validateEventRequest(request.body);
-    const draft = validateOfferDraft(createPortfolioAwareOfferDraft(eventRequest));
-    await store.saveDraft(draft);
-    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(eventRequest), businessId: actor.businessId, revision: 1 });
+    await store.saveDraft(actor, draft);
+    await auditLog.logFor(actor, {
       action: "offer.draft_created",
       entityType: "OfferDraft",
       entityId: draft.draftId,
-      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+      actor,
       summary: "Angebotsentwurf aus strukturierter Event-Anfrage erstellt.",
       details: {
         requestId: eventRequest.requestId,
@@ -102,13 +98,14 @@ export function registerOfferDraftRoutes(
       channel: "text",
       rawText: request.body.text
     });
-    const draft = validateOfferDraft(createPortfolioAwareOfferDraft(eventRequest));
-    await store.saveDraft(draft);
-    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(eventRequest), businessId: actor.businessId, revision: 1 });
+    await store.saveDraft(actor, draft);
+    await auditLog.logFor(actor, {
       action: "offer.draft_created_from_text",
       entityType: "OfferDraft",
       entityId: draft.draftId,
-      actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+      actor,
       summary: "Angebotsentwurf aus Freitext erstellt.",
       details: {
         requestId: eventRequest.requestId,
@@ -126,7 +123,7 @@ export function registerOfferDraftRoutes(
     }
 
     return reply.send({
-      items: await store.listDrafts()
+      items: await store.listDrafts(actorForRequest(request, trustedActorSecret, allowDevActorHeader))
     });
   });
 
@@ -136,7 +133,7 @@ export function registerOfferDraftRoutes(
       return forbidden;
     }
 
-    const draft = await store.getDraft(request.params.draftId);
+    const draft = await store.getDraft(actorForRequest(request, trustedActorSecret, allowDevActorHeader), request.params.draftId);
     if (!draft) {
       return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
     }
@@ -144,37 +141,4 @@ export function registerOfferDraftRoutes(
     return reply.send(draft);
   });
 
-  app.post<{ Params: { draftId: string }; Body: { variantId?: string } }>(
-    "/v1/offers/drafts/:draftId/promote",
-    async (request, reply) => {
-      const forbidden = requireOfferOperator(request, reply, trustedActorSecret, allowDevActorHeader);
-      if (forbidden) {
-        return forbidden;
-      }
-
-      const draft = await store.getDraft(request.params.draftId);
-      if (!draft) {
-        return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
-      }
-
-      const promoted = validateAcceptedEventSpec(
-        promoteOfferVariant(draft, request.body?.variantId)
-      );
-      await intakeStore.saveSpec(promoted);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
-        action: "offer.promoted_variant",
-        entityType: "AcceptedEventSpec",
-        entityId: promoted.specId,
-        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-        summary: `Angebotsvariante in operative Event-Spezifikation übernommen.`,
-        details: {
-          draftId: draft.draftId,
-          variantId: request.body?.variantId ?? draft.variantSet[0]?.variantId,
-          readiness: promoted.readiness.status
-        }
-      });
-
-      return reply.code(201).send(promoted);
-    }
-  );
 }

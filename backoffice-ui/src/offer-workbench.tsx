@@ -70,7 +70,9 @@ export type OfferWorkbenchProps = {
   activeDraft?: Record<string, unknown>;
   selectedDraft?: Record<string, unknown>;
   setSelectedDraftId: (draftId: string) => void;
-  promoteDraft: (draftId: string, variantId: string) => Promise<void>;
+  approveDraft: (draftId: string, variantId: string) => Promise<void>;
+  approvedOfferId?: string;
+  createHandoff?: (approvedOfferId: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
   activeSpec?: Record<string, unknown>;
   completeSpecCount: number;
@@ -184,7 +186,9 @@ export function OfferConversationalWorkbench({
   activeDraft,
   selectedDraft,
   setSelectedDraftId,
-  promoteDraft,
+  approveDraft,
+  approvedOfferId,
+  createHandoff,
   filteredSpecs,
   activeSpec,
   completeSpecCount,
@@ -441,14 +445,19 @@ export function OfferConversationalWorkbench({
                     key={String(variant.variantId)}
                     className="secondary-button"
                     disabled={submitting}
-                    onClick={() => void promoteDraft(focusedDraftId, String(variant.variantId))}
+                    onClick={() => void approveDraft(focusedDraftId, String(variant.variantId))}
                   >
-                    {`Variante übernehmen: ${String(variant.label ?? variant.variantId)}`}
+                    {`Variante freigeben: ${String(variant.label ?? variant.variantId)}`}
                   </button>
                 ))}
                 <a className="ghost-link" href={offerExportUrl(focusedDraftId)} target="_blank" rel="noreferrer">
                   Angebot exportieren
                 </a>
+                {approvedOfferId && createHandoff ? (
+                  <button className="secondary-button" disabled={submitting} onClick={() => void createHandoff(approvedOfferId)}>
+                    An Produktion übergeben
+                  </button>
+                ) : null}
               </div>
               <details className="nested-details">
                 <summary>Angebotstexte anzeigen</summary>
