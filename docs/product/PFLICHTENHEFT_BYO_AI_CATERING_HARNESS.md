@@ -139,10 +139,11 @@ ueberschrieben.
 | `ApprovedProductionSpec` | Produktionsprodukt | unveraenderlicher freigegebener Stand | Plan, Rezepte, Einkauf und Mappe |
 | Produktionsartefakte | Produktionsprodukt | aus freigegebener Version ableitbar und versioniert | Arbeitsansichten und Exporte |
 
-Eine kanonische `ApprovalDecision` verweist auf Artefakt, Version, Entscheidung,
-Zeitpunkt und verantwortliche Person. Review-Markierungen wie `Passt` oder
-`Unklar` sind Arbeitsstand, aber keine zweite Freigabeautoritaet. Jede
-Materialisierung verweist auf genau eine gueltige Freigabeentscheidung.
+Der repo-weit fuehrende `ApprovalRequestRecord` verweist auf Artefakt, Version,
+Entscheidung, Zeitpunkt und verantwortliche Person. Review-Markierungen wie
+`Passt` oder `Unklar` sind Arbeitsstand, aber keine zweite
+Freigabeautoritaet. Jede Materialisierung verweist auf genau einen gueltigen
+Freigabenachweis.
 
 `AcceptedEventSpec` bleibt waehrend der Migration ein Legacy-Eingang oder
 Payload-Bestandteil. Im Zielbild ist es weder gemeinsam beschreibbares Aggregat
