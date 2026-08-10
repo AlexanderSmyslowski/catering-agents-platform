@@ -381,27 +381,3 @@ export function createCuratedOfferDraft(
     reviewStatus
   };
 }
-
-export function promoteOfferVariant(
-  draft: OfferDraft,
-  variantId?: string
-): AcceptedEventSpec {
-  const variant =
-    draft.variantSet.find((item) => item.variantId === variantId) ??
-    draft.variantSet.find((item) => item.qualityTier === "standard") ??
-    draft.variantSet[0];
-
-  return {
-    ...variant.proposedEventSpec,
-    specId: `${draft.draftId}-${variant.variantId}`,
-    lifecycle: {
-      commercialState: "quoted"
-    },
-    sourceLineage: [
-      {
-        sourceType: "offer_service",
-        reference: draft.draftId
-      }
-    ]
-  };
-}

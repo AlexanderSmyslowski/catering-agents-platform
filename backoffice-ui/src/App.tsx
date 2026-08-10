@@ -27,6 +27,7 @@ import {
   createProductionDraftFromDocument,
   decideOfferDraft,
   createProductionHandoff,
+  createProductionDraftFromHandoff,
   reviewRecipe,
   seedDemoData,
   updateAcceptedSpec,
@@ -58,6 +59,7 @@ import { useProductionWindowFileDrop } from "./use-production-window-file-drop.j
 import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useOperatorNameState } from "./use-operator-name-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
+import { openProductionDraftEntry } from "./production-entry-focus.js";
 
 const PROMOTED_PRODUCTION_SPEC_FOCUS_KEY = "catering.promotedProductionSpecFocus";
 
@@ -111,6 +113,8 @@ export function App() {
   const [search, setSearch] = useState("");
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [approvedOfferId, setApprovedOfferId] = useState<string>();
+  const [, setHandoffId] = useState<string>();
+  const [productionDraftId, setProductionDraftId] = useState<string>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [initialProductionWorkspace] = useState(() => {
     const focusedSpecId = consumePromotedProductionSpecFocus(route);
@@ -589,6 +593,7 @@ export function App() {
     createOfferFromText,
     decideOfferDraft,
     createProductionHandoff,
+    createProductionDraftFromHandoff,
     submitting,
     setSubmitting,
     clearMessages,
@@ -596,6 +601,9 @@ export function App() {
     setNotice,
     setError,
     setApprovedOfferId,
+    setHandoffId,
+    setProductionDraftId,
+    openProductionEntry: openProductionDraftEntry,
     latestSourceLabel: latestIntakeRequestSummary,
     offerText,
     setOfferText,
@@ -613,6 +621,7 @@ export function App() {
     activeDraft: activeOfferDraft,
     selectedDraft,
     approvedOfferId,
+    productionDraftId,
     setSelectedDraftId,
     filteredSpecs,
     activeSpec: activeOfferSpec,

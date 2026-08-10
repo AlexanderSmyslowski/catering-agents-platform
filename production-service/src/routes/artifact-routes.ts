@@ -737,11 +737,14 @@ export function registerProductionArtifactRoutes(
     try { handoff = await handoffReader.getHandoff(actor, request.params.handoffId); }
     catch { return reply.code(502).send({ message: "Angebotsübergabe konnte nicht geladen werden." }); }
     if (!handoff) return reply.code(404).send({ message: "Produktionsübergabe nicht gefunden." });
+    if (handoff.businessId !== actor.businessId || handoff.handoffId !== request.params.handoffId) {
+      return reply.code(502).send({ message: "Angebotsübergabe passt nicht zum angeforderten Betriebskontext." });
+    }
     const draftId = `production-draft-handoff-${handoff.handoffId}`;
     const existing = await store.getProductionDraft(draftId);
     if (existing) return reply.code(201).send({ draft: existing });
     const draft = validateProductionDraft({
-      schemaVersion: handoff.eventSpecSnapshot.schemaVersion, draftId, status: "pending_review", createdAt: handoff.createdAt,
+      schemaVersion: handoff.eventSpecSnapshot.schemaVersion, businessId: actor.businessId, draftId, status: "pending_review", createdAt: handoff.createdAt,
       source: { kind: "manual_import", receivedAt: handoff.createdAt, sourceRef: `offer-handoff:${handoff.handoffId}` },
       guardrails: { draftOnly: true, humanApprovalRequired: true, writesProductObjects: false, rawProviderPayloadStored: false, knowledgeWritePolicy: "reviewed_only" },
       reviewCards: [{ cardId: "card-event-handoff", kind: "event_data", title: "Freigegebenes Angebot prüfen", summary: "Unveränderliche Angebotsübergabe für die Produktionsprüfung.", decision: "pending", targetPath: "$.draftArtifacts.eventSpec", targetId: handoff.eventSpecSnapshot.specId, requiredApproval: true }],

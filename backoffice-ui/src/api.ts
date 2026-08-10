@@ -385,6 +385,13 @@ export async function createProductionHandoff(approvedOfferId: string) {
   }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 
+export async function createProductionDraftFromHandoff(handoffId: string) {
+  return fetchJson<{ draft?: { draftId: string } }>(`/api/production/v1/production/drafts/from-handoff/${encodeURIComponent(handoffId)}`, {
+    method: "POST",
+    body: "{}"
+  }, DEFAULT_MUTATION_ACTOR_NAMES.production);
+}
+
 export async function createProductionPlan(
   eventSpec: Record<string, unknown>,
   options?: { sourceReviewConfirmed?: boolean }

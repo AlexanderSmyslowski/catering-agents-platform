@@ -48,6 +48,7 @@ export const productionDraftSchema = {
   ],
   properties: {
     schemaVersion: { type: "string", maxLength: 32 },
+    businessId: { type: "string", pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" },
     draftId: { type: "string", maxLength: 160 },
     status: {
       enum: ["pending_review", "approved", "rejected", "superseded"]

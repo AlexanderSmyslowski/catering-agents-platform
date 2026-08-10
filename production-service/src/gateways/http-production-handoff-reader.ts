@@ -18,6 +18,11 @@ export class HttpProductionHandoffReader implements ProductionHandoffReader {
     if (response.status === 404) return undefined;
     if (!response.ok) throw new Error("Produktionsübergabe konnte nicht geladen werden.");
     const payload = await response.json() as { handoff?: ProductionHandoff };
-    return payload.handoff ? validateProductionHandoff(payload.handoff) : undefined;
+    if (!payload.handoff) throw new Error("Produktionsübergabe enthält kein gültiges Handoff-Artefakt.");
+    const handoff = validateProductionHandoff(payload.handoff);
+    if (handoff.handoffId !== handoffId || handoff.businessId !== context.businessId) {
+      throw new Error("Produktionsübergabe passt nicht zur angeforderten Identität.");
+    }
+    return handoff;
   }
 }

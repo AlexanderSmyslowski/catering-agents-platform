@@ -552,4 +552,38 @@ describe("ProductionDraftReviewPanel", () => {
     expect(document.body.textContent ?? "").not.toContain("Produktionsentwürfe prüfen");
     await act(async () => root.unmount());
   });
+
+  it("exposes and focuses the production draft selected by the handoff entry URL", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+    });
+    const selectedDraft = {
+      ...draftFixture(),
+      draftId: "draft-from-handoff",
+      createdAt: "2026-07-01T10:00:00.000Z",
+      draftArtifacts: { eventSpec: { event: { title: "Übergebener Entwurf" } } }
+    };
+    const newerDraft = {
+      ...draftFixture(),
+      draftId: "draft-newer",
+      createdAt: "2026-07-01T12:00:00.000Z",
+      draftArtifacts: { eventSpec: { event: { title: "Neuer Entwurf" } } }
+    };
+    window.history.pushState({}, "", "/produktion?productionDraftId=draft-from-handoff#production-draft-draft-from-handoff");
+    globalThis.fetch = vi.fn(async () => jsonResponse({ items: [selectedDraft, newerDraft] })) as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, embedded: true, latestOnly: true }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent ?? "").toContain("Übergebener Entwurf");
+    expect(document.body.textContent ?? "").not.toContain("Neuer Entwurf");
+    expect(document.activeElement?.id).toBe("production-draft-draft-from-handoff");
+    await act(async () => root.unmount());
+  });
 });

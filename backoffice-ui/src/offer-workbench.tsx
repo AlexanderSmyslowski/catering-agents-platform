@@ -1,5 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
+import { productionDraftEntryUrl } from "./production-entry-focus.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
@@ -72,6 +73,7 @@ export type OfferWorkbenchProps = {
   setSelectedDraftId: (draftId: string) => void;
   approveDraft: (draftId: string, variantId: string) => Promise<void>;
   approvedOfferId?: string;
+  productionDraftId?: string;
   createHandoff?: (approvedOfferId: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
   activeSpec?: Record<string, unknown>;
@@ -188,6 +190,7 @@ export function OfferConversationalWorkbench({
   setSelectedDraftId,
   approveDraft,
   approvedOfferId,
+  productionDraftId,
   createHandoff,
   filteredSpecs,
   activeSpec,
@@ -457,6 +460,11 @@ export function OfferConversationalWorkbench({
                   <button className="secondary-button" disabled={submitting} onClick={() => void createHandoff(approvedOfferId)}>
                     An Produktion übergeben
                   </button>
+                ) : null}
+                {productionDraftId ? (
+                  <a className="ghost-link" href={productionDraftEntryUrl(productionDraftId)}>
+                    Produktionsentwurf öffnen
+                  </a>
                 ) : null}
               </div>
               <details className="nested-details">

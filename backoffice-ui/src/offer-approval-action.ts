@@ -3,12 +3,16 @@ import { formatSubmitErrorMessage } from "./submit-error-message.js";
 export type OfferApprovalActionInput = {
   decideOfferDraft: (draftId: string, variantId: string) => Promise<{ approvedOffer?: { approvedOfferId: string } }>;
   createProductionHandoff: (approvedOfferId: string) => Promise<{ handoff?: { handoffId: string } }>;
+  createProductionDraftFromHandoff: (handoffId: string) => Promise<{ draft?: { draftId: string } }>;
   setSubmitting: (submitting: boolean) => void;
   clearMessages: () => void;
   refreshDashboard: () => Promise<void>;
   setNotice: (message: string) => void;
   setError: (message: string) => void;
   setApprovedOfferId?: (approvedOfferId: string) => void;
+  setHandoffId?: (handoffId: string) => void;
+  setProductionDraftId?: (draftId: string) => void;
+  openProductionEntry: (draftId: string) => void;
 };
 
 export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
@@ -28,7 +32,12 @@ export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
     createHandoff: async (approvedOfferId: string) => run(async () => {
       const result = await input.createProductionHandoff(approvedOfferId);
       if (!result.handoff?.handoffId) throw new Error("Produktionsübergabe fehlt.");
+      input.setHandoffId?.(result.handoff.handoffId);
+      const productionResult = await input.createProductionDraftFromHandoff(result.handoff.handoffId);
+      if (!productionResult.draft?.draftId) throw new Error("Produktionsentwurf fehlt.");
+      input.setProductionDraftId?.(productionResult.draft.draftId);
       input.setNotice("Freigegebenes Angebot wurde an die Produktion übergeben.");
+      input.openProductionEntry(productionResult.draft.draftId);
     }, "Produktionsübergabe konnte nicht erstellt werden.")
   };
 }

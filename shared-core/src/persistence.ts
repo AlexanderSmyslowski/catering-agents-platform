@@ -33,6 +33,7 @@ export interface CollectionStorageOptions {
 export interface PersistentCollectionOptions<T> extends CollectionStorageOptions {
   collectionName: string;
   getId: (item: T) => string;
+  getVersion?: (item: T) => number | undefined;
   validate?: (value: T) => T;
   seed?: T[];
   fileFaultInjector?: (phase:
@@ -488,8 +489,14 @@ function versionOf(value: unknown): number | undefined {
   return undefined;
 }
 
-function assertIncomingVersion(value: unknown): void {
-  if (value && typeof value === "object" && "version" in value && versionOf(value) === undefined) {
+function collectionVersion<T>(value: T, getVersion?: (item: T) => number | undefined): number | undefined {
+  return getVersion ? getVersion(value) : versionOf(value);
+}
+
+function assertIncomingVersion<T>(value: T, getVersion?: (item: T) => number | undefined): void {
+  const hasVersion = getVersion !== undefined || (value && typeof value === "object" && "version" in value);
+  const incomingVersion = collectionVersion(value, getVersion);
+  if (hasVersion && (incomingVersion === undefined || !Number.isSafeInteger(incomingVersion) || incomingVersion < 0 || incomingVersion > 2_147_483_647)) {
     throw new Error("Version muss eine sichere nicht-negative Int32-Ganzzahl sein.");
   }
 }
@@ -520,7 +527,7 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
 
   async set(context: BusinessContext, item: T): Promise<void> {
     const normalized = this.normalizeForContext(context, item);
-    assertIncomingVersion(normalized);
+    assertIncomingVersion(normalized, this.options.getVersion);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
     mkdirSync(path.dirname(filePath), { recursive: true });
     atomicWrite(
@@ -533,7 +540,7 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
     const normalized = this.normalizeForContext(context, item);
-    assertIncomingVersion(normalized);
+    assertIncomingVersion(normalized, this.options.getVersion);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
     mkdirSync(path.dirname(filePath), { recursive: true });
     return atomicInsert(
@@ -547,11 +554,11 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
   async compareAndSet(context: BusinessContext, id: string, expectedVersion: number, item: T): Promise<"updated" | "conflict" | "missing"> {
     assertExpectedVersion(expectedVersion);
     const normalized = this.normalizeForContext(context, item);
-    assertIncomingVersion(normalized);
+    assertIncomingVersion(normalized, this.options.getVersion);
     const filePath = this.filePathFor(context, id);
     if (!existsSync(filePath)) return "missing";
     const existing = this.normalizeForContext(context, JSON.parse(readFileSync(filePath, "utf8")) as T, id);
-    if (versionOf(existing) !== expectedVersion) return "conflict";
+    if (collectionVersion(existing, this.options.getVersion) !== expectedVersion) return "conflict";
     if (this.options.getId(normalized) !== id) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     atomicWrite(
       filePath,
@@ -605,21 +612,21 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
 
   async set(context: BusinessContext, item: T): Promise<void> {
     const normalized = this.normalizeForContext(context, item);
-    assertIncomingVersion(normalized);
+    assertIncomingVersion(normalized, this.options.getVersion);
     await this.ensureInitialized();
     await this.queryable.query(
       "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, version_number, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5, NOW()) ON CONFLICT (business_id, collection_name, record_id) DO UPDATE SET payload = EXCLUDED.payload, version_number = EXCLUDED.version_number, updated_at = NOW()",
-      [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized), versionOf(normalized) ?? null]
+      [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized), collectionVersion(normalized, this.options.getVersion) ?? null]
     );
   }
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
     const normalized = this.normalizeForContext(context, item);
-    assertIncomingVersion(normalized);
+    assertIncomingVersion(normalized, this.options.getVersion);
     await this.ensureInitialized();
     const result = await this.queryable.query(
       "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, version_number, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5, NOW()) ON CONFLICT DO NOTHING RETURNING record_id",
-      [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized), versionOf(normalized) ?? null]
+      [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized), collectionVersion(normalized, this.options.getVersion) ?? null]
     );
     return result.rows.length === 1 ? "created" : "exists";
   }
@@ -627,13 +634,13 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
   async compareAndSet(context: BusinessContext, id: string, expectedVersion: number, item: T): Promise<"updated" | "conflict" | "missing"> {
     assertExpectedVersion(expectedVersion);
     const normalized = this.normalizeForContext(context, item);
-    assertIncomingVersion(normalized);
+    assertIncomingVersion(normalized, this.options.getVersion);
     if (this.options.getId(normalized) !== id) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     const businessId = assertBusinessId(context.businessId);
     await this.ensureInitialized();
     const result = await this.queryable.query(
       "UPDATE catering_business_records SET payload = $4::jsonb, version_number = $5, updated_at = NOW() WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 AND version_number = $6 RETURNING record_id",
-      [businessId, this.options.collectionName, id, JSON.stringify(normalized), versionOf(normalized) ?? null, expectedVersion]
+      [businessId, this.options.collectionName, id, JSON.stringify(normalized), collectionVersion(normalized, this.options.getVersion) ?? null, expectedVersion]
     );
     if (result.rows.length === 1) return "updated";
     return (await this.get(context, id)) ? "conflict" : "missing";

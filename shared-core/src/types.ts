@@ -586,6 +586,7 @@ export interface ProductionDraftArtifacts {
 
 export interface ProductionDraft {
   schemaVersion: string;
+  businessId?: BusinessId;
   draftId: string;
   status: ProductionDraftStatus;
   createdAt: string;

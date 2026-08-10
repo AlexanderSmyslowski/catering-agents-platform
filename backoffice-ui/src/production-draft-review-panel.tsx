@@ -9,6 +9,7 @@ import {
   type ProductionDraftReviewCard,
   type ProductionDraftReviewDecision
 } from "./api.js";
+import { productionDraftEntryId } from "./production-entry-focus.js";
 
 type ProductionDraftReviewPanelProps = {
   submitting: boolean;
@@ -269,6 +270,9 @@ export function ProductionDraftReviewPanel({
   const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
   const [changeRequest, setChangeRequest] = useState("");
   const panelRef = useRef<HTMLElement>(null);
+  const focusedDraftId = typeof window === "undefined"
+    ? undefined
+    : new URLSearchParams(window.location.search).get("productionDraftId")?.trim() || undefined;
 
   async function reloadDrafts(options?: { clearMessage?: boolean }) {
     setLoading(true);
@@ -288,6 +292,13 @@ export function ProductionDraftReviewPanel({
   useEffect(() => {
     void reloadDrafts();
   }, []);
+
+  useEffect(() => {
+    if (!focusedDraftId || !drafts.some((draft) => draft.draftId === focusedDraftId)) return;
+    const entry = document.getElementById(productionDraftEntryId(focusedDraftId));
+    entry?.focus({ preventScroll: true });
+    entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+  }, [drafts, focusedDraftId]);
 
   async function decideCard(
     draftId: string,
@@ -360,7 +371,12 @@ export function ProductionDraftReviewPanel({
   const visibleDrafts = drafts
     .filter((draft) => draft.status === "pending_review" || canApplyProductionDraft(draft))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  const displayedDrafts = latestOnly ? visibleDrafts.slice(0, 1) : visibleDrafts;
+  const focusedDraft = focusedDraftId
+    ? visibleDrafts.find((draft) => draft.draftId === focusedDraftId)
+    : undefined;
+  const displayedDrafts = latestOnly
+    ? (focusedDraft ? [focusedDraft] : visibleDrafts.slice(0, 1))
+    : visibleDrafts;
 
   if (resumeMode && displayedDrafts.length === 0 && !message) {
     return null;
@@ -402,7 +418,7 @@ export function ProductionDraftReviewPanel({
       {displayedDrafts.length > 0 ? (
         <ul className="item-list compact">
           {displayedDrafts.map((draft) => (
-            <li key={draft.draftId}>
+            <li key={draft.draftId} id={productionDraftEntryId(draft.draftId)} tabIndex={-1}>
               <strong>{eventSpecTitle(draft)}</strong>
               <p className="helper-text">
                 {formatProductionDraftSourceLabel(draft)} | {formatProductionDraftStatusLabel(draft.status)} | {formatCount(draft.reviewCards.length, "Prüfpunkt", "Prüfpunkte")}

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
+  areJsonValuesEqual,
   createApprovalRequestRecord,
   validateApprovedOffer,
   validateProductionHandoff,
@@ -13,6 +14,7 @@ export interface OfferApprovalRouteDependencies {
   store: OfferStore;
   auditLog: AuditLogStore;
   requireOfferOperator: (request: { headers: Record<string, string | string[] | undefined> }, reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }) => unknown | undefined;
+  requireHandoffReader: (request: { headers: Record<string, string | string[] | undefined> }, reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }) => unknown | undefined;
   actorForRequest: (request: { headers: Record<string, string | string[] | undefined> }) => TrustedActor;
 }
 
@@ -25,7 +27,7 @@ function sameDecision(left: { decision: string; selectedVariantId?: string }, ri
 }
 
 export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApprovalRouteDependencies) {
-  const { store, auditLog, requireOfferOperator, actorForRequest } = deps;
+  const { store, auditLog, requireOfferOperator, requireHandoffReader, actorForRequest } = deps;
 
   app.post<{ Params: { draftId: string }; Body: { decision?: "approved" | "rejected"; variantId?: string; comment?: string } }>(
     "/v1/offers/drafts/:draftId/decision",
@@ -73,15 +75,15 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
         eventSummary: draft.eventSummary,
         customerFacingText: draft.customerFacingText,
         serviceModules: structuredClone(draft.serviceModules),
-        pricingSummary: structuredClone(draft.pricingSummary),
+        pricingSummary: structuredClone(selectedVariant!.proposedEventSpec.budgetContext!.pricingSummary!),
         selectedVariant: structuredClone(selectedVariant!)
       });
       const created = await store.insertApprovedOffer(actor, approvedOffer);
       if (created === "exists") {
         const existingOffer = await store.getApprovedOffer(actor, approvedOffer.approvedOfferId);
-        if (JSON.stringify(existingOffer) !== JSON.stringify(approvedOffer)) return reply.code(409).send({ message: "Freigegebenes Angebot stimmt nicht mit dem bestehenden Artefakt überein." });
+        if (!areJsonValuesEqual(existingOffer, approvedOffer)) return reply.code(409).send({ message: "Freigegebenes Angebot stimmt nicht mit dem bestehenden Artefakt überein." });
       }
-      await auditLog.logFor(actor, { action: "offer.approved", entityType: "ApprovedOffer", entityId: approvedOffer.approvedOfferId, actor, summary: "Angebotsvariante explizit freigegeben.", details: { draftId: draft.draftId, variantId: selectedVariant!.variantId } });
+      if (created === "created") await auditLog.logFor(actor, { action: "offer.approved", entityType: "ApprovedOffer", entityId: approvedOffer.approvedOfferId, actor, summary: "Angebotsvariante explizit freigegeben.", details: { draftId: draft.draftId, variantId: selectedVariant!.variantId } });
       return reply.code(201).send({ approval: finalApproval, approvedOffer });
     }
   );
@@ -97,20 +99,20 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       handoffId: deterministicId("handoff", { businessId: actor.businessId, approvedOfferId: approvedOffer.approvedOfferId }),
       approvedOfferId: approvedOffer.approvedOfferId, approvalRequestId: approvedOffer.approvalRequestId, createdAt: approvedOffer.approvedAt,
       eventSpecSnapshot: { ...structuredClone(approvedOffer.selectedVariant.proposedEventSpec), lifecycle: { commercialState: "accepted" } },
-      pricingSnapshot: structuredClone(approvedOffer.pricingSummary),
+      pricingSnapshot: structuredClone(approvedOffer.selectedVariant.proposedEventSpec.budgetContext!.pricingSummary!),
       source: { draftId: approvedOffer.sourceDraft.draftId, revision: approvedOffer.sourceDraft.revision, selectedVariantId: approvedOffer.selectedVariantId }
     });
     const inserted = await store.insertHandoff(actor, handoff);
     if (inserted === "exists") {
       const existing = await store.getHandoff(actor, handoff.handoffId);
-      if (JSON.stringify(existing) !== JSON.stringify(handoff)) return reply.code(409).send({ message: "Bestehende Produktionsübergabe stimmt nicht überein." });
+      if (!areJsonValuesEqual(existing, handoff)) return reply.code(409).send({ message: "Bestehende Produktionsübergabe stimmt nicht überein." });
     }
     if (inserted === "created") await auditLog.logFor(actor, { action: "offer.production_handoff_created", entityType: "ProductionHandoff", entityId: handoff.handoffId, actor, summary: "Freigegebenes Angebot an die Produktion übergeben.", details: { approvedOfferId: approvedOffer.approvedOfferId } });
     return reply.code(201).send({ handoff });
   });
 
   app.get<{ Params: { handoffId: string } }>("/v1/offers/handoffs/:handoffId", async (request, reply) => {
-    const forbidden = requireOfferOperator(request, reply);
+    const forbidden = requireHandoffReader(request, reply);
     if (forbidden) return forbidden;
     const handoff = await store.getHandoff(actorForRequest(request), request.params.handoffId);
     return handoff ? reply.send({ handoff }) : reply.code(404).send({ message: "Produktionsübergabe nicht gefunden." });

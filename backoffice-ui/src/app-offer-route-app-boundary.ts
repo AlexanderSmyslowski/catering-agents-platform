@@ -14,12 +14,16 @@ export type AppOfferRouteAppBoundaryInput =
     createOfferFromText: OfferTextSubmitActionInput["createOfferFromText"];
     decideOfferDraft: OfferApprovalActionInput["decideOfferDraft"];
     createProductionHandoff: OfferApprovalActionInput["createProductionHandoff"];
+    createProductionDraftFromHandoff: OfferApprovalActionInput["createProductionDraftFromHandoff"];
     setSubmitting: OfferTextSubmitActionInput["setSubmitting"];
     clearMessages: OfferTextSubmitActionInput["clearMessages"];
     refreshDashboard: OfferTextSubmitActionInput["refreshDashboard"];
     setNotice: OfferTextSubmitActionInput["setNotice"];
     setError: OfferTextSubmitActionInput["setError"];
     setApprovedOfferId?: OfferApprovalActionInput["setApprovedOfferId"];
+    setHandoffId?: OfferApprovalActionInput["setHandoffId"];
+    setProductionDraftId?: OfferApprovalActionInput["setProductionDraftId"];
+    openProductionEntry: OfferApprovalActionInput["openProductionEntry"];
   };
 
 export function buildAppOfferRouteAppBoundary(
@@ -38,12 +42,16 @@ export function buildAppOfferRouteAppBoundary(
   const approvalAction = buildOfferApprovalAction({
     decideOfferDraft: input.decideOfferDraft,
     createProductionHandoff: input.createProductionHandoff,
+    createProductionDraftFromHandoff: input.createProductionDraftFromHandoff,
     setSubmitting: input.setSubmitting,
     clearMessages: input.clearMessages,
     refreshDashboard: input.refreshDashboard,
     setNotice: input.setNotice,
     setError: input.setError,
-    setApprovedOfferId: input.setApprovedOfferId
+    setApprovedOfferId: input.setApprovedOfferId,
+    setHandoffId: input.setHandoffId,
+    setProductionDraftId: input.setProductionDraftId,
+    openProductionEntry: input.openProductionEntry
   });
 
   return buildAppOfferRouteState({

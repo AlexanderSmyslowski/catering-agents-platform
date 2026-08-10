@@ -134,6 +134,16 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   ): unknown | undefined => isOfferOperator(request)
     ? undefined
     : reply.code(403).send({ message: "Angebots-Operator erforderlich." });
+  const requireHandoffReader = (
+    request: { headers: Record<string, string | string[] | undefined> },
+    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }
+  ): unknown | undefined => {
+    const actor = actorForRequest(request);
+    const role = resolveMinimalMvpRoleFromTrustedActor(actor);
+    return role === "offer_operator" || (actor.trusted && role === "production_operator")
+      ? undefined
+      : reply.code(403).send({ message: "Leseberechtigung für Produktionsübergaben erforderlich." });
+  };
   const isOperationsAuditOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
     resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
   const storageOptions = isOfferStore(input) ? input.storageOptions : options;
@@ -199,7 +209,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     requireOfferOperator,
     actorForRequest
   });
-  registerOfferApprovalRoutes(app, { store, auditLog, requireOfferOperator, actorForRequest });
+  registerOfferApprovalRoutes(app, { store, auditLog, requireOfferOperator, requireHandoffReader, actorForRequest });
 
   app.post("/v1/offers/seed-demo", async (request, reply) => {
     if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {

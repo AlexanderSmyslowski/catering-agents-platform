@@ -33,6 +33,8 @@ function input(
     createOfferFromText: vi.fn(async () => ({ draftId: "draft-offer-1" })),
     decideOfferDraft: vi.fn(async () => ({ approvedOffer: { approvedOfferId: "offer-1" } })),
     createProductionHandoff: vi.fn(async () => ({ handoff: { handoffId: "handoff-1" } })),
+    createProductionDraftFromHandoff: vi.fn(async () => ({ draft: { draftId: "production-draft-1" } })),
+    openProductionEntry: vi.fn(),
     submitting: false,
     setSubmitting: vi.fn(),
     clearMessages: vi.fn(),
@@ -153,6 +155,34 @@ describe("app offer route app boundary", () => {
       "decideOfferDraft:draft-1:balanced",
       "setNotice:Angebotsvariante wurde freigegeben.",
       "refreshDashboard"
+    ]);
+  });
+
+  it("wires a returned handoff into the focused production entry", async () => {
+    const calls: string[] = [];
+    const boundaryInput = input({
+      createProductionHandoff: vi.fn(async (approvedOfferId) => {
+        calls.push(`handoff:${approvedOfferId}`);
+        return { handoff: { handoffId: "handoff-created" } };
+      }),
+      createProductionDraftFromHandoff: vi.fn(async (handoffId) => {
+        calls.push(`production:${handoffId}`);
+        return { draft: { draftId: "production-created" } };
+      }),
+      setHandoffId: vi.fn((handoffId) => calls.push(`preserve:${handoffId}`)),
+      setProductionDraftId: vi.fn((draftId) => calls.push(`draft:${draftId}`)),
+      openProductionEntry: vi.fn((draftId) => calls.push(`open:${draftId}`))
+    });
+    const state = buildAppOfferRouteAppBoundary(boundaryInput);
+
+    await state.offerWorkbenchState.createHandoff?.("approved-1");
+
+    expect(calls).toEqual([
+      "handoff:approved-1",
+      "preserve:handoff-created",
+      "production:handoff-created",
+      "draft:production-created",
+      "open:production-created"
     ]);
   });
 });

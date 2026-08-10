@@ -68,11 +68,17 @@ wait_for_url() {
 seed_demo_data() {
   local audit_actor_name="Betriebs-/Audit-Operator"
   curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3101/v1/intake/seed-demo \
-    -H "x-actor-name: ${audit_actor_name}" >/dev/null
+    -H "x-catering-trusted-secret: ${TRUSTED_ACTOR_SECRET}" \
+    -H "x-catering-actor-name: ${audit_actor_name}" \
+    -H "x-catering-business-id: ${DEFAULT_BUSINESS_ID}" >/dev/null
   curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3102/v1/offers/seed-demo \
-    -H "x-actor-name: ${audit_actor_name}" >/dev/null
+    -H "x-catering-trusted-secret: ${TRUSTED_ACTOR_SECRET}" \
+    -H "x-catering-actor-name: ${audit_actor_name}" \
+    -H "x-catering-business-id: ${DEFAULT_BUSINESS_ID}" >/dev/null
   curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf -X POST http://127.0.0.1:3103/v1/production/seed-demo \
-    -H "x-actor-name: ${audit_actor_name}" >/dev/null
+    -H "x-catering-trusted-secret: ${TRUSTED_ACTOR_SECRET}" \
+    -H "x-catering-actor-name: ${audit_actor_name}" \
+    -H "x-catering-business-id: ${DEFAULT_BUSINESS_ID}" >/dev/null
   echo "Demo-Daten geladen."
 }
 
