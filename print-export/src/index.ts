@@ -303,6 +303,7 @@ function actorForRequest(
 ) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName,
+    fallbackBusinessId: process.env.CATERING_DEFAULT_BUSINESS_ID ?? "local",
     trustedActorSecret,
     allowDevActorHeader
   });

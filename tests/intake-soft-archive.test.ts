@@ -118,7 +118,7 @@ describe("intake soft archive", () => {
         reasonCode: "wrong_upload"
       });
 
-      const auditEvents = await auditLog.listRecent(10);
+      const auditEvents = await auditLog.listRecentFor({ businessId: "local" }, 10);
       expect(auditEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({

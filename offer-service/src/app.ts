@@ -6,6 +6,7 @@ import {
   createUploadSourceMetadata,
   extractTextFromDocument,
   getDemoOfferRequests,
+  hostedMultiBusinessReady,
   parseUploadedRecipeText,
   isDevAuthEnabled,
   RecipeLibrary,
@@ -153,6 +154,7 @@ function actorForRequest(
 ) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName: "Angebots-Mitarbeiter",
+    fallbackBusinessId: process.env.CATERING_DEFAULT_BUSINESS_ID ?? "local",
     trustedActorSecret,
     allowDevActorHeader
   });
@@ -161,6 +163,10 @@ function actorForRequest(
 export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   const options = isOfferStore(input) ? { store: input } : input;
   const env = options.env ?? process.env;
+  const defaultBusinessContext = { businessId: env.CATERING_DEFAULT_BUSINESS_ID ?? "local" };
+  if (env.CATERING_DEPLOYMENT_PROFILE === "hosted" && !hostedMultiBusinessReady) {
+    throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
+  }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
   const storageOptions = isOfferStore(input) ? input.storageOptions : options;
@@ -203,7 +209,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     const [drafts, recipes, auditEvents] = await Promise.all([
       store.listDrafts(),
       recipeLibrary.list(),
-      auditLog.count()
+      auditLog.countFor(defaultBusinessContext)
     ]);
     return reply.send({
       service: "offer-service",
@@ -244,7 +250,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         draftId: draft.draftId
       });
     }
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "offer.seed_demo",
       entityType: "SeedBatch",
       entityId: `offer-demo-${Date.now()}`,
@@ -297,7 +303,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
 
     const recipe = parseUploadedRecipeText(request.body);
     await recipeLibrary.save(recipe);
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "recipe.imported_text",
       entityType: "Recipe",
       entityId: recipe.recipeId,
@@ -323,7 +329,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       const payload = await recipeImportFromMultipart(request);
       const recipe = parseUploadedRecipeText(payload);
       await recipeLibrary.save(recipe);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "recipe.uploaded_file",
         entityType: "Recipe",
         entityId: recipe.recipeId,
@@ -353,7 +359,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       }
 
       const recipe = await recipeLibrary.reviewRecipe(request.params.recipeId, request.body);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "recipe.reviewed",
         entityType: "Recipe",
         entityId: recipe.recipeId,

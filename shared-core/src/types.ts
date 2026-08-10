@@ -31,6 +31,7 @@ export interface OperationalArchiveState {
 
 export interface AuditEntry {
   auditId: string;
+  businessId: string;
   at: string;
   action: string;
   entityType: string;

@@ -308,7 +308,7 @@ describe("Codex CLI BYO LLM provider", () => {
         headers: trustedProductionHeaders
       });
       const draft = response.json<{ draft: ClarificationDraft }>().draft;
-      const auditEvents = await auditLog.listRecent(5);
+      const auditEvents = await auditLog.listRecentFor({ businessId: "local" }, 5);
       const auditJson = JSON.stringify(auditEvents);
 
       expect(response.statusCode).toBe(201);
@@ -367,7 +367,7 @@ describe("Codex CLI BYO LLM provider", () => {
         url: `/v1/production/specs/${fixtureSpecId}/clarification-drafts`,
         headers: trustedProductionHeaders
       });
-      const auditJson = JSON.stringify(await auditLog.listRecent(5));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 5));
 
       expect(response.statusCode).toBe(422);
       expect(response.json<{ errors: string[] }>().errors).toContain(

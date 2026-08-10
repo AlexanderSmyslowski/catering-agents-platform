@@ -138,7 +138,7 @@ describe("ProductionDraft import", () => {
         url: "/v1/production/drafts",
         headers: trustedProductionHeaders
       });
-      const auditJson = JSON.stringify(await auditLog.listRecent(5));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 5));
 
       expect(response.statusCode).toBe(201);
       expect(response.json<{ draft: ProductionDraft }>().draft.status).toBe("pending_review");

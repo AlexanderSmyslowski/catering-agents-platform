@@ -10,6 +10,7 @@ import {
   findLlmReadinessPromptSchemaEntryByInputKind,
   getDemoIntakeRequests,
   getDemoProductionAnsweredClarificationAnchor,
+  hostedMultiBusinessReady,
   isDevAuthEnabled,
   llmReadinessContractVersion,
   normalizeEventRequestToSpec,
@@ -422,6 +423,7 @@ function actorForRequest(
 ) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName: "Intake-Mitarbeiter",
+    fallbackBusinessId: process.env.CATERING_DEFAULT_BUSINESS_ID ?? "local",
     trustedActorSecret,
     allowDevActorHeader
   });
@@ -465,6 +467,10 @@ function isOperationsAuditOperator(
 export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   const options = isIntakeStore(input) ? { store: input } : input;
   const env = options.env ?? process.env;
+  const defaultBusinessContext = { businessId: env.CATERING_DEFAULT_BUSINESS_ID ?? "local" };
+  if (env.CATERING_DEPLOYMENT_PROFILE === "hosted" && !hostedMultiBusinessReady) {
+    throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
+  }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
   const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
@@ -493,7 +499,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     const [requests, specs, auditEvents] = await Promise.all([
       store.listRequests(),
       store.listSpecs(),
-      auditLog.count()
+      auditLog.countFor(defaultBusinessContext)
     ]);
     return reply.send({
       service: "intake-service",
@@ -541,7 +547,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       );
 
       await store.saveSpec(spec);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.normalized",
         entityType: "AcceptedEventSpec",
         entityId: spec.specId,
@@ -644,7 +650,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     const adapterResponse: LlmReadinessProviderAdapterResponse | undefined = await adapter.run(adapterRequest)
       .catch(async (error: unknown) => {
-        await auditLog.log({
+        await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "intake.shadow_extraction_rejected",
           entityType: "IntakeShadowRun",
           entityId: input.inputId,
@@ -678,7 +684,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       ...auditBuild.errors.map((error) => `agentAudit.${error}`)
     ];
     if (!adapterResponse.ok || responseErrors.length > 0 || !extractionBuild.extraction || !auditBuild.auditRecord) {
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.shadow_extraction_rejected",
         entityType: "IntakeShadowRun",
         entityId: input.inputId,
@@ -739,7 +745,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       }
     };
     await store.saveShadowRun(shadowRun);
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.shadow_extraction_compared",
       entityType: "IntakeShadowRun",
       entityId: shadowRun.shadowRunId,
@@ -795,7 +801,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
     await store.saveRequest(eventRequest);
     await store.saveSpec(spec);
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.manual_spec_created",
       entityType: "AcceptedEventSpec",
       entityId: spec.specId,
@@ -850,7 +856,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       requestId: answeredClarificationAnchor.request.requestId,
       specId: answeredClarificationSpec.specId
     });
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.seed_demo",
       entityType: "SeedBatch",
       entityId: `intake-demo-${Date.now()}`,

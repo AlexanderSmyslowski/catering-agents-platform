@@ -89,11 +89,13 @@ describe("minimal MVP roles convention", () => {
         },
         {
           fallbackActorName: "Produktions-Mitarbeiter",
+          fallbackBusinessId: "local",
           trustedActorSecret: "shared-secret"
         }
       )
     ).toEqual({
       name: "Produktions-Mitarbeiter",
+      businessId: "local",
       source: "untrusted",
       trusted: false
     });
@@ -105,11 +107,13 @@ describe("minimal MVP roles convention", () => {
         "x-actor-name": "Produktions-Mitarbeiter"
       },
       {
-        fallbackActorName: "Produktions-Mitarbeiter"
+        fallbackActorName: "Produktions-Mitarbeiter",
+        fallbackBusinessId: "local"
       }
     );
     expect(defaultActor).toEqual({
       name: "Produktions-Mitarbeiter",
+      businessId: "local",
       source: "service-default",
       trusted: false
     });
@@ -121,11 +125,13 @@ describe("minimal MVP roles convention", () => {
       },
       {
         fallbackActorName: "Produktions-Mitarbeiter",
+        fallbackBusinessId: "local",
         allowDevActorHeader: true
       }
     );
     expect(devActor).toEqual({
       name: "Produktions-Mitarbeiter",
+      businessId: "local",
       source: "dev-header:x-actor-name",
       trusted: false
     });
@@ -135,11 +141,13 @@ describe("minimal MVP roles convention", () => {
       {},
       {
         fallbackActorName: "Produktions-Mitarbeiter",
+        fallbackBusinessId: "local",
         allowDevActorHeader: true
       }
     );
     expect(devDefaultActor).toEqual({
       name: "Produktions-Mitarbeiter",
+      businessId: "local",
       source: "dev-default",
       trusted: false
     });
@@ -151,18 +159,30 @@ describe("minimal MVP roles convention", () => {
       trustedActorFromHeaders(
         {
           "x-catering-actor-name": "Produktions-Mitarbeiter",
+          "x-catering-business-id": "alpha",
           "x-catering-trusted-secret": "shared-secret",
           "x-actor-name": "Angebots-Mitarbeiter"
         },
         {
           fallbackActorName: "Produktions-Mitarbeiter",
+          fallbackBusinessId: "local",
           trustedActorSecret: "shared-secret"
         }
       )
     ).toEqual({
       name: "Produktions-Mitarbeiter",
+      businessId: "alpha",
       source: "trusted-proxy:x-catering-actor-name",
       trusted: true
     });
+  });
+
+  it("rejects a hosted request without a trusted business header", () => {
+    expect(() => trustedActorFromHeaders({}, {
+      fallbackActorName: "Operator",
+      fallbackBusinessId: "local",
+      requireTrustedBusinessId: true,
+      trustedActorSecret: "secret"
+    })).toThrow("Vertrauenswürdiger Betriebskontext erforderlich");
   });
 });

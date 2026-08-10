@@ -161,7 +161,7 @@ describe("ProductionDraft review state", () => {
       });
       const draft = response.json<{ draft: ProductionDraft }>().draft;
       const card = draft.reviewCards.find((item) => item.cardId === "card-event");
-      const auditJson = JSON.stringify(await auditLog.listRecent(5));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 5));
 
       expect(response.statusCode).toBe(200);
       expect(card).toMatchObject({
@@ -205,7 +205,7 @@ describe("ProductionDraft review state", () => {
         }
       });
       const card = response.json<{ reviewCard: ProductionDraftReviewCard }>().reviewCard;
-      const auditJson = JSON.stringify(await auditLog.listRecent(5));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 5));
 
       expect(response.statusCode).toBe(200);
       expect(card.decision).toBe("unclear");
@@ -242,7 +242,7 @@ describe("ProductionDraft review state", () => {
         payload: { approve: true }
       });
       const draft = response.json<{ draft: ProductionDraft }>().draft;
-      const auditJson = JSON.stringify(await auditLog.listRecent(10));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
 
       expect(response.statusCode).toBe(200);
       expect(draft).toMatchObject({

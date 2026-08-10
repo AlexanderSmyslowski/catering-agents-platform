@@ -7,19 +7,26 @@ export const MINIMAL_MVP_ROLES = [
 
 export type MinimalMvpRole = (typeof MINIMAL_MVP_ROLES)[number];
 
+import { assertBusinessId, type BusinessId } from "./business-context.js";
+
+export type TrustedActorSource =
+  | "trusted-proxy:x-catering-actor-name"
+  | "dev-header:x-actor-name"
+  | "dev-default"
+  | "service-default"
+  | "untrusted";
+
 export interface TrustedActor {
   name: string;
-  source:
-    | "trusted-proxy:x-catering-actor-name"
-    | "dev-header:x-actor-name"
-    | "dev-default"
-    | "service-default"
-    | "untrusted";
+  businessId: BusinessId;
+  source: TrustedActorSource;
   trusted: boolean;
 }
 
 export interface TrustedActorOptions {
   fallbackActorName: string;
+  fallbackBusinessId: string;
+  requireTrustedBusinessId?: boolean;
   trustedActorSecret?: string;
   allowDevActorHeader?: boolean;
 }
@@ -185,19 +192,30 @@ export function trustedActorFromHeaders(
   const expectedSecret = options.trustedActorSecret?.trim();
   const trustedSecret = firstHeaderValue(headers["x-catering-trusted-secret"])?.trim();
   const trustedActorName = firstHeaderValue(headers["x-catering-actor-name"])?.trim();
+  const trustedBusinessId = firstHeaderValue(headers["x-catering-business-id"])?.trim();
+  const fallbackBusinessId = assertBusinessId(options.fallbackBusinessId);
 
   if (expectedSecret && trustedSecret === expectedSecret && trustedActorName) {
+    if (options.requireTrustedBusinessId && !trustedBusinessId) {
+      throw new Error("Vertrauenswürdiger Betriebskontext erforderlich");
+    }
     return {
       name: trustedActorName,
+      businessId: trustedBusinessId ? assertBusinessId(trustedBusinessId) : fallbackBusinessId,
       source: "trusted-proxy:x-catering-actor-name",
       trusted: true
     };
+  }
+
+  if (options.requireTrustedBusinessId) {
+    throw new Error("Vertrauenswürdiger Betriebskontext erforderlich");
   }
 
   const devActorName = firstHeaderValue(headers["x-actor-name"])?.trim();
   if (!expectedSecret && options.allowDevActorHeader === true && devActorName) {
     return {
       name: devActorName,
+      businessId: fallbackBusinessId,
       source: "dev-header:x-actor-name",
       trusted: false
     };
@@ -206,6 +224,7 @@ export function trustedActorFromHeaders(
   if (expectedSecret) {
     return {
       name: options.fallbackActorName,
+      businessId: fallbackBusinessId,
       source: "untrusted",
       trusted: false
     };
@@ -214,6 +233,7 @@ export function trustedActorFromHeaders(
   if (options.allowDevActorHeader === true) {
     return {
       name: options.fallbackActorName,
+      businessId: fallbackBusinessId,
       source: "dev-default",
       trusted: false
     };
@@ -221,6 +241,7 @@ export function trustedActorFromHeaders(
 
   return {
     name: options.fallbackActorName,
+    businessId: fallbackBusinessId,
     source: "service-default",
     trusted: false
   };

@@ -75,7 +75,7 @@ export function registerOfferDraftRoutes(
     const eventRequest = validateEventRequest(request.body);
     const draft = validateOfferDraft(createPortfolioAwareOfferDraft(eventRequest));
     await store.saveDraft(draft);
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "offer.draft_created",
       entityType: "OfferDraft",
       entityId: draft.draftId,
@@ -104,7 +104,7 @@ export function registerOfferDraftRoutes(
     });
     const draft = validateOfferDraft(createPortfolioAwareOfferDraft(eventRequest));
     await store.saveDraft(draft);
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "offer.draft_created_from_text",
       entityType: "OfferDraft",
       entityId: draft.draftId,
@@ -161,7 +161,7 @@ export function registerOfferDraftRoutes(
         promoteOfferVariant(draft, request.body?.variantId)
       );
       await intakeStore.saveSpec(promoted);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "offer.promoted_variant",
         entityType: "AcceptedEventSpec",
         entityId: promoted.specId,

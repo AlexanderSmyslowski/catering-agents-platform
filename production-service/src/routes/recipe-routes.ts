@@ -159,7 +159,7 @@ export function registerProductionRecipeRoutes(
 
     const recipe = parseUploadedRecipeText(request.body);
     await repository.save(recipe);
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "recipe.imported_text",
       entityType: "Recipe",
       entityId: recipe.recipeId,
@@ -185,7 +185,7 @@ export function registerProductionRecipeRoutes(
       const payload = await recipeImportFromMultipart(request);
       const recipe = parseUploadedRecipeText(payload);
       await repository.save(recipe);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "recipe.uploaded_file",
         entityType: "Recipe",
         entityId: recipe.recipeId,
@@ -215,7 +215,7 @@ export function registerProductionRecipeRoutes(
       }
 
       const recipe = await repository.reviewRecipe(request.params.recipeId, request.body);
-      await auditLog.log({
+      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "recipe.reviewed",
         entityType: "Recipe",
         entityId: recipe.recipeId,

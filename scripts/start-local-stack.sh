@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
 LOG_DIR="${RUNTIME_DIR}/logs"
 DATA_ROOT="${CATERING_DATA_ROOT:-${ROOT_DIR}/data}"
+DEFAULT_BUSINESS_ID="${CATERING_DEFAULT_BUSINESS_ID:-local}"
 DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 
@@ -99,6 +100,7 @@ fi
 
 printf '%s\n' "${DATA_ROOT}" >"${DATA_ROOT_FILE}"
 echo "Lokale Datenwurzel: ${DATA_ROOT}"
+npm run migrate:business-scope -- --business-id "${DEFAULT_BUSINESS_ID}"
 
 start_service() {
   local name="$1"
@@ -116,6 +118,7 @@ start_service() {
 cd "${ROOT_DIR}"
 export CATERING_DATA_ROOT="${DATA_ROOT}"
 export CATERING_DEV_AUTH=1
+export CATERING_DEFAULT_BUSINESS_ID="${DEFAULT_BUSINESS_ID}"
 export CATERING_LLM_PROVIDER="${LLM_PROVIDER}"
 export CATERING_SYNTHETIC_LLM_SLICE="${LLM_OPT_IN}"
 export CATERING_PRODUCTION_DRAFT_DATA_MODE="${PRODUCTION_DRAFT_DATA_MODE}"

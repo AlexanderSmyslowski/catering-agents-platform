@@ -4,6 +4,7 @@ import {
   AuditLogStore,
   buildByoLlmAdapterFromEnv,
   getDemoProductionSpecs,
+  hostedMultiBusinessReady,
   isDevAuthEnabled,
   resolveMinimalMvpRoleFromTrustedActor,
   trustedActorFromHeaders,
@@ -87,6 +88,7 @@ function actorForRequest(
 ) {
   return trustedActorFromHeaders(request.headers, {
     fallbackActorName: "Produktions-Mitarbeiter",
+    fallbackBusinessId: process.env.CATERING_DEFAULT_BUSINESS_ID ?? "local",
     trustedActorSecret,
     allowDevActorHeader
   });
@@ -119,6 +121,10 @@ function requireProductionOperator(
 
 export function buildProductionApp(options: ProductionAppOptions = {}) {
   const env = options.env ?? process.env;
+  const defaultBusinessContext = { businessId: env.CATERING_DEFAULT_BUSINESS_ID ?? "local" };
+  if (env.CATERING_DEPLOYMENT_PROFILE === "hosted" && !hostedMultiBusinessReady) {
+    throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
+  }
   const productionDraftDataMode = productionDraftDataModeFromEnv(env);
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
@@ -170,7 +176,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       store.listPlans(),
       store.listPurchaseLists(),
       repository.list(),
-      auditLog.count()
+      auditLog.countFor(defaultBusinessContext)
     ]);
 
     return reply.send({
@@ -220,7 +226,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
         purchaseListId: artifacts.purchaseList.purchaseListId
       });
     }
-    await auditLog.log({
+    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "production.seed_demo",
       entityType: "SeedBatch",
       entityId: `production-demo-${Date.now()}`,
@@ -252,7 +258,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       ? Math.max(1, Math.min(200, Math.trunc(limit)))
       : 50;
     return reply.send({
-      items: await auditLog.listRecent(safeLimit)
+      items: await auditLog.listRecentFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), safeLimit)
     });
   });
 

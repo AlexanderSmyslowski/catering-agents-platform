@@ -195,7 +195,7 @@ describe("BYO LLM runtime clarification drafts", () => {
         url: `/v1/production/specs/${fixtureSpecId}/clarification-drafts`,
         headers: trustedProductionHeaders
       });
-      const auditEvents = await auditLog.listRecent(5);
+      const auditEvents = await auditLog.listRecentFor({ businessId: "local" }, 5);
 
       expect(draft).toMatchObject({
         specId: fixtureSpecId,
@@ -310,7 +310,7 @@ describe("BYO LLM runtime clarification drafts", () => {
         headers: trustedProductionHeaders
       });
       const responseBody = response.body;
-      const auditJson = JSON.stringify(await auditLog.listRecent(5));
+      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 5));
 
       expect(response.statusCode).toBe(422);
       expect(response.json<{ errors: string[] }>().errors).toContain("BYO-LLM-Aufruf ist fehlgeschlagen.");
