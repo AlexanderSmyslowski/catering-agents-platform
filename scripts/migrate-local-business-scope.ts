@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { assertBusinessId, type AuditEntry } from "../shared-core/src/index.js";
 import {
@@ -22,7 +22,7 @@ interface MigrationUnitResult {
 
 export interface LocalBusinessScopeMigrationOptions extends CollectionStorageOptions {
   businessId: string;
-  faultInjector?: (phase: "after_record_publish" | "before_manifest_publish") => void;
+  faultInjector?: (phase: "after_record_publish" | "before_manifest_publish" | "after_manifest_publish") => void;
 }
 
 function stableJson(value: unknown): string {
@@ -51,12 +51,38 @@ function readManifest(options: LocalBusinessScopeMigrationOptions, businessId: s
     : { completed: {} };
 }
 
+function fsyncDirectory(directory: string): void {
+  const fd = openSync(directory, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function writeManifest(options: LocalBusinessScopeMigrationOptions, businessId: string, manifest: MigrationManifest): void {
   const filePath = manifestPath(options, businessId);
   mkdirSync(path.dirname(filePath), { recursive: true });
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(temporaryPath, JSON.stringify(manifest, null, 2), { flag: "wx" });
-  renameSync(temporaryPath, filePath);
+  try {
+    const fd = openSync(temporaryPath, "wx");
+    try {
+      writeFileSync(fd, JSON.stringify(manifest, null, 2));
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    options.faultInjector?.("before_manifest_publish");
+    renameSync(temporaryPath, filePath);
+    // This local migration contract requires directory fsync support (macOS/Linux).
+    fsyncDirectory(path.dirname(filePath));
+    options.faultInjector?.("after_manifest_publish");
+  } finally {
+    if (existsSync(temporaryPath)) {
+      unlinkSync(temporaryPath);
+      fsyncDirectory(path.dirname(filePath));
+    }
+  }
 }
 
 async function pgCompletion(queryable: Queryable, businessId: string, name: string): Promise<boolean> {
@@ -80,16 +106,14 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
   const legacy = createPersistentCollection<AuditEntry>({
     collectionName: "audit/events",
     getId: (entry) => entry.auditId,
-    rootDir: options.rootDir,
-    databaseUrl: options.databaseUrl,
-    pgPool: options.pgPool
+    rootDir: queryable ? undefined : options.rootDir,
+    pgPool: queryable
   });
   const target = createBusinessScopedPersistentCollection<AuditEntry>({
     collectionName: "audit/events",
     getId: (entry) => entry.auditId,
-    rootDir: options.rootDir,
-    databaseUrl: options.databaseUrl,
-    pgPool: options.pgPool
+    rootDir: queryable ? undefined : options.rootDir,
+    pgPool: queryable
   });
   const sourceEntries = await legacy.list();
   const scopedEntries = sourceEntries.map((entry) => ({ ...entry, businessId }));
@@ -113,7 +137,6 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
     await recordPgCompletion(queryable, businessId, name, sourceEntries.length, targetEntries.length, actualHash);
   } else {
     manifest!.completed[name] = completion;
-    options.faultInjector?.("before_manifest_publish");
     writeManifest(options, businessId, manifest!);
   }
   return { units: [{ name, status: "migrated" }] };

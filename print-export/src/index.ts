@@ -14,6 +14,7 @@ import type {
 import {
   formatDocumentIngestionStatusLabel,
   formatDocumentIngestionWarningLabel,
+  createTrustedActorResolver,
   formatMetroGroupLabel,
   isDevAuthEnabled,
   hostedMultiBusinessReady,
@@ -21,7 +22,6 @@ import {
   recipeSourceOriginLabel,
   recipeSourceReferenceLabel,
   resolveMinimalMvpRoleFromTrustedActor,
-  trustedActorFromHeaders
 } from "@catering/shared-core";
 import { renderProductionFolderHtml } from "./production-folder.js";
 
@@ -296,79 +296,49 @@ export interface PrintExportAppOptions extends CollectionStorageOptions {
   env?: Record<string, string | undefined>;
 }
 
-function actorForRequest(
-  request: { headers: Record<string, string | string[] | undefined> },
-  fallbackActorName: string,
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-) {
-  return trustedActorFromHeaders(request.headers, {
-    fallbackActorName,
-    fallbackBusinessId: "local",
-    trustedActorSecret,
-    allowDevActorHeader
-  });
-}
-
-function isOfferOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, "Angebots-Mitarbeiter", trustedActorSecret, allowDevActorHeader)
-  ) === "offer_operator";
-}
-
-function isProductionOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): boolean {
-  return resolveMinimalMvpRoleFromTrustedActor(
-    actorForRequest(request, "Produktions-Mitarbeiter", trustedActorSecret, allowDevActorHeader)
-  ) === "production_operator";
-}
-
-function requireOfferOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): unknown | undefined {
-  if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
-    return reply.code(403).send({
-      message: "Angebots-Operator erforderlich."
-    });
-  }
-
-  return undefined;
-}
-
-function requireProductionOperator(
-  request: { headers: Record<string, string | string[] | undefined> },
-  reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
-  trustedActorSecret?: string,
-  allowDevActorHeader = false
-): unknown | undefined {
-  if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
-    return reply.code(403).send({
-      message: "Produktions-Operator erforderlich."
-    });
-  }
-
-  return undefined;
-}
-
 export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   const env = options.env ?? process.env;
-  if (env.CATERING_DEPLOYMENT_PROFILE === "hosted" && !hostedMultiBusinessReady) {
+  const hosted = env.CATERING_DEPLOYMENT_PROFILE === "hosted";
+  if (hosted && !hostedMultiBusinessReady) {
     throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
   }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
   const allowDevActorHeader = isDevAuthEnabled(env);
+  const defaultBusinessId = env.CATERING_DEFAULT_BUSINESS_ID ?? "local";
+  type PrintExportRequest = { headers: Record<string, string | string[] | undefined>; url?: string };
+  const resolveActor = createTrustedActorResolver<PrintExportRequest>((request) => ({
+    fallbackActorName: request.url?.startsWith("/v1/exports/offers/")
+      ? "Angebots-Mitarbeiter"
+      : "Produktions-Mitarbeiter",
+    fallbackBusinessId: defaultBusinessId,
+    requireTrustedBusinessId: hosted,
+    trustedActorSecret,
+    allowDevActorHeader
+  }));
+  const actorForRequest = (request: PrintExportRequest, ..._ignored: unknown[]) => resolveActor(request);
+  const isOfferOperator = (request: PrintExportRequest, ..._ignored: unknown[]) =>
+    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "offer_operator";
+  const isProductionOperator = (request: PrintExportRequest, ..._ignored: unknown[]) =>
+    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "production_operator";
+  const requireOfferOperator = (
+    request: PrintExportRequest,
+    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+    ..._ignored: unknown[]
+  ): unknown | undefined => isOfferOperator(request)
+    ? undefined
+    : reply.code(403).send({ message: "Angebots-Operator erforderlich." });
+  const requireProductionOperator = (
+    request: PrintExportRequest,
+    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+    ..._ignored: unknown[]
+  ): unknown | undefined => isProductionOperator(request)
+    ? undefined
+    : reply.code(403).send({ message: "Produktions-Operator erforderlich." });
   const app = Fastify({
     logger: false
+  });
+  app.addHook("onRequest", async (request) => {
+    if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
   });
   const offerStore = new OfferStore({
     rootDir: options.rootDir,
@@ -392,6 +362,9 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   });
 
   app.get("/health", async (_request, reply) => {
+    if (hosted) {
+      return reply.send({ service: "print-export", status: "ok", timestamp: new Date().toISOString() });
+    }
     const [offerDrafts, productionPlans, purchaseLists] = await Promise.all([
       offerStore.listDrafts(),
       productionStore.listPlans(),

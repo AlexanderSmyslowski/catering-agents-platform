@@ -31,6 +31,10 @@ export interface TrustedActorOptions {
   allowDevActorHeader?: boolean;
 }
 
+export interface TrustedActorRequest {
+  headers: Record<string, string | string[] | undefined>;
+}
+
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) {
     return value[0];
@@ -244,6 +248,21 @@ export function trustedActorFromHeaders(
     businessId: fallbackBusinessId,
     source: "service-default",
     trusted: false
+  };
+}
+
+export function createTrustedActorResolver<TRequest extends TrustedActorRequest>(
+  options: TrustedActorOptions | ((request: TRequest) => TrustedActorOptions)
+): (request: TRequest) => TrustedActor {
+  const actorByRequest = new WeakMap<object, TrustedActor>();
+  return (request) => {
+    const cached = actorByRequest.get(request);
+    if (cached) return cached;
+
+    const resolvedOptions = typeof options === "function" ? options(request) : options;
+    const actor = trustedActorFromHeaders(request.headers, resolvedOptions);
+    actorByRequest.set(request, actor);
+    return actor;
   };
 }
 
