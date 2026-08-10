@@ -18,6 +18,7 @@ import {
   InMemoryRecipeRepository,
   buildProductionApp
 } from "@catering/production-service";
+import { runApprovedProductionWorkflow } from "./helpers/approved-production-workflow.js";
 
 const TRUSTED_SECRET = "critical-path-rehearsal-secret";
 
@@ -209,9 +210,7 @@ describe("critical path rehearsal", () => {
 
       const productionSpec = withProductionDecisions(promotedSpec);
       const artifacts = await expectJsonResponse<ProductionArtifactsResponse>(
-        await productionApp.inject({
-          method: "POST",
-          url: "/v1/production/plans",
+        await runApprovedProductionWorkflow(productionApp, {
           headers: trustedHeaders("production_operator"),
           payload: {
             eventSpec: productionSpec
@@ -335,8 +334,8 @@ describe("critical path rehearsal", () => {
       expect(auditEvents.items).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            action: "production.plan_created",
-            entityId: productionPlan.planId,
+              action: "production.approved_spec_applied",
+              entityId: expect.stringMatching(/^approved-production-spec-/),
             actor: expect.objectContaining({
               name: MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES.production_operator,
               source: "trusted-proxy:x-catering-actor-name"

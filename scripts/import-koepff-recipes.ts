@@ -30,11 +30,12 @@ async function loadSeedRecipes(): Promise<Recipe[]> {
 async function main() {
   const dataRoot = process.env.CATERING_DATA_ROOT || "./data";
   const databaseUrl = process.env.CATERING_DATABASE_URL;
+  const context = { businessId: process.env.CATERING_BUSINESS_ID || "local" };
   const library = new RecipeLibrary(undefined, {
     rootDir: dataRoot,
     databaseUrl
   });
-  const existingRecipes = await library.list();
+  const existingRecipes = await library.list(context);
   const existingIds = new Set(existingRecipes.map((recipe) => recipe.recipeId));
   const existingNames = new Map(existingRecipes.map((recipe) => [normalizeName(recipe.name), recipe.recipeId]));
 
@@ -49,7 +50,7 @@ async function main() {
       continue;
     }
 
-    await library.save(seed);
+    await library.save(context, seed);
     if (existingIds.has(seed.recipeId)) {
       updated.push(seed.recipeId);
     } else {
@@ -62,6 +63,7 @@ async function main() {
       {
         seedDir: basename(SEED_DIR.pathname),
         dataRoot,
+        businessId: context.businessId,
         importedCount: imported.length,
         updatedCount: updated.length,
         skippedSameNameCount: skippedSameName.length,

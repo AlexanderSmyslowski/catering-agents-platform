@@ -39,7 +39,9 @@ function productionDraft(draftId = "production-draft-import-1"): ProductionDraft
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId,
+    revision: 1,
     status: "pending_review",
     createdAt: "2026-07-01T12:00:00.000Z",
     source: {

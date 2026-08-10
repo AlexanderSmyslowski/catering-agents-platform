@@ -51,7 +51,9 @@ async function buildDraft(draftId = "production-draft-apply-1"): Promise<Product
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId,
+    revision: 1,
     status: "pending_review",
     createdAt: "2026-07-01T12:00:00.000Z",
     source: {
@@ -196,13 +198,16 @@ async function importApproveAndApply(
     method: "POST",
     url: `/v1/production/drafts/${draft.draftId}/decision`,
     headers: trustedProductionHeaders,
-    payload: { approve: true }
+    payload: { decision: "approved" }
   });
-  expect(approved.statusCode).toBe(200);
+  expect(approved.statusCode).toBe(201);
+  const approvedProductionSpecId = approved.json<{
+    approvedProductionSpec: { approvedProductionSpecId: string };
+  }>().approvedProductionSpec.approvedProductionSpecId;
 
   return app.inject({
     method: "POST",
-    url: `/v1/production/drafts/${draft.draftId}/apply`,
+    url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
     headers: trustedProductionHeaders
   });
 }
@@ -235,28 +240,30 @@ describe("ProductionDraft apply", () => {
     try {
       const response = await importApproveAndApply(app, draft);
       const body = response.json<{
-        draft: ProductionDraft;
-        applied: { specId?: string; planId?: string; purchaseListId?: string; recipeIds?: string[] };
+        eventSpec: AcceptedEventSpec;
+        plan: ProductionDraft["draftArtifacts"]["productionPlan"];
+        purchaseList: ProductionDraft["draftArtifacts"]["purchaseList"];
+        recipes: Recipe[];
       }>();
       const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 20));
 
       expect(response.statusCode).toBe(200);
-      expect(body.draft.appliedBy).toBe("Produktions-Mitarbeiter");
-      expect(body.draft.appliedAt).toMatch(/^20/);
-      expect(body.applied).toEqual({
-        specId: draft.draftArtifacts.eventSpec?.specId,
-        planId: draft.draftArtifacts.productionPlan?.planId,
-        purchaseListId: draft.draftArtifacts.purchaseList?.purchaseListId,
-        recipeIds: ["recipe-draft-vitello"]
-      });
-      expect(await store.getPlan(draft.draftArtifacts.productionPlan?.planId ?? "")).toEqual(
+      expect(body.eventSpec.specId).toBe(draft.draftArtifacts.eventSpec?.specId);
+      expect(body.plan?.planId).toBe(draft.draftArtifacts.productionPlan?.planId);
+      expect(body.purchaseList?.purchaseListId).toBe(draft.draftArtifacts.purchaseList?.purchaseListId);
+      expect(body.recipes.map((recipe) => recipe.recipeId)).toEqual(["recipe-draft-vitello"]);
+      expect(await store.getPlan({ businessId: "local" }, draft.draftArtifacts.productionPlan?.planId ?? "")).toEqual(
         draft.draftArtifacts.productionPlan
       );
-      expect(await store.getPurchaseList(draft.draftArtifacts.purchaseList?.purchaseListId ?? "")).toEqual(
+      expect(await store.getPurchaseList(
+        { businessId: "local" },
+        draft.draftArtifacts.purchaseList?.purchaseListId ?? ""
+      )).toEqual(
         draft.draftArtifacts.purchaseList
       );
-      expect((await repository.get("recipe-draft-vitello"))?.source.approvalState).toBe("review_required");
-      expect(auditJson).toContain("production.production_draft_applied");
+      expect((await repository.get({ businessId: "local" }, "recipe-draft-vitello"))?.source.approvalState)
+        .toBe("approved_internal");
+      expect(auditJson).toContain("production.approved_spec_applied");
       expect(auditJson).toContain('"writesProductObject":true');
       expect(auditJson).toContain('"recipeCandidateCount":1');
       expect(auditJson).not.toContain("SECRET_REVIEW_TITLE");
@@ -269,7 +276,7 @@ describe("ProductionDraft apply", () => {
     }
   });
 
-  it("does not apply a pending draft", async () => {
+  it("keeps the retired draft Apply route unavailable", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
@@ -295,9 +302,9 @@ describe("ProductionDraft apply", () => {
       });
 
       expect(imported.statusCode).toBe(201);
-      expect(response.statusCode).toBe(409);
-      expect(await store.listPlans()).toHaveLength(0);
-      expect(await store.listPurchaseLists()).toHaveLength(0);
+      expect(response.statusCode).toBe(404);
+      expect(await store.listPlans({ businessId: "local" })).toHaveLength(0);
+      expect(await store.listPurchaseLists({ businessId: "local" })).toHaveLength(0);
     } finally {
       await app.close();
     }
@@ -314,7 +321,7 @@ describe("ProductionDraft apply", () => {
       env: {}
     });
     const draft = await buildDraft("production-draft-apply-conflict");
-    await store.savePlan({
+    await store.savePlan({ businessId: "local" }, {
       ...draft.draftArtifacts.productionPlan!,
       warnings: ["abweichender bestehender Plan"]
     });
@@ -324,7 +331,7 @@ describe("ProductionDraft apply", () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.body).toContain("würde bestehende Produktobjekte überschreiben");
-      expect(await store.listPurchaseLists()).toHaveLength(0);
+      expect(await store.listPurchaseLists({ businessId: "local" })).toHaveLength(0);
     } finally {
       await app.close();
     }
@@ -341,7 +348,7 @@ describe("ProductionDraft apply", () => {
       env: {}
     });
     const draft = await buildDraft("production-draft-apply-recipe-conflict");
-    await repository.save({
+    await repository.save({ businessId: "local" }, {
       ...recipeCandidate(),
       name: "Bestehendes abweichendes Rezept"
     });

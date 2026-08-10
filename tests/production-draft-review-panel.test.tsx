@@ -32,7 +32,8 @@ function draftFixture(): ProductionDraft {
         title: "Buffetdaten prüfen",
         summary: "Personenzahl und Datum fachlich bestätigen.",
         decision: "pending",
-        targetId: "event"
+        targetId: "event",
+        requiredApproval: true
       },
       {
         cardId: "card-plan",
@@ -40,7 +41,8 @@ function draftFixture(): ProductionDraft {
         title: "Produktionsplan prüfen",
         summary: "Ablauf und Zeiten fachlich bestätigen.",
         decision: "pending",
-        targetId: "plan-review-ui-1"
+        targetId: "plan-review-ui-1",
+        requiredApproval: true
       },
       {
         cardId: "card-purchase",
@@ -48,7 +50,8 @@ function draftFixture(): ProductionDraft {
         title: "Einkaufsliste prüfen",
         summary: "Mengen und Warengruppen fachlich bestätigen.",
         decision: "pending",
-        targetId: "purchase-review-ui-1"
+        targetId: "purchase-review-ui-1",
+        requiredApproval: true
       },
       {
         cardId: "card-recipe-1",
@@ -56,7 +59,8 @@ function draftFixture(): ProductionDraft {
         title: "Rezeptkarte 1 prüfen",
         summary: "Rezept, Allergene und Mengen fachlich bestätigen.",
         decision: "pending",
-        targetId: "recipe-review-ui-1"
+        targetId: "recipe-review-ui-1",
+        requiredApproval: true
       },
       {
         cardId: "card-recipe-2",
@@ -64,7 +68,8 @@ function draftFixture(): ProductionDraft {
         title: "Rezeptkarte 2 prüfen",
         summary: "Rezept, Allergene und Mengen fachlich bestätigen.",
         decision: "pending",
-        targetId: "recipe-review-ui-2"
+        targetId: "recipe-review-ui-2",
+        requiredApproval: true
       }
     ],
     draftArtifacts: {
@@ -186,19 +191,19 @@ describe("ProductionDraftReviewPanel", () => {
           ...draft,
           status: "approved"
         };
-        return jsonResponse({ draft });
+        return jsonResponse({
+          approval: { approvalRequestId: "approval-ui-1", decision: "approved" },
+          approvedProductionSpec: { approvedProductionSpecId: "approved-production-spec-ui-1" }
+        }, 201);
       }
 
-      if (url === "/api/production/v1/production/drafts/draft-review-ui-1/apply" && method === "POST") {
-        draft = {
-          ...draft,
-          appliedAt: "2026-07-01T12:30:00.000Z",
-          appliedBy: "Produktions-Mitarbeiter",
-          appliedArtifactIds: {
-            specId: "spec-review-ui-1"
-          }
-        };
-        return jsonResponse({ draft, applied: draft.appliedArtifactIds });
+      if (url === "/api/production/v1/production/approved-specs/approved-production-spec-ui-1/apply" && method === "POST") {
+        return jsonResponse({
+          eventSpec: { specId: "spec-review-ui-1" },
+          plan: {},
+          purchaseList: {},
+          recipes: []
+        });
       }
 
       return jsonResponse({ message: "not found" }, 404);
@@ -282,7 +287,7 @@ describe("ProductionDraftReviewPanel", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/production/v1/production/drafts/draft-review-ui-1/apply",
+      "/api/production/v1/production/approved-specs/approved-production-spec-ui-1/apply",
       expect.objectContaining({
         method: "POST"
       })

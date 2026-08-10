@@ -19,9 +19,39 @@ import {
   InMemoryRecipeRepository,
   ProductionStore,
   RecipeDiscoveryService,
-  buildProductionApp
+  buildProductionApp as buildRawProductionApp
 } from "@catering/production-service";
 import type { WebRecipeSearchProvider } from "@catering/production-service";
+import type { ProductionAppOptions } from "@catering/production-service";
+import {
+  APPROVED_PRODUCTION_TEST_SECRET,
+  runApprovedProductionWorkflow
+} from "./helpers/approved-production-workflow.js";
+
+function buildProductionApp(
+  options: ProductionAppOptions = {}
+): ReturnType<typeof buildRawProductionApp> {
+  const app = buildRawProductionApp({
+    ...options,
+    trustedActorSecret: APPROVED_PRODUCTION_TEST_SECRET
+  });
+  const inject = app.inject.bind(app);
+  app.inject = ((input: any) => {
+    if (typeof input === "string") return inject(input);
+    const actorName = input.headers?.["x-catering-actor-name"] ??
+      input.headers?.["x-actor-name"] ??
+      "Produktions-Mitarbeiter";
+    return inject({
+      ...input,
+      headers: {
+        "x-catering-actor-name": actorName,
+        "x-catering-trusted-secret": APPROVED_PRODUCTION_TEST_SECRET,
+        ...input.headers
+      }
+    });
+  }) as typeof app.inject;
+  return app;
+}
 
 class FakeWebProvider implements WebRecipeSearchProvider {
   constructor(private readonly candidates: WebRecipeCandidate[]) {}
@@ -508,9 +538,7 @@ describe("catering agents platform", () => {
       )
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -680,9 +708,7 @@ describe("catering agents platform", () => {
       }))
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -844,9 +870,7 @@ describe("catering agents platform", () => {
       ]
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1122,9 +1146,7 @@ describe("catering agents platform", () => {
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json().acceptedEventSpec.menuPlan[0].recipeOverrideId).toBe(recipeId);
 
-    const planResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const planResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: updateResponse.json().acceptedEventSpec
       }
@@ -1241,9 +1263,7 @@ describe("catering agents platform", () => {
     const app = buildProductionApp({ dataRoot });
     const spec = specWithComponent("Filterkaffee Station");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1300,9 +1320,7 @@ describe("catering agents platform", () => {
       ]
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1448,9 +1466,7 @@ describe("catering agents platform", () => {
       ]
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1514,9 +1530,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("Mystery Bowl", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1588,9 +1602,7 @@ describe("catering agents platform", () => {
       baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche.")
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1678,9 +1690,7 @@ describe("catering agents platform", () => {
     });
     const spec = specWithComponent("Tomatensuppe");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1756,9 +1766,7 @@ describe("catering agents platform", () => {
     });
     const spec = specWithComponent("Mystery Bowl");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1814,9 +1822,7 @@ describe("catering agents platform", () => {
     });
     const spec = specWithComponent("Tomatensuppe");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1954,9 +1960,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2009,9 +2013,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2061,9 +2063,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2108,9 +2108,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2181,9 +2179,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2234,9 +2230,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2290,9 +2284,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2346,10 +2338,9 @@ describe("catering agents platform", () => {
           baseEventRequest(`Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit ${label}.`)
         )
       );
+      spec.specId = `${spec.specId}-${label.startsWith("KALBSBULETTEN") ? "buletten" : "frikadellen"}`;
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/v1/production/plans",
+      const response = await runApprovedProductionWorkflow(app, {
         payload: {
           eventSpec: spec
         }
@@ -2405,9 +2396,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2457,9 +2446,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("Hummus", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2509,9 +2496,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("Gemuesepfanne", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2688,9 +2673,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2765,9 +2748,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2844,9 +2825,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2923,9 +2902,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -3062,9 +3039,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -3137,9 +3112,7 @@ describe("catering agents platform", () => {
       dataRoot
     });
 
-    const firstPlanResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const firstPlanResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: specWithComponent("Harissa Bowl")
       }
@@ -3167,11 +3140,12 @@ describe("catering agents platform", () => {
     expect(reviewResponse.json().recipe.source.tier).toBe("internal_approved");
     await offerApp.close();
 
-    const secondPlanResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const secondPlanResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
-        eventSpec: specWithComponent("Harissa Bowl")
+        eventSpec: {
+          ...specWithComponent("Harissa Bowl"),
+          specId: "spec-harissa-bowl-reviewed"
+        }
       }
     });
 
@@ -3235,9 +3209,7 @@ describe("catering agents platform", () => {
     expect(rejectResponse.statusCode).toBe(200);
     expect(rejectResponse.json().recipe.source.approvalState).toBe("rejected");
 
-    const planResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const planResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: specWithComponent("Smoked Pepper Dip")
       }
@@ -3512,9 +3484,7 @@ describe("catering agents platform", () => {
       dataRoot
     });
 
-    const createResponse = await firstApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const createResponse = await runApprovedProductionWorkflow(firstApp, {
       payload: {
         eventSpec: specWithComponent("Linseneintopf")
       }
@@ -3555,7 +3525,7 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
-  it("requires explicit source review before planning unsafe uploaded intake sources", async () => {
+  it("requires the canonical human review flow for unsafe uploaded intake sources", async () => {
     const dataRoot = createDataRoot();
     const intakeStore = new IntakeStore({ rootDir: dataRoot });
     const unsafeRequest: EventRequest = {
@@ -3582,30 +3552,15 @@ describe("catering agents platform", () => {
     const spec = withProductionDecision(normalizeEventRequestToSpec(unsafeRequest));
     const app = buildProductionApp({ dataRoot });
 
-    const blockedResponse = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(0);
+
+    const reviewedResponse = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
     });
 
-    expect(blockedResponse.statusCode).toBe(422);
-    expect(blockedResponse.json()).toMatchObject({
-      message: "Quellenprüfung erforderlich, bevor Produktionsartefakte berechnet werden."
-    });
-    expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(0);
-
-    const confirmedResponse = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
-      payload: {
-        eventSpec: spec,
-        sourceReviewConfirmed: true
-      }
-    });
-
-    expect(confirmedResponse.statusCode).toBe(201);
+    expect(reviewedResponse.statusCode).toBe(201);
     expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(1);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -3662,9 +3617,7 @@ describe("catering agents platform", () => {
       method: "GET",
       url: "/v1/production/recipes"
     });
-    const planResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const planResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: specWithComponent("Humus Bowl")
       }
@@ -3756,9 +3709,7 @@ describe("catering agents platform", () => {
     await offerApp.close();
 
     const productionApp = buildProductionApp({ dataRoot });
-    const productionResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const productionResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: specWithComponent("Filterkaffee Station")
       }
@@ -3824,7 +3775,8 @@ describe("catering agents platform", () => {
     const { Pool } = db.adapters.createPg();
     const pool = new Pool();
 
-    const intakeApp = buildIntakeApp(new IntakeStore({ pgPool: pool }));
+    const intakeStore = new IntakeStore({ pgPool: pool });
+    const intakeApp = buildIntakeApp(intakeStore);
     const intakeResponse = await intakeApp.inject({
       method: "POST",
       url: "/v1/intake/normalize",
@@ -3836,6 +3788,7 @@ describe("catering agents platform", () => {
       intakeResponse.json().acceptedEventSpec,
       "vegan"
     );
+    await intakeStore.saveSpec(acceptedEventSpec);
     await intakeApp.close();
 
     const offerApp = buildOfferApp(new OfferStore({ pgPool: pool }));
@@ -3907,9 +3860,7 @@ describe("catering agents platform", () => {
       discoveryService: new RecipeDiscoveryService(repository, provider),
       pgPool: pool
     });
-    const productionResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const productionResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: acceptedEventSpec
       }
@@ -3989,14 +3940,14 @@ describe("catering agents platform", () => {
     });
     expect(intakeResponse.statusCode).toBe(201);
 
-    const productionResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const productionEventSpec = withProductionDecision(intakeResponse.json().acceptedEventSpec);
+    await new IntakeStore({ rootDir: dataRoot }).saveSpec(productionEventSpec);
+    const productionResponse = await runApprovedProductionWorkflow(productionApp, {
       headers: {
         "x-actor-name": "Produktions-Mitarbeiter"
       },
       payload: {
-        eventSpec: withProductionDecision(intakeResponse.json().acceptedEventSpec)
+        eventSpec: productionEventSpec
       }
     });
     expect(productionResponse.statusCode).toBe(201);
@@ -4033,11 +3984,11 @@ describe("catering agents platform", () => {
     expect(
       auditEvents.some(
         (entry) =>
-          entry.action === "production.plan_created" &&
+          entry.action === "production.approved_spec_applied" &&
           entry.actor.name === "Produktions-Mitarbeiter"
       )
     ).toBe(true);
-    expect(auditEvents.some((entry) => entry.entityType === "ProductionPlan")).toBe(true);
+    expect(auditEvents.some((entry) => entry.entityType === "ApprovedProductionSpec")).toBe(true);
 
     await intakeApp.close();
     await offerApp.close();

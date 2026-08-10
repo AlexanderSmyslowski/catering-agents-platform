@@ -125,6 +125,10 @@ export class IntakeStore {
     await this.specs.set(spec);
   }
 
+  async insertSpec(spec: AcceptedEventSpec): Promise<"created" | "exists"> {
+    return this.specs.insert(spec);
+  }
+
   async getSpec(specId: string): Promise<AcceptedEventSpec | undefined> {
     return this.specs.get(specId);
   }

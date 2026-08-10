@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  applyProductionDraft,
+  applyApprovedProductionSpec,
   decideProductionDraft,
   decideProductionDraftReviewCard,
   loadProductionDrafts,
@@ -141,12 +141,9 @@ export function formatProductionDraftArtifactSummary(draft: ProductionDraft): st
 
 function canApproveProductionDraft(draft: ProductionDraft): boolean {
   return draft.status === "pending_review" &&
-    draft.reviewCards.length > 0 &&
-    draft.reviewCards.every((card) => card.decision === "fits" && card.riskLevel !== "blocking");
-}
-
-function canApplyProductionDraft(draft: ProductionDraft): boolean {
-  return draft.status === "approved" && !draft.appliedAt;
+    draft.reviewCards
+      .filter((card) => card.requiredApproval === true || card.riskLevel === "blocking")
+      .every((card) => card.decision === "fits");
 }
 
 function canReviseProductionDraft(draft: ProductionDraft): boolean {
@@ -271,6 +268,7 @@ export function ProductionDraftReviewPanel({
   const [message, setMessage] = useState<string>();
   const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
   const [changeRequest, setChangeRequest] = useState("");
+  const [approvedSpecIds, setApprovedSpecIds] = useState<Record<string, string>>({});
   const panelRef = useRef<HTMLElement>(null);
   const focusedDraftId = typeof window === "undefined"
     ? undefined
@@ -344,11 +342,15 @@ export function ProductionDraftReviewPanel({
     }
   }
 
-  async function decideDraft(draftId: string, approve: boolean) {
+  async function decideDraft(draftId: string, decision: "approved" | "rejected") {
     setLoading(true);
     try {
-      await decideProductionDraft(draftId, approve);
-      setMessage(approve ? "Produktionsentwurf freigegeben." : "Produktionsentwurf verworfen.");
+      const response = await decideProductionDraft(draftId, decision);
+      const approvedProductionSpecId = response.approvedProductionSpec?.approvedProductionSpecId;
+      if (approvedProductionSpecId) {
+        setApprovedSpecIds((current) => ({ ...current, [draftId]: approvedProductionSpecId }));
+      }
+      setMessage(decision === "approved" ? "Produktionsentwurf freigegeben." : "Produktionsentwurf verworfen.");
       await onDraftChanged?.();
       await reloadDrafts({ clearMessage: false });
     } catch (error) {
@@ -358,12 +360,18 @@ export function ProductionDraftReviewPanel({
     }
   }
 
-  async function applyDraft(draftId: string) {
+  async function applyDraft(draftId: string, approvedProductionSpecId: string) {
     setLoading(true);
     try {
-      const response = await applyProductionDraft(draftId);
+      const response = await applyApprovedProductionSpec(approvedProductionSpecId);
       setMessage("Produktionsentwurf übernommen.");
-      await onDraftChanged?.(response.applied?.specId);
+      const specId = typeof response.eventSpec.specId === "string" ? response.eventSpec.specId : undefined;
+      await onDraftChanged?.(specId);
+      setApprovedSpecIds((current) => {
+        const next = { ...current };
+        delete next[draftId];
+        return next;
+      });
       await reloadDrafts({ clearMessage: false });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht übernommen werden.");
@@ -373,7 +381,7 @@ export function ProductionDraftReviewPanel({
   }
 
   const visibleDrafts = drafts
-    .filter((draft) => draft.status === "pending_review" || canApplyProductionDraft(draft))
+    .filter((draft) => draft.status === "pending_review" || Boolean(approvedSpecIds[draft.draftId]))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const focusedDraft = focusedDraftId
     ? visibleDrafts.find((draft) => draft.draftId === focusedDraftId)
@@ -556,24 +564,24 @@ export function ProductionDraftReviewPanel({
                     <button
                       className="secondary-button"
                       disabled={submitting || loading || !canApproveProductionDraft(draft)}
-                      onClick={() => void decideDraft(draft.draftId, true)}
+                      onClick={() => void decideDraft(draft.draftId, "approved")}
                     >
                       Entwurf freigeben
                     </button>
                     <button
                       className="secondary-button"
                       disabled={submitting || loading}
-                      onClick={() => void decideDraft(draft.draftId, false)}
+                      onClick={() => void decideDraft(draft.draftId, "rejected")}
                     >
                       Entwurf verwerfen
                     </button>
                   </>
                 ) : null}
-                {canApplyProductionDraft(draft) ? (
+                {approvedSpecIds[draft.draftId] ? (
                   <button
                     className="secondary-button"
                     disabled={submitting || loading}
-                    onClick={() => void applyDraft(draft.draftId)}
+                    onClick={() => void applyDraft(draft.draftId, approvedSpecIds[draft.draftId]!)}
                   >
                     Entwurf übernehmen
                   </button>

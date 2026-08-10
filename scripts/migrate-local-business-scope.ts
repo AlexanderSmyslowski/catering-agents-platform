@@ -5,9 +5,15 @@ import {
   assertBusinessId,
   validateOfferDraft,
   validateProductionDraft,
+  validateProductionPlan,
+  validatePurchaseList,
+  validateRecipe,
   type AuditEntry,
   type OfferDraft,
-  type ProductionDraft
+  type ProductionDraft,
+  type ProductionPlan,
+  type PurchaseList,
+  type Recipe
 } from "../shared-core/src/index.js";
 import {
   createBusinessScopedPersistentCollection,
@@ -20,11 +26,11 @@ import {
 } from "../shared-core/src/persistence.js";
 
 interface MigrationManifest {
-  completed: Record<string, { completedAt: string; sourceCount: number; targetCount: number; hash: string; legacyHandoffDiscarded?: boolean; discardedHandoffCount?: number; strippedHandoffHash?: string }>;
+  completed: Record<string, { completedAt: string; sourceCount: number; targetCount: number; hash: string; legacyHandoffDiscarded?: boolean; discardedHandoffCount?: number; strippedHandoffHash?: string; legacyProductionStates?: Array<{ draftId: string; formerStatus: string; sourceHash: string }> }>;
 }
 
 interface MigrationUnitResult {
-  name: "stage-a-001-audit" | "stage-a-002-offers" | "stage-a-003-production-drafts";
+  name: "stage-a-001-audit" | "stage-a-002-offers" | "stage-a-003-production-drafts" | "stage-a-004-production-v2";
   status: "migrated" | "already_migrated";
 }
 
@@ -36,6 +42,7 @@ export interface LocalBusinessScopeMigrationOptions extends CollectionStorageOpt
     | "after_record_publish"
     | "after_offer_record_publish"
     | "after_production_draft_record_publish"
+    | "after_production_v2_record_publish"
     | "before_manifest_publish"
     | "after_manifest_publish"
   ) => void;
@@ -54,6 +61,29 @@ function stableJson(value: unknown): string {
 
 function hashRecords(records: unknown[]): string {
   return createHash("sha256").update(stableJson(records)).digest("hex");
+}
+
+function normalizeLegacyProductionDraft(draft: Record<string, unknown>, businessId: string): ProductionDraft {
+  if (draft.businessId !== undefined && draft.businessId !== businessId) {
+    throw new Error("Legacy-ProductionDraft passt nicht zum konfigurierten Betriebskontext.");
+  }
+  const formerStatus = String(draft.status ?? "pending_review");
+  const mustReapprove = formerStatus === "approved" || formerStatus === "applied" ||
+    draft.appliedAt !== undefined || draft.approvalRequestId !== undefined;
+  const normalized = { ...draft };
+  delete normalized.approvalRequestId;
+  delete normalized.approvedBy;
+  delete normalized.approvedAt;
+  delete normalized.appliedBy;
+  delete normalized.appliedAt;
+  delete normalized.appliedArtifactIds;
+  return validateProductionDraft({
+    ...normalized,
+    businessId,
+    revision: typeof normalized.revision === "number" ? normalized.revision : 1,
+    status: mustReapprove ? "pending_review" : normalized.status,
+    ...(mustReapprove ? { legacyApprovalState: "unverified" } : {})
+  } as ProductionDraft);
 }
 
 function manifestPath(options: LocalBusinessScopeMigrationOptions, businessId: string): string {
@@ -102,10 +132,11 @@ function writeManifest(options: LocalBusinessScopeMigrationOptions, businessId: 
 }
 
 async function pgCompletion(queryable: Queryable, businessId: string, name: string): Promise<boolean> {
-  await queryable.query("CREATE TABLE IF NOT EXISTS catering_business_migrations (business_id TEXT NOT NULL, unit_name TEXT NOT NULL, completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), source_count INTEGER NOT NULL, target_count INTEGER NOT NULL, hash TEXT NOT NULL, legacy_handoff_discarded BOOLEAN NOT NULL DEFAULT FALSE, discarded_handoff_count INTEGER NOT NULL DEFAULT 0, stripped_handoff_hash TEXT, PRIMARY KEY (business_id, unit_name))");
+  await queryable.query("CREATE TABLE IF NOT EXISTS catering_business_migrations (business_id TEXT NOT NULL, unit_name TEXT NOT NULL, completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), source_count INTEGER NOT NULL, target_count INTEGER NOT NULL, hash TEXT NOT NULL, legacy_handoff_discarded BOOLEAN NOT NULL DEFAULT FALSE, discarded_handoff_count INTEGER NOT NULL DEFAULT 0, stripped_handoff_hash TEXT, legacy_production_states JSONB, PRIMARY KEY (business_id, unit_name))");
   await queryable.query("ALTER TABLE catering_business_migrations ADD COLUMN IF NOT EXISTS legacy_handoff_discarded BOOLEAN NOT NULL DEFAULT FALSE");
   await queryable.query("ALTER TABLE catering_business_migrations ADD COLUMN IF NOT EXISTS discarded_handoff_count INTEGER NOT NULL DEFAULT 0");
   await queryable.query("ALTER TABLE catering_business_migrations ADD COLUMN IF NOT EXISTS stripped_handoff_hash TEXT");
+  await queryable.query("ALTER TABLE catering_business_migrations ADD COLUMN IF NOT EXISTS legacy_production_states JSONB");
   return (await queryable.query("SELECT unit_name FROM catering_business_migrations WHERE business_id = $1 AND unit_name = $2", [businessId, name])).rows.length > 0;
 }
 
@@ -116,11 +147,12 @@ async function recordPgCompletion(
   sourceCount: number,
   targetCount: number,
   hash: string,
-  handoffEvidence: { discarded: boolean; count: number; hash?: string } = { discarded: false, count: 0 }
+  handoffEvidence: { discarded: boolean; count: number; hash?: string } = { discarded: false, count: 0 },
+  legacyProductionStates?: Array<{ draftId: string; formerStatus: string; sourceHash: string }>
 ): Promise<void> {
   await queryable.query(
-    "INSERT INTO catering_business_migrations (business_id, unit_name, source_count, target_count, hash, legacy_handoff_discarded, discarded_handoff_count, stripped_handoff_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING",
-    [businessId, name, sourceCount, targetCount, hash, handoffEvidence.discarded, handoffEvidence.count, handoffEvidence.hash ?? null]
+    "INSERT INTO catering_business_migrations (business_id, unit_name, source_count, target_count, hash, legacy_handoff_discarded, discarded_handoff_count, stripped_handoff_hash, legacy_production_states) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb) ON CONFLICT DO NOTHING",
+    [businessId, name, sourceCount, targetCount, hash, handoffEvidence.discarded, handoffEvidence.count, handoffEvidence.hash ?? null, legacyProductionStates ? JSON.stringify(legacyProductionStates) : null]
   );
 }
 
@@ -149,12 +181,7 @@ async function migrateProductionDrafts(
     pgPool: queryable
   });
   const sourceDrafts = await legacy.list();
-  const transformed = sourceDrafts.map((draft) => {
-    if (draft.businessId !== undefined && draft.businessId !== businessId) {
-      throw new Error("Legacy-ProductionDraft passt nicht zum konfigurierten Betriebskontext.");
-    }
-    return validateProductionDraft({ ...draft, businessId } as unknown as ProductionDraft);
-  });
+  const transformed = sourceDrafts.map((draft) => normalizeLegacyProductionDraft(draft, businessId));
   for (const draft of transformed) {
     await target.insert({ businessId }, draft);
   }
@@ -193,6 +220,129 @@ async function migrateProductionDrafts(
   return { name, status: "migrated" };
 }
 
+async function migrateProductionV2(
+  options: LocalBusinessScopeMigrationOptions,
+  businessId: string,
+  queryable: Queryable | undefined,
+  manifest: MigrationManifest | undefined
+): Promise<MigrationUnitResult> {
+  const name = "stage-a-004-production-v2" as const;
+  if (queryable ? await pgCompletion(queryable, businessId, name) : manifest?.completed[name]) {
+    return { name, status: "already_migrated" };
+  }
+
+  const definitions: Array<{
+    collectionName: string;
+    idKey: string;
+    normalize: (value: Record<string, unknown>) => Record<string, unknown>;
+  }> = [
+    {
+      collectionName: "production/plans",
+      idKey: "planId",
+      normalize: (value) => validateProductionPlan(value as unknown as ProductionPlan) as unknown as Record<string, unknown>
+    },
+    {
+      collectionName: "production/purchase-lists",
+      idKey: "purchaseListId",
+      normalize: (value) => validatePurchaseList(value as unknown as PurchaseList) as unknown as Record<string, unknown>
+    },
+    { collectionName: "production/clarification-answers", idKey: "answerId", normalize: validateLegacyRecord },
+    { collectionName: "production/clarification-drafts", idKey: "draftId", normalize: validateLegacyRecord },
+    {
+      collectionName: "production/drafts",
+      idKey: "draftId",
+      normalize: (value) => normalizeLegacyProductionDraft(value, businessId) as unknown as Record<string, unknown>
+    },
+    { collectionName: "production/feedback-drafts", idKey: "feedbackId", normalize: validateLegacyRecord },
+    {
+      collectionName: "production/recipes",
+      idKey: "recipeId",
+      normalize: (value) => validateRecipe(value as unknown as Recipe) as unknown as Record<string, unknown>
+    }
+  ];
+  const expectedRecords: Array<{ collectionName: string; id: string; value: Record<string, unknown> }> = [];
+  const actualRecords: Array<{ collectionName: string; id: string; value: Record<string, unknown> }> = [];
+  const legacyProductionStates: Array<{ draftId: string; formerStatus: string; sourceHash: string }> = [];
+
+  for (const definition of definitions) {
+    const legacy = createPersistentCollection<Record<string, unknown>>({
+      collectionName: definition.collectionName,
+      getId: (value) => String(value[definition.idKey]),
+      rootDir: queryable ? undefined : options.rootDir,
+      pgPool: queryable
+    });
+    const target = createBusinessScopedPersistentCollection<Record<string, unknown>>({
+      collectionName: definition.collectionName,
+      getId: (value) => String(value[definition.idKey]),
+      rootDir: queryable ? undefined : options.rootDir,
+      pgPool: queryable
+    });
+    const source = await legacy.list();
+    for (const raw of source) {
+      if (definition.collectionName === "production/drafts") {
+        legacyProductionStates.push({
+          draftId: String(raw.draftId),
+          formerStatus: String(raw.status ?? "pending_review"),
+          sourceHash: hashRecords([raw])
+        });
+      }
+      const value = definition.normalize(raw);
+      const id = String(value[definition.idKey]);
+      await target.insert({ businessId }, value);
+      expectedRecords.push({ collectionName: definition.collectionName, id, value });
+    }
+    for (const value of await target.list({ businessId })) {
+      actualRecords.push({
+        collectionName: definition.collectionName,
+        id: String(value[definition.idKey]),
+        value
+      });
+    }
+  }
+
+  const byIdentity = <T extends { collectionName: string; id: string }>(records: T[]) =>
+    [...records].sort((left, right) =>
+      `${left.collectionName}:${left.id}`.localeCompare(`${right.collectionName}:${right.id}`)
+    );
+  const expectedHash = hashRecords(byIdentity(expectedRecords));
+  const actualHash = hashRecords(byIdentity(actualRecords));
+  if (expectedRecords.length !== actualRecords.length || expectedHash !== actualHash) {
+    throw new Error("Production-v2-Migration konnte nicht verifiziert werden.");
+  }
+
+  options.faultInjector?.("after_production_v2_record_publish");
+  const completion = {
+    completedAt: new Date().toISOString(),
+    sourceCount: expectedRecords.length,
+    targetCount: actualRecords.length,
+    hash: actualHash,
+    legacyProductionStates
+  };
+  if (queryable) {
+    await recordPgCompletion(
+      queryable,
+      businessId,
+      name,
+      expectedRecords.length,
+      actualRecords.length,
+      actualHash,
+      undefined,
+      legacyProductionStates
+    );
+  } else {
+    manifest!.completed[name] = completion;
+    writeManifest(options, businessId, manifest!);
+  }
+  return { name, status: "migrated" };
+}
+
+function validateLegacyRecord(value: Record<string, unknown>): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Legacy-Produktionsrecord muss ein Objekt sein.");
+  }
+  return value;
+}
+
 export async function runLocalBusinessScopeMigration(options: LocalBusinessScopeMigrationOptions): Promise<{ units: MigrationUnitResult[] }> {
   const businessId = assertBusinessId(options.businessId);
   const name = "stage-a-001-audit" as const;
@@ -201,7 +351,17 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
   if (!queryable && options.legacyFileWritersQuiesced !== true) {
     throw new Error("Legacy file writers must be confirmed quiescent before migration.");
   }
-  for (const collectionName of ["audit/events", "offers/drafts", "production/drafts"] as const) {
+  for (const collectionName of [
+    "audit/events",
+    "offers/drafts",
+    "production/plans",
+    "production/purchase-lists",
+    "production/clarification-answers",
+    "production/clarification-drafts",
+    "production/drafts",
+    "production/feedback-drafts",
+    "production/recipes"
+  ] as const) {
     await establishLegacyCollectionWriteFence({
       collectionName,
       rootDir: queryable ? undefined : options.rootDir,
@@ -276,6 +436,7 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
     }
     units.push({ name: offerName, status: "already_migrated" });
     units.push(await migrateProductionDrafts(options, businessId, queryable, manifest));
+    units.push(await migrateProductionV2(options, businessId, queryable, manifest));
     return { units };
   }
   const scopedOffers = createBusinessScopedPersistentCollection<OfferDraft>({ collectionName: "offers/drafts", getId: (draft) => draft.draftId, getVersion: (draft) => draft.revision, validate: validateOfferDraft, rootDir: queryable ? undefined : options.rootDir, pgPool: queryable });
@@ -294,6 +455,7 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
   else { manifest!.completed[offerName] = offerCompletion; writeManifest(options, businessId, manifest!); }
   units.push({ name: offerName, status: "migrated" });
   units.push(await migrateProductionDrafts(options, businessId, queryable, manifest));
+  units.push(await migrateProductionV2(options, businessId, queryable, manifest));
   return { units };
 }
 

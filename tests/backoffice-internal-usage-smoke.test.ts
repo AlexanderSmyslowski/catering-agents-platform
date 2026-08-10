@@ -210,7 +210,7 @@ afterEach(() => {
 });
 
 describe("backoffice internal usage smoke", () => {
-  it("walks one realistic internal catering flow from manual intake to a usable production plan", async () => {
+  it("walks one realistic internal catering flow into the reviewed ProductionDraft boundary", async () => {
     const fixture = buildUsageFlowFixture();
     const artifacts = await buildArtifactsForFixture(fixture.plannedSpec, fixture.repository);
 
@@ -286,6 +286,13 @@ describe("backoffice internal usage smoke", () => {
               headers: { "content-type": "application/json" }
             });
           }
+          return new Response(JSON.stringify({ items: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (method === "GET" && url.endsWith("/api/production/v1/production/drafts")) {
           return new Response(JSON.stringify({ items: [] }), {
             status: 200,
             headers: { "content-type": "application/json" }
@@ -509,46 +516,17 @@ describe("backoffice internal usage smoke", () => {
     const createPlanCallIndex = fetchCalls.findIndex(
       (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/plans")
     );
-    const createPlanBody = fetchCalls[createPlanCallIndex]?.body as
-      | { eventSpec?: { menuPlan?: Array<{ productionDecision?: { mode?: string } }> } }
-      | undefined;
-    const plannedComponent = createPlanBody?.eventSpec?.menuPlan?.[0] as
-      | {
-          menuCategory?: string;
-          productionDecision?: { mode?: string };
-          recipeOverrideId?: string;
-        }
-      | undefined;
-
-    expect(createdPlanViaPost).toBe(true);
+    expect(createdPlanViaPost).toBe(false);
     expect(saveAnswersCallIndex).toBeGreaterThanOrEqual(0);
-    expect(createPlanCallIndex).toBeGreaterThan(saveAnswersCallIndex);
-    expect(plannedComponent?.menuCategory).toBe("vegetarian");
-    expect(plannedComponent?.productionDecision?.mode).toBe("scratch");
-    expect(plannedComponent?.recipeOverrideId).toBe(fixture.recipe.recipeId);
+    expect(createPlanCallIndex).toBe(-1);
+    expect(document.body.textContent ?? "").toContain("ProductionDraft vorbereitet und geprüft");
 
-    expect(document.body.textContent ?? "").toContain("Produktionsplan wurde erzeugt.");
+    expect(document.body.textContent ?? "").not.toContain("Produktionsplan wurde erzeugt.");
     expect(document.body.textContent ?? "").toContain("Status: vollständig");
-    expect(document.body.textContent ?? "").toContain("Offene Punkte: keine");
-    expect(document.body.textContent ?? "").toContain("Arbeitsblätter: 1");
-    expect(document.body.textContent ?? "").toContain("Rezeptblätter: 1");
-    expect(document.body.textContent ?? "").toContain("Rezeptauswahl: 1");
-    expect(document.body.textContent ?? "").toContain("Produktionsarbeit prüfen");
-    expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
-    expect(document.body.textContent ?? "").toContain("Einkaufsliste");
-    expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren für aktuellen Vorgang");
-    expect(document.body.textContent ?? "").not.toContain(
-      `Einkaufsliste exportieren für aktuellen Vorgang ${artifacts.purchaseList.purchaseListId}`
-    );
-    expect(document.body.textContent ?? "").toContain("Tomaten");
-    expect(findAnchorByText("Produktionsblatt exportieren").href).toContain(
-      `/api/exports/v1/exports/production-plans/${artifacts.productionPlan.planId}/html`
-    );
-    expect(findAnchorByText("Einkaufsliste exportieren").href).toContain(
-      `/api/exports/v1/exports/purchase-lists/${artifacts.purchaseList.purchaseListId}/csv`
-    );
+    expect(document.body.textContent ?? "").toContain("noch kein Produktionsplan");
+    expect(document.body.textContent ?? "").not.toContain("Produktionsblatt exportieren");
+    expect(document.body.textContent ?? "").not.toContain("Einkaufsliste exportieren");
     expect(document.body.textContent ?? "").toContain("Vegetarische Tomatensuppe");
-    expect(document.body.textContent ?? "").toContain("Küche, Beschaffung und Klärungen");
     expect(document.body.textContent ?? "").not.toContain("Status: unzureichend");
     expect(document.body.textContent ?? "").not.toContain("fallback");
     expect(document.body.textContent ?? "").not.toContain("blockiert");

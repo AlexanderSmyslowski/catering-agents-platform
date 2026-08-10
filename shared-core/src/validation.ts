@@ -7,6 +7,7 @@ import { schemaBundle } from "./schemas/index.js";
 import type {
   AcceptedEventSpec,
   ApprovedOffer,
+  ApprovedProductionSpec,
   ApprovalRequestRecord,
   EventRequest,
   OfferDraft,
@@ -40,6 +41,7 @@ const addFormats = (
 type SchemaName =
   | "approvalRequest"
   | "approvedOffer"
+  | "approvedProductionSpec"
   | "eventRequest"
   | "offerDraft"
   | "acceptedEventSpec"
@@ -56,6 +58,7 @@ type Validator = ((value: unknown) => boolean) & {
 const schemaIds: Record<SchemaName, string> = {
   approvalRequest: "https://schemas.catering.local/approval-request.json",
   approvedOffer: "https://schemas.catering.local/approved-offer.json",
+  approvedProductionSpec: "https://schemas.catering.local/approved-production-spec.json",
   eventRequest: "https://schemas.catering.local/event-request.json",
   offerDraft: "https://schemas.catering.local/offer-draft.json",
   acceptedEventSpec: "https://schemas.catering.local/accepted-event-spec.json",
@@ -179,14 +182,13 @@ function validateProductionDraftSemantics(value: ProductionDraft): string[] {
   }
 
   if (value.status === "approved") {
-    const openCards = value.reviewCards.filter((card) => card.decision !== "fits");
+    const openCards = value.reviewCards.filter((card) =>
+      (card.requiredApproval === true || card.riskLevel === "blocking") && card.decision !== "fits"
+    );
     if (openCards.length > 0) {
-      errors.push("approved ProductionDraft must have only fits review card decisions");
+      errors.push("approved ProductionDraft must resolve required and blocking review cards as fits");
     }
 
-    if (value.reviewCards.some((card) => card.riskLevel === "blocking")) {
-      errors.push("approved ProductionDraft must not contain blocking review cards");
-    }
   }
 
   if ((value.appliedAt || value.appliedBy || value.appliedArtifactIds) && value.status !== "approved") {
@@ -208,6 +210,28 @@ export function validateApprovalRequestRecord(value: ApprovalRequestRecord): App
   const record = assertValid("approvalRequest", value);
   assertApprovalRequestRecordSemantics(record);
   return record;
+}
+
+export function validateApprovedProductionSpec(value: ApprovedProductionSpec): ApprovedProductionSpec {
+  const spec = assertValid("approvedProductionSpec", value);
+  if (spec.artifacts.productionPlan.eventSpecId !== spec.artifacts.eventSpec.specId) {
+    throw new Error("ApprovedProductionSpec productionPlan must reference its eventSpec.");
+  }
+  if (spec.artifacts.purchaseList.eventSpecId !== spec.artifacts.eventSpec.specId) {
+    throw new Error("ApprovedProductionSpec purchaseList must reference its eventSpec.");
+  }
+  const recipeIds = spec.artifacts.recipes.map((recipe) => recipe.recipeId);
+  if (new Set(recipeIds).size !== recipeIds.length) {
+    throw new Error("ApprovedProductionSpec recipe snapshots must have unique recipe IDs.");
+  }
+  const missingRecipeIds = spec.artifacts.productionPlan.recipeSelections
+    .map((selection) => selection.recipeId)
+    .filter((recipeId): recipeId is string => Boolean(recipeId))
+    .filter((recipeId) => !recipeIds.includes(recipeId));
+  if (missingRecipeIds.length > 0) {
+    throw new Error("ApprovedProductionSpec must include every selected recipe snapshot.");
+  }
+  return spec;
 }
 
 export function validateOfferDraft(value: OfferDraft): OfferDraft {

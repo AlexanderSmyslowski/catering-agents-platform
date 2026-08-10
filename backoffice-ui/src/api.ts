@@ -73,10 +73,13 @@ export interface ProductionDraftReviewCard {
 }
 
 export interface ProductionDraft {
+  businessId?: string;
   draftId: string;
+  revision?: number;
   status: "pending_review" | "approved" | "rejected" | "superseded";
   createdAt: string;
   supersedesDraftId?: string;
+  approvalRequestId?: string;
   appliedAt?: string;
   appliedBy?: string;
   appliedArtifactIds?: {
@@ -99,6 +102,16 @@ export interface ProductionDraft {
     recipes?: Array<Record<string, unknown>>;
     openQuestions?: Array<Record<string, unknown>>;
     notes?: string[];
+  };
+}
+
+export interface ApprovedProductionSpecSummary {
+  approvedProductionSpecId: string;
+  artifacts: {
+    eventSpec: Record<string, unknown>;
+    productionPlan: Record<string, unknown>;
+    purchaseList: Record<string, unknown>;
+    recipes: Array<Record<string, unknown>>;
   };
 }
 
@@ -393,16 +406,10 @@ export async function createProductionDraftFromHandoff(handoffId: string) {
 }
 
 export async function createProductionPlan(
-  eventSpec: Record<string, unknown>,
-  options?: { sourceReviewConfirmed?: boolean }
-) {
-  return fetchJson<Record<string, unknown>>("/api/production/v1/production/plans", {
-    method: "POST",
-    body: JSON.stringify({
-      eventSpec,
-      ...(options?.sourceReviewConfirmed ? { sourceReviewConfirmed: true } : {})
-    })
-  }, DEFAULT_MUTATION_ACTOR_NAMES.production);
+  _eventSpec: Record<string, unknown>,
+  _options?: { sourceReviewConfirmed?: boolean }
+): Promise<Record<string, unknown>> {
+  throw new Error("Produktionsartefakte müssen zuerst als ProductionDraft vorbereitet und geprüft werden.");
 }
 
 export async function loadClarificationDrafts(specId: string) {
@@ -473,23 +480,44 @@ export async function reviseProductionDraft(draftId: string) {
   );
 }
 
-export async function decideProductionDraft(draftId: string, approve: boolean) {
-  return fetchJson<{ draft: ProductionDraft }>(
+export async function decideProductionDraft(
+  draftId: string,
+  decision: "approved" | "rejected",
+  comment?: string
+) {
+  return fetchJson<{
+    approval: { approvalRequestId: string; decision: "approved" | "rejected" };
+    approvedProductionSpec?: ApprovedProductionSpecSummary;
+  }>(
     `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/decision`,
     {
       method: "POST",
-      body: JSON.stringify({ approve })
+      body: JSON.stringify({ decision, ...(comment?.trim() ? { comment: comment.trim() } : {}) })
     },
     DEFAULT_MUTATION_ACTOR_NAMES.production
   );
 }
 
-export async function applyProductionDraft(draftId: string) {
-  return fetchJson<{ draft: ProductionDraft; applied: ProductionDraft["appliedArtifactIds"] }>(
-    `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/apply`,
+export async function applyApprovedProductionSpec(approvedProductionSpecId: string) {
+  return fetchJson<{
+    eventSpec: Record<string, unknown>;
+    plan: Record<string, unknown>;
+    purchaseList: Record<string, unknown>;
+    recipes: Array<Record<string, unknown>>;
+  }>(
+    `/api/production/v1/production/approved-specs/${encodeURIComponent(approvedProductionSpecId)}/apply`,
     {
-      method: "POST"
+      method: "POST",
+      body: "{}"
     },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function prepareProductionDraft(draftId: string) {
+  return fetchJson<{ draft: ProductionDraft }>(
+    `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/prepare`,
+    { method: "POST", body: "{}" },
     DEFAULT_MUTATION_ACTOR_NAMES.production
   );
 }

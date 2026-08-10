@@ -220,7 +220,9 @@ function purchaseList(): PurchaseList {
 function productionDraft(): ProductionDraft {
   return {
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId: "production-draft-1",
+    revision: 1,
     status: "pending_review",
     createdAt: "2026-07-01T12:00:00.000Z",
     source: {
@@ -497,7 +499,7 @@ describe("ProductionDraft contract", () => {
         approvedBy: "Alexander",
         approvedAt: "2026-07-01T13:00:00.000Z"
       },
-      /approved ProductionDraft must have only fits review card decisions/
+      /approved ProductionDraft must resolve required and blocking review cards as fits/
     );
   });
 

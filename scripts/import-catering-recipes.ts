@@ -141,6 +141,7 @@ function choosePreferredFiles(files: CandidateFile[]): CandidateFile[] {
 async function main(): Promise<void> {
   const rootDir = process.argv[2] ?? defaultSourceRoot;
   const dataRoot = process.env.CATERING_DATA_ROOT || "./data";
+  const context = { businessId: process.env.CATERING_BUSINESS_ID || "local" };
   const library = new RecipeLibrary(undefined, { rootDir: dataRoot });
   const candidates = choosePreferredFiles(await collectCandidateFiles(rootDir));
 
@@ -169,7 +170,7 @@ async function main(): Promise<void> {
         sourceRef: file.fullPath
       });
 
-      await library.save(recipe);
+      await library.save(context, recipe);
       imported.push(`${recipe.name} <- ${file.fullPath}`);
     } catch (error) {
       failed.push({
@@ -184,6 +185,7 @@ async function main(): Promise<void> {
       {
         rootDir,
         dataRoot,
+        businessId: context.businessId,
         scannedCandidates: candidates.length,
         importedCount: imported.length,
         skippedCount: skipped.length,

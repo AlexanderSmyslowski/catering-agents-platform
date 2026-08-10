@@ -18,9 +18,6 @@ import {
   validateUploadedDocumentMetadata,
   validateLlmReadinessModelOutputCandidate,
   validateProductionDraft,
-  validateProductionPlan,
-  validatePurchaseList,
-  validateRecipe,
   type AcceptedEventSpec,
   type AuditLogStore,
   type LlmReadinessDataMode,
@@ -32,10 +29,7 @@ import {
   type ProductionDraft,
   type ProductionDraftReviewCard,
   type ProductionDraftReviewDecision,
-  type ProductionPlan,
   type ProductionHandoff,
-  type PurchaseList,
-  type Recipe,
   type TrustedActor
 } from "@catering/shared-core";
 import type { IntakeStore } from "@catering/intake-service";
@@ -62,32 +56,6 @@ const productionDraftExtractionRevisionCardKinds = [
   "open_question"
 ] as const satisfies readonly ProductionDraftReviewCard["kind"][];
 
-function sourceLineageRequestIds(eventSpec: AcceptedEventSpec): string[] {
-  const ids = new Set<string>();
-
-  for (const source of eventSpec.sourceLineage) {
-    const reference = source.reference.trim();
-    if (reference) {
-      ids.add(reference);
-    }
-  }
-
-  return [...ids];
-}
-
-function hasUnsafeDocumentIngestion(
-  rawInputs: Array<{ documentIngestion?: { status?: string; warnings?: string[] } }>
-): boolean {
-  return rawInputs.some((rawInput) => {
-    const status = rawInput.documentIngestion?.status?.trim();
-    const warnings = Array.isArray(rawInput.documentIngestion?.warnings)
-      ? rawInput.documentIngestion.warnings.map((warning) => warning.trim()).filter(Boolean)
-      : [];
-
-    return status === "fallback" || status === "failed" || warnings.length > 0;
-  });
-}
-
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableJson).join(",")}]`;
@@ -109,114 +77,6 @@ function productionDraftImportValidationMessage(errorMessage: string): string {
   }
 
   return "ProductionDraft ist nicht schema-valide.";
-}
-
-async function assertNoDifferentExistingArtifact<T>(
-  existing: T | undefined,
-  next: T,
-  label: string,
-  id: string
-): Promise<string | undefined> {
-  if (!existing || stableJson(existing) === stableJson(next)) {
-    return undefined;
-  }
-
-  return `${label} ${id} existiert bereits mit abweichendem Inhalt.`;
-}
-
-function validateDraftApplyArtifacts(draft: ProductionDraft): {
-  eventSpec?: AcceptedEventSpec;
-  productionPlan?: ProductionPlan;
-  purchaseList?: PurchaseList;
-  recipes: Recipe[];
-  errors: string[];
-} {
-  const errors: string[] = [];
-  let eventSpec: AcceptedEventSpec | undefined;
-  let productionPlan: ProductionPlan | undefined;
-  let purchaseList: PurchaseList | undefined;
-  const recipes: Recipe[] = [];
-
-  try {
-    eventSpec = draft.draftArtifacts.eventSpec
-      ? validateAcceptedEventSpec(draft.draftArtifacts.eventSpec)
-      : undefined;
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : "eventSpec ist nicht schema-valide.");
-  }
-
-  try {
-    productionPlan = draft.draftArtifacts.productionPlan
-      ? validateProductionPlan(draft.draftArtifacts.productionPlan)
-      : undefined;
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : "productionPlan ist nicht schema-valide.");
-  }
-
-  try {
-    purchaseList = draft.draftArtifacts.purchaseList
-      ? validatePurchaseList(draft.draftArtifacts.purchaseList)
-      : undefined;
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : "purchaseList ist nicht schema-valide.");
-  }
-
-  for (const recipe of draft.draftArtifacts.recipes ?? []) {
-    try {
-      recipes.push(validateRecipe({
-        ...recipe,
-        source: {
-          ...recipe.source,
-          approvalState: "review_required"
-        }
-      }));
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : `recipe ${recipe.recipeId} ist nicht schema-valide.`);
-    }
-  }
-
-  const eventSpecId = eventSpec?.specId;
-  const planSpecId = productionPlan?.eventSpecId;
-  const purchaseSpecId = purchaseList?.eventSpecId;
-  if (eventSpecId && planSpecId && eventSpecId !== planSpecId) {
-    errors.push("productionPlan.eventSpecId passt nicht zum eventSpec.specId.");
-  }
-  if (eventSpecId && purchaseSpecId && eventSpecId !== purchaseSpecId) {
-    errors.push("purchaseList.eventSpecId passt nicht zum eventSpec.specId.");
-  }
-  if (planSpecId && purchaseSpecId && planSpecId !== purchaseSpecId) {
-    errors.push("productionPlan.eventSpecId passt nicht zur purchaseList.eventSpecId.");
-  }
-  if (!eventSpec && !productionPlan && !purchaseList && recipes.length === 0) {
-    errors.push("ProductionDraft enthält keine übernehmbaren Produktartefakte.");
-  }
-
-  return {
-    eventSpec,
-    productionPlan,
-    purchaseList,
-    recipes,
-    errors
-  };
-}
-
-async function hasUnsafeLinkedIntakeSource(
-  eventSpec: AcceptedEventSpec,
-  intakeStore: IntakeStore
-): Promise<boolean> {
-  for (const requestId of sourceLineageRequestIds(eventSpec)) {
-    const intakeRequest = await intakeStore.getRequest(requestId);
-    if (intakeRequest && hasUnsafeDocumentIngestion(intakeRequest.rawInputs)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-interface RecipeCandidateRepository {
-  get(recipeId: string): Promise<Recipe | undefined>;
-  save(recipe: Recipe): Promise<void>;
 }
 
 interface ProductionDraftDocumentBody {
@@ -258,7 +118,6 @@ interface ProductionDraftExtraction {
 export interface ProductionArtifactRouteDependencies {
   store: ProductionStore;
   intakeStore: IntakeStore;
-  repository: RecipeCandidateRepository;
   discoveryService: RecipeDiscoveryService;
   auditLog: AuditLogStore;
   buildLlmAdapter: () => LlmReadinessProviderAdapter;
@@ -525,6 +384,8 @@ async function productionDraftDocumentFromRequest(
 }
 
 function buildProductionDraftFromExtraction(input: {
+  businessId: TrustedActor["businessId"];
+  revision: number;
   extraction: ProductionDraftExtraction;
   source: {
     filename: string;
@@ -629,7 +490,9 @@ function buildProductionDraftFromExtraction(input: {
 
   return validateProductionDraft({
     schemaVersion: draftEventSpec.schemaVersion,
+    businessId: input.businessId,
     draftId: `production-draft-${randomUUID()}`,
+    revision: input.revision,
     status: "pending_review",
     createdAt: new Date().toISOString(),
     ...(input.supersedesDraftId ? { supersedesDraftId: input.supersedesDraftId } : {}),
@@ -716,7 +579,6 @@ export function registerProductionArtifactRoutes(
   const {
     store,
     intakeStore,
-    repository,
     discoveryService,
     auditLog,
     buildLlmAdapter,
@@ -743,7 +605,7 @@ export function registerProductionArtifactRoutes(
     }
     const draftId = `production-draft-handoff-${handoff.handoffId}`;
     const draft = validateProductionDraft({
-      schemaVersion: handoff.eventSpecSnapshot.schemaVersion, businessId: actor.businessId, draftId, status: "pending_review", createdAt: handoff.createdAt,
+      schemaVersion: handoff.eventSpecSnapshot.schemaVersion, businessId: actor.businessId, draftId, revision: 1, status: "pending_review", createdAt: handoff.createdAt,
       source: { kind: "manual_import", receivedAt: handoff.createdAt, sourceRef: `offer-handoff:${handoff.handoffId}` },
       guardrails: { draftOnly: true, humanApprovalRequired: true, writesProductObjects: false, rawProviderPayloadStored: false, knowledgeWritePolicy: "reviewed_only" },
       reviewCards: [{ cardId: "card-event-handoff", kind: "event_data", title: "Freigegebenes Angebot prüfen", summary: "Unveränderliche Angebotsübergabe für die Produktionsprüfung.", decision: "pending", targetPath: "$.draftArtifacts.eventSpec", targetId: handoff.eventSpecSnapshot.specId, requiredApproval: true }],
@@ -765,43 +627,6 @@ export function registerProductionArtifactRoutes(
     return reply.code(201).send({ draft });
   });
 
-  app.post<{ Body: { eventSpec: AcceptedEventSpec; sourceReviewConfirmed?: boolean } }>(
-    "/v1/production/plans",
-    async (request, reply) => {
-      if (!isProductionOperator(request, trustedActorSecret, allowDevActorHeader)) {
-        return reply.code(403).send({
-          message: "Produktions-Operator erforderlich."
-        });
-      }
-
-      const eventSpec = validateAcceptedEventSpec(request.body.eventSpec);
-      const sourceReviewRequired = await hasUnsafeLinkedIntakeSource(eventSpec, intakeStore);
-      if (sourceReviewRequired && request.body.sourceReviewConfirmed !== true) {
-        return reply.code(422).send({
-          message: "Quellenprüfung erforderlich, bevor Produktionsartefakte berechnet werden."
-        });
-      }
-      const artifacts = await buildProductionArtifacts(eventSpec, discoveryService);
-      await store.savePlan(artifacts.productionPlan);
-      await store.savePurchaseList(artifacts.purchaseList);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
-        action: "production.plan_created",
-        entityType: "ProductionPlan",
-        entityId: artifacts.productionPlan.planId,
-        actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-        summary: "Produktionsplan erstellt.",
-        details: {
-          specId: eventSpec.specId,
-          purchaseListId: artifacts.purchaseList.purchaseListId,
-          readiness: artifacts.productionPlan.readiness.status,
-          recipeSelections: artifacts.productionPlan.recipeSelections.length,
-          sourceReviewConfirmed: sourceReviewRequired ? true : undefined
-        }
-      });
-      return reply.code(201).send(artifacts);
-    }
-  );
-
   app.get("/v1/production/plans", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
@@ -809,7 +634,7 @@ export function registerProductionArtifactRoutes(
     }
 
     return reply.send({
-      items: await store.listPlans()
+      items: await store.listPlans(actorForRequest(request, trustedActorSecret, allowDevActorHeader))
     });
   });
 
@@ -819,7 +644,10 @@ export function registerProductionArtifactRoutes(
       return forbidden;
     }
 
-    const plan = await store.getPlan(request.params.planId);
+    const plan = await store.getPlan(
+      actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+      request.params.planId
+    );
     if (!plan) {
       return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
     }
@@ -835,7 +663,10 @@ export function registerProductionArtifactRoutes(
         return forbidden;
       }
 
-      const list = await store.getPurchaseList(request.params.purchaseListId);
+      const list = await store.getPurchaseList(
+        actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+        request.params.purchaseListId
+      );
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
       }
@@ -851,7 +682,7 @@ export function registerProductionArtifactRoutes(
     }
 
     return reply.send({
-      items: await store.listPurchaseLists()
+      items: await store.listPurchaseLists(actorForRequest(request, trustedActorSecret, allowDevActorHeader))
     });
   });
 
@@ -1000,6 +831,8 @@ export function registerProductionArtifactRoutes(
 
       const draft = validateProductionDraft({
         ...buildProductionDraftFromExtraction({
+          businessId: actor.businessId,
+          revision: 1,
           extraction: extractionBuild.extraction,
           source: {
             filename: sourceMetadata.filename,
@@ -1131,6 +964,142 @@ export function registerProductionArtifactRoutes(
       items: await store.listProductionDrafts(actor)
     });
   });
+
+  app.post<{ Params: { draftId: string } }>(
+    "/v1/production/drafts/:draftId/prepare",
+    async (request, reply) => {
+      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) return forbidden;
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const draft = await store.getProductionDraft(actor, request.params.draftId);
+      if (!draft) return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+      if (draft.status !== "pending_review") {
+        return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann vorbereitet werden." });
+      }
+      const eventSpec = draft.draftArtifacts.eventSpec;
+      if (!eventSpec) {
+        return reply.code(422).send({
+          message: "ProductionDraft benötigt vor der Vorbereitung vollständige Eventdaten.",
+          errors: ["draftArtifacts.eventSpec is required"]
+        });
+      }
+
+      const artifacts = await buildProductionArtifacts(eventSpec, discoveryService, {
+        context: actor,
+        persistDiscoveredRecipes: false
+      });
+      const selectedRecipeIds = [...new Set(
+        artifacts.productionPlan.recipeSelections
+          .map((selection) => selection.recipeId)
+          .filter((recipeId): recipeId is string => Boolean(recipeId))
+      )];
+      const recipes = artifacts.recipes;
+      const missingRecipeIds = selectedRecipeIds.filter((recipeId) =>
+        !recipes.some((recipe) => recipe.recipeId === recipeId)
+      );
+      const planningBlockingIssues = [...new Set(artifacts.productionPlan.blockingIssues ?? [])];
+      const prepared = validateProductionDraft({
+        ...draft,
+        draftId: `production-draft-${randomUUID()}`,
+        revision: draft.revision + 1,
+        status: "pending_review",
+        createdAt: new Date().toISOString(),
+        supersedesDraftId: draft.draftId,
+        approvalRequestId: undefined,
+        approvedBy: undefined,
+        approvedAt: undefined,
+        reviewCards: [
+          {
+            cardId: "card-prepared-event-spec",
+            kind: "event_data",
+            title: "Eventdaten prüfen",
+            summary: "Eventdaten des vollständigen Produktions-Snapshots prüfen.",
+            decision: "pending",
+            targetPath: "$.draftArtifacts.eventSpec",
+            targetId: eventSpec.specId,
+            requiredApproval: true
+          },
+          {
+            cardId: "card-prepared-production-plan",
+            kind: "timeline",
+            title: "Produktionsplan prüfen",
+            summary: "Mengen, Ablauf und Produktionsblätter prüfen.",
+            decision: "pending",
+            targetPath: "$.draftArtifacts.productionPlan",
+            targetId: artifacts.productionPlan.planId,
+            requiredApproval: true
+          },
+          {
+            cardId: "card-prepared-purchase-list",
+            kind: "purchase_item",
+            title: "Einkaufsliste prüfen",
+            summary: "Aggregierte Einkaufsmengen prüfen.",
+            decision: "pending",
+            targetPath: "$.draftArtifacts.purchaseList",
+            targetId: artifacts.purchaseList.purchaseListId,
+            requiredApproval: true
+          },
+          ...recipes.map((recipe, index): ProductionDraftReviewCard => ({
+            cardId: `card-prepared-recipe-${index + 1}`,
+            kind: "recipe",
+            title: recipe.name,
+            summary: "Rezept-Snapshot und Skalierung prüfen.",
+            decision: "pending",
+            targetPath: `$.draftArtifacts.recipes[${index}]`,
+            targetId: recipe.recipeId,
+            requiredApproval: true
+          })),
+          ...missingRecipeIds.map((recipeId, index): ProductionDraftReviewCard => ({
+            cardId: `card-missing-recipe-${index + 1}`,
+            kind: "recipe",
+            title: "Rezept-Snapshot fehlt",
+            summary: `Rezept ${recipeId} muss vor der Freigabe als vollständiger Snapshot vorliegen.`,
+            decision: "pending",
+            targetId: recipeId,
+            riskLevel: "blocking",
+            requiredApproval: true
+          })),
+          ...planningBlockingIssues.map((issue, index): ProductionDraftReviewCard => ({
+            cardId: `card-planning-blocker-${index + 1}`,
+            kind: "risk",
+            title: "Planungshindernis prüfen",
+            summary: issue,
+            decision: "pending",
+            targetPath: `$.draftArtifacts.productionPlan.blockingIssues[${index}]`,
+            riskLevel: "blocking",
+            requiredApproval: true
+          }))
+        ],
+        draftArtifacts: {
+          eventSpec,
+          productionPlan: artifacts.productionPlan,
+          purchaseList: artifacts.purchaseList,
+          recipes,
+          ...(missingRecipeIds.length > 0 || planningBlockingIssues.length > 0
+            ? {
+              openQuestions: [
+                ...missingRecipeIds.map((recipeId) => ({
+                  field: `recipe.${recipeId}`,
+                  message: "Vollständiger Rezept-Snapshot fehlt.",
+                  severity: "high" as const,
+                  suggestedQuestion: `Welches geprüfte Rezept soll ${recipeId} ersetzen?`
+                })),
+                ...planningBlockingIssues.map((issue, index) => ({
+                  field: `productionPlan.blockingIssues.${index}`,
+                  message: issue,
+                  severity: "high" as const,
+                  suggestedQuestion: "Wie soll dieses Planungshindernis fachlich aufgelöst werden?"
+                }))
+              ]
+            }
+            : {})
+        }
+      });
+      await store.insertProductionDraft(actor, prepared);
+      await store.saveProductionDraft(actor, validateProductionDraft({ ...draft, status: "superseded" }));
+      return reply.code(201).send({ draft: prepared });
+    }
+  );
 
   app.patch<{
     Params: { draftId: string; cardId: string };
@@ -1364,6 +1333,8 @@ export function registerProductionArtifactRoutes(
       const sourceFilename = draft.source.sourceRef?.replace(/^upload:/, "") || "production-draft-revision.json";
       const revision = validateProductionDraft({
         ...buildProductionDraftFromExtraction({
+          businessId: actor.businessId,
+          revision: draft.revision + 1,
           extraction: extractionBuild.extraction,
           source: {
             filename: sourceFilename,
@@ -1404,205 +1375,6 @@ export function registerProductionArtifactRoutes(
       });
 
       return reply.code(201).send({ draft: revision });
-    }
-  );
-
-  app.post<{ Params: { draftId: string }; Body: { approve?: unknown } }>(
-    "/v1/production/drafts/:draftId/decision",
-    async (request, reply) => {
-      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
-      if (forbidden) {
-        return forbidden;
-      }
-
-      if (typeof request.body?.approve !== "boolean") {
-        return reply.code(400).send({ message: "approve muss true oder false sein." });
-      }
-
-      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-      const draft = await store.getProductionDraft(actor, request.params.draftId);
-      if (!draft) {
-        return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
-      }
-      if (draft.status !== "pending_review") {
-        return reply.code(409).send({ message: "ProductionDraft wurde bereits entschieden." });
-      }
-
-      const decidedAt = new Date().toISOString();
-      let decidedDraft: ProductionDraft;
-      if (request.body.approve) {
-        const openCards = draft.reviewCards.filter((card) => card.decision !== "fits");
-        const blockingCards = draft.reviewCards.filter((card) => card.riskLevel === "blocking");
-        if (openCards.length > 0 || blockingCards.length > 0) {
-          return reply.code(422).send({
-            message: "ProductionDraft kann erst freigegeben werden, wenn alle Review-Karten passen und keine Blocking-Risiken offen sind.",
-            errors: [
-              ...openCards.map((card) => `reviewCard ${card.cardId} is ${card.decision}`),
-              ...blockingCards.map((card) => `reviewCard ${card.cardId} has blocking risk`)
-            ]
-          });
-        }
-        decidedDraft = validateProductionDraft({
-          ...draft,
-          status: "approved",
-          approvedBy: actor.name,
-          approvedAt: decidedAt
-        });
-      } else {
-        decidedDraft = validateProductionDraft({
-          ...draft,
-          status: "rejected"
-        });
-      }
-
-      await store.saveProductionDraft(actor, decidedDraft);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
-        action: request.body.approve
-          ? "production.production_draft_approved"
-          : "production.production_draft_rejected",
-        entityType: "ProductionDraft",
-        entityId: decidedDraft.draftId,
-        actor,
-        summary: request.body.approve
-          ? "ProductionDraft nach Review freigegeben."
-          : "ProductionDraft nach Review verworfen.",
-        details: compactAuditDetails({
-          draftId: decidedDraft.draftId,
-          status: decidedDraft.status,
-          reviewCardCount: decidedDraft.reviewCards.length,
-          fittingReviewCardCount: decidedDraft.reviewCards.filter((card) => card.decision === "fits").length,
-          blockingReviewCardCount: decidedDraft.reviewCards.filter((card) => card.riskLevel === "blocking").length,
-          humanApprovalRequired: decidedDraft.guardrails.humanApprovalRequired,
-          writesProductObject: decidedDraft.guardrails.writesProductObjects
-        })
-      });
-
-      return reply.send({ draft: decidedDraft });
-    }
-  );
-
-  app.post<{ Params: { draftId: string } }>(
-    "/v1/production/drafts/:draftId/apply",
-    async (request, reply) => {
-      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
-      if (forbidden) {
-        return forbidden;
-      }
-
-      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-      const draft = await store.getProductionDraft(actor, request.params.draftId);
-      if (!draft) {
-        return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
-      }
-      if (draft.status !== "approved") {
-        return reply.code(409).send({ message: "ProductionDraft muss vor der Übernahme freigegeben sein." });
-      }
-      if (draft.appliedAt) {
-        return reply.code(409).send({ message: "ProductionDraft wurde bereits übernommen." });
-      }
-
-      const artifacts = validateDraftApplyArtifacts(draft);
-      if (artifacts.errors.length > 0) {
-        return reply.code(422).send({
-          message: "ProductionDraft kann nicht übernommen werden.",
-          errors: artifacts.errors
-        });
-      }
-
-      const conflictErrors = [
-        artifacts.eventSpec
-          ? await assertNoDifferentExistingArtifact(
-            await intakeStore.getSpec(artifacts.eventSpec.specId),
-            artifacts.eventSpec,
-            "AcceptedEventSpec",
-            artifacts.eventSpec.specId
-          )
-          : undefined,
-        artifacts.productionPlan
-          ? await assertNoDifferentExistingArtifact(
-            await store.getPlan(artifacts.productionPlan.planId),
-            artifacts.productionPlan,
-            "ProductionPlan",
-            artifacts.productionPlan.planId
-          )
-          : undefined,
-        artifacts.purchaseList
-          ? await assertNoDifferentExistingArtifact(
-            await store.getPurchaseList(artifacts.purchaseList.purchaseListId),
-            artifacts.purchaseList,
-            "PurchaseList",
-            artifacts.purchaseList.purchaseListId
-          )
-          : undefined,
-        ...(await Promise.all(artifacts.recipes.map(async (recipe) =>
-          assertNoDifferentExistingArtifact(
-            await repository.get(recipe.recipeId),
-            recipe,
-            "Recipe",
-            recipe.recipeId
-          )
-        )))
-      ].filter((error): error is string => Boolean(error));
-
-      if (conflictErrors.length > 0) {
-        return reply.code(409).send({
-          message: "ProductionDraft-Übernahme würde bestehende Produktobjekte überschreiben.",
-          errors: conflictErrors
-        });
-      }
-
-      if (artifacts.eventSpec) {
-        await intakeStore.saveSpec(artifacts.eventSpec);
-      }
-      if (artifacts.productionPlan) {
-        await store.savePlan(artifacts.productionPlan);
-      }
-      if (artifacts.purchaseList) {
-        await store.savePurchaseList(artifacts.purchaseList);
-      }
-      for (const recipe of artifacts.recipes) {
-        await repository.save(recipe);
-      }
-
-      const appliedAt = new Date().toISOString();
-      const appliedArtifactIds = {
-        ...(artifacts.eventSpec ? { specId: artifacts.eventSpec.specId } : {}),
-        ...(artifacts.productionPlan ? { planId: artifacts.productionPlan.planId } : {}),
-        ...(artifacts.purchaseList ? { purchaseListId: artifacts.purchaseList.purchaseListId } : {}),
-        ...(artifacts.recipes.length > 0 ? { recipeIds: artifacts.recipes.map((recipe) => recipe.recipeId) } : {})
-      };
-      const appliedDraft = validateProductionDraft({
-        ...draft,
-        appliedBy: actor.name,
-        appliedAt,
-        appliedArtifactIds
-      });
-      await store.saveProductionDraft(actor, appliedDraft);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
-        action: "production.production_draft_applied",
-        entityType: "ProductionDraft",
-        entityId: appliedDraft.draftId,
-        actor,
-        summary: "Freigegebener ProductionDraft in Produktobjekte übernommen.",
-        details: compactAuditDetails({
-          draftId: appliedDraft.draftId,
-          specId: artifacts.eventSpec?.specId,
-          planId: artifacts.productionPlan?.planId,
-          purchaseListId: artifacts.purchaseList?.purchaseListId,
-          hasEventSpec: Boolean(artifacts.eventSpec),
-          hasProductionPlan: Boolean(artifacts.productionPlan),
-          hasPurchaseList: Boolean(artifacts.purchaseList),
-          recipeCandidateCount: artifacts.recipes.length,
-          skippedOpenQuestionCount: draft.draftArtifacts.openQuestions?.length ?? 0,
-          writesProductObject: true,
-          rawProviderPayloadStored: false
-        })
-      });
-
-      return reply.send({
-        draft: appliedDraft,
-        applied: appliedDraft.appliedArtifactIds
-      });
     }
   );
 
@@ -1652,7 +1424,7 @@ export function registerProductionArtifactRoutes(
       };
 
       try {
-        await store.saveProductionFeedbackDraft(draft);
+        await store.saveProductionFeedbackDraft(actor, draft);
       } catch (error) {
         return reply.code(422).send({
           message: "Produktionsfeedback-Entwurf ist nicht valide.",
@@ -1697,7 +1469,8 @@ export function registerProductionArtifactRoutes(
         return reply.code(400).send({ message: "approve muss true oder false sein." });
       }
 
-      const draft = await store.getProductionFeedbackDraft(request.params.feedbackId);
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const draft = await store.getProductionFeedbackDraft(actor, request.params.feedbackId);
       if (!draft) {
         return reply.code(404).send({ message: "ProductionFeedbackDraft nicht gefunden." });
       }
@@ -1705,7 +1478,6 @@ export function registerProductionArtifactRoutes(
         return reply.code(409).send({ message: "ProductionFeedbackDraft wurde bereits entschieden." });
       }
 
-      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const now = new Date().toISOString();
       const decidedDraft: ProductionFeedbackDraft = request.body.approve
         ? {
@@ -1729,7 +1501,7 @@ export function registerProductionArtifactRoutes(
           rejectedAt: now
         };
 
-      await store.saveProductionFeedbackDraft(decidedDraft);
+      await store.saveProductionFeedbackDraft(actor, decidedDraft);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: request.body.approve
           ? "production.feedback_draft_approved"
@@ -1759,7 +1531,9 @@ export function registerProductionArtifactRoutes(
     }
 
     return reply.send({
-      items: await store.listReviewedProductionFeedbackKnowledge()
+      items: await store.listReviewedProductionFeedbackKnowledge(
+        actorForRequest(request, trustedActorSecret, allowDevActorHeader)
+      )
     });
   });
 
@@ -1777,7 +1551,10 @@ export function registerProductionArtifactRoutes(
       }
 
       return reply.send({
-        items: await store.listClarificationDrafts(request.params.specId)
+        items: await store.listClarificationDrafts(
+          actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+          request.params.specId
+        )
       });
     }
   );
@@ -1903,7 +1680,7 @@ export function registerProductionArtifactRoutes(
         },
         agentAudit: auditBuild.auditRecord
       };
-      await store.saveClarificationDraft(draft);
+      await store.saveClarificationDraft(actor, draft);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.clarification_draft_created",
         entityType: "ClarificationDraft",
@@ -1944,7 +1721,8 @@ export function registerProductionArtifactRoutes(
         return reply.code(400).send({ message: "approve muss true oder false sein." });
       }
 
-      const draft = await store.getClarificationDraft(request.params.draftId);
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const draft = await store.getClarificationDraft(actor, request.params.draftId);
       if (!draft) {
         return reply.code(404).send({ message: "ClarificationDraft nicht gefunden." });
       }
@@ -1952,7 +1730,6 @@ export function registerProductionArtifactRoutes(
         return reply.code(409).send({ message: "ClarificationDraft wurde bereits entschieden." });
       }
 
-      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const now = new Date().toISOString();
       const decidedDraft: ClarificationDraft = {
         ...draft,
@@ -1975,7 +1752,7 @@ export function registerProductionArtifactRoutes(
         await intakeStore.saveSpec(acceptedEventSpec);
       }
 
-      await store.saveClarificationDraft(decidedDraft);
+      await store.saveClarificationDraft(actor, decidedDraft);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: request.body.approve
           ? "production.clarification_draft_approved"

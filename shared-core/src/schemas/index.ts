@@ -1,6 +1,7 @@
 import { acceptedEventSpecSchema } from "./accepted-event-spec.js";
 import { approvalRequestSchema } from "./approval-request.js";
 import { approvedOfferSchema } from "./approved-offer.js";
+import { approvedProductionSpecSchema } from "./approved-production-spec.js";
 import { commonSchema } from "./common.js";
 import { eventRequestSchema } from "./event-request.js";
 import { offerDraftSchema } from "./offer-draft.js";
@@ -14,6 +15,7 @@ export const schemaBundle = [
   commonSchema,
   approvalRequestSchema,
   approvedOfferSchema,
+  approvedProductionSpecSchema,
   eventRequestSchema,
   acceptedEventSpecSchema,
   offerDraftSchema,

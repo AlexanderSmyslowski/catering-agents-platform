@@ -48,6 +48,7 @@ function buildPoisonedProductionDraft(handoff: ProductionHandoff) {
     schemaVersion: handoff.eventSpecSnapshot.schemaVersion,
     businessId: handoff.businessId,
     draftId: `production-draft-handoff-${handoff.handoffId}`,
+    revision: 1,
     status: "pending_review",
     createdAt: handoff.createdAt,
     source: { kind: "manual_import", receivedAt: handoff.createdAt, sourceRef: "manual-poison" },
@@ -232,7 +233,7 @@ describe("production handoff port", () => {
       method: "POST",
       url: `/v1/production/drafts/${draft.draftId}/decision`,
       headers: headersFor("beta"),
-      payload: { approve: false }
+      payload: { decision: "rejected" }
     });
     const betaApply = await app.inject({
       method: "POST",

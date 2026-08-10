@@ -79,7 +79,6 @@ describe("P1 minimal role guards", () => {
     const blockedActor = "Angebots-Mitarbeiter";
 
     for (const { method, url } of [
-      { method: "POST", url: "/v1/production/plans" },
       { method: "POST", url: "/v1/production/recipes/import-text" },
       { method: "POST", url: "/v1/production/recipes/upload" }
     ] as const) {
@@ -89,7 +88,7 @@ describe("P1 minimal role guards", () => {
         headers: {
           "x-actor-name": blockedActor
         },
-        payload: method === "POST" && url === "/v1/production/plans" ? { eventSpec: { specId: "spec-123" } } : undefined
+        payload: undefined
       });
 
       expect(response.statusCode).toBe(403);
@@ -97,6 +96,13 @@ describe("P1 minimal role guards", () => {
         message: "Produktions-Operator erforderlich."
       });
     }
+
+    expect((await app.inject({
+      method: "POST",
+      url: "/v1/production/plans",
+      headers: { "x-actor-name": blockedActor },
+      payload: { eventSpec: { specId: "spec-123" } }
+    })).statusCode).toBe(404);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });

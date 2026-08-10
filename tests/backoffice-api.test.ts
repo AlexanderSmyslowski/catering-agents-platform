@@ -47,7 +47,6 @@ describe("backoffice API actor defaults", () => {
 
     await createAcceptedSpecFromText("Konferenz am 2026-06-18 fuer 90 Teilnehmer.");
     await createOfferFromText("Lunchangebot fuer 80 Personen.");
-    await createProductionPlan({ eventType: "conference" });
     await reviewRecipe("offer", "recipe-offer-1", "approve");
     await reviewRecipe("production", "recipe-production-1", "verify");
 
@@ -62,12 +61,6 @@ describe("backoffice API actor defaults", () => {
         url: "/api/offers/v1/offers/from-text",
         method: "POST",
         actor: "Angebots-Mitarbeiter",
-        contentType: "application/json"
-      },
-      {
-        url: "/api/production/v1/production/plans",
-        method: "POST",
-        actor: "Produktions-Mitarbeiter",
         contentType: "application/json"
       },
       {
@@ -114,7 +107,7 @@ describe("backoffice API actor defaults", () => {
     }]);
   });
 
-  it("sends source review confirmation only when production planning confirms it", async () => {
+  it("does not expose the retired direct production-plan mutation", async () => {
     const bodies: unknown[] = [];
     vi.stubGlobal(
       "fetch",
@@ -130,13 +123,12 @@ describe("backoffice API actor defaults", () => {
       })
     );
 
-    await createProductionPlan({ specId: "spec-safe" });
-    await createProductionPlan({ specId: "spec-confirmed" }, { sourceReviewConfirmed: true });
-
-    expect(bodies).toEqual([
-      { eventSpec: { specId: "spec-safe" } },
-      { eventSpec: { specId: "spec-confirmed" }, sourceReviewConfirmed: true }
-    ]);
+    await expect(createProductionPlan({ specId: "spec-safe" })).rejects.toThrow("ProductionDraft");
+    await expect(createProductionPlan(
+      { specId: "spec-confirmed" },
+      { sourceReviewConfirmed: true }
+    )).rejects.toThrow("ProductionDraft");
+    expect(bodies).toEqual([]);
   });
 
   it("keeps export links on the read-only export service paths", () => {

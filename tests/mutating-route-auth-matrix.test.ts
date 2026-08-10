@@ -160,9 +160,14 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "production",
     method: "POST",
-    pathTemplate: "/v1/production/plans",
+    pathTemplate: "/v1/production/drafts/:draftId/prepare",
     requiredRole: "production_operator",
-    payload: () => ({ eventSpec: productionEventSpec() })
+    url: "/v1/production/drafts/matrix-production-draft/prepare",
+    payload: {},
+    prepareCorrectRoleCase: async (app, headers) => {
+      await seedProductionDraftForMatrix(app, headers);
+      return { url: "/v1/production/drafts/matrix-production-draft/prepare", payload: {} };
+    }
   },
   {
     service: "production",
@@ -226,27 +231,22 @@ const mutatingMvpRoutes: MutableRoute[] = [
     pathTemplate: "/v1/production/drafts/:draftId/decision",
     requiredRole: "production_operator",
     url: "/v1/production/drafts/matrix-production-draft/decision",
-    payload: { approve: false },
+    payload: { decision: "rejected" },
     prepareCorrectRoleCase: async (app, headers) => {
       await seedProductionDraftForMatrix(app, headers);
       return {
         url: "/v1/production/drafts/matrix-production-draft/decision",
-        payload: { approve: false }
+        payload: { decision: "rejected" }
       };
     }
   },
   {
     service: "production",
     method: "POST",
-    pathTemplate: "/v1/production/drafts/:draftId/apply",
+    pathTemplate: "/v1/production/approved-specs/:approvedProductionSpecId/apply",
     requiredRole: "production_operator",
-    url: "/v1/production/drafts/matrix-production-draft/apply",
-    prepareCorrectRoleCase: async (app, headers) => {
-      await seedApprovedProductionDraftForMatrix(app, headers);
-      return {
-        url: "/v1/production/drafts/matrix-production-draft/apply"
-      };
-    }
+    url: "/v1/production/approved-specs/matrix-approved-production-spec/apply",
+    payload: {}
   },
   {
     service: "production",
@@ -402,7 +402,9 @@ function productionDraftPayload(): ProductionDraft {
   const eventSpec = productionEventSpec();
   return {
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId: "matrix-production-draft",
+    revision: 1,
     status: "pending_review",
     createdAt: "2026-07-01T12:00:00.000Z",
     source: {
@@ -476,24 +478,6 @@ async function seedChangeRequestedProductionDraftForMatrix(
   expect(reviewed.statusCode).toBe(200);
 }
 
-async function seedApprovedProductionDraftForMatrix(app: unknown, headers: Record<string, string>): Promise<void> {
-  await seedProductionDraftForMatrix(app, headers);
-  const reviewed = await inject(app, {
-    method: "PATCH",
-    url: "/v1/production/drafts/matrix-production-draft/review-cards/matrix-card-event",
-    headers,
-    payload: { decision: "fits" }
-  });
-  expect(reviewed.statusCode).toBe(200);
-  const approved = await inject(app, {
-    method: "POST",
-    url: "/v1/production/drafts/matrix-production-draft/decision",
-    headers,
-    payload: { approve: true }
-  });
-  expect(approved.statusCode).toBe(200);
-}
-
 function buildAppForRoute(route: MutableRoute, dataRoot: string) {
   return route.service === "intake"
     ? buildIntakeApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} })
@@ -511,6 +495,7 @@ function discoverRegisteredMutatingRoutes(): string[] {
     "offer-service/src/routes/draft-routes.ts",
     "production-service/src/app.ts",
     "production-service/src/routes/artifact-routes.ts",
+    "production-service/src/routes/approval-routes.ts",
     "production-service/src/routes/recipe-routes.ts",
     "print-export/src/index.ts"
   ];

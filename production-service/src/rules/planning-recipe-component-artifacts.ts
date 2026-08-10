@@ -1,5 +1,6 @@
 import type {
   AcceptedEventSpec,
+  BusinessContext,
   MenuComponent,
   ProductionPlan,
   Recipe
@@ -20,6 +21,7 @@ export type RecipeComponentPlanningIssue = {
 
 export type UnresolvedRecipeComponentPlanningArtifacts = {
   kind: "unresolved";
+  recipe?: Recipe;
   selection: ProductionPlan["recipeSelections"][number];
   kitchenSheet: ProductionPlan["kitchenSheets"][number];
   timelineItem: ProductionPlan["timeline"][number];
@@ -28,6 +30,7 @@ export type UnresolvedRecipeComponentPlanningArtifacts = {
 
 export type ResolvedRecipeComponentPlanningArtifacts = {
   kind: "resolved";
+  recipe?: Recipe;
   selection: ProductionPlan["recipeSelections"][number];
   batch: ProductionPlan["productionBatches"][number];
   kitchenSheet: ProductionPlan["kitchenSheets"][number];
@@ -50,16 +53,23 @@ export async function buildRecipeComponentPlanningArtifacts({
   component,
   eventSpec,
   servings,
-  discoveryService
+  discoveryService,
+  context = { businessId: "local" },
+  persistDiscoveredRecipes = true
 }: {
   component: MenuComponent;
   eventSpec: AcceptedEventSpec;
   servings: number;
   discoveryService: RecipeDiscoveryService;
+  context?: BusinessContext;
+  persistDiscoveredRecipes?: boolean;
 }): Promise<RecipeComponentPlanningArtifacts> {
   const rawResolution = component.recipeOverrideId
-    ? await discoveryService.resolveRecipeOverride(component.recipeOverrideId, component)
-    : await discoveryService.resolveRecipe(component, eventSpec);
+    ? await discoveryService.resolveRecipeOverride(component.recipeOverrideId, component, context)
+    : await discoveryService.resolveRecipe(component, eventSpec, {
+      context,
+      persistWebWinner: persistDiscoveredRecipes
+    });
   const resolution = normalizeRecipeResolution(rawResolution, component.label);
   const resolvedRecipe = resolution.recipe as Recipe | undefined;
   const issues = resolutionIssues(resolution.unresolvedItems);
@@ -87,6 +97,7 @@ export async function buildRecipeComponentPlanningArtifacts({
     });
     return {
       kind: "unresolved",
+      ...(resolvedRecipe ? { recipe: resolvedRecipe } : {}),
       selection,
       kitchenSheet: artifacts.kitchenSheet,
       timelineItem: artifacts.timelineItem,
@@ -108,6 +119,7 @@ export async function buildRecipeComponentPlanningArtifacts({
       });
       return {
         kind: "unresolved",
+        recipe: resolvedRecipe,
         selection: {
           ...selection,
           selectionReason: reason,
@@ -153,6 +165,7 @@ export async function buildRecipeComponentPlanningArtifacts({
   });
   return {
     kind: "resolved",
+    recipe: resolvedRecipe,
     selection,
     batch: artifacts.batch,
     kitchenSheet: artifacts.kitchenSheet,

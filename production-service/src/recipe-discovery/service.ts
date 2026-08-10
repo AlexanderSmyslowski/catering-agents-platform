@@ -1,5 +1,6 @@
 import type {
   AcceptedEventSpec,
+  BusinessContext,
   MenuComponent,
   RecipeSelection,
   Recipe
@@ -28,9 +29,10 @@ export class RecipeDiscoveryService {
 
   async resolveRecipeOverride(
     recipeId: string,
-    component: MenuComponent
+    component: MenuComponent,
+    context: BusinessContext = { businessId: "local" }
   ): Promise<RecipeResolution> {
-    const recipe = await this.repository.get(recipeId);
+    const recipe = await this.repository.get(context, recipeId);
     if (!recipe) {
       return buildMissingOverrideRecipeResolution({ recipeId, component });
     }
@@ -40,10 +42,15 @@ export class RecipeDiscoveryService {
 
   async resolveRecipe(
     component: MenuComponent,
-    eventSpec: AcceptedEventSpec
+    eventSpec: AcceptedEventSpec,
+    options: {
+      context?: BusinessContext;
+      persistWebWinner?: boolean;
+    } = {}
   ): Promise<RecipeResolution> {
+    const context = options.context ?? { businessId: "local" };
     const searchTrace = createRecipeSearchTrace();
-    const repositoryCandidates = await this.repository.findCandidates(component);
+    const repositoryCandidates = await this.repository.findCandidates(context, component);
     const internalResolution = resolveInternalRecipeCandidate({
       repositoryCandidates,
       component,
@@ -59,7 +66,8 @@ export class RecipeDiscoveryService {
       component,
       eventSpec,
       webProvider: this.webProvider,
-      repository: this.repository,
+      repository: { save: (recipe) => this.repository.save(context, recipe) },
+      persistWinner: options.persistWebWinner !== false,
       searchTrace
     });
   }

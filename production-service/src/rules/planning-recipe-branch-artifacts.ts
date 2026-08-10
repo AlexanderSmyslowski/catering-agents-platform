@@ -1,5 +1,6 @@
 import type {
   AcceptedEventSpec,
+  BusinessContext,
   PurchaseItem
 } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
@@ -21,12 +22,16 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
   component: MenuPlanComponent;
   servings: number;
   discoveryService: RecipeDiscoveryService;
+  context?: BusinessContext;
+  persistDiscoveredRecipes?: boolean;
 }): Promise<RecipeBranchPlanningArtifacts> {
   const {
     eventSpec,
     component,
     servings,
-    discoveryService
+    discoveryService,
+    context = { businessId: "local" },
+    persistDiscoveredRecipes = true
   } = input;
 
   return {
@@ -35,7 +40,9 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
       eventSpec,
       component,
       servings,
-      discoveryService
+      discoveryService,
+      context,
+      persistDiscoveredRecipes
     })
   };
 }
