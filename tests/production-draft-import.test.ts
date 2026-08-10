@@ -147,8 +147,8 @@ describe("ProductionDraft import", () => {
       expect(response.json<{ draft: ProductionDraft }>().draft.status).toBe("pending_review");
       expect(listResponse.statusCode).toBe(200);
       expect(listResponse.json<{ items: ProductionDraft[] }>().items).toHaveLength(1);
-      expect(await store.listPlans()).toHaveLength(0);
-      expect(await store.listPurchaseLists()).toHaveLength(0);
+      expect(await store.listPlans(localBusiness)).toHaveLength(0);
+      expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
       expect(auditJson).toContain("production.production_draft_imported");
       expect(auditJson).toContain("sha256:output-structured");
       expect(auditJson).not.toContain("SECRET_REVIEW_SUMMARY");

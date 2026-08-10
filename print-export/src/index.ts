@@ -356,7 +356,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     databaseUrl: options.databaseUrl,
     pgPool: options.pgPool
   });
-  const recipeLibrary = new RecipeLibrary(undefined, {
+  const recipeLibrary = new RecipeLibrary({
     rootDir: options.rootDir,
     databaseUrl: options.databaseUrl,
     pgPool: options.pgPool

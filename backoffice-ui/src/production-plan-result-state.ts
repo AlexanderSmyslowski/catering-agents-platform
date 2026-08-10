@@ -1,4 +1,3 @@
-import { extractProductionPlanId } from "./production-api-response-ids.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
 export type ProductionPlanStartActions = {
@@ -12,11 +11,11 @@ export type ProductionSpecPlanningPreflightActions = {
   setNotice: (message: string) => void;
 };
 
-export type ProductionPlanSuccessActions = {
-  setSelectedPlanId: (planId: string) => void;
+export type ProductionDraftPreparationSuccessActions = {
   refreshDashboard: () => Promise<void>;
   completePlanProgress: () => void;
   setNotice: (message: string) => void;
+  showProductionDraftReview: (draftId: string) => void;
 };
 
 export type ProductionPlanFailureActions = {
@@ -31,7 +30,7 @@ export function startProductionPlanRunState(
 ) {
   actions.startPlanProgress(spec, specLabel);
   actions.clearSelectedPlanId();
-  actions.setNotice("Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...");
+  actions.setNotice("Vollständiger Produktionsentwurf wird vorbereitet...");
 }
 
 export async function prepareProductionSpecForPlanning(
@@ -48,17 +47,16 @@ export async function prepareProductionSpecForPlanning(
   return (await actions.persistCurrentSpecEdit({ quiet: true })) ?? spec;
 }
 
-export async function completeProductionStateAfterPlanSuccess(
-  response: Record<string, unknown>,
-  actions: ProductionPlanSuccessActions
+export async function completeProductionStateAfterDraftPreparation(
+  response: { draft: { draftId: unknown } },
+  actions: ProductionDraftPreparationSuccessActions
 ) {
-  const planId = extractProductionPlanId(response);
-  if (planId) {
-    actions.setSelectedPlanId(planId);
-  }
   await actions.refreshDashboard();
   actions.completePlanProgress();
-  actions.setNotice("Produktionsplan wurde erzeugt.");
+  actions.setNotice("Produktionsentwurf wurde vorbereitet und wartet auf Prüfung.");
+  if (typeof response.draft.draftId === "string" && response.draft.draftId.trim()) {
+    actions.showProductionDraftReview(response.draft.draftId);
+  }
 }
 
 export function resetProductionStateAfterPlanFailure(
@@ -67,6 +65,6 @@ export function resetProductionStateAfterPlanFailure(
 ) {
   actions.failPlanProgress();
   actions.setError(
-    formatSubmitErrorMessage(submitError, "Produktionsplan konnte nicht erstellt werden.")
+    formatSubmitErrorMessage(submitError, "Produktionsentwurf konnte nicht vorbereitet werden.")
   );
 }

@@ -31,7 +31,7 @@ async function main() {
   const dataRoot = process.env.CATERING_DATA_ROOT || "./data";
   const databaseUrl = process.env.CATERING_DATABASE_URL;
   const context = { businessId: process.env.CATERING_BUSINESS_ID || "local" };
-  const library = new RecipeLibrary(undefined, {
+  const library = new RecipeLibrary({
     rootDir: dataRoot,
     databaseUrl
   });

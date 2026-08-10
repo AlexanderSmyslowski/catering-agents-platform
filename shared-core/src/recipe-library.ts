@@ -2,12 +2,10 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import {
   createBusinessScopedPersistentCollection,
-  resolveDatabaseUrl,
   type BusinessScopedPersistentCollection,
   type CollectionStorageOptions
 } from "./persistence.js";
 import type { BusinessContext } from "./business-context.js";
-import { internalRecipes } from "./fixtures/sample-data.js";
 import { isTrustedProductionRecipe } from "./recipe-research-calculation-boundary.js";
 import { ingredientGroupHints, unitNormalization } from "./taxonomies/defaults.js";
 import {
@@ -681,16 +679,7 @@ export function isRecipeEligibleForOperationalPlanning(recipe: Recipe): boolean 
 export class RecipeLibrary {
   private readonly recipes: BusinessScopedPersistentCollection<Recipe>;
 
-  private readonly seed: Recipe[];
-
-  private readonly seededBusinesses = new Set<string>();
-
-  constructor(
-    seed?: Recipe[],
-    options?: CollectionStorageOptions
-  ) {
-    const hosted = Boolean(options?.pgPool || resolveDatabaseUrl(options?.databaseUrl));
-    this.seed = seed === undefined ? (hosted ? [] : internalRecipes) : seed;
+  constructor(options?: CollectionStorageOptions) {
     this.recipes = createBusinessScopedPersistentCollection<Recipe>({
       collectionName: "production/recipes",
       getId: (recipe) => recipe.recipeId,
@@ -702,11 +691,10 @@ export class RecipeLibrary {
   }
 
   async findCandidates(
-    contextOrLabel: BusinessContext | { label: string },
-    maybeLabel?: { label: string }
+    context: BusinessContext,
+    label: { label: string }
   ): Promise<Recipe[]> {
-    const [context, label] = recipeContextAndValue(contextOrLabel, maybeLabel);
-    await this.ensureSeed(context);
+    assertRecipeBusinessContext(context);
     const rawLeftTokens = rawSearchTokens(label.label);
     const orderedLeftTokens = tokenizeSearchText(label.label);
     const leftTokens = new Set(orderedLeftTokens);
@@ -802,42 +790,30 @@ export class RecipeLibrary {
       .map((item) => item.recipe);
   }
 
-  async save(contextOrRecipe: BusinessContext | Recipe, maybeRecipe?: Recipe): Promise<void> {
-    const [context, recipe] = recipeContextAndValue(contextOrRecipe, maybeRecipe);
-    await this.ensureSeed(context);
+  async save(context: BusinessContext, recipe: Recipe): Promise<void> {
+    assertRecipeBusinessContext(context);
     await this.recipes.set(context, recipe);
   }
 
   async insert(context: BusinessContext, recipe: Recipe): Promise<"created" | "exists"> {
-    await this.ensureSeed(context);
+    assertRecipeBusinessContext(context);
     return this.recipes.insert(context, recipe);
   }
 
-  async get(contextOrId: BusinessContext | string, maybeId?: string): Promise<Recipe | undefined> {
-    const [context, recipeId] = recipeContextAndValue(contextOrId, maybeId);
-    await this.ensureSeed(context);
+  async get(context: BusinessContext, recipeId: string): Promise<Recipe | undefined> {
+    assertRecipeBusinessContext(context);
     return this.recipes.get(context, recipeId);
   }
 
   async reviewRecipe(
-    contextOrRecipeId: BusinessContext | string,
-    recipeIdOrInput: string | {
-      decision: RecipeReviewDecision;
-      note?: string;
-    },
-    maybeInput?: {
+    context: BusinessContext,
+    recipeId: string,
+    input: {
       decision: RecipeReviewDecision;
       note?: string;
     }
   ): Promise<Recipe> {
-    const context = isRecipeBusinessContext(contextOrRecipeId) ? contextOrRecipeId : { businessId: "local" };
-    const recipeId = isRecipeBusinessContext(contextOrRecipeId)
-      ? recipeIdOrInput as string
-      : contextOrRecipeId;
-    const input = (isRecipeBusinessContext(contextOrRecipeId) ? maybeInput : recipeIdOrInput) as {
-      decision: RecipeReviewDecision;
-      note?: string;
-    };
+    assertRecipeBusinessContext(context);
     const recipe = await this.get(context, recipeId);
     if (!recipe) {
       throw new Error(`Rezept ${recipeId} wurde nicht gefunden.`);
@@ -878,23 +854,21 @@ export class RecipeLibrary {
     return reviewed;
   }
 
-  async list(context: BusinessContext = { businessId: "local" }): Promise<Recipe[]> {
-    await this.ensureSeed(context);
+  async list(context: BusinessContext): Promise<Recipe[]> {
+    assertRecipeBusinessContext(context);
     return this.recipes.list(context);
   }
 
-  private async ensureSeed(context: BusinessContext): Promise<void> {
-    if (this.seededBusinesses.has(context.businessId)) return;
-    for (const recipe of this.seed) await this.recipes.insert(context, recipe);
-    this.seededBusinesses.add(context.businessId);
+  async seed(context: BusinessContext, recipes: readonly Recipe[]): Promise<void> {
+    assertRecipeBusinessContext(context);
+    for (const recipe of recipes) {
+      await this.recipes.insert(context, recipe);
+    }
   }
 }
 
-function isRecipeBusinessContext(value: unknown): value is BusinessContext {
-  return typeof value === "object" && value !== null && typeof (value as BusinessContext).businessId === "string";
-}
-
-function recipeContextAndValue<T>(contextOrValue: BusinessContext | T, maybeValue?: T): [BusinessContext, T] {
-  if (isRecipeBusinessContext(contextOrValue) && maybeValue !== undefined) return [contextOrValue, maybeValue];
-  return [{ businessId: "local" }, contextOrValue as T];
+function assertRecipeBusinessContext(context: BusinessContext): void {
+  if (!context || typeof context.businessId !== "string" || context.businessId.trim().length === 0) {
+    throw new Error("Ein nicht leerer Betriebskontext ist erforderlich.");
+  }
 }

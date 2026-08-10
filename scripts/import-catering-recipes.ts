@@ -142,7 +142,7 @@ async function main(): Promise<void> {
   const rootDir = process.argv[2] ?? defaultSourceRoot;
   const dataRoot = process.env.CATERING_DATA_ROOT || "./data";
   const context = { businessId: process.env.CATERING_BUSINESS_ID || "local" };
-  const library = new RecipeLibrary(undefined, { rootDir: dataRoot });
+  const library = new RecipeLibrary({ rootDir: dataRoot });
   const candidates = choosePreferredFiles(await collectCandidateFiles(rootDir));
 
   const imported: string[] = [];

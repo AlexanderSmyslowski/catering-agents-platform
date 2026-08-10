@@ -184,7 +184,7 @@ describe("production handoff port", () => {
     await app.close();
   });
 
-  it("isolates handoff-derived drafts from every other business read and mutation path", async () => {
+  it("serves only the configured local business and rejects every other business path", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-handoff-draft-scope-"));
     const store = new ProductionStore({ rootDir });
     const handoff = buildHandoff({ businessId: "alpha" });
@@ -192,6 +192,7 @@ describe("production handoff port", () => {
       dataRoot: rootDir,
       store,
       trustedActorSecret: sharedSecret,
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha" },
       handoffReader: { async getHandoff() { return handoff; } }
     });
     const headersFor = (businessId: string) => ({
@@ -251,12 +252,12 @@ describe("production handoff port", () => {
       }
     });
     expect(alphaList.json<{ items: unknown[] }>().items).toHaveLength(1);
-    expect(betaList.json<{ items: unknown[] }>().items).toHaveLength(0);
+    expect(betaList.statusCode).toBe(403);
     expect(await store.getProductionDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
     expect(await store.getProductionDraft({ businessId: "beta" }, draft.draftId)).toBeUndefined();
     expect([betaReview.statusCode, betaRevision.statusCode, betaDecision.statusCode, betaApply.statusCode])
-      .toEqual([404, 404, 404, 404]);
-    expect(betaImport.statusCode).toBe(422);
+      .toEqual([403, 403, 403, 403]);
+    expect(betaImport.statusCode).toBe(403);
 
     await app.close();
   });

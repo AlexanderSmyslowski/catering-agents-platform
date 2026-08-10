@@ -214,9 +214,9 @@ describe("production gold run", () => {
 
     const dataRoot = createDataRoot();
     try {
-      const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
-      await repository.save(createInternalRecipe());
-      await repository.save(createClassicCaesarRecipe());
+      const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+      await repository.save({ businessId: "local" }, createInternalRecipe());
+      await repository.save({ businessId: "local" }, createClassicCaesarRecipe());
       const webProvider = new NoopWebRecipeProvider();
       const discovery = new RecipeDiscoveryService(repository, webProvider);
 

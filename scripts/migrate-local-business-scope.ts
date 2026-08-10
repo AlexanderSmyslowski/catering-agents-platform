@@ -3,6 +3,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, re
 import path from "node:path";
 import {
   assertBusinessId,
+  areJsonValuesEqual,
   validateOfferDraft,
   validateProductionDraft,
   validateProductionPlan,
@@ -11,6 +12,7 @@ import {
   type AuditEntry,
   type OfferDraft,
   type ProductionDraft,
+  type ProductionClarificationAnswer,
   type ProductionPlan,
   type PurchaseList,
   type Recipe
@@ -24,6 +26,13 @@ import {
   type CollectionStorageOptions,
   type Queryable
 } from "../shared-core/src/persistence.js";
+import {
+  validateClarificationDraftForStorage,
+  validateProductionClarificationAnswerForStorage,
+  validateProductionFeedbackDraftForStorage,
+  type ClarificationDraft,
+  type ProductionFeedbackDraft
+} from "../production-service/src/repositories/production-store.js";
 
 interface MigrationManifest {
   completed: Record<string, { completedAt: string; sourceCount: number; targetCount: number; hash: string; legacyHandoffDiscarded?: boolean; discardedHandoffCount?: number; strippedHandoffHash?: string; legacyProductionStates?: Array<{ draftId: string; formerStatus: string; sourceHash: string }> }>;
@@ -84,6 +93,21 @@ function normalizeLegacyProductionDraft(draft: Record<string, unknown>, business
     status: mustReapprove ? "pending_review" : normalized.status,
     ...(mustReapprove ? { legacyApprovalState: "unverified" } : {})
   } as ProductionDraft);
+}
+
+function oldStageThreeProductionDraftProjection(
+  draft: Record<string, unknown>,
+  businessId: string
+): ProductionDraft | undefined {
+  try {
+    return validateProductionDraft({
+      ...draft,
+      businessId,
+      revision: typeof draft.revision === "number" ? draft.revision : 1
+    } as ProductionDraft);
+  } catch {
+    return undefined;
+  }
 }
 
 function manifestPath(options: LocalBusinessScopeMigrationOptions, businessId: string): string {
@@ -246,14 +270,32 @@ async function migrateProductionV2(
       idKey: "purchaseListId",
       normalize: (value) => validatePurchaseList(value as unknown as PurchaseList) as unknown as Record<string, unknown>
     },
-    { collectionName: "production/clarification-answers", idKey: "answerId", normalize: validateLegacyRecord },
-    { collectionName: "production/clarification-drafts", idKey: "draftId", normalize: validateLegacyRecord },
+    {
+      collectionName: "production/clarification-answers",
+      idKey: "answerId",
+      normalize: (value) => validateProductionClarificationAnswerForStorage(
+        value as unknown as ProductionClarificationAnswer
+      ) as unknown as Record<string, unknown>
+    },
+    {
+      collectionName: "production/clarification-drafts",
+      idKey: "draftId",
+      normalize: (value) => validateClarificationDraftForStorage(
+        value as unknown as ClarificationDraft
+      ) as unknown as Record<string, unknown>
+    },
     {
       collectionName: "production/drafts",
       idKey: "draftId",
       normalize: (value) => normalizeLegacyProductionDraft(value, businessId) as unknown as Record<string, unknown>
     },
-    { collectionName: "production/feedback-drafts", idKey: "feedbackId", normalize: validateLegacyRecord },
+    {
+      collectionName: "production/feedback-drafts",
+      idKey: "feedbackId",
+      normalize: (value) => validateProductionFeedbackDraftForStorage(
+        value as unknown as ProductionFeedbackDraft
+      ) as unknown as Record<string, unknown>
+    },
     {
       collectionName: "production/recipes",
       idKey: "recipeId",
@@ -288,7 +330,21 @@ async function migrateProductionV2(
       }
       const value = definition.normalize(raw);
       const id = String(value[definition.idKey]);
-      await target.insert({ businessId }, value);
+      const inserted = await target.insert({ businessId }, value);
+      if (inserted === "exists") {
+        const existing = await target.get({ businessId }, id);
+        if (!areJsonValuesEqual(existing, value)) {
+          const oldStageThreeProjection = definition.collectionName === "production/drafts"
+            ? oldStageThreeProductionDraftProjection(raw, businessId) as unknown as Record<string, unknown> | undefined
+            : undefined;
+          if (!oldStageThreeProjection || !areJsonValuesEqual(existing, oldStageThreeProjection)) {
+            throw new Error(
+              `${definition.collectionName}/${id} weicht von der sicher erkennbaren Legacy-Projektion ab.`
+            );
+          }
+          await target.set({ businessId }, value);
+        }
+      }
       expectedRecords.push({ collectionName: definition.collectionName, id, value });
     }
     for (const value of await target.list({ businessId })) {
@@ -334,13 +390,6 @@ async function migrateProductionV2(
     writeManifest(options, businessId, manifest!);
   }
   return { name, status: "migrated" };
-}
-
-function validateLegacyRecord(value: Record<string, unknown>): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Legacy-Produktionsrecord muss ein Objekt sein.");
-  }
-  return value;
 }
 
 export async function runLocalBusinessScopeMigration(options: LocalBusinessScopeMigrationOptions): Promise<{ units: MigrationUnitResult[] }> {

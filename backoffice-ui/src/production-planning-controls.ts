@@ -18,7 +18,7 @@ import {
 import type {
   ProductionPlanFailureActions,
   ProductionPlanStartActions,
-  ProductionPlanSuccessActions,
+  ProductionDraftPreparationSuccessActions,
   ProductionSpecPlanningPreflightActions
 } from "./production-plan-result-state.js";
 
@@ -28,7 +28,7 @@ export type ProductionPlanningControlsInput =
   ProductionPlanSubmissionServices &
   Omit<ProductionSpecPlanningPreflightActions, "persistCurrentSpecEdit"> &
   ProductionPlanStartActions &
-  ProductionPlanSuccessActions &
+  ProductionDraftPreparationSuccessActions &
   ProductionPlanFailureActions &
   Pick<ProductionSpecSaveActionInput, "setSubmitting" | "clearMessages" | "setError"> & {
     setProductionWorkspaceCleared: (cleared: boolean) => void;
@@ -68,7 +68,8 @@ export function buildProductionPlanningControls(
     ...focusActions,
     persistCurrentSpecEdit,
     handleCreatePlan: buildProductionPlanSubmissionAction({
-      createProductionPlan: input.createProductionPlan,
+      createProductionDraftFromAcceptedEventSpec: input.createProductionDraftFromAcceptedEventSpec,
+      prepareProductionDraft: input.prepareProductionDraft,
       editingSpecId: input.editingSpecId,
       setSubmitting: input.setSubmitting,
       setProductionWorkspaceCleared: input.setProductionWorkspaceCleared,
@@ -76,12 +77,12 @@ export function buildProductionPlanningControls(
       persistCurrentSpecEdit,
       startPlanProgress: input.startPlanProgress,
       clearSelectedPlanId: input.clearSelectedPlanId,
-      setSelectedPlanId: input.setSelectedPlanId,
       refreshDashboard: input.refreshDashboard,
       completePlanProgress: input.completePlanProgress,
       failPlanProgress: input.failPlanProgress,
       setNotice: input.setNotice,
-      setError: input.setError
+      setError: input.setError,
+      showProductionDraftReview: input.showProductionDraftReview
     }),
     handleSaveSpecEdit: buildProductionSpecSaveAction({
       editingSpecId: input.editingSpecId,

@@ -164,12 +164,17 @@ describe("ProductionDraftReviewPanel", () => {
       }
     });
     let draft = draftFixture();
+    let approvedProductionSpecs: Array<{
+      approvedProductionSpecId: string;
+      sourceDraft: { draftId: string; revision: number };
+      applied: boolean;
+    }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
       if (url === "/api/production/v1/production/drafts" && method === "GET") {
-        return jsonResponse({ items: [draft] });
+        return jsonResponse({ items: [draft], approvedProductionSpecs });
       }
 
       if (
@@ -191,6 +196,11 @@ describe("ProductionDraftReviewPanel", () => {
           ...draft,
           status: "approved"
         };
+        approvedProductionSpecs = [{
+          approvedProductionSpecId: "approved-production-spec-ui-1",
+          sourceDraft: { draftId: draft.draftId, revision: draft.revision ?? 1 },
+          applied: false
+        }];
         return jsonResponse({
           approval: { approvalRequestId: "approval-ui-1", decision: "approved" },
           approvedProductionSpec: { approvedProductionSpecId: "approved-production-spec-ui-1" }
@@ -198,6 +208,10 @@ describe("ProductionDraftReviewPanel", () => {
       }
 
       if (url === "/api/production/v1/production/approved-specs/approved-production-spec-ui-1/apply" && method === "POST") {
+        approvedProductionSpecs = approvedProductionSpecs.map((projection) => ({
+          ...projection,
+          applied: true
+        }));
         return jsonResponse({
           eventSpec: { specId: "spec-review-ui-1" },
           plan: {},
@@ -298,6 +312,167 @@ describe("ProductionDraftReviewPanel", () => {
     await act(async () => {
       root.unmount();
     });
+  });
+
+  it("prepares an event-only draft before showing the complete snapshot review", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+    });
+    const sourceDraft: ProductionDraft = {
+      ...draftFixture(),
+      draftId: "draft-event-only",
+      revision: 1,
+      reviewCards: [{ ...draftFixture().reviewCards[0]!, decision: "fits" }],
+      draftArtifacts: {
+        eventSpec: { event: { title: "Noch vorzubereitendes Sommerfest" } }
+      }
+    };
+    const preparedDraft: ProductionDraft = {
+      ...draftFixture(),
+      draftId: "draft-prepared",
+      revision: 2,
+      supersedesDraftId: sourceDraft.draftId,
+      draftArtifacts: {
+        ...draftFixture().draftArtifacts,
+        eventSpec: { event: { title: "Vorbereitetes Sommerfest" } }
+      }
+    };
+    let drafts = [sourceDraft];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+        return jsonResponse({ items: drafts, approvedProductionSpecs: [] });
+      }
+      if (
+        url === "/api/production/v1/production/drafts/draft-event-only/prepare" &&
+        method === "POST"
+      ) {
+        drafts = [{ ...sourceDraft, status: "superseded" }, preparedDraft];
+        return jsonResponse({ draft: preparedDraft }, 201);
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      await flushPromises();
+    });
+
+    const prepareButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Entwurf vorbereiten"
+    );
+    const approveButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Entwurf freigeben"
+    ) as HTMLButtonElement | undefined;
+    expect(prepareButton).toBeDefined();
+    expect(approveButton?.disabled).toBe(true);
+
+    await act(async () => {
+      prepareButton?.click();
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/production/v1/production/drafts/draft-event-only/prepare",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(document.body.textContent ?? "").toContain("Vorbereitetes Sommerfest");
+    expect(document.body.textContent ?? "").toContain("Produktionsentwurf wurde vorbereitet.");
+    expect(document.body.textContent ?? "").not.toContain("Noch vorzubereitendes Sommerfest");
+
+    await act(async () => root.unmount());
+  });
+
+  it("recovers an unapplied approved snapshot on a fresh panel mount", async () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+    });
+    const approvedDraft: ProductionDraft = {
+      ...draftFixture(),
+      draftId: "draft-approved-reload",
+      revision: 3,
+      status: "approved",
+      reviewCards: draftFixture().reviewCards.map((card) => ({ ...card, decision: "fits" }))
+    };
+    let applied = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+        return jsonResponse({
+          items: [approvedDraft],
+          approvedProductionSpecs: [{
+            approvedProductionSpecId: "approved-production-spec-reload",
+            sourceDraft: { draftId: approvedDraft.draftId, revision: 3 },
+            applied
+          }]
+        });
+      }
+      if (
+        url === "/api/production/v1/production/approved-specs/approved-production-spec-reload/apply" &&
+        method === "POST"
+      ) {
+        applied = true;
+        return jsonResponse({
+          eventSpec: { specId: "spec-approved-reload" },
+          plan: {},
+          purchaseList: {},
+          recipes: []
+        });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const onDraftChanged = vi.fn(async () => undefined);
+
+    const firstContainer = document.createElement("div");
+    document.body.appendChild(firstContainer);
+    const firstRoot = createRoot(firstContainer);
+    await act(async () => {
+      firstRoot.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      await flushPromises();
+      firstRoot.unmount();
+    });
+    firstContainer.remove();
+
+    const reloadedContainer = document.createElement("div");
+    document.body.appendChild(reloadedContainer);
+    const reloadedRoot = createRoot(reloadedContainer);
+    await act(async () => {
+      reloadedRoot.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        onDraftChanged
+      }));
+      await flushPromises();
+    });
+
+    expect(document.body.textContent ?? "").toContain("Kundenbuffet");
+    const applyButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Entwurf übernehmen"
+    );
+    expect(applyButton).toBeDefined();
+
+    await act(async () => {
+      applyButton?.click();
+      await flushPromises();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/production/v1/production/approved-specs/approved-production-spec-reload/apply",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(onDraftChanged).toHaveBeenCalledWith("spec-approved-reload");
+    expect(document.body.textContent ?? "").not.toContain("Entwurf übernehmen");
+
+    await act(async () => reloadedRoot.unmount());
   });
 
   it("collects one concrete change request before offering a new AI revision", async () => {

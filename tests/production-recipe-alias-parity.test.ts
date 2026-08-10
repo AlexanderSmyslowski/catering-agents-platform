@@ -345,21 +345,21 @@ describe("production recipe alias parity", () => {
     "keeps backend discovery and UI suggestions aligned for $componentLabel",
     async ({ componentLabel, category, recipeName, filename, sourceRef, text }) => {
       const dataRoot = createDataRoot();
-      const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+      const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
       const recipe = parseUploadedRecipeText({
         recipeName,
         filename,
         sourceRef,
         text
       });
-      await repository.save(recipe);
-      await repository.reviewRecipe(recipe.recipeId, { decision: "approve" });
+      await repository.save({ businessId: "local" }, recipe);
+      await repository.reviewRecipe({ businessId: "local" }, recipe.recipeId, { decision: "approve" });
 
       const spec = singleComponentSpec(componentLabel, category);
       const component = spec.menuPlan[0];
       const discovery = new RecipeDiscoveryService(repository, new EmptyWebProvider());
       const resolution = await discovery.resolveRecipe(component, spec);
-      const uiRecipes = (await repository.list()).map((storedRecipe) => ({
+      const uiRecipes = (await repository.list({ businessId: "local" })).map((storedRecipe) => ({
         recipeId: storedRecipe.recipeId,
         name: storedRecipe.name,
         source: storedRecipe.source

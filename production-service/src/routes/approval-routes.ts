@@ -13,7 +13,16 @@ import {
 } from "@catering/shared-core";
 import type { IntakeStore } from "@catering/intake-service";
 import type { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
-import type { ProductionStore } from "../repositories/production-store.js";
+import {
+  productionDecisionRepositoryFor,
+  type ProductionStore
+} from "../repositories/production-store.js";
+import type { ProductionDecisionTargetScope } from "../repositories/production-decision-repository.js";
+import {
+  productionDecidedDraftFor,
+  validateProductionDecisionAggregate,
+  type ProductionDecisionAggregate
+} from "../production-decision-aggregate.js";
 
 export type ProductionDecisionFaultPhase = "after_approval_insert";
 export type ProductionApplyFaultPhase =
@@ -100,6 +109,32 @@ export function registerProductionApprovalRoutes(
     decisionFaultInjector,
     applyFaultInjector
   } = deps;
+  const decisionRepository = productionDecisionRepositoryFor(store);
+
+  const projectDecisionAggregate = async (
+    scope: ProductionDecisionTargetScope,
+    aggregate: ProductionDecisionAggregate
+  ) => {
+    const approval = aggregate.approval;
+    const existingApproval = await scope.getApproval(approval.approvalRequestId);
+    if (existingApproval && !areJsonValuesEqual(existingApproval, approval)) {
+      throw new Error("Freigabeprojektion weicht von der autoritativen Produktionsentscheidung ab.");
+    }
+    if (!existingApproval) {
+      await scope.insertApproval(approval);
+      decisionFaultInjector?.("after_approval_insert");
+    }
+
+    if (aggregate.approvedProductionSpec) {
+      const expectedSpec = aggregate.approvedProductionSpec;
+      const existingSpec = await scope.getApprovedProductionSpec(expectedSpec.approvedProductionSpecId);
+      if (existingSpec && !areJsonValuesEqual(existingSpec, expectedSpec)) {
+        throw new Error("Freigegebener Produktionssnapshot weicht von der autoritativen Entscheidung ab.");
+      }
+      if (!existingSpec) await scope.insertApprovedProductionSpec(expectedSpec);
+    }
+    await scope.setDraft(aggregate.decidedDraft);
+  };
 
   app.post<{
     Params: { draftId: string };
@@ -112,12 +147,22 @@ export function registerProductionApprovalRoutes(
     }
 
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-    const draft = await store.getProductionDraft(actor, request.params.draftId);
-    if (!draft) return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
-    const target = {
+    const aggregateCandidates = await decisionRepository.listDecisionAggregatesForDraft(
+      actor,
+      request.params.draftId
+    );
+    if (aggregateCandidates.length > 1) {
+      return reply.code(409).send({ message: "ProductionDraft besitzt konkurrierende autoritative Entscheidungen." });
+    }
+    const existingAggregate = aggregateCandidates[0];
+    const observedDraft = existingAggregate
+      ? existingAggregate.sourceDraft
+      : await store.getProductionDraft(actor, request.params.draftId);
+    if (!observedDraft) return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+    const target = existingAggregate?.approval.target ?? {
       kind: "production_draft" as const,
-      artifactId: draft.draftId,
-      revision: draft.revision
+      artifactId: observedDraft.draftId,
+      revision: observedDraft.revision
     };
     const requestedApproval = createApprovalRequestRecord({
       actor,
@@ -126,106 +171,121 @@ export function registerProductionApprovalRoutes(
       decision: request.body.decision,
       ...(request.body.comment?.trim() ? { comment: request.body.comment.trim() } : {})
     });
-    const existingApprovals = await store.listApprovalsForTarget(actor, target);
-    if (existingApprovals.length > 1) {
-      return reply.code(409).send({ message: "Freigabeziel besitzt konkurrierende Entscheidungen." });
-    }
-    const existingApproval = existingApprovals[0];
-    if (existingApproval && !sameApproval(existingApproval, requestedApproval)) {
-      return reply.code(409).send({ message: "ProductionDraft-Revision wurde bereits anders entschieden." });
-    }
-    if (!existingApproval && draft.status !== "pending_review") {
-      return reply.code(409).send({ message: "Nur ein pending_review ProductionDraft darf entschieden werden." });
-    }
-
-    if (request.body.decision === "approved") {
-      const unresolvedCards = draft.reviewCards.filter((card) =>
-        (card.requiredApproval === true || card.riskLevel === "blocking") && card.decision !== "fits"
-      );
-      const { eventSpec, productionPlan, purchaseList, recipes } = draft.draftArtifacts;
-      const selectedRecipeIds = productionPlan?.recipeSelections
-        .map((selection) => selection.recipeId)
-        .filter((recipeId): recipeId is string => Boolean(recipeId)) ?? [];
-      const incomplete = !eventSpec || !productionPlan || !purchaseList || !Array.isArray(recipes) ||
-        selectedRecipeIds.some((recipeId) => !recipes?.some((recipe) => recipe.recipeId === recipeId));
-      if (unresolvedCards.length > 0 || incomplete) {
-        return reply.code(422).send({
-          message: "ProductionDraft-Snapshot ist noch nicht vollständig freigabefähig.",
-          errors: [
-            ...unresolvedCards.map((card) => `reviewCard ${card.cardId} is ${card.decision}`),
-            ...(incomplete ? ["eventSpec, productionPlan, purchaseList und recipes müssen vollständig vorliegen"] : [])
-          ]
-        });
+    const resolution = await decisionRepository.withTargetCriticalSection(actor, target, async (scope) => {
+      const persistedAggregate = await scope.getDecisionAggregate(requestedApproval.approvalRequestId);
+      if (persistedAggregate) {
+        validateProductionDecisionAggregate(persistedAggregate);
+        if (!sameApproval(persistedAggregate.approval, requestedApproval)) {
+          return { kind: "conflict" as const, message: "ProductionDraft-Revision wurde bereits anders entschieden." };
+        }
+        await projectDecisionAggregate(scope, persistedAggregate);
+        return { kind: "decided" as const, aggregate: persistedAggregate };
       }
-    }
 
-    let approval = existingApproval ?? requestedApproval;
-    if (!existingApproval) {
-      await store.insertApproval(actor, approval);
-      decisionFaultInjector?.("after_approval_insert");
-      const persistedApproval = await store.getApproval(actor, requestedApproval.approvalRequestId);
-      if (!persistedApproval) {
-        return reply.code(409).send({ message: "Freigabe konnte nicht konfliktfrei gespeichert werden." });
+      const draft = await scope.getDraft(request.params.draftId);
+      if (!draft) return { kind: "not_found" as const };
+      if (draft.revision !== target.revision) {
+        return { kind: "conflict" as const, message: "ProductionDraft-Revision wurde gleichzeitig verändert." };
       }
-      if (!sameApproval(persistedApproval, requestedApproval)) {
-        return reply.code(409).send({ message: "ProductionDraft-Revision wurde gleichzeitig anders entschieden." });
+      const existingApprovals = await scope.listApprovalsForTarget();
+      if (existingApprovals.length > 1) {
+        return { kind: "conflict" as const, message: "Freigabeziel besitzt konkurrierende Entscheidungen." };
       }
-      approval = persistedApproval;
-    }
+      const existingApproval = existingApprovals[0];
+      if (existingApproval && !sameApproval(existingApproval, requestedApproval)) {
+        return { kind: "conflict" as const, message: "ProductionDraft-Revision wurde bereits anders entschieden." };
+      }
+      if (!existingApproval && draft.status !== "pending_review") {
+        return { kind: "conflict" as const, message: "Nur ein pending_review ProductionDraft darf entschieden werden." };
+      }
+      if (existingApproval && draft.status !== "pending_review") {
+        return { kind: "conflict" as const, message: "Persistierte Freigabeevidenz besitzt keinen unveränderten Quelldraft." };
+      }
 
-    if (approval.decision === "rejected") {
-      const decidedDraft = validateProductionDraft({
-        ...draft,
-        status: "rejected",
-        approvalRequestId: approval.approvalRequestId
+      if (request.body.decision === "approved") {
+        const unresolvedCards = draft.reviewCards.filter((card) =>
+          (card.requiredApproval === true || card.riskLevel === "blocking") && card.decision !== "fits"
+        );
+        const { eventSpec, productionPlan, purchaseList, recipes } = draft.draftArtifacts;
+        const selectedRecipeIds = productionPlan?.recipeSelections
+          .map((selection) => selection.recipeId)
+          .filter((recipeId): recipeId is string => Boolean(recipeId)) ?? [];
+        const incomplete = !eventSpec || !productionPlan || !purchaseList || !Array.isArray(recipes) ||
+          selectedRecipeIds.some((recipeId) => !recipes?.some((recipe) => recipe.recipeId === recipeId));
+        if (unresolvedCards.length > 0 || incomplete) {
+          return {
+            kind: "unprocessable" as const,
+            errors: [
+              ...unresolvedCards.map((card) => `reviewCard ${card.cardId} is ${card.decision}`),
+              ...(incomplete ? ["eventSpec, productionPlan, purchaseList und recipes müssen vollständig vorliegen"] : [])
+            ]
+          };
+        }
+      }
+
+      const approval = existingApproval ?? requestedApproval;
+      const aggregate = validateProductionDecisionAggregate({
+        schemaVersion: "1.0",
+        businessId: actor.businessId,
+        sourceDraft: draft,
+        approval,
+        decidedDraft: productionDecidedDraftFor(draft, approval),
+        ...(approval.decision === "approved"
+          ? { approvedProductionSpec: createApprovedProductionSpec({ draft, approval }) }
+          : {})
       });
-      await store.saveProductionDraft(actor, decidedDraft);
+      await scope.insertDecisionAggregate(aggregate);
+      const authoritative = await scope.getDecisionAggregate(approval.approvalRequestId);
+      if (!authoritative || !areJsonValuesEqual(authoritative, aggregate)) {
+        return { kind: "conflict" as const, message: "Autoritative Produktionsentscheidung konnte nicht konfliktfrei gespeichert werden." };
+      }
+      await projectDecisionAggregate(scope, authoritative);
+      return { kind: "decided" as const, aggregate: authoritative };
+    });
+
+    if (resolution.kind === "not_found") {
+      return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+    }
+    if (resolution.kind === "conflict") {
+      return reply.code(409).send({ message: resolution.message });
+    }
+    if (resolution.kind === "unprocessable") {
+      return reply.code(422).send({
+        message: "ProductionDraft-Snapshot ist noch nicht vollständig freigabefähig.",
+        errors: resolution.errors
+      });
+    }
+
+    const { aggregate } = resolution;
+    const { approval } = aggregate;
+    if (approval.decision === "rejected") {
       await auditLog.logFor(actor, {
         action: "production.production_draft_rejected",
         entityType: "ProductionDraft",
-        entityId: draft.draftId,
+        entityId: aggregate.sourceDraft.draftId,
         actor,
+        idempotencyKey: `production-decision:${approval.approvalRequestId}`,
         summary: "ProductionDraft nach Review verworfen.",
         details: {
-          draftId: draft.draftId,
-          revision: draft.revision,
+          draftId: aggregate.sourceDraft.draftId,
+          revision: aggregate.sourceDraft.revision,
           approvalRequestId: approval.approvalRequestId,
           writesProductObject: false
         }
       });
       return reply.code(201).send({ approval });
     }
-
-    const expectedSpec = createApprovedProductionSpec({ draft, approval });
-    const snapshotConflict = await compareOrInsert({
-      get: () => store.getApprovedProductionSpec(actor, expectedSpec.approvedProductionSpecId),
-      insert: () => store.insertApprovedProductionSpec(actor, expectedSpec),
-      expected: expectedSpec,
-      label: `ApprovedProductionSpec ${expectedSpec.approvedProductionSpecId}`
-    });
-    if (snapshotConflict) return reply.code(409).send({ message: snapshotConflict });
-    const approvedProductionSpec = await store.getApprovedProductionSpec(
-      actor,
-      expectedSpec.approvedProductionSpecId
-    );
-
-    const decidedDraft = validateProductionDraft({
-      ...draft,
-      status: "approved",
-      approvalRequestId: approval.approvalRequestId,
-      approvedBy: approval.decidedBy.name,
-      approvedAt: approval.decidedAt
-    });
-    await store.saveProductionDraft(actor, decidedDraft);
+    const approvedProductionSpec = aggregate.approvedProductionSpec!;
     await auditLog.logFor(actor, {
       action: "production.production_spec_approved",
       entityType: "ApprovedProductionSpec",
-      entityId: expectedSpec.approvedProductionSpecId,
+      entityId: approvedProductionSpec.approvedProductionSpecId,
       actor,
+      idempotencyKey: `production-decision:${approvedProductionSpec.approvedProductionSpecId}`,
       summary: "Geprüfter Produktions-Snapshot unveränderlich freigegeben.",
       details: {
-        draftId: draft.draftId,
-        revision: draft.revision,
+        draftId: aggregate.sourceDraft.draftId,
+        revision: aggregate.sourceDraft.revision,
         approvalRequestId: approval.approvalRequestId,
         writesProductObject: false
       }

@@ -123,10 +123,10 @@ function eventSpec(draftId: string): AcceptedEventSpec {
 async function buildDraft(draftId = "production-draft-e2e-chain-1"): Promise<ProductionDraft> {
   const spec = eventSpec(draftId);
   const fixtureRoot = createDataRoot("catering-agents-production-draft-fixture-");
-  const repository = new InMemoryRecipeRepository([], { rootDir: fixtureRoot });
+  const repository = new InMemoryRecipeRepository({ rootDir: fixtureRoot });
 
   try {
-    await repository.save(recipeCandidate());
+    await repository.save({ businessId: "local" }, recipeCandidate());
     const discoveryService = new RecipeDiscoveryService(repository, {
       searchRecipes: async () => []
     });
@@ -284,7 +284,7 @@ describe("ProductionDraft E2E chain", () => {
   it("keeps imported drafts draft-only until approved apply materializes the production folder chain", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const productionApp = buildProductionApp({
       dataRoot,
       repository,

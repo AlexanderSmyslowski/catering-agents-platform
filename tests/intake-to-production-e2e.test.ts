@@ -122,8 +122,8 @@ async function runParityFlow(
   const dataRoot = createDataRoot();
 
   try {
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
-    await repository.save(createRecipe(recipe));
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.save({ businessId: "local" }, createRecipe(recipe));
 
     const discovery = createDiscoveryService(repository);
     const plannedSpec = {
@@ -183,8 +183,8 @@ describe("manual form intake to production e2e", () => {
 
     const dataRoot = createDataRoot();
     try {
-      const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
-      await repository.save(
+      const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+      await repository.save({ businessId: "local" },
         createRecipe({
           recipeId: "tomatensuppe-manual",
           name: "Tomatensuppe",
@@ -245,8 +245,8 @@ describe("manual form intake to production e2e", () => {
 
     const dataRoot = createDataRoot();
     try {
-      const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
-      await repository.save(
+      const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+      await repository.save({ businessId: "local" },
         createRecipe({
           recipeId: "bread-baguette-manual",
           name: "Bread & Baguette",
@@ -434,4 +434,3 @@ describe("manual form intake to production e2e", () => {
     });
   });
 });
-

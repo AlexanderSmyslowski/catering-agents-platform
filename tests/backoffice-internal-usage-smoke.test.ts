@@ -9,6 +9,7 @@ import {
   createEventRequestFromManualForm,
   normalizeEventRequestToSpec,
   SCHEMA_VERSION,
+  type ProductionDraft,
   type Recipe
 } from "@catering/shared-core";
 import {
@@ -152,7 +153,7 @@ function buildUsageFlowFixture() {
   };
 
   const dataRoot = createDataRoot();
-  const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+  const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
   const recipe = createRecipe({
     recipeId: "vegetarische-tomatensuppe-usage",
     name: "Vegetarische Tomatensuppe",
@@ -171,7 +172,7 @@ function buildUsageFlowFixture() {
 }
 
 async function buildArtifactsForFixture(plannedSpec: ReturnType<typeof buildUsageFlowFixture>["plannedSpec"], repository: InMemoryRecipeRepository) {
-  await repository.save(createRecipe({
+  await repository.save({ businessId: "local" }, createRecipe({
     recipeId: "vegetarische-tomatensuppe-usage",
     name: "Vegetarische Tomatensuppe",
     ingredientName: "Tomaten",
@@ -219,6 +220,7 @@ describe("backoffice internal usage smoke", () => {
     let currentSpec: typeof fixture.spec | undefined;
     let currentPlan = undefined as typeof artifacts.productionPlan | undefined;
     let currentPurchaseList = undefined as typeof artifacts.purchaseList | undefined;
+    let productionDrafts: ProductionDraft[] = [];
     let createdPlanViaPost = false;
     const fetchCalls: Array<{ method: string; url: string; body?: unknown }> = [];
 
@@ -293,7 +295,7 @@ describe("backoffice internal usage smoke", () => {
         }
 
         if (method === "GET" && url.endsWith("/api/production/v1/production/drafts")) {
-          return new Response(JSON.stringify({ items: [] }), {
+          return new Response(JSON.stringify({ items: productionDrafts, approvedProductionSpecs: [] }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
@@ -400,6 +402,77 @@ describe("backoffice internal usage smoke", () => {
         if (method === "GET" && url.endsWith(`/api/intake/v1/intake/requests/${currentRequestId}`)) {
           return new Response(JSON.stringify(currentRequest ?? fixture.request), {
             status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (method === "POST" && url.endsWith("/api/production/v1/production/drafts")) {
+          const importedDraft = {
+            ...(body as ProductionDraft),
+            businessId: "local"
+          };
+          productionDrafts = [importedDraft];
+          return new Response(JSON.stringify({ draft: importedDraft }), {
+            status: 201,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (
+          method === "POST" &&
+          url.endsWith(`/api/production/v1/production/drafts/${productionDrafts[0]?.draftId}/prepare`)
+        ) {
+          const sourceDraft = productionDrafts[0]!;
+          const preparedDraft: ProductionDraft = {
+            ...sourceDraft,
+            draftId: "production-draft-prepared-usage",
+            revision: sourceDraft.revision! + 1,
+            createdAt: "2026-04-10T09:35:00.000Z",
+            supersedesDraftId: sourceDraft.draftId,
+            reviewCards: [
+              {
+                cardId: "card-prepared-event-spec",
+                kind: "event_data",
+                title: "Eventdaten prüfen",
+                summary: "Eventdaten des vollständigen Produktions-Snapshots prüfen.",
+                decision: "pending",
+                requiredApproval: true
+              },
+              {
+                cardId: "card-prepared-plan",
+                kind: "timeline",
+                title: "Produktionsplan prüfen",
+                summary: "Ablauf und Zeiten fachlich bestätigen.",
+                decision: "pending",
+                requiredApproval: true
+              },
+              {
+                cardId: "card-prepared-purchase-list",
+                kind: "purchase_item",
+                title: "Einkaufsliste prüfen",
+                summary: "Mengen und Warengruppen fachlich bestätigen.",
+                decision: "pending",
+                requiredApproval: true
+              },
+              {
+                cardId: "card-prepared-recipe",
+                kind: "recipe",
+                title: "Vegetarische Tomatensuppe prüfen",
+                summary: "Rezept und Mengen fachlich bestätigen.",
+                decision: "pending",
+                requiredApproval: true
+              }
+            ],
+            draftArtifacts: {
+              eventSpec: currentSpec ?? fixture.plannedSpec,
+              productionPlan: artifacts.productionPlan,
+              purchaseList: artifacts.purchaseList,
+              recipes: [fixture.recipe]
+            }
+          };
+          productionDrafts = [{ ...sourceDraft, status: "superseded" }, preparedDraft];
+          return new Response(JSON.stringify({ draft: preparedDraft }), {
+            status: 201,
             headers: { "content-type": "application/json" }
           });
         }
@@ -516,10 +589,21 @@ describe("backoffice internal usage smoke", () => {
     const createPlanCallIndex = fetchCalls.findIndex(
       (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/plans")
     );
+    const importDraftCallIndex = fetchCalls.findIndex(
+      (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/drafts")
+    );
+    const prepareDraftCallIndex = fetchCalls.findIndex(
+      (call) => call.method === "POST" && call.url.endsWith("/prepare")
+    );
     expect(createdPlanViaPost).toBe(false);
     expect(saveAnswersCallIndex).toBeGreaterThanOrEqual(0);
+    expect(importDraftCallIndex).toBeGreaterThan(saveAnswersCallIndex);
+    expect(prepareDraftCallIndex).toBeGreaterThan(importDraftCallIndex);
     expect(createPlanCallIndex).toBe(-1);
-    expect(document.body.textContent ?? "").toContain("ProductionDraft vorbereitet und geprüft");
+    expect(document.body.textContent ?? "").toContain("Produktionsentwurf wurde vorbereitet und wartet auf Prüfung.");
+    expect(document.body.textContent ?? "").toContain("Produktionsplan prüfen");
+    expect(document.body.textContent ?? "").toContain("Einkaufsliste prüfen");
+    expect(document.body.textContent ?? "").toContain("Entwurf freigeben");
 
     expect(document.body.textContent ?? "").not.toContain("Produktionsplan wurde erzeugt.");
     expect(document.body.textContent ?? "").toContain("Status: vollständig");

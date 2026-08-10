@@ -273,7 +273,7 @@ describe("BYO LLM runtime clarification drafts", () => {
       expect(response.json<{ errors: string[] }>().errors).toContain(
         "outputCandidate.structuredCandidate.reasonCode must be a non-empty string"
       );
-      expect(await store.listClarificationDrafts(fixtureSpecId)).toEqual([]);
+      expect(await store.listClarificationDrafts({ businessId: "local" }, fixtureSpecId)).toEqual([]);
     } finally {
       await app.close();
     }
@@ -314,7 +314,7 @@ describe("BYO LLM runtime clarification drafts", () => {
 
       expect(response.statusCode).toBe(422);
       expect(response.json<{ errors: string[] }>().errors).toContain("BYO-LLM-Aufruf ist fehlgeschlagen.");
-      expect(await store.listClarificationDrafts(fixtureSpecId)).toEqual([]);
+      expect(await store.listClarificationDrafts({ businessId: "local" }, fixtureSpecId)).toEqual([]);
       expect(responseBody).not.toContain("raw prompt");
       expect(responseBody).not.toContain("provider response");
       expect(auditJson).not.toContain("raw prompt");

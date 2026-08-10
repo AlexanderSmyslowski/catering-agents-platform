@@ -21,6 +21,7 @@ const specContext = {
   specId: specWithClarification.specId,
   productionSessionId: `production-session-${specWithClarification.specId}`
 };
+const localBusiness = { businessId: "local" } as const;
 
 function firstQuestion(): ProductionClarificationQuestion {
   const [question] = buildProductionClarificationQuestions({ spec: specWithClarification });
@@ -71,12 +72,12 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     const dataRoot = createTempRoot();
     tempRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
-    await store.saveClarificationAnswer(answer);
+    await store.saveClarificationAnswer(localBusiness, answer);
 
-    const storedAnswers = await store.listClarificationAnswers();
+    const storedAnswers = await store.listClarificationAnswers(localBusiness);
     expect(storedAnswers).toHaveLength(1);
     expect(storedAnswers[0]).toEqual(answer);
-    expect(await store.getClarificationAnswer(answer.answerId)).toEqual(answer);
+    expect(await store.getClarificationAnswer(localBusiness, answer.answerId)).toEqual(answer);
 
     const projection = buildProductionConversationProjection({
       spec: specWithClarification,
@@ -268,37 +269,37 @@ describe("PA23 clarification answer runtime minimal slice", () => {
     tempRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
 
-    await expect(store.saveClarificationAnswer({ ...validAnswer, status: "draft" } as never)).rejects.toThrow(
+    await expect(store.saveClarificationAnswer(localBusiness, { ...validAnswer, status: "draft" } as never)).rejects.toThrow(
       "Nur submitted shortText-Klärungsantworten dürfen gespeichert werden."
     );
     await expect(
-      store.saveClarificationAnswer({
+      store.saveClarificationAnswer(localBusiness, {
         ...validAnswer,
         answerId: "answer-store-wrong-session",
         context: { ...validAnswer.context, productionSessionId: "production-session-other-spec" }
       } as never)
     ).rejects.toThrow("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
-    await expect(store.saveClarificationAnswer({ ...validAnswer, answerType: "yesNo" } as never)).rejects.toThrow(
+    await expect(store.saveClarificationAnswer(localBusiness, { ...validAnswer, answerType: "yesNo" } as never)).rejects.toThrow(
       "Nur submitted shortText-Klärungsantworten dürfen gespeichert werden."
     );
     await expect(
-      store.saveClarificationAnswer({ ...validAnswer, answerText: { kind: "longText", value: "42 Personen" } } as never)
+      store.saveClarificationAnswer(localBusiness, { ...validAnswer, answerText: { kind: "longText", value: "42 Personen" } } as never)
     ).rejects.toThrow("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
-    await expect(store.saveClarificationAnswer({ ...validAnswer, answerText: undefined } as never)).rejects.toThrow(
+    await expect(store.saveClarificationAnswer(localBusiness, { ...validAnswer, answerText: undefined } as never)).rejects.toThrow(
       "Nur submitted shortText-Klärungsantworten dürfen gespeichert werden."
     );
     await expect(
-      store.saveClarificationAnswer({ ...validAnswer, answerText: { kind: "shortText", value: "x".repeat(501) } } as never)
+      store.saveClarificationAnswer(localBusiness, { ...validAnswer, answerText: { kind: "shortText", value: "x".repeat(501) } } as never)
     ).rejects.toThrow("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
 
-    expect(await store.listClarificationAnswers()).toEqual([]);
+    expect(await store.listClarificationAnswers(localBusiness)).toEqual([]);
 
-    await store.saveClarificationAnswer({
+    await store.saveClarificationAnswer(localBusiness, {
       ...validAnswer,
       answerId: "answer-store-raw-html",
       answerText: { kind: "shortText", value: "<script>alert('store')</script>" }
     });
-    expect((await store.getClarificationAnswer("answer-store-raw-html"))?.answerText.value).toBe(
+    expect((await store.getClarificationAnswer(localBusiness, "answer-store-raw-html"))?.answerText.value).toBe(
       "&lt;script&gt;alert(&#39;store&#39;)&lt;/script&gt;"
     );
   });

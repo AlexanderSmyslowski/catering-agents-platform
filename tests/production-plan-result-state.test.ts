@@ -1,20 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  completeProductionStateAfterPlanSuccess,
+  completeProductionStateAfterDraftPreparation,
   prepareProductionSpecForPlanning,
   resetProductionStateAfterPlanFailure,
   startProductionPlanRunState,
   type ProductionPlanFailureActions,
   type ProductionPlanStartActions,
-  type ProductionPlanSuccessActions,
+  type ProductionDraftPreparationSuccessActions,
   type ProductionSpecPlanningPreflightActions
 } from "../backoffice-ui/src/production-plan-result-state.js";
 
-function buildSuccessActions(calls: string[]): ProductionPlanSuccessActions {
+function buildSuccessActions(calls: string[]): ProductionDraftPreparationSuccessActions {
   return {
-    setSelectedPlanId: vi.fn((planId) => {
-      calls.push(`setSelectedPlanId:${planId}`);
-    }),
     refreshDashboard: vi.fn(async () => {
       calls.push("refreshDashboard");
     }),
@@ -23,6 +20,9 @@ function buildSuccessActions(calls: string[]): ProductionPlanSuccessActions {
     }),
     setNotice: vi.fn((message) => {
       calls.push(`setNotice:${message}`);
+    }),
+    showProductionDraftReview: vi.fn((draftId) => {
+      calls.push(`showProductionDraftReview:${draftId}`);
     })
   };
 }
@@ -112,51 +112,51 @@ describe("production plan result state", () => {
 
     expect(actions.startPlanProgress).toHaveBeenCalledWith(spec, "Konferenz 42");
     expect(actions.clearSelectedPlanId).toHaveBeenCalledTimes(1);
-    expect(actions.setNotice).toHaveBeenCalledWith(
-      "Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen..."
-    );
+    expect(actions.setNotice).toHaveBeenCalledWith("Vollständiger Produktionsentwurf wird vorbereitet...");
     expect(calls).toEqual([
       "startPlanProgress:spec-planning-1:Konferenz 42",
       "clearSelectedPlanId",
-      "setNotice:Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen..."
+      "setNotice:Vollständiger Produktionsentwurf wird vorbereitet..."
     ]);
   });
 
-  it("focuses the created plan and completes the planning progress after refresh", async () => {
+  it("opens the prepared draft review after refresh", async () => {
     const calls: string[] = [];
     const actions = buildSuccessActions(calls);
 
-    await completeProductionStateAfterPlanSuccess(
-      { productionPlan: { planId: "plan-created-1" } },
+    await completeProductionStateAfterDraftPreparation(
+      { draft: { draftId: "draft-prepared-2" } },
       actions
     );
 
-    expect(actions.setSelectedPlanId).toHaveBeenCalledWith("plan-created-1");
     expect(actions.refreshDashboard).toHaveBeenCalledTimes(1);
     expect(actions.completePlanProgress).toHaveBeenCalledTimes(1);
-    expect(actions.setNotice).toHaveBeenCalledWith("Produktionsplan wurde erzeugt.");
+    expect(actions.setNotice).toHaveBeenCalledWith(
+      "Produktionsentwurf wurde vorbereitet und wartet auf Prüfung."
+    );
+    expect(actions.showProductionDraftReview).toHaveBeenCalledWith("draft-prepared-2");
     expect(calls).toEqual([
-      "setSelectedPlanId:plan-created-1",
       "refreshDashboard",
       "completePlanProgress",
-      "setNotice:Produktionsplan wurde erzeugt."
+      "setNotice:Produktionsentwurf wurde vorbereitet und wartet auf Prüfung.",
+      "showProductionDraftReview:draft-prepared-2"
     ]);
   });
 
-  it("still completes planning when the response does not include a usable plan id", async () => {
+  it("still completes progress when the response has no usable draft id", async () => {
     const calls: string[] = [];
     const actions = buildSuccessActions(calls);
 
-    await completeProductionStateAfterPlanSuccess(
-      { productionPlan: { planId: 123 } },
+    await completeProductionStateAfterDraftPreparation(
+      { draft: { draftId: 123 } },
       actions
     );
 
-    expect(actions.setSelectedPlanId).not.toHaveBeenCalled();
+    expect(actions.showProductionDraftReview).not.toHaveBeenCalled();
     expect(calls).toEqual([
       "refreshDashboard",
       "completePlanProgress",
-      "setNotice:Produktionsplan wurde erzeugt."
+      "setNotice:Produktionsentwurf wurde vorbereitet und wartet auf Prüfung."
     ]);
   });
 
@@ -181,7 +181,7 @@ describe("production plan result state", () => {
     ]);
   });
 
-  it("uses the existing fallback copy for non-error planning failures", () => {
+  it("uses draft-preparation fallback copy for non-error failures", () => {
     const actions: ProductionPlanFailureActions = {
       failPlanProgress: vi.fn(),
       setError: vi.fn()
@@ -190,6 +190,6 @@ describe("production plan result state", () => {
     resetProductionStateAfterPlanFailure("boom", actions);
 
     expect(actions.failPlanProgress).toHaveBeenCalledTimes(1);
-    expect(actions.setError).toHaveBeenCalledWith("Produktionsplan konnte nicht erstellt werden.");
+    expect(actions.setError).toHaveBeenCalledWith("Produktionsentwurf konnte nicht vorbereitet werden.");
   });
 });

@@ -115,6 +115,20 @@ export interface ApprovedProductionSpecSummary {
   };
 }
 
+export interface ApprovedProductionSpecProjection {
+  approvedProductionSpecId: string;
+  sourceDraft: {
+    draftId: string;
+    revision: number;
+  };
+  applied: boolean;
+}
+
+export interface ProductionDraftListResponse {
+  items: ProductionDraft[];
+  approvedProductionSpecs?: ApprovedProductionSpecProjection[];
+}
+
 export interface ServiceHealth {
   service: string;
   status: string;
@@ -405,11 +419,55 @@ export async function createProductionDraftFromHandoff(handoffId: string) {
   }, DEFAULT_MUTATION_ACTOR_NAMES.production);
 }
 
-export async function createProductionPlan(
-  _eventSpec: Record<string, unknown>,
-  _options?: { sourceReviewConfirmed?: boolean }
-): Promise<Record<string, unknown>> {
-  throw new Error("Produktionsartefakte müssen zuerst als ProductionDraft vorbereitet und geprüft werden.");
+export async function createProductionDraftFromAcceptedEventSpec(
+  eventSpec: Record<string, unknown>
+): Promise<{ draft: ProductionDraft }> {
+  const specId = typeof eventSpec.specId === "string" ? eventSpec.specId.trim() : "";
+  if (!specId) {
+    throw new Error("Event-Spezifikation benötigt eine gültige ID.");
+  }
+
+  const createdAt = new Date().toISOString();
+  const draftId = `production-draft-${crypto.randomUUID()}`;
+  return fetchJson<{ draft: ProductionDraft }>(
+    "/api/production/v1/production/drafts",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        schemaVersion: "1.0.0",
+        draftId,
+        revision: 1,
+        status: "pending_review",
+        createdAt,
+        source: {
+          kind: "manual_import",
+          receivedAt: createdAt,
+          sourceRef: `accepted-event-spec:${specId}`
+        },
+        guardrails: {
+          draftOnly: true,
+          humanApprovalRequired: true,
+          writesProductObjects: false,
+          rawProviderPayloadStored: false,
+          knowledgeWritePolicy: "reviewed_only"
+        },
+        reviewCards: [{
+          cardId: "card-imported-event-spec",
+          kind: "event_data",
+          title: "Eventdaten prüfen",
+          summary: "Übernommene Eventdaten vor der Produktionsplanung fachlich prüfen.",
+          decision: "pending",
+          targetPath: "$.draftArtifacts.eventSpec",
+          targetId: specId,
+          requiredApproval: true
+        }],
+        draftArtifacts: {
+          eventSpec
+        }
+      })
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
 }
 
 export async function loadClarificationDrafts(specId: string) {
@@ -443,7 +501,7 @@ export async function decideClarificationDraft(draftId: string, approve: boolean
 }
 
 export async function loadProductionDrafts() {
-  return fetchJson<{ items: ProductionDraft[] }>(
+  return fetchJson<ProductionDraftListResponse>(
     "/api/production/v1/production/drafts",
     undefined,
     DEFAULT_MUTATION_ACTOR_NAMES.production

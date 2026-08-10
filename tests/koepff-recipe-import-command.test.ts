@@ -59,7 +59,7 @@ describe("Köpff recipe import command", () => {
 
     const firstRun = runKoepffImport(dataRoot);
     const secondRun = runKoepffImport(dataRoot);
-    const recipes = await new RecipeLibrary(undefined, { rootDir: dataRoot }).list();
+    const recipes = await new RecipeLibrary({ rootDir: dataRoot }).list({ businessId: "local" });
 
     expect(firstRun).toMatchObject({
       seedDir: "recipes-koepff",

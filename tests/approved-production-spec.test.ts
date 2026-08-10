@@ -12,10 +12,17 @@ import {
   type ProductionDecisionFaultPhase
 } from "@catering/production-service";
 import { IntakeStore } from "@catering/intake-service";
+import { productionDecisionRepositoryFor } from "../production-service/src/repositories/production-store.js";
 import {
+  createApprovedProductionSpec,
+  createApprovalRequestRecord,
   createEventRequestFromText,
+  AuditLogStore,
+  llmReadinessContractVersion,
   normalizeEventRequestToSpec,
   SCHEMA_VERSION,
+  type LlmReadinessProviderAdapter,
+  type LlmReadinessProviderAdapterRequest,
   type ProductionDraft,
   type Recipe
 } from "@catering/shared-core";
@@ -71,7 +78,7 @@ async function completeDraft(
     channel: "text",
     rawText: "Synthetisches Buffet fuer 20 Personen am 18.09.2026."
   }));
-  const repository = new InMemoryRecipeRepository([]);
+  const repository = new InMemoryRecipeRepository();
   const artifacts = await buildProductionArtifacts(
     eventSpec,
     new RecipeDiscoveryService(repository, { searchRecipes: async () => [] })
@@ -163,23 +170,95 @@ async function completeDraft(
 function buildHarness(options: {
   applyFaultInjector?: (phase: ProductionApplyFaultPhase) => void;
   decisionFaultInjector?: (phase: ProductionDecisionFaultPhase) => void;
+  llmAdapter?: LlmReadinessProviderAdapter;
 } = {}) {
   const rootDir = mkdtempSync(path.join(tmpdir(), "approved-production-spec-"));
   roots.push(rootDir);
   const store = new ProductionStore({ rootDir });
-  const repository = new InMemoryRecipeRepository([], { rootDir });
+  const repository = new InMemoryRecipeRepository({ rootDir });
   const intakeStore = new IntakeStore({ rootDir });
+  const auditLog = new AuditLogStore({ rootDir });
   const app = buildProductionApp({
     dataRoot: rootDir,
     store,
     repository,
     intakeStore,
+    auditLog,
+    llmAdapter: options.llmAdapter,
     trustedActorSecret: TRUSTED_SECRET,
     productionApplyFaultInjector: options.applyFaultInjector,
     productionDecisionFaultInjector: options.decisionFaultInjector,
     env: {}
   });
-  return { app, intakeStore, repository, store };
+  return { app, auditLog, intakeStore, repository, store };
+}
+
+function revisionAdapter(): LlmReadinessProviderAdapter {
+  return {
+    adapterId: "task-4-revision-adapter",
+    adapterMode: "synthetic_live",
+    run: async (request: LlmReadinessProviderAdapterRequest) => ({
+      ok: true,
+      errors: [],
+      adapterId: "task-4-revision-adapter",
+      adapterMode: "synthetic_live",
+      providerId: "task-4-test-provider",
+      providerRequestId: "task-4-revision-request",
+      promptSchemaId: request.promptSchemaId,
+      outputCandidate: {
+        contractVersion: llmReadinessContractVersion,
+        outputId: "task-4-revision-output",
+        kind: "production_draft_extraction",
+        sourceRefs: request.input.sourceRefs,
+        humanApprovalRequired: true,
+        writesProductObject: false,
+        text: JSON.stringify({
+          eventType: "meeting",
+          serviceForm: "buffet",
+          eventDate: "2026-09-18",
+          attendeeCount: 20,
+          customerName: null,
+          venueName: null,
+          components: [{
+            label: "Synthetisches Buffet fuer 20 Personen am 18.09.2026.",
+            course: "main",
+            category: "classic",
+            categoryEvidence: null,
+            note: "Operator-Änderung eingearbeitet."
+          }],
+          openQuestions: []
+        })
+      }
+    })
+  };
+}
+
+function reviseReadyDraft(draft: ProductionDraft): ProductionDraft {
+  return {
+    ...draft,
+    reviewCards: draft.reviewCards.map((card, index) => index === 0
+      ? {
+        ...card,
+        kind: "event_data",
+        decision: "change_requested",
+        operatorComment: "Veranstaltungsdaten fachlich überarbeiten.",
+        decidedBy: "Produktions-Mitarbeiter",
+        decidedAt: "2026-08-10T12:06:00.000Z"
+      }
+      : card)
+  };
+}
+
+function reviseReadyAndApprovalEligibleDraft(draft: ProductionDraft): ProductionDraft {
+  const revised = reviseReadyDraft(draft);
+  return {
+    ...revised,
+    reviewCards: revised.reviewCards.map((card, index) => {
+      if (index !== 0) return card;
+      const { riskLevel: _riskLevel, ...approvalEligible } = card;
+      return { ...approvalEligible, requiredApproval: false };
+    })
+  };
 }
 
 async function importDraft(app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) {
@@ -200,6 +279,80 @@ async function decide(
 }
 
 describe("ApprovedProductionSpec decision boundary", () => {
+  it("rejects direct snapshot publication without persisted approved evidence", async () => {
+    const { app, store } = buildHarness();
+    const draft = await completeDraft("draft-forged-snapshot");
+    const actor = {
+      businessId: "local",
+      name: "Produktions-Mitarbeiter",
+      source: "trusted-proxy:x-catering-actor-name" as const,
+      trusted: true as const
+    };
+    const approval = createApprovalRequestRecord({
+      actor,
+      role: "production_operator",
+      target: {
+        kind: "production_draft",
+        artifactId: draft.draftId,
+        revision: draft.revision
+      },
+      decision: "approved"
+    });
+    const forged = createApprovedProductionSpec({ draft, approval });
+
+    try {
+      await expect(store.insertApprovedProductionSpec(context, forged)).rejects.toThrow(
+        "persistierte, freigegebene ApprovalRequestRecord"
+      );
+      expect(await store.listApprovedProductionSpecs(context)).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    {
+      label: "deterministische Snapshot-ID",
+      alter: (spec: ReturnType<typeof createApprovedProductionSpec>) => ({
+        ...spec,
+        approvedProductionSpecId: `approved-production-spec-${"0".repeat(64)}`
+      })
+    },
+    {
+      label: "Freigabezeitpunkt",
+      alter: (spec: ReturnType<typeof createApprovedProductionSpec>) => ({
+        ...spec,
+        approvedAt: "2020-01-01T00:00:00.000Z"
+      })
+    }
+  ])("rejects a snapshot with forged $label", async ({ alter }) => {
+    const { app, store } = buildHarness();
+    const draft = await completeDraft("draft-forged-approval-metadata");
+    const actor = {
+      businessId: "local",
+      name: "Produktions-Mitarbeiter",
+      source: "trusted-proxy:x-catering-actor-name" as const,
+      trusted: true as const
+    };
+    const approval = createApprovalRequestRecord({
+      actor,
+      role: "production_operator",
+      target: { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision },
+      decision: "approved"
+    });
+    const forged = alter(createApprovedProductionSpec({ draft, approval }));
+    await store.insertApproval(context, approval);
+
+    try {
+      await expect(store.insertApprovedProductionSpec(context, forged)).rejects.toThrow(
+        "stimmt nicht exakt mit der persistierten Freigabe überein"
+      );
+      expect(await store.listApprovedProductionSpecs(context)).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it.each(["rejected", "superseded"] as const)(
     "does not create ApprovedProductionSpec from %s",
     async (status) => {
@@ -229,7 +382,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
   });
 
   it("creates one immutable snapshot and resumes an identical approved decision", async () => {
-    const { app, store } = buildHarness();
+    const { app, auditLog, store } = buildHarness();
     const draft = await completeDraft("draft-approved");
     try {
       const imported = await importDraft(app, draft);
@@ -243,6 +396,9 @@ describe("ApprovedProductionSpec decision boundary", () => {
       );
       expect(await store.listApprovedProductionSpecs(context)).toHaveLength(1);
       expect((await decide(app, draft.draftId, "rejected")).statusCode).toBe(409);
+      expect((await auditLog.listRecentFor(context, 20)).filter(
+        (entry) => entry.action === "production.production_spec_approved"
+      )).toHaveLength(1);
     } finally {
       await app.close();
     }
@@ -251,6 +407,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
   it("resumes after approval evidence was inserted but snapshot publication was interrupted", async () => {
     let failOnce = true;
     const { app, store } = buildHarness({
+      llmAdapter: revisionAdapter(),
       decisionFaultInjector(phase) {
         if (failOnce && phase === "after_approval_insert") {
           failOnce = false;
@@ -258,7 +415,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
         }
       }
     });
-    const draft = await completeDraft("draft-approval-retry");
+    const draft = reviseReadyAndApprovalEligibleDraft(await completeDraft("draft-approval-retry"));
     try {
       expect((await importDraft(app, draft)).statusCode).toBe(201);
       expect((await decide(app, draft.draftId, "approved")).statusCode).toBe(500);
@@ -269,7 +426,25 @@ describe("ApprovedProductionSpec decision boundary", () => {
       })).toHaveLength(1);
       expect(await store.listApprovedProductionSpecs(context)).toHaveLength(0);
 
+      const blockedMutations = await Promise.all([
+        app.inject({
+          method: "PATCH",
+          url: `/v1/production/drafts/${draft.draftId}/review-cards/${draft.reviewCards[0]!.cardId}`,
+          headers,
+          payload: { decision: "blocked", operatorComment: "Darf den Snapshot nicht verändern" }
+        }),
+        app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/prepare`, headers }),
+        app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers })
+      ]);
+      expect(blockedMutations.map((response) => response.statusCode)).toEqual([409, 409, 409]);
+
+      const originalGetProductionDraft = store.getProductionDraft.bind(store);
+      store.getProductionDraft = async () => {
+        throw new Error("Retry darf den veränderlichen Draft nicht erneut lesen.");
+      };
+
       expect((await decide(app, draft.draftId, "approved")).statusCode).toBe(201);
+      store.getProductionDraft = originalGetProductionDraft;
       expect(await store.listApprovalsForTarget(context, {
         kind: "production_draft",
         artifactId: draft.draftId,
@@ -277,6 +452,156 @@ describe("ApprovedProductionSpec decision boundary", () => {
       })).toHaveLength(1);
       expect(await store.listApprovedProductionSpecs(context)).toHaveLength(1);
     } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    {
+      name: "Review",
+      decision: "approved" as const,
+      transform: undefined,
+      request: (app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) => app.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${draft.draftId}/review-cards/${draft.reviewCards[0]!.cardId}`,
+        headers,
+        payload: { decision: "blocked", operatorComment: "Paralleländerung" }
+      })
+    },
+    {
+      name: "Prepare",
+      decision: "approved" as const,
+      transform: undefined,
+      request: (app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) => app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${draft.draftId}/prepare`,
+        headers
+      })
+    },
+    {
+      name: "Revise",
+      decision: "rejected" as const,
+      transform: reviseReadyDraft,
+      request: (app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) => app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${draft.draftId}/revise`,
+        headers
+      })
+    }
+  ])("serializes Decision against concurrent $name", async ({ decision: requestedDecision, request, transform }) => {
+    const { app, store } = buildHarness({ llmAdapter: revisionAdapter() });
+    const source = await completeDraft("draft-decision-mutation-race");
+    const draft = transform ? transform(source) : source;
+    expect((await importDraft(app, draft)).statusCode).toBe(201);
+
+    const repository = productionDecisionRepositoryFor(store);
+    const originalCriticalSection = repository.withTargetCriticalSection.bind(repository);
+    let entered!: () => void;
+    let release!: () => void;
+    const aggregateEntered = new Promise<void>((resolve) => { entered = resolve; });
+    const continueDecision = new Promise<void>((resolve) => { release = resolve; });
+    repository.withTargetCriticalSection = (context, target, operation) =>
+      originalCriticalSection(context, target, (scope) => operation({
+        ...scope,
+        insertDecisionAggregate: async (aggregate) => {
+          entered();
+          await continueDecision;
+          return scope.insertDecisionAggregate(aggregate);
+        }
+      }));
+
+    try {
+      const decision = decide(app, draft.draftId, requestedDecision);
+      await aggregateEntered;
+      const mutation = request(app, draft);
+      release();
+
+      expect((await decision).statusCode).toBe(201);
+      expect((await mutation).statusCode).toBe(409);
+      expect(await store.getProductionDraft(context, draft.draftId)).toMatchObject({
+        status: requestedDecision === "approved" ? "approved" : "rejected",
+        approvalRequestId: expect.stringMatching(/^approval-/)
+      });
+    } finally {
+      release();
+      await app.close();
+    }
+  });
+
+  it.each([
+    {
+      name: "Review",
+      expectedDecisionStatus: 422,
+      transform: undefined,
+      request: (app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) => app.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${draft.draftId}/review-cards/${draft.reviewCards[0]!.cardId}`,
+        headers,
+        payload: { decision: "blocked", operatorComment: "Mutation gewinnt zuerst" }
+      })
+    },
+    {
+      name: "Prepare",
+      expectedDecisionStatus: 409,
+      transform: undefined,
+      request: (app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) => app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${draft.draftId}/prepare`,
+        headers
+      })
+    },
+    {
+      name: "Revise",
+      expectedDecisionStatus: 409,
+      transform: reviseReadyDraft,
+      request: (app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) => app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${draft.draftId}/revise`,
+        headers
+      })
+    }
+  ])("makes Decision observe concurrent $name that committed first", async ({
+    expectedDecisionStatus,
+    request,
+    transform
+  }) => {
+    const { app, store } = buildHarness({ llmAdapter: revisionAdapter() });
+    const source = await completeDraft("draft-mutation-decision-race");
+    const draft = transform ? transform(source) : source;
+    expect((await importDraft(app, draft)).statusCode).toBe(201);
+
+    const repository = productionDecisionRepositoryFor(store);
+    const originalCriticalSection = repository.withTargetCriticalSection.bind(repository);
+    let entered!: () => void;
+    let release!: () => void;
+    let pauseOnce = true;
+    const mutationEntered = new Promise<void>((resolve) => { entered = resolve; });
+    const continueMutation = new Promise<void>((resolve) => { release = resolve; });
+    repository.withTargetCriticalSection = (businessContext, target, operation) =>
+      originalCriticalSection(businessContext, target, (scope) => operation({
+        ...scope,
+        setDraft: async (value) => {
+          if (pauseOnce) {
+            pauseOnce = false;
+            entered();
+            await continueMutation;
+          }
+          return scope.setDraft(value);
+        }
+      }));
+
+    try {
+      const mutation = request(app, draft);
+      await mutationEntered;
+      const decision = decide(app, draft.draftId, "approved");
+      release();
+
+      expect((await mutation).statusCode).toBeGreaterThanOrEqual(200);
+      expect((await mutation).statusCode).toBeLessThan(300);
+      expect((await decision).statusCode).toBe(expectedDecisionStatus);
+      expect(await store.listApprovedProductionSpecs(context)).toEqual([]);
+    } finally {
+      release();
       await app.close();
     }
   });
@@ -333,7 +658,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
       expect(approvedResponse.statusCode).toBe(201);
       const approved = approvedResponse.json().approvedProductionSpec;
 
-      await store.saveProductionDraft(context, {
+      await expect(store.saveProductionDraft(context, {
         ...draft,
         draftArtifacts: {
           ...draft.draftArtifacts,
@@ -342,7 +667,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
             eventSpecId: "mutated-after-approval"
           }
         }
-      });
+      })).rejects.toThrow("unveränderlich");
 
       const applied = await app.inject({
         method: "POST",

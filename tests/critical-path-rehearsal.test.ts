@@ -135,8 +135,8 @@ describe("critical path rehearsal", () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
 
-    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
-    await repository.save(createSoupRecipe());
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.save({ businessId: "local" }, createSoupRecipe());
 
     const offerApp = buildOfferApp({
       rootDir: dataRoot,

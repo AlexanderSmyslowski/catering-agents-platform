@@ -215,7 +215,7 @@ describe("production planning fallbacks", () => {
       productionDecision: undefined
     }));
     const discovery = new RecipeDiscoveryService(
-      new InMemoryRecipeRepository([], { rootDir: createDataRoot() }),
+      new InMemoryRecipeRepository({ rootDir: createDataRoot() }),
       new FakeWebProvider([])
     );
 
@@ -351,7 +351,7 @@ describe("production planning fallbacks", () => {
       }
     ];
 
-    const repository = new InMemoryRecipeRepository([], { rootDir: createDataRoot() });
+    const repository = new InMemoryRecipeRepository({ rootDir: createDataRoot() });
     const discovery = new RecipeDiscoveryService(repository, new FakeWebProvider([baseCandidate()]));
 
     const artifacts = await buildProductionArtifacts(spec, discovery);
@@ -382,7 +382,7 @@ describe("production planning fallbacks", () => {
       }
     ];
 
-    const repository = new InMemoryRecipeRepository([], { rootDir: createDataRoot() });
+    const repository = new InMemoryRecipeRepository({ rootDir: createDataRoot() });
     const discovery = new RecipeDiscoveryService(repository, new FakeWebProvider([baseCandidate()]));
 
     const artifacts = await buildProductionArtifacts(spec, discovery);
@@ -415,8 +415,8 @@ describe("production planning fallbacks", () => {
       }
     ];
 
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
-    await repository.save(recipe);
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.save({ businessId: "local" }, recipe);
     const discovery = new RecipeDiscoveryService(repository, new FakeWebProvider([]));
 
     try {

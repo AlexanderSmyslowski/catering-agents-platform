@@ -61,7 +61,7 @@ function eventSpec(menuComponent: MenuComponent): AcceptedEventSpec {
 describe("recipe discovery service", () => {
   it("does not call the web provider when an internal recipe wins", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new CountingWebProvider();
     const recipe = parseUploadedRecipeText({
       recipeName: "Kalbsbuletten",
@@ -77,8 +77,8 @@ describe("recipe discovery service", () => {
         "2. Kalbsbuletten formen und braten."
       ].join("\n")
     });
-    await repository.save(recipe);
-    await repository.reviewRecipe(recipe.recipeId, { decision: "approve" });
+    await repository.save({ businessId: "local" }, recipe);
+    await repository.reviewRecipe({ businessId: "local" }, recipe.recipeId, { decision: "approve" });
 
     const menuComponent = component();
     const discovery = new RecipeDiscoveryService(repository, provider);

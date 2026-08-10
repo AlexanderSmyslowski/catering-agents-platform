@@ -1,5 +1,7 @@
 import {
   createBusinessScopedPersistentCollection,
+  areJsonValuesEqual,
+  approvalRequestIdForTarget,
   llmReadinessForbiddenPayloadKeys,
   productionClarificationAnswerTextMaxLength,
   type BusinessContext,
@@ -16,12 +18,19 @@ import {
   type ProductionPlan,
   type PurchaseList,
   type TrustedActor,
+  approvedProductionSpecIdForApproval,
   validateApprovedProductionSpec,
   validateApprovalRequestRecord,
   validateProductionDraft
 } from "@catering/shared-core";
+import { validateProductionDecisionAggregate } from "../production-decision-aggregate.js";
+import {
+  createProductionDecisionCollections,
+  productionDecisionRepositoryFor,
+  registerProductionDecisionRepository
+} from "./production-decision-repository.js";
 
-const localBusinessContext: BusinessContext = { businessId: "local" };
+export { productionDecisionRepositoryFor } from "./production-decision-repository.js";
 
 export type ClarificationDraftStatus = "pending_review" | "approved" | "rejected";
 export type ProductionFeedbackStatus = "pending_review" | "approved" | "rejected";
@@ -221,7 +230,7 @@ function normalizeProductionFeedbackTarget(
   return target;
 }
 
-function normalizeProductionFeedbackDraft(value: ProductionFeedbackDraft): ProductionFeedbackDraft {
+export function validateProductionFeedbackDraftForStorage(value: ProductionFeedbackDraft): ProductionFeedbackDraft {
   const errors = collectForbiddenProductionFeedbackKeys(value);
   const status = value.status;
   if (status !== "pending_review" && status !== "approved" && status !== "rejected") {
@@ -318,6 +327,11 @@ export class ProductionStore {
   private readonly applyManifests: BusinessScopedPersistentCollection<ProductionApplyManifest>;
 
   constructor(options?: CollectionStorageOptions) {
+    const storage = {
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    };
     this.plans = createBusinessScopedPersistentCollection<ProductionPlan>({
       collectionName: "production/plans",
       getId: (plan) => plan.planId,
@@ -346,39 +360,18 @@ export class ProductionStore {
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
     });
-    this.productionDrafts = createBusinessScopedPersistentCollection<ProductionDraft>({
-      collectionName: "production/drafts",
-      getId: (draft) => draft.draftId,
-      getVersion: (draft) => draft.revision,
-      validate: validateProductionDraft,
-      rootDir: options?.rootDir,
-      databaseUrl: options?.databaseUrl,
-      pgPool: options?.pgPool
-    });
+    const decisionCollections = createProductionDecisionCollections(storage);
+    this.productionDrafts = decisionCollections.drafts;
     this.productionFeedbackDrafts = createBusinessScopedPersistentCollection<ProductionFeedbackDraft>({
       collectionName: "production/feedback-drafts",
       getId: (draft) => draft.feedbackId,
-      validate: normalizeProductionFeedbackDraft,
+      validate: validateProductionFeedbackDraftForStorage,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
     });
-    this.approvals = createBusinessScopedPersistentCollection<ApprovalRequestRecord>({
-      collectionName: "production/approvals",
-      getId: (approval) => approval.approvalRequestId,
-      validate: validateApprovalRequestRecord,
-      rootDir: options?.rootDir,
-      databaseUrl: options?.databaseUrl,
-      pgPool: options?.pgPool
-    });
-    this.approvedProductionSpecs = createBusinessScopedPersistentCollection<ApprovedProductionSpec>({
-      collectionName: "production/approved-specs",
-      getId: (spec) => spec.approvedProductionSpecId,
-      validate: validateApprovedProductionSpec,
-      rootDir: options?.rootDir,
-      databaseUrl: options?.databaseUrl,
-      pgPool: options?.pgPool
-    });
+    this.approvals = decisionCollections.approvals;
+    this.approvedProductionSpecs = decisionCollections.approvedProductionSpecs;
     this.applyManifests = createBusinessScopedPersistentCollection<ProductionApplyManifest>({
       collectionName: "production/apply-manifests",
       getId: (manifest) => manifest.approvedProductionSpecId,
@@ -386,91 +379,88 @@ export class ProductionStore {
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
     });
+    registerProductionDecisionRepository(this, storage, decisionCollections);
   }
 
-  async savePlan(contextOrPlan: BusinessContext | ProductionPlan, maybePlan?: ProductionPlan): Promise<void> {
-    const [context, plan] = withContext(contextOrPlan, maybePlan);
+  async savePlan(context: BusinessContext, plan: ProductionPlan): Promise<void> {
+    assertBusinessContext(context);
     await this.plans.set(context, plan);
   }
 
   async insertPlan(context: BusinessContext, plan: ProductionPlan): Promise<"created" | "exists"> {
+    assertBusinessContext(context);
     return this.plans.insert(context, plan);
   }
 
-  async getPlan(contextOrId: BusinessContext | string, maybeId?: string): Promise<ProductionPlan | undefined> {
-    const [context, id] = withContext(contextOrId, maybeId);
+  async getPlan(context: BusinessContext, id: string): Promise<ProductionPlan | undefined> {
+    assertBusinessContext(context);
     return this.plans.get(context, id);
   }
 
-  async savePurchaseList(contextOrList: BusinessContext | PurchaseList, maybeList?: PurchaseList): Promise<void> {
-    const [context, list] = withContext(contextOrList, maybeList);
+  async savePurchaseList(context: BusinessContext, list: PurchaseList): Promise<void> {
+    assertBusinessContext(context);
     await this.purchaseLists.set(context, list);
   }
 
   async insertPurchaseList(context: BusinessContext, list: PurchaseList): Promise<"created" | "exists"> {
+    assertBusinessContext(context);
     return this.purchaseLists.insert(context, list);
   }
 
-  async getPurchaseList(contextOrId: BusinessContext | string, maybeId?: string): Promise<PurchaseList | undefined> {
-    const [context, id] = withContext(contextOrId, maybeId);
+  async getPurchaseList(context: BusinessContext, id: string): Promise<PurchaseList | undefined> {
+    assertBusinessContext(context);
     return this.purchaseLists.get(context, id);
   }
 
-  async listPlans(context: BusinessContext = localBusinessContext): Promise<ProductionPlan[]> {
+  async listPlans(context: BusinessContext): Promise<ProductionPlan[]> {
+    assertBusinessContext(context);
     return this.plans.list(context);
   }
 
-  async listPurchaseLists(context: BusinessContext = localBusinessContext): Promise<PurchaseList[]> {
+  async listPurchaseLists(context: BusinessContext): Promise<PurchaseList[]> {
+    assertBusinessContext(context);
     return this.purchaseLists.list(context);
   }
 
   async saveClarificationAnswer(
-    contextOrAnswer: BusinessContext | ProductionClarificationAnswer,
-    maybeAnswer?: ProductionClarificationAnswer
+    context: BusinessContext,
+    answer: ProductionClarificationAnswer
   ): Promise<void> {
-    const [context, answer] = withContext(contextOrAnswer, maybeAnswer);
-    if (!isSubmittedShortTextAnswer(answer)) {
-      throw new Error("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
-    }
-
-    await this.clarificationAnswers.set(context, safeClarificationAnswerForStorage(answer));
+    assertBusinessContext(context);
+    await this.clarificationAnswers.set(context, validateProductionClarificationAnswerForStorage(answer));
   }
 
   async getClarificationAnswer(
-    contextOrId: BusinessContext | string,
-    maybeId?: string
+    context: BusinessContext,
+    id: string
   ): Promise<ProductionClarificationAnswer | undefined> {
-    const [context, id] = withContext(contextOrId, maybeId);
+    assertBusinessContext(context);
     return this.clarificationAnswers.get(context, id);
   }
 
-  async listClarificationAnswers(context: BusinessContext = localBusinessContext): Promise<ProductionClarificationAnswer[]> {
+  async listClarificationAnswers(context: BusinessContext): Promise<ProductionClarificationAnswer[]> {
+    assertBusinessContext(context);
     return this.clarificationAnswers.list(context);
   }
 
   async saveClarificationDraft(
-    contextOrDraft: BusinessContext | ClarificationDraft,
-    maybeDraft?: ClarificationDraft
+    context: BusinessContext,
+    draft: ClarificationDraft
   ): Promise<void> {
-    const [context, draft] = withContext(contextOrDraft, maybeDraft);
-    if (!isClarificationDraft(draft)) {
-      throw new Error("Ungültiger Rückfragen-Entwurf.");
-    }
-
-    await this.clarificationDrafts.set(context, draft);
+    assertBusinessContext(context);
+    await this.clarificationDrafts.set(context, validateClarificationDraftForStorage(draft));
   }
 
-  async getClarificationDraft(contextOrId: BusinessContext | string, maybeId?: string): Promise<ClarificationDraft | undefined> {
-    const [context, id] = withContext(contextOrId, maybeId);
+  async getClarificationDraft(context: BusinessContext, id: string): Promise<ClarificationDraft | undefined> {
+    assertBusinessContext(context);
     return this.clarificationDrafts.get(context, id);
   }
 
   async listClarificationDrafts(
-    contextOrSpecId?: BusinessContext | string,
-    maybeSpecId?: string
+    context: BusinessContext,
+    specId?: string
   ): Promise<ClarificationDraft[]> {
-    const context = isBusinessContext(contextOrSpecId) ? contextOrSpecId : localBusinessContext;
-    const specId = isBusinessContext(contextOrSpecId) ? maybeSpecId : contextOrSpecId;
+    assertBusinessContext(context);
     const drafts = await this.clarificationDrafts.list(context);
     return drafts
       .filter((draft) => !specId || draft.specId === specId)
@@ -478,25 +468,63 @@ export class ProductionStore {
   }
 
   async saveProductionDraft(context: BusinessContext, draft: ProductionDraft): Promise<void> {
-    await this.productionDrafts.set(context, productionDraftForContext(context, draft));
+    assertBusinessContext(context);
+    const normalized = productionDraftForContext(context, draft);
+    const target = productionDraftTarget(normalized);
+    await productionDecisionRepositoryFor(this).withTargetCriticalSection(context, target, async (scope) => {
+      const aggregate = await scope.getDecisionAggregate(
+        approvalRequestIdForTarget({ businessId: context.businessId, target })
+      );
+      if (aggregate) {
+        validateProductionDecisionAggregate(aggregate);
+        if (!areJsonValuesEqual(normalized, aggregate.decidedDraft)) {
+          throw new Error("Eine entschiedene ProductionDraft-Revision ist unveränderlich.");
+        }
+        await scope.setDraft(normalized);
+        return;
+      }
+      const approvals = await scope.listApprovalsForTarget();
+      if (approvals.length > 0) {
+        const existing = await scope.getDraft(normalized.draftId);
+        if (existing && areJsonValuesEqual(existing, normalized)) return;
+        throw new Error("ProductionDraft-Revision ist durch persistierte Freigabeevidenz eingefroren.");
+      }
+      await scope.setDraft(normalized);
+    });
   }
 
   async insertProductionDraft(
     context: BusinessContext,
     draft: ProductionDraft
   ): Promise<"created" | "exists"> {
-    return this.productionDrafts.insert(context, productionDraftForContext(context, draft));
+    assertBusinessContext(context);
+    const normalized = productionDraftForContext(context, draft);
+    const target = productionDraftTarget(normalized);
+    return productionDecisionRepositoryFor(this).withTargetCriticalSection(context, target, async (scope) => {
+      const aggregate = await scope.getDecisionAggregate(
+        approvalRequestIdForTarget({ businessId: context.businessId, target })
+      );
+      const approvals = await scope.listApprovalsForTarget();
+      if (aggregate || approvals.length > 0) {
+        const existing = await scope.getDraft(normalized.draftId);
+        if (existing && areJsonValuesEqual(existing, normalized)) return "exists";
+        throw new Error("ProductionDraft-Revision ist durch persistierte Freigabeevidenz eingefroren.");
+      }
+      return scope.insertDraft(normalized);
+    });
   }
 
   async getProductionDraft(
     context: BusinessContext,
     draftId: string
   ): Promise<ProductionDraft | undefined> {
+    assertBusinessContext(context);
     const draft = await this.productionDrafts.get(context, draftId);
     return draft ? productionDraftForContext(context, draft) : undefined;
   }
 
   async listProductionDrafts(context: BusinessContext): Promise<ProductionDraft[]> {
+    assertBusinessContext(context);
     const drafts = await this.productionDrafts.list(context);
     return drafts
       .map((draft) => productionDraftForContext(context, draft))
@@ -504,29 +532,31 @@ export class ProductionStore {
   }
 
   async saveProductionFeedbackDraft(
-    contextOrDraft: BusinessContext | ProductionFeedbackDraft,
-    maybeDraft?: ProductionFeedbackDraft
+    context: BusinessContext,
+    draft: ProductionFeedbackDraft
   ): Promise<void> {
-    const [context, draft] = withContext(contextOrDraft, maybeDraft);
-    await this.productionFeedbackDrafts.set(context, normalizeProductionFeedbackDraft(draft));
+    assertBusinessContext(context);
+    await this.productionFeedbackDrafts.set(context, validateProductionFeedbackDraftForStorage(draft));
   }
 
   async getProductionFeedbackDraft(
-    contextOrId: BusinessContext | string,
-    maybeId?: string
+    context: BusinessContext,
+    id: string
   ): Promise<ProductionFeedbackDraft | undefined> {
-    const [context, id] = withContext(contextOrId, maybeId);
+    assertBusinessContext(context);
     return this.productionFeedbackDrafts.get(context, id);
   }
 
-  async listProductionFeedbackDrafts(context: BusinessContext = localBusinessContext): Promise<ProductionFeedbackDraft[]> {
+  async listProductionFeedbackDrafts(context: BusinessContext): Promise<ProductionFeedbackDraft[]> {
+    assertBusinessContext(context);
     const drafts = await this.productionFeedbackDrafts.list(context);
     return drafts.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
   async listReviewedProductionFeedbackKnowledge(
-    context: BusinessContext = localBusinessContext
+    context: BusinessContext
   ): Promise<ReviewedProductionFeedbackKnowledge[]> {
+    assertBusinessContext(context);
     const drafts = await this.listProductionFeedbackDrafts(context);
     return drafts.filter((draft): draft is ReviewedProductionFeedbackKnowledge =>
       draft.status === "approved" && Boolean(draft.approvedBy) && Boolean(draft.approvedAt)
@@ -534,10 +564,16 @@ export class ProductionStore {
   }
 
   async insertApproval(context: BusinessContext, record: ApprovalRequestRecord): Promise<"created" | "exists"> {
-    return this.approvals.insert(context, record);
+    assertBusinessContext(context);
+    return productionDecisionRepositoryFor(this).withTargetCriticalSection(
+      context,
+      record.target,
+      (scope) => scope.insertApproval(record)
+    );
   }
 
   async getApproval(context: BusinessContext, id: string): Promise<ApprovalRequestRecord | undefined> {
+    assertBusinessContext(context);
     return this.approvals.get(context, id);
   }
 
@@ -545,6 +581,7 @@ export class ProductionStore {
     context: BusinessContext,
     target: ApprovalRequestRecord["target"]
   ): Promise<ApprovalRequestRecord[]> {
+    assertBusinessContext(context);
     return (await this.approvals.list(context)).filter((record) =>
       record.target.kind === target.kind &&
       record.target.artifactId === target.artifactId &&
@@ -556,17 +593,59 @@ export class ProductionStore {
     context: BusinessContext,
     value: ApprovedProductionSpec
   ): Promise<"created" | "exists"> {
-    return this.approvedProductionSpecs.insert(context, value);
+    assertBusinessContext(context);
+    const spec = validateApprovedProductionSpec(value);
+    const target = {
+      kind: "production_draft" as const,
+      artifactId: spec.sourceDraft.draftId,
+      revision: spec.sourceDraft.revision
+    };
+    return productionDecisionRepositoryFor(this).withTargetCriticalSection(context, target, async (scope) => {
+      const approval = await scope.getApproval(spec.approvalRequestId);
+      if (
+        !approval ||
+        approval.decision !== "approved" ||
+        approval.businessId !== context.businessId ||
+        spec.businessId !== context.businessId ||
+        approval.target.kind !== target.kind ||
+        approval.target.artifactId !== target.artifactId ||
+        approval.target.revision !== target.revision
+      ) {
+        throw new Error(
+          "ApprovedProductionSpec benötigt eine persistierte, freigegebene ApprovalRequestRecord für denselben Betrieb, dasselbe Ziel und dieselbe Revision."
+        );
+      }
+      if (
+        spec.approvalRequestId !== approval.approvalRequestId ||
+        spec.approvedProductionSpecId !== approvedProductionSpecIdForApproval(approval.approvalRequestId) ||
+        spec.approvedAt !== approval.decidedAt
+      ) {
+        throw new Error("ApprovedProductionSpec stimmt nicht exakt mit der persistierten Freigabe überein.");
+      }
+      const aggregate = await scope.getDecisionAggregate(approval.approvalRequestId);
+      try {
+        if (!aggregate) throw new Error("missing aggregate");
+        validateProductionDecisionAggregate(aggregate);
+      } catch {
+        throw new Error("ApprovedProductionSpec benötigt ein exakt passendes autoritatives Produktionsentscheidungsaggregat.");
+      }
+      if (!areJsonValuesEqual(aggregate.approvedProductionSpec, spec)) {
+        throw new Error("ApprovedProductionSpec stimmt nicht exakt mit der persistierten Freigabe überein.");
+      }
+      return scope.insertApprovedProductionSpec(spec);
+    });
   }
 
   async getApprovedProductionSpec(
     context: BusinessContext,
     id: string
   ): Promise<ApprovedProductionSpec | undefined> {
+    assertBusinessContext(context);
     return this.approvedProductionSpecs.get(context, id);
   }
 
   async listApprovedProductionSpecs(context: BusinessContext): Promise<ApprovedProductionSpec[]> {
+    assertBusinessContext(context);
     return this.approvedProductionSpecs.list(context);
   }
 
@@ -574,6 +653,7 @@ export class ProductionStore {
     context: BusinessContext,
     value: ProductionApplyManifest
   ): Promise<"created" | "exists"> {
+    assertBusinessContext(context);
     return this.applyManifests.insert(context, value);
   }
 
@@ -581,17 +661,20 @@ export class ProductionStore {
     context: BusinessContext,
     approvedProductionSpecId: string
   ): Promise<ProductionApplyManifest | undefined> {
+    assertBusinessContext(context);
     return this.applyManifests.get(context, approvedProductionSpecId);
+  }
+
+  async listApplyManifests(context: BusinessContext): Promise<ProductionApplyManifest[]> {
+    assertBusinessContext(context);
+    return this.applyManifests.list(context);
   }
 }
 
-function isBusinessContext(value: unknown): value is BusinessContext {
-  return typeof value === "object" && value !== null && typeof (value as BusinessContext).businessId === "string";
-}
-
-function withContext<T>(contextOrValue: BusinessContext | T, maybeValue?: T): [BusinessContext, T] {
-  if (isBusinessContext(contextOrValue) && maybeValue !== undefined) return [contextOrValue, maybeValue];
-  return [localBusinessContext, contextOrValue as T];
+function assertBusinessContext(context: BusinessContext): void {
+  if (!context || typeof context.businessId !== "string" || context.businessId.trim().length === 0) {
+    throw new Error("Ein nicht leerer Betriebskontext ist erforderlich.");
+  }
 }
 
 function productionDraftForContext(
@@ -606,6 +689,14 @@ function productionDraftForContext(
     throw new Error("ProductionDraft passt nicht zum vertrauenswürdigen Betriebskontext.");
   }
   return normalized;
+}
+
+function productionDraftTarget(draft: ProductionDraft): ApprovalRequestRecord["target"] {
+  return {
+    kind: "production_draft",
+    artifactId: draft.draftId,
+    revision: draft.revision
+  };
 }
 
 function isClarificationDraftQuestion(question: unknown): question is ClarificationDraftQuestion {
@@ -633,4 +724,20 @@ function isClarificationDraft(draft: unknown): draft is ClarificationDraft {
     isNonEmptyString(candidate.modelMetadata?.adapterId) &&
     (candidate.modelMetadata.adapterMode === "fixture_only" || candidate.modelMetadata.adapterMode === "synthetic_live") &&
     isNonEmptyString(candidate.modelMetadata.inputId);
+}
+
+export function validateProductionClarificationAnswerForStorage(
+  answer: ProductionClarificationAnswer
+): ProductionClarificationAnswer {
+  if (!isSubmittedShortTextAnswer(answer)) {
+    throw new Error("Nur submitted shortText-Klärungsantworten dürfen gespeichert werden.");
+  }
+  return safeClarificationAnswerForStorage(answer);
+}
+
+export function validateClarificationDraftForStorage(draft: ClarificationDraft): ClarificationDraft {
+  if (!isClarificationDraft(draft)) {
+    throw new Error("Ungültiger Rückfragen-Entwurf.");
+  }
+  return structuredClone(draft);
 }

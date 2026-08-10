@@ -156,7 +156,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     });
   const recipeLibrary =
     options.recipeLibrary ??
-    new RecipeLibrary(undefined, {
+    new RecipeLibrary({
       rootDir: storageOptions?.rootDir,
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool

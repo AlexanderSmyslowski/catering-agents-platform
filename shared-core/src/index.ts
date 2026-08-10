@@ -43,6 +43,7 @@ export * from "./rules/scaling.js";
 export * from "./rules/uni-packages.js";
 export * from "./schemas/index.js";
 export * from "./taxonomies/defaults.js";
+export * from "./target-critical-section.js";
 export * from "./taxonomies/labels.js";
 export * from "./taxonomies/metro-groups.js";
 export * from "./types.js";

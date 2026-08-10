@@ -373,7 +373,7 @@ describe("Codex CLI BYO LLM provider", () => {
       expect(response.json<{ errors: string[] }>().errors).toContain(
         "codex CLI output did not contain a valid JSON object"
       );
-      expect(await store.listClarificationDrafts(fixtureSpecId)).toEqual([]);
+      expect(await store.listClarificationDrafts({ businessId: "local" }, fixtureSpecId)).toEqual([]);
       expect(auditJson).not.toContain("not json, just chatter");
     } finally {
       await app.close();

@@ -193,9 +193,9 @@ afterEach(() => {
 describe("UI critical path rehearsal", () => {
   it("shows the synthetic intake, offer handoff, production, purchase and export evidence path", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const recipe = createRecipe();
-    await repository.save(recipe);
+    await repository.save({ businessId: "local" }, recipe);
 
     const request = createEventRequestFromManualForm({
       requestId: "ui-critical-path-request-1",

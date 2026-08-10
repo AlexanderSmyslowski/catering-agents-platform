@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAcceptedSpecFromText,
   createOfferFromText,
+  createProductionDraftFromAcceptedEventSpec,
   createProductionDraftFromDocument,
-  createProductionPlan,
   offerExportUrl,
   productionExportUrl,
   purchaseListExportUrl,
@@ -38,6 +38,7 @@ function installFetchSpy() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -107,15 +108,19 @@ describe("backoffice API actor defaults", () => {
     }]);
   });
 
-  it("does not expose the retired direct production-plan mutation", async () => {
-    const bodies: unknown[] = [];
+  it("imports an AcceptedEventSpec as a guarded draft-only production review", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-11T09:30:00.000Z"));
+    vi.stubGlobal("crypto", { randomUUID: () => "12345678-1234-4123-8123-123456789abc" });
+    const requests: Array<{ url: string; method?: string; body: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-        bodies.push(JSON.parse(String(init?.body ?? "{}")));
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        requests.push({ url: String(input), method: init?.method, body });
 
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
+        return new Response(JSON.stringify({ draft: body }), {
+          status: 201,
           headers: {
             "content-type": "application/json"
           }
@@ -123,12 +128,56 @@ describe("backoffice API actor defaults", () => {
       })
     );
 
-    await expect(createProductionPlan({ specId: "spec-safe" })).rejects.toThrow("ProductionDraft");
-    await expect(createProductionPlan(
-      { specId: "spec-confirmed" },
-      { sourceReviewConfirmed: true }
-    )).rejects.toThrow("ProductionDraft");
-    expect(bodies).toEqual([]);
+    await createProductionDraftFromAcceptedEventSpec({
+      schemaVersion: "1.0.0",
+      specId: "spec-safe",
+      event: { title: "Sommerfest" },
+      attendees: { expected: 80 },
+      menuPlan: []
+    });
+
+    expect(requests).toEqual([{
+      url: "/api/production/v1/production/drafts",
+      method: "POST",
+      body: {
+        schemaVersion: "1.0.0",
+        draftId: "production-draft-12345678-1234-4123-8123-123456789abc",
+        revision: 1,
+        status: "pending_review",
+        createdAt: "2026-08-11T09:30:00.000Z",
+        source: {
+          kind: "manual_import",
+          receivedAt: "2026-08-11T09:30:00.000Z",
+          sourceRef: "accepted-event-spec:spec-safe"
+        },
+        guardrails: {
+          draftOnly: true,
+          humanApprovalRequired: true,
+          writesProductObjects: false,
+          rawProviderPayloadStored: false,
+          knowledgeWritePolicy: "reviewed_only"
+        },
+        reviewCards: [{
+          cardId: "card-imported-event-spec",
+          kind: "event_data",
+          title: "Eventdaten prüfen",
+          summary: "Übernommene Eventdaten vor der Produktionsplanung fachlich prüfen.",
+          decision: "pending",
+          targetPath: "$.draftArtifacts.eventSpec",
+          targetId: "spec-safe",
+          requiredApproval: true
+        }],
+        draftArtifacts: {
+          eventSpec: {
+            schemaVersion: "1.0.0",
+            specId: "spec-safe",
+            event: { title: "Sommerfest" },
+            attendees: { expected: 80 },
+            menuPlan: []
+          }
+        }
+      }
+    }]);
   });
 
   it("keeps export links on the read-only export service paths", () => {

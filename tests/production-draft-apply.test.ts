@@ -224,7 +224,7 @@ describe("ProductionDraft apply", () => {
   it("materializes approved draft artifacts without leaking review text into audit details", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const store = new ProductionStore({ rootDir: dataRoot });
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
     const app = buildProductionApp({
@@ -340,7 +340,7 @@ describe("ProductionDraft apply", () => {
   it("blocks recipe candidate overwrite when the existing recipe differs", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const app = buildProductionApp({
       dataRoot,
       repository,

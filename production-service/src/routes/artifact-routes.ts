@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { createHash, randomUUID } from "node:crypto";
 import {
   areJsonValuesEqual,
+  approvalRequestIdForTarget,
   createLlmReadinessAgentAuditRecord,
   createEventRequestFromManualForm,
   createUploadSourceMetadata,
@@ -34,12 +35,14 @@ import {
 } from "@catering/shared-core";
 import type { IntakeStore } from "@catering/intake-service";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
-import type {
-  ClarificationDraft,
-  ClarificationDraftQuestion,
-  ProductionFeedbackDraft,
-  ProductionStore
+import {
+  productionDecisionRepositoryFor,
+  type ProductionStore,
+  type ClarificationDraft,
+  type ClarificationDraftQuestion,
+  type ProductionFeedbackDraft
 } from "../repositories/production-store.js";
+import type { ProductionDecisionTargetScope } from "../repositories/production-decision-repository.js";
 import { buildProductionArtifacts } from "../rules/planning.js";
 import type { ProductionHandoffReader } from "../ports/production-handoff-reader.js";
 
@@ -590,6 +593,25 @@ export function registerProductionArtifactRoutes(
     requireProductionOperator,
     actorForRequest
   } = deps;
+  const decisionRepository = productionDecisionRepositoryFor(store);
+
+  const mutableDraftInScope = async (
+    scope: ProductionDecisionTargetScope,
+    expected: ProductionDraft
+  ): Promise<ProductionDraft | undefined> => {
+    const current = await scope.getDraft(expected.draftId);
+    if (!current || current.status !== "pending_review" || !areJsonValuesEqual(current, expected)) return undefined;
+    const target = {
+      kind: "production_draft" as const,
+      artifactId: expected.draftId,
+      revision: expected.revision
+    };
+    const aggregate = await scope.getDecisionAggregate(
+      approvalRequestIdForTarget({ businessId: expected.businessId, target })
+    );
+    if (aggregate || (await scope.listApprovalsForTarget()).length > 0) return undefined;
+    return current;
+  };
 
   app.post<{ Params: { handoffId: string } }>("/v1/production/drafts/from-handoff/:handoffId", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
@@ -960,8 +982,19 @@ export function registerProductionArtifactRoutes(
     }
 
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const [items, approvedProductionSpecs, applyManifests] = await Promise.all([
+      store.listProductionDrafts(actor),
+      store.listApprovedProductionSpecs(actor),
+      store.listApplyManifests(actor)
+    ]);
+    const appliedIds = new Set(applyManifests.map((manifest) => manifest.approvedProductionSpecId));
     return reply.send({
-      items: await store.listProductionDrafts(actor)
+      items,
+      approvedProductionSpecs: approvedProductionSpecs.map((spec) => ({
+        approvedProductionSpecId: spec.approvedProductionSpecId,
+        sourceDraft: spec.sourceDraft,
+        applied: appliedIds.has(spec.approvedProductionSpecId)
+      }))
     });
   });
 
@@ -983,6 +1016,11 @@ export function registerProductionArtifactRoutes(
           errors: ["draftArtifacts.eventSpec is required"]
         });
       }
+      const target = {
+        kind: "production_draft" as const,
+        artifactId: draft.draftId,
+        revision: draft.revision
+      };
 
       const artifacts = await buildProductionArtifacts(eventSpec, discoveryService, {
         context: actor,
@@ -1095,8 +1133,21 @@ export function registerProductionArtifactRoutes(
             : {})
         }
       });
-      await store.insertProductionDraft(actor, prepared);
-      await store.saveProductionDraft(actor, validateProductionDraft({ ...draft, status: "superseded" }));
+      const committed = await decisionRepository.withTargetCriticalSection(actor, target, async (scope) => {
+        if (!await mutableDraftInScope(scope, draft)) return false;
+        const inserted = await scope.insertDraft(prepared);
+        if (inserted === "exists") {
+          const existing = await scope.getDraft(prepared.draftId);
+          if (!areJsonValuesEqual(existing, prepared)) return false;
+        }
+        await scope.setDraft(validateProductionDraft({ ...draft, status: "superseded" }));
+        return true;
+      });
+      if (!committed) {
+        return reply.code(409).send({
+          message: "ProductionDraft wurde während der Vorbereitung verändert oder entschieden."
+        });
+      }
       return reply.code(201).send({ draft: prepared });
     }
   );
@@ -1135,29 +1186,40 @@ export function registerProductionArtifactRoutes(
         return reply.code(409).send({ message: "ProductionDraft wurde bereits entschieden." });
       }
 
-      const cardIndex = draft.reviewCards.findIndex((card) => card.cardId === request.params.cardId);
-      if (cardIndex < 0) {
+      const target = {
+        kind: "production_draft" as const,
+        artifactId: draft.draftId,
+        revision: draft.revision
+      };
+      const reviewResult = await decisionRepository.withTargetCriticalSection(actor, target, async (scope) => {
+        const current = await mutableDraftInScope(scope, draft);
+        if (!current) return { kind: "conflict" as const };
+        const cardIndex = current.reviewCards.findIndex((card) => card.cardId === request.params.cardId);
+        if (cardIndex < 0) return { kind: "not_found" as const };
+
+        const decidedAt = new Date().toISOString();
+        const reviewCards = current.reviewCards.map((card, index) =>
+          index === cardIndex
+            ? {
+              ...card,
+              decision,
+              decidedBy: actor.name,
+              decidedAt,
+              ...(operatorComment ? { operatorComment } : {})
+            }
+            : card
+        );
+        const reviewedDraft = validateProductionDraft({ ...current, reviewCards });
+        await scope.setDraft(reviewedDraft);
+        return { kind: "reviewed" as const, reviewedDraft, cardIndex };
+      });
+      if (reviewResult.kind === "not_found") {
         return reply.code(404).send({ message: "Review-Karte nicht gefunden." });
       }
-
-      const decidedAt = new Date().toISOString();
-      const reviewCards = draft.reviewCards.map((card, index) =>
-        index === cardIndex
-          ? {
-            ...card,
-            decision,
-            decidedBy: actor.name,
-            decidedAt,
-            ...(operatorComment ? { operatorComment } : {})
-          }
-          : card
-      );
-      const reviewedDraft = validateProductionDraft({
-        ...draft,
-        reviewCards
-      });
-
-      await store.saveProductionDraft(actor, reviewedDraft);
+      if (reviewResult.kind === "conflict") {
+        return reply.code(409).send({ message: "ProductionDraft wurde gleichzeitig verändert oder entschieden." });
+      }
+      const { reviewedDraft, cardIndex } = reviewResult;
       const card = reviewedDraft.reviewCards[cardIndex];
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.production_draft_review_card_decided",
@@ -1199,6 +1261,11 @@ export function registerProductionArtifactRoutes(
       if (draft.status !== "pending_review") {
         return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann überarbeitet werden." });
       }
+      const target = {
+        kind: "production_draft" as const,
+        artifactId: draft.draftId,
+        revision: draft.revision
+      };
 
       const requestedChanges = draft.reviewCards.filter((card) => card.decision === "change_requested");
       const missingComments = requestedChanges.filter((card) => !card.operatorComment?.trim());
@@ -1348,11 +1415,21 @@ export function registerProductionArtifactRoutes(
         }),
         businessId: actor.businessId
       });
-      await store.saveProductionDraft(actor, revision);
-      await store.saveProductionDraft(actor, validateProductionDraft({
-        ...draft,
-        status: "superseded"
-      }));
+      const committed = await decisionRepository.withTargetCriticalSection(actor, target, async (scope) => {
+        if (!await mutableDraftInScope(scope, draft)) return false;
+        const inserted = await scope.insertDraft(revision);
+        if (inserted === "exists") {
+          const existing = await scope.getDraft(revision.draftId);
+          if (!areJsonValuesEqual(existing, revision)) return false;
+        }
+        await scope.setDraft(validateProductionDraft({ ...draft, status: "superseded" }));
+        return true;
+      });
+      if (!committed) {
+        return reply.code(409).send({
+          message: "ProductionDraft wurde während der Überarbeitung verändert oder entschieden."
+        });
+      }
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.production_draft_revision_created",
         entityType: "ProductionDraft",

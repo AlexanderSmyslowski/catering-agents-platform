@@ -6,7 +6,12 @@ import {
 
 function input(overrides: Partial<ProductionPlanSubmissionActionInput> = {}): ProductionPlanSubmissionActionInput {
   return {
-    createProductionPlan: vi.fn(async () => ({ productionPlan: { planId: "plan-created-1" } })),
+    createProductionDraftFromAcceptedEventSpec: vi.fn(async () => ({
+      draft: { draftId: "draft-imported-1" }
+    })),
+    prepareProductionDraft: vi.fn(async () => ({
+      draft: { draftId: "draft-prepared-2" }
+    })),
     editingSpecId: undefined,
     setSubmitting: vi.fn(),
     setProductionWorkspaceCleared: vi.fn(),
@@ -14,12 +19,12 @@ function input(overrides: Partial<ProductionPlanSubmissionActionInput> = {}): Pr
     persistCurrentSpecEdit: vi.fn(async () => undefined),
     startPlanProgress: vi.fn(),
     clearSelectedPlanId: vi.fn(),
-    setSelectedPlanId: vi.fn(),
     refreshDashboard: vi.fn(async () => undefined),
     completePlanProgress: vi.fn(),
     failPlanProgress: vi.fn(),
     setNotice: vi.fn(),
     setError: vi.fn(),
+    showProductionDraftReview: vi.fn(),
     ...overrides
   };
 }
@@ -39,7 +44,7 @@ function spec(overrides: Record<string, unknown> = {}) {
 }
 
 describe("production plan submission action", () => {
-  it("creates a plan from the focused spec and completes the production progress", async () => {
+  it("imports and prepares the focused spec before opening its review", async () => {
     const calls: string[] = [];
     const planningSpec = spec();
     const actionsInput = input({
@@ -58,12 +63,13 @@ describe("production plan submission action", () => {
       clearSelectedPlanId: vi.fn(() => {
         calls.push("clearSelectedPlanId");
       }),
-      createProductionPlan: vi.fn(async () => {
-        calls.push("createProductionPlan");
-        return { productionPlan: { planId: "plan-created-1" } };
+      createProductionDraftFromAcceptedEventSpec: vi.fn(async () => {
+        calls.push("createProductionDraftFromAcceptedEventSpec");
+        return { draft: { draftId: "draft-imported-1" } };
       }),
-      setSelectedPlanId: vi.fn((planId) => {
-        calls.push(`setSelectedPlanId:${planId}`);
+      prepareProductionDraft: vi.fn(async (draftId) => {
+        calls.push(`prepareProductionDraft:${draftId}`);
+        return { draft: { draftId: "draft-prepared-2" } };
       }),
       refreshDashboard: vi.fn(async () => {
         calls.push("refreshDashboard");
@@ -73,13 +79,17 @@ describe("production plan submission action", () => {
       }),
       setNotice: vi.fn((message) => {
         calls.push(`setNotice:${message}`);
+      }),
+      showProductionDraftReview: vi.fn((draftId) => {
+        calls.push(`showProductionDraftReview:${draftId}`);
       })
     });
     const handleCreatePlan = buildProductionPlanSubmissionAction(actionsInput);
 
     await handleCreatePlan(planningSpec);
 
-    expect(actionsInput.createProductionPlan).toHaveBeenCalledWith(planningSpec);
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(planningSpec);
+    expect(actionsInput.prepareProductionDraft).toHaveBeenCalledWith("draft-imported-1");
     expect(actionsInput.persistCurrentSpecEdit).not.toHaveBeenCalled();
     expect(actionsInput.setError).not.toHaveBeenCalled();
     expect(calls).toEqual([
@@ -88,12 +98,13 @@ describe("production plan submission action", () => {
       "clearMessages",
       "startPlanProgress:Lunch · 40 Teilnehmer · 2026-06-30",
       "clearSelectedPlanId",
-      "setNotice:Rezeptsuche, Produktionsplanung und Einkaufsberechnung laufen...",
-      "createProductionPlan",
-      "setSelectedPlanId:plan-created-1",
+      "setNotice:Vollständiger Produktionsentwurf wird vorbereitet...",
+      "createProductionDraftFromAcceptedEventSpec",
+      "prepareProductionDraft:draft-imported-1",
       "refreshDashboard",
       "completePlanProgress",
-      "setNotice:Produktionsplan wurde erzeugt.",
+      "setNotice:Produktionsentwurf wurde vorbereitet und wartet auf Prüfung.",
+      "showProductionDraftReview:draft-prepared-2",
       "setSubmitting:false"
     ]);
   });
@@ -116,26 +127,25 @@ describe("production plan submission action", () => {
 
     await handleCreatePlan(originalSpec);
 
-    expect(actionsInput.createProductionPlan).toHaveBeenCalledWith(updatedSpec);
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(updatedSpec);
     expect(calls).toContain("setNotice:Antworten werden übernommen...");
     expect(calls).toContain("persistCurrentSpecEdit:true");
   });
 
-  it("passes explicit source review confirmation into the production plan request", async () => {
+  it("keeps source review confirmation on the same draft preparation corridor", async () => {
     const actionsInput = input();
     const handleCreatePlan = buildProductionPlanSubmissionAction(actionsInput);
     const planningSpec = spec();
 
     await handleCreatePlan(planningSpec, { sourceReviewConfirmed: true });
 
-    expect(actionsInput.createProductionPlan).toHaveBeenCalledWith(planningSpec, {
-      sourceReviewConfirmed: true
-    });
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(planningSpec);
+    expect(actionsInput.prepareProductionDraft).toHaveBeenCalledWith("draft-imported-1");
   });
 
   it("surfaces planning failures and always exits submitting state", async () => {
     const actionsInput = input({
-      createProductionPlan: vi.fn(async () => {
+      prepareProductionDraft: vi.fn(async () => {
         throw new Error("Planung abgelehnt");
       })
     });

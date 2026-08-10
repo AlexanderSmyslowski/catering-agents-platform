@@ -6,6 +6,7 @@ import {
   createTrustedActorResolver,
   getDemoProductionSpecs,
   hostedMultiBusinessReady,
+  internalRecipes,
   isDevAuthEnabled,
   resolveMinimalMvpRoleFromTrustedActor,
   type LlmReadinessProviderAdapter,
@@ -108,7 +109,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
   const repository =
     options.repository ??
-    new InMemoryRecipeRepository(undefined, {
+    new InMemoryRecipeRepository({
       rootDir: options.dataRoot,
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
@@ -150,8 +151,14 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     logger: false
   });
 
-  app.addHook("onRequest", async (request) => {
-    if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.url.split("?", 1)[0] === "/health") return;
+    const actor = actorForRequest(request);
+    if (!hosted && actor.businessId !== defaultBusinessContext.businessId) {
+      return reply.code(403).send({
+        message: "Der vertrauenswürdige Betriebskontext passt nicht zum konfigurierten Betrieb dieses lokalen Dienstes."
+      });
+    }
   });
 
   app.register(multipart);
@@ -216,6 +223,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     }
 
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    await repository.seed(actor, internalRecipes);
     const seeded = [];
     for (const spec of getDemoProductionSpecs()) {
       const artifacts = await buildProductionArtifacts(spec, discoveryService, { context: actor });

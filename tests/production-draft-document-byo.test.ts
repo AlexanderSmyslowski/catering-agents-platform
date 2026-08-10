@@ -171,8 +171,8 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(promptArtifact?.userPromptTemplate).toContain("Glaeser");
       expect(promptArtifact?.userPromptTemplate).toContain("keine Menuekomponenten");
       expect(draft.draftArtifacts.recipes).toBeUndefined();
-      expect(await store.listPlans()).toHaveLength(0);
-      expect(await store.listPurchaseLists()).toHaveLength(0);
+      expect(await store.listPlans(localBusiness)).toHaveLength(0);
+      expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
       expect(auditJson).toContain("production.production_draft_document_created");
       expect(auditJson).not.toContain("VITELLO TONNATO");
       expect(auditJson).not.toContain("KOKOS-CHEESECAKE");
@@ -272,8 +272,8 @@ describe("ProductionDraft document BYO extraction", () => {
         expect.arrayContaining(originalDraft.draftArtifacts.eventSpec?.sourceLineage ?? [])
       );
       expect(storedOriginal?.status).toBe("superseded");
-      expect(await store.listPlans()).toHaveLength(0);
-      expect(await store.listPurchaseLists()).toHaveLength(0);
+      expect(await store.listPlans(localBusiness)).toHaveLength(0);
+      expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
       expect(auditJson).toContain("production.production_draft_revision_created");
       expect(auditJson).not.toContain(changeRequest);
       expect(auditJson).not.toContain("promptContext");
@@ -777,8 +777,8 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("Keine aktive KI-Verbindung für dieses Dokument");
       expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
-      expect(await store.listPlans()).toHaveLength(0);
-      expect(await store.listPurchaseLists()).toHaveLength(0);
+      expect(await store.listPlans(localBusiness)).toHaveLength(0);
+      expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }
