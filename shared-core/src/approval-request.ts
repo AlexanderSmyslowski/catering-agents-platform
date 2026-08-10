@@ -1,7 +1,15 @@
-import { assertBusinessId, type BusinessId } from "./business-context.js";
-import type { MinimalMvpRole, TrustedActor } from "./access-control.js";
+import {
+  assertTrustedFinalApprovalActor,
+  type MinimalMvpRole,
+  type TrustedActor
+} from "./access-control.js";
+import {
+  approvalRequestIdForTarget,
+  assertApprovalRequestRecordSemantics
+} from "./approval-request-identity.js";
 import type { ApprovalRequestRecord } from "./types.js";
-import { validateApprovalRequestRecord } from "./validation.js";
+
+export { approvalRequestIdForTarget } from "./approval-request-identity.js";
 
 export interface CreateApprovalRequestRecordInput {
   actor: TrustedActor;
@@ -13,49 +21,12 @@ export interface CreateApprovalRequestRecordInput {
   now?: Date;
 }
 
-function assertApprovalTarget(target: ApprovalRequestRecord["target"]): void {
-  if (target.kind !== "offer_draft" && target.kind !== "production_draft") {
-    throw new Error("Ungültige Freigabezielart.");
-  }
-
-  if (
-    typeof target.artifactId !== "string" ||
-    !target.artifactId.trim() ||
-    target.artifactId.length > 160
-  ) {
-    throw new Error("Ungültige Freigabezielkennung.");
-  }
-
-  if (!Number.isInteger(target.revision) || target.revision < 1 || target.revision > 2147483647) {
-    throw new Error("Ungültige Freigabezielrevision.");
-  }
-}
-
-export function approvalRequestIdForTarget(input: {
-  businessId: BusinessId;
-  target: ApprovalRequestRecord["target"];
-}): string {
-  const businessId = assertBusinessId(input.businessId);
-  assertApprovalTarget(input.target);
-
-  // Escaped components preserve the exact target identity and cannot collide at delimiters.
-  return [
-    "approval",
-    encodeURIComponent(businessId),
-    input.target.kind,
-    encodeURIComponent(input.target.artifactId),
-    String(input.target.revision)
-  ].join(":");
-}
-
 export function createApprovalRequestRecord(
   input: CreateApprovalRequestRecordInput
 ): ApprovalRequestRecord {
-  if (!input.actor.trusted) {
-    throw new Error("Vertrauenswürdiger Actor für finale Freigaben erforderlich.");
-  }
+  assertTrustedFinalApprovalActor(input.actor);
 
-  const businessId = assertBusinessId(input.actor.businessId);
+  const businessId = input.actor.businessId;
   const now = input.now ?? new Date();
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) {
     throw new Error("Ungültiger serverseitiger Freigabezeitpunkt.");
@@ -79,5 +50,6 @@ export function createApprovalRequestRecord(
     ...(input.comment === undefined ? {} : { comment: input.comment })
   };
 
-  return validateApprovalRequestRecord(record);
+  assertApprovalRequestRecordSemantics(record);
+  return record;
 }

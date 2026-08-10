@@ -16,11 +16,28 @@ export type TrustedActorSource =
   | "service-default"
   | "untrusted";
 
+export const TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE = "trusted-proxy:x-catering-actor-name";
+
+export type TrustedFinalApprovalActorSource = typeof TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE;
+
 export interface TrustedActor {
   name: string;
   businessId: BusinessId;
   source: TrustedActorSource;
   trusted: boolean;
+}
+
+export function isTrustedFinalApprovalSource(source: string): source is TrustedFinalApprovalActorSource {
+  return source === TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE;
+}
+
+export function assertTrustedFinalApprovalActor(
+  actor: TrustedActor
+): asserts actor is TrustedActor & { source: TrustedFinalApprovalActorSource; trusted: true } {
+  // The resolver alone authenticates proxy headers; this guard only preserves its trusted provenance invariant.
+  if (!actor.trusted || !isTrustedFinalApprovalSource(actor.source)) {
+    throw new Error("Vertrauenswürdiger Proxy-Actor für finale Freigaben erforderlich.");
+  }
 }
 
 export interface TrustedActorOptions {

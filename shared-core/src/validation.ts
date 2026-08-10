@@ -2,7 +2,7 @@ import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import type { ErrorObject } from "ajv";
 import { llmReadinessForbiddenPayloadKeys } from "./llm-readiness.js";
-import { approvalRequestIdForTarget } from "./approval-request.js";
+import { assertApprovalRequestRecordSemantics } from "./approval-request-identity.js";
 import { schemaBundle } from "./schemas/index.js";
 import type {
   AcceptedEventSpec,
@@ -200,15 +200,7 @@ export function validateEventRequest(value: EventRequest): EventRequest {
 
 export function validateApprovalRequestRecord(value: ApprovalRequestRecord): ApprovalRequestRecord {
   const record = assertValid("approvalRequest", value);
-  const canonicalId = approvalRequestIdForTarget({
-    businessId: record.businessId,
-    target: record.target
-  });
-
-  if (record.approvalRequestId !== canonicalId) {
-    throw new Error("Schema validation failed for approvalRequest: approvalRequestId does not match its target");
-  }
-
+  assertApprovalRequestRecordSemantics(record);
   return record;
 }
 

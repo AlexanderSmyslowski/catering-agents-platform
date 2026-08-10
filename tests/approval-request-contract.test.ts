@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   approvalRequestIdForTarget,
@@ -12,6 +13,21 @@ const target = {
   revision: 1
 };
 
+const actorSources = [
+  "trusted-proxy:x-catering-actor-name",
+  "dev-header:x-actor-name",
+  "dev-default",
+  "service-default",
+  "untrusted"
+] as const;
+
+const roles = [
+  "intake_operator",
+  "offer_operator",
+  "production_operator",
+  "operations_audit_operator"
+] as const;
+
 type ApprovalOverrides = Omit<Partial<ApprovalRequestRecord>, "target" | "decidedBy"> & {
   target?: Partial<ApprovalRequestRecord["target"]>;
   decidedBy?: Partial<ApprovalRequestRecord["decidedBy"]>;
@@ -20,8 +36,9 @@ type ApprovalOverrides = Omit<Partial<ApprovalRequestRecord>, "target" | "decide
 function validApproval(
   overrides: ApprovalOverrides = {}
 ): ApprovalRequestRecord {
-  const businessId = overrides.businessId ?? "alpha";
-  const approvalTarget = { ...target, ...overrides.target };
+  const { target: targetOverrides, decidedBy: decidedByOverrides, ...recordOverrides } = overrides;
+  const businessId = recordOverrides.businessId ?? "alpha";
+  const approvalTarget = { ...target, ...targetOverrides };
 
   return {
     schemaVersion: "1.0",
@@ -35,9 +52,9 @@ function validApproval(
       name: "Angebots-Mitarbeiter",
       role: "offer_operator",
       source: "trusted-proxy:x-catering-actor-name",
-      ...overrides.decidedBy
+      ...decidedByOverrides
     },
-    ...overrides
+    ...recordOverrides
   } as ApprovalRequestRecord;
 }
 
@@ -57,14 +74,50 @@ describe("ApprovalRequestRecord contract", () => {
     expect(() => validateApprovalRequestRecord(createInvalidApproval())).toThrow();
   });
 
+  it.each(["aa", "a".repeat(64)])("accepts a business ID at the valid boundary", (businessId) => {
+    expect(validateApprovalRequestRecord(validApproval({ businessId }))).toMatchObject({ businessId });
+  });
+
+  it.each(["a", "a".repeat(65)])("rejects a business ID outside its boundary", (businessId) => {
+    expect(() => validateApprovalRequestRecord(validApproval({ businessId }))).toThrow();
+  });
+
+  it.each(roles)("accepts the minimal MVP approval role %s", (role) => {
+    expect(validateApprovalRequestRecord(validApproval({ decidedBy: { role } }))).toMatchObject({
+      decidedBy: { role }
+    });
+  });
+
+  it.each([1, 2147483647])("accepts target revision %s at the valid boundary", (revision) => {
+    expect(validateApprovalRequestRecord(validApproval({ target: { revision } }))).toMatchObject({
+      target: { revision }
+    });
+  });
+
   it("does not accept review-card working states as approval", () => {
     expect(() => validateApprovalRequestRecord(validApproval({ decision: "fits" as never }))).toThrow();
   });
 
   it("uses one target key for competing final decisions", () => {
-    expect(approvalRequestIdForTarget({ businessId: "alpha", target })).toBe(
-      approvalRequestIdForTarget({ businessId: "alpha", target: { ...target } })
-    );
+    const approvalFor = (decision: "approved" | "rejected") => createApprovalRequestRecord({
+      actor: {
+        name: "Angebots-Mitarbeiter",
+        businessId: "alpha",
+        source: "trusted-proxy:x-catering-actor-name",
+        trusted: true
+      },
+      role: "offer_operator",
+      target,
+      decision,
+      now: new Date("2026-08-10T12:00:00.000Z")
+    });
+
+    const approved = approvalFor("approved");
+    const rejected = approvalFor("rejected");
+
+    expect(approved.decision).toBe("approved");
+    expect(rejected.decision).toBe("rejected");
+    expect(approved.approvalRequestId).toBe(rejected.approvalRequestId);
   });
 
   it("uses delimiter-safe target identity without canonicalizing artifact IDs", () => {
@@ -125,6 +178,117 @@ describe("ApprovalRequestRecord contract", () => {
     })).toThrow();
   });
 
+  it.each(actorSources.flatMap((source) => [true, false].map((trusted) => [source, trusted] as const)))(
+    "accepts only the resolver-trusted %s actor source when trusted is %s",
+    (source, trusted) => {
+      const create = () => createApprovalRequestRecord({
+        actor: {
+          name: "Angebots-Mitarbeiter",
+          businessId: "alpha",
+          source,
+          trusted
+        },
+        role: "offer_operator",
+        target,
+        decision: "approved"
+      });
+
+      if (source === "trusted-proxy:x-catering-actor-name" && trusted) {
+        expect(create()).toMatchObject({ decidedBy: { source } });
+      } else {
+        expect(create).toThrow();
+      }
+    }
+  );
+
+  it.each(actorSources)("accepts only trusted-proxy provenance in a final record: %s", (source) => {
+    const record = validApproval({ decidedBy: { source } });
+    if (source === "trusted-proxy:x-catering-actor-name") {
+      expect(validateApprovalRequestRecord(record)).toEqual(record);
+    } else {
+      expect(() => validateApprovalRequestRecord(record)).toThrow();
+    }
+  });
+
+  it("uses a fixed SHA-256 target ID for reserved characters and Unicode", () => {
+    const artifactId = "draft:%/😀";
+    const id = approvalRequestIdForTarget({
+      businessId: "alpha",
+      target: { kind: "offer_draft", artifactId, revision: 2 }
+    });
+
+    expect(id).toMatch(/^approval-[a-f0-9]{64}$/);
+    expect(id).not.toBe(approvalRequestIdForTarget({
+      businessId: "alpha",
+      target: { kind: "offer_draft", artifactId: "draft:%/😀x", revision: 2 }
+    }));
+  });
+
+  it("accepts the target ID boundary as Unicode code points", () => {
+    const artifactId = "😀".repeat(160);
+    expect(validateApprovalRequestRecord(validApproval({ target: { artifactId } }))).toMatchObject({
+      target: { artifactId }
+    });
+    expect(createApprovalRequestRecord({
+      actor: {
+        name: "Angebots-Mitarbeiter",
+        businessId: "alpha",
+        source: "trusted-proxy:x-catering-actor-name",
+        trusted: true
+      },
+      role: "offer_operator",
+      target: { kind: "offer_draft", artifactId, revision: 1 },
+      decision: "approved"
+    }).target.artifactId).toBe(artifactId);
+  });
+
+  it("accepts the target ID boundary as ASCII code points", () => {
+    const artifactId = "x".repeat(160);
+    expect(approvalRequestIdForTarget({
+      businessId: "alpha",
+      target: { kind: "offer_draft", artifactId, revision: 1 }
+    })).toMatch(/^approval-[a-f0-9]{64}$/);
+  });
+
+  it.each([
+    "😀".repeat(161),
+    "draft\ud800"
+  ])("rejects an invalid Unicode target ID", (artifactId) => {
+    expect(() => approvalRequestIdForTarget({
+      businessId: "alpha",
+      target: { kind: "offer_draft", artifactId, revision: 1 }
+    })).toThrow();
+  });
+
+  it.each([
+    ["equal timestamps", "2026-08-10T12:00:00.000Z", "2026-08-10T12:00:00.000Z", false],
+    ["later decision", "2026-08-10T12:00:00.000Z", "2026-08-10T12:00:01.000Z", false],
+    ["inverted timestamps", "2026-08-11T12:00:00.000Z", "2026-08-10T12:00:00.000Z", true],
+    ["equivalent offset timestamps", "2026-08-10T14:00:00.000+02:00", "2026-08-10T12:00:00.000Z", false]
+  ])("enforces approval chronology for %s", (_caseName, requestedAt, decidedAt, shouldReject) => {
+    const validate = () => validateApprovalRequestRecord(validApproval({ requestedAt, decidedAt }));
+    if (shouldReject) {
+      expect(validate).toThrow();
+    } else {
+      expect(validate()).toMatchObject({ requestedAt, decidedAt });
+    }
+  });
+
+  it.each(["", "   ", "\t\n"])("rejects a blank comment", (comment) => {
+    expect(() => validateApprovalRequestRecord(validApproval({ comment }))).toThrow();
+  });
+
+  it("keeps approval identity cycle-free while preserving direct and barrel imports", async () => {
+    const approvalModule = readFileSync("shared-core/src/approval-request.ts", "utf8");
+    const validationModule = readFileSync("shared-core/src/validation.ts", "utf8");
+
+    expect(approvalModule).not.toContain('from "./validation.js"');
+    expect(validationModule).not.toContain('from "./approval-request.js"');
+    await expect(import("../shared-core/src/approval-request.js")).resolves.toHaveProperty("createApprovalRequestRecord");
+    await expect(import("../shared-core/src/validation.js")).resolves.toHaveProperty("validateApprovalRequestRecord");
+    await expect(import("@catering/shared-core")).resolves.toHaveProperty("approvalRequestIdForTarget");
+  });
+
   it("rejects a record whose ID does not belong to its target", () => {
     expect(() => validateApprovalRequestRecord(validApproval({ approvalRequestId: "approval-wrong-target" }))).toThrow();
   });
@@ -133,6 +297,17 @@ describe("ApprovalRequestRecord contract", () => {
     expect(() => validateApprovalRequestRecord({
       ...validApproval(),
       clientDecidedBy: "untrusted-client"
+    } as ApprovalRequestRecord)).toThrow();
+  });
+
+  it("rejects unexpected nested target and actor fields", () => {
+    expect(() => validateApprovalRequestRecord({
+      ...validApproval(),
+      target: { ...target, clientArtifactId: "untrusted-client" }
+    } as ApprovalRequestRecord)).toThrow();
+    expect(() => validateApprovalRequestRecord({
+      ...validApproval(),
+      decidedBy: { ...validApproval().decidedBy, clientRole: "untrusted-client" }
     } as ApprovalRequestRecord)).toThrow();
   });
 });

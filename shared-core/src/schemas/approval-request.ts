@@ -15,7 +15,7 @@ export const approvalRequestSchema = {
   ],
   properties: {
     schemaVersion: { const: "1.0" },
-    approvalRequestId: { type: "string", minLength: 1, maxLength: 650 },
+    approvalRequestId: { type: "string", pattern: "^approval-[a-f0-9]{64}$" },
     businessId: {
       type: "string",
       pattern: "^[a-z0-9][a-z0-9_-]{1,63}$"
@@ -48,17 +48,9 @@ export const approvalRequestSchema = {
             "operations_audit_operator"
           ]
         },
-        source: {
-          enum: [
-            "trusted-proxy:x-catering-actor-name",
-            "dev-header:x-actor-name",
-            "dev-default",
-            "service-default",
-            "untrusted"
-          ]
-        }
+        source: { const: "trusted-proxy:x-catering-actor-name" }
       }
     },
-    comment: { type: "string", minLength: 1, maxLength: 1000 }
+    comment: { type: "string", minLength: 1, maxLength: 1000, pattern: ".*\\S.*" }
   }
 };
