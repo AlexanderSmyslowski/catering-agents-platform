@@ -68,6 +68,10 @@ function getCachedPool(connectionString: string): Pool {
   return pool;
 }
 
+export function resolveCollectionQueryable(options: CollectionStorageOptions): Queryable | undefined {
+  return options.pgPool ?? (resolveDatabaseUrl(options.databaseUrl) ? getCachedPool(resolveDatabaseUrl(options.databaseUrl)!) : undefined);
+}
+
 export function resolveDataRoot(rootDir?: string): string {
   return rootDir ?? process.env.CATERING_DATA_ROOT ?? path.join(process.cwd(), "data");
 }
@@ -338,7 +342,8 @@ function atomicInsert(filePath: string, payload: string, beforePublish?: () => v
 
 function versionOf(value: unknown): number | undefined {
   if (value && typeof value === "object" && typeof (value as { version?: unknown }).version === "number") {
-    return (value as { version: number }).version;
+    const version = (value as { version: number }).version;
+    if (Number.isSafeInteger(version) && version >= 0 && version <= 2_147_483_647) return version;
   }
   return undefined;
 }
@@ -474,9 +479,21 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
     const initializers = initCache.get(key) ?? new Map<string, Promise<void>>();
     initCache.set(key, initializers);
     if (!initializers.has("catering_business_records")) {
-      initializers.set("catering_business_records", this.queryable.query(
-        "CREATE TABLE IF NOT EXISTS catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, version_number INTEGER, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))"
-      ).then(() => undefined));
+      initializers.set("catering_business_records", (async () => {
+        try {
+          await this.queryable.query("ALTER TABLE catering_business_records ADD COLUMN version_number INTEGER");
+        } catch {
+          await this.queryable.query("CREATE TABLE IF NOT EXISTS catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, version_number INTEGER, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))");
+        }
+        // JSON payloads predate the denormalized CAS column; only safe integers are backfilled.
+        const records = await this.queryable.query("SELECT business_id, collection_name, record_id, payload, version_number FROM catering_business_records");
+        for (const record of records.rows) {
+          if (record.version_number === null || record.version_number === undefined) {
+            const version = versionOf(parsePayload<unknown>(record.payload));
+            if (version !== undefined) await this.queryable.query("UPDATE catering_business_records SET version_number = $4 WHERE business_id = $1 AND collection_name = $2 AND record_id = $3", [record.business_id, record.collection_name, record.record_id, version]);
+          }
+        }
+      })());
     }
     await initializers.get("catering_business_records");
   }

@@ -80,4 +80,13 @@ describe("Task 1 review fixes", () => {
     await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha", faultInjector: (phase) => { if (phase === "before_manifest_publish") throw new Error("stop"); } })).rejects.toThrow("stop");
     await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha" })).resolves.toMatchObject({ units: [{ status: "migrated" }] });
   });
+
+  it("upgrades an old postgres scoped table before compare-and-set", async () => {
+    const { Pool } = newDb().adapters.createPg();
+    const pool = new Pool();
+    await pool.query("CREATE TABLE catering_business_records (business_id TEXT NOT NULL, collection_name TEXT NOT NULL, record_id TEXT NOT NULL, payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (business_id, collection_name, record_id))");
+    await pool.query("INSERT INTO catering_business_records (business_id, collection_name, record_id, payload) VALUES ('alpha', 'old-records', 'same', '{\"id\":\"same\",\"version\":1}')");
+    const scoped = createBusinessScopedPersistentCollection({ collectionName: "old-records", getId: (record: { id: string; version: number }) => record.id, pgPool: pool });
+    await expect(scoped.compareAndSet({ businessId: "alpha" }, "same", 1, { id: "same", version: 2 })).resolves.toBe("updated");
+  });
 });

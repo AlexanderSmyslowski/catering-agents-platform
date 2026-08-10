@@ -5,6 +5,7 @@ import { assertBusinessId, type AuditEntry } from "../shared-core/src/index.js";
 import {
   createBusinessScopedPersistentCollection,
   createPersistentCollection,
+  resolveCollectionQueryable,
   resolveDataRoot,
   type CollectionStorageOptions,
   type Queryable
@@ -70,7 +71,7 @@ async function recordPgCompletion(queryable: Queryable, businessId: string, name
 export async function runLocalBusinessScopeMigration(options: LocalBusinessScopeMigrationOptions): Promise<{ units: MigrationUnitResult[] }> {
   const businessId = assertBusinessId(options.businessId);
   const name = "stage-a-001-audit" as const;
-  const queryable = options.pgPool;
+  const queryable = resolveCollectionQueryable(options);
   const manifest = queryable ? undefined : readManifest(options, businessId);
   if (queryable ? await pgCompletion(queryable, businessId, name) : manifest?.completed[name]) {
     return { units: [{ name, status: "already_migrated" }] };
