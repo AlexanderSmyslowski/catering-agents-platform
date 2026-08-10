@@ -1,6 +1,31 @@
 import type { DocumentIngestionStatus, DocumentIngestionWarning } from "./document-ingestion.js";
+import type { MinimalMvpRole, TrustedActor } from "./access-control.js";
+import type { BusinessId } from "./business-context.js";
 
 export const SCHEMA_VERSION = "1.0.0";
+
+export type ApprovalTargetKind = "offer_draft" | "production_draft";
+
+export interface ApprovalRequestRecord {
+  schemaVersion: "1.0";
+  approvalRequestId: string;
+  businessId: BusinessId;
+  target: {
+    kind: ApprovalTargetKind;
+    artifactId: string;
+    revision: number;
+  };
+  decision: "approved" | "rejected";
+  selectedVariantId?: string;
+  requestedAt: string;
+  decidedAt: string;
+  decidedBy: {
+    name: string;
+    role: MinimalMvpRole;
+    source: TrustedActor["source"];
+  };
+  comment?: string;
+}
 
 export type ReadinessStatus = "complete" | "partial" | "insufficient";
 export type CustomerSegment = "company" | "university" | "public" | "private" | "unknown";
