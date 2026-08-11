@@ -41,6 +41,11 @@ import {
   type SpecUpdateBody
 } from "./routes/work-item-routes.js";
 import { registerIntakeDocumentRoutes } from "./routes/document-routes.js";
+import { registerSourceDocumentRoutes } from "./routes/source-document-routes.js";
+import {
+  createSourceDocumentStore,
+  type SourceDocumentStore
+} from "./source-document-store.js";
 
 interface ManualSpecBody {
   eventType?: string;
@@ -406,6 +411,7 @@ function applySpecUpdates(
 
 export interface IntakeAppOptions extends CollectionStorageOptions {
   store?: IntakeStore;
+  sourceDocumentStore?: SourceDocumentStore;
   auditLog?: AuditLogStore;
   llmAdapter?: LlmReadinessProviderAdapter;
   trustedActorSecret?: string;
@@ -460,6 +466,13 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool
     });
+  const sourceDocumentStore =
+    options.sourceDocumentStore ??
+    createSourceDocumentStore({
+      rootDir: storageOptions?.rootDir,
+      databaseUrl: storageOptions?.databaseUrl,
+      pgPool: storageOptions?.pgPool
+    });
   const app = Fastify({
     logger: false,
     bodyLimit: DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes
@@ -476,8 +489,8 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       return reply.send({ service: "intake-service", status: "ok", timestamp: new Date().toISOString() });
     }
     const [requests, specs, auditEvents] = await Promise.all([
-      store.listRequests(),
-      store.listSpecs(),
+      store.listRequests(defaultBusinessContext),
+      store.listSpecs(defaultBusinessContext),
       auditLog.countFor(defaultBusinessContext)
     ]);
     return reply.send({
@@ -502,6 +515,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       }
 
       const body = request.body;
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const eventRequest =
         "rawInputs" in body
           ? validateEventRequest(body)
@@ -511,7 +525,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
               rawText: body.text
             });
 
-      await store.saveRequest(eventRequest);
+      await store.saveRequest(actor, eventRequest);
       const spec = validateAcceptedEventSpec(
         normalizeEventRequestToSpec(eventRequest, {
           sourceType:
@@ -525,7 +539,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         })
       );
 
-      await store.saveSpec(spec);
+      await store.saveSpec(actor, spec);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.normalized",
         entityType: "AcceptedEventSpec",
@@ -723,7 +737,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         dataMode: "synthetic_or_demo_only"
       }
     };
-    await store.saveShadowRun(shadowRun);
+    await store.saveShadowRun(actor, shadowRun);
     await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.shadow_extraction_compared",
       entityType: "IntakeShadowRun",
@@ -749,10 +763,19 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
   registerIntakeDocumentRoutes(app, {
     store,
+    sourceDocumentStore,
     auditLog,
     trustedActorSecret,
     allowDevActorHeader,
     isIntakeOperator,
+    actorForRequest
+  });
+  registerSourceDocumentRoutes(app, {
+    sourceDocumentStore,
+    auditLog,
+    trustedActorSecret,
+    allowDevActorHeader,
+    requireIntakeOperator,
     actorForRequest
   });
 
@@ -763,6 +786,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       });
     }
 
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     const eventRequest = validateEventRequest(
       createEventRequestFromManualForm({
         requestId: `manual-${Date.now()}`,
@@ -778,8 +802,8 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       })
     );
 
-    await store.saveRequest(eventRequest);
-    await store.saveSpec(spec);
+    await store.saveRequest(actor, eventRequest);
+    await store.saveSpec(actor, spec);
     await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "intake.manual_spec_created",
       entityType: "AcceptedEventSpec",
@@ -806,9 +830,10 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       });
     }
 
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     const seeded = [];
     for (const eventRequest of getDemoIntakeRequests()) {
-      await store.saveRequest(eventRequest);
+      await store.saveRequest(actor, eventRequest);
       const spec = validateAcceptedEventSpec(
         normalizeEventRequestToSpec(eventRequest, {
           sourceType:
@@ -821,7 +846,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
           commercialState: "manual"
         })
       );
-      await store.saveSpec(spec);
+      await store.saveSpec(actor, spec);
       seeded.push({
         requestId: eventRequest.requestId,
         specId: spec.specId
@@ -829,8 +854,8 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     }
     const answeredClarificationAnchor = getDemoProductionAnsweredClarificationAnchor();
     const answeredClarificationSpec = validateAcceptedEventSpec(answeredClarificationAnchor.spec);
-    await store.saveRequest(answeredClarificationAnchor.request);
-    await store.saveSpec(answeredClarificationSpec);
+    await store.saveRequest(actor, answeredClarificationAnchor.request);
+    await store.saveSpec(actor, answeredClarificationSpec);
     seeded.push({
       requestId: answeredClarificationAnchor.request.requestId,
       specId: answeredClarificationSpec.specId
@@ -849,8 +874,8 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     return reply.code(201).send({
       seeded,
       counts: {
-        requests: (await store.listRequests()).length,
-        acceptedSpecs: (await store.listSpecs()).length
+        requests: (await store.listRequests(actor)).length,
+        acceptedSpecs: (await store.listSpecs(actor)).length
       }
     });
   });

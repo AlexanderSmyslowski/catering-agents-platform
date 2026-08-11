@@ -163,7 +163,8 @@ describe("Task 1 review fixes", () => {
       { name: "stage-a-001-audit", status: "migrated" },
       { name: "stage-a-002-offers", status: "migrated" },
       { name: "stage-a-003-production-drafts", status: "migrated" },
-      { name: "stage-a-004-production-v2", status: "migrated" }
+      { name: "stage-a-004-production-v2", status: "migrated" },
+      { name: "stage-a-005-intake-cases", status: "migrated" }
     ];
     await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "alpha", legacyFileWritersQuiesced: true })).resolves.toEqual({ units: migratedUnits });
     await expect(runLocalBusinessScopeMigration({ rootDir: dataRoot, businessId: "beta", legacyFileWritersQuiesced: true })).resolves.toEqual({ units: migratedUnits });
@@ -222,7 +223,8 @@ describe("Task 1 review fixes", () => {
         { name: "stage-a-001-audit", status: "migrated" },
         { name: "stage-a-002-offers", status: "migrated" },
         { name: "stage-a-003-production-drafts", status: "migrated" },
-        { name: "stage-a-004-production-v2", status: "migrated" }
+        { name: "stage-a-004-production-v2", status: "migrated" },
+        { name: "stage-a-005-intake-cases", status: "migrated" }
       ]
     });
     expectNoTemporaryFiles(dataRoot);
@@ -249,7 +251,8 @@ describe("Task 1 review fixes", () => {
         { name: "stage-a-001-audit", status: retryStatus },
         { name: "stage-a-002-offers", status: "migrated" },
         { name: "stage-a-003-production-drafts", status: "migrated" },
-        { name: "stage-a-004-production-v2", status: "migrated" }
+        { name: "stage-a-004-production-v2", status: "migrated" },
+        { name: "stage-a-005-intake-cases", status: "migrated" }
       ]
     });
     expectNoTemporaryFiles(dataRoot);

@@ -3555,7 +3555,7 @@ describe("catering agents platform", () => {
         }
       ]
     };
-    await intakeStore.saveRequest(unsafeRequest);
+    await intakeStore.saveRequest({ businessId: "local" }, unsafeRequest);
     const spec = withProductionDecision(normalizeEventRequestToSpec(unsafeRequest));
     const app = buildProductionApp({ dataRoot });
 
@@ -3797,7 +3797,7 @@ describe("catering agents platform", () => {
       intakeResponse.json().acceptedEventSpec,
       "vegan"
     );
-    await intakeStore.saveSpec(acceptedEventSpec);
+    await intakeStore.saveSpec({ businessId: "local" }, acceptedEventSpec);
     await intakeApp.close();
 
     const offerApp = buildOfferApp(new OfferStore({ pgPool: pool }));
@@ -3950,7 +3950,7 @@ describe("catering agents platform", () => {
     expect(intakeResponse.statusCode).toBe(201);
 
     const productionEventSpec = withProductionDecision(intakeResponse.json().acceptedEventSpec);
-    await new IntakeStore({ rootDir: dataRoot }).saveSpec(productionEventSpec);
+    await new IntakeStore({ rootDir: dataRoot }).saveSpec({ businessId: "local" }, productionEventSpec);
     const productionResponse = await runApprovedProductionWorkflow(productionApp, {
       headers: {
         "x-actor-name": "Produktions-Mitarbeiter"

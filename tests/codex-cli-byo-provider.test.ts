@@ -15,6 +15,7 @@ import {
 
 const TRUSTED_SECRET = "codex-cli-byo-secret";
 const fixtureSpecId = "spec-synthetic-coffee-break";
+const localBusiness = { businessId: "local" } as const;
 
 type MockCodexExecRequest = {
   command: string;
@@ -73,7 +74,7 @@ function fixtureSpec(): AcceptedEventSpec {
 }
 
 async function seedFixtureSpec(intakeStore: IntakeStore): Promise<void> {
-  await intakeStore.saveSpec(fixtureSpec());
+  await intakeStore.saveSpec(localBusiness, fixtureSpec());
 }
 
 function successfulCodexExec(calls: MockCodexExecRequest[]) {

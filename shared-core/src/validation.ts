@@ -3,6 +3,7 @@ import addFormatsModule from "ajv-formats";
 import type { ErrorObject } from "ajv";
 import { llmReadinessForbiddenPayloadKeys } from "./llm-readiness.js";
 import { assertApprovalRequestRecordSemantics } from "./approval-request-identity.js";
+import type { CaseEvent, CaseProduct, OfferCase, ProductionCase } from "./case-contracts.js";
 import { schemaBundle } from "./schemas/index.js";
 import type {
   AcceptedEventSpec,
@@ -42,10 +43,13 @@ type SchemaName =
   | "approvalRequest"
   | "approvedOffer"
   | "approvedProductionSpec"
+  | "caseEvent"
   | "eventRequest"
   | "offerDraft"
+  | "offerCase"
   | "acceptedEventSpec"
   | "productionDraft"
+  | "productionCase"
   | "recipe"
   | "productionPlan"
   | "productionHandoff"
@@ -59,10 +63,13 @@ const schemaIds: Record<SchemaName, string> = {
   approvalRequest: "https://schemas.catering.local/approval-request.json",
   approvedOffer: "https://schemas.catering.local/approved-offer.json",
   approvedProductionSpec: "https://schemas.catering.local/approved-production-spec.json",
+  caseEvent: "https://schemas.catering.local/case.json#/$defs/caseEvent",
   eventRequest: "https://schemas.catering.local/event-request.json",
   offerDraft: "https://schemas.catering.local/offer-draft.json",
+  offerCase: "https://schemas.catering.local/case.json#/$defs/offerCase",
   acceptedEventSpec: "https://schemas.catering.local/accepted-event-spec.json",
   productionDraft: "https://schemas.catering.local/production-draft.json",
+  productionCase: "https://schemas.catering.local/case.json#/$defs/productionCase",
   recipe: "https://schemas.catering.local/recipe.json",
   productionPlan: "https://schemas.catering.local/production-plan.json",
   productionHandoff: "https://schemas.catering.local/production-handoff.json",
@@ -122,6 +129,48 @@ function collectForbiddenPayloadKeyErrors(value: unknown, path = "$"): string[] 
     errors.push(...collectForbiddenPayloadKeyErrors(nested, `${path}.${key}`));
   }
   return errors;
+}
+
+const caseEventForbiddenPayloadKeys = new Set<string>([
+  ...llmReadinessForbiddenPayloadKeys,
+  "providerPayload",
+  "rawPrompt",
+  "rawProviderPayload",
+  "rawResponse",
+  "systemPrompt",
+  "toolOutput",
+  "userPrompt"
+]);
+
+function collectCaseEventForbiddenPayloadKeyErrors(value: unknown, path = "$"): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      collectCaseEventForbiddenPayloadKeyErrors(item, `${path}[${index}]`)
+    );
+  }
+
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const errors: string[] = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (caseEventForbiddenPayloadKeys.has(key)) {
+      errors.push(`${path}.${key} is not allowed in CaseEvent`);
+    }
+    errors.push(...collectCaseEventForbiddenPayloadKeyErrors(nested, `${path}.${key}`));
+  }
+  return errors;
+}
+
+function throwCaseValidationErrors(
+  schemaName: "caseEvent" | "offerCase" | "productionCase",
+  errors: string[]
+): void {
+  if (errors.length === 0) return;
+  throw new Error(
+    `Schema validation failed for ${schemaName}: ${[...new Set(errors)].join("; ")}`
+  );
 }
 
 function reviewCardTargetsPath(targetPath: string | undefined, artifactPath: string): boolean {
@@ -204,6 +253,77 @@ function validateProductionDraftSemantics(value: ProductionDraft): string[] {
 
 export function validateEventRequest(value: EventRequest): EventRequest {
   return assertValid("eventRequest", value);
+}
+
+export function validateCaseEvent(value: CaseEvent): CaseEvent {
+  throwCaseValidationErrors("caseEvent", collectCaseEventForbiddenPayloadKeyErrors(value));
+  const event = assertValid("caseEvent", value);
+  const errors: string[] = [];
+
+  if (event.sourceId && event.sourceRef && event.sourceId !== event.sourceRef.sourceId) {
+    errors.push("sourceId must match sourceRef.sourceId");
+  }
+  if (event.artifactId && event.revisionRef && event.artifactId !== event.revisionRef.artifactId) {
+    errors.push("artifactId must match revisionRef.artifactId");
+  }
+
+  if (["case_created", "case_copied", "source_added", "legacy_unverified"].includes(event.kind) && event.role !== "system") {
+    errors.push(`${event.kind} role must be system`);
+  }
+  if (event.kind === "instruction" && event.role !== "user") {
+    errors.push("instruction role must be user");
+  }
+
+  const forbiddenFieldsByKind: Partial<Record<CaseEvent["kind"], Array<keyof CaseEvent>>> = {
+    case_created: ["sourceId", "artifactId", "sourceRef", "revisionRef"],
+    case_copied: ["sourceId", "sourceRef", "revisionRef"],
+    source_added: ["artifactId", "revisionRef"],
+    instruction: ["sourceId", "artifactId", "sourceRef", "revisionRef"],
+    revision_created: ["sourceId", "sourceRef"]
+  };
+  for (const field of forbiddenFieldsByKind[event.kind] ?? []) {
+    if (event[field] !== undefined) errors.push(`${String(field)} is not allowed for ${event.kind}`);
+  }
+
+  throwCaseValidationErrors("caseEvent", errors);
+  return event;
+}
+
+export function validateCaseEventForProduct(value: CaseEvent, product: CaseProduct): CaseEvent {
+  const event = validateCaseEvent(value);
+  const expectedArtifactType = product === "offer" ? "OfferDraft" : "ProductionDraft";
+  if (event.revisionRef && event.revisionRef.artifactType !== expectedArtifactType) {
+    throwCaseValidationErrors("caseEvent", [
+      `${product} case revisions must reference ${expectedArtifactType}`
+    ]);
+  }
+  return event;
+}
+
+function validateCaseTimestamps(
+  schemaName: "offerCase" | "productionCase",
+  value: OfferCase | ProductionCase
+): void {
+  const errors: string[] = [];
+  if (Date.parse(value.updatedAt) < Date.parse(value.createdAt)) {
+    errors.push("updatedAt must not be earlier than createdAt");
+  }
+  if (value.copiedFromCaseId === value.caseId) {
+    errors.push("copiedFromCaseId must reference another case");
+  }
+  throwCaseValidationErrors(schemaName, errors);
+}
+
+export function validateOfferCase(value: OfferCase): OfferCase {
+  const offerCase = assertValid("offerCase", value);
+  validateCaseTimestamps("offerCase", offerCase);
+  return offerCase;
+}
+
+export function validateProductionCase(value: ProductionCase): ProductionCase {
+  const productionCase = assertValid("productionCase", value);
+  validateCaseTimestamps("productionCase", productionCase);
+  return productionCase;
 }
 
 export function validateApprovalRequestRecord(value: ApprovalRequestRecord): ApprovalRequestRecord {

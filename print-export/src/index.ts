@@ -415,12 +415,13 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
-      const plan = await productionStore.getPlan(actorForRequest(request), request.params.planId);
+      const actor = actorForRequest(request);
+      const plan = await productionStore.getPlan(actor, request.params.planId);
       if (!plan) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
-      const spec = await intakeStore.getSpec(plan.eventSpecId);
+      const spec = await intakeStore.getSpec(actor, plan.eventSpecId);
 
       reply.header(
         "content-disposition",
@@ -446,7 +447,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
-      const spec = await intakeStore.getSpec(plan.eventSpecId);
+      const spec = await intakeStore.getSpec(actor, plan.eventSpecId);
       if (!spec) {
         return reply.code(404).send({ message: "AcceptedEventSpec zum ProductionPlan nicht gefunden." });
       }

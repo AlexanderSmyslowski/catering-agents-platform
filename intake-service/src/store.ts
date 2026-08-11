@@ -1,7 +1,13 @@
 import {
-  createPersistentCollection,
+  areJsonValuesEqual,
+  createBusinessScopedPersistentCollection,
+  llmReadinessForbiddenPayloadKeys,
+  validateAcceptedEventSpec,
+  validateEventRequest,
+  withBusinessTargetCriticalSection,
+  type BusinessContext,
+  type BusinessScopedPersistentCollection,
   type CollectionStorageOptions,
-  type PersistentCollection,
   type AcceptedEventSpec,
   type EventRequest,
   type OperationalArchiveReasonCode,
@@ -66,6 +72,241 @@ interface ArchiveRequestContextInput {
   archivedBy: string;
 }
 
+const shadowDifferenceFields = [
+  "eventType",
+  "serviceForm",
+  "eventDate",
+  "attendeeCount",
+  "menuItems"
+] as const satisfies readonly IntakeShadowDifference["field"][];
+
+const intakeSourceChannels = [
+  "agent1_json",
+  "manual_form",
+  "email",
+  "pdf_upload",
+  "text",
+  "api"
+] as const satisfies readonly EventRequest["source"]["channel"][];
+
+function shadowValidationError(detail: string): never {
+  throw new Error(`Intake shadow run validation failed: ${detail}`);
+}
+
+function asRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return shadowValidationError(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+const shadowForbiddenPayloadKeys = new Set<string>([
+  ...llmReadinessForbiddenPayloadKeys,
+  "providerPayload",
+  "rawPrompt",
+  "rawProviderPayload",
+  "rawResponse",
+  "systemPrompt",
+  "toolOutput",
+  "userPrompt"
+]);
+
+function collectForbiddenShadowPayloadKeys(value: unknown, path = "$"): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      collectForbiddenShadowPayloadKeys(item, `${path}[${index}]`)
+    );
+  }
+  if (!value || typeof value !== "object") return [];
+
+  const errors: string[] = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (shadowForbiddenPayloadKeys.has(key)) {
+      errors.push(`${path}.${key} is not allowed in IntakeShadowRun`);
+    }
+    errors.push(...collectForbiddenShadowPayloadKeys(nested, `${path}.${key}`));
+  }
+  return errors;
+}
+
+function assertOnlyKeys(
+  record: Record<string, unknown>,
+  allowed: readonly string[],
+  label: string
+): void {
+  const allowedKeys = new Set(allowed);
+  for (const key of Object.keys(record)) {
+    if (!allowedKeys.has(key)) shadowValidationError(`${label}.${key} is an additional property`);
+  }
+}
+
+function requireString(record: Record<string, unknown>, key: string, label: string): string {
+  const value = record[key];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return shadowValidationError(`${label}.${key} must be a non-empty string`);
+  }
+  return value;
+}
+
+function optionalString(record: Record<string, unknown>, key: string, label: string): void {
+  const value = record[key];
+  if (value !== undefined && (typeof value !== "string" || value.trim().length === 0)) {
+    shadowValidationError(`${label}.${key} must be a non-empty string when present`);
+  }
+}
+
+function validateShadowValueSummary(value: unknown, label: string): void {
+  const item = asRecord(value, label);
+  assertOnlyKeys(item, ["present", "valueHash", "numericValue"], label);
+  if (typeof item.present !== "boolean") {
+    shadowValidationError(`${label}.present must be boolean`);
+  }
+  optionalString(item, "valueHash", label);
+  if (item.numericValue !== undefined && (
+    typeof item.numericValue !== "number" || !Number.isFinite(item.numericValue)
+  )) {
+    shadowValidationError(`${label}.numericValue must be finite when present`);
+  }
+}
+
+function validateShadowSummary(value: unknown, label: string): void {
+  const summary = asRecord(value, label);
+  assertOnlyKeys(summary, shadowDifferenceFields, label);
+  for (const field of shadowDifferenceFields) {
+    validateShadowValueSummary(summary[field], `${label}.${field}`);
+  }
+}
+
+export function validateIntakeShadowRunForStorage(value: IntakeShadowRun): IntakeShadowRun {
+  const forbiddenErrors = collectForbiddenShadowPayloadKeys(value);
+  if (forbiddenErrors.length > 0) shadowValidationError([...new Set(forbiddenErrors)].join("; "));
+  const run = asRecord(value, "shadowRun");
+  assertOnlyKeys(
+    run,
+    ["shadowRunId", "createdAt", "status", "safetyMode", "source", "baseline", "llm", "differences", "guardrails"],
+    "shadowRun"
+  );
+  requireString(run, "shadowRunId", "shadowRun");
+  const createdAt = requireString(run, "createdAt", "shadowRun");
+  if (Number.isNaN(Date.parse(createdAt))) shadowValidationError("shadowRun.createdAt must be a timestamp");
+  if (run.status !== "pending_review") shadowValidationError("shadowRun.status must be pending_review");
+  if (run.safetyMode !== "synthetic_demo" && run.safetyMode !== "anonymized_reference") {
+    shadowValidationError("shadowRun.safetyMode is invalid");
+  }
+
+  const source = asRecord(run.source, "shadowRun.source");
+  assertOnlyKeys(source, ["channel", "inputHash", "sourceRef"], "shadowRun.source");
+  if (!intakeSourceChannels.includes(source.channel as EventRequest["source"]["channel"])) {
+    shadowValidationError("shadowRun.source.channel is invalid");
+  }
+  requireString(source, "inputHash", "shadowRun.source");
+  optionalString(source, "sourceRef", "shadowRun.source");
+
+  const baseline = asRecord(run.baseline, "shadowRun.baseline");
+  assertOnlyKeys(baseline, ["requestId", "specId", "summary"], "shadowRun.baseline");
+  requireString(baseline, "requestId", "shadowRun.baseline");
+  requireString(baseline, "specId", "shadowRun.baseline");
+  validateShadowSummary(baseline.summary, "shadowRun.baseline.summary");
+
+  const llm = asRecord(run.llm, "shadowRun.llm");
+  assertOnlyKeys(
+    llm,
+    ["inputId", "outputId", "outputHash", "providerId", "providerRequestId", "adapterId", "adapterMode", "promptSchemaId", "summary"],
+    "shadowRun.llm"
+  );
+  requireString(llm, "inputId", "shadowRun.llm");
+  requireString(llm, "adapterId", "shadowRun.llm");
+  requireString(llm, "adapterMode", "shadowRun.llm");
+  for (const key of ["outputId", "outputHash", "providerId", "providerRequestId", "promptSchemaId"]) {
+    optionalString(llm, key, "shadowRun.llm");
+  }
+  validateShadowSummary(llm.summary, "shadowRun.llm.summary");
+
+  if (!Array.isArray(run.differences)) shadowValidationError("shadowRun.differences must be an array");
+  for (const [index, rawDifference] of run.differences.entries()) {
+    const difference = asRecord(rawDifference, `shadowRun.differences[${index}]`);
+    assertOnlyKeys(
+      difference,
+      ["field", "matches", "baseline", "llm"],
+      `shadowRun.differences[${index}]`
+    );
+    if (!shadowDifferenceFields.includes(difference.field as IntakeShadowDifference["field"])) {
+      shadowValidationError(`shadowRun.differences[${index}].field is invalid`);
+    }
+    if (typeof difference.matches !== "boolean") {
+      shadowValidationError(`shadowRun.differences[${index}].matches must be boolean`);
+    }
+    validateShadowValueSummary(difference.baseline, `shadowRun.differences[${index}].baseline`);
+    validateShadowValueSummary(difference.llm, `shadowRun.differences[${index}].llm`);
+  }
+
+  const guardrails = asRecord(run.guardrails, "shadowRun.guardrails");
+  assertOnlyKeys(
+    guardrails,
+    ["draftOnly", "humanApprovalRequired", "writesProductObjects", "rawPayloadStored", "dataMode"],
+    "shadowRun.guardrails"
+  );
+  if (
+    guardrails.draftOnly !== true ||
+    guardrails.humanApprovalRequired !== true ||
+    guardrails.writesProductObjects !== false ||
+    guardrails.rawPayloadStored !== false ||
+    guardrails.dataMode !== "synthetic_or_demo_only"
+  ) {
+    shadowValidationError("shadowRun.guardrails do not match the draft-only safety contract");
+  }
+
+  return value;
+}
+
+interface IntakeCollections {
+  requests: BusinessScopedPersistentCollection<EventRequest>;
+  specs: BusinessScopedPersistentCollection<AcceptedEventSpec>;
+  shadowRuns: BusinessScopedPersistentCollection<IntakeShadowRun>;
+}
+
+export interface IntakeStoreOptions extends CollectionStorageOptions {
+  fileFaultInjector?: (
+    phase:
+      | "before_record_publish"
+      | "after_record_publish"
+      | "before_record_replace"
+      | "after_record_replace"
+  ) => void;
+}
+
+function createIntakeCollections(options: IntakeStoreOptions = {}): IntakeCollections {
+  return {
+    requests: createBusinessScopedPersistentCollection<EventRequest>({
+      collectionName: "intake/requests",
+      getId: (request) => request.requestId,
+      validate: validateEventRequest,
+      ...options
+    }),
+    specs: createBusinessScopedPersistentCollection<AcceptedEventSpec>({
+      collectionName: "intake/specs",
+      getId: (spec) => spec.specId,
+      validate: validateAcceptedEventSpec,
+      ...options
+    }),
+    shadowRuns: createBusinessScopedPersistentCollection<IntakeShadowRun>({
+      collectionName: "intake/shadow-runs",
+      getId: (run) => run.shadowRunId,
+      validate: validateIntakeShadowRunForStorage,
+      ...options
+    })
+  };
+}
+
+export class IntakeStoreConflictError extends Error {
+  readonly code = "INTAKE_STORE_CONFLICT";
+
+  constructor(entity: "request" | "spec", id: string) {
+    super(`Konflikt beim Archivieren von ${entity} ${id}. Bitte Daten neu laden und erneut versuchen.`);
+    this.name = "IntakeStoreConflictError";
+  }
+}
+
 function isOperationallyArchived(
   item: { operationalArchive?: OperationalArchiveState }
 ): boolean {
@@ -80,79 +321,95 @@ function activeOnly<T extends { operationalArchive?: OperationalArchiveState }>(
 }
 
 export class IntakeStore {
-  private readonly requests: PersistentCollection<EventRequest>;
+  private readonly requests: BusinessScopedPersistentCollection<EventRequest>;
 
-  private readonly specs: PersistentCollection<AcceptedEventSpec>;
+  private readonly specs: BusinessScopedPersistentCollection<AcceptedEventSpec>;
 
-  private readonly shadowRuns: PersistentCollection<IntakeShadowRun>;
+  private readonly shadowRuns: BusinessScopedPersistentCollection<IntakeShadowRun>;
 
   readonly storageOptions?: CollectionStorageOptions;
 
-  constructor(options?: CollectionStorageOptions) {
+  constructor(options?: IntakeStoreOptions) {
     this.storageOptions = options;
-    this.requests = createPersistentCollection<EventRequest>({
-      collectionName: "intake/requests",
-      getId: (request) => request.requestId,
-      rootDir: options?.rootDir,
-      databaseUrl: options?.databaseUrl,
-      pgPool: options?.pgPool
-    });
-    this.specs = createPersistentCollection<AcceptedEventSpec>({
-      collectionName: "intake/specs",
-      getId: (spec) => spec.specId,
-      rootDir: options?.rootDir,
-      databaseUrl: options?.databaseUrl,
-      pgPool: options?.pgPool
-    });
-    this.shadowRuns = createPersistentCollection<IntakeShadowRun>({
-      collectionName: "intake/shadow-runs",
-      getId: (run) => run.shadowRunId,
-      rootDir: options?.rootDir,
-      databaseUrl: options?.databaseUrl,
-      pgPool: options?.pgPool
-    });
+    const collections = createIntakeCollections(options);
+    this.requests = collections.requests;
+    this.specs = collections.specs;
+    this.shadowRuns = collections.shadowRuns;
   }
 
-  async saveRequest(request: EventRequest): Promise<void> {
-    await this.requests.set(request);
+  async saveRequest(context: BusinessContext, request: EventRequest): Promise<void> {
+    await this.saveRecord(context, this.requests, request.requestId, request, "request");
   }
 
-  async getRequest(requestId: string): Promise<EventRequest | undefined> {
-    return this.requests.get(requestId);
+  async getRequest(context: BusinessContext, requestId: string): Promise<EventRequest | undefined> {
+    return this.requests.get(context, requestId);
   }
 
-  async saveSpec(spec: AcceptedEventSpec): Promise<void> {
-    await this.specs.set(spec);
+  async saveSpec(context: BusinessContext, spec: AcceptedEventSpec): Promise<void> {
+    await this.saveRecord(context, this.specs, spec.specId, spec, "spec");
   }
 
-  async insertSpec(spec: AcceptedEventSpec): Promise<"created" | "exists"> {
-    return this.specs.insert(spec);
+  async insertSpec(context: BusinessContext, spec: AcceptedEventSpec): Promise<"created" | "exists"> {
+    return this.specs.insert(context, spec);
   }
 
-  async getSpec(specId: string): Promise<AcceptedEventSpec | undefined> {
-    return this.specs.get(specId);
+  async getSpec(context: BusinessContext, specId: string): Promise<AcceptedEventSpec | undefined> {
+    return this.specs.get(context, specId);
   }
 
-  async listRequests(options?: { includeArchived?: boolean }): Promise<EventRequest[]> {
-    return activeOnly(await this.requests.list(), options?.includeArchived);
+  async listRequests(
+    context: BusinessContext,
+    options?: { includeArchived?: boolean }
+  ): Promise<EventRequest[]> {
+    return activeOnly(await this.requests.list(context), options?.includeArchived);
   }
 
-  async listSpecs(options?: { includeArchived?: boolean }): Promise<AcceptedEventSpec[]> {
-    return activeOnly(await this.specs.list(), options?.includeArchived);
+  async listSpecs(
+    context: BusinessContext,
+    options?: { includeArchived?: boolean }
+  ): Promise<AcceptedEventSpec[]> {
+    return activeOnly(await this.specs.list(context), options?.includeArchived);
   }
 
-  async saveShadowRun(run: IntakeShadowRun): Promise<void> {
-    await this.shadowRuns.set(run);
+  async saveShadowRun(context: BusinessContext, run: IntakeShadowRun): Promise<void> {
+    await this.shadowRuns.set(context, run);
   }
 
-  async listShadowRuns(): Promise<IntakeShadowRun[]> {
-    return this.shadowRuns.list();
+  async listShadowRuns(context: BusinessContext): Promise<IntakeShadowRun[]> {
+    return this.shadowRuns.list(context);
   }
 
   async archiveRequestContext(
+    context: BusinessContext,
     input: ArchiveRequestContextInput
   ): Promise<{ request?: EventRequest; specs: AcceptedEventSpec[]; alreadyArchived: boolean }> {
-    const request = await this.requests.get(input.requestId);
+    const storage = this.storageOptions ?? {};
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "intake_request", artifactId: input.requestId, revision: 0 },
+      collectionNamespace: "intake/archive",
+      queueFullMessage: "Die Warteschlange für Intake-Archive benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Intake-Archive ist ausgeschöpft.",
+      timeoutMessage: "Der Intake-Kontext konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Intake-Kontext konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Intake-Archive benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createIntakeCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { requests: this.requests, specs: this.specs, shadowRuns: this.shadowRuns };
+        return this.archiveWithinCollections(context, input, collections, Boolean(transactionalQueryable));
+      }
+    });
+  }
+
+  private async archiveWithinCollections(
+    context: BusinessContext,
+    input: ArchiveRequestContextInput,
+    collections: IntakeCollections,
+    transactional: boolean
+  ): Promise<{ request?: EventRequest; specs: AcceptedEventSpec[]; alreadyArchived: boolean }> {
+    const request = await collections.requests.get(context, input.requestId);
     if (!request) {
       return {
         request: undefined,
@@ -173,20 +430,72 @@ export class IntakeStore {
       ...request,
       operationalArchive: request.operationalArchive ?? archiveState
     };
-    await this.requests.set(archivedRequest);
-
-    const specs = await this.specs.list();
+    const specs = await collections.specs.list(context);
     const relatedSpecs = specs.filter((spec) =>
       spec.sourceLineage.some((source) => source.reference === input.requestId)
     );
-    const archivedSpecs: AcceptedEventSpec[] = [];
-    for (const spec of relatedSpecs) {
-      const archivedSpec: AcceptedEventSpec = {
-        ...spec,
-        operationalArchive: spec.operationalArchive ?? archiveState
-      };
-      await this.specs.set(archivedSpec);
-      archivedSpecs.push(archivedSpec);
+    const changed: Array<{
+      collection: BusinessScopedPersistentCollection<EventRequest | AcceptedEventSpec>;
+      id: string;
+      before: EventRequest | AcceptedEventSpec;
+      after: EventRequest | AcceptedEventSpec;
+    }> = [];
+    const archivedSpecs: AcceptedEventSpec[] = relatedSpecs.map((spec) => ({
+      ...spec,
+      operationalArchive: spec.operationalArchive ?? archiveState
+    }));
+
+    try {
+      if (!alreadyArchived) {
+        const result = await collections.requests.compareAndSetExact(
+          context,
+          input.requestId,
+          request,
+          archivedRequest
+        );
+        if (result !== "updated") throw new IntakeStoreConflictError("request", input.requestId);
+        changed.push({
+          collection: collections.requests,
+          id: input.requestId,
+          before: request,
+          after: archivedRequest
+        });
+      }
+
+      for (const [index, spec] of relatedSpecs.entries()) {
+        if (isOperationallyArchived(spec)) continue;
+        const archivedSpec = archivedSpecs[index] as AcceptedEventSpec;
+        const result = await collections.specs.compareAndSetExact(
+          context,
+          spec.specId,
+          spec,
+          archivedSpec
+        );
+        if (result !== "updated") throw new IntakeStoreConflictError("spec", spec.specId);
+        changed.push({
+          collection: collections.specs,
+          id: spec.specId,
+          before: spec,
+          after: archivedSpec
+        });
+      }
+    } catch (error) {
+      if (!transactional) {
+        for (const change of changed.reverse()) {
+          const rollback = await change.collection.compareAndSetExact(
+            context,
+            change.id,
+            change.after,
+            change.before
+          );
+          if (rollback !== "updated") {
+            throw new Error(`Intake-Archiv konnte nach Fehler nicht konsistent zurückgerollt werden: ${change.id}`, {
+              cause: error
+            });
+          }
+        }
+      }
+      throw error;
     }
 
     return {
@@ -194,5 +503,24 @@ export class IntakeStore {
       specs: archivedSpecs,
       alreadyArchived
     };
+  }
+
+  private async saveRecord<T extends EventRequest | AcceptedEventSpec>(
+    context: BusinessContext,
+    collection: BusinessScopedPersistentCollection<T>,
+    id: string,
+    item: T,
+    entity: "request" | "spec"
+  ): Promise<void> {
+    let existing = await collection.get(context, id);
+    if (!existing) {
+      if (await collection.insert(context, item) === "created") return;
+      existing = await collection.get(context, id);
+    }
+    if (!existing) throw new IntakeStoreConflictError(entity, id);
+    if (areJsonValuesEqual(existing, item)) return;
+    if (isOperationallyArchived(existing)) throw new IntakeStoreConflictError(entity, id);
+    const result = await collection.compareAndSetExact(context, id, existing, item);
+    if (result !== "updated") throw new IntakeStoreConflictError(entity, id);
   }
 }

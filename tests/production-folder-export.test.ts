@@ -498,7 +498,7 @@ describe("production folder export", () => {
     const intakeStore = new IntakeStore({ rootDir: dataRoot });
     const productionStore = new ProductionStore({ rootDir: dataRoot });
     const recipeLibrary = new RecipeLibrary({ rootDir: dataRoot });
-    await intakeStore.saveSpec(input.spec);
+    await intakeStore.saveSpec(localBusiness, input.spec);
     await productionStore.savePlan(localBusiness, input.plan);
     await productionStore.savePurchaseList(localBusiness, input.purchaseList);
     await productionStore.saveClarificationAnswer(localBusiness, input.clarificationAnswer);

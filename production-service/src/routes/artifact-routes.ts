@@ -1622,14 +1622,15 @@ export function registerProductionArtifactRoutes(
         return forbidden;
       }
 
-      const spec = await intakeStore.getSpec(request.params.specId);
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const spec = await intakeStore.getSpec(actor, request.params.specId);
       if (!spec) {
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
       }
 
       return reply.send({
         items: await store.listClarificationDrafts(
-          actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+          actor,
           request.params.specId
         )
       });
@@ -1644,7 +1645,10 @@ export function registerProductionArtifactRoutes(
         return forbidden;
       }
 
-      const spec = await intakeStore.getSpec(request.params.specId);
+      const spec = await intakeStore.getSpec(
+        actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+        request.params.specId
+      );
       if (!spec) {
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
       }
@@ -1821,12 +1825,12 @@ export function registerProductionArtifactRoutes(
 
       let acceptedEventSpec: AcceptedEventSpec | undefined;
       if (request.body.approve) {
-        const spec = await intakeStore.getSpec(draft.specId);
+        const spec = await intakeStore.getSpec(actor, draft.specId);
         if (!spec) {
           return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
         }
         acceptedEventSpec = applyApprovedDraftToSpec(spec, draft);
-        await intakeStore.saveSpec(acceptedEventSpec);
+        await intakeStore.saveSpec(actor, acceptedEventSpec);
       }
 
       await store.saveClarificationDraft(actor, decidedDraft);
