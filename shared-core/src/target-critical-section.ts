@@ -43,6 +43,7 @@ export interface BusinessTargetCriticalSectionOptions<T> {
   storage: CollectionStorageOptions;
   context: BusinessContext;
   target: CriticalSectionTarget;
+  compatibilityTargets?: readonly CriticalSectionTarget[];
   collectionNamespace: string;
   queueFullMessage: string;
   queueExhaustedMessage?: string;
@@ -94,6 +95,18 @@ function targetAdvisoryLockKey(context: BusinessContext, target: CriticalSection
   return createHash("sha256").update(targetIdentity(context, target)).digest().readBigInt64BE(0).toString();
 }
 
+function orderedCriticalSectionTargets<T>(
+  input: BusinessTargetCriticalSectionOptions<T>
+): CriticalSectionTarget[] {
+  const targetsByIdentity = new Map<string, CriticalSectionTarget>();
+  for (const target of [input.target, ...(input.compatibilityTargets ?? [])]) {
+    targetsByIdentity.set(targetIdentity(input.context, target), target);
+  }
+  return [...targetsByIdentity.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, target]) => target);
+}
+
 function isConnectableQueryable(queryable: Queryable): queryable is ConnectableQueryable {
   return typeof (queryable as Partial<ConnectableQueryable>).connect === "function";
 }
@@ -121,6 +134,13 @@ async function withTargetMutex<T>(key: string, operation: () => Promise<T>): Pro
     release();
     if (targetMutexes.get(key) === tail) targetMutexes.delete(key);
   }
+}
+
+async function withTargetMutexes<T>(keys: string[], operation: () => Promise<T>): Promise<T> {
+  const [key, ...remaining] = keys;
+  return key === undefined
+    ? operation()
+    : withTargetMutex(key, () => withTargetMutexes(remaining, operation));
 }
 
 function fileTargetLockPath(
@@ -523,9 +543,11 @@ async function withPostgresTransaction<T>(
       await client.query("SELECT pg_catalog.set_config('lock_timeout', $1, true)", [
         `${TARGET_LOCK_TIMEOUT_MS}ms`
       ]);
-      await client.query("SELECT pg_catalog.pg_advisory_xact_lock($1::bigint)", [
-        targetAdvisoryLockKey(input.context, input.target)
-      ]);
+      for (const target of orderedCriticalSectionTargets(input)) {
+        await client.query("SELECT pg_catalog.pg_advisory_xact_lock($1::bigint)", [
+          targetAdvisoryLockKey(input.context, target)
+        ]);
+      }
     } catch (error) {
       if (isPgMemMissingAdvisoryLock(error)) throw new PgMemAdvisoryLockUnavailable();
       if (isPostgresLockTimeout(error)) throw new Error(input.timeoutMessage);
@@ -548,22 +570,33 @@ export async function withBusinessTargetCriticalSection<T>(
 ): Promise<T> {
   const queryable = resolveCollectionQueryable(input.storage);
   if (!queryable) {
-    const release = await acquireFileTargetLock({
-      lockPath: fileTargetLockPath(
-        input.storage,
-        input.context,
-        input.target,
-        input.collectionNamespace
-      ),
-      queueFullMessage: input.queueFullMessage,
-      queueExhaustedMessage: input.queueExhaustedMessage,
-      timeoutMessage: input.timeoutMessage,
-      legacyTimeoutMessage: input.legacyTimeoutMessage
-    });
+    const releases: Array<() => void> = [];
     try {
+      for (const target of orderedCriticalSectionTargets(input)) {
+        releases.push(await acquireFileTargetLock({
+          lockPath: fileTargetLockPath(
+            input.storage,
+            input.context,
+            target,
+            input.collectionNamespace
+          ),
+          queueFullMessage: input.queueFullMessage,
+          queueExhaustedMessage: input.queueExhaustedMessage,
+          timeoutMessage: input.timeoutMessage,
+          legacyTimeoutMessage: input.legacyTimeoutMessage
+        }));
+      }
       return await input.operation();
     } finally {
-      release();
+      let releaseError: unknown;
+      for (const release of releases.reverse()) {
+        try {
+          release();
+        } catch (error) {
+          releaseError ??= error;
+        }
+      }
+      if (releaseError !== undefined) throw releaseError;
     }
   }
 
@@ -573,8 +606,10 @@ export async function withBusinessTargetCriticalSection<T>(
   } catch (error) {
     if (!(error instanceof PgMemAdvisoryLockUnavailable)) throw error;
     // pg-mem has no advisory locks; only its in-process test adapter may use this fallback.
-    return withTargetMutex(
-      `${input.collectionNamespace}:${targetIdentity(input.context, input.target)}`,
+    return withTargetMutexes(
+      orderedCriticalSectionTargets(input).map(
+        (target) => `${input.collectionNamespace}:${targetIdentity(input.context, target)}`
+      ),
       () => input.operation()
     );
   }

@@ -17,6 +17,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   withBusinessTargetCriticalSection,
   type CollectionStorageOptions,
+  type CriticalSectionTarget,
   type Queryable
 } from "@catering/shared-core";
 
@@ -24,8 +25,8 @@ const context = { businessId: "local" };
 const target = { kind: "production_draft", artifactId: "draft-lock-test", revision: 1 };
 const namespace = "lock-tests";
 
-function targetLockPath(rootDir: string): string {
-  const identity = JSON.stringify({ businessId: context.businessId, ...target });
+function targetLockPath(rootDir: string, lockTarget: CriticalSectionTarget = target): string {
+  const identity = JSON.stringify({ businessId: context.businessId, ...lockTarget });
   return path.join(
     rootDir,
     "businesses",
@@ -38,12 +39,17 @@ function targetLockPath(rootDir: string): string {
 
 function lockInput<T>(
   storage: CollectionStorageOptions,
-  operation: (transactionalQueryable?: Queryable) => Promise<T>
+  operation: (transactionalQueryable?: Queryable) => Promise<T>,
+  options: {
+    target?: CriticalSectionTarget;
+    compatibilityTargets?: CriticalSectionTarget[];
+  } = {}
 ) {
   return {
     storage,
     context,
-    target,
+    target: options.target ?? target,
+    ...(options.compatibilityTargets ? { compatibilityTargets: options.compatibilityTargets } : {}),
     collectionNamespace: namespace,
     queueFullMessage: "queue full",
     timeoutMessage: "target lock timed out",
@@ -55,6 +61,62 @@ function lockInput<T>(
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+class MockPostgresAdvisoryLocks {
+  private readonly holders = new Set<string>();
+  private readonly waiters = new Map<string, Array<() => void>>();
+
+  pool() {
+    return {
+      query: async () => ({ rows: [] }),
+      connect: async () => {
+        const held: string[] = [];
+        const releaseHeld = () => {
+          for (const key of held.splice(0).reverse()) {
+            this.holders.delete(key);
+            for (const wake of this.waiters.get(key) ?? []) wake();
+            this.waiters.delete(key);
+          }
+        };
+        return {
+          query: async (sql: string, params: unknown[] = []) => {
+            if (sql.includes("pg_advisory_xact_lock")) {
+              const key = String(params[0]);
+              while (this.holders.has(key)) {
+                await new Promise<void>((resolve) => {
+                  const waiters = this.waiters.get(key) ?? [];
+                  waiters.push(resolve);
+                  this.waiters.set(key, waiters);
+                });
+              }
+              this.holders.add(key);
+              held.push(key);
+            } else if (sql === "COMMIT" || sql === "ROLLBACK") {
+              releaseHeld();
+            }
+            return { rows: [] };
+          },
+          release: () => releaseHeld()
+        };
+      }
+    };
+  }
+}
+
+function pgMemPool() {
+  const missingAdvisoryLock = new Error("function pg_advisory_xact_lock(bigint) does not exist");
+  missingAdvisoryLock.stack = `${missingAdvisoryLock.message}\nnode_modules/pg-mem/index.js`;
+  return {
+    query: async () => ({ rows: [] }),
+    connect: async () => ({
+      query: async (sql: string) => {
+        if (sql.includes("pg_advisory_xact_lock")) throw missingAdvisoryLock;
+        return { rows: [] };
+      },
+      release: () => undefined
+    })
+  };
 }
 
 describe("business target critical section", () => {
@@ -125,6 +187,119 @@ describe("business target critical section", () => {
     ))).resolves.toBe("fallback-result");
     expect(operation).toHaveBeenCalledOnce();
     expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it("waits for a legacy revision file lock before entering through the canonical target", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-file-compatibility-"));
+    const legacyTarget = { ...target, revision: 1 };
+    const canonicalTarget = { ...target, revision: 0 };
+    let releaseLegacy!: () => void;
+    const legacyGate = new Promise<void>((resolve) => { releaseLegacy = resolve; });
+    let signalLegacyEntered!: () => void;
+    const legacyEntered = new Promise<void>((resolve) => { signalLegacyEntered = resolve; });
+    const legacy = withBusinessTargetCriticalSection(lockInput(
+      { rootDir },
+      async () => {
+        signalLegacyEntered();
+        await legacyGate;
+      },
+      { target: legacyTarget }
+    ));
+    let canonicalEntered = false;
+    let canonical: Promise<void> | undefined;
+
+    try {
+      await legacyEntered;
+      canonical = withBusinessTargetCriticalSection(lockInput(
+        { rootDir },
+        async () => { canonicalEntered = true; },
+        { target: canonicalTarget, compatibilityTargets: [legacyTarget, canonicalTarget] }
+      ));
+      await delay(100);
+      expect(canonicalEntered).toBe(false);
+      releaseLegacy();
+      await Promise.all([legacy, canonical]);
+      expect(canonicalEntered).toBe(true);
+    } finally {
+      releaseLegacy();
+      await Promise.allSettled([legacy, ...(canonical ? [canonical] : [])]);
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("waits for a legacy revision PostgreSQL lock before entering through the canonical target", async () => {
+    const locks = new MockPostgresAdvisoryLocks();
+    const pgPool = locks.pool();
+    const legacyTarget = { ...target, revision: 1 };
+    const canonicalTarget = { ...target, revision: 0 };
+    let releaseLegacy!: () => void;
+    const legacyGate = new Promise<void>((resolve) => { releaseLegacy = resolve; });
+    let signalLegacyEntered!: () => void;
+    const legacyEntered = new Promise<void>((resolve) => { signalLegacyEntered = resolve; });
+    const legacy = withBusinessTargetCriticalSection(lockInput(
+      { pgPool },
+      async () => {
+        signalLegacyEntered();
+        await legacyGate;
+      },
+      { target: legacyTarget }
+    ));
+    let canonicalEntered = false;
+    let canonical: Promise<void> | undefined;
+
+    try {
+      await legacyEntered;
+      canonical = withBusinessTargetCriticalSection(lockInput(
+        { pgPool },
+        async () => { canonicalEntered = true; },
+        { target: canonicalTarget, compatibilityTargets: [legacyTarget] }
+      ));
+      await delay(100);
+      expect(canonicalEntered).toBe(false);
+      releaseLegacy();
+      await Promise.all([legacy, canonical]);
+      expect(canonicalEntered).toBe(true);
+    } finally {
+      releaseLegacy();
+      await Promise.allSettled([legacy, ...(canonical ? [canonical] : [])]);
+    }
+  });
+
+  it("orders opposite pg-mem compatibility target inputs without deadlocking", async () => {
+    const pgPool = pgMemPool();
+    const revisionZero = { ...target, revision: 0 };
+    const revisionOne = { ...target, revision: 1 };
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let signalFirstEntered!: () => void;
+    const firstEntered = new Promise<void>((resolve) => { signalFirstEntered = resolve; });
+    const first = withBusinessTargetCriticalSection(lockInput(
+      { pgPool },
+      async () => {
+        signalFirstEntered();
+        await firstGate;
+      },
+      { target: revisionOne, compatibilityTargets: [revisionZero] }
+    ));
+    let secondEntered = false;
+    let second: Promise<void> | undefined;
+
+    try {
+      await firstEntered;
+      second = withBusinessTargetCriticalSection(lockInput(
+        { pgPool },
+        async () => { secondEntered = true; },
+        { target: revisionZero, compatibilityTargets: [revisionOne] }
+      ));
+      await delay(100);
+      expect(secondEntered).toBe(false);
+      releaseFirst();
+      await Promise.all([first, second]);
+      expect(secondEntered).toBe(true);
+    } finally {
+      releaseFirst();
+      await Promise.allSettled([first, ...(second ? [second] : [])]);
+    }
   });
 
   it("reclaims an expired file ticket even when its PID has been reused", async () => {

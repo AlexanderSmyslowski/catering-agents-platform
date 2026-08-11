@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Pool as PostgresPool } from "pg";
 import { afterEach, describe, expect, it } from "vitest";
+import { withBusinessTargetCriticalSection } from "@catering/shared-core";
 import { ProductionStore } from "../production-service/src/repositories/production-store.js";
 import { productionDecisionRepositoryFor } from "../production-service/src/repositories/production-decision-repository.js";
 
@@ -51,6 +52,50 @@ function startChild(rootDir: string, artifactId: string): ChildProcess {
 }
 
 describe("Production decision critical section", () => {
+  it("waits for the pre-canonical revision lock during the supported local transition", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "production-compatibility-lock-"));
+    roots.push(rootDir);
+    const target = { kind: "production_draft" as const, artifactId: "draft-compat-lock", revision: 1 };
+    let releaseLegacy!: () => void;
+    const legacyGate = new Promise<void>((resolve) => { releaseLegacy = resolve; });
+    let signalLegacyEntered!: () => void;
+    const legacyEntered = new Promise<void>((resolve) => { signalLegacyEntered = resolve; });
+    const legacy = withBusinessTargetCriticalSection({
+      storage: { rootDir },
+      context: { businessId: "local" },
+      target,
+      collectionNamespace: "production",
+      queueFullMessage: "legacy queue full",
+      timeoutMessage: "legacy target lock timed out",
+      legacyTimeoutMessage: "legacy lock timed out",
+      postgresPoolMessage: "legacy pool required",
+      operation: async () => {
+        signalLegacyEntered();
+        await legacyGate;
+      }
+    });
+    const repository = productionDecisionRepositoryFor(new ProductionStore({ rootDir }));
+    let currentEntered = false;
+    let current: Promise<void> | undefined;
+
+    try {
+      await legacyEntered;
+      current = repository.withTargetCriticalSection(
+        { businessId: "local" },
+        target,
+        async () => { currentEntered = true; }
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(currentEntered).toBe(false);
+      releaseLegacy();
+      await Promise.all([legacy, current]);
+      expect(currentEntered).toBe(true);
+    } finally {
+      releaseLegacy();
+      await Promise.allSettled([legacy, ...(current ? [current] : [])]);
+    }
+  });
+
   it("serialisiert dasselbe Ziel über getrennte Dateiprozesse", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "production-process-lock-"));
     roots.push(rootDir);

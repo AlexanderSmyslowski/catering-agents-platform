@@ -125,6 +125,9 @@ class InternalProductionDecisionRepository implements ProductionDecisionReposito
       context,
       // Revision remains part of the evidence scope below, while every revision of one draft ID shares one lock.
       target: { ...target, revision: 0 },
+      // During the Stage-A protocol transition, new writers also honor the revision-specific key used by
+      // the previous build. The supported local launcher still requires all old writers to be quiescent.
+      compatibilityTargets: [target],
       collectionNamespace: "production",
       queueFullMessage: "Die Produktionsentscheidungs-Warteschlange benötigt eine betriebliche Bereinigung.",
       timeoutMessage: "Die zielbezogene Produktionsentscheidung konnte nicht rechtzeitig gesperrt werden.",
