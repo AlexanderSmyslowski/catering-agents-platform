@@ -30,35 +30,31 @@ Zuerst lesen
 Aktueller Projektkontext
  • Repository: AlexanderSmyslowski/catering-agents-platform
  • Der reale GitHub-Repo-Stand ist fuehrend.
- • Die Arbeit betrifft aktuell einen Governance-Ausbau fuer Aenderungs-/Freigabehistorie sowie den konsolidierten M1-Memory-Strang.
- • Der Governance-Pfad ist bis einschliesslich Stufe 6c umgesetzt und fachlich gruen / abnahmefaehig.
- • M1 Owned Memory Foundation ist im aktuellen Ausbaustand vorerst konsolidiert und abgeschlossen.
- • Die aktuelle Phase ist eine Konsolidierungsphase ohne neue Fachlogik.
+ • Der verbindliche Stage-A-Zielanker ist `origin/main` auf `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`.
+ • Aufgaben 1 bis 7 sind durch die zusammengeführten PRs 590 bis 596 belegt. PR 596 wurde als `c6f530c7bae70bf52c3767b68620368060fd00cf` zusammengeführt; PR 597 redigiert fehlerhafte Provider-Kennungen zusätzlich und ist als `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b` enthalten.
+ • Der Stage-A-Kontrollpunkt ist bestanden: geschäftsbezogene Datei-/PostgreSQL-Grenzen, unveränderliche Angebots-/Produktionsartefakte, persistente Fälle/Quellen/Verläufe, explizite Produkt-Ports und ein geschlossenes Provider-Gate sind belegt.
+ • OpenAI und Codex CLI unterliegen derselben serverseitigen Freigabegrenze vor Fetch beziehungsweise Subprozess; Fixture-Betrieb bleibt lokal. `ApprovalRequestRecord` bleibt die einzige fachliche Freigabewahrheit.
+ • Die vollständige serielle Testsuite, Typprüfung, Build, beide Audits, interne Beta-Gates und die CI-Läufe von PR 596/597 waren grün. PostgreSQL-Konkurrenztests blieben wegen fehlender lokaler PostgreSQL-Instanz übersprungen.
+ • Aufgabe 8 ist nicht begonnen. Aufgaben 8 bis 12 sind bis zu einer ausdrücklichen Supervisor-Entscheidung offen.
 
 Was aktuell gilt
  • ApprovalRequestRecord bleibt die fuehrende Freigabewahrheit.
- • SpecGovernanceStateRecord bleibt die Statusspur.
- • SpecChangeSetRecord bleibt die Aenderungseinheit.
- • Finalize ist nicht gleich Freigabe.
- • Governance bleibt additiv und wird nicht als zweiter Kern aufgebaut.
- • M1 bleibt intern, modellagnostisch und ohne neue API-, Persistenz- oder UI-Flaeche.
+ • Die Providerfreigabe ist ein technisches Betriebs-Gate und keine zweite fachliche Freigabewahrheit.
+ • Datei- und PostgreSQL-Speicherung bleiben getrennt und geschäftsbezogen; neue Persistenzsysteme sind ausgeschlossen.
+ • Freigegebene Angebots- und Produktionsartefakte bleiben unveränderlich; Handoff und Apply können nicht direkt umgangen werden.
+ • Externe KI-Aufrufe bleiben ohne exakt passende serverseitige Freigabe geschlossen; reale Unternehmens- und Kundendaten sowie echte Providerläufe bleiben außerhalb dieses Kontrollpunkts.
  • Keine neue Persistenzwelt / kein Prisma ohne ausdruecklichen Grossschnitt.
 
 Naechster explizit beauftragter Schritt
 
-Kein neuer Fachausbau ist implizit vorgegeben.
- • Zuerst den in memory.md dokumentierten Iststand lesen und am realen Repo abgleichen.
- • Danach den kleinsten sinnvollen, klar beauftragten und scope-sicheren Schritt ableiten.
- • Keine neuen Features, keine neue Produktflaeche und keine Scope-Ausweitung ohne ausdruecklichen Auftrag.
+Der Stage-A-Kontrollpunkt ist abgeschlossen. Der nächste Schritt ist eine ausdrückliche Supervisor-Entscheidung; insbesondere wird Aufgabe 8 nicht automatisch begonnen.
+ • Vor jedem Folgeauftrag erneut `memory.md`, `AGENTS.md`, `README.md` und diesen Handoff am realen Repo-Stand lesen.
+ • Keine neue Produktfläche, keine neue Roadmap und keine Scope-Ausweitung ohne ausdruecklichen Auftrag.
 
 Weiter out of scope
- • Snapshots / lastHardApproved
- • Hard-Approve
- • Point-of-no-return-Ausbau
- • ChangeItem-Persistenz
- • ChangeItem-Anzeige
- • zusaetzliche Governance-Workflows
- • neue API-Endpunkte
+ • Aufgaben 8 bis 12 bis zum ausdruecklichen Supervisor-Auftrag
+ • echte externe KI-Ausführung und reale Unternehmens- oder Kundendaten
+ • Bereitstellung, Deployment und Änderungen produktiver Infrastruktur
  • neue Persistenzsysteme / Prisma
 
 Erwartete erste Ausgabe im neuen Chat
