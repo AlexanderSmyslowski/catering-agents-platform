@@ -246,10 +246,11 @@ function startFileTargetLeaseHeartbeat(paths: string[]): () => void {
 
 function fileTargetOwnerIsCurrentIncarnation(owner: FileTargetLockMetadata): boolean | undefined {
   if (owner.hostname && owner.hostname !== CURRENT_HOSTNAME) return undefined;
-  if (owner.pid === process.pid) {
-    return owner.processInstanceId === PROCESS_INSTANCE_ID;
-  }
+  if (owner.processInstanceId === PROCESS_INSTANCE_ID && owner.pid === process.pid) return true;
+  // Worker threads share an OS process but load this module independently. Their instance IDs differ,
+  // so only the OS fingerprint can disprove ownership without evicting a still-running worker.
   if (!owner.processFingerprint) return undefined;
+  if (!processIsAlive(owner.pid)) return false;
   const liveFingerprint = processFingerprint(owner.pid);
   return liveFingerprint === undefined ? undefined : liveFingerprint === owner.processFingerprint;
 }
@@ -355,15 +356,14 @@ function fileTargetTicketIsActive(queuePath: string, sequence: number): boolean 
   if (existsSync(path.join(queuePath, targetTicketReleaseName(sequence)))) return false;
   const ticketPath = path.join(queuePath, targetTicketName(sequence));
   const owner = readFileTargetLock(ticketPath);
-  // Queue tickets have always been short-lived leases. Expiry also recovers an old ticket whose PID
-  // was reused by a different process after the original owner crashed.
+  // Lease age only permits cleanup after the OS fingerprint proves this PID belongs to a different
+  // process. It never proves owner death by itself.
   const leaseExpired = invalidFileTargetLockIsStale(ticketPath);
-  if (owner && processIsAlive(owner.pid)) {
+  if (owner) {
     const currentIncarnation = fileTargetOwnerIsCurrentIncarnation(owner);
-    if (currentIncarnation === true) return true;
-    // A fresh heartbeat is authoritative across worker threads and hosts. If OS-level incarnation
-    // lookup is unavailable, fail closed rather than evicting a possibly active owner.
-    if (!leaseExpired || currentIncarnation === undefined) return true;
+    // Unknown includes foreign hosts and owners without a verifiable OS fingerprint. The file backend
+    // cannot fence those safely, so it times out instead of treating lease age as proof of death.
+    if (currentIncarnation !== false || !leaseExpired) return true;
   }
   if (leaseExpired) {
     markFileTargetTicketReleased(queuePath, sequence);
@@ -407,7 +407,7 @@ async function waitForLegacyFileTargetLock(
       invalidFileTargetLockIsStale(lockPath) &&
       fileTargetOwnerIsCurrentIncarnation(owner) === false;
     if (
-      (owner && (!processIsAlive(owner.pid) || expiredHeartbeatLease)) ||
+      (owner && expiredHeartbeatLease) ||
       (!owner && invalidFileTargetLockIsStale(lockPath))
     ) {
       unlinkIfPresent(lockPath);

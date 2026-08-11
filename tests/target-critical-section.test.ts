@@ -11,7 +11,7 @@ import {
   utimesSync,
   writeFileSync
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -137,6 +137,8 @@ describe("business target critical section", () => {
       pid: process.pid,
       token: "previous-process",
       lease: "heartbeat-v1",
+      hostname: hostname(),
+      processFingerprint: "definitely-not-the-current-process",
       processInstanceId: "previous-process-instance"
     }));
     const expired = new Date(Date.now() - 60_000);
@@ -203,7 +205,7 @@ describe("business target critical section", () => {
     }
   });
 
-  it("does not evict a live owner when one heartbeat interval is missed", async () => {
+  it("does not evict a live same-process owner from another worker when its heartbeat is stale", async () => {
     const ownerRoot = mkdtempSync(path.join(tmpdir(), "catering-target-owner-identity-"));
     const probeRoot = mkdtempSync(path.join(tmpdir(), "catering-target-owner-probe-"));
     let releaseOwner!: () => void;
@@ -223,11 +225,17 @@ describe("business target critical section", () => {
       await ownerEntered;
       const ownerQueuePath = `${targetLockPath(ownerRoot)}.queue`;
       const ownerTicketName = readdirSync(ownerQueuePath).find((name) => name.startsWith("ticket-"));
-      const ownerMetadata = readFileSync(path.join(ownerQueuePath, ownerTicketName!), "utf8");
+      const ownerMetadata = JSON.parse(
+        readFileSync(path.join(ownerQueuePath, ownerTicketName!), "utf8")
+      ) as Record<string, unknown>;
+      expect(ownerMetadata.processFingerprint).toEqual(expect.any(String));
       const probeQueuePath = `${targetLockPath(probeRoot)}.queue`;
       mkdirSync(probeQueuePath, { recursive: true });
       const copiedTicket = path.join(probeQueuePath, "ticket-000000000001.json");
-      writeFileSync(copiedTicket, ownerMetadata);
+      writeFileSync(copiedTicket, JSON.stringify({
+        ...ownerMetadata,
+        processInstanceId: "different-worker-module-instance"
+      }));
       const expired = new Date(Date.now() - 60_000);
       utimesSync(copiedTicket, expired, expired);
       let probeEntered = false;
@@ -253,7 +261,7 @@ describe("business target critical section", () => {
     }
   });
 
-  it("does not overtake a fresh lease owned by another worker with the same PID", async () => {
+  it("fails closed when a stale same-PID worker ticket has no process fingerprint", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-worker-lease-"));
     const queuePath = `${targetLockPath(rootDir)}.queue`;
     mkdirSync(queuePath, { recursive: true });
@@ -275,16 +283,89 @@ describe("business target critical section", () => {
       expect(existsSync(path.join(queuePath, "released-000000000001"))).toBe(false);
       const expired = new Date(Date.now() - 60_000);
       utimesSync(path.join(queuePath, "ticket-000000000001.json"), expired, expired);
-      await Promise.race([
-        pending,
-        delay(250).then(() => { throw new Error("expired worker lease was not reclaimed"); })
-      ]);
+      await delay(100);
+      expect(entered).toBe(false);
+      expect(existsSync(path.join(queuePath, "released-000000000001"))).toBe(false);
+      writeFileSync(path.join(queuePath, "released-000000000001"), "");
+      await pending;
       expect(entered).toBe(true);
     } finally {
       if (!existsSync(path.join(queuePath, "released-000000000001"))) {
         writeFileSync(path.join(queuePath, "released-000000000001"), "");
       }
       await pending;
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed for a stale queue ticket owned by another host", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-foreign-ticket-"));
+    const lockPath = targetLockPath(rootDir);
+    const queuePath = `${lockPath}.queue`;
+    const foreignOwner = {
+      pid: 999_999_999,
+      token: "foreign-host-owner",
+      lease: "heartbeat-v1",
+      hostname: "another-host.invalid",
+      processFingerprint: "foreign:process"
+    };
+    mkdirSync(queuePath, { recursive: true });
+    const ticketPath = path.join(queuePath, "ticket-000000000001.json");
+    writeFileSync(ticketPath, JSON.stringify(foreignOwner));
+    const expired = new Date(Date.now() - 60_000);
+    utimesSync(ticketPath, expired, expired);
+    let entered = false;
+    const pending = withBusinessTargetCriticalSection(lockInput(
+      { rootDir },
+      async () => { entered = true; }
+    ));
+
+    try {
+      await delay(100);
+      expect(entered).toBe(false);
+      expect(existsSync(ticketPath)).toBe(true);
+      expect(existsSync(path.join(queuePath, "released-000000000001"))).toBe(false);
+      writeFileSync(path.join(queuePath, "released-000000000001"), "");
+      await pending;
+      expect(entered).toBe(true);
+    } finally {
+      if (!existsSync(path.join(queuePath, "released-000000000001"))) {
+        writeFileSync(path.join(queuePath, "released-000000000001"), "");
+      }
+      await pending.catch(() => undefined);
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed for a stale legacy lock owned by another host", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-foreign-legacy-"));
+    const lockPath = targetLockPath(rootDir);
+    mkdirSync(path.dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, JSON.stringify({
+      pid: 999_999_999,
+      token: "foreign-host-owner",
+      lease: "heartbeat-v1",
+      hostname: "another-host.invalid",
+      processFingerprint: "foreign:process"
+    }));
+    const expired = new Date(Date.now() - 60_000);
+    utimesSync(lockPath, expired, expired);
+    let entered = false;
+    const pending = withBusinessTargetCriticalSection(lockInput(
+      { rootDir },
+      async () => { entered = true; }
+    ));
+
+    try {
+      await delay(100);
+      expect(entered).toBe(false);
+      expect(existsSync(lockPath)).toBe(true);
+      unlinkSync(lockPath);
+      await pending;
+      expect(entered).toBe(true);
+    } finally {
+      if (existsSync(lockPath)) unlinkSync(lockPath);
+      await pending.catch(() => undefined);
       rmSync(rootDir, { recursive: true, force: true });
     }
   });
