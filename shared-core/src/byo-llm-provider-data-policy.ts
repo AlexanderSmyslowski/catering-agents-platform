@@ -199,7 +199,7 @@ function hasConcreteExternalProviderMetadata(descriptor: ByoLlmProviderDescripto
   if (descriptor.providerKind === "fixture") return true;
   const isConcrete = (value: string): boolean => {
     const normalized = value.trim().toLowerCase();
-    return normalized.length > 0 && normalized !== "unknown";
+    return normalized.length > 0 && !new Set(["unknown", "unset", "n/a", "not_available", "null", "undefined"]).has(normalized);
   };
   return isConcrete(descriptor.providerModel) &&
     isConcrete(descriptor.actualRegion) &&

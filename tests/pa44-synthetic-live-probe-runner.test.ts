@@ -149,18 +149,25 @@ describe("PA44 synthetic-live probe runner", () => {
   });
 
   it("does not forward caller-supplied fixture identity text to the fake transport", async () => {
-    const fixture = structuredClone(llmReadinessEvalFixtures[0]);
-    fixture.title = "Kundin Max Mustermann, Musterstrasse 7";
-    fixture.input.sourceRefs = [{
-      ...fixture.input.sourceRefs[0],
+    const originalFixture = structuredClone(llmReadinessEvalFixtures[0]);
+    const sensitiveSourceRef = {
+      ...originalFixture.input.sourceRefs[0],
       objectId: "Max Mustermann / Musterstrasse 7",
       label: "Kundin Max Mustermann"
-    }];
-    fixture.expectedOutput.sourceRefs = [{
-      ...fixture.expectedOutput.sourceRefs[0],
-      objectId: "Max Mustermann / Musterstrasse 7",
-      label: "Kundin Max Mustermann"
-    }];
+    };
+    const fixture = {
+      ...originalFixture,
+      title: "Kundin Max Mustermann, Musterstrasse 7",
+      input: { ...originalFixture.input, sourceRefs: [sensitiveSourceRef] },
+      expectedOutput: {
+        ...originalFixture.expectedOutput,
+        sourceRefs: [{
+          ...originalFixture.expectedOutput.sourceRefs[0],
+          objectId: "Max Mustermann / Musterstrasse 7",
+          label: "Kundin Max Mustermann"
+        }]
+      }
+    };
     let userPrompt = "";
     const result = await runLlmReadinessSyntheticLiveProbe({
       fixtures: [fixture],

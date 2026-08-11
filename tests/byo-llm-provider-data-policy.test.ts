@@ -278,6 +278,35 @@ describe("BYO LLM provider data policy", () => {
     expect(JSON.stringify(result)).not.toContain("customer@example.test");
   });
 
+  it("fails closed when an external delegate reports success with errors", async () => {
+    const guarded = new BoundaryGuardedLlmAdapter({
+      descriptor: externalDescriptor(),
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
+      approvalResolver: () => validApproval(),
+      delegate: {
+        adapterId: "test-delegate",
+        adapterMode: "synthetic_live",
+        run: async () => ({
+          ok: true,
+          errors: ["provider leaked secret: customer@example.test"],
+          adapterId: "test-delegate",
+          adapterMode: "synthetic_live" as const,
+          outputCandidate: structuredClone(llmReadinessEvalFixtures[0].expectedOutput)
+        })
+      }
+    });
+
+    const result = await guarded.execute({ input: structuredClone(llmReadinessEvalFixtures[0].input) }, context);
+
+    expect(result).toMatchObject({
+      ok: false,
+      errors: ["BYO LLM provider call failed"],
+      outputCandidate: undefined,
+      processingPolicy: { successClass: "provider_rejected" }
+    });
+    expect(JSON.stringify(result)).not.toContain("customer@example.test");
+  });
+
   it("projects contact-bearing prompt context before an external delegate sees it", async () => {
     const delegate = vi.fn<LlmReadinessProviderAdapter["run"]>(async (_request) => ({
       ok: true,

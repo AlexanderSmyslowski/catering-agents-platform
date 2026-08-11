@@ -31,6 +31,10 @@ Feature-Flag, Env-Contract oder die internen Readiness-Anker nicht stimmen.
 
 - `CATERING_SYNTHETIC_LLM_SLICE` muss aktiviert sein.
 - `OPENAI_API_KEY` und `CATERING_SYNTHETIC_LLM_MODEL` muessen gesetzt sein.
+- Der anschliessende Default-Transport benoetigt zusaetzlich den serverseitig
+  bestimmten Business-Kontext, Region, Kostenrahmen, Retention-/Training-Fakten,
+  einen expliziten Endpoint und eine passende Approval-Datei ausserhalb des
+  Repos. Der Preflight ersetzt diesen Approval-Abgleich nicht.
 - Prompt-Schema und Prompt-Artefakte fuer
   `clarification_draft_request` muessen vorhanden bleiben.
 - Mindestens eine synthetische Clarification-Fixture muss verfuegbar bleiben.

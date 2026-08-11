@@ -20,7 +20,7 @@ import {
   evaluateByoLlmProviderDataGate,
   loadByoLlmExternalProcessingApprovalFromEnv
 } from "./byo-llm-provider-data-policy.js";
-import type { LlmReadinessModelInput } from "./llm-readiness.js";
+import type { LlmReadinessModelInput, LlmReadinessSourceRef } from "./llm-readiness.js";
 import {
   createLlmReadinessRunResult,
   type LlmReadinessRunResult
@@ -76,14 +76,15 @@ function buildResultId(providerRunId: string): string {
 function sanitizeSyntheticFixtures(
   fixtures: readonly LlmReadinessEvalFixture[]
 ): readonly LlmReadinessEvalFixture[] {
+  const sanitizeSourceRefs = (sourceRefs: readonly LlmReadinessSourceRef[]) => sourceRefs.map((sourceRef, index) => ({
+    ...sourceRef,
+    // Source ids are operator-facing prompt material in this eval harness;
+    // hash even synthetic caller-supplied ids before they can leave the process.
+    objectId: `synthetic-ref-${createHash("sha256").update(sourceRef.objectId).digest("hex").slice(0, 16)}`,
+    label: `synthetic-source-${index + 1}`
+  }));
   return fixtures.map((fixture) => {
-    const sourceRefs = fixture.input.sourceRefs.map((sourceRef, index) => ({
-      ...sourceRef,
-      // Source ids are operator-facing prompt material in this eval harness;
-      // hash even synthetic caller-supplied ids before they can leave the process.
-      objectId: `synthetic-ref-${createHash("sha256").update(sourceRef.objectId).digest("hex").slice(0, 16)}`,
-      label: `synthetic-source-${index + 1}`
-    }));
+    const sourceRefs = sanitizeSourceRefs(fixture.input.sourceRefs);
     return {
       ...fixture,
       // Caller-supplied fixture titles are not trusted provider input.
@@ -94,7 +95,7 @@ function sanitizeSyntheticFixtures(
       },
       expectedOutput: {
         ...fixture.expectedOutput,
-        sourceRefs: sourceRefs.map((sourceRef) => ({ ...sourceRef }))
+        sourceRefs: sanitizeSourceRefs(fixture.expectedOutput.sourceRefs)
       }
     };
   });
@@ -105,6 +106,7 @@ function evaluateExternalProbeApproval(
 ): { allowed: boolean; errors: string[] } {
   let approval;
   try {
+    const businessId = env.CATERING_LLM_BUSINESS_ID?.trim() || env.CATERING_DEFAULT_BUSINESS_ID?.trim() || "local";
     const model = env.CATERING_SYNTHETIC_LLM_MODEL?.trim() || "unknown";
     const actualRegion = env.CATERING_LLM_PROCESSING_REGION?.trim() || "unknown";
     const retentionPolicy = env.CATERING_LLM_RETENTION_POLICY?.trim() || "unknown";
@@ -124,12 +126,13 @@ function evaluateExternalProbeApproval(
       trainingUse,
       endpoint,
       metadataVerified: Boolean(
-        env.CATERING_LLM_BUSINESS_ID?.trim() &&
+        businessId &&
         env.CATERING_SYNTHETIC_LLM_MODEL?.trim() &&
         env.CATERING_LLM_PROCESSING_REGION?.trim() &&
         env.CATERING_LLM_MAX_ESTIMATED_COST_EUR?.trim() &&
         env.CATERING_LLM_RETENTION_POLICY?.trim() &&
-        env.CATERING_LLM_TRAINING_USE === "contractually_excluded"
+        env.CATERING_LLM_TRAINING_USE === "contractually_excluded" &&
+        env.CATERING_OPENAI_RESPONSES_URL?.trim()
       )
     });
     approval = loadByoLlmExternalProcessingApprovalFromEnv(env);
@@ -137,7 +140,7 @@ function evaluateExternalProbeApproval(
     return evaluateByoLlmProviderDataGate({
       provider: descriptor,
       context: {
-        businessId: env.CATERING_LLM_BUSINESS_ID?.trim() ?? "",
+        businessId,
         dataClass: "synthetic_demo",
         purpose: "clarification_draft"
       },

@@ -31,8 +31,21 @@ pruefen.
 CATERING_SYNTHETIC_LLM_SLICE=1 \
 OPENAI_API_KEY=... \
 CATERING_SYNTHETIC_LLM_MODEL=... \
+CATERING_OPENAI_RESPONSES_URL=... \
+CATERING_LLM_PROCESSING_REGION=... \
+CATERING_LLM_MAX_ESTIMATED_COST_EUR=... \
+CATERING_LLM_RETENTION_POLICY=... \
+CATERING_LLM_TRAINING_USE=contractually_excluded \
+CATERING_DEFAULT_BUSINESS_ID=... \
+CATERING_LLM_PROCESSING_APPROVAL_FILE=/secure/path/approval.json \
 npm run llm:synthetic-live:probe
 ```
+
+Der Default-OpenAI-Transport wird erst nach einem exakten serverseitigen
+Abgleich dieser Laufzeitdaten mit der Approval-Datei ausgefuehrt. Die Datei
+liegt ausserhalb des Repos, ist nicht schreibbar fuer Gruppe oder Welt und
+enthaelt keine Rohtexte. Fehlt eine Angabe oder stimmt ein Feld nicht, bleibt
+der Lauf geschlossen; ein Feature-Flag allein ist keine Freigabe.
 
 Optional:
 

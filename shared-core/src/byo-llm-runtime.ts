@@ -235,9 +235,13 @@ export class BoundaryGuardedLlmAdapter {
         })
       };
     }
-    const safeResponse = this.options.descriptor.dataLeavesInstallation && !response.ok
+    const safeResponse = this.options.descriptor.dataLeavesInstallation &&
+      (!response.ok || response.errors.length > 0)
       ? {
           ...response,
+          // An external delegate returning ok=true with errors is malformed;
+          // fail closed and never let its raw error text escape the boundary.
+          ok: false,
           errors: safeExternalProviderErrors(response.errors),
           outputCandidate: undefined
         }
