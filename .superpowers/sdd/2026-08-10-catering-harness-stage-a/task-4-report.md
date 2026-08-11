@@ -100,3 +100,16 @@ passed.
 ```
 
 The full suite was intentionally not repeated in this slice because the parent Stage A verification run follows the separate lock-hardening work. Lock transport hardening is not part of this round.
+
+## Target-Lock Liveness Hardening
+
+- PostgreSQL now sets a transaction-local 10-second `lock_timeout` before acquiring the advisory lock. SQLSTATE `55P03` is translated to the existing domain timeout, the transaction is rolled back, and the checked-out client is released.
+- File-backed tickets carry a renewable heartbeat plus host, process-incarnation, and process-start evidence. A fresh lease is never overtaken; an expired ticket from a terminated worker or reused PID is reclaimed without trusting the PID alone.
+- The queued leader also owns the legacy lock path for the duration of the operation, closing the rolling-version race after the one-time preflight.
+- RED covered the missing PostgreSQL deadline, a stale live-PID ticket, a non-renewed active lease, a same-PID worker race, and a legacy-lock entry after preflight. GREEN covered 74 focused tests across the shared lock and its Offer/Production callers; 3 optional real-PostgreSQL tests remained skipped without `CATERING_TEST_POSTGRES_URL`.
+
+Implementation commits through this round: `c87e8a1`, `a94bbd5`, and `97f91a2`.
+
+### Bounded-History Follow-Up
+
+Released ticket and marker history remains durable per target, so acquisition scans grow linearly with repeated operations on that same target. The active 4,096-ticket pressure check is also advisory under simultaneous allocation. This does not weaken mutual exclusion or normal Task 4 behavior, where each immutable draft target has few operations, but safe queue compaction remains a focused maintenance follow-up rather than an untested cleanup inside this boundary change.
