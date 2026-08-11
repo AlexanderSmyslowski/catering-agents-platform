@@ -716,7 +716,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
       expect((await app.inject({ method: "POST", url: applyUrl, headers })).statusCode).toBe(200);
       expect((await app.inject({ method: "POST", url: applyUrl, headers })).statusCode).toBe(200);
 
-      expect(await intakeStore.listSpecs()).toHaveLength(1);
+      expect(await intakeStore.listSpecs(context)).toHaveLength(1);
       expect(await store.listPlans(context)).toHaveLength(1);
       expect(await store.listPurchaseLists(context)).toHaveLength(1);
       expect(await repository.list(context)).toHaveLength(1);

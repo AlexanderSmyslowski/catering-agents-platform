@@ -322,8 +322,8 @@ export function registerProductionApprovalRoutes(
       const { eventSpec, productionPlan, purchaseList, recipes } = approvedSpec.artifacts;
       const conflicts: string[] = [];
       const eventSpecConflict = await compareOrInsert({
-        get: () => intakeStore.getSpec(eventSpec.specId),
-        insert: () => intakeStore.insertSpec(eventSpec),
+        get: () => intakeStore.getSpec(actor, eventSpec.specId),
+        insert: () => intakeStore.insertSpec(actor, eventSpec),
         expected: eventSpec,
         label: `AcceptedEventSpec ${eventSpec.specId}`
       });

@@ -1,12 +1,19 @@
+import { randomUUID } from "node:crypto";
 import {
   createBusinessScopedPersistentCollection,
   areJsonValuesEqual,
   approvalRequestIdForTarget,
+  initialCaseEventForCase,
   llmReadinessForbiddenPayloadKeys,
   productionClarificationAnswerTextMaxLength,
+  normalizeCaseSearchText,
+  persistCaseWithInitialEvent,
+  sortCasesByLatestActivity,
+  withBusinessTargetCriticalSection,
   type BusinessContext,
   type BusinessScopedPersistentCollection,
   type CollectionStorageOptions,
+  type CaseEvent,
   type LlmReadinessAgentAuditRecord,
   type LlmReadinessProviderAdapterMode,
   type ApprovedProductionSpec,
@@ -16,11 +23,15 @@ import {
   type ProductionDraft,
   type ProductionDraftGuardrails,
   type ProductionPlan,
+  type ProductionCase,
   type PurchaseList,
   type TrustedActor,
   approvedProductionSpecIdForApproval,
   validateApprovedProductionSpec,
   validateApprovalRequestRecord,
+  validateCaseEvent,
+  validateCaseEventForProduct,
+  validateProductionCase,
   validateProductionDraft
 } from "@catering/shared-core";
 import { validateProductionDecisionAggregate } from "../production-decision-aggregate.js";
@@ -315,6 +326,61 @@ function isSubmittedShortTextAnswer(answer: ProductionClarificationAnswer): bool
     answer.answerText.value.trim().length <= productionClarificationAnswerTextMaxLength;
 }
 
+interface ProductionCaseCollections {
+  cases: BusinessScopedPersistentCollection<ProductionCase>;
+  events: BusinessScopedPersistentCollection<CaseEvent>;
+}
+
+type CaseEventInput = Omit<CaseEvent, "businessId" | "eventId" | "caseId" | "sequence">;
+
+function createProductionCaseCollections(options: CollectionStorageOptions): ProductionCaseCollections {
+  return {
+    cases: createBusinessScopedPersistentCollection({
+      collectionName: "production/cases",
+      getId: (item: ProductionCase) => item.caseId,
+      getVersion: (item: ProductionCase) => item.version,
+      validate: validateProductionCase,
+      ...options
+    }),
+    events: createBusinessScopedPersistentCollection({
+      collectionName: "production/case-events",
+      getId: (item: CaseEvent) => item.eventId,
+      validate: validateCaseEvent,
+      ...options
+    })
+  };
+}
+
+async function createProductionCaseInCollections(
+  collections: ProductionCaseCollections,
+  context: BusinessContext,
+  input: ProductionCase
+): Promise<"created" | "exists"> {
+  const item = validateProductionCase(input);
+  const initialEvent = validateCaseEventForProduct(initialCaseEventForCase(item), "production");
+  return persistCaseWithInitialEvent(collections, context, item, initialEvent);
+}
+
+function assertProductionCaseUpdate(
+  existing: ProductionCase,
+  next: ProductionCase,
+  expectedVersion: number
+): void {
+  if (
+    next.businessId !== existing.businessId ||
+    next.caseId !== existing.caseId ||
+    next.product !== existing.product ||
+    next.schemaVersion !== existing.schemaVersion ||
+    next.createdAt !== existing.createdAt ||
+    next.copiedFromCaseId !== existing.copiedFromCaseId
+  ) {
+    throw new Error("Die Identität eines ProductionCase darf nicht verändert werden.");
+  }
+  if (next.version !== expectedVersion + 1) {
+    throw new Error("Eine ProductionCase-Aktualisierung muss die Version genau um eins erhöhen.");
+  }
+}
+
 export class ProductionStore {
   private readonly plans: BusinessScopedPersistentCollection<ProductionPlan>;
   private readonly purchaseLists: BusinessScopedPersistentCollection<PurchaseList>;
@@ -325,8 +391,12 @@ export class ProductionStore {
   private readonly approvals: BusinessScopedPersistentCollection<ApprovalRequestRecord>;
   private readonly approvedProductionSpecs: BusinessScopedPersistentCollection<ApprovedProductionSpec>;
   private readonly applyManifests: BusinessScopedPersistentCollection<ProductionApplyManifest>;
+  private readonly cases: BusinessScopedPersistentCollection<ProductionCase>;
+  private readonly caseEvents: BusinessScopedPersistentCollection<CaseEvent>;
+  private readonly storageOptions: CollectionStorageOptions;
 
   constructor(options?: CollectionStorageOptions) {
+    this.storageOptions = options ?? {};
     const storage = {
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
@@ -379,6 +449,9 @@ export class ProductionStore {
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
     });
+    const caseCollections = createProductionCaseCollections(storage);
+    this.cases = caseCollections.cases;
+    this.caseEvents = caseCollections.events;
     registerProductionDecisionRepository(this, storage, decisionCollections);
   }
 
@@ -671,6 +744,125 @@ export class ProductionStore {
   async listApplyManifests(context: BusinessContext): Promise<ProductionApplyManifest[]> {
     assertBusinessContext(context);
     return this.applyManifests.list(context);
+  }
+
+  async insertCase(context: BusinessContext, item: ProductionCase): Promise<"created" | "exists"> {
+    return this.createCase(context, item);
+  }
+
+  async createCase(context: BusinessContext, item: ProductionCase): Promise<"created" | "exists"> {
+    assertBusinessContext(context);
+    const storage = this.storageOptions;
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "production_case", artifactId: item.caseId, revision: 0 },
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Produktionsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: (transactionalQueryable) => createProductionCaseInCollections(
+        transactionalQueryable
+          ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents },
+        context,
+        item
+      )
+    });
+  }
+
+  async getCase(context: BusinessContext, caseId: string): Promise<ProductionCase | undefined> {
+    assertBusinessContext(context);
+    return this.cases.get(context, caseId);
+  }
+
+  async listCases(context: BusinessContext): Promise<ProductionCase[]> {
+    assertBusinessContext(context);
+    return sortCasesByLatestActivity(
+      await this.cases.list(context),
+      await this.caseEvents.list(context)
+    );
+  }
+
+  async updateCase(
+    context: BusinessContext,
+    caseId: string,
+    expectedVersion: number,
+    next: ProductionCase
+  ): Promise<"updated" | "conflict" | "missing"> {
+    assertBusinessContext(context);
+    const existing = await this.cases.get(context, caseId);
+    if (!existing) return "missing";
+    assertProductionCaseUpdate(existing, next, expectedVersion);
+    return this.cases.compareAndSet(context, caseId, expectedVersion, next);
+  }
+
+  async appendEvent(context: BusinessContext, caseId: string, input: CaseEventInput): Promise<CaseEvent> {
+    assertBusinessContext(context);
+    const storage = this.storageOptions;
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "production_case", artifactId: caseId, revision: 0 },
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Produktionsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        if (!await collections.cases.get(context, caseId)) {
+          throw new Error("ProductionCase wurde nicht gefunden.");
+        }
+        const sequence = (await collections.events.list(context))
+          .filter((event) => event.caseId === caseId)
+          .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
+        const event = validateCaseEventForProduct({
+          ...input,
+          businessId: context.businessId,
+          eventId: `production-case-event-${randomUUID()}`,
+          caseId,
+          sequence
+        }, "production");
+        if (await collections.events.insert(context, event) !== "created") {
+          throw new Error("Der Produktionsverlauf konnte nicht eindeutig fortgeschrieben werden.");
+        }
+        return event;
+      }
+    });
+  }
+
+  async listEvents(context: BusinessContext, caseId: string): Promise<CaseEvent[]> {
+    assertBusinessContext(context);
+    if (!await this.cases.get(context, caseId)) throw new Error("ProductionCase wurde nicht gefunden.");
+    return (await this.caseEvents.list(context))
+      .filter((event) => event.caseId === caseId)
+      .sort((left, right) => left.sequence - right.sequence || left.eventId.localeCompare(right.eventId));
+  }
+
+  async searchCases(context: BusinessContext, query: string): Promise<ProductionCase[]> {
+    assertBusinessContext(context);
+    const normalizedQuery = normalizeCaseSearchText(query);
+    const cases = await this.listCases(context);
+    if (!normalizedQuery) return cases;
+    const events = await this.caseEvents.list(context);
+    const sourceNamesByCase = new Map<string, string[]>();
+    for (const event of events) {
+      const filename = event.sourceRef?.filename;
+      if (!filename) continue;
+      const names = sourceNamesByCase.get(event.caseId) ?? [];
+      names.push(filename);
+      sourceNamesByCase.set(event.caseId, names);
+    }
+    return cases.filter((item) => normalizeCaseSearchText([
+      item.displayName,
+      ...(sourceNamesByCase.get(item.caseId) ?? [])
+    ].join(" ")).includes(normalizedQuery));
   }
 }
 

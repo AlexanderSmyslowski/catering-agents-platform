@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { AuditLogStore } from "@catering/shared-core";
-import { IntakeStore, buildIntakeApp } from "@catering/intake-service";
+import {
+  IntakeStore,
+  IntakeStoreConflictError,
+  buildIntakeApp
+} from "@catering/intake-service";
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-intake-archive-"));
@@ -161,6 +165,28 @@ describe("intake soft archive", () => {
     } finally {
       await app.close();
       rmSync(dataRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns 409 when the archived intake context changed concurrently", async () => {
+    class ConflictingIntakeStore extends IntakeStore {
+      override async archiveRequestContext(): Promise<never> {
+        throw new IntakeStoreConflictError("request", "concurrent-request");
+      }
+    }
+
+    const app = buildIntakeApp(new ConflictingIntakeStore());
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/intake/requests/concurrent-request/archive",
+        payload: { reasonCode: "wrong_upload" }
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().message).toMatch(/Konflikt|neu laden/i);
+    } finally {
+      await app.close();
     }
   });
 });

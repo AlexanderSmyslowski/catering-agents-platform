@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   createUploadSourceMetadata,
@@ -11,13 +12,22 @@ import {
   validateEventRequest,
   validateUploadedDocument,
   validateUploadedDocumentMetadata,
+  UploadValidationError,
   type AuditLogStore,
   type DocumentIngestionResult,
   type DocumentInput,
   type EventRequest,
   type TrustedActor
 } from "@catering/shared-core";
-import type { IntakeStore } from "../store.js";
+import { IntakeStoreConflictError, type IntakeStore } from "../store.js";
+import type {
+  SourceDocumentStore,
+  StoredSourceDocument
+} from "../source-document-store.js";
+import {
+  insertRegisteredSourceDocument,
+  SourceDocumentConflictError
+} from "../source-document-store.js";
 
 interface DocumentBody {
   documents: {
@@ -37,6 +47,7 @@ interface MultipartDocumentUpload {
 
 export interface IntakeDocumentRouteDependencies {
   store: IntakeStore;
+  sourceDocumentStore: SourceDocumentStore;
   auditLog: AuditLogStore;
   trustedActorSecret?: string;
   allowDevActorHeader: boolean;
@@ -97,7 +108,7 @@ async function extractMultipartDocuments(
   };
 
   if (!multipartRequest.isMultipart()) {
-    throw new Error("Es wurde kein Multipart-Upload gesendet.");
+    throw new UploadValidationError("Es wurde kein Multipart-Upload gesendet.");
   }
 
   const documents: DocumentInput[] = [];
@@ -140,7 +151,7 @@ async function extractMultipartDocuments(
   }
 
   if (documents.length === 0) {
-    throw new Error("Es wurde keine Dokumentdatei mitgesendet.");
+    throw new UploadValidationError("Es wurde keine Dokumentdatei mitgesendet.");
   }
 
   return {
@@ -150,27 +161,110 @@ async function extractMultipartDocuments(
   };
 }
 
-async function normalizeUploadedDocuments(
-  payload: { documents: DocumentInput[]; requestId?: string; channel?: EventRequest["source"]["channel"] }
-) {
-  const ingested = await Promise.all(
-    payload.documents.map(async (document, index) => ({
-      documentId: `${payload.requestId ?? "document"}-${index + 1}`,
-      mimeType: document.mimeType,
-      ...(await ingestDocument({
-        document,
-        context: "intake"
-      }))
-    }))
-  );
-
-  const eventRequest: EventRequest = {
+function validatedUploadEnvelope(
+  payload: {
+    documents: DocumentInput[];
+    requestId?: string;
+    channel?: EventRequest["source"]["channel"];
+  }
+): Pick<EventRequest, "requestId" | "source"> {
+  const envelope: EventRequest = {
     schemaVersion: "1.0.0",
     requestId: payload.requestId ?? `request-${Date.now()}`,
     source: {
       channel: payload.channel ?? "pdf_upload",
       receivedAt: new Date().toISOString()
     },
+    rawInputs: payload.documents.map((document) => ({
+      kind: rawInputKindForMimeType(document.mimeType),
+      content: "",
+      mimeType: document.mimeType
+    }))
+  };
+
+  try {
+    const validated = validateEventRequest(envelope);
+    return {
+      requestId: validated.requestId,
+      source: validated.source
+    };
+  } catch {
+    throw new UploadValidationError("Die Angaben zum Dokument-Upload sind ungültig.");
+  }
+}
+
+function expectedDocumentRouteError(
+  error: unknown
+): { statusCode: number; message: string } | undefined {
+  if (error instanceof IntakeStoreConflictError) {
+    return {
+      statusCode: 409,
+      message: error.message
+    };
+  }
+  if (error instanceof UploadValidationError || error instanceof SourceDocumentConflictError) {
+    return {
+      statusCode: error.statusCode,
+      message: error.message
+    };
+  }
+
+  const maybeError = error as { code?: string; statusCode?: number };
+  if (maybeError?.code === "FST_REQ_FILE_TOO_LARGE" || maybeError?.statusCode === 413) {
+    return uploadErrorResponse(error, "intake");
+  }
+  return undefined;
+}
+
+async function normalizeUploadedDocuments(
+  payload: { documents: DocumentInput[]; requestId?: string; channel?: EventRequest["source"]["channel"] },
+  actor: TrustedActor,
+  sourceDocumentStore: SourceDocumentStore,
+  auditLog: AuditLogStore
+) {
+  const envelope = validatedUploadEnvelope(payload);
+  const ingested = await Promise.all(
+    payload.documents.map(async (document) => {
+      const sourceMetadata = document.sourceMetadata ?? createUploadSourceMetadata({
+        filename: document.filename,
+        mimeType: document.mimeType,
+        content: document.content,
+        uploadContext: "intake"
+      });
+      const metadata: StoredSourceDocument = {
+        businessId: actor.businessId,
+        documentId: randomUUID(),
+        filename: sourceMetadata.filename,
+        mimeType: sourceMetadata.mimeType,
+        sizeBytes: sourceMetadata.sizeBytes,
+        sha256: sourceMetadata.sha256,
+        dataClass: "personal_confidential",
+        createdAt: sourceMetadata.ingestedAt
+      };
+
+      // The original is the durable evidence. Extraction may fail later without losing that evidence.
+      await insertRegisteredSourceDocument({
+        store: sourceDocumentStore,
+        auditLog,
+        actor,
+        metadata,
+        content: document.content
+      });
+      return {
+        documentId: metadata.documentId,
+        mimeType: document.mimeType,
+        ...(await ingestDocument({
+          document,
+          context: "intake"
+        }))
+      };
+    })
+  );
+
+  const eventRequest: EventRequest = {
+    schemaVersion: "1.0.0",
+    requestId: envelope.requestId,
+    source: envelope.source,
     rawInputs: ingested.map((item) => ({
       kind: rawInputKindForMimeType(item.mimeType),
       content: item.extractedText ?? "",
@@ -215,6 +309,7 @@ export function registerIntakeDocumentRoutes(
 ) {
   const {
     store,
+    sourceDocumentStore,
     auditLog,
     trustedActorSecret,
     allowDevActorHeader,
@@ -231,6 +326,7 @@ export function registerIntakeDocumentRoutes(
 
     const body = request.body;
     try {
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const documents: DocumentInput[] = body.documents.map((document) => {
         const content = Buffer.from(document.contentBase64, "base64");
         const decodedDocument = {
@@ -251,10 +347,10 @@ export function registerIntakeDocumentRoutes(
         documents,
         requestId: body.requestId,
         channel: body.channel
-      });
+      }, actor, sourceDocumentStore, auditLog);
 
-      await store.saveRequest(normalized.eventRequest);
-      await store.saveSpec(normalized.acceptedEventSpec);
+      await store.saveRequest(actor, normalized.eventRequest);
+      await store.saveSpec(actor, normalized.acceptedEventSpec);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.documents_normalized",
         entityType: "AcceptedEventSpec",
@@ -273,8 +369,15 @@ export function registerIntakeDocumentRoutes(
 
       return reply.code(201).send(normalized);
     } catch (error) {
-      const uploadError = uploadErrorResponse(error, "intake");
-      return reply.code(uploadError.statusCode).send({ message: uploadError.message });
+      const expected = expectedDocumentRouteError(error);
+      if (expected) {
+        return reply.code(expected.statusCode).send({ message: expected.message });
+      }
+      request.log.error(
+        { errorType: error instanceof Error ? error.name : typeof error },
+        "intake document processing failed"
+      );
+      return reply.code(500).send({ message: "Dokument konnte nicht verarbeitet werden." });
     }
   });
 
@@ -286,11 +389,12 @@ export function registerIntakeDocumentRoutes(
     }
 
     try {
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const upload = await extractMultipartDocuments(request);
-      const normalized = await normalizeUploadedDocuments(upload);
+      const normalized = await normalizeUploadedDocuments(upload, actor, sourceDocumentStore, auditLog);
 
-      await store.saveRequest(normalized.eventRequest);
-      await store.saveSpec(normalized.acceptedEventSpec);
+      await store.saveRequest(actor, normalized.eventRequest);
+      await store.saveSpec(actor, normalized.acceptedEventSpec);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.documents_normalized",
         entityType: "AcceptedEventSpec",
@@ -309,8 +413,15 @@ export function registerIntakeDocumentRoutes(
 
       return reply.code(201).send(normalized);
     } catch (error) {
-      const uploadError = uploadErrorResponse(error, "intake");
-      return reply.code(uploadError.statusCode).send({ message: uploadError.message });
+      const expected = expectedDocumentRouteError(error);
+      if (expected) {
+        return reply.code(expected.statusCode).send({ message: expected.message });
+      }
+      request.log.error(
+        { errorType: error instanceof Error ? error.name : typeof error },
+        "intake document processing failed"
+      );
+      return reply.code(500).send({ message: "Dokument konnte nicht verarbeitet werden." });
     }
   });
 }

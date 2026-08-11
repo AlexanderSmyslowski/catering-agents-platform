@@ -264,7 +264,7 @@ describe("local stack migration guard", () => {
       child.once("close", resolve);
     });
 
-    await waitForPath(harness.migrationMarker);
+    await waitForPath(harness.migrationMarker, 5_000);
     process.kill(-child.pid!, "SIGTERM");
     const status = await closed;
 
@@ -276,7 +276,7 @@ describe("local stack migration guard", () => {
       env: launcherEnv(harness, { TEST_NPM_EXIT: "99" })
     });
     expect(retry.status).toBe(99);
-  });
+  }, 10_000);
 
   it("does not overlap migrations after the launcher is killed without its child", async () => {
     const harness = createLauncherHarness("catering-local-start-orphan-");

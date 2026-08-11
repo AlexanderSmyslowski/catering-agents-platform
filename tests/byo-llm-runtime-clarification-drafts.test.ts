@@ -17,6 +17,7 @@ import {
 
 const TRUSTED_SECRET = "byo-llm-draft-secret";
 const fixtureSpecId = "spec-synthetic-coffee-break";
+const localBusiness = { businessId: "local" } as const;
 
 const trustedProductionHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
@@ -69,7 +70,7 @@ function fixtureSpec(): AcceptedEventSpec {
 
 async function seedFixtureSpec(intakeStore: IntakeStore): Promise<AcceptedEventSpec> {
   const spec = fixtureSpec();
-  await intakeStore.saveSpec(spec);
+  await intakeStore.saveSpec(localBusiness, spec);
   return spec;
 }
 
@@ -189,7 +190,7 @@ describe("BYO LLM runtime clarification drafts", () => {
 
     try {
       const draft = await createDraft(app);
-      const storedSpec = await intakeStore.getSpec(fixtureSpecId);
+      const storedSpec = await intakeStore.getSpec(localBusiness, fixtureSpecId);
       const listResponse = await app.inject({
         method: "GET",
         url: `/v1/production/specs/${fixtureSpecId}/clarification-drafts`,
@@ -347,14 +348,14 @@ describe("BYO LLM runtime clarification drafts", () => {
         headers: trustedProductionHeaders,
         payload: { approve: true }
       });
-      const specAfterApprove = await intakeStore.getSpec(fixtureSpecId);
+      const specAfterApprove = await intakeStore.getSpec(localBusiness, fixtureSpecId);
       const rejectResponse = await app.inject({
         method: "POST",
         url: `/v1/production/clarification-drafts/${rejectedDraft.draftId}/decision`,
         headers: trustedProductionHeaders,
         payload: { approve: false }
       });
-      const specAfterReject = await intakeStore.getSpec(fixtureSpecId);
+      const specAfterReject = await intakeStore.getSpec(localBusiness, fixtureSpecId);
       const questions = buildProductionClarificationQuestions({ spec: specAfterApprove as unknown as Record<string, unknown> });
 
       expect(approveResponse.statusCode).toBe(200);
@@ -386,11 +387,11 @@ describe("BYO LLM runtime clarification drafts", () => {
 
     try {
       const draft = await createDraft(app);
-      const spec = await intakeStore.getSpec(fixtureSpecId);
+      const spec = await intakeStore.getSpec(localBusiness, fixtureSpecId);
       if (!spec) {
         throw new Error("Fixture spec missing");
       }
-      await intakeStore.saveSpec({
+      await intakeStore.saveSpec(localBusiness, {
         ...spec,
         uncertainties: [
           {
@@ -408,7 +409,7 @@ describe("BYO LLM runtime clarification drafts", () => {
         headers: trustedProductionHeaders,
         payload: { approve: true }
       });
-      const specAfterApprove = await intakeStore.getSpec(fixtureSpecId);
+      const specAfterApprove = await intakeStore.getSpec(localBusiness, fixtureSpecId);
 
       expect(response.statusCode).toBe(200);
       expect(specAfterApprove?.uncertainties).toEqual([

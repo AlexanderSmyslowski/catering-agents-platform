@@ -6,7 +6,10 @@ import {
   type OperationalArchiveReasonCode,
   type TrustedActor
 } from "@catering/shared-core";
-import type { IntakeStore } from "../store.js";
+import {
+  IntakeStoreConflictError,
+  type IntakeStore
+} from "../store.js";
 
 export interface SpecUpdateBody {
   eventDate?: string;
@@ -90,8 +93,9 @@ export function registerIntakeWorkItemRoutes(
       return forbidden;
     }
 
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     return reply.send({
-      items: await store.listRequests({
+      items: await store.listRequests(actor, {
         includeArchived: includeArchivedFromQuery(request.query)
       })
     });
@@ -115,12 +119,20 @@ export function registerIntakeWorkItemRoutes(
       }
 
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-      const archived = await store.archiveRequestContext({
-        requestId: request.params.requestId,
-        reasonCode,
-        archivedAt: new Date().toISOString(),
-        archivedBy: actor.name
-      });
+      let archived: Awaited<ReturnType<IntakeStore["archiveRequestContext"]>>;
+      try {
+        archived = await store.archiveRequestContext(actor, {
+          requestId: request.params.requestId,
+          reasonCode,
+          archivedAt: new Date().toISOString(),
+          archivedBy: actor.name
+        });
+      } catch (error) {
+        if (error instanceof IntakeStoreConflictError) {
+          return reply.code(409).send({ message: error.message });
+        }
+        throw error;
+      }
       if (!archived.request) {
         return reply.code(404).send({ message: "EventRequest nicht gefunden." });
       }
@@ -155,7 +167,8 @@ export function registerIntakeWorkItemRoutes(
       return forbidden;
     }
 
-    const intakeRequest = await store.getRequest(request.params.requestId);
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const intakeRequest = await store.getRequest(actor, request.params.requestId);
     if (!intakeRequest) {
       return reply.code(404).send({ message: "EventRequest nicht gefunden." });
     }
@@ -169,8 +182,9 @@ export function registerIntakeWorkItemRoutes(
       return forbidden;
     }
 
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     return reply.send({
-      items: await store.listSpecs({
+      items: await store.listSpecs(actor, {
         includeArchived: includeArchivedFromQuery(request.query)
       })
     });
@@ -182,7 +196,8 @@ export function registerIntakeWorkItemRoutes(
       return forbidden;
     }
 
-    const spec = await store.getSpec(request.params.specId);
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const spec = await store.getSpec(actor, request.params.specId);
     if (!spec) {
       return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
     }
@@ -199,13 +214,14 @@ export function registerIntakeWorkItemRoutes(
         });
       }
 
-      const spec = await store.getSpec(request.params.specId);
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const spec = await store.getSpec(actor, request.params.specId);
       if (!spec) {
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
       }
 
       const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
-      await store.saveSpec(updatedSpec);
+      await store.saveSpec(actor, updatedSpec);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.spec_updated",
         entityType: "AcceptedEventSpec",

@@ -11,6 +11,7 @@ import {
 } from "@catering/shared-core";
 
 const TRUSTED_SECRET = "intake-shadow-mode-secret";
+const localBusiness = { businessId: "local" } as const;
 const trustedIntakeHeaders = {
   "x-catering-actor-name": "Intake-Mitarbeiter",
   "x-catering-trusted-secret": TRUSTED_SECRET
@@ -93,7 +94,7 @@ describe("intake shadow mode", () => {
         }
       });
       const body = response.json();
-      const shadowRuns = await store.listShadowRuns();
+      const shadowRuns = await store.listShadowRuns(localBusiness);
       const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
 
       expect(response.statusCode, response.body).toBe(201);
@@ -101,8 +102,8 @@ describe("intake shadow mode", () => {
       expect(requests[0].input.kind).toBe("intake_shadow_request");
       expect(requests[0].input.policy.dataMode).toBe("synthetic_or_demo_only");
       expect(requests[0].promptContext).toContain("Business Lunch");
-      expect(await store.listRequests()).toHaveLength(0);
-      expect(await store.listSpecs()).toHaveLength(0);
+      expect(await store.listRequests(localBusiness)).toHaveLength(0);
+      expect(await store.listSpecs(localBusiness)).toHaveLength(0);
       expect(shadowRuns).toHaveLength(1);
       expect(body.shadowRun).toMatchObject({
         status: "pending_review",
@@ -174,9 +175,9 @@ describe("intake shadow mode", () => {
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("safetyMode synthetic_demo oder anonymized_reference");
       expect(requests).toHaveLength(0);
-      expect(await store.listShadowRuns()).toHaveLength(0);
-      expect(await store.listRequests()).toHaveLength(0);
-      expect(await store.listSpecs()).toHaveLength(0);
+      expect(await store.listShadowRuns(localBusiness)).toHaveLength(0);
+      expect(await store.listRequests(localBusiness)).toHaveLength(0);
+      expect(await store.listSpecs(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }

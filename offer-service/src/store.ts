@@ -1,16 +1,26 @@
+import { randomUUID } from "node:crypto";
 import {
   createBusinessScopedPersistentCollection,
   areJsonValuesEqual,
+  initialCaseEventForCase,
+  normalizeCaseSearchText,
+  persistCaseWithInitialEvent,
+  sortCasesByLatestActivity,
   withBusinessTargetCriticalSection,
   type ApprovalRequestRecord,
   type ApprovedOffer,
   type BusinessContext,
   type BusinessScopedPersistentCollection,
   type CollectionStorageOptions,
+  type CaseEvent,
+  type OfferCase,
   type OfferDraft,
   type ProductionHandoff,
   validateApprovalRequestRecord,
   validateApprovedOffer,
+  validateCaseEvent,
+  validateCaseEventForProduct,
+  validateOfferCase,
   validateOfferDraft,
   validateProductionHandoff
 } from "@catering/shared-core";
@@ -26,6 +36,57 @@ interface OfferDecisionCollections {
   decisionAggregates: BusinessScopedPersistentCollection<OfferDecisionAggregate>;
   approvals: BusinessScopedPersistentCollection<ApprovalRequestRecord>;
   approvedOffers: BusinessScopedPersistentCollection<ApprovedOffer>;
+}
+
+interface OfferCaseCollections {
+  cases: BusinessScopedPersistentCollection<OfferCase>;
+  events: BusinessScopedPersistentCollection<CaseEvent>;
+}
+
+type CaseEventInput = Omit<CaseEvent, "businessId" | "eventId" | "caseId" | "sequence">;
+
+function createOfferCaseCollections(options: CollectionStorageOptions): OfferCaseCollections {
+  return {
+    cases: createBusinessScopedPersistentCollection({
+      collectionName: "offers/cases",
+      getId: (item: OfferCase) => item.caseId,
+      getVersion: (item: OfferCase) => item.version,
+      validate: validateOfferCase,
+      ...options
+    }),
+    events: createBusinessScopedPersistentCollection({
+      collectionName: "offers/case-events",
+      getId: (item: CaseEvent) => item.eventId,
+      validate: validateCaseEvent,
+      ...options
+    })
+  };
+}
+
+async function createOfferCaseInCollections(
+  collections: OfferCaseCollections,
+  context: BusinessContext,
+  input: OfferCase
+): Promise<"created" | "exists"> {
+  const item = validateOfferCase(input);
+  const initialEvent = validateCaseEventForProduct(initialCaseEventForCase(item), "offer");
+  return persistCaseWithInitialEvent(collections, context, item, initialEvent);
+}
+
+function assertOfferCaseUpdate(existing: OfferCase, next: OfferCase, expectedVersion: number): void {
+  if (
+    next.businessId !== existing.businessId ||
+    next.caseId !== existing.caseId ||
+    next.product !== existing.product ||
+    next.schemaVersion !== existing.schemaVersion ||
+    next.createdAt !== existing.createdAt ||
+    next.copiedFromCaseId !== existing.copiedFromCaseId
+  ) {
+    throw new Error("Die Identität eines OfferCase darf nicht verändert werden.");
+  }
+  if (next.version !== expectedVersion + 1) {
+    throw new Error("Eine OfferCase-Aktualisierung muss die Version genau um eins erhöhen.");
+  }
 }
 
 export interface OfferDecisionTargetScope {
@@ -154,6 +215,8 @@ export class OfferStore {
   private readonly approvals: BusinessScopedPersistentCollection<ApprovalRequestRecord>;
   private readonly approvedOffers: BusinessScopedPersistentCollection<ApprovedOffer>;
   private readonly handoffs: BusinessScopedPersistentCollection<ProductionHandoff>;
+  private readonly cases: BusinessScopedPersistentCollection<OfferCase>;
+  private readonly caseEvents: BusinessScopedPersistentCollection<CaseEvent>;
 
   readonly storageOptions?: CollectionStorageOptions;
 
@@ -166,6 +229,9 @@ export class OfferStore {
     this.approvals = decisionCollections.approvals;
     this.approvedOffers = decisionCollections.approvedOffers;
     this.handoffs = createBusinessScopedPersistentCollection({ collectionName: "offers/handoffs", getId: (handoff: ProductionHandoff) => handoff.handoffId, validate: validateProductionHandoff, ...storage });
+    const caseCollections = createOfferCaseCollections(storage);
+    this.cases = caseCollections.cases;
+    this.caseEvents = caseCollections.events;
     decisionRepositories.set(this, new InternalOfferDecisionRepository(this, storage, decisionCollections));
   }
 
@@ -234,4 +300,116 @@ export class OfferStore {
   async listApprovedOffers(context: BusinessContext): Promise<ApprovedOffer[]> { return this.approvedOffers.list(context); }
   async insertHandoff(context: BusinessContext, handoff: ProductionHandoff): Promise<"created" | "exists"> { return this.handoffs.insert(context, handoff); }
   async getHandoff(context: BusinessContext, id: string): Promise<ProductionHandoff | undefined> { return this.handoffs.get(context, id); }
+
+  async insertCase(context: BusinessContext, item: OfferCase): Promise<"created" | "exists"> {
+    return this.createCase(context, item);
+  }
+
+  async createCase(context: BusinessContext, item: OfferCase): Promise<"created" | "exists"> {
+    const storage = this.storageOptions ?? {};
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "offer_case", artifactId: item.caseId, revision: 0 },
+      collectionNamespace: "offers/case-events",
+      queueFullMessage: "Die Warteschlange für Angebotsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Angebotsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Angebotsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Angebotsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Angebotsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: (transactionalQueryable) => createOfferCaseInCollections(
+        transactionalQueryable
+          ? createOfferCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents },
+        context,
+        item
+      )
+    });
+  }
+
+  async getCase(context: BusinessContext, caseId: string): Promise<OfferCase | undefined> {
+    return this.cases.get(context, caseId);
+  }
+
+  async listCases(context: BusinessContext): Promise<OfferCase[]> {
+    return sortCasesByLatestActivity(
+      await this.cases.list(context),
+      await this.caseEvents.list(context)
+    );
+  }
+
+  async updateCase(
+    context: BusinessContext,
+    caseId: string,
+    expectedVersion: number,
+    next: OfferCase
+  ): Promise<"updated" | "conflict" | "missing"> {
+    const existing = await this.cases.get(context, caseId);
+    if (!existing) return "missing";
+    assertOfferCaseUpdate(existing, next, expectedVersion);
+    return this.cases.compareAndSet(context, caseId, expectedVersion, next);
+  }
+
+  async appendEvent(context: BusinessContext, caseId: string, input: CaseEventInput): Promise<CaseEvent> {
+    const storage = this.storageOptions ?? {};
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "offer_case", artifactId: caseId, revision: 0 },
+      collectionNamespace: "offers/case-events",
+      queueFullMessage: "Die Warteschlange für Angebotsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Angebotsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Angebotsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Angebotsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Angebotsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createOfferCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        if (!await collections.cases.get(context, caseId)) {
+          throw new Error("OfferCase wurde nicht gefunden.");
+        }
+        const sequence = (await collections.events.list(context))
+          .filter((event) => event.caseId === caseId)
+          .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
+        const event = validateCaseEventForProduct({
+          ...input,
+          businessId: context.businessId,
+          eventId: `offer-case-event-${randomUUID()}`,
+          caseId,
+          sequence
+        }, "offer");
+        if (await collections.events.insert(context, event) !== "created") {
+          throw new Error("Der Angebotsverlauf konnte nicht eindeutig fortgeschrieben werden.");
+        }
+        return event;
+      }
+    });
+  }
+
+  async listEvents(context: BusinessContext, caseId: string): Promise<CaseEvent[]> {
+    if (!await this.cases.get(context, caseId)) throw new Error("OfferCase wurde nicht gefunden.");
+    return (await this.caseEvents.list(context))
+      .filter((event) => event.caseId === caseId)
+      .sort((left, right) => left.sequence - right.sequence || left.eventId.localeCompare(right.eventId));
+  }
+
+  async searchCases(context: BusinessContext, query: string): Promise<OfferCase[]> {
+    const normalizedQuery = normalizeCaseSearchText(query);
+    const cases = await this.listCases(context);
+    if (!normalizedQuery) return cases;
+    const events = await this.caseEvents.list(context);
+    const sourceNamesByCase = new Map<string, string[]>();
+    for (const event of events) {
+      const filename = event.sourceRef?.filename;
+      if (!filename) continue;
+      const names = sourceNamesByCase.get(event.caseId) ?? [];
+      names.push(filename);
+      sourceNamesByCase.set(event.caseId, names);
+    }
+    return cases.filter((item) => normalizeCaseSearchText([
+      item.displayName,
+      ...(sourceNamesByCase.get(item.caseId) ?? [])
+    ].join(" ")).includes(normalizedQuery));
+  }
 }
