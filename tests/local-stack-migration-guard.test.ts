@@ -25,14 +25,14 @@ function createLauncherHarness(prefix: string): {
   dataRoot: string;
   startScript: string;
   binDir: string;
-  npmMarker: string;
+  migrationMarker: string;
 } {
   const root = mkdtempSync(path.join(tmpdir(), prefix));
   roots.push(root);
   const scriptsDir = path.join(root, "scripts");
   const binDir = path.join(root, "bin");
   const dataRoot = path.join(root, "shared-data");
-  const npmMarker = path.join(root, "npm-called");
+  const migrationMarker = path.join(root, "migration-called");
   mkdirSync(scriptsDir, { recursive: true });
   mkdirSync(binDir, { recursive: true });
   mkdirSync(dataRoot, { recursive: true });
@@ -42,13 +42,13 @@ function createLauncherHarness(prefix: string): {
   writeExecutable(path.join(binDir, "pgrep"), "#!/bin/sh\nexit 1\n");
   writeExecutable(path.join(binDir, "lsof"), "#!/bin/sh\nexit 1\n");
   writeExecutable(path.join(binDir, "launchctl"), "#!/bin/sh\nexit 1\n");
-  writeExecutable(path.join(binDir, "npm"), [
+  writeExecutable(path.join(binDir, "node"), [
     "#!/bin/sh",
-    `printf '%s\\n' "$$:$*" >>${JSON.stringify(npmMarker)}`,
+    `printf '%s\\n' "$$:$*" >>${JSON.stringify(migrationMarker)}`,
     "sleep \"${TEST_MIGRATION_SLEEP_SECONDS:-0}\"",
     "exit \"${TEST_NPM_EXIT:-99}\""
   ].join("\n"));
-  return { root, dataRoot, startScript, binDir, npmMarker };
+  return { root, dataRoot, startScript, binDir, migrationMarker };
 }
 
 function launcherEnv(
@@ -61,7 +61,6 @@ function launcherEnv(
     PATH: `${harness.binDir}:${process.env.PATH ?? ""}`,
     CATERING_DATA_ROOT: dataRoot,
     CATERING_LOCAL_START_LOCK_FILE: path.join(dataRoot, ".test-production-startup-3103.lock"),
-    CATERING_NODE_BIN: path.join(harness.binDir, "npm"),
     ...extra
   };
 }
@@ -116,7 +115,7 @@ describe("local stack migration guard", () => {
     roots.push(root);
     const scriptsDir = path.join(root, "scripts");
     const binDir = path.join(root, "bin");
-    const npmMarker = path.join(root, "npm-called");
+    const migrationMarker = path.join(root, "migration-called");
     mkdirSync(scriptsDir, { recursive: true });
     mkdirSync(binDir, { recursive: true });
     const startScript = path.join(scriptsDir, "start-local-stack.sh");
@@ -131,9 +130,9 @@ describe("local stack migration guard", () => {
     ].join("\n"));
     chmodSync(screen, 0o755);
 
-    const npm = path.join(binDir, "npm");
-    writeFileSync(npm, `#!/bin/sh\nprintf called >${JSON.stringify(npmMarker)}\nexit 99\n`);
-    chmodSync(npm, 0o755);
+    const node = path.join(binDir, "node");
+    writeFileSync(node, `#!/bin/sh\nprintf called >${JSON.stringify(migrationMarker)}\nexit 99\n`);
+    chmodSync(node, 0o755);
 
     const result = spawnSync("bash", [startScript], {
       cwd: root,
@@ -141,14 +140,13 @@ describe("local stack migration guard", () => {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
-        CATERING_DATA_ROOT: path.join(root, "data"),
-        CATERING_NODE_BIN: npm
+        CATERING_DATA_ROOT: path.join(root, "data")
       }
     });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("npm run local:stop");
-    expect(existsSync(npmMarker)).toBe(false);
+    expect(existsSync(migrationMarker)).toBe(false);
   });
 
   it("confirms quiescence to the migration only after the stack session check passes", () => {
@@ -156,7 +154,7 @@ describe("local stack migration guard", () => {
     roots.push(root);
     const scriptsDir = path.join(root, "scripts");
     const binDir = path.join(root, "bin");
-    const npmMarker = path.join(root, "npm-args");
+    const migrationMarker = path.join(root, "migration-args");
     mkdirSync(scriptsDir, { recursive: true });
     mkdirSync(binDir, { recursive: true });
     const startScript = path.join(scriptsDir, "start-local-stack.sh");
@@ -166,9 +164,9 @@ describe("local stack migration guard", () => {
     writeFileSync(screen, "#!/bin/sh\nexit 0\n");
     chmodSync(screen, 0o755);
 
-    const npm = path.join(binDir, "npm");
-    writeFileSync(npm, `#!/bin/sh\nprintf '%s' "$*" >${JSON.stringify(npmMarker)}\nexit 99\n`);
-    chmodSync(npm, 0o755);
+    const node = path.join(binDir, "node");
+    writeFileSync(node, `#!/bin/sh\nprintf '%s' "$*" >${JSON.stringify(migrationMarker)}\nexit 99\n`);
+    chmodSync(node, 0o755);
 
     const result = spawnSync("bash", [startScript], {
       cwd: root,
@@ -176,13 +174,12 @@ describe("local stack migration guard", () => {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
-        CATERING_DATA_ROOT: path.join(root, "data"),
-        CATERING_NODE_BIN: npm
+        CATERING_DATA_ROOT: path.join(root, "data")
       }
     });
 
     expect(result.status).toBe(99);
-    expect(readFileSync(npmMarker, "utf8")).toContain("--confirm-legacy-file-writers-quiesced");
+    expect(readFileSync(migrationMarker, "utf8")).toContain("--confirm-legacy-file-writers-quiesced");
   });
 
   it("allows only one concurrent launcher to reach migration for one production port", async () => {
@@ -207,7 +204,7 @@ describe("local stack migration guard", () => {
 
     expect([first.status, second.status].sort()).toEqual([1, 99]);
     expect(
-      [firstHarness.npmMarker, secondHarness.npmMarker].filter((marker) => existsSync(marker))
+      [firstHarness.migrationMarker, secondHarness.migrationMarker].filter((marker) => existsSync(marker))
     ).toHaveLength(1);
     expect(`${first.stderr}\n${second.stderr}`).toContain("Start-Sperre");
   });
@@ -236,7 +233,7 @@ describe("local stack migration guard", () => {
 
     expect([first.status, second.status].sort()).toEqual([1, 99]);
     expect(
-      [firstHarness.npmMarker, secondHarness.npmMarker].filter((marker) => existsSync(marker))
+      [firstHarness.migrationMarker, secondHarness.migrationMarker].filter((marker) => existsSync(marker))
     ).toHaveLength(1);
     expect(`${first.stderr}\n${second.stderr}`).toContain("Start-Sperre");
   });
@@ -267,7 +264,7 @@ describe("local stack migration guard", () => {
       child.once("close", resolve);
     });
 
-    await waitForPath(harness.npmMarker);
+    await waitForPath(harness.migrationMarker);
     process.kill(-child.pid!, "SIGTERM");
     const status = await closed;
 
@@ -283,11 +280,11 @@ describe("local stack migration guard", () => {
 
   it("does not overlap migrations after the launcher is killed without its child", async () => {
     const harness = createLauncherHarness("catering-local-start-orphan-");
-    writeExecutable(path.join(harness.binDir, "npm"), [
+    writeExecutable(path.join(harness.binDir, "node"), [
       "#!/bin/sh",
-      `printf 'start:%s\\n' \"$$\" >>${JSON.stringify(harness.npmMarker)}`,
+      `printf 'start:%s\\n' \"$$\" >>${JSON.stringify(harness.migrationMarker)}`,
       "sleep \"${TEST_MIGRATION_SLEEP_SECONDS:-0}\"",
-      `printf 'end:%s\\n' \"$$\" >>${JSON.stringify(harness.npmMarker)}`,
+      `printf 'end:%s\\n' \"$$\" >>${JSON.stringify(harness.migrationMarker)}`,
       "exit \"${TEST_NPM_EXIT:-99}\""
     ].join("\n"));
     const child = spawn("bash", [harness.startScript], {
@@ -303,7 +300,7 @@ describe("local stack migration guard", () => {
       child.once("exit", () => resolve());
     });
 
-    await waitForFileContent(harness.npmMarker, "start:");
+    await waitForFileContent(harness.migrationMarker, "start:");
     child.kill("SIGKILL");
     await launcherExited;
 
@@ -313,16 +310,16 @@ describe("local stack migration guard", () => {
       env: launcherEnv(harness, { TEST_NPM_EXIT: "99" })
     });
     expect(blocked.status).toBe(1);
-    expect(readFileSync(harness.npmMarker, "utf8").match(/^start:/gm)).toHaveLength(1);
+    expect(readFileSync(harness.migrationMarker, "utf8").match(/^start:/gm)).toHaveLength(1);
 
-    await waitForFileContent(harness.npmMarker, "end:");
+    await waitForFileContent(harness.migrationMarker, "end:");
     const retry = spawnSync("bash", [harness.startScript], {
       cwd: harness.root,
       encoding: "utf8",
       env: launcherEnv(harness, { TEST_NPM_EXIT: "99" })
     });
     expect(retry.status).toBe(99);
-    expect(readFileSync(harness.npmMarker, "utf8").match(/^start:/gm)).toHaveLength(2);
+    expect(readFileSync(harness.migrationMarker, "utf8").match(/^start:/gm)).toHaveLength(2);
   }, 10_000);
 
   it("requires the canonical production lock protocol in the health response", () => {
@@ -346,7 +343,7 @@ describe("local stack migration guard", () => {
       "  printf 'There is a screen on:\\n\\t123.catering-production\\t(Detached)\\n'",
       "fi"
     ].join("\n"));
-    writeExecutable(path.join(harness.binDir, "npm"), [
+    writeExecutable(path.join(harness.binDir, "node"), [
       "#!/bin/sh",
       "printf appeared >\"${SESSION_MARKER}\"",
       "exit 0"
@@ -364,7 +361,7 @@ describe("local stack migration guard", () => {
 
   it("does not accept an old production health response", () => {
     const harness = createLauncherHarness("catering-local-start-old-health-");
-    writeExecutable(path.join(harness.binDir, "npm"), "#!/bin/sh\nexit 0\n");
+    writeExecutable(path.join(harness.binDir, "node"), "#!/bin/sh\nexit 0\n");
     writeExecutable(path.join(harness.binDir, "curl"), [
       "#!/bin/sh",
       "case \"$*\" in",

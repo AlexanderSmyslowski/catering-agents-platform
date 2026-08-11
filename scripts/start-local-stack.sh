@@ -42,12 +42,9 @@ PRODUCTION_DRAFT_DATA_MODE="${CATERING_PRODUCTION_DRAFT_DATA_MODE:-synthetic_or_
 LLM_CLI_BIN="${CATERING_LLM_CLI_BIN:-codex}"
 LLM_MODEL="${CATERING_LLM_MODEL:-}"
 LLM_CLI_TIMEOUT_MS="${CATERING_LLM_CLI_TIMEOUT_MS:-120000}"
-MIGRATION_NODE_BIN="${CATERING_NODE_BIN:-}"
-if [[ -z "${MIGRATION_NODE_BIN}" ]]; then
-  if ! MIGRATION_NODE_BIN="$(command -v node)"; then
-    echo "Node.js wurde für die Business-Scope-Migration nicht gefunden." >&2
-    exit 1
-  fi
+if ! MIGRATION_NODE_BIN="$(command -v node)"; then
+  echo "Node.js wurde für die Business-Scope-Migration nicht gefunden." >&2
+  exit 1
 fi
 
 mkdir -p "${LOG_DIR}"
