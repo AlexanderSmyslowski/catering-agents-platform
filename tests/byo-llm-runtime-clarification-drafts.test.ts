@@ -296,7 +296,10 @@ describe("BYO LLM runtime clarification drafts", () => {
       llmAdapter: invalidAdapter,
       llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
-      env: { CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalApproval(dataRoot) }
+      env: {
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalApproval(dataRoot)
+      }
     });
 
     try {
@@ -338,7 +341,10 @@ describe("BYO LLM runtime clarification drafts", () => {
       llmAdapter: throwingAdapter,
       llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
-      env: { CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalApproval(dataRoot) }
+      env: {
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalApproval(dataRoot)
+      }
     });
 
     try {

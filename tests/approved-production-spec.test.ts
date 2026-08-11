@@ -227,7 +227,12 @@ function buildHarness(options: {
     trustedActorSecret: TRUSTED_SECRET,
     productionApplyFaultInjector: options.applyFaultInjector,
     productionDecisionFaultInjector: options.decisionFaultInjector,
-    env: approvalPath ? { CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath } : {}
+    env: approvalPath
+      ? {
+          CATERING_SYNTHETIC_LLM_SLICE: "1",
+          CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath
+        }
+      : {}
   });
   return { app, auditLog, intakeStore, repository, store };
 }

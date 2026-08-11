@@ -173,7 +173,8 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     ? new BoundaryGuardedLlmAdapter({
         descriptor: options.llmProviderDescriptor,
         delegate: injectedAdapter(),
-        approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env)
+        approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env),
+        env
       })
     : buildBoundaryGuardedLlmAdapterFromEnv(env);
   const handoffReader = options.handoffReader ?? (env.CATERING_OFFER_SERVICE_URL

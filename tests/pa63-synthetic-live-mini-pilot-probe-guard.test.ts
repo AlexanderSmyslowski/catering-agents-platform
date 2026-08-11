@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { LlmReadinessSyntheticLiveTransport } from "@catering/shared-core";
 import {
   parseSyntheticLiveProbeCliArgs,
-  runSyntheticLiveProbeCli
+  runSyntheticLiveProbeCli,
+  sanitizeSyntheticLiveProbeCliResult
 } from "../scripts/run-synthetic-live-llm-readiness.js";
 
 const docPath = "docs/architecture/PA63_SYNTHETIC_LIVE_MINI_PILOT_PROBE_GUARD.md";
@@ -118,6 +119,28 @@ describe("PA63 synthetic-live mini-pilot probe guard", () => {
     expect(result.preflight?.miniPilotReady).toBe(true);
     expect(result.response?.ok).toBe(true);
     expect(result.auditRecord?.providerId).toBe("openai-responses");
+  });
+
+  it("keeps raw provider failures out of serialized CLI evidence", async () => {
+    const result = await runSyntheticLiveProbeCli(
+      { failOnEvalMismatch: false, requireMiniPilotReady: false },
+      {
+        env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
+        transport: {
+          run: async () => ({
+            ok: false,
+            errors: ["provider returned raw prompt secret"],
+            providerId: "openai-responses"
+          })
+        }
+      }
+    );
+
+    const sanitized = sanitizeSyntheticLiveProbeCliResult(result);
+    expect(JSON.stringify(sanitized)).not.toContain("raw prompt secret");
+    expect(sanitized.errors).toEqual(["synthetic-live probe failed"]);
+    expect(sanitized.auditRecord?.errors).toEqual(["synthetic-live probe failed"]);
+    expect(sanitized.runResult?.errorCount).toBe(1);
   });
 
   it("keeps the guard discoverable from repo docs", () => {

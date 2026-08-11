@@ -329,7 +329,10 @@ describe("Codex CLI BYO LLM provider", () => {
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
       llmProviderDescriptor: codexDescriptor,
-      env: { CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalFile(dataRoot) },
+      env: {
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalFile(dataRoot)
+      },
       buildLlmAdapter: () =>
         buildByoLlmAdapterFromEnv(
           {
@@ -386,7 +389,10 @@ describe("Codex CLI BYO LLM provider", () => {
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
       llmProviderDescriptor: codexDescriptor,
-      env: { CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalFile(dataRoot) },
+      env: {
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalFile(dataRoot)
+      },
       buildLlmAdapter: () =>
         buildByoLlmAdapterFromEnv(
           {

@@ -10,6 +10,7 @@ import {
   evaluateByoLlmProviderDataGate,
   llmReadinessEvalFixtures,
   loadByoLlmExternalProcessingApprovalFromEnv,
+  redactByoLlmEndpointForAudit,
   FixtureOnlyLlmReadinessProviderAdapter,
   type ByoLlmExternalProcessingApproval,
   type ByoLlmProviderDataContext,
@@ -88,6 +89,7 @@ describe("BYO LLM provider data policy", () => {
     });
     const guarded = new BoundaryGuardedLlmAdapter({
       descriptor,
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
       delegate: {
         adapterId: "test-delegate",
         adapterMode: "synthetic_live",
@@ -109,6 +111,7 @@ describe("BYO LLM provider data policy", () => {
     const delegate = vi.fn<LlmReadinessProviderAdapter["run"]>();
     const guarded = new BoundaryGuardedLlmAdapter({
       descriptor: externalDescriptor(),
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
       approvalResolver: () => {
         throw new Error("sensitive approval path details");
       },
@@ -133,7 +136,7 @@ describe("BYO LLM provider data policy", () => {
         providerModel: "gpt-test",
         capability: "document_understanding",
         actualRegion: "eu",
-        endpoint: "https://api.example.test/v1/responses",
+        endpoint: "https://api.example.test",
         maximumEstimatedCostEur: 0.12,
         retentionPolicy: "zero-retention",
         trainingUse: "contractually_excluded",
@@ -171,6 +174,20 @@ describe("BYO LLM provider data policy", () => {
     expect(result.allowed).toBe(false);
   });
 
+  it("retains a validated approval id on a rejected policy decision", () => {
+    const result = evaluateByoLlmProviderDataGate({
+      provider: externalDescriptor(),
+      context,
+      approval: { ...validApproval(), allowedModels: ["different-model"] },
+      now: new Date("2026-08-11T00:00:00.000Z")
+    });
+
+    expect(result).toMatchObject({
+      allowed: false,
+      approvalId: "approval-local-openai-production-v1"
+    });
+  });
+
   it.each(["openai", "codex_cli"] as const)("allows exactly one matching %s external call", async (providerKind) => {
     const delegate = vi.fn<LlmReadinessProviderAdapter["run"]>(async (_request) => ({
       ok: true,
@@ -180,6 +197,7 @@ describe("BYO LLM provider data policy", () => {
     }));
     const guarded = new BoundaryGuardedLlmAdapter({
       descriptor: externalDescriptor(providerKind),
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
       approvalResolver: () => validApproval(providerKind),
       delegate: {
         adapterId: "test-delegate",
@@ -198,13 +216,66 @@ describe("BYO LLM provider data policy", () => {
       providerModel: "gpt-test",
       capability: "document_understanding",
       actualRegion: "eu",
-      endpoint: "https://api.example.test/v1/responses",
+      endpoint: "https://api.example.test",
       purpose: "production_draft_extraction",
       dataClass: "private_business",
       successClass: "success"
     });
     expect(result.processingPolicy?.inputHash).toMatch(/^sha256:/);
     expect(JSON.stringify(result.processingPolicy)).not.toContain("approval.local");
+  });
+
+  it("blocks an injected external adapter before execution without synthetic opt-in", async () => {
+    const delegate = vi.fn<LlmReadinessProviderAdapter["run"]>(async (_request) => ({
+      ok: true,
+      errors: [],
+      adapterId: "test-delegate",
+      adapterMode: "synthetic_live" as const
+    }));
+    const guarded = new BoundaryGuardedLlmAdapter({
+      descriptor: externalDescriptor(),
+      env: {},
+      approvalResolver: () => validApproval(),
+      delegate: { adapterId: "test-delegate", adapterMode: "synthetic_live", run: delegate }
+    });
+
+    const result = await guarded.execute({ input: structuredClone(llmReadinessEvalFixtures[0].input) }, context);
+
+    expect(result).toMatchObject({
+      ok: false,
+      errors: ["provider calls require explicit synthetic-live opt-in"],
+      processingPolicy: { successClass: "policy_rejected" }
+    });
+    expect(delegate).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes external provider failures and never returns a raw output candidate", async () => {
+    const guarded = new BoundaryGuardedLlmAdapter({
+      descriptor: externalDescriptor(),
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
+      approvalResolver: () => validApproval(),
+      delegate: {
+        adapterId: "test-delegate",
+        adapterMode: "synthetic_live",
+        run: async () => ({
+          ok: false,
+          errors: ["provider returned secret prompt and response: customer@example.test"],
+          adapterId: "test-delegate",
+          adapterMode: "synthetic_live" as const,
+          outputCandidate: structuredClone(llmReadinessEvalFixtures[0].expectedOutput)
+        })
+      }
+    });
+
+    const result = await guarded.execute({ input: structuredClone(llmReadinessEvalFixtures[0].input) }, context);
+
+    expect(result).toMatchObject({
+      ok: false,
+      errors: ["BYO LLM provider call failed"],
+      outputCandidate: undefined,
+      processingPolicy: { successClass: "provider_rejected" }
+    });
+    expect(JSON.stringify(result)).not.toContain("customer@example.test");
   });
 
   it("projects contact-bearing prompt context before an external delegate sees it", async () => {
@@ -217,6 +288,7 @@ describe("BYO LLM provider data policy", () => {
     }));
     const guarded = new BoundaryGuardedLlmAdapter({
       descriptor: externalDescriptor(),
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
       approvalResolver: () => validApproval(),
       delegate: { adapterId: "test-delegate", adapterMode: "synthetic_live", run: delegate }
     });
@@ -277,6 +349,91 @@ describe("BYO LLM provider data policy", () => {
     });
   });
 
+  it("drops inline address and contact labels from an external projection", async () => {
+    const delegate = vi.fn<LlmReadinessProviderAdapter["run"]>(async (_request) => ({
+      ok: true,
+      errors: [],
+      adapterId: "test-delegate",
+      adapterMode: "synthetic_live" as const
+    }));
+    const guarded = new BoundaryGuardedLlmAdapter({
+      descriptor: externalDescriptor(),
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
+      approvalResolver: () => validApproval(),
+      delegate: { adapterId: "test-delegate", adapterMode: "synthetic_live", run: delegate }
+    });
+
+    await guarded.execute(
+      {
+        input: structuredClone(llmReadinessEvalFixtures[0].input),
+        promptContext: "Bitte senden Sie an Max Mustermann, Musterweg 12, 12345 Berlin\nKunde: Ada Lovelace GmbH\nMenu: Sommerbuffet"
+      },
+      context
+    );
+
+    const forwarded = delegate.mock.calls[0]?.[0].promptContext ?? "";
+    expect(forwarded).toBe("Menu: Sommerbuffet");
+    expect(forwarded).not.toMatch(/Max Mustermann|Musterweg|Ada Lovelace|Berlin/i);
+  });
+
+  it("removes customer and venue objects from a structured revision context", async () => {
+    const delegate = vi.fn<LlmReadinessProviderAdapter["run"]>(async (_request) => ({
+      ok: true,
+      errors: [],
+      adapterId: "test-delegate",
+      adapterMode: "synthetic_live" as const
+    }));
+    const guarded = new BoundaryGuardedLlmAdapter({
+      descriptor: externalDescriptor(),
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
+      approvalResolver: () => validApproval(),
+      delegate: { adapterId: "test-delegate", adapterMode: "synthetic_live", run: delegate }
+    });
+
+    await guarded.execute(
+      {
+        input: structuredClone(llmReadinessEvalFixtures[0].input),
+        promptContext: JSON.stringify({
+          event: { customer: { name: "Max Mustermann" }, venue: { name: "Musterhalle" } },
+          menu: [{ label: "Sommerbuffet" }],
+          budget: 42
+        })
+      },
+      context
+    );
+
+    const forwarded = delegate.mock.calls[0]?.[0].promptContext ?? "";
+    expect(forwarded).toContain("Sommerbuffet");
+    expect(forwarded).toContain("budget");
+    expect(forwarded).not.toMatch(/Max Mustermann|Musterhalle|customer|venue/i);
+  });
+
+  it("keeps credentials out of processing provenance", async () => {
+    const descriptor = createByoLlmProviderDescriptor({
+      ...externalDescriptor(),
+      endpoint: "https://user:secret@example.test/v1/responses?api_key=secret#fragment"
+    });
+    const guarded = new BoundaryGuardedLlmAdapter({
+      descriptor,
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" },
+      approvalResolver: () => ({
+        ...validApproval(),
+        allowedEndpoints: [descriptor.endpoint]
+      }),
+      delegate: {
+        adapterId: "test-delegate",
+        adapterMode: "synthetic_live",
+        run: async () => ({ ok: true, errors: [], adapterId: "test-delegate", adapterMode: "synthetic_live" as const })
+      }
+    });
+
+    const result = await guarded.execute({ input: structuredClone(llmReadinessEvalFixtures[0].input) }, context);
+
+    expect(result.processingPolicy?.endpoint).toBe("https://example.test");
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(redactByoLlmEndpointForAudit("codex --unsafe")).toMatch(/^sha256:/);
+  });
+
   it("marks an unknown external provider capability as unverified", () => {
     const descriptor = byoLlmProviderDescriptorFromEnv({
       CATERING_LLM_PROVIDER: "openai",
@@ -289,6 +446,73 @@ describe("BYO LLM provider data policy", () => {
     });
 
     expect(descriptor.metadataVerified).toBe(false);
+  });
+
+  it("fails closed when external runtime metadata uses unknown placeholders", () => {
+    const descriptor = byoLlmProviderDescriptorFromEnv({
+      CATERING_LLM_PROVIDER: "openai",
+      CATERING_LLM_MODEL: "unknown",
+      CATERING_LLM_PROVIDER_CAPABILITY: "structured_output",
+      CATERING_LLM_PROCESSING_REGION: " unknown ",
+      CATERING_LLM_MAX_ESTIMATED_COST_EUR: "0.12",
+      CATERING_LLM_RETENTION_POLICY: "unknown",
+      CATERING_LLM_TRAINING_USE: "contractually_excluded",
+      CATERING_LLM_BASE_URL: "https://api.example.test/v1/responses"
+    });
+
+    expect(descriptor.metadataVerified).toBe(false);
+    const result = evaluateByoLlmProviderDataGate({
+      provider: descriptor,
+      context,
+      approval: validApproval()
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.errors).toContain("provider runtime metadata is incomplete or unverified");
+  });
+
+  it("does not trust unknown metadata on an injected descriptor marked verified", () => {
+    const descriptor = createByoLlmProviderDescriptor({
+      providerKind: "openai",
+      dataLeavesInstallation: true,
+      providerModel: "unknown",
+      capability: "structured_output",
+      actualRegion: "unknown",
+      maximumEstimatedCostEur: 0.12,
+      retentionPolicy: "unknown",
+      trainingUse: "contractually_excluded",
+      endpoint: "unknown",
+      metadataVerified: true
+    });
+
+    const result = evaluateByoLlmProviderDataGate({
+      provider: descriptor,
+      context,
+      approval: {
+        ...validApproval(),
+        allowedModels: ["unknown"],
+        allowedRegions: ["unknown"],
+        allowedEndpoints: ["unknown"],
+        retentionPolicy: "unknown"
+      }
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.errors).toContain("provider runtime metadata contains unknown or unsafe values");
+  });
+
+  it("does not treat the unset-cost sentinel as verified provider metadata", () => {
+    const descriptor = createByoLlmProviderDescriptor({
+      ...externalDescriptor(),
+      maximumEstimatedCostEur: Number.MAX_VALUE
+    });
+    const result = evaluateByoLlmProviderDataGate({
+      provider: descriptor,
+      context,
+      approval: { ...validApproval(), maxCostEurPerCall: Number.MAX_VALUE }
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.errors).toContain("provider runtime metadata contains unknown or unsafe values");
   });
 
   it.each(["synthetic_live", "fixture_only"] as const)("blocks an injected %s adapter behind a fixture descriptor before it runs", async (adapterMode) => {

@@ -178,7 +178,9 @@ function adapterForModel(model: string, env: Record<string, string | undefined>)
     ...env,
     CATERING_LLM_PROVIDER: env.CATERING_LLM_PROVIDER ?? "openai",
     CATERING_LLM_MODEL: model,
-    CATERING_SYNTHETIC_LLM_SLICE: "1"
+    // The batch command must not manufacture the provider opt-in. A live run
+    // is allowed only when the server-owned environment explicitly enables it.
+    CATERING_SYNTHETIC_LLM_SLICE: env.CATERING_SYNTHETIC_LLM_SLICE
   };
   return buildBoundaryGuardedLlmAdapterFromEnv(providerEnv, {
     providerRunIdPrefix: "offer-package-batch-pilot"

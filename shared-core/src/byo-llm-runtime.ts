@@ -10,6 +10,7 @@ import {
   createByoLlmProviderDescriptor,
   evaluateByoLlmProviderDataGate,
   loadByoLlmExternalProcessingApprovalFromEnv,
+  redactByoLlmEndpointForAudit,
   type ByoLlmExternalProcessingApproval,
   type ByoLlmProviderDataContext,
   type ByoLlmProviderDescriptor,
@@ -36,6 +37,8 @@ export interface BoundaryGuardedLlmAdapterOptions {
   descriptor: ByoLlmProviderDescriptor;
   delegate: LlmReadinessProviderAdapter;
   approvalResolver?: () => ByoLlmExternalProcessingApproval | undefined;
+  /** Server-owned runtime flags are part of the use-case boundary, including injected delegates. */
+  env?: Record<string, string | undefined>;
 }
 
 // Fixture calls pass through the same draft-only runtime guard as external
@@ -46,6 +49,37 @@ const runtimeCreatedFixtureAdapters = new WeakMap<object, LlmReadinessProviderAd
 function isRuntimeCreatedFixtureAdapter(adapter: LlmReadinessProviderAdapter): boolean {
   return runtimeCreatedFixtureAdapters.get(adapter) === adapter.run &&
     Object.getPrototypeOf(adapter) === BoundaryGuardedByoLlmProviderAdapter.prototype;
+}
+
+function safeExternalProviderErrors(errors: readonly string[]): string[] {
+  const staticSafe = new Set([
+    "BYO LLM provider call failed",
+    "no synthetic fixture matches input",
+    "provider response must be valid JSON",
+    "provider response must contain components as an array",
+    "provider response must contain menuItems as an array",
+    "provider response must contain signals and alternatives as arrays",
+    "provider response must contain text, reason and reasonCode as strings",
+    "provider response did not contain output text",
+    "codex CLI output did not contain a valid JSON object",
+    "codex CLI JSON output must contain components as an array",
+    "codex CLI JSON output must contain menuItems as an array",
+    "codex CLI JSON output must contain signals and alternatives as arrays",
+    "codex CLI JSON output must contain text, reason and reasonCode as strings",
+    "codex CLI is not logged in or subscription authentication is unavailable",
+    "OpenAI synthetic live transport only supports clarification_question_draft, production_draft_extraction, intake_shadow_extraction and offer_package_classification_draft",
+    "Codex CLI transport only supports clarification_question_draft, production_draft_extraction, intake_shadow_extraction and offer_package_classification_draft"
+  ]);
+  const safe = errors.filter((error) => (
+    staticSafe.has(error) ||
+    /^codex CLI binary not found: [^\r\n]+$/.test(error) ||
+    /^codex CLI timed out after \d+ms$/.test(error) ||
+    /^codex CLI exited with code (?:-?\d+|unknown)$/.test(error) ||
+    /^OpenAI responses request timed out after \d+ms$/.test(error)
+  )).map((error) => (
+    error.startsWith("codex CLI binary not found:") ? "codex CLI binary not found" : error
+  ));
+  return safe.length > 0 ? [...new Set(safe)] : ["BYO LLM provider call failed"];
 }
 
 /**
@@ -65,6 +99,11 @@ export class BoundaryGuardedLlmAdapter {
     request: LlmReadinessProviderAdapterRequest,
     context: ByoLlmProviderDataContext
   ): Promise<LlmReadinessProviderAdapterResponse> {
+    const providerBoundary = validateByoLlmProviderRunBoundary({
+      providerKind: this.options.descriptor.providerKind,
+      env: this.options.env ?? process.env,
+      input: request.input
+    });
     const inputHash = `sha256:${createHash("sha256").update(JSON.stringify(request.input)).digest("hex")}`;
     const projection = projectByoLlmExternalPromptContext(request.promptContext);
     const projectedRequest: LlmReadinessProviderAdapterRequest = this.options.descriptor.dataLeavesInstallation
@@ -92,7 +131,7 @@ export class BoundaryGuardedLlmAdapter {
       providerModel: this.options.descriptor.providerModel,
       capability: this.options.descriptor.capability,
       actualRegion: this.options.descriptor.actualRegion,
-      endpoint: this.options.descriptor.endpoint,
+      endpoint: redactByoLlmEndpointForAudit(this.options.descriptor.endpoint),
       maximumEstimatedCostEur: this.options.descriptor.maximumEstimatedCostEur,
       retentionPolicy: this.options.descriptor.retentionPolicy,
       trainingUse: this.options.descriptor.trainingUse,
@@ -104,6 +143,16 @@ export class BoundaryGuardedLlmAdapter {
       outputHash: input.outputHash,
       successClass: input.successClass
     });
+    if (!providerBoundary.valid) {
+      return {
+        ok: false,
+        errors: providerBoundary.errors,
+        adapterId: this.adapterId,
+        adapterMode: this.adapterMode,
+        promptSchemaId: request.promptSchemaId,
+        processingPolicy: policyMetadata({ successClass: "policy_rejected" })
+      };
+    }
     if (
       this.options.descriptor.providerKind === "fixture" &&
       !isRuntimeCreatedFixtureAdapter(this.options.delegate)
@@ -164,12 +213,41 @@ export class BoundaryGuardedLlmAdapter {
     const outputHash = response.outputCandidate
       ? `sha256:${createHash("sha256").update(response.outputCandidate.text).digest("hex")}`
       : undefined;
+    const outputBoundary = response.outputCandidate
+      ? validateByoLlmProviderRunBoundary({
+          providerKind: this.options.descriptor.providerKind,
+          env: this.options.env ?? process.env,
+          input: request.input,
+          outputCandidate: response.outputCandidate
+        })
+      : { valid: true, errors: [] };
+    if (!outputBoundary.valid) {
+      return {
+        ok: false,
+        errors: outputBoundary.errors,
+        adapterId: this.adapterId,
+        adapterMode: this.adapterMode,
+        promptSchemaId: request.promptSchemaId,
+        processingPolicy: policyMetadata({
+          approvalId: decision.approvalId,
+          outputHash,
+          successClass: "provider_rejected"
+        })
+      };
+    }
+    const safeResponse = this.options.descriptor.dataLeavesInstallation && !response.ok
+      ? {
+          ...response,
+          errors: safeExternalProviderErrors(response.errors),
+          outputCandidate: undefined
+        }
+      : response;
     return {
-      ...response,
+      ...safeResponse,
       processingPolicy: policyMetadata({
         approvalId: decision.approvalId,
         outputHash,
-        successClass: response.ok ? "success" : "provider_rejected"
+        successClass: safeResponse.ok ? "success" : "provider_rejected"
       })
     };
   }
@@ -205,6 +283,11 @@ function hasVerifiedProviderCapability(value: string | undefined): boolean {
   return configured === "structured_output" || configured === "document_understanding" || configured === "text_generation";
 }
 
+function hasConcreteProviderMetadata(value: string | undefined): boolean {
+  const configured = value?.trim();
+  return Boolean(configured) && configured?.toLowerCase() !== "unknown";
+}
+
 export function byoLlmProviderDescriptorFromEnv(
   env: Record<string, string | undefined> = process.env
 ): ByoLlmProviderDescriptor {
@@ -229,12 +312,13 @@ export function byoLlmProviderDescriptorFromEnv(
         ? env.CATERING_LLM_BASE_URL?.trim() || "https://api.openai.com/v1/responses"
         : env.CATERING_LLM_CLI_BIN?.trim() || "codex",
     metadataVerified: provider === "fixture" || Boolean(
-      env.CATERING_LLM_MODEL?.trim() &&
+      hasConcreteProviderMetadata(env.CATERING_LLM_MODEL) &&
       hasVerifiedProviderCapability(env.CATERING_LLM_PROVIDER_CAPABILITY) &&
-      env.CATERING_LLM_PROCESSING_REGION?.trim() &&
+      hasConcreteProviderMetadata(env.CATERING_LLM_PROCESSING_REGION) &&
       env.CATERING_LLM_MAX_ESTIMATED_COST_EUR?.trim() &&
-      env.CATERING_LLM_RETENTION_POLICY?.trim() &&
-      env.CATERING_LLM_TRAINING_USE === "contractually_excluded"
+      hasConcreteProviderMetadata(env.CATERING_LLM_RETENTION_POLICY) &&
+      env.CATERING_LLM_TRAINING_USE === "contractually_excluded" &&
+      hasConcreteProviderMetadata(provider === "openai" ? env.CATERING_LLM_BASE_URL : env.CATERING_LLM_CLI_BIN)
     )
   });
 }
@@ -246,7 +330,8 @@ export function buildBoundaryGuardedLlmAdapterFromEnv(
   return new BoundaryGuardedLlmAdapter({
     descriptor: byoLlmProviderDescriptorFromEnv(env),
     delegate: buildByoLlmAdapterFromEnv(env, options),
-    approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env)
+    approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env),
+    env
   });
 }
 
@@ -258,7 +343,8 @@ export function guardByoLlmAdapterForEnv(
   return new BoundaryGuardedLlmAdapter({
     descriptor,
     delegate,
-    approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env)
+    approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env),
+    env
   });
 }
 

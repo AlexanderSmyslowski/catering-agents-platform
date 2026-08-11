@@ -12,6 +12,7 @@ describe("BYO LLM raw transport boundary", () => {
     const indexSource = readFileSync(path.join(root, "shared-core/src/index.ts"), "utf8");
     expect(indexSource).not.toContain('export * from "./llm-readiness-openai-transport.js"');
     expect(indexSource).not.toContain('export * from "./byo-llm-codex-cli-transport.js"');
+    expect(indexSource).not.toContain('export * from "./llm-readiness-synthetic-live-probe.js"');
     expect(indexSource).not.toContain("buildByoLlmAdapterFromEnv");
   });
 

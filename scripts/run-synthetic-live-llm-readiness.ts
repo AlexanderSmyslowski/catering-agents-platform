@@ -1,9 +1,11 @@
 import {
   runLlmReadinessSyntheticLivePreflight,
-  runLlmReadinessSyntheticLiveProbe,
   type LlmReadinessSyntheticLivePreflightResult,
   type LlmReadinessSyntheticLiveTransport
 } from "@catering/shared-core";
+import {
+  runLlmReadinessSyntheticLiveProbe
+} from "../shared-core/src/llm-readiness-synthetic-live-probe.js";
 import { pathToFileURL } from "node:url";
 
 export interface SyntheticLiveProbeCliArgs {
@@ -29,6 +31,36 @@ export interface SyntheticLiveProbeCliResult {
 export interface SyntheticLiveProbeCliOptions {
   env?: Record<string, string | undefined>;
   transport?: LlmReadinessSyntheticLiveTransport;
+}
+
+/** Keep the human-readable CLI evidence free of provider text and raw model output. */
+export function sanitizeSyntheticLiveProbeCliResult(
+  result: SyntheticLiveProbeCliResult
+): SyntheticLiveProbeCliResult {
+  const hasFailure = !result.ok ||
+    result.errors.length > 0 ||
+    (result.response?.errors.length ?? 0) > 0 ||
+    (result.auditRecord?.errors.length ?? 0) > 0 ||
+    (result.runResult?.errors.length ?? 0) > 0;
+  const safeErrors = hasFailure ? ["synthetic-live probe failed"] : [];
+  return {
+    ...result,
+    errors: safeErrors,
+    response: result.response
+      ? { ...result.response, errors: safeErrors, outputCandidate: undefined }
+      : undefined,
+    auditRecord: result.auditRecord
+      ? { ...result.auditRecord, errors: safeErrors, errorCount: safeErrors.length }
+      : undefined,
+    runResult: result.runResult
+      ? {
+          ...result.runResult,
+          errors: safeErrors,
+          errorCount: safeErrors.length,
+          outputCandidate: undefined
+        }
+      : undefined
+  };
 }
 
 export function parseSyntheticLiveProbeCliArgs(argv: readonly string[]): SyntheticLiveProbeCliArgs {
@@ -136,7 +168,7 @@ export async function main(): Promise<void> {
     env: process.env
   });
 
-  console.log(JSON.stringify(output, null, 2));
+  console.log(JSON.stringify(sanitizeSyntheticLiveProbeCliResult(output), null, 2));
 
   if (shouldFailSyntheticLiveProbeProcess(output, args)) {
     process.exitCode = 1;

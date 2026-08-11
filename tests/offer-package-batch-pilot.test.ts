@@ -439,6 +439,7 @@ describe("offer package batch pilot", () => {
       ], {
         CATERING_LLM_PROVIDER: "openai",
         OPENAI_API_KEY: "sk-test",
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
         CATERING_LLM_BASE_URL: endpoint,
         CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath,
         CATERING_LLM_PROVIDER_CAPABILITY: "structured_output",
@@ -524,6 +525,7 @@ describe("offer package batch pilot", () => {
       ], {
         CATERING_LLM_PROVIDER: "openai",
         OPENAI_API_KEY: "sk-test",
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
         CATERING_LLM_BASE_URL: endpoint,
         CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath,
         CATERING_LLM_PROVIDER_CAPABILITY: "structured_output",

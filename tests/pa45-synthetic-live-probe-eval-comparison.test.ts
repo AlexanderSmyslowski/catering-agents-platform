@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   evaluateLlmReadinessEvalOutputCandidateMatch,
   llmReadinessEvalFixtures,
-  runLlmReadinessSyntheticLiveProbe,
   type LlmReadinessSyntheticLiveTransport
 } from "@catering/shared-core";
+import { runLlmReadinessSyntheticLiveProbe } from "../shared-core/src/llm-readiness-synthetic-live-probe.js";
 
 const docPath = "docs/architecture/PA45_SYNTHETIC_LIVE_PROBE_EVAL_COMPARISON.md";
 const doc = existsSync(docPath) ? readFileSync(docPath, "utf8") : "";

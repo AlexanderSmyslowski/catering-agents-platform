@@ -91,21 +91,64 @@ function sha256(value: string): string {
 }
 
 /**
+ * Endpoint configuration is needed for an approval comparison, but a raw
+ * endpoint is not safe audit data: URLs may contain credentials or secret
+ * query parameters and CLI paths may reveal local operator details. Keep the
+ * exact value inside the in-process descriptor and expose only a safe form in
+ * processing provenance.
+ */
+export function redactByoLlmEndpointForAudit(endpoint: string): string {
+  try {
+    const parsed = new URL(endpoint);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "local:") {
+      parsed.username = "";
+      parsed.password = "";
+      parsed.search = "";
+      parsed.hash = "";
+      // Keep only the authority. Provider paths can contain tenant ids or
+      // credentials, so they are not safe provenance even after query
+      // parameters and fragments have been removed.
+      return `${parsed.protocol}//${parsed.host}`;
+    }
+  } catch {
+    // Non-URL provider identifiers are represented by a one-way identifier below.
+  }
+
+  return sha256(endpoint);
+}
+
+/**
  * External providers receive only the operational content needed for the task.
  * Contact and salutation lines are removed wholesale so a partial regex match
  * cannot leave a person's identity or address beside otherwise useful menu data.
  */
 export function projectByoLlmExternalPromptContext(promptContext: string | undefined): ByoLlmExternalPromptProjection {
   const source = promptContext ?? "";
-  const lines = source.split(/\r?\n/);
+  const structuredProjection = (() => {
+    try {
+      const parsed = JSON.parse(source) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+      const stripSensitiveFields = (value: unknown): unknown => {
+        if (Array.isArray(value)) return value.map(stripSensitiveFields);
+        if (!value || typeof value !== "object") return value;
+        return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+          .filter(([key]) => !/^(?:customer|customerName|client|company|contact|contacts|organizer|organizerName|venue|email|phone|telephone|mobile|address|street|postalCode|zip|city|filename|fileName)$/iu.test(key))
+          .map(([key, nested]) => [key, stripSensitiveFields(nested)]));
+      };
+      return JSON.stringify(stripSensitiveFields(parsed));
+    } catch {
+      return undefined;
+    }
+  })();
+  const lines = (structuredProjection ?? source).split(/\r?\n/);
   const directlyIdentifying = lines.map((line) => (
       /\b[\w.%+-]+@[\w.-]+\.[a-z]{2,}\b/i.test(line) ||
       /\b(?:https?:\/\/|www\.)\S+/i.test(line) ||
       /\+\d(?:[\d\s()./-]*\d){6,}/.test(line) ||
       /(?:^|[^\d])0\d(?:[\d\s()./-]*\d){7,}(?:$|[^\d])/.test(line) ||
       /^\s*(?:\+?\d[\d\s()./-]{6,})\s*$/.test(line) ||
-      /^\s*[\p{L}][\p{L} .'-]*(?:straße|strasse|str\.?|weg|allee|platz|gasse|ring|ufer|damm)\s+\d+[\p{L}\d/-]*(?:\s*[,·]\s*\d{5}\s+[\p{L} .'-]+)?\s*$/iu.test(line) ||
-      /^\s*(?:anrede|kontakt|contact|e-?mail|telefon|phone|adresse|address|kunde|customer|firma|company|veranstalter|organizer)\s*:/i.test(line) ||
+      /\b[\p{L}][\p{L} .'-]*(?:straße|strasse|str\.?|weg|allee|platz|gasse|ring|ufer|damm)\s+\d+[\p{L}\d/-]*(?:\s*[,·]\s*\d{5}\s+[\p{L} .'-]+)?/iu.test(line) ||
+      /\b(?:anrede|kontakt|contact|e-?mail|telefon|phone|adresse|address|kunde|customer|firma|company|veranstalter|organizer)\s*:/i.test(line) ||
       /^\s*(?:sehr\s+geehrt\w*|liebe[rsn]?|dear)\b/i.test(line)
   ));
   const standalonePerson = (line: string) =>
@@ -150,6 +193,20 @@ function nonEmptyList(value: unknown): value is readonly unknown[] {
 
 function validDate(value: string | undefined): boolean {
   return value !== undefined && !Number.isNaN(new Date(value).getTime());
+}
+
+function hasConcreteExternalProviderMetadata(descriptor: ByoLlmProviderDescriptor): boolean {
+  if (descriptor.providerKind === "fixture") return true;
+  const isConcrete = (value: string): boolean => {
+    const normalized = value.trim().toLowerCase();
+    return normalized.length > 0 && normalized !== "unknown";
+  };
+  return isConcrete(descriptor.providerModel) &&
+    isConcrete(descriptor.actualRegion) &&
+    isConcrete(descriptor.retentionPolicy) &&
+    isConcrete(descriptor.endpoint) &&
+    descriptor.trainingUse === "contractually_excluded" &&
+    descriptor.maximumEstimatedCostEur !== Number.MAX_VALUE;
 }
 
 export function createByoLlmProviderDescriptor(
@@ -242,6 +299,9 @@ export function evaluateByoLlmProviderDataGate(input: {
     return { allowed: errors.length === 0, errors };
   }
   if (!descriptor.metadataVerified) errors.push("provider runtime metadata is incomplete or unverified");
+  if (!hasConcreteExternalProviderMetadata(descriptor)) {
+    errors.push("provider runtime metadata contains unknown or unsafe values");
+  }
   if (!input.approval) {
     return { allowed: false, errors: [...errors, "external provider calls require a matching processing approval"] };
   }
@@ -268,7 +328,7 @@ export function evaluateByoLlmProviderDataGate(input: {
 
   return errors.length === 0
     ? { allowed: true, errors: [], approvalId: approval.approvalId }
-    : { allowed: false, errors };
+    : { allowed: false, errors, approvalId: approval.approvalId };
 }
 
 export function loadByoLlmExternalProcessingApprovalFromEnv(

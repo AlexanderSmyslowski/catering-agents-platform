@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   llmReadinessEvalFixtures,
-  runLlmReadinessSyntheticLiveProbe,
   type LlmReadinessSyntheticLiveTransport
 } from "@catering/shared-core";
+import { runLlmReadinessSyntheticLiveProbe } from "../shared-core/src/llm-readiness-synthetic-live-probe.js";
 import {
   parseSyntheticLiveProbeCliArgs,
   shouldFailSyntheticLiveProbeProcess

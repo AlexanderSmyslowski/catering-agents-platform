@@ -107,7 +107,11 @@ function buildProductionApp(
       llmProviderDescriptor: externalProviderDescriptor
     } : {}),
     env: approvalPath
-      ? { ...options.env, CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath }
+      ? {
+          ...options.env,
+          CATERING_SYNTHETIC_LLM_SLICE: "1",
+          CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath
+        }
       : options.env,
     sourceDocumentReader: options.sourceDocumentReader ?? sourceDocumentReader
   });
@@ -378,7 +382,7 @@ describe("ProductionDraft document BYO extraction", () => {
       store,
       llmAdapter: adapter,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" }
     });
 
     try {
@@ -699,7 +703,7 @@ describe("ProductionDraft document BYO extraction", () => {
         providerModel: externalProviderDescriptor.providerModel,
         capability: externalProviderDescriptor.capability,
         actualRegion: externalProviderDescriptor.actualRegion,
-        endpoint: externalProviderDescriptor.endpoint,
+        endpoint: "https://api.example.test",
         maximumEstimatedCostEur: externalProviderDescriptor.maximumEstimatedCostEur,
         retentionPolicy: externalProviderDescriptor.retentionPolicy,
         trainingUse: "contractually_excluded",
@@ -733,7 +737,7 @@ describe("ProductionDraft document BYO extraction", () => {
             policyProviderModel: externalProviderDescriptor.providerModel,
             policyCapability: externalProviderDescriptor.capability,
             policyRegion: externalProviderDescriptor.actualRegion,
-            policyEndpoint: externalProviderDescriptor.endpoint,
+            policyEndpoint: "https://api.example.test",
             policyMaximumEstimatedCostEur: externalProviderDescriptor.maximumEstimatedCostEur,
             policyRetentionPolicy: externalProviderDescriptor.retentionPolicy,
             policyTrainingUse: "contractually_excluded",

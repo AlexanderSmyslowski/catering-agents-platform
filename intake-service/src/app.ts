@@ -672,7 +672,8 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         ? new BoundaryGuardedLlmAdapter({
             descriptor: options.llmProviderDescriptor,
             delegate: options.llmAdapter,
-            approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env)
+            approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env),
+            env
           })
         : buildBoundaryGuardedLlmAdapterFromEnv(env, {
             providerRunIdPrefix: "intake-shadow"
