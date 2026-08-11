@@ -18,9 +18,22 @@ async () => {
     const text = document.body.innerText;
     if (
       text.includes("Lunch · 42 Teilnehmer · 2026-12-16") &&
-      text.includes("Rückfragenstatus: offen 5 · beantwortet 0") &&
-      text.includes("production-session-spec-demo-production-answered-clarification")
+      text.includes("Rückfragen:\noffen 6 · beantwortet 0")
     ) {
+      break;
+    }
+  }
+
+  const openAnswerEditorButton = [...document.querySelectorAll("button")].find((button) =>
+    (button.textContent ?? "").replace(/\s+/g, " ").trim() === "Rückfragen beantworten"
+  );
+  if (!openAnswerEditorButton) {
+    throw new Error("Offener-Rueckfragen-Browserpfad ohne sichtbare Antwort-Aktion");
+  }
+  openAnswerEditorButton.click();
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (document.body.innerText.includes("Antwort direkt zur Agentenfrage")) {
       break;
     }
   }
@@ -30,13 +43,12 @@ async () => {
     .filter((anchor) => anchor.offsetParent !== null)
     .map((anchor) => anchor.getAttribute("href") ?? "");
   for (const marker of [
-    "Nächster Schritt\\n\\nRückfragen beantworten",
+    "NÄCHSTER SCHRITT\n\nRückfragen beantworten",
     "Lunch · 42 Teilnehmer · 2026-12-16",
-    "Klarheit: teilweise vollständig · Rückfragen: 5 offene Rückfragen",
-    "Rückfragenstatus: offen 5 · beantwortet 0",
-    "Rückfragen und Antworten\\noffen 5 · beantwortet 0",
-    "ConversationSession-Projektion",
-    "production-session-spec-demo-production-answered-clarification",
+    "Status:\nteilweise geklärt",
+    "Rückfragen:\noffen 6 · beantwortet 0",
+    "Rückfragen und Antworten\noffen 6 · beantwortet 0",
+    "URSPRÜNGLICHE INTAKE-ANFRAGE",
     "Rückfrage offen",
     "Bitte prüfen: Synthetischer Rueckfragenanker fuer Demo.",
     "Antwort direkt zur Agentenfrage",
@@ -63,7 +75,7 @@ async () => {
     missing.push("Offener-Rueckfragen-Pfad zeigt alten Abschluss-Kontext");
   }
   const archiveButton = [...document.querySelectorAll("button")].find((button) =>
-    (button.textContent ?? "").replace(/\s+/g, " ").trim().startsWith("Fehlupload archivieren")
+    (button.getAttribute("title") ?? "").startsWith("Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen:")
   );
   if (!archiveButton) {
     missing.push("Offener-Rueckfragen-Pfad ohne Fehlupload-Archiv-Aktion");
@@ -73,13 +85,10 @@ async () => {
     if (archiveButton.disabled) {
       missing.push("Offener-Rueckfragen-Pfad deaktiviert Fehlupload-Archiv trotz aktivem Intake-Kontext");
     }
-    if (!archiveButtonText.includes("Intake-Anfrage demo-production-answered-clarification")) {
+    if (!archiveButtonText.includes("Intake-Anfrage im Fokus")) {
       missing.push("Offener-Rueckfragen-Pfad bindet Fehlupload-Archiv nicht an den aktuellen Intake-Kontext");
     }
-    if (
-      archiveTitle !==
-      "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage demo-production-answered-clarification"
-    ) {
+    if (archiveTitle !== "Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen: Intake-Anfrage im Fokus") {
       missing.push("Offener-Rueckfragen-Pfad beschriftet Fehlupload-Archiv nicht mit dem aktuellen Intake-Kontext");
     }
   }
@@ -95,11 +104,10 @@ async () => {
         const archivedText = document.body.innerText;
         if (
           archivedText.includes(
-            "Fehlupload demo-production-answered-clarification wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+            "Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
           ) &&
-          archivedText.includes("Kein aktiver Vorgang") &&
-          archivedText.includes("Auftrag einfügen oder Datei ablegen") &&
-          !archivedText.includes("requestId: demo-production-answered-clarification")
+          archivedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben") &&
+          !archivedText.includes("requestId:")
         ) {
           break;
         }
@@ -112,27 +120,23 @@ async () => {
         disabled: button.disabled,
         title: button.getAttribute("title") ?? ""
       }));
-      const archivedArchiveButton = archivedButtons.find((button) => button.text === "Fehlupload archivieren");
+      const archivedArchiveButton = archivedButtons.find((button) =>
+        button.text.startsWith("Fehlgeschlagenen Demo-Upload ausblenden")
+      );
       if (
         !archivedText.includes(
-          "Fehlupload demo-production-answered-clarification wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
+          "Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
         )
       ) {
         missing.push("Archive-Rehearsal ohne Soft-Archiv-Erfolgsmeldung");
       }
-      if (!archivedText.includes("Kein aktiver Vorgang")) {
-        missing.push("Archive-Rehearsal ohne leeren aktiven Vorgang nach Klick");
-      }
-      if (!archivedText.includes("Auftrag einfügen oder Datei ablegen")) {
+      if (!archivedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben")) {
         missing.push("Archive-Rehearsal ohne sichere naechste Eingabe nach Klick");
       }
-      if (archivedText.includes("requestId: demo-production-answered-clarification")) {
+      if (archivedText.includes("requestId:")) {
         missing.push("Archive-Rehearsal zeigt archivierten Intake weiter als aktiven Kontext");
       }
-      if (archivedText.includes("Lunch · 42 Teilnehmer · 2026-12-16")) {
-        missing.push("Archive-Rehearsal zeigt archivierte Spezifikation weiter als aktiven Vorgang");
-      }
-      if (archivedHtml.includes("/api/intake/v1/intake/requests/demo-production-answered-clarification")) {
+      if (archivedHtml.includes("/api/intake/v1/intake/requests/")) {
         missing.push("Archive-Rehearsal behaelt archivierten Intake-Detailanker im DOM");
       }
       if (archivedText.includes("Abschluss-Kontext:")) {
@@ -167,13 +171,12 @@ async () => {
   const planWithSaveButton = [...document.querySelectorAll("button")].find((button) =>
     (button.textContent ?? "").replace(/\s+/g, " ").trim() === "Speichern und Berechnung starten"
   );
-  const answerEditor = answerSaveButton?.closest("section, article, form") ??
-    [...document.querySelectorAll("section, article, form")].find((element) =>
-      (element.textContent ?? "").includes("Antwort direkt zur Agentenfrage") &&
-      (element.textContent ?? "").includes("Antworten speichern")
-    );
+  const answerEditor = [...document.querySelectorAll("section, article, form")].find((element) =>
+    (element.textContent ?? "").includes("Antwort direkt zur Agentenfrage") &&
+    (element.textContent ?? "").includes("Antworten speichern")
+  );
   const attendeeInput = answerEditor
-    ? [...answerEditor.querySelectorAll("input")].find((input) => input.getAttribute("placeholder") === "Teilnehmerzahl")
+    ? [...answerEditor.querySelectorAll("input")].find((input) => input.getAttribute("placeholder") === "120")
     : undefined;
 
   if (!answerSaveButton) {
@@ -187,7 +190,7 @@ async () => {
   if (!attendeeInput) {
     missing.push("Offener-Rueckfragen-Pfad ohne Teilnehmerzahl-Feld");
   } else {
-    attendeeInput.value = "43";
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(attendeeInput, "43");
     attendeeInput.dispatchEvent(new Event("input", { bubbles: true }));
     attendeeInput.dispatchEvent(new Event("change", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -207,17 +210,84 @@ async () => {
       planWithSaveButton.click();
       for (let attempt = 0; attempt < 60; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 150));
-        const submittedText = document.body.innerText;
-        const submittedHtml = document.body.innerHTML;
+        const draftText = document.body.innerText;
         if (
-          submittedText.includes("Produktionsplan wurde erzeugt.") &&
-          submittedText.includes("Plan-Kontext: aktueller Produktionsplan") &&
-          submittedText.includes("Produktionsblatt exportieren") &&
-          submittedText.includes("Einkaufsliste exportieren") &&
-          submittedHtml.includes("/api/exports/v1/exports/production-plans/") &&
-          submittedHtml.includes("/api/exports/v1/exports/purchase-lists/")
+          draftText.includes("Lunch · 43 Teilnehmer · 2026-12-16") &&
+          draftText.includes("manueller Import | wartet auf Prüfung | 5 Prüfpunkte") &&
+          draftText.includes("Enthält: Eventdaten, Produktionsplan, Einkaufsliste, 2 Rückfragen.")
         ) {
           break;
+        }
+      }
+
+      const draftText = document.body.innerText;
+      if (!draftText.includes("Lunch · 43 Teilnehmer · 2026-12-16")) {
+        missing.push("Answer-Submit-Rehearsal speichert die strukturierte Teilnehmerzahl nicht im Lunch-Auftrag");
+      }
+      if (!draftText.includes("manueller Import | wartet auf Prüfung | 5 Prüfpunkte")) {
+        missing.push("Answer-Submit-Rehearsal erzeugt keinen prüfpflichtigen Produktionsentwurf");
+      }
+      if (!draftText.includes("Enthält: Eventdaten, Produktionsplan, Einkaufsliste, 2 Rückfragen.")) {
+        missing.push("Answer-Submit-Rehearsal weist den Inhalt des Produktionsentwurfs nicht aus");
+      }
+      if (draftText.includes("Plan-Kontext: aktueller Produktionsplan")) {
+        missing.push("Answer-Submit-Rehearsal materialisiert Produktdaten vor der Freigabe");
+      }
+
+      const passButtons = [...document.querySelectorAll("button")].filter(
+        (button) => (button.textContent ?? "").trim() === "Passt" && !button.disabled
+      );
+      if (passButtons.length !== 5) {
+        missing.push(`Answer-Submit-Rehearsal erwartet 5 entscheidbare Prüfpunkte, gefunden: ${passButtons.length}`);
+      } else {
+        for (const passButton of passButtons) {
+          passButton.click();
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
+      }
+
+      const approveDraftButton = [...document.querySelectorAll("button")].find(
+        (button) => (button.textContent ?? "").trim() === "Entwurf freigeben"
+      );
+      if (!approveDraftButton) {
+        missing.push("Answer-Submit-Rehearsal ohne Entwurf-freigeben-Aktion");
+      } else if (approveDraftButton.disabled) {
+        missing.push("Answer-Submit-Rehearsal kann den vollständig geprüften Entwurf nicht freigeben");
+      } else {
+        approveDraftButton.click();
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          const approvedText = document.body.innerText;
+          const enabledApplyButton = [...document.querySelectorAll("button")].find(
+            (button) =>
+              (button.textContent ?? "").trim() === "Entwurf übernehmen" &&
+              !button.disabled
+          );
+          if (approvedText.includes("Produktionsentwurf freigegeben.") && enabledApplyButton) {
+            break;
+          }
+        }
+      }
+
+      const applyDraftButton = [...document.querySelectorAll("button")].find(
+        (button) => (button.textContent ?? "").trim() === "Entwurf übernehmen"
+      );
+      if (!applyDraftButton) {
+        missing.push("Answer-Submit-Rehearsal ohne bewusste Übernahme-Aktion nach Freigabe");
+      } else if (applyDraftButton.disabled) {
+        missing.push("Answer-Submit-Rehearsal kann den freigegebenen Entwurf nicht übernehmen");
+      } else {
+        applyDraftButton.click();
+        for (let attempt = 0; attempt < 80; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          const appliedText = document.body.innerText;
+          if (
+            appliedText.includes("Produktionsentwurf übernommen.") &&
+            appliedText.includes("Plan-Kontext: aktueller Produktionsplan") &&
+            appliedText.includes("1 Liste ohne Positionen")
+          ) {
+            break;
+          }
         }
       }
 
@@ -235,14 +305,16 @@ async () => {
         /^\/api\/exports\/v1\/exports\/purchase-lists\/[^/]+\/csv$/.test(href)
       );
       const submittedPlanId = submittedPlanExport?.match(/^\/api\/exports\/v1\/exports\/production-plans\/([^/]+)\/html$/)?.[1];
-      const submittedPurchaseListId = submittedPurchaseExport?.match(/^\/api\/exports\/v1\/exports\/purchase-lists\/([^/]+)\/csv$/)?.[1];
       const expectedHandoffContext =
-        "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden";
-      if (!submittedText.includes("Produktionsplan wurde erzeugt.")) {
-        missing.push("Answer-Submit-Rehearsal ohne Plan-Erfolgsmeldung");
+        "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen";
+      if (!submittedText.includes("Produktionsentwurf übernommen.")) {
+        missing.push("Answer-Submit-Rehearsal ohne bestätigte Entwurfsübernahme");
       }
       if (!submittedText.includes("Teilnehmerzahl: 43")) {
         missing.push("Answer-Submit-Rehearsal ohne gespeicherte strukturierte Teilnehmerzahl");
+      }
+      if (!submittedText.includes("Lunch · 43 Teilnehmer · 2026-12-16")) {
+        missing.push("Answer-Submit-Rehearsal zeigt den aktualisierten Lunch-Auftrag nicht mit 43 Teilnehmern");
       }
       if (!submittedText.includes("Plan-Kontext: aktueller Produktionsplan")) {
         missing.push("Answer-Submit-Rehearsal ohne lesbaren aktuellen Plan-Kontext");
@@ -258,27 +330,25 @@ async () => {
           missing.push(`Answer-Submit-Rehearsal Produktionsplan-Export ist nicht abrufbar: ${planExportResponse.status}`);
         } else {
           const planExportBody = await planExportResponse.text();
-          if (!planExportBody.includes(`Produktionsplan ${submittedPlanId}`)) {
-            missing.push(`Answer-Submit-Rehearsal Produktionsplan-Exportinhalt passt nicht zu ${submittedPlanId}`);
+          if (
+            !planExportBody.includes("<h1>Produktionsplan</h1>") ||
+            !planExportBody.includes("Klassifikation für Lunchbuffet fehlt.")
+          ) {
+            missing.push("Answer-Submit-Rehearsal Produktionsplan-Export enthaelt keine fachliche Lunch-Planung");
+          }
+          if (planExportBody.includes(submittedPlanId) || planExportBody.includes("planId")) {
+            missing.push("Answer-Submit-Rehearsal Produktionsplan-Export zeigt eine technische Plan-ID");
           }
         }
       }
-      if (!submittedPurchaseExport || !submittedPurchaseListId) {
-        missing.push("Answer-Submit-Rehearsal ohne aktuelle Einkaufsliste");
-      } else {
-        const purchaseExportResponse = await fetch(submittedPurchaseExport);
-        if (!purchaseExportResponse.ok) {
-          missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Export ist nicht abrufbar: ${purchaseExportResponse.status}`);
-        } else {
-          const purchaseExportBody = await purchaseExportResponse.text();
-          if (
-            !purchaseExportBody.includes(
-              `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
-            )
-          ) {
-            missing.push(`Answer-Submit-Rehearsal Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${submittedPurchaseListId}`);
-          }
-        }
+      if (submittedPurchaseExport) {
+        missing.push("Answer-Submit-Rehearsal bietet für eine Einkaufsliste ohne Positionen einen CSV-Export an");
+      }
+      if (!submittedText.includes("1 Liste ohne Positionen")) {
+        missing.push("Answer-Submit-Rehearsal kennzeichnet die leere Einkaufsliste nicht ehrlich");
+      }
+      if (!submittedText.includes("Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.")) {
+        missing.push("Answer-Submit-Rehearsal erklärt den fehlenden Einkaufslisten-Export nicht");
       }
       if (!submittedText.includes(expectedHandoffContext)) {
         missing.push("Answer-Submit-Rehearsal ohne lesbaren Abschluss-Kontext");
@@ -286,11 +356,17 @@ async () => {
       if (!submittedHtml.includes("/api/exports/v1/exports/production-plans/")) {
         missing.push("Answer-Submit-Rehearsal ohne Produktionsplan-Exportlink");
       }
-      if (!submittedHtml.includes("/api/exports/v1/exports/purchase-lists/")) {
-        missing.push("Answer-Submit-Rehearsal ohne Einkaufslisten-Exportlink");
+      if (submittedHtml.includes("/api/exports/v1/exports/purchase-lists/")) {
+        missing.push("Answer-Submit-Rehearsal zeigt einen unzulässigen Einkaufslisten-Exportlink");
       }
       if (submittedText.includes("Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.")) {
-        missing.push("Answer-Submit-Rehearsal bleibt nach Berechnung in leerem Ergebniszustand");
+        missing.push("Answer-Submit-Rehearsal bleibt nach Übernahme in leerem Ergebniszustand");
+      }
+      if (submittedText.includes("Plan-Kontext: planId ") || submittedText.includes("purchaseListId:")) {
+        missing.push("Answer-Submit-Rehearsal zeigt technische IDs im sichtbaren Kontext");
+      }
+      if (missing.length > 0) {
+        throw new Error(`Answer-Submit-Rehearsal fehlgeschlagen: ${missing.join(" | ")}`);
       }
     }
   }

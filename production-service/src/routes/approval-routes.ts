@@ -12,13 +12,13 @@ import {
   type ProductionApplyManifest,
   type TrustedActor
 } from "@catering/shared-core";
-import type { IntakeStore } from "@catering/intake-service";
 import type { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 import {
   productionDecisionRepositoryFor,
   type ProductionStore
 } from "../repositories/production-store.js";
 import type { ProductionDecisionTargetScope } from "../repositories/production-decision-repository.js";
+import type { IntakeRecordsPort } from "../ports/intake-records-port.js";
 import {
   productionDecidedDraftFor,
   validateProductionDecisionAggregate,
@@ -35,7 +35,7 @@ export type ProductionApplyFaultPhase =
 
 export interface ProductionApprovalRouteDependencies {
   store: ProductionStore;
-  intakeStore: IntakeStore;
+  intakeRecords: IntakeRecordsPort;
   repository: InMemoryRecipeRepository;
   auditLog: AuditLogStore;
   trustedActorSecret?: string;
@@ -107,13 +107,72 @@ async function compareOrInsert<T>(input: {
     : `${input.label} konnte nicht konfliktfrei veröffentlicht werden.`;
 }
 
+async function updateLinkedProductionCase(
+  store: ProductionStore,
+  actor: TrustedActor,
+  sourceDraftId: string,
+  update: {
+    approvedProductionSpecId?: string;
+    currentPlanId?: string;
+    currentPurchaseListId?: string;
+    status?: "open" | "completed";
+  }
+): Promise<void> {
+  const caseId = await store.findCaseIdForArtifact(actor, sourceDraftId);
+  if (!caseId) return;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const current = await store.getCase(actor, caseId);
+    if (!current) return;
+    const unchanged = Object.entries(update).every(([key, value]) =>
+      current[key as keyof typeof current] === value
+    );
+    if (unchanged) return;
+    const result = await store.updateCase(actor, caseId, current.version, {
+      ...current,
+      ...update,
+      version: current.version + 1,
+      updatedAt: new Date().toISOString()
+    });
+    if (result === "updated" || result === "missing") return;
+  }
+  throw new Error("Produktionsauftrag wurde gleichzeitig zu oft verändert.");
+}
+
+async function appendProductionDecisionEvents(
+  store: ProductionStore,
+  actor: TrustedActor,
+  aggregate: ProductionDecisionAggregate
+): Promise<void> {
+  const { approval, sourceDraft, approvedProductionSpec } = aggregate;
+  await store.appendEventForArtifactCase(actor, sourceDraft.draftId, {
+    at: approval.decidedAt,
+    role: "user",
+    kind: "review_decision",
+    text: approval.decision === "approved"
+      ? "Produktionsentwurf freigegeben."
+      : "Produktionsentwurf abgelehnt.",
+    artifactId: approval.approvalRequestId
+  });
+  if (!approvedProductionSpec) return;
+  await updateLinkedProductionCase(store, actor, sourceDraft.draftId, {
+    approvedProductionSpecId: approvedProductionSpec.approvedProductionSpecId
+  });
+  await store.appendEventForArtifactCase(actor, sourceDraft.draftId, {
+    at: approval.decidedAt,
+    role: "system",
+    kind: "approval",
+    text: "Produktionssnapshot freigegeben.",
+    artifactId: approvedProductionSpec.approvedProductionSpecId
+  });
+}
+
 export function registerProductionApprovalRoutes(
   app: FastifyInstance,
   deps: ProductionApprovalRouteDependencies
 ): void {
   const {
     store,
-    intakeStore,
+    intakeRecords,
     repository,
     auditLog,
     trustedActorSecret,
@@ -287,6 +346,7 @@ export function registerProductionApprovalRoutes(
           writesProductObject: false
         }
       });
+      await appendProductionDecisionEvents(store, actor, aggregate);
       return reply.code(201).send({ approval });
     }
     const approvedProductionSpec = aggregate.approvedProductionSpec!;
@@ -304,6 +364,7 @@ export function registerProductionApprovalRoutes(
         writesProductObject: false
       }
     });
+    await appendProductionDecisionEvents(store, actor, aggregate);
     return reply.code(201).send({
       approval,
       approvedProductionSpec
@@ -322,8 +383,8 @@ export function registerProductionApprovalRoutes(
       const { eventSpec, productionPlan, purchaseList, recipes } = approvedSpec.artifacts;
       const conflicts: string[] = [];
       const eventSpecConflict = await compareOrInsert({
-        get: () => intakeStore.getSpec(actor, eventSpec.specId),
-        insert: () => intakeStore.insertSpec(actor, eventSpec),
+        get: () => intakeRecords.getSpec(actor, eventSpec.specId),
+        insert: async () => (await intakeRecords.insertSpec(actor, eventSpec)) === "created" ? "created" : "exists",
         expected: eventSpec,
         label: `AcceptedEventSpec ${eventSpec.specId}`
       });
@@ -408,6 +469,19 @@ export function registerProductionApprovalRoutes(
           recipeCandidateCount: recipes.length,
           writesProductObject: true
         }
+      });
+      await updateLinkedProductionCase(store, actor, approvedSpec.sourceDraft.draftId, {
+        approvedProductionSpecId: approvedSpec.approvedProductionSpecId,
+        currentPlanId: productionPlan.planId,
+        currentPurchaseListId: purchaseList.purchaseListId,
+        status: "completed"
+      });
+      await store.appendEventForArtifactCase(actor, approvedSpec.sourceDraft.draftId, {
+        at: authoritativeManifest.appliedAt,
+        role: "system",
+        kind: "result",
+        text: "Produktionsplan und Einkaufsliste erstellt.",
+        artifactId: productionPlan.planId
       });
       return reply.send({ eventSpec, plan: productionPlan, purchaseList, recipes });
     }

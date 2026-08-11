@@ -131,18 +131,11 @@ function productionDraft(
 }
 
 async function importDraft(
-  app: ReturnType<typeof buildProductionApp>,
+  store: ProductionStore,
   draft: ProductionDraft
 ): Promise<ProductionDraft> {
-  const response = await app.inject({
-    method: "POST",
-    url: "/v1/production/drafts",
-    headers: trustedProductionHeaders,
-    payload: draft
-  });
-
-  expect(response.statusCode, response.body).toBe(201);
-  return response.json<{ draft: ProductionDraft }>().draft;
+  await store.saveProductionDraft(localBusiness, draft);
+  return draft;
 }
 
 async function decideCard(
@@ -178,15 +171,17 @@ describe("ProductionDraft review state", () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
     const app = buildProductionApp({
       dataRoot,
+      store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
 
     try {
-      await importDraft(app, productionDraft());
+      await importDraft(store, productionDraft());
       const response = await app.inject({
         method: "PATCH",
         url: "/v1/production/drafts/production-draft-review-1/review-cards/card-event",
@@ -222,15 +217,17 @@ describe("ProductionDraft review state", () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
     const app = buildProductionApp({
       dataRoot,
+      store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
 
     try {
-      await importDraft(app, productionDraft());
+      await importDraft(store, productionDraft());
       const response = await app.inject({
         method: "PATCH",
         url: "/v1/production/drafts/production-draft-review-1/review-cards/card-event",
@@ -269,7 +266,7 @@ describe("ProductionDraft review state", () => {
     });
 
     try {
-      await importDraft(app, productionDraft());
+      await importDraft(store, productionDraft());
       await decideCard(app, "production-draft-review-1", "card-event");
       await decideCard(app, "production-draft-review-1", "card-risk");
       const response = await app.inject({
@@ -320,7 +317,7 @@ describe("ProductionDraft review state", () => {
     });
 
     try {
-      await importDraft(app, blockingDraft);
+      await importDraft(store, blockingDraft);
       const openResponse = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/production-draft-blocking/decision",
@@ -349,14 +346,16 @@ describe("ProductionDraft review state", () => {
   it("rejects a pending draft without requiring all review cards to fit and locks later edits", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
     const app = buildProductionApp({
       dataRoot,
+      store,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
 
     try {
-      await importDraft(app, productionDraft());
+      await importDraft(store, productionDraft());
       const decisionResponse = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/production-draft-review-1/decision",

@@ -22,6 +22,7 @@ import {
 } from "@catering/shared-core";
 import { OfferStore } from "./store.js";
 import { registerOfferApprovalRoutes } from "./routes/approval-routes.js";
+import { registerOfferCaseRoutes } from "./routes/case-routes.js";
 import { registerOfferDraftRoutes } from "./routes/draft-routes.js";
 
 interface RecipeTextImportBody {
@@ -140,7 +141,8 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   ): unknown | undefined => {
     const actor = actorForRequest(request);
     const role = resolveMinimalMvpRoleFromTrustedActor(actor);
-    return role === "offer_operator" || (actor.trusted && role === "production_operator")
+    return role === "offer_operator" ||
+      (actor.trusted && (actor.name === "Production-Service" || role === "production_operator"))
       ? undefined
       : reply.code(403).send({ message: "Leseberechtigung für Produktionsübergaben erforderlich." });
   };
@@ -173,8 +175,14 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     logger: false
   });
 
-  app.addHook("onRequest", async (request) => {
-    if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.url.split("?", 1)[0] === "/health") return;
+    const actor = actorForRequest(request);
+    if (!hosted && actor.businessId !== defaultBusinessContext.businessId) {
+      return reply.code(403).send({
+        message: "Der vertrauenswürdige Betriebskontext passt nicht zum konfigurierten Betrieb dieses lokalen Dienstes."
+      });
+    }
   });
 
   app.register(multipart);
@@ -206,6 +214,13 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     trustedActorSecret,
     allowDevActorHeader,
     isOfferOperator,
+    requireOfferOperator,
+    actorForRequest
+  });
+  registerOfferCaseRoutes(app, {
+    store,
+    trustedActorSecret,
+    allowDevActorHeader,
     requireOfferOperator,
     actorForRequest
   });

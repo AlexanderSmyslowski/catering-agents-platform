@@ -874,6 +874,20 @@ describe("backoffice production acceptance smoke", () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
+      if (url.endsWith("/api/intake/v1/intake/source-documents")) {
+        return new Response(JSON.stringify({ documentId: "source-document-wrong-offer" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/production/v1/production/cases")) {
+        return new Response(JSON.stringify({ case: { caseId: "production-case-wrong-offer" } }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
       if (url.endsWith("/api/production/v1/production/drafts/from-document")) {
         return new Response(JSON.stringify({ message: "Upload passt nicht zum Angebot." }), {
           status: 422,

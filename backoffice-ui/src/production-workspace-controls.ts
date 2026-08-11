@@ -63,6 +63,7 @@ export function buildProductionWorkspaceControls(
     resetPlanProgress: input.resetPlanProgress,
     resetIntakeRequestDetail: input.resetIntakeRequestDetail,
     resetSpecEdit: input.resetSpecEdit,
+    clearActiveProductionCaseId: input.clearActiveProductionCaseId,
     clearUploadInput: input.clearUploadInput
   });
 

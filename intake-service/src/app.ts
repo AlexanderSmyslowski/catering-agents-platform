@@ -478,8 +478,14 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     bodyLimit: DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes
   });
 
-  app.addHook("onRequest", async (request) => {
-    if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.url.split("?", 1)[0] === "/health") return;
+    const actor = actorForRequest(request);
+    if (!hosted && actor.businessId !== defaultBusinessContext.businessId) {
+      return reply.code(403).send({
+        message: "Der vertrauenswürdige Betriebskontext passt nicht zum konfigurierten Betrieb dieses lokalen Dienstes."
+      });
+    }
   });
 
   app.register(multipart);

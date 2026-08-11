@@ -18,6 +18,7 @@ function input(
     resetPlanProgress: vi.fn(),
     resetIntakeRequestDetail: vi.fn(),
     resetSpecEdit: vi.fn(),
+    clearActiveProductionCaseId: vi.fn(),
     clearUploadInput: vi.fn(),
     ...overrides
   };
@@ -63,6 +64,9 @@ describe("production workspace UI actions", () => {
       resetSpecEdit: vi.fn((markDismissed) => {
         calls.push(`resetSpecEdit:${markDismissed}`);
       }),
+      clearActiveProductionCaseId: vi.fn(() => {
+        calls.push("clearActiveProductionCaseId");
+      }),
       clearUploadInput: vi.fn(() => {
         calls.push("clearUploadInput");
       })
@@ -80,6 +84,7 @@ describe("production workspace UI actions", () => {
       "resetPlanProgress",
       "resetIntakeRequestDetail",
       "resetSpecEdit:false",
+      "clearActiveProductionCaseId",
       "clearUploadInput"
     ]);
   });

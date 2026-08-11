@@ -221,6 +221,27 @@ describe("Hetzner deployment script", () => {
     );
   });
 
+  test("does not expose Intake internal reader routes through the browser proxy", () => {
+    const caddyfile = readFileSync(caddyfilePath, "utf8");
+    const internalBlock = caddyfile.indexOf("@intakeInternal path /api/intake/v1/intake/internal/*");
+    const intakeProxy = caddyfile.indexOf("handle_path /api/intake/*");
+
+    expect(internalBlock).toBeGreaterThan(-1);
+    expect(caddyfile.slice(internalBlock, intakeProxy)).toContain("respond @intakeInternal 404");
+    expect(internalBlock).toBeLessThan(intakeProxy);
+  });
+
+  test("connects production to Intake only through the internal service URL", () => {
+    const compose = readFileSync(composePath, "utf8");
+    const productionService = compose.slice(
+      compose.indexOf("  production:"),
+      compose.indexOf("  exports:")
+    );
+
+    expect(productionService).toContain("CATERING_INTAKE_SERVICE_URL: http://intake:3101");
+    expect(productionService).toMatch(/depends_on:[\s\S]*intake:[\s\S]*condition: service_started/);
+  });
+
   test("uses the fixed server-owned Caddy directory protected by deployment sync", () => {
     const caddyfile = readFileSync(caddyfilePath, "utf8");
     const compose = readFileSync(composePath, "utf8");
@@ -242,10 +263,12 @@ describe("Hetzner deployment script", () => {
     expect(caddyfile).toContain("{$CATERING_BASIC_AUTH_USER} {$CATERING_BASIC_AUTH_PASSWORD_HASH}");
     expect(caddyfile).toContain("header_up -Authorization");
     expect(caddyfile).toContain("header_up -X-Actor-Name");
+    expect(caddyfile).toContain("header_up -X-Catering-Business-Id");
     expect(caddyfile).not.toContain("header_up -X-Catering-Actor-Name");
     expect(caddyfile).not.toContain("header_up -X-Catering-Trusted-Secret");
     expect(caddyfile).toContain("header_up X-Catering-Actor-Name {args[0]}");
     expect(caddyfile).toContain("header_up X-Catering-Trusted-Secret {$CATERING_TRUSTED_ACTOR_SECRET}");
+    expect(caddyfile).toContain("header_up X-Catering-Business-Id {$CATERING_DEFAULT_BUSINESS_ID}");
     expect(caddyfile).toContain('import trusted_actor_headers "Intake-Mitarbeiter"');
     expect(caddyfile).toContain('import trusted_actor_headers "Angebots-Mitarbeiter"');
     expect(caddyfile).toContain('import trusted_actor_headers "Produktions-Mitarbeiter"');

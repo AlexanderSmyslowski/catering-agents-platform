@@ -10,13 +10,13 @@ export interface HttpProductionHandoffReaderOptions {
 export class HttpProductionHandoffReader implements ProductionHandoffReader {
   private readonly fetcher: typeof globalThis.fetch;
   constructor(private readonly options: HttpProductionHandoffReaderOptions) { this.fetcher = options.fetch ?? globalThis.fetch; }
-  async getHandoff(context: BusinessContext, handoffId: string): Promise<ProductionHandoff | undefined> {
+  async get(context: BusinessContext, handoffId: string): Promise<ProductionHandoff | undefined> {
     let response: Response;
     try {
       response = await this.fetcher(`${this.options.offerServiceUrl.replace(/\/$/, "")}/v1/offers/handoffs/${encodeURIComponent(handoffId)}`, {
         redirect: "error",
         headers: {
-          "x-catering-actor-name": "Produktions-Mitarbeiter", "x-catering-business-id": context.businessId,
+          "x-catering-actor-name": "Production-Service", "x-catering-business-id": context.businessId,
           ...(this.options.trustedServiceSecret ? { "x-catering-trusted-secret": this.options.trustedServiceSecret } : {})
         }
       });

@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { IntakeStore } from "@catering/intake-service";
 import { buildProductionApp, ProductionStore, type ClarificationDraft } from "@catering/production-service";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import {
   AuditLogStore,
   buildByoLlmAdapterFromEnv,
@@ -68,9 +68,9 @@ function fixtureSpec(): AcceptedEventSpec {
   };
 }
 
-async function seedFixtureSpec(intakeStore: IntakeStore): Promise<AcceptedEventSpec> {
+async function seedFixtureSpec(intakeStore: InMemoryIntakeRecordsPort): Promise<AcceptedEventSpec> {
   const spec = fixtureSpec();
-  await intakeStore.saveSpec(localBusiness, spec);
+  await intakeStore.insertSpec(localBusiness, spec);
   return spec;
 }
 
@@ -175,13 +175,13 @@ describe("BYO LLM runtime clarification drafts", () => {
   it("creates and lists a fixture-backed clarification draft without writing product questions", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeStore = new InMemoryIntakeRecordsPort();
     const store = new ProductionStore({ rootDir: dataRoot });
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
     await seedFixtureSpec(intakeStore);
     const app = buildProductionApp({
       dataRoot,
-      intakeStore,
+      intakeRecords: intakeStore,
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
@@ -227,7 +227,7 @@ describe("BYO LLM runtime clarification drafts", () => {
   it("rejects schema-invalid adapter output with 422 and does not persist a draft", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeStore = new InMemoryIntakeRecordsPort();
     const store = new ProductionStore({ rootDir: dataRoot });
     await seedFixtureSpec(intakeStore);
     const invalidAdapter: LlmReadinessProviderAdapter = {
@@ -256,7 +256,7 @@ describe("BYO LLM runtime clarification drafts", () => {
     };
     const app = buildProductionApp({
       dataRoot,
-      intakeStore,
+      intakeRecords: intakeStore,
       store,
       llmAdapter: invalidAdapter,
       trustedActorSecret: TRUSTED_SECRET,
@@ -283,7 +283,7 @@ describe("BYO LLM runtime clarification drafts", () => {
   it("contains adapter runtime failures without persisting drafts or leaking raw provider text", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeStore = new InMemoryIntakeRecordsPort();
     const store = new ProductionStore({ rootDir: dataRoot });
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
     await seedFixtureSpec(intakeStore);
@@ -296,7 +296,7 @@ describe("BYO LLM runtime clarification drafts", () => {
     };
     const app = buildProductionApp({
       dataRoot,
-      intakeStore,
+      intakeRecords: intakeStore,
       store,
       auditLog,
       llmAdapter: throwingAdapter,
@@ -328,12 +328,12 @@ describe("BYO LLM runtime clarification drafts", () => {
   it("approves drafts into spec uncertainties and rejects drafts without materializing questions", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeStore = new InMemoryIntakeRecordsPort();
     const store = new ProductionStore({ rootDir: dataRoot });
     await seedFixtureSpec(intakeStore);
     const app = buildProductionApp({
       dataRoot,
-      intakeStore,
+      intakeRecords: intakeStore,
       store,
       trustedActorSecret: TRUSTED_SECRET,
       env: { CATERING_LLM_PROVIDER: "fixture" }
@@ -374,12 +374,12 @@ describe("BYO LLM runtime clarification drafts", () => {
   it("preserves existing matching spec uncertainties when approving a duplicate draft question", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeStore = new InMemoryIntakeRecordsPort();
     const store = new ProductionStore({ rootDir: dataRoot });
     await seedFixtureSpec(intakeStore);
     const app = buildProductionApp({
       dataRoot,
-      intakeStore,
+      intakeRecords: intakeStore,
       store,
       trustedActorSecret: TRUSTED_SECRET,
       env: { CATERING_LLM_PROVIDER: "fixture" }
@@ -391,7 +391,7 @@ describe("BYO LLM runtime clarification drafts", () => {
       if (!spec) {
         throw new Error("Fixture spec missing");
       }
-      await intakeStore.saveSpec(localBusiness, {
+      await intakeStore.replaceSpec(localBusiness, spec, {
         ...spec,
         uncertainties: [
           {

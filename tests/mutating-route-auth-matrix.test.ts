@@ -13,6 +13,9 @@ import {
 import { buildIntakeApp } from "../intake-service/src/app.js";
 import { buildOfferApp } from "../offer-service/src/app.js";
 import { buildProductionApp } from "../production-service/src/app.js";
+import { ProductionStore } from "../production-service/src/repositories/production-store.js";
+
+const productionStores = new WeakMap<object, ProductionStore>();
 
 type MutableRoute = {
   service: "intake" | "offer" | "production";
@@ -49,6 +52,12 @@ const mutatingMvpRoutes: MutableRoute[] = [
     service: "intake",
     method: "POST",
     pathTemplate: "/v1/intake/documents/upload",
+    requiredRole: "intake_operator"
+  },
+  {
+    service: "intake",
+    method: "POST",
+    pathTemplate: "/v1/intake/source-documents",
     requiredRole: "intake_operator"
   },
   {
@@ -96,6 +105,29 @@ const mutatingMvpRoutes: MutableRoute[] = [
     pathTemplate: "/v1/intake/spec-governance/finalize",
     requiredRole: "operations_audit_operator",
     payload: { specId: "matrix-spec", confirmCriticalFinalize: true }
+  },
+  {
+    service: "offer",
+    method: "POST",
+    pathTemplate: "/v1/offers/cases",
+    requiredRole: "offer_operator",
+    payload: {}
+  },
+  {
+    service: "offer",
+    method: "POST",
+    pathTemplate: "/v1/offers/cases/:caseId/copies",
+    requiredRole: "offer_operator",
+    url: "/v1/offers/cases/matrix-offer-case/copies",
+    payload: {}
+  },
+  {
+    service: "offer",
+    method: "POST",
+    pathTemplate: "/v1/offers/cases/:caseId/messages",
+    requiredRole: "offer_operator",
+    url: "/v1/offers/cases/matrix-offer-case/messages",
+    payload: { text: "Bitte Personenzahl prüfen." }
   },
   {
     service: "offer",
@@ -160,12 +192,43 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "production",
     method: "POST",
+    pathTemplate: "/v1/production/cases",
+    requiredRole: "production_operator",
+    payload: {}
+  },
+  {
+    service: "production",
+    method: "POST",
+    pathTemplate: "/v1/production/cases/:caseId/copies",
+    requiredRole: "production_operator",
+    url: "/v1/production/cases/matrix-production-case/copies",
+    payload: {}
+  },
+  {
+    service: "production",
+    method: "POST",
+    pathTemplate: "/v1/production/cases/from-handoff/:handoffId",
+    requiredRole: "production_operator",
+    url: "/v1/production/cases/from-handoff/matrix-handoff",
+    payload: {}
+  },
+  {
+    service: "production",
+    method: "POST",
+    pathTemplate: "/v1/production/cases/:caseId/messages",
+    requiredRole: "production_operator",
+    url: "/v1/production/cases/matrix-production-case/messages",
+    payload: { text: "Bitte Garverfahren prüfen." }
+  },
+  {
+    service: "production",
+    method: "POST",
     pathTemplate: "/v1/production/drafts/:draftId/prepare",
     requiredRole: "production_operator",
     url: "/v1/production/drafts/matrix-production-draft/prepare",
     payload: {},
     prepareCorrectRoleCase: async (app, headers) => {
-      await seedProductionDraftForMatrix(app, headers);
+      await seedProductionDraftForMatrix(app);
       return { url: "/v1/production/drafts/matrix-production-draft/prepare", payload: {} };
     }
   },
@@ -181,11 +244,22 @@ const mutatingMvpRoutes: MutableRoute[] = [
     method: "POST",
     pathTemplate: "/v1/production/drafts/from-document",
     requiredRole: "production_operator",
-    payload: () => ({
-      filename: "matrix-angebot.txt",
-      mimeType: "text/plain",
-      contentBase64: Buffer.from("Buffet fuer 45 Personen mit Vitello Tonnato.", "utf8").toString("base64")
-    })
+    payload: { caseId: "matrix-production-case", documentId: "matrix-source-document" },
+    prepareCorrectRoleCase: async (app, headers) => {
+      const created = await inject(app, {
+        method: "POST",
+        url: "/v1/production/cases",
+        headers,
+        payload: { eventTypeLabel: "Matrix Produktionsauftrag" }
+      });
+      expect(created.statusCode).toBe(201);
+      return {
+        payload: {
+          caseId: created.json<{ case: { caseId: string } }>().case.caseId,
+          documentId: "matrix-source-document"
+        }
+      };
+    }
   },
   {
     service: "production",
@@ -203,7 +277,7 @@ const mutatingMvpRoutes: MutableRoute[] = [
     url: "/v1/production/drafts/matrix-production-draft/review-cards/matrix-card-event",
     payload: { decision: "fits" },
     prepareCorrectRoleCase: async (app, headers) => {
-      await seedProductionDraftForMatrix(app, headers);
+      await seedProductionDraftForMatrix(app);
       return {
         url: "/v1/production/drafts/matrix-production-draft/review-cards/matrix-card-event",
         payload: { decision: "fits" }
@@ -233,7 +307,7 @@ const mutatingMvpRoutes: MutableRoute[] = [
     url: "/v1/production/drafts/matrix-production-draft/decision",
     payload: { decision: "rejected" },
     prepareCorrectRoleCase: async (app, headers) => {
-      await seedProductionDraftForMatrix(app, headers);
+      await seedProductionDraftForMatrix(app);
       return {
         url: "/v1/production/drafts/matrix-production-draft/decision",
         payload: { decision: "rejected" }
@@ -451,21 +525,17 @@ function productionFeedbackPayload() {
   };
 }
 
-async function seedProductionDraftForMatrix(app: unknown, headers: Record<string, string>): Promise<void> {
-  const imported = await inject(app, {
-    method: "POST",
-    url: "/v1/production/drafts",
-    headers,
-    payload: productionDraftPayload()
-  });
-  expect(imported.statusCode).toBe(201);
+async function seedProductionDraftForMatrix(app: unknown): Promise<void> {
+  const store = productionStores.get(app as object);
+  if (!store) throw new Error("ProductionStore für Auth-Matrix fehlt.");
+  await store.saveProductionDraft({ businessId: "local" }, productionDraftPayload());
 }
 
 async function seedChangeRequestedProductionDraftForMatrix(
   app: unknown,
   headers: Record<string, string>
 ): Promise<void> {
-  await seedProductionDraftForMatrix(app, headers);
+  await seedProductionDraftForMatrix(app);
   const reviewed = await inject(app, {
     method: "PATCH",
     url: "/v1/production/drafts/matrix-production-draft/review-cards/matrix-card-event",
@@ -479,23 +549,31 @@ async function seedChangeRequestedProductionDraftForMatrix(
 }
 
 function buildAppForRoute(route: MutableRoute, dataRoot: string) {
-  return route.service === "intake"
-    ? buildIntakeApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} })
-    : route.service === "offer"
-      ? buildOfferApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} })
-      : buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+  if (route.service === "intake") {
+    return buildIntakeApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+  }
+  if (route.service === "offer") {
+    return buildOfferApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+  }
+  const store = new ProductionStore({ rootDir: dataRoot });
+  const app = buildProductionApp({ dataRoot, store, trustedActorSecret: TRUSTED_SECRET, env: {} });
+  productionStores.set(app, store);
+  return app;
 }
 
 function discoverRegisteredMutatingRoutes(): string[] {
   const routeSources = [
     "intake-service/src/app.ts",
     "intake-service/src/routes/document-routes.ts",
+    "intake-service/src/routes/source-document-routes.ts",
     "intake-service/src/routes/work-item-routes.ts",
     "offer-service/src/app.ts",
+    "offer-service/src/routes/case-routes.ts",
     "offer-service/src/routes/draft-routes.ts",
     "production-service/src/app.ts",
     "production-service/src/routes/artifact-routes.ts",
     "production-service/src/routes/approval-routes.ts",
+    "production-service/src/routes/case-routes.ts",
     "production-service/src/routes/recipe-routes.ts",
     "print-export/src/index.ts"
   ];
@@ -510,7 +588,8 @@ function discoverRegisteredMutatingRoutes(): string[] {
     }
   }
 
-  return [...routes].sort();
+  // Service-to-service mutations use a distinct trusted service identity and are never browser-role routes.
+  return [...routes].filter((route) => !route.includes("/internal/")).sort();
 }
 
 describe("mutating MVP route auth matrix", () => {

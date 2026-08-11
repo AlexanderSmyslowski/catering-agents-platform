@@ -88,6 +88,9 @@ describe("production workspace reset", () => {
       resetSpecEdit: vi.fn((markDismissed) => {
         calls.push(`resetSpecEdit:${markDismissed}`);
       }),
+      clearActiveProductionCaseId: vi.fn(() => {
+        calls.push("clearActiveProductionCaseId");
+      }),
       clearUploadInput: vi.fn(() => {
         calls.push("clearUploadInput");
       })
@@ -107,6 +110,7 @@ describe("production workspace reset", () => {
       "resetPlanProgress",
       "resetIntakeRequestDetail",
       "resetSpecEdit:false",
+      "clearActiveProductionCaseId",
       "clearUploadInput"
     ]);
   });

@@ -30,10 +30,18 @@ function input(
   };
 
   return {
+    createOfferCase: vi.fn(async () => ({ case: { caseId: "offer-case-1" } })),
     createOfferFromText: vi.fn(async () => ({ draftId: "draft-offer-1" })),
+    getOrCreateOfferRequestId: vi.fn(() => "request-offer-boundary"),
+    completeOfferRequestId: vi.fn(),
+    activeOfferCaseId: undefined,
+    setActiveOfferCaseId: vi.fn(),
     decideOfferDraft: vi.fn(async () => ({ approvedOffer: { approvedOfferId: "offer-1" } })),
     createProductionHandoff: vi.fn(async () => ({ handoff: { handoffId: "handoff-1" } })),
+    createProductionCaseFromHandoff: vi.fn(async () => ({ case: { caseId: "production-case-1" } })),
     createProductionDraftFromHandoff: vi.fn(async () => ({ draft: { draftId: "production-draft-1" } })),
+    setActiveProductionCaseId: vi.fn(),
+    clearActiveOfferCaseId: vi.fn(),
     openProductionEntry: vi.fn(),
     submitting: false,
     setSubmitting: vi.fn(),
@@ -99,8 +107,15 @@ describe("app offer route app boundary", () => {
       clearMessages: vi.fn(() => {
         calls.push("clearMessages");
       }),
-      createOfferFromText: vi.fn(async (text) => {
-        calls.push(`createOfferFromText:${text}`);
+      createOfferCase: vi.fn(async () => {
+        calls.push("createOfferCase");
+        return { case: { caseId: "offer-case-new" } };
+      }),
+      setActiveOfferCaseId: vi.fn((caseId) => {
+        calls.push(`setActiveOfferCaseId:${caseId}`);
+      }),
+      createOfferFromText: vi.fn(async (caseId, text, requestId) => {
+        calls.push(`createOfferFromText:${caseId}:${text}:${requestId}`);
         return { draftId: "draft-new" };
       }),
       setSelectedDraftId: vi.fn((draftId) => {
@@ -124,7 +139,9 @@ describe("app offer route app boundary", () => {
     expect(calls).toEqual([
       "setSubmitting:true",
       "clearMessages",
-      "createOfferFromText:Business Lunch fuer 35 Personen.",
+      "createOfferCase",
+      "setActiveOfferCaseId:offer-case-new",
+      "createOfferFromText:offer-case-new:Business Lunch fuer 35 Personen.:request-offer-boundary",
       "setSelectedDraftId:draft-new",
       "refreshDashboard",
       "setNotice:Angebotsentwurf wurde erstellt.",
@@ -165,10 +182,18 @@ describe("app offer route app boundary", () => {
         calls.push(`handoff:${approvedOfferId}`);
         return { handoff: { handoffId: "handoff-created" } };
       }),
-      createProductionDraftFromHandoff: vi.fn(async (handoffId) => {
-        calls.push(`production:${handoffId}`);
+      createProductionCaseFromHandoff: vi.fn(async (handoffId) => {
+        calls.push(`production-case:${handoffId}`);
+        return { case: { caseId: "production-case-created" } };
+      }),
+      setActiveProductionCaseId: vi.fn((caseId) => {
+        calls.push(`active-case:${caseId}`);
+      }),
+      createProductionDraftFromHandoff: vi.fn(async (caseId, handoffId) => {
+        calls.push(`production:${caseId}:${handoffId}`);
         return { draft: { draftId: "production-created" } };
       }),
+      clearActiveOfferCaseId: vi.fn(() => calls.push("offer-case:clear")),
       setApprovalBinding: vi.fn((binding) => calls.push(`binding:${JSON.stringify(binding)}`)),
       openProductionEntry: vi.fn((draftId) => calls.push(`open:${draftId}`))
     });
@@ -178,8 +203,11 @@ describe("app offer route app boundary", () => {
 
     expect(calls).toEqual([
       "handoff:approved-1",
-      "production:handoff-created",
+      "production-case:handoff-created",
+      "active-case:production-case-created",
+      "production:production-case-created:handoff-created",
       'binding:{"offerDraftId":"draft-1","offerDraftRevision":3,"approvedOfferId":"approved-1","handoffId":"handoff-created","productionDraftId":"production-created"}',
+      "offer-case:clear",
       "open:production-created"
     ]);
   });

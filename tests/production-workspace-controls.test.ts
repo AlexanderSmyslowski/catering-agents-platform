@@ -31,6 +31,7 @@ function input(
     resetPlanProgress: vi.fn(),
     resetIntakeRequestDetail: vi.fn(),
     resetSpecEdit: vi.fn(),
+    clearActiveProductionCaseId: vi.fn(),
     clearUploadInput: vi.fn(),
     ...overrides
   };

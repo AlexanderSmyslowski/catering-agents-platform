@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { IntakeStore } from "@catering/intake-service";
 import { buildProductionApp, ProductionStore, type ClarificationDraft } from "@catering/production-service";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import {
   AuditLogStore,
   buildByoLlmAdapterFromEnv,
@@ -73,8 +73,8 @@ function fixtureSpec(): AcceptedEventSpec {
   };
 }
 
-async function seedFixtureSpec(intakeStore: IntakeStore): Promise<void> {
-  await intakeStore.saveSpec(localBusiness, fixtureSpec());
+async function seedFixtureSpec(intakeStore: InMemoryIntakeRecordsPort): Promise<void> {
+  await intakeStore.insertSpec(localBusiness, fixtureSpec());
 }
 
 function successfulCodexExec(calls: MockCodexExecRequest[]) {
@@ -280,14 +280,14 @@ describe("Codex CLI BYO LLM provider", () => {
   it("creates a schema-valid route draft through mocked Codex CLI and keeps audit free of CLI plaintext", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeStore = new InMemoryIntakeRecordsPort();
     const store = new ProductionStore({ rootDir: dataRoot });
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
     const calls: MockCodexExecRequest[] = [];
     await seedFixtureSpec(intakeStore);
     const app = buildProductionApp({
       dataRoot,
-      intakeStore,
+      intakeRecords: intakeStore,
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
@@ -336,13 +336,13 @@ describe("Codex CLI BYO LLM provider", () => {
   it("returns 422 for garbage Codex CLI output and persists no draft", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeStore = new InMemoryIntakeRecordsPort();
     const store = new ProductionStore({ rootDir: dataRoot });
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
     await seedFixtureSpec(intakeStore);
     const app = buildProductionApp({
       dataRoot,
-      intakeStore,
+      intakeRecords: intakeStore,
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,

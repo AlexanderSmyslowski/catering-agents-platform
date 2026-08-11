@@ -6,9 +6,14 @@ import {
 
 function input(overrides: Partial<ProductionPlanSubmissionActionInput> = {}): ProductionPlanSubmissionActionInput {
   return {
+    createProductionCase: vi.fn(async () => ({ case: { caseId: "production-case-plan-1" } })),
     createProductionDraftFromAcceptedEventSpec: vi.fn(async () => ({
       draft: { draftId: "draft-imported-1" }
     })),
+    activeProductionCaseId: undefined,
+    activeProductionCaseSpecId: undefined,
+    setActiveProductionCaseId: vi.fn(),
+    setActiveProductionCaseSpecId: vi.fn(),
     prepareProductionDraft: vi.fn(async () => ({
       draft: { draftId: "draft-prepared-2" }
     })),
@@ -63,8 +68,15 @@ describe("production plan submission action", () => {
       clearSelectedPlanId: vi.fn(() => {
         calls.push("clearSelectedPlanId");
       }),
-      createProductionDraftFromAcceptedEventSpec: vi.fn(async () => {
-        calls.push("createProductionDraftFromAcceptedEventSpec");
+      createProductionCase: vi.fn(async () => {
+        calls.push("createProductionCase");
+        return { case: { caseId: "production-case-plan-1" } };
+      }),
+      setActiveProductionCaseId: vi.fn((caseId) => {
+        calls.push(`setActiveProductionCaseId:${caseId}`);
+      }),
+      createProductionDraftFromAcceptedEventSpec: vi.fn(async (caseId) => {
+        calls.push(`createProductionDraftFromAcceptedEventSpec:${caseId}`);
         return { draft: { draftId: "draft-imported-1" } };
       }),
       prepareProductionDraft: vi.fn(async (draftId) => {
@@ -88,7 +100,10 @@ describe("production plan submission action", () => {
 
     await handleCreatePlan(planningSpec);
 
-    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(planningSpec);
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(
+      "production-case-plan-1",
+      planningSpec
+    );
     expect(actionsInput.prepareProductionDraft).toHaveBeenCalledWith("draft-imported-1");
     expect(actionsInput.persistCurrentSpecEdit).not.toHaveBeenCalled();
     expect(actionsInput.setError).not.toHaveBeenCalled();
@@ -99,7 +114,9 @@ describe("production plan submission action", () => {
       "startPlanProgress:Lunch · 40 Teilnehmer · 2026-06-30",
       "clearSelectedPlanId",
       "setNotice:Vollständiger Produktionsentwurf wird vorbereitet...",
-      "createProductionDraftFromAcceptedEventSpec",
+      "createProductionCase",
+      "setActiveProductionCaseId:production-case-plan-1",
+      "createProductionDraftFromAcceptedEventSpec:production-case-plan-1",
       "prepareProductionDraft:draft-imported-1",
       "refreshDashboard",
       "completePlanProgress",
@@ -127,7 +144,10 @@ describe("production plan submission action", () => {
 
     await handleCreatePlan(originalSpec);
 
-    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(updatedSpec);
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(
+      "production-case-plan-1",
+      updatedSpec
+    );
     expect(calls).toContain("setNotice:Antworten werden übernommen...");
     expect(calls).toContain("persistCurrentSpecEdit:true");
   });
@@ -139,8 +159,49 @@ describe("production plan submission action", () => {
 
     await handleCreatePlan(planningSpec, { sourceReviewConfirmed: true });
 
-    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(planningSpec);
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(
+      "production-case-plan-1",
+      planningSpec
+    );
     expect(actionsInput.prepareProductionDraft).toHaveBeenCalledWith("draft-imported-1");
+  });
+
+  it("reuses the active production case when importing another revision of its bound spec", async () => {
+    const actionsInput = input({
+      activeProductionCaseId: "production-case-existing",
+      activeProductionCaseSpecId: "spec-plan-submit-1"
+    });
+    const handleCreatePlan = buildProductionPlanSubmissionAction(actionsInput);
+    const planningSpec = spec();
+
+    await handleCreatePlan(planningSpec);
+
+    expect(actionsInput.createProductionCase).not.toHaveBeenCalled();
+    expect(actionsInput.setActiveProductionCaseId).not.toHaveBeenCalled();
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(
+      "production-case-existing",
+      planningSpec
+    );
+  });
+
+  it("creates a new production case when focus changed away from the active case spec", async () => {
+    const actionsInput = input({
+      activeProductionCaseId: "production-case-spec-a",
+      activeProductionCaseSpecId: "spec-a",
+      createProductionCase: vi.fn(async () => ({ case: { caseId: "production-case-spec-b" } }))
+    } as Partial<ProductionPlanSubmissionActionInput>);
+    const handleCreatePlan = buildProductionPlanSubmissionAction(actionsInput);
+    const planningSpec = spec({ specId: "spec-b" });
+
+    await handleCreatePlan(planningSpec);
+
+    expect(actionsInput.createProductionCase).toHaveBeenCalledWith({});
+    expect(actionsInput.setActiveProductionCaseId).toHaveBeenCalledWith("production-case-spec-b");
+    expect(actionsInput.setActiveProductionCaseSpecId).toHaveBeenCalledWith("spec-b");
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(
+      "production-case-spec-b",
+      planningSpec
+    );
   });
 
   it("surfaces planning failures and always exits submitting state", async () => {

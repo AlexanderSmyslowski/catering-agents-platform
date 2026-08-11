@@ -47,7 +47,9 @@ require_ui_shell "${BASE_URL}/produktion"
 run_browser open "${BASE_URL}/" >/dev/null
 
 home_markers="$(load_rehearsal_script "home-markers.js")"
+offer_empty_markers="$(load_rehearsal_script "offer-empty-markers.js")"
 offer_markers="$(load_rehearsal_script "offer-markers.js")"
+production_empty_markers="$(load_rehearsal_script "production-empty-markers.js")"
 production_markers="$(load_rehearsal_script "production-markers.js")"
 
 load_rehearsal_script_with_modes() {
@@ -74,31 +76,47 @@ clear_workspace_markers="$(load_rehearsal_script "clear-workspace-markers.js")"
 clear_workspace_reload_markers="$(load_rehearsal_script "clear-workspace-reload-markers.js")"
 
 home_to_offer="$(load_rehearsal_script "home-to-offer.js")"
+open_offer_history_item="$(load_rehearsal_script "open-offer-history-item.js")"
 offer_to_production="$(load_rehearsal_script "offer-to-production.js")"
+open_production_history_item="$(load_rehearsal_script "open-production-history-item.js")"
 
 echo "Browser-Navigations- und Markerpruefung:"
 check_current_page_markers "Start" "${home_markers}"
 click_rehearsal_link "Start -> Angebot" "/angebot" "${home_to_offer}"
+check_current_page_markers "Angebot leerer Start" "${offer_empty_markers}"
+check_current_page_markers "Angebot Auftrag bewusst geoeffnet" "${open_offer_history_item}"
 check_current_page_markers "Angebot" "${offer_markers}"
 click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
+check_current_page_markers "Produktion leerer Start" "${production_empty_markers}"
+check_current_page_markers "Produktion Auftrag bewusst geoeffnet" "${open_production_history_item}"
 check_current_page_markers "Produktion" "${production_markers}"
 check_current_page_markers "Produktion offene Rueckfragen" "${open_question_markers}"
+if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
+  run_browser reload >/dev/null
+  check_current_page_markers "Produktion Submit-Reload leerer Start" "${production_empty_markers}"
+  check_current_page_markers "Produktion Submit-Reload gespeichert" "${submitted_reload_markers}"
+  echo ""
+  echo "Browser-Rehearsal-Antwortpfad bestaetigt: Lunch-Auftrag wurde auf 43 Teilnehmer aktualisiert; Produktionsplan und ehrlicher Leerzustand der Einkaufsliste bleiben nach Reload sichtbar."
+  echo "Grenze: mutierender Fresh-Rehearsal-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
+  exit 0
+fi
 if [[ "${ARCHIVE_INTAKE}" == "1" ]]; then
-  run_browser open "${BASE_URL}/produktion" >/dev/null
+  run_browser reload >/dev/null
   check_current_page_markers "Produktion Archiv-Reload stabil" "${archive_reload_markers}"
   echo ""
   echo "Browser-Rehearsal-Archivpfad bestaetigt: synthetischer aktiver Intake-Kontext wurde per Soft-Archiv aus dem Fokus genommen."
   echo "Grenze: mutierender Fresh-Rehearsal-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
   exit 0
 fi
-run_browser open "${BASE_URL}/produktion" >/dev/null
+run_browser reload >/dev/null
+check_current_page_markers "Produktion Ergebnis leerer Reload-Start" "${production_empty_markers}"
+check_current_page_markers "Produktion Ergebnis-Kontext bewusst geoeffnet" "${open_production_history_item}"
 check_current_page_markers "Produktion Ergebnis-Kontext wiederhergestellt" "${production_markers}"
 check_current_page_markers "Produktion Ergebnis-Reload vorbereitet" "${production_result_reload_pre_markers}"
-run_browser open "${BASE_URL}/produktion" >/dev/null
+run_browser reload >/dev/null
+check_current_page_markers "Produktion Ergebnis zweiter leerer Reload-Start" "${production_empty_markers}"
+check_current_page_markers "Produktion Ergebnis-Kontext erneut bewusst geoeffnet" "${open_production_history_item}"
 check_current_page_markers "Produktion Ergebnis-Reload stabil" "${production_result_reload_markers}"
-if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
-  check_current_page_markers "Produktion Submit-Reload gespeichert" "${submitted_reload_markers}"
-fi
 if [[ "${FAILED_UPLOAD}" == "1" ]]; then
   check_current_page_markers "Produktion Failed-Upload sicher" "${failed_upload_markers}"
   echo ""
@@ -107,7 +125,7 @@ if [[ "${FAILED_UPLOAD}" == "1" ]]; then
   exit 0
 fi
 check_current_page_markers "Produktion lokal geleert" "${clear_workspace_markers}"
-run_browser open "${BASE_URL}/produktion" >/dev/null
+run_browser reload >/dev/null
 check_current_page_markers "Produktion lokales Leeren nach Reload konsistent" "${clear_workspace_reload_markers}"
 
 echo ""

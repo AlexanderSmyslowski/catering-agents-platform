@@ -19,6 +19,10 @@ import {
   buildProductionApp
 } from "@catering/production-service";
 import { runApprovedProductionWorkflow } from "./helpers/approved-production-workflow.js";
+import {
+  InMemoryIntakeRecordsPort,
+  bindTestIntakeRecordsPort
+} from "./support/in-memory-intake-records-port.js";
 
 const TRUSTED_SECRET = "critical-path-rehearsal-secret";
 
@@ -143,14 +147,17 @@ describe("critical path rehearsal", () => {
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
     const productionApp = buildProductionApp({
       dataRoot,
       repository,
+      intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
         CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
       }
     });
+    bindTestIntakeRecordsPort(productionApp, intakeRecords);
     const exportApp = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: TRUSTED_SECRET,
@@ -172,12 +179,21 @@ describe("critical path rehearsal", () => {
       expect(syntheticRequest.requestId).toBe("critical-path-synthetic-lunch-1");
       expect(syntheticRequest.rawInputs[0]?.content).toContain("Synthetischer Rehearsal-Fall");
 
+      const offerCaseResponse = await offerApp.inject({
+        method: "POST",
+        url: "/v1/offers/cases",
+        headers: trustedHeaders("offer_operator"),
+        payload: { eventTypeLabel: "Business Lunch", attendeeCount: 80 }
+      });
+      const offerCaseId = await expectJsonResponse<{ case: { caseId: string } }>(offerCaseResponse)
+        .then((body) => body.case.caseId);
+
       const draft = await expectJsonResponse<OfferDraft>(
         await offerApp.inject({
           method: "POST",
           url: "/v1/offers/drafts",
           headers: trustedHeaders("offer_operator"),
-          payload: syntheticRequest
+          payload: { ...syntheticRequest, caseId: offerCaseId }
         })
       );
 

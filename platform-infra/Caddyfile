@@ -5,8 +5,10 @@
 (trusted_actor_headers) {
 	header_up -Authorization
 	header_up -X-Actor-Name
+	header_up -X-Catering-Business-Id
 	header_up X-Catering-Actor-Name {args[0]}
 	header_up X-Catering-Trusted-Secret {$CATERING_TRUSTED_ACTOR_SECRET}
+	header_up X-Catering-Business-Id {$CATERING_DEFAULT_BUSINESS_ID}
 }
 
 {$CATERING_SITE_ADDRESS::80} {
@@ -25,6 +27,9 @@
 				import trusted_actor_headers "Betriebs-/Audit-Operator"
 			}
 		}
+
+		@intakeInternal path /api/intake/v1/intake/internal/*
+		respond @intakeInternal 404
 
 		handle_path /api/intake/* {
 			reverse_proxy intake:3101 {

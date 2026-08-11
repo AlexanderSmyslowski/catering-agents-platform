@@ -149,6 +149,52 @@ export function registerSourceDocumentRoutes(
     actorForRequest
   } = deps;
 
+  const productionServiceActor = (
+    request: { headers: Record<string, string | string[] | undefined> }
+  ): TrustedActor | undefined => {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    return actor.trusted && actor.name === "Production-Service" ? actor : undefined;
+  };
+
+  app.get<{ Params: { documentId: string } }>(
+    "/v1/intake/internal/source-documents/:documentId",
+    async (request, reply) => {
+      const actor = productionServiceActor(request);
+      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      const sourceDocument = await sourceDocumentStore.getMetadata(
+        actor,
+        request.params.documentId
+      );
+      if (!sourceDocument) {
+        return reply.code(404).send({ message: "Quelldokument nicht gefunden." });
+      }
+      reply.header("cache-control", "private, no-store");
+      reply.header("x-content-type-options", "nosniff");
+      return reply.send({ sourceDocument });
+    }
+  );
+
+  app.get<{ Params: { documentId: string } }>(
+    "/v1/intake/internal/source-documents/:documentId/content",
+    async (request, reply) => {
+      const actor = productionServiceActor(request);
+      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      const [metadata, content] = await Promise.all([
+        sourceDocumentStore.getMetadata(actor, request.params.documentId),
+        sourceDocumentStore.getContent(actor, request.params.documentId)
+      ]);
+      if (!metadata || !content) {
+        return reply.code(404).send({ message: "Quelldokument nicht gefunden." });
+      }
+      reply.header("cache-control", "private, no-store");
+      reply.header("x-content-type-options", "nosniff");
+      reply.header("x-catering-business-id", actor.businessId);
+      reply.header("x-catering-source-document-id", metadata.documentId);
+      reply.header("content-length", String(content.byteLength));
+      return reply.type(metadata.mimeType).send(Buffer.from(content));
+    }
+  );
+
   app.post("/v1/intake/source-documents", async (request, reply) => {
     const forbidden = requireIntakeOperator(
       request,

@@ -11,8 +11,8 @@ import {
   type ProductionApplyFaultPhase,
   type ProductionDecisionFaultPhase
 } from "@catering/production-service";
-import { IntakeStore } from "@catering/intake-service";
 import { productionDecisionRepositoryFor } from "../production-service/src/repositories/production-store.js";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import {
   createApprovedProductionSpec,
   createApprovalRequestRecord,
@@ -177,13 +177,13 @@ function buildHarness(options: {
   roots.push(rootDir);
   const store = new ProductionStore({ rootDir });
   const repository = new InMemoryRecipeRepository({ rootDir });
-  const intakeStore = new IntakeStore({ rootDir });
+  const intakeStore = new InMemoryIntakeRecordsPort();
   const auditLog = new AuditLogStore({ rootDir });
   const app = buildProductionApp({
     dataRoot: rootDir,
     store,
     repository,
-    intakeStore,
+    intakeRecords: intakeStore,
     auditLog,
     llmAdapter: options.llmAdapter,
     trustedActorSecret: TRUSTED_SECRET,
@@ -262,8 +262,9 @@ function reviseReadyAndApprovalEligibleDraft(draft: ProductionDraft): Production
   };
 }
 
-async function importDraft(app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) {
-  return app.inject({ method: "POST", url: "/v1/production/drafts", headers, payload: draft });
+async function importDraft(store: ProductionStore, draft: ProductionDraft) {
+  await store.saveProductionDraft(context, draft);
+  return { statusCode: 201, body: "" };
 }
 
 async function decide(
@@ -373,7 +374,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const { app, store } = buildHarness();
     const draft = await completeDraft("draft-open-card", "pending_review", "pending");
     try {
-      const imported = await importDraft(app, draft);
+      const imported = await importDraft(store, draft);
       expect(imported.statusCode, imported.body).toBe(201);
       expect((await decide(app, draft.draftId, "approved")).statusCode).toBe(422);
       expect(await store.listApprovedProductionSpecs(context)).toHaveLength(0);
@@ -386,7 +387,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const { app, auditLog, store } = buildHarness();
     const draft = await completeDraft("draft-approved");
     try {
-      const imported = await importDraft(app, draft);
+      const imported = await importDraft(store, draft);
       expect(imported.statusCode, imported.body).toBe(201);
       const first = await decide(app, draft.draftId, "approved");
       const retry = await decide(app, draft.draftId, "approved");
@@ -410,7 +411,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const draft = await completeDraft("draft-fixed-revision");
     const sameIdRevisionTwo = { ...draft, revision: 2 };
     try {
-      expect((await importDraft(app, draft)).statusCode).toBe(201);
+      expect((await importDraft(store, draft)).statusCode).toBe(201);
       expect((await decide(app, draft.draftId, "approved")).statusCode).toBe(201);
 
       await expect(store.saveProductionDraft(context, sameIdRevisionTwo)).rejects.toThrow(
@@ -429,7 +430,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const { app, store } = buildHarness();
     const draft = await completeDraft("draft-fixed-revision-race");
     const sameIdRevisionTwo = { ...draft, revision: 2 };
-    expect((await importDraft(app, draft)).statusCode).toBe(201);
+    expect((await importDraft(store, draft)).statusCode).toBe(201);
 
     const repository = productionDecisionRepositoryFor(store);
     const originalCriticalSection = repository.withTargetCriticalSection.bind(repository);
@@ -498,7 +499,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     });
     const draft = reviseReadyAndApprovalEligibleDraft(await completeDraft("draft-approval-retry"));
     try {
-      expect((await importDraft(app, draft)).statusCode).toBe(201);
+      expect((await importDraft(store, draft)).statusCode).toBe(201);
       expect((await decide(app, draft.draftId, "approved")).statusCode).toBe(500);
       expect(await store.listApprovalsForTarget(context, {
         kind: "production_draft",
@@ -573,7 +574,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const { app, store } = buildHarness({ llmAdapter: revisionAdapter() });
     const source = await completeDraft("draft-decision-mutation-race");
     const draft = transform ? transform(source) : source;
-    expect((await importDraft(app, draft)).statusCode).toBe(201);
+    expect((await importDraft(store, draft)).statusCode).toBe(201);
 
     const repository = productionDecisionRepositoryFor(store);
     const originalCriticalSection = repository.withTargetCriticalSection.bind(repository);
@@ -649,7 +650,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const { app, store } = buildHarness({ llmAdapter: revisionAdapter() });
     const source = await completeDraft("draft-mutation-decision-race");
     const draft = transform ? transform(source) : source;
-    expect((await importDraft(app, draft)).statusCode).toBe(201);
+    expect((await importDraft(store, draft)).statusCode).toBe(201);
 
     const repository = productionDecisionRepositoryFor(store);
     const originalCriticalSection = repository.withTargetCriticalSection.bind(repository);
@@ -705,7 +706,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     });
     const draft = await completeDraft(`draft-apply-retry-${faultPhase}`);
     try {
-      expect((await importDraft(app, draft)).statusCode).toBe(201);
+      expect((await importDraft(store, draft)).statusCode).toBe(201);
       const decision = await decide(app, draft.draftId, "approved");
       expect(decision.statusCode, decision.body).toBe(201);
       const approvedProductionSpecId = decision.json().approvedProductionSpec.approvedProductionSpecId;
@@ -739,12 +740,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const draft = await completeDraft("draft-apply-audit-first-actor");
 
     try {
-      expect((await app.inject({
-        method: "POST",
-        url: "/v1/production/drafts",
-        headers: firstActorHeaders,
-        payload: draft
-      })).statusCode).toBe(201);
+      await store.saveProductionDraft(context, draft);
       const decision = await app.inject({
         method: "POST",
         url: `/v1/production/drafts/${draft.draftId}/decision`,
@@ -789,7 +785,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const { app, store } = buildHarness();
     const draft = await completeDraft("draft-immutable");
     try {
-      const imported = await importDraft(app, draft);
+      const imported = await importDraft(store, draft);
       expect(imported.statusCode, imported.body).toBe(201);
       const approvedResponse = await decide(app, draft.draftId, "approved");
       expect(approvedResponse.statusCode).toBe(201);

@@ -56,11 +56,19 @@ function decisionsFor(store: OfferStore) {
 }
 
 async function createDraft(app: ReturnType<typeof buildTestApp>) {
+  const caseResponse = await app.inject({
+    method: "POST",
+    url: "/v1/offers/cases",
+    headers: trustedHeaders,
+    payload: { eventTypeLabel: "Business Lunch", attendeeCount: 35 }
+  });
+  expect(caseResponse.statusCode).toBe(201);
+  const caseId = caseResponse.json<{ case: { caseId: string } }>().case.caseId;
   const response = await app.inject({
     method: "POST",
     url: "/v1/offers/from-text",
     headers: trustedHeaders,
-    payload: { text: "Business Lunch fuer 35 Personen." }
+    payload: { caseId, text: "Business Lunch fuer 35 Personen." }
   });
   expect(response.statusCode).toBe(201);
   return response.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
@@ -1813,7 +1821,7 @@ describe("offer approval request", () => {
     expect(handoffRetry.statusCode).toBe(201);
   });
 
-  it("does not expose a draft from another business", async () => {
+  it("rejects a request for another business before looking up its draft", async () => {
     const app = buildTestApp();
     const draft = await createDraft(app);
 
@@ -1824,7 +1832,7 @@ describe("offer approval request", () => {
       payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]?.variantId }
     });
 
-    expect(response.statusCode).toBe(404);
+    expect(response.statusCode).toBe(403);
   });
 
   it("allows a deliberate corrected-revision decision while replaying the completed older decision exactly", async () => {

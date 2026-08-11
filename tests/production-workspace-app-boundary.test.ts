@@ -30,6 +30,7 @@ function input(
     resetPlanProgress: vi.fn(),
     resetIntakeRequestDetail: vi.fn(),
     resetSpecEdit: vi.fn(),
+    clearActiveProductionCaseId: vi.fn(),
     uploadInputRef: { current: null },
     ...overrides
   };
@@ -60,6 +61,9 @@ describe("production workspace app boundary", () => {
         resetSpecEdit: vi.fn((markDismissed) => {
           calls.push(`resetSpecEdit:${markDismissed}`);
         }),
+        clearActiveProductionCaseId: vi.fn(() => {
+          calls.push("clearActiveProductionCaseId");
+        }),
         setProductionWorkspaceCleared: vi.fn((cleared) => {
           calls.push(`setProductionWorkspaceCleared:${cleared}`);
         }),
@@ -89,6 +93,7 @@ describe("production workspace app boundary", () => {
       "resetPlanProgress",
       "resetIntakeRequestDetail",
       "resetSpecEdit:false",
+      "clearActiveProductionCaseId",
       "setNotice:undefined",
       "setNotice:Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert."
     ]);

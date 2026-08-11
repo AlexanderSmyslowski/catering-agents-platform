@@ -1,7 +1,12 @@
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
 export type OfferTextSubmitActionInput = {
-  createOfferFromText: (text: string) => Promise<Record<string, unknown>>;
+  createOfferCase: (input?: Record<string, never>) => Promise<{ case: { caseId: string } }>;
+  createOfferFromText: (caseId: string, text: string, requestId: string) => Promise<Record<string, unknown>>;
+  getOrCreateOfferRequestId: (text: string) => string;
+  completeOfferRequestId: (requestId: string) => void;
+  activeOfferCaseId?: string;
+  setActiveOfferCaseId: (caseId: string) => void;
   offerText: string;
   setSubmitting: (submitting: boolean) => void;
   clearMessages: () => void;
@@ -12,7 +17,12 @@ export type OfferTextSubmitActionInput = {
 };
 
 export function buildOfferTextSubmitAction({
+  createOfferCase,
   createOfferFromText,
+  getOrCreateOfferRequestId,
+  completeOfferRequestId,
+  activeOfferCaseId,
+  setActiveOfferCaseId,
   offerText,
   setSubmitting,
   clearMessages,
@@ -25,12 +35,18 @@ export function buildOfferTextSubmitAction({
     setSubmitting(true);
     clearMessages();
     try {
-      const response = await createOfferFromText(offerText);
+      const requestId = getOrCreateOfferRequestId(offerText);
+      const caseId = activeOfferCaseId ?? (await createOfferCase({})).case.caseId;
+      if (!activeOfferCaseId) {
+        setActiveOfferCaseId(caseId);
+      }
+      const response = await createOfferFromText(caseId, offerText, requestId);
       const createdDraftId = typeof response.draftId === "string" ? response.draftId : undefined;
       if (createdDraftId) {
         setSelectedDraftId(createdDraftId);
       }
       await refreshDashboard();
+      completeOfferRequestId(requestId);
       setNotice("Angebotsentwurf wurde erstellt.");
     } catch (submitError) {
       setError(formatSubmitErrorMessage(submitError, "Angebotsentwurf konnte nicht erstellt werden."));

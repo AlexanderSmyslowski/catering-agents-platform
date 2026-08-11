@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-import { SCHEMA_VERSION, type AcceptedEventSpec, type ProductionDraft } from "@catering/shared-core";
+import { type AcceptedEventSpec, type ProductionDraft } from "@catering/shared-core";
 import { buildProductionApp } from "@catering/production-service";
+import { testIntakeRecordsPortFor } from "../support/in-memory-intake-records-port.js";
 
 type InjectInput = {
   method?: string;
@@ -17,48 +17,7 @@ type InjectResponse = {
 
 type InjectableApp = ReturnType<typeof buildProductionApp>;
 
-let workflowSequence = 0;
 export const APPROVED_PRODUCTION_TEST_SECRET = "approved-production-workflow-test-secret";
-
-function workflowDraft(eventSpec: AcceptedEventSpec, businessId: string): ProductionDraft {
-  workflowSequence += 1;
-  const suffix = createHash("sha256")
-    .update(`${eventSpec.specId}:${workflowSequence}`)
-    .digest("hex")
-    .slice(0, 20);
-  const now = new Date().toISOString();
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    businessId,
-    draftId: `production-draft-test-workflow-${suffix}`,
-    revision: 1,
-    status: "pending_review",
-    createdAt: now,
-    source: {
-      kind: "fixture",
-      receivedAt: now,
-      sourceRef: "test:approved-production-workflow"
-    },
-    guardrails: {
-      draftOnly: true,
-      humanApprovalRequired: true,
-      writesProductObjects: false,
-      rawProviderPayloadStored: false,
-      knowledgeWritePolicy: "reviewed_only"
-    },
-    reviewCards: [{
-      cardId: "card-test-event-spec",
-      kind: "event_data",
-      title: "Eventdaten prüfen",
-      summary: "Testworkflow prüft den Event-Snapshot.",
-      decision: "pending",
-      targetPath: "$.draftArtifacts.eventSpec",
-      targetId: eventSpec.specId,
-      requiredApproval: true
-    }],
-    draftArtifacts: { eventSpec }
-  };
-}
 
 export async function runApprovedProductionWorkflow(
   app: InjectableApp,
@@ -76,11 +35,23 @@ export async function runApprovedProductionWorkflow(
     ...input.headers
   };
   const businessId = headers["x-catering-business-id"] ?? "local";
+  await testIntakeRecordsPortFor(app).insertSpec({ businessId }, eventSpec);
+  const caseResponse = await app.inject({
+    method: "POST",
+    url: "/v1/production/cases",
+    headers,
+    payload: {
+      eventTypeLabel: eventSpec.servicePlan.eventType,
+      attendeeCount: eventSpec.attendees.expected
+    }
+  });
+  if (caseResponse.statusCode !== 201) return caseResponse;
+  const caseId = caseResponse.json().case.caseId as string;
   const imported = await app.inject({
     method: "POST",
     url: "/v1/production/drafts",
     headers,
-    payload: workflowDraft(eventSpec, businessId)
+    payload: { caseId, specId: eventSpec.specId }
   });
   if (imported.statusCode !== 201) return imported;
 

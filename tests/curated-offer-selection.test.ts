@@ -86,10 +86,17 @@ describe("curated offer package selection", () => {
     const app = buildOfferApp({ rootDir: dataRoot });
 
     try {
+      const caseResponse = await app.inject({
+        method: "POST",
+        url: "/v1/offers/cases",
+        payload: { eventTypeLabel: "Konferenz", attendeeCount: 90 }
+      });
+      const caseId = caseResponse.json<{ case: { caseId: string } }>().case.caseId;
       const response = await app.inject({
         method: "POST",
         url: "/v1/offers/from-text",
         payload: {
+          caseId,
           requestId: "request-curated-conference",
           text: "Konferenz, 90 Teilnehmer, Lunchbuffet"
         }
@@ -119,10 +126,17 @@ describe("curated offer package selection", () => {
     const app = buildOfferApp({ rootDir: dataRoot });
 
     try {
+      const caseResponse = await app.inject({
+        method: "POST",
+        url: "/v1/offers/cases",
+        payload: { eventTypeLabel: "Besprechung", attendeeCount: 35 }
+      });
+      const caseId = caseResponse.json<{ case: { caseId: string } }>().case.caseId;
       const response = await app.inject({
         method: "POST",
         url: "/v1/offers/from-text",
         payload: {
+          caseId,
           requestId: "request-default-coffee-break",
           text: "Besprechung, 35 Teilnehmer, Kaffeepause"
         }

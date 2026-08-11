@@ -6,9 +6,11 @@ async () => {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 150));
     const reloadedText = document.body.innerText;
+    const reloadedHtml = document.body.innerHTML;
     if (
-      reloadedText.includes("Kein aktiver Vorgang") &&
-      reloadedText.includes("Auftrag einfügen oder Datei ablegen")
+      reloadedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben") &&
+      !reloadedHtml.includes("/api/intake/v1/intake/requests/demo-production-answered-clarification") &&
+      !/\/api\/exports\/v1\/exports\/(?:production-plans|purchase-lists)\//.test(reloadedHtml)
     ) {
       break;
     }
@@ -21,30 +23,30 @@ async () => {
     disabled: button.disabled,
     title: button.getAttribute("title") ?? ""
   }));
-  const reloadedArchiveButton = reloadedButtons.find((button) => button.text === "Fehlupload archivieren");
-  if (!reloadedText.includes("Kein aktiver Vorgang")) {
-    missing.push("Archive-Rehearsal Reload ohne leeren aktiven Vorgang");
-  }
-  if (!reloadedText.includes("Auftrag einfügen oder Datei ablegen")) {
-    missing.push("Archive-Rehearsal Reload ohne sichere naechste Eingabe");
+  const reloadedArchiveButton = reloadedButtons.find((button) =>
+    button.text.startsWith("Fehlgeschlagenen Demo-Upload ausblenden")
+  );
+  if (!reloadedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben")) {
+    missing.push("Archive-Rehearsal Reload ohne stabilen Empty-first-Einstieg");
   }
   if (reloadedText.includes("requestId: demo-production-answered-clarification")) {
     missing.push("Archive-Rehearsal Reload zeigt archivierten Intake wieder als aktiven Kontext");
   }
-  if (reloadedText.includes("Lunch · 42 Teilnehmer · 2026-12-16")) {
-    missing.push("Archive-Rehearsal Reload zeigt archivierte Spezifikation wieder als aktiven Vorgang");
-  }
   if (reloadedHtml.includes("/api/intake/v1/intake/requests/demo-production-answered-clarification")) {
     missing.push("Archive-Rehearsal Reload behaelt archivierten Intake-Detailanker im DOM");
+  }
+  if (
+    reloadedText.includes("Aktueller Vorgang") ||
+    reloadedText.includes("Plan-Kontext: aktueller Produktionsplan") ||
+    reloadedText.includes("Rückfragen und Antworten")
+  ) {
+    missing.push("Archive-Rehearsal Reload zeigt weiterhin einen aktiven Detail- oder Produktionskontext");
   }
   if (reloadedText.includes("Abschluss-Kontext:")) {
     missing.push("Archive-Rehearsal Reload zeigt alten Abschluss-Kontext");
   }
-  if (reloadedHtml.includes("/api/exports/v1/exports/production-plans/")) {
-    missing.push("Archive-Rehearsal Reload behaelt Produktionsplan-Exportlink");
-  }
-  if (reloadedHtml.includes("/api/exports/v1/exports/purchase-lists/")) {
-    missing.push("Archive-Rehearsal Reload behaelt Einkaufslisten-Exportlink");
+  if (/\/api\/exports\/v1\/exports\/(?:production-plans|purchase-lists)\//.test(reloadedHtml)) {
+    missing.push("Archive-Rehearsal Reload zeigt aktuelle Exporte im leeren Arbeitsbereich");
   }
   if (!reloadedArchiveButton) {
     missing.push("Archive-Rehearsal Reload ohne Fehlupload-Archiv-Aktion");

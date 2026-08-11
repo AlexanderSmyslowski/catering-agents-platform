@@ -13,8 +13,14 @@ describe("offer approval action", () => {
         calls.push("handoff");
         return { handoff: { handoffId: "handoff-1" } };
       },
-      createProductionDraftFromHandoff: async (handoffId: string) => {
-        calls.push(`production:${handoffId}`);
+      createProductionCaseFromHandoff: async (handoffId: string) => {
+        calls.push(`production-case:${handoffId}`);
+        return { case: { caseId: "production-case-1" } };
+      },
+      setActiveProductionCaseId: (caseId: string) => calls.push(`active-case:${caseId}`),
+      clearActiveOfferCaseId: () => calls.push("clear-offer-case"),
+      createProductionDraftFromHandoff: async (caseId: string, handoffId: string) => {
+        calls.push(`production:${caseId}:${handoffId}`);
         return { draft: { draftId: "production-draft-1" } };
       },
       setApprovalBinding: (binding: {
@@ -31,7 +37,8 @@ describe("offer approval action", () => {
       setNotice: () => undefined,
       setError: () => undefined
     } as Parameters<typeof buildOfferApprovalAction>[0] & {
-      createProductionDraftFromHandoff: (handoffId: string) => Promise<{ draft: { draftId: string } }>;
+      createProductionDraftFromHandoff: (caseId: string, handoffId: string) => Promise<{ draft: { draftId: string } }>;
+      clearActiveOfferCaseId: () => void;
       setApprovalBinding: (binding: {
         offerDraftId: string;
         offerDraftRevision: number;
@@ -52,9 +59,36 @@ describe("offer approval action", () => {
       "decision",
       'binding:{"offerDraftId":"draft-1","offerDraftRevision":2,"approvedOfferId":"offer-1"}',
       "handoff",
-      "production:handoff-1",
+      "production-case:handoff-1",
+      "active-case:production-case-1",
+      "production:production-case-1:handoff-1",
       'binding:{"offerDraftId":"draft-1","offerDraftRevision":2,"approvedOfferId":"offer-1","handoffId":"handoff-1","productionDraftId":"production-draft-1"}',
+      "clear-offer-case",
       "open:production-draft-1"
     ]);
+  });
+
+  it("keeps the active offer case when the handoff flow fails and can be retried", async () => {
+    const calls: string[] = [];
+    const action = buildOfferApprovalAction({
+      decideOfferDraft: async () => ({ approvedOffer: { approvedOfferId: "offer-1" } }),
+      createProductionHandoff: async () => ({ handoff: { handoffId: "handoff-1" } }),
+      createProductionCaseFromHandoff: async () => ({ case: { caseId: "production-case-1" } }),
+      createProductionDraftFromHandoff: async () => {
+        throw new Error("Produktion vorübergehend nicht erreichbar");
+      },
+      setActiveProductionCaseId: () => undefined,
+      clearActiveOfferCaseId: () => calls.push("clear-offer-case"),
+      setSubmitting: () => undefined,
+      clearMessages: () => undefined,
+      refreshDashboard: async () => undefined,
+      setNotice: () => undefined,
+      setError: (message: string) => calls.push(`error:${message}`),
+      openProductionEntry: () => undefined
+    } as Parameters<typeof buildOfferApprovalAction>[0] & { clearActiveOfferCaseId: () => void });
+
+    await action.createHandoff("draft-1", 1, "offer-1");
+
+    expect(calls).toEqual(["error:Produktion vorübergehend nicht erreichbar"]);
   });
 });

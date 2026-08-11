@@ -33,6 +33,10 @@ export type ProductionPlanningControlsInput =
   Pick<ProductionSpecSaveActionInput, "setSubmitting" | "clearMessages" | "setError"> & {
     setProductionWorkspaceCleared: (cleared: boolean) => void;
     editingSpecId?: string;
+    activeProductionCaseId?: string;
+    activeProductionCaseSpecId?: string;
+    setActiveProductionCaseId: (caseId: string) => void;
+    setActiveProductionCaseSpecId: (specId: string) => void;
   };
 
 export type ProductionPlanningControls = ProductionSpecFocusActions & {
@@ -68,7 +72,12 @@ export function buildProductionPlanningControls(
     ...focusActions,
     persistCurrentSpecEdit,
     handleCreatePlan: buildProductionPlanSubmissionAction({
+      createProductionCase: input.createProductionCase,
       createProductionDraftFromAcceptedEventSpec: input.createProductionDraftFromAcceptedEventSpec,
+      activeProductionCaseId: input.activeProductionCaseId,
+      activeProductionCaseSpecId: input.activeProductionCaseSpecId,
+      setActiveProductionCaseId: input.setActiveProductionCaseId,
+      setActiveProductionCaseSpecId: input.setActiveProductionCaseSpecId,
       prepareProductionDraft: input.prepareProductionDraft,
       editingSpecId: input.editingSpecId,
       setSubmitting: input.setSubmitting,

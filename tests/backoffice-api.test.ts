@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAcceptedSpecFromText,
+  createOfferCase,
+  createOfferDraftFromRequest,
   createOfferFromText,
+  createProductionCase,
   createProductionDraftFromAcceptedEventSpec,
   createProductionDraftFromDocument,
   offerExportUrl,
   productionExportUrl,
   purchaseListExportUrl,
   reviewRecipe,
-  seedDemoData
+  seedDemoData,
+  uploadSourceDocument
 } from "../backoffice-ui/src/api.js";
 
 function installFetchSpy() {
@@ -47,7 +51,8 @@ describe("backoffice API actor defaults", () => {
     const calls = installFetchSpy();
 
     await createAcceptedSpecFromText("Konferenz am 2026-06-18 fuer 90 Teilnehmer.");
-    await createOfferFromText("Lunchangebot fuer 80 Personen.");
+    await createOfferCase({ eventTypeLabel: "Lunch", attendeeCount: 80 });
+    await createOfferFromText("offer-case-1", "Lunchangebot fuer 80 Personen.", "request-offer-ui-1");
     await reviewRecipe("offer", "recipe-offer-1", "approve");
     await reviewRecipe("production", "recipe-production-1", "verify");
 
@@ -56,6 +61,12 @@ describe("backoffice API actor defaults", () => {
         url: "/api/intake/v1/intake/normalize",
         method: "POST",
         actor: "Intake-Mitarbeiter",
+        contentType: "application/json"
+      },
+      {
+        url: "/api/offers/v1/offers/cases",
+        method: "POST",
+        actor: "Angebots-Mitarbeiter",
         contentType: "application/json"
       },
       {
@@ -93,25 +104,37 @@ describe("backoffice API actor defaults", () => {
     expect(calls.map((call) => call.contentType)).toEqual(["application/json", "application/json", "application/json"]);
   });
 
-  it("uploads production documents as multipart draft requests with the production actor", async () => {
+  it("uploads originals to intake and sends only stable references to production", async () => {
     const calls = installFetchSpy();
+    const file = new File(["%PDF-1.4 fixture"], "angebot.pdf", { type: "application/pdf" });
 
-    await createProductionDraftFromDocument(
-      new File(["%PDF-1.4 fixture"], "angebot.pdf", { type: "application/pdf" })
-    );
+    await uploadSourceDocument(file);
+    await createProductionCase({ eventTypeLabel: "Empfang", attendeeCount: 45 });
+    await createProductionDraftFromDocument("production-case-1", "source-document-1");
 
-    expect(calls).toEqual([{
-      url: "/api/production/v1/production/drafts/from-document",
-      method: "POST",
-      actor: "Produktions-Mitarbeiter",
-      contentType: null
-    }]);
+    expect(calls).toEqual([
+      {
+        url: "/api/intake/v1/intake/source-documents",
+        method: "POST",
+        actor: "Intake-Mitarbeiter",
+        contentType: null
+      },
+      {
+        url: "/api/production/v1/production/cases",
+        method: "POST",
+        actor: "Produktions-Mitarbeiter",
+        contentType: "application/json"
+      },
+      {
+        url: "/api/production/v1/production/drafts/from-document",
+        method: "POST",
+        actor: "Produktions-Mitarbeiter",
+        contentType: "application/json"
+      }
+    ]);
   });
 
   it("imports an AcceptedEventSpec as a guarded draft-only production review", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-11T09:30:00.000Z"));
-    vi.stubGlobal("crypto", { randomUUID: () => "12345678-1234-4123-8123-123456789abc" });
     const requests: Array<{ url: string; method?: string; body: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -128,7 +151,7 @@ describe("backoffice API actor defaults", () => {
       })
     );
 
-    await createProductionDraftFromAcceptedEventSpec({
+    await createProductionDraftFromAcceptedEventSpec("production-case-safe", {
       schemaVersion: "1.0.0",
       specId: "spec-safe",
       event: { title: "Sommerfest" },
@@ -140,42 +163,46 @@ describe("backoffice API actor defaults", () => {
       url: "/api/production/v1/production/drafts",
       method: "POST",
       body: {
-        schemaVersion: "1.0.0",
-        draftId: "production-draft-12345678-1234-4123-8123-123456789abc",
-        revision: 1,
-        status: "pending_review",
-        createdAt: "2026-08-11T09:30:00.000Z",
-        source: {
-          kind: "manual_import",
-          receivedAt: "2026-08-11T09:30:00.000Z",
-          sourceRef: "accepted-event-spec:spec-safe"
-        },
-        guardrails: {
-          draftOnly: true,
-          humanApprovalRequired: true,
-          writesProductObjects: false,
-          rawProviderPayloadStored: false,
-          knowledgeWritePolicy: "reviewed_only"
-        },
-        reviewCards: [{
-          cardId: "card-imported-event-spec",
-          kind: "event_data",
-          title: "Eventdaten prüfen",
-          summary: "Übernommene Eventdaten vor der Produktionsplanung fachlich prüfen.",
-          decision: "pending",
-          targetPath: "$.draftArtifacts.eventSpec",
-          targetId: "spec-safe",
-          requiredApproval: true
-        }],
-        draftArtifacts: {
-          eventSpec: {
-            schemaVersion: "1.0.0",
-            specId: "spec-safe",
-            event: { title: "Sommerfest" },
-            attendees: { expected: 80 },
-            menuPlan: []
-          }
-        }
+        caseId: "production-case-safe",
+        specId: "spec-safe"
+      }
+    }]);
+  });
+
+  it("creates an offer draft with a stable case reference after intake normalization", async () => {
+    const requests: Array<{ url: string; method?: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        requests.push({ url: String(input), method: init?.method, body });
+        return new Response(JSON.stringify({ draftId: "offer-draft-upload-1" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        });
+      })
+    );
+
+    await createOfferDraftFromRequest("offer-case-1", {
+      requestId: "request-upload-1",
+      channel: "pdf_upload",
+      receivedAt: "2026-07-10T10:00:00.000Z",
+      rawText: "Lunch fuer 40 Personen",
+      signals: {},
+      ambiguities: []
+    });
+
+    expect(requests).toEqual([{
+      url: "/api/offers/v1/offers/drafts",
+      method: "POST",
+      body: {
+        requestId: "request-upload-1",
+        channel: "pdf_upload",
+        receivedAt: "2026-07-10T10:00:00.000Z",
+        rawText: "Lunch fuer 40 Personen",
+        signals: {},
+        ambiguities: [],
+        caseId: "offer-case-1"
       }
     }]);
   });

@@ -622,6 +622,16 @@ describe("backoffice route smoke", () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
+      if (
+        url.endsWith("/api/offers/v1/offers/cases") &&
+        (init?.method ?? "GET").toUpperCase() === "POST"
+      ) {
+        return new Response(JSON.stringify({ case: { caseId: "offer-case-c3" } }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
       if (url.endsWith("/api/offers/v1/offers/from-text")) {
         postedBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
         const createdDraft = {
@@ -755,6 +765,8 @@ describe("backoffice route smoke", () => {
 
     expect(postedBodies).toEqual([
       {
+        caseId: "offer-case-c3",
+        requestId: expect.stringMatching(/^request-ui-/),
         text: "C3 Sommerfest am 2026-08-20 für 80 Personen mit Buffet, Getränkepaket und Dessertstation."
       }
     ]);
@@ -793,7 +805,7 @@ describe("backoffice route smoke", () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
-      if (url.endsWith("/api/production/v1/production/drafts/from-document")) {
+      if (url.endsWith("/api/intake/v1/intake/source-documents")) {
         return new Response(JSON.stringify({ message: "Datei ist zu gross fuer den Import." }), {
           status: 413,
           statusText: "Payload Too Large",

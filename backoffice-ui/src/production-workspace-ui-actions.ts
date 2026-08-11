@@ -14,6 +14,7 @@ export type ProductionWorkspaceUiActionsInput = {
   resetPlanProgress: () => void;
   resetIntakeRequestDetail: () => void;
   resetSpecEdit: (markDismissed: boolean) => void;
+  clearActiveProductionCaseId: () => void;
   clearUploadInput: () => void;
 };
 
@@ -34,6 +35,7 @@ export function buildProductionWorkspaceUiActions({
   resetPlanProgress,
   resetIntakeRequestDetail,
   resetSpecEdit,
+  clearActiveProductionCaseId,
   clearUploadInput
 }: ProductionWorkspaceUiActionsInput): ProductionWorkspaceUiActions {
   function clearMessages() {
@@ -51,6 +53,7 @@ export function buildProductionWorkspaceUiActions({
       resetPlanProgress,
       resetIntakeRequestDetail,
       resetSpecEdit,
+      clearActiveProductionCaseId,
       clearUploadInput
     });
   }

@@ -330,21 +330,60 @@ export async function createAcceptedSpecFromDocument(
   return (await response.json()) as Record<string, unknown>;
 }
 
-export async function createProductionDraftFromDocument(file: File) {
+export type ProductCaseSummary = {
+  caseId: string;
+  displayName: string;
+  status: string;
+};
+
+export type StoredSourceDocumentSummary = {
+  documentId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  dataClass: string;
+  createdAt: string;
+};
+
+export async function uploadSourceDocument(file: File): Promise<StoredSourceDocumentSummary> {
   const formData = new FormData();
   formData.append("file", file, file.name);
 
-  const response = await fetch("/api/production/v1/production/drafts/from-document", {
+  const response = await fetch("/api/intake/v1/intake/source-documents", {
     method: "POST",
     body: formData,
-    headers: buildHeaders(undefined, false, DEFAULT_MUTATION_ACTOR_NAMES.production)
+    headers: buildHeaders(undefined, false, DEFAULT_MUTATION_ACTOR_NAMES.intake)
   });
 
   if (!response.ok) {
     throw new Error(await responseErrorMessage(response));
   }
 
-  return (await response.json()) as { draft: ProductionDraft };
+  return (await response.json()) as StoredSourceDocumentSummary;
+}
+
+export async function createProductionCase(input: {
+  customerName?: string;
+  eventTypeLabel?: string;
+  eventDate?: string;
+  attendeeCount?: number;
+} = {}) {
+  return fetchJson<{ case: ProductCaseSummary }>("/api/production/v1/production/cases", {
+    method: "POST",
+    body: JSON.stringify(input)
+  }, DEFAULT_MUTATION_ACTOR_NAMES.production);
+}
+
+export async function createProductionDraftFromDocument(caseId: string, documentId: string) {
+  return fetchJson<{ draft: ProductionDraft }>(
+    "/api/production/v1/production/drafts/from-document",
+    {
+      method: "POST",
+      body: JSON.stringify({ caseId, documentId })
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
 }
 
 export async function updateAcceptedSpec(
@@ -392,10 +431,32 @@ export async function createAcceptedSpecFromManualForm(input: {
   }, DEFAULT_MUTATION_ACTOR_NAMES.intake);
 }
 
-export async function createOfferFromText(text: string) {
+export async function createOfferCase(input: {
+  customerName?: string;
+  eventTypeLabel?: string;
+  eventDate?: string;
+  attendeeCount?: number;
+} = {}) {
+  return fetchJson<{ case: ProductCaseSummary }>("/api/offers/v1/offers/cases", {
+    method: "POST",
+    body: JSON.stringify(input)
+  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+}
+
+export async function createOfferFromText(caseId: string, text: string, requestId: string) {
   return fetchJson<Record<string, unknown>>("/api/offers/v1/offers/from-text", {
     method: "POST",
-    body: JSON.stringify({ text })
+    body: JSON.stringify({ caseId, text, requestId })
+  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+}
+
+export async function createOfferDraftFromRequest(
+  caseId: string,
+  eventRequest: Record<string, unknown>
+) {
+  return fetchJson<Record<string, unknown>>("/api/offers/v1/offers/drafts", {
+    method: "POST",
+    body: JSON.stringify({ ...eventRequest, caseId })
   }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 
@@ -412,14 +473,26 @@ export async function createProductionHandoff(approvedOfferId: string) {
   }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
 }
 
-export async function createProductionDraftFromHandoff(handoffId: string) {
+export async function createProductionCaseFromHandoff(handoffId: string) {
+  return fetchJson<{ case: ProductCaseSummary }>(
+    `/api/production/v1/production/cases/from-handoff/${encodeURIComponent(handoffId)}`,
+    {
+      method: "POST",
+      body: "{}"
+    },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
+export async function createProductionDraftFromHandoff(caseId: string, handoffId: string) {
   return fetchJson<{ draft?: { draftId: string } }>(`/api/production/v1/production/drafts/from-handoff/${encodeURIComponent(handoffId)}`, {
     method: "POST",
-    body: "{}"
+    body: JSON.stringify({ caseId })
   }, DEFAULT_MUTATION_ACTOR_NAMES.production);
 }
 
 export async function createProductionDraftFromAcceptedEventSpec(
+  caseId: string,
   eventSpec: Record<string, unknown>
 ): Promise<{ draft: ProductionDraft }> {
   const specId = typeof eventSpec.specId === "string" ? eventSpec.specId.trim() : "";
@@ -427,44 +500,11 @@ export async function createProductionDraftFromAcceptedEventSpec(
     throw new Error("Event-Spezifikation benötigt eine gültige ID.");
   }
 
-  const createdAt = new Date().toISOString();
-  const draftId = `production-draft-${crypto.randomUUID()}`;
   return fetchJson<{ draft: ProductionDraft }>(
     "/api/production/v1/production/drafts",
     {
       method: "POST",
-      body: JSON.stringify({
-        schemaVersion: "1.0.0",
-        draftId,
-        revision: 1,
-        status: "pending_review",
-        createdAt,
-        source: {
-          kind: "manual_import",
-          receivedAt: createdAt,
-          sourceRef: `accepted-event-spec:${specId}`
-        },
-        guardrails: {
-          draftOnly: true,
-          humanApprovalRequired: true,
-          writesProductObjects: false,
-          rawProviderPayloadStored: false,
-          knowledgeWritePolicy: "reviewed_only"
-        },
-        reviewCards: [{
-          cardId: "card-imported-event-spec",
-          kind: "event_data",
-          title: "Eventdaten prüfen",
-          summary: "Übernommene Eventdaten vor der Produktionsplanung fachlich prüfen.",
-          decision: "pending",
-          targetPath: "$.draftArtifacts.eventSpec",
-          targetId: specId,
-          requiredApproval: true
-        }],
-        draftArtifacts: {
-          eventSpec
-        }
-      })
+      body: JSON.stringify({ caseId, specId })
     },
     DEFAULT_MUTATION_ACTOR_NAMES.production
   );

@@ -11,7 +11,9 @@ import {
 } from "./production-plan-result-state.js";
 
 export type ProductionPlanSubmissionServices = {
+  createProductionCase: (input?: Record<string, never>) => Promise<{ case: { caseId: string } }>;
   createProductionDraftFromAcceptedEventSpec: (
+    caseId: string,
     spec: Record<string, unknown>
   ) => Promise<{ draft: { draftId: string } }>;
   prepareProductionDraft: (draftId: string) => Promise<{ draft: { draftId: unknown } }>;
@@ -25,16 +27,25 @@ export type ProductionPlanSubmissionCallbacks =
     setSubmitting: (submitting: boolean) => void;
     setProductionWorkspaceCleared: (cleared: boolean) => void;
     clearMessages: () => void;
+    setActiveProductionCaseId: (caseId: string) => void;
+    setActiveProductionCaseSpecId: (specId: string) => void;
   };
 
 export type ProductionPlanSubmissionActionInput =
   ProductionPlanSubmissionServices &
   ProductionPlanSubmissionCallbacks & {
     editingSpecId?: string;
+    activeProductionCaseId?: string;
+    activeProductionCaseSpecId?: string;
   };
 
 export function buildProductionPlanSubmissionAction({
+  createProductionCase,
   createProductionDraftFromAcceptedEventSpec,
+  activeProductionCaseId,
+  activeProductionCaseSpecId,
+  setActiveProductionCaseId,
+  setActiveProductionCaseSpecId,
   prepareProductionDraft,
   editingSpecId,
   setSubmitting,
@@ -69,7 +80,20 @@ export function buildProductionPlanSubmissionAction({
         clearSelectedPlanId,
         setNotice
       });
-      const imported = await createProductionDraftFromAcceptedEventSpec(specForPlanning);
+      const sourceSpecId = String(specForPlanning.specId ?? "").trim();
+      const canReuseActiveCase = Boolean(
+        activeProductionCaseId &&
+        sourceSpecId &&
+        activeProductionCaseSpecId === sourceSpecId
+      );
+      const caseId = canReuseActiveCase
+        ? activeProductionCaseId!
+        : (await createProductionCase({})).case.caseId;
+      if (!canReuseActiveCase) {
+        setActiveProductionCaseId(caseId);
+        setActiveProductionCaseSpecId(sourceSpecId);
+      }
+      const imported = await createProductionDraftFromAcceptedEventSpec(caseId, specForPlanning);
       const prepared = await prepareProductionDraft(imported.draft.draftId);
       await completeProductionStateAfterDraftPreparation(prepared, {
         refreshDashboard,

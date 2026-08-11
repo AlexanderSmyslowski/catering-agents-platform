@@ -21,6 +21,17 @@ const trustedHeaders = {
   "x-catering-business-id": "local"
 };
 
+async function createOfferCase(app: ReturnType<typeof buildOfferApp>): Promise<string> {
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/offers/cases",
+    headers: trustedHeaders,
+    payload: { eventTypeLabel: "Business Lunch", attendeeCount: 35 }
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json<{ case: { caseId: string } }>().case.caseId;
+}
+
 describe("offer production handoff", () => {
   it("rejects duplicate variant IDs in an OfferDraft", () => {
     const draft = {
@@ -50,11 +61,12 @@ describe("offer production handoff", () => {
       store,
       trustedActorSecret: trustedSecret
     });
+    const caseId = await createOfferCase(app);
     const draftResponse = await app.inject({
       method: "POST",
       url: "/v1/offers/from-text",
       headers: trustedHeaders,
-      payload: { text: "Business Lunch fuer 35 Personen." }
+      payload: { caseId, text: "Business Lunch fuer 35 Personen." }
     });
     const draft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
     const decisionResponse = await app.inject({
@@ -93,7 +105,8 @@ describe("offer production handoff", () => {
   it("snapshots the selected variant pricing in both approved artifacts", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-offer-pricing-"));
     const app = buildOfferApp({ rootDir, trustedActorSecret: trustedSecret });
-    const draftResponse = await app.inject({ method: "POST", url: "/v1/offers/from-text", headers: trustedHeaders, payload: { text: "Business Lunch fuer 35 Personen." } });
+    const caseId = await createOfferCase(app);
+    const draftResponse = await app.inject({ method: "POST", url: "/v1/offers/from-text", headers: trustedHeaders, payload: { caseId, text: "Business Lunch fuer 35 Personen." } });
     const draft = draftResponse.json<{ draftId: string; pricingSummary: { subtotal: { amount: number } }; variantSet: Array<{ variantId: string; proposedEventSpec: { budgetContext: { pricingSummary: { subtotal: { amount: number }; perPerson: { amount: number } } } } }> }>();
     const selectedVariant = draft.variantSet[0]!;
     expect(selectedVariant.proposedEventSpec.budgetContext.pricingSummary.subtotal.amount).not.toBe(draft.pricingSummary.subtotal.amount);
@@ -115,9 +128,10 @@ describe("offer production handoff", () => {
     const store = new OfferStore({ rootDir });
     const auditLog = new AuditLogStore({ rootDir });
     const app = buildOfferApp({ rootDir, store, auditLog, trustedActorSecret: trustedSecret });
+    const caseId = await createOfferCase(app);
     const draftResponse = await app.inject({
       method: "POST", url: "/v1/offers/from-text", headers: trustedHeaders,
-      payload: { text: "Business Lunch fuer 35 Personen." }
+      payload: { caseId, text: "Business Lunch fuer 35 Personen." }
     });
     const draft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
     const decision = await app.inject({

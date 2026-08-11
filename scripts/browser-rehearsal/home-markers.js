@@ -5,7 +5,7 @@
     "Interner Arbeitsstand",
     "Arbeitsweg: Start → Angebot → Produktion → Rückfragen → Exporte.",
     "keine automatische Allergen-, Preis- oder Margenfreigabe",
-    "Nächster Einstieg: zuerst Angebot prüfen, danach Produktion und offene Rückfragen klären."
+    "Bestands- und Demo-Kontext ist geladen."
   ].filter((marker) => !text.includes(marker));
   const links = [...document.querySelectorAll("a")].map((anchor) => anchor.getAttribute("href"));
   for (const href of ["/angebot", "/produktion"]) {

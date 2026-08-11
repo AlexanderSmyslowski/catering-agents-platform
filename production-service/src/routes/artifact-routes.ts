@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { createHash, randomUUID } from "node:crypto";
 import {
   areJsonValuesEqual,
@@ -10,15 +10,12 @@ import {
   ingestDocument,
   llmReadinessForbiddenPayloadKeys,
   llmReadinessContractVersion,
-  multipartLimitsForUpload,
   normalizeEventRequestToSpec,
-  readLimitedUploadBuffer,
-  uploadErrorResponse,
   validateAcceptedEventSpec,
   validateUploadedDocument,
-  validateUploadedDocumentMetadata,
   validateLlmReadinessModelOutputCandidate,
   validateProductionDraft,
+  uploadErrorResponse,
   type AcceptedEventSpec,
   type AuditLogStore,
   type LlmReadinessDataMode,
@@ -33,7 +30,6 @@ import {
   type ProductionHandoff,
   type TrustedActor
 } from "@catering/shared-core";
-import type { IntakeStore } from "@catering/intake-service";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import {
   productionDecisionRepositoryFor,
@@ -45,6 +41,11 @@ import {
 import type { ProductionDecisionTargetScope } from "../repositories/production-decision-repository.js";
 import { buildProductionArtifacts } from "../rules/planning.js";
 import type { ProductionHandoffReader } from "../ports/production-handoff-reader.js";
+import type { IntakeRecordsPort } from "../ports/intake-records-port.js";
+import type {
+  SourceDocumentReader,
+  StoredSourceDocument
+} from "../ports/source-document-reader.js";
 
 const operatorProductionDraftReviewDecisions = [
   "fits",
@@ -83,15 +84,27 @@ function productionDraftImportValidationMessage(errorMessage: string): string {
 }
 
 interface ProductionDraftDocumentBody {
-  filename?: unknown;
-  mimeType?: unknown;
-  contentBase64?: unknown;
+  caseId?: unknown;
+  documentId?: unknown;
 }
 
 interface ProductionDraftDocumentInput {
+  caseId: string;
+  documentId: string;
   filename: string;
   mimeType: string;
   content: Buffer;
+  sha256: string;
+  ingestedAt: string;
+}
+
+interface ProductionDraftFromSpecBody {
+  caseId?: unknown;
+  specId?: unknown;
+}
+
+interface ProductionDraftFromHandoffBody {
+  caseId?: unknown;
 }
 
 interface ProductionDraftExtractionComponent {
@@ -120,7 +133,8 @@ interface ProductionDraftExtraction {
 
 export interface ProductionArtifactRouteDependencies {
   store: ProductionStore;
-  intakeStore: IntakeStore;
+  intakeRecords: IntakeRecordsPort;
+  sourceDocumentReader?: SourceDocumentReader;
   discoveryService: RecipeDiscoveryService;
   auditLog: AuditLogStore;
   buildLlmAdapter: () => LlmReadinessProviderAdapter;
@@ -153,6 +167,342 @@ function normalizeOptionalText(value: unknown, maxLength = 240): string | undefi
 
   const trimmed = value.replace(/\s+/g, " ").trim();
   return trimmed.length > 0 ? trimmed.slice(0, maxLength) : undefined;
+}
+
+function strictReferenceBody(
+  value: unknown,
+  requiredKeys: readonly string[]
+): Record<string, string> | undefined {
+  if (!isPlainRecord(value) || Object.keys(value).length !== requiredKeys.length) return undefined;
+  if (!requiredKeys.every((key) => Object.hasOwn(value, key))) return undefined;
+  const normalized = Object.fromEntries(requiredKeys.map((key) => [key, normalizeOptionalText(value[key], 240)]));
+  if (requiredKeys.some((key) => !normalized[key])) return undefined;
+  return normalized as Record<string, string>;
+}
+
+function productionDocumentDraftId(
+  businessId: TrustedActor["businessId"],
+  caseId: string,
+  documentId: string
+): string {
+  // The document import is one case-scoped command. A stable identity lets a
+  // retried request recover its persisted result without asking the provider again.
+  const identityHash = createHash("sha256")
+    .update(`${businessId}\0${caseId}\0${documentId}`)
+    .digest("hex");
+  return `production-draft-document-${identityHash}`;
+}
+
+function acceptedEventSpecFingerprint(spec: AcceptedEventSpec): string {
+  return createHash("sha256")
+    .update(stableJson(validateAcceptedEventSpec(spec)))
+    .digest("hex");
+}
+
+function productionDraftIdForSpecImport(
+  businessId: string,
+  caseId: string,
+  specId: string,
+  specFingerprint: string
+): string {
+  const fingerprint = createHash("sha256")
+    .update(`${businessId}\0${caseId}\0${specId}\0${specFingerprint}`)
+    .digest("hex");
+  return `production-draft-spec-${fingerprint}`;
+}
+
+function preparedProductionDraftId(
+  businessId: string,
+  sourceDraft: Pick<ProductionDraft, "draftId" | "revision">
+): string {
+  const fingerprint = createHash("sha256")
+    .update(`${businessId}\0${sourceDraft.draftId}\0${sourceDraft.revision}\0prepare`)
+    .digest("hex");
+  return `production-draft-prepared-${fingerprint}`;
+}
+
+function preparedProductionDraftMatchesSource(
+  sourceDraft: ProductionDraft,
+  preparedDraft: ProductionDraft,
+  expectedDraftId: string
+): boolean {
+  return (
+    preparedDraft.draftId === expectedDraftId &&
+    preparedDraft.businessId === sourceDraft.businessId &&
+    preparedDraft.revision === sourceDraft.revision + 1 &&
+    preparedDraft.status === "pending_review" &&
+    preparedDraft.supersedesDraftId === sourceDraft.draftId &&
+    areJsonValuesEqual(preparedDraft.draftArtifacts.eventSpec, sourceDraft.draftArtifacts.eventSpec) &&
+    Boolean(preparedDraft.draftArtifacts.productionPlan) &&
+    Boolean(preparedDraft.draftArtifacts.purchaseList)
+  );
+}
+
+function productionDraftRevisionCommandIdentity(
+  businessId: string,
+  sourceDraft: Pick<ProductionDraft, "draftId" | "revision">,
+  contextHash: string
+): { draftId: string; inputId: string; agentAuditId: string } {
+  const fingerprint = createHash("sha256")
+    .update(`${businessId}\0${sourceDraft.draftId}\0${sourceDraft.revision}\0${contextHash}`)
+    .digest("hex");
+  return {
+    draftId: `production-draft-revision-${fingerprint}`,
+    inputId: `input-production-draft-revision-${fingerprint}`,
+    agentAuditId: `agent-audit-production-draft-revision-${fingerprint}`
+  };
+}
+
+async function appendProductionDraftRevisionEvent(
+  store: ProductionStore,
+  actor: TrustedActor,
+  sourceDraft: ProductionDraft,
+  revision: ProductionDraft,
+  text: string
+): Promise<void> {
+  const caseId = await store.findCaseIdForArtifact(actor, sourceDraft.draftId);
+  // Drafts created through the case routes always have a timeline. Older persisted
+  // drafts may predate cases, so their established prepare/revise behavior must not
+  // fail merely because there is no history projection to extend.
+  if (!caseId) return;
+  await appendArtifactEvent(store, actor, sourceDraft.draftId, {
+    at: revision.createdAt,
+    role: "assistant",
+    kind: "revision_created",
+    text,
+    artifactId: revision.draftId,
+    revisionRef: {
+      artifactType: "ProductionDraft",
+      artifactId: revision.draftId,
+      revision: revision.revision,
+      createdAt: revision.createdAt,
+      supersedesArtifactId: sourceDraft.draftId
+    }
+  }, `revision:${revision.draftId}`);
+  const caseUpdate = await store.reopenCaseForDraftContinuation(actor, caseId, revision.draftId);
+  if (caseUpdate === "missing") {
+    throw new Error("ProductionCase wurde nicht gefunden.");
+  }
+}
+
+async function appendDraftCreatedEvent(
+  store: ProductionStore,
+  actor: TrustedActor,
+  caseId: string,
+  draft: ProductionDraft
+): Promise<void> {
+  await store.appendEvent(actor, caseId, {
+    at: draft.createdAt,
+    role: "assistant",
+    kind: "draft_created",
+    text: "Produktionsentwurf erstellt.",
+    artifactId: draft.draftId,
+    revisionRef: {
+      artifactType: "ProductionDraft",
+      artifactId: draft.draftId,
+      revision: draft.revision,
+      createdAt: draft.createdAt,
+      ...(draft.supersedesDraftId ? { supersedesArtifactId: draft.supersedesDraftId } : {})
+    }
+  }, draft.draftId);
+  const caseUpdate = await store.reopenCaseForDraftContinuation(actor, caseId, draft.draftId);
+  if (caseUpdate === "missing") {
+    throw new Error("ProductionCase wurde nicht gefunden.");
+  }
+}
+
+async function productionDocumentDraftMatchesCaseSource(
+  store: ProductionStore,
+  actor: TrustedActor,
+  caseId: string,
+  documentId: string,
+  draft: ProductionDraft
+): Promise<boolean> {
+  if (
+    draft.draftId !== productionDocumentDraftId(actor.businessId, caseId, documentId) ||
+    draft.revision < 1
+  ) {
+    return false;
+  }
+
+  if (draft.supersedesDraftId) {
+    const superseded = await store.getProductionDraft(actor, draft.supersedesDraftId);
+    const supersededCaseId = await store.findCaseIdForArtifact(actor, draft.supersedesDraftId);
+    if (
+      !superseded ||
+      supersededCaseId !== caseId ||
+      draft.revision !== superseded.revision + 1
+    ) {
+      return false;
+    }
+    const inheritedLineage = draft.draftArtifacts.eventSpec?.sourceLineage ?? [];
+    if (!(superseded.draftArtifacts.eventSpec?.sourceLineage ?? []).every((source) =>
+      inheritedLineage.some((candidate) => areJsonValuesEqual(candidate, source))
+    )) {
+      return false;
+    }
+  } else if (draft.revision !== 1) {
+    return false;
+  }
+
+  const sourceEvent = (await store.listEvents(actor, caseId)).find((event) =>
+    event.kind === "source_added" &&
+    event.sourceId === documentId &&
+    event.sourceRef?.documentId === documentId
+  );
+  const sourceRef = sourceEvent?.sourceRef;
+  if (!sourceRef) return false;
+
+  const expectedHash = `sha256:${sourceRef.sha256}`;
+  return (
+    draft.source.inputHash === expectedHash &&
+    draft.source.sourceRef === `upload:${sourceRef.filename}` &&
+    (draft.draftArtifacts.eventSpec?.sourceLineage ?? []).some((source) =>
+      source.sourceType === "pdf" && source.reference === expectedHash
+    )
+  );
+}
+
+async function latestProductionDraftForCase(
+  store: ProductionStore,
+  actor: TrustedActor,
+  caseId: string
+): Promise<ProductionDraft | undefined> {
+  const events = (await store.listEvents(actor, caseId)).slice().reverse();
+  for (const event of events) {
+    if (event.kind !== "draft_created" && event.kind !== "revision_created") continue;
+    const draftId = event.revisionRef?.artifactId ?? event.artifactId;
+    if (!draftId) continue;
+    const draft = await store.getProductionDraft(actor, draftId);
+    if (draft) return draft;
+  }
+  return undefined;
+}
+
+async function appendProductionDocumentCreatedAudit(
+  auditLog: AuditLogStore,
+  actor: TrustedActor,
+  caseId: string,
+  documentId: string,
+  draft: ProductionDraft
+): Promise<void> {
+  await auditLog.logFor(actor, {
+    action: "production.production_draft_document_created",
+    entityType: "ProductionDraft",
+    entityId: draft.draftId,
+    actor,
+    at: draft.createdAt,
+    idempotencyKey: `production-document-draft:${draft.draftId}`,
+    summary: "ProductionDraft aus Dokumentextraktion angelegt.",
+    details: compactAuditDetails({
+      draftId: draft.draftId,
+      caseId,
+      documentId,
+      sourceSha256: draft.source.inputHash?.replace(/^sha256:/, ""),
+      providerId: draft.source.providerId,
+      modelId: draft.source.modelId,
+      runId: draft.source.runId,
+      reviewCardCount: draft.reviewCards.length,
+      componentCount: draft.draftArtifacts.eventSpec?.menuPlan.length ?? 0,
+      openQuestionCount: draft.draftArtifacts.openQuestions?.length ?? 0,
+      outputTextHash: draft.source.outputHash,
+      humanApprovalRequired: true,
+      writesProductObject: false
+    })
+  });
+}
+
+async function finalizeProductionDraftRevision(
+  store: ProductionStore,
+  auditLog: AuditLogStore,
+  actor: TrustedActor,
+  sourceDraft: ProductionDraft,
+  revision: ProductionDraft,
+  commandIdentity: ReturnType<typeof productionDraftRevisionCommandIdentity>,
+  changeRequestCount: number,
+  changeRequestHash: string
+): Promise<void> {
+  await appendProductionDraftRevisionEvent(
+    store,
+    actor,
+    sourceDraft,
+    revision,
+    "Überarbeitete Produktionsrevision erstellt."
+  );
+  await auditLog.logFor(actor, {
+    action: "production.production_draft_revision_created",
+    entityType: "ProductionDraft",
+    entityId: revision.draftId,
+    actor,
+    at: revision.createdAt,
+    idempotencyKey: `production-draft-revision:${revision.draftId}`,
+    summary: "Neue ProductionDraft-Revision zur Prüfung angelegt.",
+    details: compactAuditDetails({
+      draftId: revision.draftId,
+      supersedesDraftId: sourceDraft.draftId,
+      agentAuditId: commandIdentity.agentAuditId,
+      inputId: commandIdentity.inputId,
+      providerId: revision.source.providerId,
+      providerRequestId: revision.source.runId,
+      changeRequestCount,
+      changeRequestHash,
+      reviewCardCount: revision.reviewCards.length,
+      humanApprovalRequired: true,
+      writesProductObject: false
+    })
+  });
+}
+
+async function appendSourceAddedEvent(
+  store: ProductionStore,
+  actor: TrustedActor,
+  caseId: string,
+  source: StoredSourceDocument
+): Promise<void> {
+  await store.appendEvent(actor, caseId, {
+    at: source.createdAt,
+    role: "system",
+    kind: "source_added",
+    text: "Quelldokument zum Produktionsauftrag hinzugefügt.",
+    sourceId: source.documentId,
+    sourceRef: {
+      sourceId: source.documentId,
+      documentId: source.documentId,
+      filename: source.filename,
+      mimeType: source.mimeType,
+      sha256: source.sha256,
+      dataClass: source.dataClass,
+      addedAt: source.createdAt
+    }
+  }, source.documentId);
+}
+
+async function appendCaseErrorEvent(
+  store: ProductionStore,
+  actor: TrustedActor,
+  caseId: string,
+  text: string,
+  sourceId?: string,
+  eventIdentity?: string,
+  at = new Date().toISOString()
+): Promise<void> {
+  await store.appendEvent(actor, caseId, {
+    at,
+    role: "system",
+    kind: "error",
+    text,
+    ...(sourceId ? { sourceId } : {})
+  }, eventIdentity);
+}
+
+async function appendArtifactEvent(
+  store: ProductionStore,
+  actor: TrustedActor,
+  sourceArtifactId: string,
+  input: Parameters<ProductionStore["appendEvent"]>[2],
+  eventIdentity?: string
+): Promise<void> {
+  await store.appendEventForArtifactCase(actor, sourceArtifactId, input, eventIdentity);
 }
 
 function normalizeOptionalNumber(value: unknown): number | undefined {
@@ -346,48 +696,9 @@ function productionDraftExtractionFailureMessage(errors: readonly string[]): str
     : "ProductionDraft-Extraktion ist nicht schema-valide.";
 }
 
-async function productionDraftDocumentFromRequest(
-  request: FastifyRequest
-): Promise<ProductionDraftDocumentInput> {
-  const multipartRequest = request as FastifyRequest & {
-    isMultipart: () => boolean;
-    file: (options?: { limits?: { fileSize?: number; files?: number; fields?: number; parts?: number } }) => Promise<
-      | {
-          filename: string;
-          mimetype: string;
-          file: AsyncIterable<Buffer | Uint8Array>;
-          toBuffer: () => Promise<Buffer>;
-        }
-      | undefined
-    >;
-  };
-
-  if (multipartRequest.isMultipart?.()) {
-    const file = await multipartRequest.file({ limits: multipartLimitsForUpload("intake") });
-    if (!file) {
-      throw new Error("No production source file provided.");
-    }
-    validateUploadedDocumentMetadata({ filename: file.filename, mimeType: file.mimetype });
-    const content = await readLimitedUploadBuffer(file.file, "intake");
-    const document = { filename: file.filename, mimeType: file.mimetype, content };
-    validateUploadedDocument(document, "intake");
-    return document;
-  }
-
-  const body = request.body as ProductionDraftDocumentBody | undefined;
-  const filename = normalizeOptionalText(body?.filename, 240);
-  const mimeType = normalizeOptionalText(body?.mimeType, 120);
-  if (!filename || !mimeType || typeof body?.contentBase64 !== "string") {
-    throw new Error("filename, mimeType und contentBase64 sind erforderlich.");
-  }
-  const content = Buffer.from(body.contentBase64, "base64");
-  const document = { filename, mimeType, content };
-  validateUploadedDocument(document, "intake");
-  return document;
-}
-
 function buildProductionDraftFromExtraction(input: {
   businessId: TrustedActor["businessId"];
+  draftId?: string;
   revision: number;
   extraction: ProductionDraftExtraction;
   source: {
@@ -494,7 +805,7 @@ function buildProductionDraftFromExtraction(input: {
   return validateProductionDraft({
     schemaVersion: draftEventSpec.schemaVersion,
     businessId: input.businessId,
-    draftId: `production-draft-${randomUUID()}`,
+    draftId: input.draftId ?? `production-draft-${randomUUID()}`,
     revision: input.revision,
     status: "pending_review",
     createdAt: new Date().toISOString(),
@@ -581,7 +892,8 @@ export function registerProductionArtifactRoutes(
 ) {
   const {
     store,
-    intakeStore,
+    intakeRecords,
+    sourceDocumentReader,
     discoveryService,
     auditLog,
     buildLlmAdapter,
@@ -613,13 +925,66 @@ export function registerProductionArtifactRoutes(
     return current;
   };
 
-  app.post<{ Params: { handoffId: string } }>("/v1/production/drafts/from-handoff/:handoffId", async (request, reply) => {
+  const sameProductionDocumentDraftIdentity = (
+    existing: ProductionDraft,
+    candidate: ProductionDraft
+  ): boolean => (
+    existing.draftId === candidate.draftId &&
+    existing.revision === candidate.revision &&
+    existing.supersedesDraftId === candidate.supersedesDraftId &&
+    existing.source.sourceRef === candidate.source.sourceRef &&
+    existing.source.inputHash === candidate.source.inputHash &&
+    areJsonValuesEqual(
+      existing.draftArtifacts.eventSpec,
+      candidate.draftArtifacts.eventSpec
+    )
+  );
+
+  const insertProductionDraftInScope = async (
+    scope: ProductionDecisionTargetScope,
+    draft: ProductionDraft
+  ): Promise<
+    | { status: "committed"; value: ProductionDraft }
+    | { status: "conflict" }
+  > => {
+    const existing = await scope.getDraft(draft.draftId);
+    if (existing) {
+      return sameProductionDocumentDraftIdentity(existing, draft)
+        ? { status: "committed", value: existing }
+        : { status: "conflict" };
+    }
+    const target = {
+      kind: "production_draft" as const,
+      artifactId: draft.draftId,
+      revision: draft.revision
+    };
+    const aggregate = await scope.getDecisionAggregate(
+      approvalRequestIdForTarget({ businessId: draft.businessId, target })
+    );
+    if (aggregate || (await scope.listApprovalsForTarget()).length > 0) {
+      return { status: "conflict" };
+    }
+    const inserted = await scope.insertDraft(draft);
+    const persisted = inserted === "created" ? draft : await scope.getDraft(draft.draftId);
+    return persisted && sameProductionDocumentDraftIdentity(persisted, draft)
+      ? { status: "committed", value: persisted }
+      : { status: "conflict" };
+  };
+
+  app.post<{ Params: { handoffId: string }; Body: ProductionDraftFromHandoffBody }>("/v1/production/drafts/from-handoff/:handoffId", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) return forbidden;
+    const body = strictReferenceBody(request.body, ["caseId"]);
+    if (!body) return reply.code(422).send({ message: "caseId ist als einzige Referenz erforderlich." });
     if (!handoffReader) return reply.code(503).send({ message: "Angebotsübergabe ist nicht konfiguriert." });
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const productionCase = await store.getCase(actor, body.caseId);
+    if (!productionCase) return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
+    if (productionCase.productionHandoffId !== request.params.handoffId) {
+      return reply.code(409).send({ message: "Produktionsauftrag gehört nicht zu dieser Angebotsübergabe." });
+    }
     let handoff: ProductionHandoff | undefined;
-    try { handoff = await handoffReader.getHandoff(actor, request.params.handoffId); }
+    try { handoff = await handoffReader.get(actor, request.params.handoffId); }
     catch { return reply.code(502).send({ message: "Angebotsübergabe konnte nicht geladen werden." }); }
     if (!handoff) return reply.code(404).send({ message: "Produktionsübergabe nicht gefunden." });
     if (handoff.businessId !== actor.businessId || handoff.handoffId !== request.params.handoffId) {
@@ -640,6 +1005,7 @@ export function registerProductionArtifactRoutes(
         return reply.code(409).send({ message: "Bestehender ProductionDraft stimmt nicht mit der angeforderten Angebotsübergabe überein." });
       }
     }
+    await appendDraftCreatedEvent(store, actor, body.caseId, draft);
     await auditLog.logFor(actor, {
       action: "production.draft_created_from_handoff", entityType: "ProductionDraft", entityId: draft.draftId,
       actor, at: draft.createdAt, idempotencyKey: `production-draft-from-handoff:${draft.draftId}`,
@@ -716,10 +1082,121 @@ export function registerProductionArtifactRoutes(
         return forbidden;
       }
 
+      const body = strictReferenceBody(request.body, ["caseId", "documentId"]);
+      if (!body) {
+        return reply.code(422).send({ message: "caseId und documentId sind als einzige Referenzen erforderlich." });
+      }
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const productionCase = await store.getCase(actor, body.caseId);
+      if (!productionCase) {
+        return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
+      }
+      const documentDraftId = productionDocumentDraftId(
+        actor.businessId,
+        body.caseId,
+        body.documentId
+      );
+      const existingDraft = await store.getProductionDraft(actor, documentDraftId);
+      if (existingDraft) {
+        const nextSourceSpecId = existingDraft.draftArtifacts.eventSpec?.specId;
+        const supersededDraft = existingDraft.supersedesDraftId
+          ? await store.getProductionDraft(actor, existingDraft.supersedesDraftId)
+          : undefined;
+        if (!nextSourceSpecId || (existingDraft.supersedesDraftId && !supersededDraft)) {
+          return reply.code(409).send({
+            message: "Bestehender ProductionDraft besitzt keine eindeutige Spezifikationslinie."
+          });
+        }
+        const caseCommit = await store.commitDraftForCaseSource(actor, {
+          caseId: body.caseId,
+          expectedSourceSpecId: supersededDraft?.draftArtifacts.eventSpec?.specId,
+          nextSourceSpecId,
+          at: existingDraft.createdAt,
+          draftTarget: {
+            kind: "production_draft",
+            artifactId: existingDraft.draftId,
+            revision: existingDraft.revision
+          },
+          commitDraft: async (scope) => {
+            const persisted = await scope.getDraft(existingDraft.draftId);
+            return persisted && areJsonValuesEqual(persisted, existingDraft)
+              ? { status: "committed" as const, value: persisted }
+              : { status: "conflict" as const };
+          }
+        });
+        if (caseCommit.status === "case_missing") {
+          return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
+        }
+        if (caseCommit.status === "case_conflict") {
+          return reply.code(409).send({
+            message: "Produktionsauftrag ist bereits an eine andere Spezifikation gebunden."
+          });
+        }
+        if (caseCommit.status === "draft_conflict") {
+          return reply.code(409).send({
+            message: "Bestehender ProductionDraft stimmt nicht mit dem Quelldokument überein."
+          });
+        }
+        if (!await productionDocumentDraftMatchesCaseSource(
+          store,
+          actor,
+          body.caseId,
+          body.documentId,
+          existingDraft
+        )) {
+          return reply.code(409).send({
+            message: "Bestehender ProductionDraft passt nicht zum Quelldokument dieses Auftrags."
+          });
+        }
+        await appendDraftCreatedEvent(store, actor, body.caseId, existingDraft);
+        await appendProductionDocumentCreatedAudit(
+          auditLog,
+          actor,
+          body.caseId,
+          body.documentId,
+          existingDraft
+        );
+        return reply.code(201).send({ draft: existingDraft });
+      }
+      if (!sourceDocumentReader) {
+        return reply.code(503).send({ message: "Quelldokumente sind nicht konfiguriert." });
+      }
+
       let document: ProductionDraftDocumentInput;
+      let storedSource: StoredSourceDocument;
       try {
-        document = await productionDraftDocumentFromRequest(request);
+        const [metadata, contentBytes] = await Promise.all([
+          sourceDocumentReader.getMetadata(actor, body.documentId),
+          sourceDocumentReader.getContent(actor, body.documentId)
+        ]);
+        if (!metadata || !contentBytes) {
+          return reply.code(404).send({ message: "Quelldokument nicht gefunden." });
+        }
+        storedSource = metadata;
+        const content = Buffer.from(contentBytes);
+        const observedSha256 = createHash("sha256").update(content).digest("hex");
+        if (
+          metadata.businessId !== actor.businessId ||
+          metadata.documentId !== body.documentId ||
+          metadata.sizeBytes !== content.byteLength ||
+          metadata.sha256 !== observedSha256
+        ) {
+          return reply.code(502).send({ message: "Quelldokument stimmt nicht mit seinen Metadaten überein." });
+        }
+        document = {
+          caseId: body.caseId,
+          documentId: body.documentId,
+          filename: metadata.filename,
+          mimeType: metadata.mimeType,
+          content,
+          sha256: metadata.sha256,
+          ingestedAt: metadata.createdAt
+        };
+        validateUploadedDocument(document, "intake");
       } catch (error) {
+        if (error instanceof Error && error.message.includes("Quelldokument")) {
+          return reply.code(502).send({ message: "Quelldokument konnte nicht geladen werden." });
+        }
         const uploadError = uploadErrorResponse(error, "intake");
         return reply.code(uploadError.statusCode).send({ message: uploadError.message });
       }
@@ -728,8 +1205,12 @@ export function registerProductionArtifactRoutes(
         filename: document.filename,
         mimeType: document.mimeType,
         content: document.content,
-        uploadContext: "production"
+        uploadContext: "production",
+        ingestedAt: document.ingestedAt
       });
+      if (sourceMetadata.sha256 !== document.sha256) {
+        return reply.code(502).send({ message: "Quelldokument stimmt nicht mit seinen Metadaten überein." });
+      }
       const ingestion = await ingestDocument({
         document: {
           ...document,
@@ -737,8 +1218,18 @@ export function registerProductionArtifactRoutes(
         },
         context: "production"
       });
+      await appendSourceAddedEvent(store, actor, document.caseId, storedSource);
 
       if (ingestion.status !== "extracted" || !ingestion.extractedText?.trim()) {
+        await appendCaseErrorEvent(
+          store,
+          actor,
+          document.caseId,
+          "Quelldokument konnte nicht sicher gelesen werden.",
+          document.documentId,
+          `document-ingestion:${document.documentId}`,
+          document.ingestedAt
+        );
         return reply.code(422).send({
           message: "Angebotsdokument konnte nicht sicher als Text gelesen werden.",
           errors: ingestion.warnings
@@ -772,18 +1263,26 @@ export function registerProductionArtifactRoutes(
         promptSchemaId: promptSchema.promptSchemaId,
         promptContext: ingestion.extractedText
       };
-      const draftSeed = `draft-${sourceMetadata.sha256.slice(0, 16)}-${randomUUID()}`;
+      const draftSeed = documentDraftId;
 
       let adapter: LlmReadinessProviderAdapter;
       try {
         adapter = buildLlmAdapter();
       } catch (error) {
+        await appendCaseErrorEvent(
+          store,
+          actor,
+          document.caseId,
+          "KI-Verbindung konnte nicht gestartet werden.",
+          document.documentId,
+          `document-adapter-startup:${document.documentId}`,
+          document.ingestedAt
+        );
         return reply.code(500).send({
           message: error instanceof Error ? error.message : "BYO-LLM-Adapter konnte nicht gestartet werden."
         });
       }
 
-      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
         await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.production_draft_document_rejected",
@@ -800,8 +1299,18 @@ export function registerProductionArtifactRoutes(
             sourceSha256: sourceMetadata.sha256,
             errorCount: 1,
             errorType: error instanceof Error ? error.name : typeof error
-          })
+          }),
+          idempotencyKey: `production-document-draft-rejected:${documentDraftId}:provider`
         });
+        await appendCaseErrorEvent(
+          store,
+          actor,
+          document.caseId,
+          "KI-Entwurf konnte nicht erstellt werden.",
+          document.documentId,
+          `document-provider-error:${document.documentId}`,
+          document.ingestedAt
+        );
         return undefined;
       });
       if (!adapterResponse) {
@@ -843,18 +1352,30 @@ export function registerProductionArtifactRoutes(
             providerRequestId: adapterResponse.providerRequestId,
             sourceSha256: sourceMetadata.sha256,
             errorCount: responseErrors.length
-          })
+          }),
+          idempotencyKey: `production-document-draft-rejected:${documentDraftId}:validation`
         });
+        await appendCaseErrorEvent(
+          store,
+          actor,
+          document.caseId,
+          "KI-Entwurf war nicht prüfbar und wurde verworfen.",
+          document.documentId,
+          `document-validation-error:${document.documentId}`,
+          document.ingestedAt
+        );
         return reply.code(422).send({
           message: productionDraftExtractionFailureMessage(responseErrors),
           errors: [...new Set(responseErrors)]
         });
       }
 
+      const previousDraft = await latestProductionDraftForCase(store, actor, document.caseId);
       const draft = validateProductionDraft({
         ...buildProductionDraftFromExtraction({
           businessId: actor.businessId,
-          revision: 1,
+          draftId: documentDraftId,
+          revision: (previousDraft?.revision ?? 0) + 1,
           extraction: extractionBuild.extraction,
           source: {
             filename: sourceMetadata.filename,
@@ -862,111 +1383,262 @@ export function registerProductionArtifactRoutes(
             ingestedAt: sourceMetadata.ingestedAt
           },
           outputCandidate: adapterResponse.outputCandidate!,
-          adapterResponse
+          adapterResponse,
+          ...(previousDraft
+            ? {
+              supersedesDraftId: previousDraft.draftId,
+              inheritedSourceLineage: previousDraft.draftArtifacts.eventSpec?.sourceLineage
+            }
+            : {})
         }),
         businessId: actor.businessId
       });
-      await store.saveProductionDraft(actor, draft);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
-        action: "production.production_draft_document_created",
-        entityType: "ProductionDraft",
-        entityId: draft.draftId,
-        actor,
-        summary: "ProductionDraft aus Dokumentextraktion angelegt.",
-        details: compactAuditDetails({
-          draftId: draft.draftId,
-          agentAuditId: auditBuild.auditRecord.auditId,
-          inputId: input.inputId,
-          outputId: adapterResponse.outputCandidate?.outputId,
-          sourceSha256: sourceMetadata.sha256,
-          adapterId: adapterResponse.adapterId,
-          adapterMode: adapterResponse.adapterMode,
-          promptSchemaId: adapterResponse.promptSchemaId ?? promptSchema.promptSchemaId,
-          dataMode: input.policy.dataMode,
-          providerId: adapterResponse.providerId,
-          providerRequestId: adapterResponse.providerRequestId,
-          reviewCardCount: draft.reviewCards.length,
-          componentCount: draft.draftArtifacts.eventSpec?.menuPlan.length ?? 0,
-          openQuestionCount: draft.draftArtifacts.openQuestions?.length ?? 0,
-          outputTextHash: adapterResponse.outputCandidate
-            ? hashText(adapterResponse.outputCandidate.text)
-            : undefined,
-          humanApprovalRequired: true,
-          writesProductObject: false
-        })
-      });
+      const sourceSpecId = draft.draftArtifacts.eventSpec?.specId;
+      if (!sourceSpecId) {
+        return reply.code(422).send({
+          message: "ProductionDraft enthält keine bindbare Veranstaltungsspezifikation."
+        });
+      }
+      const draftTarget = previousDraft
+        ? {
+          kind: "production_draft" as const,
+          artifactId: previousDraft.draftId,
+          revision: previousDraft.revision
+        }
+        : {
+          kind: "production_draft" as const,
+          artifactId: draft.draftId,
+          revision: draft.revision
+        };
+      const caseCommit = await store.commitDraftForCaseSource(actor, {
+        caseId: document.caseId,
+        expectedSourceSpecId: productionCase.sourceSpecId,
+        nextSourceSpecId: sourceSpecId,
+        at: draft.createdAt,
+        draftTarget,
+        commitDraft: async (scope) => {
+          if (!previousDraft) return insertProductionDraftInScope(scope, draft);
 
-      return reply.code(201).send({ draft });
+          const existingContinuation = await scope.getDraft(draft.draftId);
+          const currentSource = await scope.getDraft(previousDraft.draftId);
+          if (!currentSource || !areJsonValuesEqual(currentSource, previousDraft)) {
+            return { status: "conflict" as const };
+          }
+          if (existingContinuation) {
+            if (!sameProductionDocumentDraftIdentity(existingContinuation, draft)) {
+              return { status: "conflict" as const };
+            }
+            if (
+              currentSource.status === "pending_review" &&
+              !await mutableDraftInScope(scope, previousDraft)
+            ) {
+              return { status: "conflict" as const };
+            }
+            if (currentSource.status === "pending_review") {
+              await scope.setDraft(validateProductionDraft({ ...previousDraft, status: "superseded" }));
+            }
+            return { status: "committed" as const, value: existingContinuation };
+          }
+          if (
+            currentSource.status === "pending_review" &&
+            !await mutableDraftInScope(scope, previousDraft)
+          ) {
+            return { status: "conflict" as const };
+          }
+          if (currentSource.status === "superseded") {
+            return { status: "conflict" as const };
+          }
+          const inserted = await scope.insertDraft(draft);
+          const persisted = inserted === "created" ? draft : await scope.getDraft(draft.draftId);
+          if (!persisted || !sameProductionDocumentDraftIdentity(persisted, draft)) {
+            return { status: "conflict" as const };
+          }
+          // Pending work is replaced by the correction. Approved or rejected history remains
+          // immutable evidence and is only referenced by the new continuation.
+          if (currentSource.status === "pending_review") {
+            await scope.setDraft(validateProductionDraft({ ...previousDraft, status: "superseded" }));
+          }
+          return { status: "committed" as const, value: persisted };
+        }
+      });
+      if (caseCommit.status === "case_missing") {
+        return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
+      }
+      if (caseCommit.status === "case_conflict") {
+        return reply.code(409).send({
+          message: "Produktionsauftrag ist bereits an eine andere Spezifikation gebunden."
+        });
+      }
+      if (caseCommit.status === "draft_conflict") {
+        return reply.code(409).send({
+          message: previousDraft
+            ? "Der vorherige ProductionDraft wurde während der Dokumentkorrektur verändert oder entschieden."
+            : "ProductionDraft konnte nicht eindeutig gespeichert werden."
+        });
+      }
+      const persistedDraft = caseCommit.value;
+      if (!await productionDocumentDraftMatchesCaseSource(
+        store,
+        actor,
+        document.caseId,
+        document.documentId,
+        persistedDraft
+      )) {
+        return reply.code(409).send({
+          message: "Bestehender ProductionDraft passt nicht zum Quelldokument dieses Auftrags."
+        });
+      }
+      await appendDraftCreatedEvent(store, actor, document.caseId, persistedDraft);
+      await appendProductionDocumentCreatedAudit(
+        auditLog,
+        actor,
+        document.caseId,
+        document.documentId,
+        persistedDraft
+      );
+
+      return reply.code(201).send({ draft: persistedDraft });
     }
   );
 
-  app.post<{ Body: ProductionDraft }>("/v1/production/drafts", async (request, reply) => {
+  app.post<{ Body: ProductionDraftFromSpecBody }>("/v1/production/drafts", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
 
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-    if (request.body?.businessId !== undefined && request.body.businessId !== actor.businessId) {
-      return reply.code(422).send({
-        message: "ProductionDraft passt nicht zum vertrauenswürdigen Betriebskontext.",
-        errors: ["businessId must match the trusted business context"]
-      });
+    const body = strictReferenceBody(request.body, ["caseId", "specId"]);
+    if (!body) {
+      return reply.code(422).send({ message: "caseId und specId sind als einzige Referenzen erforderlich." });
+    }
+    if (!await store.getCase(actor, body.caseId)) {
+      return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
     }
 
-    let draft: ProductionDraft;
+    let spec: AcceptedEventSpec | undefined;
     try {
-      draft = validateProductionDraft({
-        ...request.body,
-        businessId: actor.businessId
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unbekannter Validierungsfehler.";
-      return reply.code(422).send({
-        message: productionDraftImportValidationMessage(errorMessage),
-        errors: [errorMessage]
-      });
+      spec = await intakeRecords.getSpec(actor, body.specId);
+    } catch {
+      return reply.code(502).send({ message: "AcceptedEventSpec konnte nicht geladen werden." });
+    }
+    if (!spec) {
+      return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
+    }
+    if (spec.specId !== body.specId) {
+      return reply.code(502).send({ message: "AcceptedEventSpec passt nicht zur angeforderten Identität." });
     }
 
-    if (draft.status !== "pending_review") {
-      return reply.code(422).send({
-        message: "ProductionDraft-Import akzeptiert nur Entwürfe im Status pending_review.",
-        errors: ["status must be pending_review for draft-only import"]
-      });
+    const specFingerprint = acceptedEventSpecFingerprint(spec);
+    const draftId = productionDraftIdForSpecImport(
+      actor.businessId,
+      body.caseId,
+      spec.specId,
+      specFingerprint
+    );
+    const now = new Date().toISOString();
+    const candidate = validateProductionDraft({
+      schemaVersion: spec.schemaVersion,
+      businessId: actor.businessId,
+      draftId,
+      revision: 1,
+      status: "pending_review",
+      createdAt: now,
+      source: {
+        kind: "manual_import",
+        receivedAt: now,
+        sourceRef: `accepted-event-spec:${spec.specId}`,
+        inputHash: `sha256:${specFingerprint}`
+      },
+      guardrails: {
+        draftOnly: true,
+        humanApprovalRequired: true,
+        writesProductObjects: false,
+        rawProviderPayloadStored: false,
+        knowledgeWritePolicy: "reviewed_only"
+      },
+      reviewCards: [{
+        cardId: "card-event-spec",
+        kind: "event_data",
+        title: "Veranstaltungsdaten prüfen",
+        summary: "Kanonische Spezifikation für die Produktionsprüfung.",
+        decision: "pending",
+        targetPath: "$.draftArtifacts.eventSpec",
+        targetId: spec.specId,
+        requiredApproval: true
+      }],
+      draftArtifacts: { eventSpec: spec }
+    });
+    const matchesSpecImport = (draft: ProductionDraft | undefined): draft is ProductionDraft => Boolean(
+      draft &&
+      draft.source.sourceRef === `accepted-event-spec:${spec.specId}` &&
+      draft.source.inputHash === `sha256:${specFingerprint}` &&
+      areJsonValuesEqual(draft.draftArtifacts.eventSpec, spec)
+    );
+    const caseCommit = await store.commitDraftForCaseSource<ProductionDraft>(actor, {
+      caseId: body.caseId,
+      expectedSourceSpecId: undefined,
+      nextSourceSpecId: spec.specId,
+      at: now,
+      draftTarget: {
+        kind: "production_draft",
+        artifactId: candidate.draftId,
+        revision: candidate.revision
+      },
+      commitDraft: async (scope) => {
+        const existing = await scope.getDraft(candidate.draftId);
+        if (existing) {
+          return matchesSpecImport(existing)
+            ? { status: "committed" as const, value: existing }
+            : { status: "conflict" as const };
+        }
+        const target = {
+          kind: "production_draft" as const,
+          artifactId: candidate.draftId,
+          revision: candidate.revision
+        };
+        const aggregate = await scope.getDecisionAggregate(
+          approvalRequestIdForTarget({ businessId: actor.businessId, target })
+        );
+        if (aggregate || (await scope.listApprovalsForTarget()).length > 0) {
+          return { status: "conflict" as const };
+        }
+        const inserted = await scope.insertDraft(candidate);
+        const persisted = inserted === "created" ? candidate : await scope.getDraft(candidate.draftId);
+        return matchesSpecImport(persisted)
+          ? { status: "committed" as const, value: persisted }
+          : { status: "conflict" as const };
+      }
+    });
+    if (caseCommit.status === "case_missing") {
+      return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
     }
-    if (await store.getProductionDraft(actor, draft.draftId)) {
+    if (caseCommit.status === "case_conflict") {
       return reply.code(409).send({
-        message: "ProductionDraft mit dieser ID existiert bereits."
+        message: "Produktionsauftrag ist bereits an eine andere Spezifikation gebunden."
       });
     }
-
-    if (await store.insertProductionDraft(actor, draft) === "exists") {
+    if (caseCommit.status === "draft_conflict") {
       return reply.code(409).send({
-        message: "ProductionDraft mit dieser ID existiert bereits."
+        message: "AcceptedEventSpec stimmt nicht mit dem bestehenden Entwurf überein."
       });
     }
-    const artifacts = draft.draftArtifacts;
+    const draft = caseCommit.value;
+    await appendDraftCreatedEvent(store, actor, body.caseId, draft);
     await auditLog.logFor(actor, {
       action: "production.production_draft_imported",
       entityType: "ProductionDraft",
       entityId: draft.draftId,
       actor,
+      at: draft.createdAt,
+      idempotencyKey: `spec-import:${draft.draftId}`,
       summary: "ProductionDraft importiert und zur Review vorgemerkt.",
       details: compactAuditDetails({
         draftId: draft.draftId,
         status: draft.status,
-        sourceKind: draft.source.kind,
-        providerId: draft.source.providerId,
-        modelId: draft.source.modelId,
-        inputHash: draft.source.inputHash,
-        outputHash: draft.source.outputHash,
+        specId: spec.specId,
+        specFingerprint,
         reviewCardCount: draft.reviewCards.length,
-        hasEventSpec: Boolean(artifacts.eventSpec),
-        hasProductionPlan: Boolean(artifacts.productionPlan),
-        hasPurchaseList: Boolean(artifacts.purchaseList),
-        recipeCount: artifacts.recipes?.length ?? 0,
-        openQuestionCount: artifacts.openQuestions?.length ?? 0,
-        noteCount: artifacts.notes?.length ?? 0,
         humanApprovalRequired: draft.guardrails.humanApprovalRequired,
         writesProductObject: draft.guardrails.writesProductObjects
       })
@@ -1006,9 +1678,6 @@ export function registerProductionArtifactRoutes(
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const draft = await store.getProductionDraft(actor, request.params.draftId);
       if (!draft) return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
-      if (draft.status !== "pending_review") {
-        return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann vorbereitet werden." });
-      }
       const eventSpec = draft.draftArtifacts.eventSpec;
       if (!eventSpec) {
         return reply.code(422).send({
@@ -1021,6 +1690,38 @@ export function registerProductionArtifactRoutes(
         artifactId: draft.draftId,
         revision: draft.revision
       };
+      const preparedDraftId = preparedProductionDraftId(actor.businessId, draft);
+      const existingPreparedDraft = await store.getProductionDraft(actor, preparedDraftId);
+      if (existingPreparedDraft) {
+        if (!preparedProductionDraftMatchesSource(draft, existingPreparedDraft, preparedDraftId)) {
+          return reply.code(409).send({
+            message: "Die gespeicherte Produktionsvorbereitung passt nicht eindeutig zum Ausgangsentwurf."
+          });
+        }
+        const recovered = await decisionRepository.withTargetCriticalSection(actor, target, async (scope) => {
+          const current = await scope.getDraft(draft.draftId);
+          if (current?.status === "superseded") return true;
+          if (!await mutableDraftInScope(scope, draft)) return false;
+          await scope.setDraft(validateProductionDraft({ ...draft, status: "superseded" }));
+          return true;
+        });
+        if (!recovered) {
+          return reply.code(409).send({
+            message: "ProductionDraft wurde während der Vorbereitung verändert oder entschieden."
+          });
+        }
+        await appendProductionDraftRevisionEvent(
+          store,
+          actor,
+          draft,
+          existingPreparedDraft,
+          "Vollständige Produktionsrevision zur Prüfung erstellt."
+        );
+        return reply.code(201).send({ draft: existingPreparedDraft });
+      }
+      if (draft.status !== "pending_review") {
+        return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann vorbereitet werden." });
+      }
 
       const artifacts = await buildProductionArtifacts(eventSpec, discoveryService, {
         context: actor,
@@ -1038,7 +1739,7 @@ export function registerProductionArtifactRoutes(
       const planningBlockingIssues = [...new Set(artifacts.productionPlan.blockingIssues ?? [])];
       const prepared = validateProductionDraft({
         ...draft,
-        draftId: `production-draft-${randomUUID()}`,
+        draftId: preparedDraftId,
         revision: draft.revision + 1,
         status: "pending_review",
         createdAt: new Date().toISOString(),
@@ -1144,10 +1845,28 @@ export function registerProductionArtifactRoutes(
         return true;
       });
       if (!committed) {
+        const racedPreparedDraft = await store.getProductionDraft(actor, preparedDraftId);
+        if (racedPreparedDraft && preparedProductionDraftMatchesSource(draft, racedPreparedDraft, preparedDraftId)) {
+          await appendProductionDraftRevisionEvent(
+            store,
+            actor,
+            draft,
+            racedPreparedDraft,
+            "Vollständige Produktionsrevision zur Prüfung erstellt."
+          );
+          return reply.code(201).send({ draft: racedPreparedDraft });
+        }
         return reply.code(409).send({
           message: "ProductionDraft wurde während der Vorbereitung verändert oder entschieden."
         });
       }
+      await appendProductionDraftRevisionEvent(
+        store,
+        actor,
+        draft,
+        prepared,
+        "Vollständige Produktionsrevision zur Prüfung erstellt."
+      );
       return reply.code(201).send({ draft: prepared });
     }
   );
@@ -1197,6 +1916,16 @@ export function registerProductionArtifactRoutes(
         const cardIndex = current.reviewCards.findIndex((card) => card.cardId === request.params.cardId);
         if (cardIndex < 0) return { kind: "not_found" as const };
 
+        const currentCard = current.reviewCards[cardIndex];
+        const effectiveOperatorComment = operatorComment ?? currentCard.operatorComment;
+        if (
+          currentCard.decision === decision &&
+          currentCard.operatorComment === effectiveOperatorComment &&
+          currentCard.decidedAt
+        ) {
+          return { kind: "reviewed" as const, reviewedDraft: current, cardIndex };
+        }
+
         const decidedAt = new Date().toISOString();
         const reviewCards = current.reviewCards.map((card, index) =>
           index === cardIndex
@@ -1221,11 +1950,26 @@ export function registerProductionArtifactRoutes(
       }
       const { reviewedDraft, cardIndex } = reviewResult;
       const card = reviewedDraft.reviewCards[cardIndex];
+      const decisionLabel = {
+        pending: "Offen",
+        fits: "Passt",
+        change_requested: "Änderung nötig",
+        unclear: "Unklar",
+        blocked: "Blockiert"
+      }[card.decision];
+      await appendArtifactEvent(store, actor, reviewedDraft.draftId, {
+        at: card.decidedAt!,
+        role: "user",
+        kind: "review_decision",
+        text: `Prüfpunkt als „${decisionLabel}“ bewertet.`,
+        artifactId: reviewedDraft.draftId
+      }, `review:${reviewedDraft.draftId}:${card.cardId}:${card.decidedAt}`);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "production.production_draft_review_card_decided",
         entityType: "ProductionDraft",
         entityId: reviewedDraft.draftId,
         actor,
+        idempotencyKey: `review:${reviewedDraft.draftId}:${card.cardId}:${card.decidedAt}`,
         summary: "ProductionDraft-Review-Karte entschieden.",
         details: compactAuditDetails({
           draftId: reviewedDraft.draftId,
@@ -1258,9 +2002,6 @@ export function registerProductionArtifactRoutes(
       if (!draft) {
         return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
       }
-      if (draft.status !== "pending_review") {
-        return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann überarbeitet werden." });
-      }
       const target = {
         kind: "production_draft" as const,
         artifactId: draft.draftId,
@@ -1287,16 +2028,54 @@ export function registerProductionArtifactRoutes(
         });
       }
 
+      const promptContext = productionDraftRevisionPromptContext(draft, requestedChanges);
+      const contextHash = hashText(promptContext);
+      const changeRequestHash = hashText(requestedChanges.map((card) => card.operatorComment).join("\n"));
+      const commandAt = requestedChanges
+        .map((card) => card.decidedAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1) ?? draft.createdAt;
+      const commandIdentity = productionDraftRevisionCommandIdentity(
+        actor.businessId,
+        draft,
+        contextHash
+      );
+      const existingRevision = await store.getProductionDraft(actor, commandIdentity.draftId);
+      if (existingRevision) {
+        const matchesCommand =
+          existingRevision.supersedesDraftId === draft.draftId &&
+          existingRevision.revision === draft.revision + 1 &&
+          existingRevision.source.inputHash === `sha256:${contextHash}`;
+        if (!matchesCommand) {
+          return reply.code(409).send({
+            message: "Die gespeicherte Produktionsrevision passt nicht eindeutig zum Überarbeitungsauftrag."
+          });
+        }
+        await finalizeProductionDraftRevision(
+          store,
+          auditLog,
+          actor,
+          draft,
+          existingRevision,
+          commandIdentity,
+          requestedChanges.length,
+          changeRequestHash
+        );
+        return reply.code(201).send({ draft: existingRevision });
+      }
+      if (draft.status !== "pending_review") {
+        return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann überarbeitet werden." });
+      }
+
       const promptSchema = findLlmReadinessPromptSchemaEntryByInputKind("production_draft_request");
       if (!promptSchema) {
         return reply.code(500).send({ message: "Prompt-Schema für ProductionDraft-Extraktion nicht registriert." });
       }
 
-      const promptContext = productionDraftRevisionPromptContext(draft, requestedChanges);
-      const contextHash = hashText(promptContext);
       const input: LlmReadinessModelInput = {
         contractVersion: llmReadinessContractVersion,
-        inputId: `input-production-draft-revision-${contextHash.slice(0, 16)}-${randomUUID()}`,
+        inputId: commandIdentity.inputId,
         kind: "production_draft_request",
         sourceRefs: [
           {
@@ -1316,12 +2095,18 @@ export function registerProductionArtifactRoutes(
         promptSchemaId: promptSchema.promptSchemaId,
         promptContext
       };
-      const revisionSeed = `revision-${draft.draftId}-${randomUUID()}`;
 
       let adapter: LlmReadinessProviderAdapter;
       try {
         adapter = buildLlmAdapter();
       } catch (error) {
+        await appendArtifactEvent(store, actor, draft.draftId, {
+          at: commandAt,
+          role: "system",
+          kind: "error",
+          text: "KI-Verbindung für die Produktionsrevision konnte nicht gestartet werden.",
+          artifactId: draft.draftId
+        }, `revision-startup-error:${input.inputId}`);
         return reply.code(500).send({
           message: error instanceof Error ? error.message : "BYO-LLM-Adapter konnte nicht gestartet werden."
         });
@@ -1342,11 +2127,19 @@ export function registerProductionArtifactRoutes(
             promptSchemaId: promptSchema.promptSchemaId,
             dataMode: input.policy.dataMode,
             changeRequestCount: requestedChanges.length,
-            changeRequestHash: hashText(requestedChanges.map((card) => card.operatorComment).join("\n")),
+            changeRequestHash,
             errorCount: 1,
             errorType: error instanceof Error ? error.name : typeof error
-          })
+          }),
+          idempotencyKey: `production-draft-revision-rejected:${input.inputId}:provider`
         });
+        await appendArtifactEvent(store, actor, draft.draftId, {
+          at: commandAt,
+          role: "system",
+          kind: "error",
+          text: "Produktionsrevision konnte nicht erstellt werden.",
+          artifactId: draft.draftId
+        }, `revision-provider-error:${input.inputId}`);
         return undefined;
       });
       if (!adapterResponse) {
@@ -1357,7 +2150,7 @@ export function registerProductionArtifactRoutes(
       }
 
       const auditBuild = createLlmReadinessAgentAuditRecord({
-        auditId: `agent-audit-${revisionSeed}`,
+        auditId: commandIdentity.agentAuditId,
         request: adapterRequest,
         response: adapterResponse
       });
@@ -1387,10 +2180,20 @@ export function registerProductionArtifactRoutes(
             providerId: adapterResponse.providerId,
             providerRequestId: adapterResponse.providerRequestId,
             changeRequestCount: requestedChanges.length,
-            changeRequestHash: hashText(requestedChanges.map((card) => card.operatorComment).join("\n")),
+            changeRequestHash,
             errorCount: responseErrors.length
-          })
+          }),
+          idempotencyKey: `production-draft-revision-rejected:${input.inputId}:validation`
         });
+        // The case history records the failed attempt without exposing the operator comment,
+        // prompt or provider response that caused the rejection.
+        await appendArtifactEvent(store, actor, draft.draftId, {
+          at: commandAt,
+          role: "system",
+          kind: "error",
+          text: "Produktionsrevision war nicht prüfbar und wurde verworfen.",
+          artifactId: draft.draftId
+        }, `revision-validation-error:${input.inputId}`);
         return reply.code(422).send({
           message: productionDraftExtractionFailureMessage(responseErrors),
           errors: [...new Set(responseErrors)]
@@ -1401,6 +2204,7 @@ export function registerProductionArtifactRoutes(
       const revision = validateProductionDraft({
         ...buildProductionDraftFromExtraction({
           businessId: actor.businessId,
+          draftId: commandIdentity.draftId,
           revision: draft.revision + 1,
           extraction: extractionBuild.extraction,
           source: {
@@ -1426,30 +2230,38 @@ export function registerProductionArtifactRoutes(
         return true;
       });
       if (!committed) {
+        const racedRevision = await store.getProductionDraft(actor, commandIdentity.draftId);
+        if (
+          racedRevision?.supersedesDraftId === draft.draftId &&
+          racedRevision.revision === draft.revision + 1 &&
+          racedRevision.source.inputHash === `sha256:${contextHash}`
+        ) {
+          await finalizeProductionDraftRevision(
+            store,
+            auditLog,
+            actor,
+            draft,
+            racedRevision,
+            commandIdentity,
+            requestedChanges.length,
+            changeRequestHash
+          );
+          return reply.code(201).send({ draft: racedRevision });
+        }
         return reply.code(409).send({
           message: "ProductionDraft wurde während der Überarbeitung verändert oder entschieden."
         });
       }
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
-        action: "production.production_draft_revision_created",
-        entityType: "ProductionDraft",
-        entityId: revision.draftId,
+      await finalizeProductionDraftRevision(
+        store,
+        auditLog,
         actor,
-        summary: "Neue ProductionDraft-Revision zur Prüfung angelegt.",
-        details: compactAuditDetails({
-          draftId: revision.draftId,
-          supersedesDraftId: draft.draftId,
-          agentAuditId: auditBuild.auditRecord.auditId,
-          inputId: input.inputId,
-          providerId: adapterResponse.providerId,
-          providerRequestId: adapterResponse.providerRequestId,
-          changeRequestCount: requestedChanges.length,
-          changeRequestHash: hashText(requestedChanges.map((card) => card.operatorComment).join("\n")),
-          reviewCardCount: revision.reviewCards.length,
-          humanApprovalRequired: true,
-          writesProductObject: false
-        })
-      });
+        draft,
+        revision,
+        commandIdentity,
+        requestedChanges.length,
+        changeRequestHash
+      );
 
       return reply.code(201).send({ draft: revision });
     }
@@ -1623,7 +2435,7 @@ export function registerProductionArtifactRoutes(
       }
 
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-      const spec = await intakeStore.getSpec(actor, request.params.specId);
+      const spec = await intakeRecords.getSpec(actor, request.params.specId);
       if (!spec) {
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
       }
@@ -1645,7 +2457,7 @@ export function registerProductionArtifactRoutes(
         return forbidden;
       }
 
-      const spec = await intakeStore.getSpec(
+      const spec = await intakeRecords.getSpec(
         actorForRequest(request, trustedActorSecret, allowDevActorHeader),
         request.params.specId
       );
@@ -1825,12 +2637,16 @@ export function registerProductionArtifactRoutes(
 
       let acceptedEventSpec: AcceptedEventSpec | undefined;
       if (request.body.approve) {
-        const spec = await intakeStore.getSpec(actor, draft.specId);
+        const spec = await intakeRecords.getSpec(actor, draft.specId);
         if (!spec) {
           return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
         }
         acceptedEventSpec = applyApprovedDraftToSpec(spec, draft);
-        await intakeStore.saveSpec(actor, acceptedEventSpec);
+        try {
+          await intakeRecords.replaceSpec(actor, spec, acceptedEventSpec);
+        } catch {
+          return reply.code(409).send({ message: "AcceptedEventSpec wurde zwischenzeitlich geändert." });
+        }
       }
 
       await store.saveClarificationDraft(actor, decidedDraft);

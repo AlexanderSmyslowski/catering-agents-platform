@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   createBusinessScopedPersistentCollection,
   areJsonValuesEqual,
@@ -37,8 +37,10 @@ import {
 import { validateProductionDecisionAggregate } from "../production-decision-aggregate.js";
 import {
   createProductionDecisionCollections,
+  productionDecisionTargetScopeFor,
   productionDecisionRepositoryFor,
-  registerProductionDecisionRepository
+  registerProductionDecisionRepository,
+  type ProductionDecisionTargetScope
 } from "./production-decision-repository.js";
 
 export { productionDecisionRepositoryFor } from "./production-decision-repository.js";
@@ -379,7 +381,19 @@ function assertProductionCaseUpdate(
   if (next.version !== expectedVersion + 1) {
     throw new Error("Eine ProductionCase-Aktualisierung muss die Version genau um eins erhöhen.");
   }
+  if (existing.sourceSpecId && next.sourceSpecId !== existing.sourceSpecId) {
+    throw new Error("Die Quellspezifikation eines ProductionCase darf nicht verändert werden.");
+  }
 }
+
+type ProductionCaseDraftMutation<T> =
+  | { status: "committed"; value: T }
+  | { status: "conflict" };
+type ProductionCaseDraftCommitResult<T> =
+  | { status: "committed"; value: T }
+  | { status: "case_missing" }
+  | { status: "case_conflict" }
+  | { status: "draft_conflict" };
 
 export class ProductionStore {
   private readonly plans: BusinessScopedPersistentCollection<ProductionPlan>;
@@ -778,6 +792,269 @@ export class ProductionStore {
     return this.cases.get(context, caseId);
   }
 
+  // The first canonical spec establishes the case lineage; later revisions keep the ID,
+  // while a different event must start in a separate ProductionCase.
+  async bindCaseToSourceSpec(
+    context: BusinessContext,
+    caseId: string,
+    sourceSpecId: string,
+    at: string
+  ): Promise<"bound" | "already_bound" | "conflict" | "missing"> {
+    assertBusinessContext(context);
+    const storage = this.storageOptions;
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "production_case", artifactId: caseId, revision: 0 },
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Produktionsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        const existing = await collections.cases.get(context, caseId);
+        if (!existing) return "missing";
+        if (existing.sourceSpecId === sourceSpecId) return "already_bound";
+        if (existing.sourceSpecId) return "conflict";
+
+        const next = validateProductionCase({
+          ...existing,
+          sourceSpecId,
+          version: existing.version + 1,
+          updatedAt: at
+        });
+        const result = await collections.cases.compareAndSet(
+          context,
+          caseId,
+          existing.version,
+          next
+        );
+        if (result === "updated") return "bound";
+
+        const raced = await collections.cases.get(context, caseId);
+        if (!raced) return "missing";
+        return raced.sourceSpecId === sourceSpecId ? "already_bound" : "conflict";
+      }
+    });
+  }
+
+  async advanceCaseSourceSpec(
+    context: BusinessContext,
+    caseId: string,
+    expectedSourceSpecId: string | undefined,
+    nextSourceSpecId: string,
+    at: string
+  ): Promise<"advanced" | "already_bound" | "conflict" | "missing"> {
+    assertBusinessContext(context);
+    const storage = this.storageOptions;
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "production_case", artifactId: caseId, revision: 0 },
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Produktionsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        const existing = await collections.cases.get(context, caseId);
+        if (!existing) return "missing";
+        if (existing.sourceSpecId === nextSourceSpecId) return "already_bound";
+        if (existing.sourceSpecId !== expectedSourceSpecId) return "conflict";
+
+        // A corrected source document advances the current view of one event. The immutable
+        // drafts and timeline retain every earlier specification; unrelated spec imports still
+        // use bindCaseToSourceSpec and cannot replace the established event lineage.
+        const next = validateProductionCase({
+          ...existing,
+          sourceSpecId: nextSourceSpecId,
+          version: existing.version + 1,
+          updatedAt: at
+        });
+        const result = await collections.cases.compareAndSet(context, caseId, existing.version, next);
+        if (result === "updated") return "advanced";
+
+        const raced = await collections.cases.get(context, caseId);
+        if (!raced) return "missing";
+        if (raced.sourceSpecId === nextSourceSpecId) return "already_bound";
+        return "conflict";
+      }
+    });
+  }
+
+  async commitDraftForCaseSource<T>(
+    context: BusinessContext,
+    input: {
+      caseId: string;
+      expectedSourceSpecId: string | undefined;
+      nextSourceSpecId: string;
+      at: string;
+      draftTarget: ApprovalRequestRecord["target"];
+      commitDraft: (scope: ProductionDecisionTargetScope) => Promise<ProductionCaseDraftMutation<T>>;
+    }
+  ): Promise<ProductionCaseDraftCommitResult<T>> {
+    assertBusinessContext(context);
+    const storage = this.storageOptions;
+    const caseTarget = {
+      kind: "production_case",
+      artifactId: input.caseId,
+      revision: 0
+    };
+    const draftTargets = [
+      { ...input.draftTarget, revision: 0 },
+      input.draftTarget
+    ];
+
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: caseTarget,
+      // PostgreSQL advisory locks do not include the collection namespace. Taking the
+      // draft identities here lets one transaction protect both records. File mode also
+      // takes the established decision lock below while the case lock remains held.
+      compatibilityTargets: draftTargets,
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Produktionsauftrag und Entwurf konnten nicht rechtzeitig gemeinsam gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const caseCollections = transactionalQueryable
+          ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        const current = await caseCollections.cases.get(context, input.caseId);
+        if (!current) return { status: "case_missing" as const };
+        if (
+          current.sourceSpecId !== input.nextSourceSpecId &&
+          current.sourceSpecId !== input.expectedSourceSpecId
+        ) {
+          return { status: "case_conflict" as const };
+        }
+
+        const mutateDraft = (scope: ProductionDecisionTargetScope) => input.commitDraft(scope);
+        const draftMutation = transactionalQueryable
+          ? await mutateDraft(productionDecisionTargetScopeFor(
+            createProductionDecisionCollections({ pgPool: transactionalQueryable }),
+            context,
+            input.draftTarget
+          ))
+          : await productionDecisionRepositoryFor(this).withTargetCriticalSection(
+            context,
+            input.draftTarget,
+            mutateDraft
+          );
+        if (draftMutation.status === "conflict") {
+          return { status: "draft_conflict" as const };
+        }
+        if (current.sourceSpecId === input.nextSourceSpecId) {
+          return { status: "committed" as const, value: draftMutation.value };
+        }
+
+        const next = validateProductionCase({
+          ...current,
+          sourceSpecId: input.nextSourceSpecId,
+          version: current.version + 1,
+          updatedAt: input.at
+        });
+        const updated = await caseCollections.cases.compareAndSet(
+          context,
+          input.caseId,
+          current.version,
+          next
+        );
+        if (updated === "updated") {
+          return { status: "committed" as const, value: draftMutation.value };
+        }
+        if (updated === "missing") return { status: "case_missing" as const };
+        const raced = await caseCollections.cases.get(context, input.caseId);
+        return raced?.sourceSpecId === input.nextSourceSpecId
+          ? { status: "committed" as const, value: draftMutation.value }
+          : { status: "case_conflict" as const };
+      }
+    });
+  }
+
+  async reopenCaseForDraftContinuation(
+    context: BusinessContext,
+    caseId: string,
+    draftId: string
+  ): Promise<"reopened" | "unchanged" | "missing"> {
+    assertBusinessContext(context);
+    const storage = this.storageOptions;
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "production_case", artifactId: caseId, revision: 0 },
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Produktionsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        const current = await collections.cases.get(context, caseId);
+        if (!current) return "missing";
+
+        const events = (await collections.events.list(context))
+          .filter((event) => event.caseId === caseId);
+        const continuationEvents = events.filter((event) =>
+          (event.kind === "draft_created" || event.kind === "revision_created") &&
+          event.artifactId === draftId
+        );
+        if (continuationEvents.length !== 1) {
+          throw new Error("ProductionDraft ist nicht eindeutig mit dem Produktionsauftrag verknüpft.");
+        }
+        const draftEvent = continuationEvents[0]!;
+        const latestDownstreamSequence = events
+          .filter((event) => event.kind === "approval" || event.kind === "result")
+          .reduce((maximum, event) => Math.max(maximum, event.sequence), 0);
+
+        // A retry of an already approved/applied draft must not reopen the case. Only a draft
+        // event later in the same timeline is a genuine continuation that invalidates old results.
+        if (draftEvent.sequence <= latestDownstreamSequence || current.status === "archived") {
+          return "unchanged";
+        }
+        if (
+          current.status === "open" &&
+          current.approvedProductionSpecId === undefined &&
+          current.currentPlanId === undefined &&
+          current.currentPurchaseListId === undefined
+        ) {
+          return "unchanged";
+        }
+
+        const {
+          approvedProductionSpecId: _approvedProductionSpecId,
+          currentPlanId: _currentPlanId,
+          currentPurchaseListId: _currentPurchaseListId,
+          ...caseWithoutOldResults
+        } = current;
+        const next = validateProductionCase({
+          ...caseWithoutOldResults,
+          status: "open",
+          version: current.version + 1,
+          updatedAt: current.updatedAt > draftEvent.at ? current.updatedAt : draftEvent.at
+        });
+        const updated = await collections.cases.compareAndSet(context, caseId, current.version, next);
+        if (updated === "updated") return "reopened";
+        if (updated === "missing") return "missing";
+        throw new Error("Produktionsauftrag wurde gleichzeitig verändert.");
+      }
+    });
+  }
+
   async listCases(context: BusinessContext): Promise<ProductionCase[]> {
     assertBusinessContext(context);
     return sortCasesByLatestActivity(
@@ -799,7 +1076,12 @@ export class ProductionStore {
     return this.cases.compareAndSet(context, caseId, expectedVersion, next);
   }
 
-  async appendEvent(context: BusinessContext, caseId: string, input: CaseEventInput): Promise<CaseEvent> {
+  async appendEvent(
+    context: BusinessContext,
+    caseId: string,
+    input: CaseEventInput,
+    eventIdentity?: string
+  ): Promise<CaseEvent> {
     assertBusinessContext(context);
     const storage = this.storageOptions;
     return withBusinessTargetCriticalSection({
@@ -819,17 +1101,38 @@ export class ProductionStore {
         if (!await collections.cases.get(context, caseId)) {
           throw new Error("ProductionCase wurde nicht gefunden.");
         }
+        const eventId = eventIdentity
+          ? `production-case-event-${createHash("sha256")
+            .update(`${context.businessId}\0${caseId}\0${input.kind}\0${eventIdentity}`)
+            .digest("hex")}`
+          : `production-case-event-${randomUUID()}`;
+        const existing = await collections.events.get(context, eventId);
+        if (existing) {
+          const expected = validateCaseEventForProduct({
+            ...input,
+            businessId: context.businessId,
+            eventId,
+            caseId,
+            sequence: existing.sequence
+          }, "production");
+          if (!areJsonValuesEqual(existing, expected)) {
+            throw new Error("Bestehendes Produktionsereignis stimmt nicht mit dem Auftrag überein.");
+          }
+          return existing;
+        }
         const sequence = (await collections.events.list(context))
           .filter((event) => event.caseId === caseId)
           .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
         const event = validateCaseEventForProduct({
           ...input,
           businessId: context.businessId,
-          eventId: `production-case-event-${randomUUID()}`,
+          eventId,
           caseId,
           sequence
         }, "production");
         if (await collections.events.insert(context, event) !== "created") {
+          const raced = await collections.events.get(context, eventId);
+          if (raced && areJsonValuesEqual(raced, event)) return raced;
           throw new Error("Der Produktionsverlauf konnte nicht eindeutig fortgeschrieben werden.");
         }
         return event;
@@ -843,6 +1146,31 @@ export class ProductionStore {
     return (await this.caseEvents.list(context))
       .filter((event) => event.caseId === caseId)
       .sort((left, right) => left.sequence - right.sequence || left.eventId.localeCompare(right.eventId));
+  }
+
+  async appendEventForArtifactCase(
+    context: BusinessContext,
+    sourceArtifactId: string,
+    input: CaseEventInput,
+    eventIdentity = input.artifactId ?? sourceArtifactId
+  ): Promise<CaseEvent | undefined> {
+    assertBusinessContext(context);
+    const caseId = await this.findCaseIdForArtifact(context, sourceArtifactId);
+    if (!caseId) return undefined;
+    return this.appendEvent(context, caseId, input, eventIdentity);
+  }
+
+  async findCaseIdForArtifact(context: BusinessContext, sourceArtifactId: string): Promise<string | undefined> {
+    assertBusinessContext(context);
+    const linkedCaseIds = [...new Set((await this.caseEvents.list(context))
+      .filter((event) =>
+        event.artifactId === sourceArtifactId || event.revisionRef?.artifactId === sourceArtifactId
+      )
+      .map((event) => event.caseId))];
+    if (linkedCaseIds.length > 1) {
+      throw new Error("Produktionsartefakt ist mehreren Produktionsaufträgen zugeordnet.");
+    }
+    return linkedCaseIds[0];
   }
 
   async searchCases(context: BusinessContext, query: string): Promise<ProductionCase[]> {

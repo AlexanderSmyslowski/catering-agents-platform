@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   createBusinessScopedPersistentCollection,
   areJsonValuesEqual,
@@ -45,6 +45,31 @@ interface OfferCaseCollections {
 
 type CaseEventInput = Omit<CaseEvent, "businessId" | "eventId" | "caseId" | "sequence">;
 
+async function saveOfferDraftInCollection(
+  drafts: BusinessScopedPersistentCollection<OfferDraft>,
+  context: BusinessContext,
+  draft: OfferDraft
+): Promise<void> {
+  if (await drafts.insert(context, draft) === "created") return;
+
+  for (;;) {
+    const existing = await drafts.get(context, draft.draftId);
+    if (!existing) {
+      if (await drafts.insert(context, draft) === "created") return;
+      continue;
+    }
+    if (existing.revision === draft.revision) {
+      if (areJsonValuesEqual(existing, draft)) return;
+      throw new Error("Eine Angebotsrevision darf nicht nachträglich verändert werden.");
+    }
+    if (draft.revision < existing.revision) {
+      throw new Error("Eine Angebotsrevision darf nicht nachträglich verändert werden.");
+    }
+    const updated = await drafts.compareAndSet(context, draft.draftId, existing.revision, draft);
+    if (updated === "updated") return;
+  }
+}
+
 function createOfferCaseCollections(options: CollectionStorageOptions): OfferCaseCollections {
   return {
     cases: createBusinessScopedPersistentCollection({
@@ -71,6 +96,38 @@ async function createOfferCaseInCollections(
   const item = validateOfferCase(input);
   const initialEvent = validateCaseEventForProduct(initialCaseEventForCase(item), "offer");
   return persistCaseWithInitialEvent(collections, context, item, initialEvent);
+}
+
+async function reopenOfferCaseForContinuation(
+  collections: OfferCaseCollections,
+  context: BusinessContext,
+  draftEvent: CaseEvent
+): Promise<void> {
+  const latestDownstreamSequence = (await collections.events.list(context))
+    .filter((event) => event.caseId === draftEvent.caseId && (event.kind === "approval" || event.kind === "result"))
+    .reduce((maximum, event) => Math.max(maximum, event.sequence), 0);
+  if (draftEvent.sequence <= latestDownstreamSequence) return;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const current = await collections.cases.get(context, draftEvent.caseId);
+    if (!current) throw new Error("OfferCase wurde nicht gefunden.");
+    if (
+      current.status === "open" &&
+      current.approvedOfferId === undefined &&
+      current.productionHandoffId === undefined
+    ) return;
+    if (current.status === "archived") return;
+    const { approvedOfferId: _approvedOfferId, productionHandoffId: _productionHandoffId, ...base } = current;
+    const result = await collections.cases.compareAndSet(context, current.caseId, current.version, {
+      ...base,
+      status: "open",
+      version: current.version + 1,
+      updatedAt: current.updatedAt > draftEvent.at ? current.updatedAt : draftEvent.at
+    });
+    if (result === "updated") return;
+    if (result === "missing") throw new Error("OfferCase wurde nicht gefunden.");
+  }
+  throw new Error("Angebotsauftrag wurde gleichzeitig zu oft verändert.");
 }
 
 function assertOfferCaseUpdate(existing: OfferCase, next: OfferCase, expectedVersion: number): void {
@@ -236,24 +293,7 @@ export class OfferStore {
   }
 
   async saveDraft(context: BusinessContext, draft: OfferDraft): Promise<void> {
-    if (await this.drafts.insert(context, draft) === "created") return;
-
-    for (;;) {
-      const existing = await this.drafts.get(context, draft.draftId);
-      if (!existing) {
-        if (await this.drafts.insert(context, draft) === "created") return;
-        continue;
-      }
-      if (existing.revision === draft.revision) {
-        if (areJsonValuesEqual(existing, draft)) return;
-        throw new Error("Eine Angebotsrevision darf nicht nachträglich verändert werden.");
-      }
-      if (draft.revision < existing.revision) {
-        throw new Error("Eine Angebotsrevision darf nicht nachträglich verändert werden.");
-      }
-      const updated = await this.drafts.compareAndSet(context, draft.draftId, existing.revision, draft);
-      if (updated === "updated") return;
-    }
+    await saveOfferDraftInCollection(this.drafts, context, draft);
   }
   async getDraft(context: BusinessContext, draftId: string): Promise<OfferDraft | undefined> { return this.drafts.get(context, draftId); }
   async listDrafts(context: BusinessContext): Promise<OfferDraft[]> { return this.drafts.list(context); }
@@ -300,6 +340,106 @@ export class OfferStore {
   async listApprovedOffers(context: BusinessContext): Promise<ApprovedOffer[]> { return this.approvedOffers.list(context); }
   async insertHandoff(context: BusinessContext, handoff: ProductionHandoff): Promise<"created" | "exists"> { return this.handoffs.insert(context, handoff); }
   async getHandoff(context: BusinessContext, id: string): Promise<ProductionHandoff | undefined> { return this.handoffs.get(context, id); }
+
+  async saveDraftForCase(
+    context: BusinessContext,
+    caseId: string,
+    draft: OfferDraft
+  ): Promise<"saved" | "case_conflict"> {
+    const normalizedDraft = validateOfferDraft(draft);
+    const storage = this.storageOptions ?? {};
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "offer_case", artifactId: caseId, revision: 0 },
+      compatibilityTargets: [
+        { kind: "offer_case_draft_link", artifactId: normalizedDraft.draftId, revision: normalizedDraft.revision }
+      ],
+      collectionNamespace: "offers/case-events",
+      queueFullMessage: "Die Warteschlange für Angebotszuordnungen benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Angebotszuordnungen ist ausgeschöpft.",
+      timeoutMessage: "Der Angebotsentwurf konnte nicht rechtzeitig einem Auftrag zugeordnet werden.",
+      legacyTimeoutMessage: "Die alte Angebotszuordnung konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Angebotszuordnungen benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const caseCollections = transactionalQueryable
+          ? createOfferCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        const draftCollection = transactionalQueryable
+          ? createOfferDecisionCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable }).drafts
+          : this.drafts;
+        if (!await caseCollections.cases.get(context, caseId)) {
+          throw new Error("OfferCase wurde nicht gefunden.");
+        }
+
+        const linkedCaseIds = [...new Set((await caseCollections.events.list(context))
+          .filter((event) => event.artifactId === normalizedDraft.draftId
+            || event.revisionRef?.artifactId === normalizedDraft.draftId)
+          .map((event) => event.caseId))];
+        if (linkedCaseIds.length > 1) {
+          throw new Error("Angebotsartefakt ist mehreren Aufträgen zugeordnet.");
+        }
+        if (linkedCaseIds[0] && linkedCaseIds[0] !== caseId) return "case_conflict";
+
+        await saveOfferDraftInCollection(draftCollection, context, normalizedDraft);
+        let draftEvent = (await caseCollections.events.list(context)).find(
+          (event) => event.caseId === caseId
+            && event.kind === "draft_created"
+            && event.artifactId === normalizedDraft.draftId
+        );
+        if (draftEvent) {
+          if (
+            draftEvent.revisionRef?.artifactType !== "OfferDraft"
+            || draftEvent.revisionRef.artifactId !== normalizedDraft.draftId
+            || draftEvent.revisionRef.revision !== normalizedDraft.revision
+          ) {
+            throw new Error("Bestehende Angebotszuordnung stimmt nicht mit der Entwurfsrevision überein.");
+          }
+        } else {
+          // The draft ID is deterministic from the request. This stable event identity makes a retry repair
+          // a draft whose first write succeeded but whose case-history write did not.
+          const eventId = `offer-case-event-${createHash("sha256")
+            .update(`${context.businessId}\0${caseId}\0draft_created\0${normalizedDraft.draftId}`)
+            .digest("hex")}`;
+          const racedEvent = await caseCollections.events.get(context, eventId);
+          if (racedEvent) {
+            draftEvent = racedEvent;
+          } else {
+            const createdAt = new Date().toISOString();
+            const sequence = (await caseCollections.events.list(context))
+              .filter((event) => event.caseId === caseId)
+              .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
+            const event = validateCaseEventForProduct({
+              businessId: context.businessId,
+              eventId,
+              caseId,
+              sequence,
+              at: createdAt,
+              role: "assistant",
+              kind: "draft_created",
+              text: "Angebotsentwurf erstellt.",
+              artifactId: normalizedDraft.draftId,
+              revisionRef: {
+                artifactType: "OfferDraft",
+                artifactId: normalizedDraft.draftId,
+                revision: normalizedDraft.revision,
+                createdAt
+              }
+            }, "offer");
+            if (await caseCollections.events.insert(context, event) === "created") {
+              draftEvent = event;
+            } else {
+              const raced = await caseCollections.events.get(context, eventId);
+              if (!raced) throw new Error("Der Angebotsverlauf konnte nicht eindeutig fortgeschrieben werden.");
+              draftEvent = raced;
+            }
+          }
+        }
+        await reopenOfferCaseForContinuation(caseCollections, context, draftEvent);
+        return "saved";
+      }
+    });
+  }
 
   async insertCase(context: BusinessContext, item: OfferCase): Promise<"created" | "exists"> {
     return this.createCase(context, item);
@@ -380,6 +520,77 @@ export class OfferStore {
           sequence
         }, "offer");
         if (await collections.events.insert(context, event) !== "created") {
+          throw new Error("Der Angebotsverlauf konnte nicht eindeutig fortgeschrieben werden.");
+        }
+        return event;
+      }
+    });
+  }
+
+  async appendEventForArtifactCase(
+    context: BusinessContext,
+    sourceArtifactId: string,
+    input: CaseEventInput
+  ): Promise<CaseEvent | undefined> {
+    const linkedCaseIds = [...new Set((await this.caseEvents.list(context))
+      .filter((event) => event.artifactId === sourceArtifactId || event.revisionRef?.artifactId === sourceArtifactId)
+      .map((event) => event.caseId))];
+    if (linkedCaseIds.length === 0) return undefined;
+    if (linkedCaseIds.length > 1) {
+      throw new Error("Angebotsartefakt ist mehreren Aufträgen zugeordnet.");
+    }
+
+    const caseId = linkedCaseIds[0]!;
+    const storage = this.storageOptions ?? {};
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "offer_case", artifactId: caseId, revision: 0 },
+      collectionNamespace: "offers/case-events",
+      queueFullMessage: "Die Warteschlange für Angebotsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Angebotsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Angebotsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Angebotsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Angebotsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createOfferCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        if (!await collections.cases.get(context, caseId)) {
+          throw new Error("OfferCase wurde nicht gefunden.");
+        }
+        // Later lifecycle artifacts keep the source draft as their case anchor. A stable event ID lets retries
+        // repair a partially completed route without turning one business action into multiple timeline entries.
+        const eventId = `offer-case-event-${createHash("sha256")
+          .update(`${context.businessId}\0${caseId}\0${input.kind}\0${input.artifactId ?? sourceArtifactId}`)
+          .digest("hex")}`;
+        const existing = await collections.events.get(context, eventId);
+        if (existing) {
+          const expected = validateCaseEventForProduct({
+            ...input,
+            businessId: context.businessId,
+            eventId,
+            caseId,
+            sequence: existing.sequence
+          }, "offer");
+          if (!areJsonValuesEqual(existing, expected)) {
+            throw new Error("Bestehendes Angebotsereignis stimmt nicht mit dem Artefakt überein.");
+          }
+          return existing;
+        }
+        const sequence = (await collections.events.list(context))
+          .filter((event) => event.caseId === caseId)
+          .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
+        const event = validateCaseEventForProduct({
+          ...input,
+          businessId: context.businessId,
+          eventId,
+          caseId,
+          sequence
+        }, "offer");
+        if (await collections.events.insert(context, event) !== "created") {
+          const raced = await collections.events.get(context, eventId);
+          if (raced && areJsonValuesEqual(raced, event)) return raced;
           throw new Error("Der Angebotsverlauf konnte nicht eindeutig fortgeschrieben werden.");
         }
         return event;
