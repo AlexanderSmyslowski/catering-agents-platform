@@ -1,11 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { newDb } from "pg-mem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createEventRequestFromText,
   createOfferDraft,
   type ProductionCase,
+  type ProductionDraft,
   type ProductionHandoff
 } from "@catering/shared-core";
 import { buildProductionApp } from "../production-service/src/app.js";
@@ -434,6 +436,126 @@ describe("production case routes", () => {
     expect(unchangedCase?.sourceSpecId).toBeUndefined();
     expect(unchangedCase?.version).toBe(productionCase.version);
     await expect(store.listProductionDrafts({ businessId: "alpha" })).resolves.toHaveLength(0);
+  });
+
+  it("rolls back a PostgreSQL draft when the case changes after the draft mutation", async () => {
+    const database = newDb();
+    const { Pool } = database.adapters.createPg();
+    const rawPool = new Pool();
+    const transactionCommands: string[] = [];
+    const pgPool = {
+      query: rawPool.query.bind(rawPool),
+      async connect() {
+        const client = await rawPool.connect();
+        let transactionBackup: ReturnType<typeof database.backup> | undefined;
+        return {
+          async query(sql: string, params?: unknown[]) {
+            if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+              transactionCommands.push(sql);
+            }
+            if (sql === "BEGIN") transactionBackup = database.backup();
+            if (sql === "ROLLBACK") {
+              const result = await client.query(sql, params);
+              // pg-mem records transaction commands but does not restore data on rollback.
+              // Restoring its snapshot here models the guarantee this test exercises in PostgreSQL.
+              transactionBackup?.restore();
+              transactionBackup = undefined;
+              return result;
+            }
+            if (sql === "COMMIT") transactionBackup = undefined;
+            if (sql.startsWith("SELECT pg_catalog.pg_advisory_xact_lock")) return { rows: [] };
+            if (
+              sql.startsWith("UPDATE catering_business_records SET payload") &&
+              params?.[1] === "production/cases"
+            ) {
+              return { rows: [] };
+            }
+            return client.query(sql, params);
+          },
+          release: () => client.release()
+        };
+      }
+    };
+    const store = new ProductionStore({ pgPool });
+    const context = { businessId: "alpha" };
+    const createdAt = "2026-06-01T08:00:00.000Z";
+    const productionCase: ProductionCase = {
+      schemaVersion: "1.0",
+      businessId: "alpha",
+      caseId: "production-case-postgres-rollback",
+      product: "production",
+      displayName: "CommCats - Empfang - 14.06.2026 - 45 Personen",
+      status: "open",
+      version: 1,
+      createdAt,
+      updatedAt: createdAt
+    };
+    const spec = handoff().eventSpecSnapshot;
+    const draft: ProductionDraft = {
+      schemaVersion: spec.schemaVersion,
+      businessId: "alpha",
+      draftId: "production-draft-postgres-rollback",
+      revision: 1,
+      status: "pending_review",
+      createdAt,
+      source: {
+        kind: "manual_import",
+        receivedAt: createdAt,
+        sourceRef: `accepted-event-spec:${spec.specId}`,
+        inputHash: `sha256:${"d".repeat(64)}`
+      },
+      guardrails: {
+        draftOnly: true,
+        humanApprovalRequired: true,
+        writesProductObjects: false,
+        rawProviderPayloadStored: false,
+        knowledgeWritePolicy: "reviewed_only"
+      },
+      reviewCards: [{
+        cardId: "card-event-spec",
+        kind: "event_data",
+        title: "Veranstaltungsdaten prüfen",
+        summary: "Kanonische Spezifikation für die Produktionsprüfung.",
+        decision: "pending",
+        targetPath: "$.draftArtifacts.eventSpec",
+        targetId: spec.specId,
+        requiredApproval: true
+      }],
+      draftArtifacts: { eventSpec: spec }
+    };
+
+    try {
+      expect(await store.createCase(context, productionCase)).toBe("created");
+      transactionCommands.length = 0;
+      const result = await store.commitDraftForCaseSource(context, {
+        caseId: productionCase.caseId,
+        expectedSourceSpecId: undefined,
+        nextSourceSpecId: spec.specId,
+        at: "2026-06-01T08:01:00.000Z",
+        draftTarget: {
+          kind: "production_draft",
+          artifactId: draft.draftId,
+          revision: draft.revision
+        },
+        commitDraft: async (scope) => {
+          expect(await scope.insertDraft(draft)).toBe("created");
+          return { status: "committed" as const, value: draft };
+        }
+      });
+
+      expect(result).toEqual({ status: "case_conflict" });
+      expect(transactionCommands).toContain("ROLLBACK");
+      expect(transactionCommands).not.toContain("COMMIT");
+      await expect(store.getProductionDraft(context, draft.draftId)).resolves.toBeUndefined();
+      const caseAfterRollback = await store.getCase(context, productionCase.caseId);
+      expect(caseAfterRollback).toMatchObject({
+        displayName: productionCase.displayName,
+        version: 1
+      });
+      expect(caseAfterRollback?.sourceSpecId).toBeUndefined();
+    } finally {
+      await rawPool.end();
+    }
   });
 
   it("reuses one case-bound draft and one draft-created event when the same spec import is retried", async () => {

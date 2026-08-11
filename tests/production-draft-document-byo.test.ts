@@ -8,6 +8,7 @@ import {
   ProductionStore
 } from "@catering/production-service";
 import type { SourceDocumentReader } from "../production-service/src/ports/source-document-reader.js";
+import { productionDecisionRepositoryFor } from "../production-service/src/repositories/production-store.js";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import {
   AuditLogStore,
@@ -852,6 +853,111 @@ describe("ProductionDraft document BYO extraction", () => {
         })
       ]);
       expect(run).toHaveBeenCalledTimes(2);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("finishes a corrected document commit after the new draft was published before the case advanced", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: {
+        adapterId: "mock-corrected-document-recovery-adapter",
+        adapterMode: "synthetic_live",
+        run
+      },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const firstPayload = await documentPayload(app);
+      const first = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: firstPayload
+      });
+      expect(first.statusCode, first.body).toBe(201);
+      const firstDraft = first.json<{ draft: ProductionDraft }>().draft;
+      const caseBeforeCorrection = await store.getCase(localBusiness, firstPayload.caseId);
+
+      const correctedContent = Buffer.from(`${documentText}\nKORREKTUR: 50 PERSONEN`, "utf8");
+      const correctedDocumentId = `source-document-${randomUUID()}`;
+      const correctedSha256 = createHash("sha256").update(correctedContent).digest("hex");
+      sourceDocuments.set(correctedDocumentId, {
+        metadata: {
+          businessId: "local",
+          documentId: correctedDocumentId,
+          filename: "angebot-flying-buffet-korrigiert-recovery.txt",
+          mimeType: "text/plain",
+          sizeBytes: correctedContent.byteLength,
+          sha256: correctedSha256,
+          dataClass: "synthetic_demo",
+          createdAt: "2026-06-14T10:00:00.000Z"
+        },
+        content: correctedContent
+      });
+
+      const repository = productionDecisionRepositoryFor(store);
+      const originalCriticalSection = repository.withTargetCriticalSection.bind(repository);
+      let failAfterPublish = true;
+      vi.spyOn(repository, "withTargetCriticalSection").mockImplementation(
+        (context, target, operation) => originalCriticalSection(context, target, (scope) => operation({
+          ...scope,
+          insertDraft: async (draft) => {
+            const result = await scope.insertDraft(draft);
+            if (result === "created" && failAfterPublish) {
+              failAfterPublish = false;
+              throw new Error("injected failure after corrected draft publish");
+            }
+            return result;
+          }
+        }))
+      );
+      const requestCorrection = () => app.inject({
+        method: "POST" as const,
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: { caseId: firstPayload.caseId, documentId: correctedDocumentId }
+      });
+
+      const failed = await requestCorrection();
+      const draftsAfterFailure = await store.listProductionDrafts(localBusiness);
+      const publishedCorrection = draftsAfterFailure.find((draft) => draft.supersedesDraftId === firstDraft.draftId);
+
+      expect(failed.statusCode).toBe(500);
+      expect(publishedCorrection).toMatchObject({ status: "pending_review" });
+      expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual(firstDraft);
+      expect(await store.getCase(localBusiness, firstPayload.caseId)).toEqual(caseBeforeCorrection);
+      expect((await store.listEvents(localBusiness, firstPayload.caseId))
+        .filter((event) => event.kind === "draft_created" && event.artifactId === publishedCorrection?.draftId))
+        .toHaveLength(0);
+
+      const retry = await requestCorrection();
+      const recoveredDraft = retry.json<{ draft: ProductionDraft }>().draft;
+      const draftsAfterRecovery = await store.listProductionDrafts(localBusiness);
+
+      expect(retry.statusCode, retry.body).toBe(201);
+      expect(recoveredDraft).toEqual(publishedCorrection);
+      expect(run).toHaveBeenCalledTimes(2);
+      expect(draftsAfterRecovery).toHaveLength(2);
+      expect(draftsAfterRecovery.filter((draft) => draft.status === "pending_review")).toEqual([recoveredDraft]);
+      expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual({
+        ...firstDraft,
+        status: "superseded"
+      });
+      expect(await store.getCase(localBusiness, firstPayload.caseId)).toMatchObject({
+        sourceSpecId: recoveredDraft.draftArtifacts.eventSpec?.specId
+      });
+      expect((await store.listEvents(localBusiness, firstPayload.caseId))
+        .filter((event) => event.kind === "draft_created" && event.artifactId === recoveredDraft.draftId))
+        .toHaveLength(1);
     } finally {
       await app.close();
     }

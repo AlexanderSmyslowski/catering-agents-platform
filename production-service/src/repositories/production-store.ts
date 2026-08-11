@@ -395,6 +395,12 @@ type ProductionCaseDraftCommitResult<T> =
   | { status: "case_conflict" }
   | { status: "draft_conflict" };
 
+class ProductionCaseDraftPostMutationConflict extends Error {
+  constructor(readonly status: "case_missing" | "case_conflict" | "draft_conflict") {
+    super(`ProductionCaseDraft konnte nach der Entwurfsmutation nicht abgeschlossen werden: ${status}`);
+  }
+}
+
 export class ProductionStore {
   private readonly plans: BusinessScopedPersistentCollection<ProductionPlan>;
   private readonly purchaseLists: BusinessScopedPersistentCollection<PurchaseList>;
@@ -913,74 +919,85 @@ export class ProductionStore {
       input.draftTarget
     ];
 
-    return withBusinessTargetCriticalSection({
-      storage,
-      context,
-      target: caseTarget,
-      // PostgreSQL advisory locks do not include the collection namespace. Taking the
-      // draft identities here lets one transaction protect both records. File mode also
-      // takes the established decision lock below while the case lock remains held.
-      compatibilityTargets: draftTargets,
-      collectionNamespace: "production/case-events",
-      queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
-      queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
-      timeoutMessage: "Produktionsauftrag und Entwurf konnten nicht rechtzeitig gemeinsam gesperrt werden.",
-      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig entsperrt werden.",
-      postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
-      operation: async (transactionalQueryable) => {
-        const caseCollections = transactionalQueryable
-          ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
-          : { cases: this.cases, events: this.caseEvents };
-        const current = await caseCollections.cases.get(context, input.caseId);
-        if (!current) return { status: "case_missing" as const };
-        if (
-          current.sourceSpecId !== input.nextSourceSpecId &&
-          current.sourceSpecId !== input.expectedSourceSpecId
-        ) {
-          return { status: "case_conflict" as const };
-        }
+    try {
+      return await withBusinessTargetCriticalSection({
+        storage,
+        context,
+        target: caseTarget,
+        // PostgreSQL advisory locks do not include the collection namespace. Taking the
+        // draft identities here lets one transaction protect both records. File mode also
+        // takes the established decision lock below while the case lock remains held.
+        compatibilityTargets: draftTargets,
+        collectionNamespace: "production/case-events",
+        queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
+        queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
+        timeoutMessage: "Produktionsauftrag und Entwurf konnten nicht rechtzeitig gemeinsam gesperrt werden.",
+        legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig entsperrt werden.",
+        postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+        operation: async (transactionalQueryable) => {
+          const caseCollections = transactionalQueryable
+            ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+            : { cases: this.cases, events: this.caseEvents };
+          const current = await caseCollections.cases.get(context, input.caseId);
+          if (!current) return { status: "case_missing" as const };
+          if (
+            current.sourceSpecId !== input.nextSourceSpecId &&
+            current.sourceSpecId !== input.expectedSourceSpecId
+          ) {
+            return { status: "case_conflict" as const };
+          }
 
-        const mutateDraft = (scope: ProductionDecisionTargetScope) => input.commitDraft(scope);
-        const draftMutation = transactionalQueryable
-          ? await mutateDraft(productionDecisionTargetScopeFor(
-            createProductionDecisionCollections({ pgPool: transactionalQueryable }),
+          const mutateDraft = (scope: ProductionDecisionTargetScope) => input.commitDraft(scope);
+          const draftMutation = transactionalQueryable
+            ? await mutateDraft(productionDecisionTargetScopeFor(
+              createProductionDecisionCollections({ pgPool: transactionalQueryable }),
+              context,
+              input.draftTarget
+            ))
+            : await productionDecisionRepositoryFor(this).withTargetCriticalSection(
+              context,
+              input.draftTarget,
+              mutateDraft
+            );
+          if (draftMutation.status === "conflict") {
+            throw new ProductionCaseDraftPostMutationConflict("draft_conflict");
+          }
+          if (current.sourceSpecId === input.nextSourceSpecId) {
+            return { status: "committed" as const, value: draftMutation.value };
+          }
+
+          const next = validateProductionCase({
+            ...current,
+            sourceSpecId: input.nextSourceSpecId,
+            version: current.version + 1,
+            updatedAt: input.at
+          });
+          const updated = await caseCollections.cases.compareAndSet(
             context,
-            input.draftTarget
-          ))
-          : await productionDecisionRepositoryFor(this).withTargetCriticalSection(
-            context,
-            input.draftTarget,
-            mutateDraft
+            input.caseId,
+            current.version,
+            next
           );
-        if (draftMutation.status === "conflict") {
-          return { status: "draft_conflict" as const };
+          if (updated === "updated") {
+            return { status: "committed" as const, value: draftMutation.value };
+          }
+          if (updated === "missing") throw new ProductionCaseDraftPostMutationConflict("case_missing");
+          const raced = await caseCollections.cases.get(context, input.caseId);
+          if (raced?.sourceSpecId === input.nextSourceSpecId) {
+            return { status: "committed" as const, value: draftMutation.value };
+          }
+          throw new ProductionCaseDraftPostMutationConflict("case_conflict");
         }
-        if (current.sourceSpecId === input.nextSourceSpecId) {
-          return { status: "committed" as const, value: draftMutation.value };
-        }
-
-        const next = validateProductionCase({
-          ...current,
-          sourceSpecId: input.nextSourceSpecId,
-          version: current.version + 1,
-          updatedAt: input.at
-        });
-        const updated = await caseCollections.cases.compareAndSet(
-          context,
-          input.caseId,
-          current.version,
-          next
-        );
-        if (updated === "updated") {
-          return { status: "committed" as const, value: draftMutation.value };
-        }
-        if (updated === "missing") return { status: "case_missing" as const };
-        const raced = await caseCollections.cases.get(context, input.caseId);
-        return raced?.sourceSpecId === input.nextSourceSpecId
-          ? { status: "committed" as const, value: draftMutation.value }
-          : { status: "case_conflict" as const };
+      });
+    } catch (error) {
+      // Throwing after a draft mutation is what makes PostgreSQL roll the whole transaction
+      // back. File storage cannot roll multiple files back, so the same status lets the
+      // idempotent retry path finish the already published draft lineage under the same locks.
+      if (error instanceof ProductionCaseDraftPostMutationConflict) {
+        return { status: error.status };
       }
-    });
+      throw error;
+    }
   }
 
   async reopenCaseForDraftContinuation(

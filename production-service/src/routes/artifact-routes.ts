@@ -971,6 +971,33 @@ export function registerProductionArtifactRoutes(
       : { status: "conflict" };
   };
 
+  const finishExistingProductionDocumentDraftInScope = async (
+    scope: ProductionDecisionTargetScope,
+    expectedDraft: ProductionDraft,
+    supersededDraft?: ProductionDraft
+  ): Promise<
+    | { status: "committed"; value: ProductionDraft }
+    | { status: "conflict" }
+  > => {
+    const persisted = await scope.getDraft(expectedDraft.draftId);
+    if (!persisted || !sameProductionDocumentDraftIdentity(persisted, expectedDraft)) {
+      return { status: "conflict" };
+    }
+    if (!supersededDraft) return { status: "committed", value: persisted };
+
+    const currentSource = await scope.getDraft(supersededDraft.draftId);
+    if (!currentSource || !areJsonValuesEqual(currentSource, supersededDraft)) {
+      return { status: "conflict" };
+    }
+    if (currentSource.status === "pending_review") {
+      if (!await mutableDraftInScope(scope, supersededDraft)) {
+        return { status: "conflict" };
+      }
+      await scope.setDraft(validateProductionDraft({ ...supersededDraft, status: "superseded" }));
+    }
+    return { status: "committed", value: persisted };
+  };
+
   app.post<{ Params: { handoffId: string }; Body: ProductionDraftFromHandoffBody }>("/v1/production/drafts/from-handoff/:handoffId", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) return forbidden;
@@ -1112,17 +1139,22 @@ export function registerProductionArtifactRoutes(
           expectedSourceSpecId: supersededDraft?.draftArtifacts.eventSpec?.specId,
           nextSourceSpecId,
           at: existingDraft.createdAt,
-          draftTarget: {
-            kind: "production_draft",
-            artifactId: existingDraft.draftId,
-            revision: existingDraft.revision
-          },
-          commitDraft: async (scope) => {
-            const persisted = await scope.getDraft(existingDraft.draftId);
-            return persisted && areJsonValuesEqual(persisted, existingDraft)
-              ? { status: "committed" as const, value: persisted }
-              : { status: "conflict" as const };
-          }
+          draftTarget: supersededDraft
+            ? {
+              kind: "production_draft",
+              artifactId: supersededDraft.draftId,
+              revision: supersededDraft.revision
+            }
+            : {
+              kind: "production_draft",
+              artifactId: existingDraft.draftId,
+              revision: existingDraft.revision
+            },
+          commitDraft: (scope) => finishExistingProductionDocumentDraftInScope(
+            scope,
+            existingDraft,
+            supersededDraft
+          )
         });
         if (caseCommit.status === "case_missing") {
           return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
@@ -1425,19 +1457,7 @@ export function registerProductionArtifactRoutes(
             return { status: "conflict" as const };
           }
           if (existingContinuation) {
-            if (!sameProductionDocumentDraftIdentity(existingContinuation, draft)) {
-              return { status: "conflict" as const };
-            }
-            if (
-              currentSource.status === "pending_review" &&
-              !await mutableDraftInScope(scope, previousDraft)
-            ) {
-              return { status: "conflict" as const };
-            }
-            if (currentSource.status === "pending_review") {
-              await scope.setDraft(validateProductionDraft({ ...previousDraft, status: "superseded" }));
-            }
-            return { status: "committed" as const, value: existingContinuation };
+            return finishExistingProductionDocumentDraftInScope(scope, draft, previousDraft);
           }
           if (
             currentSource.status === "pending_review" &&
