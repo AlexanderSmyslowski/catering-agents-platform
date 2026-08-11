@@ -135,7 +135,7 @@ async function runParityFlow(
         }
       }))
     };
-    const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
+    const artifacts = await buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
 
     return {
       intakeReadiness: spec.readiness.status,
@@ -203,7 +203,7 @@ describe("manual form intake to production e2e", () => {
         }))
       };
       const discovery = createDiscoveryService(repository);
-      const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
+      const artifacts = await buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
 
       expect(artifacts.productionPlan.readiness.status).toBe("complete");
       expect(artifacts.productionPlan.isFallback).not.toBe(true);
@@ -265,7 +265,7 @@ describe("manual form intake to production e2e", () => {
         }))
       };
       const discovery = createDiscoveryService(repository);
-      const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
+      const artifacts = await buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
 
       expect(artifacts.productionPlan.isFallback).toBe(true);
       expect(artifacts.productionPlan.readiness.status).toBe("insufficient");

@@ -332,17 +332,19 @@ async function migrateProductionV2(
       const id = String(value[definition.idKey]);
       const inserted = await target.insert({ businessId }, value);
       if (inserted === "exists") {
-        const existing = await target.get({ businessId }, id);
-        if (!areJsonValuesEqual(existing, value)) {
-          const oldStageThreeProjection = definition.collectionName === "production/drafts"
-            ? oldStageThreeProductionDraftProjection(raw, businessId) as unknown as Record<string, unknown> | undefined
-            : undefined;
-          if (!oldStageThreeProjection || !areJsonValuesEqual(existing, oldStageThreeProjection)) {
+        const oldStageThreeProjection = definition.collectionName === "production/drafts"
+          ? oldStageThreeProductionDraftProjection(raw, businessId) as unknown as Record<string, unknown> | undefined
+          : undefined;
+        const replacement = oldStageThreeProjection
+          ? await target.compareAndSetExact({ businessId }, id, oldStageThreeProjection, value)
+          : "conflict";
+        if (replacement !== "updated") {
+          const existing = await target.get({ businessId }, id);
+          if (!areJsonValuesEqual(existing, value)) {
             throw new Error(
-              `${definition.collectionName}/${id} weicht von der sicher erkennbaren Legacy-Projektion ab.`
+              `${definition.collectionName}/${id} weicht von der sicher erkennbaren Legacy-Projektion ab oder wurde gleichzeitig verändert.`
             );
           }
-          await target.set({ businessId }, value);
         }
       }
       expectedRecords.push({ collectionName: definition.collectionName, id, value });

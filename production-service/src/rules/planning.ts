@@ -1,4 +1,5 @@
 import {
+  assertBusinessId,
   validateAcceptedEventSpec,
   type AcceptedEventSpec,
   type BusinessContext,
@@ -20,10 +21,12 @@ export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
   discoveryService: RecipeDiscoveryService,
   options: {
-    context?: BusinessContext;
+    context: BusinessContext;
     persistDiscoveredRecipes?: boolean;
-  } = {}
+  }
 ): Promise<{ productionPlan: ProductionPlan; purchaseList: PurchaseList; recipes: Recipe[] }> {
+  if (!options?.context) throw new Error("Ein Betriebskontext ist erforderlich.");
+  assertBusinessId(options.context.businessId);
   const eventSpec = validateAcceptedEventSpec(eventSpecInput);
   const issueCollector = createPlanningIssueCollector(eventSpec.missingFields);
   const {
@@ -51,7 +54,7 @@ export async function buildProductionArtifacts(
         component,
         servings,
         discoveryService,
-        context: options.context ?? { businessId: "local" },
+        context: options.context,
         persistDiscoveredRecipes: options.persistDiscoveredRecipes !== false,
         artifactAppender
       });

@@ -220,7 +220,9 @@ describe("production gold run", () => {
       const webProvider = new NoopWebRecipeProvider();
       const discovery = new RecipeDiscoveryService(repository, webProvider);
 
-      const artifacts = await buildProductionArtifacts(productionSpec, discovery);
+      const artifacts = await buildProductionArtifacts(productionSpec, discovery, {
+        context: { businessId: "local" }
+      });
       const { productionPlan, purchaseList } = artifacts;
 
       const soupSelection = productionPlan.recipeSelections.find(

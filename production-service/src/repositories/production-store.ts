@@ -472,6 +472,10 @@ export class ProductionStore {
     const normalized = productionDraftForContext(context, draft);
     const target = productionDraftTarget(normalized);
     await productionDecisionRepositoryFor(this).withTargetCriticalSection(context, target, async (scope) => {
+      const existing = await scope.getDraft(normalized.draftId);
+      if (existing && existing.revision !== normalized.revision) {
+        throw new Error("ProductionDraft-ID und Revision bilden eine unveränderliche Identität.");
+      }
       const aggregate = await scope.getDecisionAggregate(
         approvalRequestIdForTarget({ businessId: context.businessId, target })
       );
@@ -485,7 +489,6 @@ export class ProductionStore {
       }
       const approvals = await scope.listApprovalsForTarget();
       if (approvals.length > 0) {
-        const existing = await scope.getDraft(normalized.draftId);
         if (existing && areJsonValuesEqual(existing, normalized)) return;
         throw new Error("ProductionDraft-Revision ist durch persistierte Freigabeevidenz eingefroren.");
       }

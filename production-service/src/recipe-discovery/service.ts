@@ -1,9 +1,10 @@
-import type {
-  AcceptedEventSpec,
-  BusinessContext,
-  MenuComponent,
-  RecipeSelection,
-  Recipe
+import {
+  assertBusinessId,
+  type AcceptedEventSpec,
+  type BusinessContext,
+  type MenuComponent,
+  type RecipeSelection,
+  type Recipe
 } from "@catering/shared-core";
 import { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 import { type WebRecipeSearchProvider } from "./provider.js";
@@ -30,9 +31,10 @@ export class RecipeDiscoveryService {
   async resolveRecipeOverride(
     recipeId: string,
     component: MenuComponent,
-    context: BusinessContext = { businessId: "local" }
+    context: BusinessContext
   ): Promise<RecipeResolution> {
-    const recipe = await this.repository.get(context, recipeId);
+    const scopedContext = requireBusinessContext(context);
+    const recipe = await this.repository.get(scopedContext, recipeId);
     if (!recipe) {
       return buildMissingOverrideRecipeResolution({ recipeId, component });
     }
@@ -44,11 +46,11 @@ export class RecipeDiscoveryService {
     component: MenuComponent,
     eventSpec: AcceptedEventSpec,
     options: {
-      context?: BusinessContext;
+      context: BusinessContext;
       persistWebWinner?: boolean;
-    } = {}
+    }
   ): Promise<RecipeResolution> {
-    const context = options.context ?? { businessId: "local" };
+    const context = requireBusinessContext(options?.context);
     const searchTrace = createRecipeSearchTrace();
     const repositoryCandidates = await this.repository.findCandidates(context, component);
     const internalResolution = resolveInternalRecipeCandidate({
@@ -71,4 +73,10 @@ export class RecipeDiscoveryService {
       searchTrace
     });
   }
+}
+
+function requireBusinessContext(context: BusinessContext | undefined): BusinessContext {
+  if (!context) throw new Error("Ein Betriebskontext ist erforderlich.");
+  assertBusinessId(context.businessId);
+  return context;
 }

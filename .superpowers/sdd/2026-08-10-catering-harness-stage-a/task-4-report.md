@@ -70,3 +70,33 @@ passed.
 ```
 
 The opt-in real PostgreSQL critical-section test is present and is skipped when `CATERING_TEST_POSTGRES_URL` is not configured. File-process serialization, both decision/mutation lock orderings, crash recovery after Approval projection, migration crash/retry, explicit scope/seeding, and UI reload recovery run in the default suite.
+
+## Root-Fix Round 2
+
+The remaining production-boundary review findings are closed:
+
+- A ProductionDraft ID now has one immutable revision identity. All revisions of the same business-and-draft ID share the decision lock, and a persisted revision cannot be replaced before or after a decision.
+- `stage-a-004-production-v2` replaces only an exact recognized Stage-A-003 payload. File storage performs the comparison under the record lock; PostgreSQL performs one atomic `UPDATE ... WHERE payload = expected::jsonb`. A concurrent writer wins without being overwritten, and the migration publishes no completion evidence.
+- Exported recipe discovery and production planning APIs require an explicit `BusinessContext`. The implicit `local` fallback is removed from both type signatures and runtime behavior, and every caller now supplies its scope.
+- `ProductionApplyManifest` persists the first Apply actor's name and source. Apply always rereads and validates the authoritative manifest after insert or a lost insert race, then projects the idempotent audit actor and timestamp from that persisted claim rather than the retry request.
+
+### Round 2 TDD Evidence
+
+- RED: a decided revision could be replaced under the same draft ID; the sequential and serialized replacement promises resolved, and both concurrent first saves fulfilled.
+- RED: both file and PostgreSQL migration races overwrote a concurrent scoped writer and still published `stage-a-004-production-v2` completion.
+- RED: erased context-free discovery and planning calls resolved through the implicit local fallback; tightening the signatures then enumerated every remaining caller at compile time.
+- RED: after a manifest write and injected audit failure, the retry manifest contained only an actor-name string and the audit used the retrying actor.
+- GREEN: 17 focused test files / 104 tests passed, covering ApprovedProductionSpec decisions and Apply, file/PostgreSQL migration, explicit scope, and every migrated planning corridor.
+
+```text
+npx tsc --noEmit
+passed.
+
+npm run build
+passed; TypeScript passed and Vite transformed 183 modules.
+
+git diff --check
+passed.
+```
+
+The full suite was intentionally not repeated in this slice because the parent Stage A verification run follows the separate lock-hardening work. Lock transport hardening is not part of this round.

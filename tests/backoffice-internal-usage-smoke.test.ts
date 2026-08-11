@@ -179,7 +179,7 @@ async function buildArtifactsForFixture(plannedSpec: ReturnType<typeof buildUsag
     dietTags: ["vegetarian"]
   }));
   const discovery = new RecipeDiscoveryService(repository, new EmptyWebProvider());
-  return buildProductionArtifacts(plannedSpec, discovery);
+  return buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
 }
 
 async function renderAppRoute(pathname: string) {

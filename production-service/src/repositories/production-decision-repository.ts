@@ -123,7 +123,8 @@ class InternalProductionDecisionRepository implements ProductionDecisionReposito
     return withBusinessTargetCriticalSection({
       storage: this.options,
       context,
-      target,
+      // Revision remains part of the evidence scope below, while every revision of one draft ID shares one lock.
+      target: { ...target, revision: 0 },
       collectionNamespace: "production",
       queueFullMessage: "Die Produktionsentscheidungs-Warteschlange benötigt eine betriebliche Bereinigung.",
       timeoutMessage: "Die zielbezogene Produktionsentscheidung konnte nicht rechtzeitig gesperrt werden.",

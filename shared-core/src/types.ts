@@ -611,7 +611,7 @@ export interface ProductionApplyManifest {
   purchaseListId: string;
   recipeIds: string[];
   appliedAt: string;
-  appliedBy: string;
+  appliedBy: Pick<TrustedActor, "name" | "source">;
 }
 
 export interface ProductionDraft {

@@ -50,7 +50,7 @@ export function createApprovedProductionSpec(input: {
 
 export function createProductionApplyManifest(input: {
   approvedProductionSpec: ApprovedProductionSpec;
-  actor: TrustedActor;
+  actor: Pick<TrustedActor, "businessId" | "name" | "source">;
   appliedAt?: Date;
 }): ProductionApplyManifest {
   const spec = validateApprovedProductionSpec(input.approvedProductionSpec);
@@ -68,6 +68,9 @@ export function createProductionApplyManifest(input: {
     purchaseListId: spec.artifacts.purchaseList.purchaseListId,
     recipeIds: spec.artifacts.recipes.map((recipe) => recipe.recipeId),
     appliedAt: appliedAt.toISOString(),
-    appliedBy: input.actor.name
+    appliedBy: {
+      name: input.actor.name,
+      source: input.actor.source
+    }
   };
 }

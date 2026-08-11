@@ -81,7 +81,8 @@ async function completeDraft(
   const repository = new InMemoryRecipeRepository();
   const artifacts = await buildProductionArtifacts(
     eventSpec,
-    new RecipeDiscoveryService(repository, { searchRecipes: async () => [] })
+    new RecipeDiscoveryService(repository, { searchRecipes: async () => [] }),
+    { context }
   );
 
   return {
@@ -404,6 +405,86 @@ describe("ApprovedProductionSpec decision boundary", () => {
     }
   });
 
+  it("does not replace a decided draft with a later revision under the same draft ID", async () => {
+    const { app, store } = buildHarness();
+    const draft = await completeDraft("draft-fixed-revision");
+    const sameIdRevisionTwo = { ...draft, revision: 2 };
+    try {
+      expect((await importDraft(app, draft)).statusCode).toBe(201);
+      expect((await decide(app, draft.draftId, "approved")).statusCode).toBe(201);
+
+      await expect(store.saveProductionDraft(context, sameIdRevisionTwo)).rejects.toThrow(
+        "ProductionDraft-ID und Revision"
+      );
+      await expect(store.getProductionDraft(context, draft.draftId)).resolves.toMatchObject({
+        revision: 1,
+        status: "approved"
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("serializes a same-ID revision replacement behind the persisted decided revision", async () => {
+    const { app, store } = buildHarness();
+    const draft = await completeDraft("draft-fixed-revision-race");
+    const sameIdRevisionTwo = { ...draft, revision: 2 };
+    expect((await importDraft(app, draft)).statusCode).toBe(201);
+
+    const repository = productionDecisionRepositoryFor(store);
+    const originalCriticalSection = repository.withTargetCriticalSection.bind(repository);
+    let entered!: () => void;
+    let release!: () => void;
+    const aggregateEntered = new Promise<void>((resolve) => { entered = resolve; });
+    const continueDecision = new Promise<void>((resolve) => { release = resolve; });
+    repository.withTargetCriticalSection = (businessContext, target, operation) =>
+      originalCriticalSection(businessContext, target, (scope) => operation({
+        ...scope,
+        insertDecisionAggregate: async (aggregate) => {
+          entered();
+          await continueDecision;
+          return scope.insertDecisionAggregate(aggregate);
+        }
+      }));
+
+    try {
+      const decision = decide(app, draft.draftId, "approved");
+      await aggregateEntered;
+      const replacement = store.saveProductionDraft(context, sameIdRevisionTwo);
+      release();
+
+      expect((await decision).statusCode).toBe(201);
+      await expect(replacement).rejects.toThrow("ProductionDraft-ID und Revision");
+      await expect(store.getProductionDraft(context, draft.draftId)).resolves.toMatchObject({
+        revision: 1,
+        status: "approved"
+      });
+    } finally {
+      release();
+      await app.close();
+    }
+  });
+
+  it("allows only one of two concurrent first saves with the same draft ID and different revisions", async () => {
+    const { app, store } = buildHarness();
+    const revisionOne = await completeDraft("draft-concurrent-first-save");
+    const revisionTwo = { ...revisionOne, revision: 2 };
+    try {
+      const results = await Promise.allSettled([
+        store.saveProductionDraft(context, revisionOne),
+        store.saveProductionDraft(context, revisionTwo)
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(["fulfilled", "rejected"]);
+      const winningRevision = results[0]?.status === "fulfilled" ? 1 : 2;
+      await expect(store.getProductionDraft(context, revisionOne.draftId)).resolves.toMatchObject({
+        revision: winningRevision
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it("resumes after approval evidence was inserted but snapshot publication was interrupted", async () => {
     let failOnce = true;
     const { app, store } = buildHarness({
@@ -643,6 +724,62 @@ describe("ApprovedProductionSpec decision boundary", () => {
         approvedProductionSpecId,
         businessId: context.businessId
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps the manifest actor authoritative when Apply audit retries under another actor", async () => {
+    const { app, auditLog, store } = buildHarness();
+    const firstActorHeaders = {
+      "x-catering-actor-name": "PRODUKTIONS-MITARBEITER",
+      "x-catering-trusted-secret": TRUSTED_SECRET
+    };
+    const retryActorHeaders = headers;
+    const draft = await completeDraft("draft-apply-audit-first-actor");
+
+    try {
+      expect((await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts",
+        headers: firstActorHeaders,
+        payload: draft
+      })).statusCode).toBe(201);
+      const decision = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${draft.draftId}/decision`,
+        headers: firstActorHeaders,
+        payload: { decision: "approved" }
+      });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const approvedProductionSpecId = decision.json().approvedProductionSpec.approvedProductionSpecId;
+      const applyUrl = `/v1/production/approved-specs/${approvedProductionSpecId}/apply`;
+
+      const logFor = auditLog.logFor.bind(auditLog);
+      let failApplyAudit = true;
+      auditLog.logFor = async (...args) => {
+        if (failApplyAudit && args[1].action === "production.approved_spec_applied") {
+          failApplyAudit = false;
+          throw new Error("injected after apply manifest publication");
+        }
+        return logFor(...args);
+      };
+
+      expect((await app.inject({ method: "POST", url: applyUrl, headers: firstActorHeaders })).statusCode).toBe(500);
+      const manifest = await store.getApplyManifest(context, approvedProductionSpecId);
+      expect(manifest).toBeDefined();
+
+      expect((await app.inject({ method: "POST", url: applyUrl, headers: retryActorHeaders })).statusCode).toBe(200);
+      const applyAudits = (await auditLog.listRecentFor(context, 100))
+        .filter((entry) => entry.action === "production.approved_spec_applied");
+
+      expect(manifest?.appliedBy).toEqual({
+        name: "PRODUKTIONS-MITARBEITER",
+        source: "trusted-proxy:x-catering-actor-name"
+      });
+      expect(applyAudits).toHaveLength(1);
+      expect(applyAudits[0].actor).toEqual(manifest?.appliedBy);
+      expect(applyAudits[0].at).toBe(manifest?.appliedAt);
     } finally {
       await app.close();
     }

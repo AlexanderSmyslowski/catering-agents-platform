@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Pool, type PoolConfig } from "pg";
 import { assertBusinessId, type BusinessContext } from "./business-context.js";
+import { areJsonValuesEqual } from "./json-equality.js";
 
 export interface Queryable {
   query: (
@@ -770,6 +771,12 @@ export interface BusinessScopedPersistentCollection<T> {
     expectedVersion: number,
     item: T
   ): Promise<"updated" | "conflict" | "missing">;
+  compareAndSetExact(
+    context: BusinessContext,
+    id: string,
+    expected: T,
+    item: T
+  ): Promise<"updated" | "conflict" | "missing">;
 }
 
 function assertScopedPayload<T>(context: BusinessContext, item: T): T {
@@ -1082,6 +1089,42 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     }
   }
 
+  async compareAndSetExact(
+    context: BusinessContext,
+    id: string,
+    expected: T,
+    item: T
+  ): Promise<"updated" | "conflict" | "missing"> {
+    const normalizedExpected = this.normalizeForContext(context, expected);
+    const normalized = this.normalizeForContext(context, item);
+    assertIncomingVersion(normalizedExpected, this.options.getVersion);
+    assertIncomingVersion(normalized, this.options.getVersion);
+    if (this.options.getId(normalizedExpected) !== id || this.options.getId(normalized) !== id) {
+      throw new Error("Payload-ID passt nicht zum angeforderten Record.");
+    }
+    const filePath = this.filePathFor(context, id);
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    const releaseLock = acquireFileLock(filePath);
+    try {
+      if (!existsSync(filePath)) return "missing";
+      const existing = this.normalizeForContext(
+        context,
+        JSON.parse(readFileSync(filePath, "utf8")) as T,
+        id
+      );
+      if (!areJsonValuesEqual(existing, normalizedExpected)) return "conflict";
+      atomicWrite(
+        filePath,
+        JSON.stringify(normalized, null, 2),
+        () => this.options.fileFaultInjector?.("before_record_replace"),
+        () => this.options.fileFaultInjector?.("after_record_replace")
+      );
+      return "updated";
+    } finally {
+      releaseLock();
+    }
+  }
+
   private directoryFor(context: BusinessContext): string {
     const businessId = assertBusinessId(context.businessId);
     return path.join(resolveDataRoot(this.options.rootDir), "businesses", businessId, this.options.collectionName);
@@ -1154,6 +1197,36 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
     const result = await this.queryable.query(
       "UPDATE catering_business_records SET payload = $4::jsonb, version_number = $5, updated_at = NOW() WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 AND version_number = $6 RETURNING record_id",
       [businessId, this.options.collectionName, id, JSON.stringify(normalized), collectionVersion(normalized, this.options.getVersion) ?? null, expectedVersion]
+    );
+    if (result.rows.length === 1) return "updated";
+    return (await this.get(context, id)) ? "conflict" : "missing";
+  }
+
+  async compareAndSetExact(
+    context: BusinessContext,
+    id: string,
+    expected: T,
+    item: T
+  ): Promise<"updated" | "conflict" | "missing"> {
+    const normalizedExpected = this.normalizeForContext(context, expected);
+    const normalized = this.normalizeForContext(context, item);
+    assertIncomingVersion(normalizedExpected, this.options.getVersion);
+    assertIncomingVersion(normalized, this.options.getVersion);
+    if (this.options.getId(normalizedExpected) !== id || this.options.getId(normalized) !== id) {
+      throw new Error("Payload-ID passt nicht zum angeforderten Record.");
+    }
+    const businessId = assertBusinessId(context.businessId);
+    await this.ensureInitialized();
+    const result = await this.queryable.query(
+      "UPDATE catering_business_records SET payload = $4::jsonb, version_number = $5, updated_at = NOW() WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 AND payload = $6::jsonb RETURNING record_id",
+      [
+        businessId,
+        this.options.collectionName,
+        id,
+        JSON.stringify(normalized),
+        collectionVersion(normalized, this.options.getVersion) ?? null,
+        JSON.stringify(normalizedExpected)
+      ]
     );
     if (result.rows.length === 1) return "updated";
     return (await this.get(context, id)) ? "conflict" : "missing";

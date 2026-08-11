@@ -358,7 +358,9 @@ describe("production recipe alias parity", () => {
       const spec = singleComponentSpec(componentLabel, category);
       const component = spec.menuPlan[0];
       const discovery = new RecipeDiscoveryService(repository, new EmptyWebProvider());
-      const resolution = await discovery.resolveRecipe(component, spec);
+      const resolution = await discovery.resolveRecipe(component, spec, {
+        context: { businessId: "local" }
+      });
       const uiRecipes = (await repository.list({ businessId: "local" })).map((storedRecipe) => ({
         recipeId: storedRecipe.recipeId,
         name: storedRecipe.name,

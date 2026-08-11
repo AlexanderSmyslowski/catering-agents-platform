@@ -82,7 +82,9 @@ describe("recipe discovery service", () => {
 
     const menuComponent = component();
     const discovery = new RecipeDiscoveryService(repository, provider);
-    const resolution = await discovery.resolveRecipe(menuComponent, eventSpec(menuComponent));
+    const resolution = await discovery.resolveRecipe(menuComponent, eventSpec(menuComponent), {
+      context: { businessId: "local" }
+    });
 
     expect(provider.calls).toBe(0);
     expect(resolution.recipe?.recipeId).toBe(recipe.recipeId);

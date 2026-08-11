@@ -96,7 +96,9 @@ async function productionDraftWithUnreviewedPlan(): Promise<ProductionDraft> {
       searchRecipes: async () => []
     }
   );
-  const artifacts = await buildProductionArtifacts(draft.draftArtifacts.eventSpec!, discoveryService);
+  const artifacts = await buildProductionArtifacts(draft.draftArtifacts.eventSpec!, discoveryService, {
+    context: { businessId: "local" }
+  });
 
   return {
     ...draft,

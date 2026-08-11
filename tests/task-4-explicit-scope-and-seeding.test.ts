@@ -2,8 +2,19 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildProductionApp, ProductionStore } from "@catering/production-service";
-import { RecipeLibrary, type Recipe } from "@catering/shared-core";
+import {
+  buildProductionApp,
+  buildProductionArtifacts,
+  InMemoryRecipeRepository,
+  ProductionStore,
+  RecipeDiscoveryService
+} from "@catering/production-service";
+import {
+  createEventRequestFromText,
+  normalizeEventRequestToSpec,
+  RecipeLibrary,
+  type Recipe
+} from "@catering/shared-core";
 
 const roots: string[] = [];
 
@@ -72,6 +83,41 @@ describe("Task 4 explicit business scope and recipe seeding", () => {
     await expect((library.list as () => Promise<unknown>)()).rejects.toThrow("Betriebskontext");
     await expect((library.get as unknown as (id: string) => Promise<unknown>)("recipe-explicit-scope"))
       .rejects.toThrow("Betriebskontext");
+  });
+
+  it("rejects context-free exported recipe discovery calls", async () => {
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot() });
+    const discovery = new RecipeDiscoveryService(repository, { searchRecipes: async () => [] });
+    const spec = normalizeEventRequestToSpec(createEventRequestFromText({
+      requestId: "request-explicit-discovery-context",
+      channel: "text",
+      rawText: "Lunch fuer 20 Personen mit Testgericht."
+    }));
+    const component = spec.menuPlan[0]!;
+
+    await expect((discovery.resolveRecipe as unknown as (
+      inputComponent: unknown,
+      inputSpec: unknown
+    ) => Promise<unknown>)(component, spec)).rejects.toThrow("Betriebskontext");
+    await expect((discovery.resolveRecipeOverride as unknown as (
+      recipeId: string,
+      inputComponent: unknown
+    ) => Promise<unknown>)("missing-recipe", component)).rejects.toThrow("Betriebskontext");
+  });
+
+  it("rejects context-free exported production artifact planning", async () => {
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot() });
+    const discovery = new RecipeDiscoveryService(repository, { searchRecipes: async () => [] });
+    const spec = normalizeEventRequestToSpec(createEventRequestFromText({
+      requestId: "request-explicit-planning-context",
+      channel: "text",
+      rawText: "Lunch fuer 20 Personen mit Testgericht."
+    }));
+
+    await expect((buildProductionArtifacts as unknown as (
+      inputSpec: unknown,
+      service: RecipeDiscoveryService
+    ) => Promise<unknown>)(spec, discovery)).rejects.toThrow("Betriebskontext");
   });
 
   it("rejects a trusted local business header that differs from the configured business", async () => {

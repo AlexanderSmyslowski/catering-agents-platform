@@ -231,7 +231,9 @@ describe("UI critical path rehearsal", () => {
       ]
     });
     const discovery = new RecipeDiscoveryService(repository, new EmptyWebProvider());
-    const artifacts = await buildProductionArtifacts(promotedSpec, discovery);
+    const artifacts = await buildProductionArtifacts(promotedSpec, discovery, {
+      context: { businessId: "local" }
+    });
     const auditEvent = {
       id: "audit-ui-critical-path-plan-created",
       action: "production.plan_created",

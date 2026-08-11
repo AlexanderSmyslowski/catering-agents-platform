@@ -172,7 +172,7 @@ describe("production planning fallbacks", () => {
       }
     } as unknown as RecipeDiscoveryService;
 
-    const artifacts = await buildProductionArtifacts(spec, discovery);
+    const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.fallbackReason).toContain("simulated timeout");
@@ -200,7 +200,7 @@ describe("production planning fallbacks", () => {
       }
     } as unknown as RecipeDiscoveryService;
 
-    const artifacts = await buildProductionArtifacts(spec, discovery);
+    const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.fallbackReason).toMatch(/ungültig/i);
@@ -219,7 +219,7 @@ describe("production planning fallbacks", () => {
       new FakeWebProvider([])
     );
 
-    const artifacts = await buildProductionArtifacts(spec, discovery);
+    const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.blockingIssues?.join(" ")).toContain("Herstellungsentscheidung");
@@ -250,7 +250,7 @@ describe("production planning fallbacks", () => {
       }
     } as unknown as RecipeDiscoveryService;
 
-    const artifacts = await buildProductionArtifacts(spec, discovery);
+    const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
     expect(artifacts.productionPlan.isFallback).toBeFalsy();
     expect(artifacts.productionPlan.recipeSelections[0].selectionReason).toContain("Bäcker-Zukauf");
@@ -285,7 +285,7 @@ describe("production planning fallbacks", () => {
       }
     } as unknown as RecipeDiscoveryService;
 
-    const artifacts = await buildProductionArtifacts(spec, discovery);
+    const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
@@ -325,7 +325,7 @@ describe("production planning fallbacks", () => {
       }
     } as unknown as RecipeDiscoveryService;
 
-    const artifacts = await buildProductionArtifacts(spec, discovery);
+    const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
@@ -354,7 +354,7 @@ describe("production planning fallbacks", () => {
     const repository = new InMemoryRecipeRepository({ rootDir: createDataRoot() });
     const discovery = new RecipeDiscoveryService(repository, new FakeWebProvider([baseCandidate()]));
 
-    const artifacts = await buildProductionArtifacts(spec, discovery);
+    const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
@@ -385,7 +385,7 @@ describe("production planning fallbacks", () => {
     const repository = new InMemoryRecipeRepository({ rootDir: createDataRoot() });
     const discovery = new RecipeDiscoveryService(repository, new FakeWebProvider([baseCandidate()]));
 
-    const artifacts = await buildProductionArtifacts(spec, discovery);
+    const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
@@ -420,7 +420,7 @@ describe("production planning fallbacks", () => {
     const discovery = new RecipeDiscoveryService(repository, new FakeWebProvider([]));
 
     try {
-      const artifacts = await buildProductionArtifacts(spec, discovery);
+      const artifacts = await buildProductionArtifacts(spec, discovery, { context: { businessId: "local" } });
 
       expect(artifacts.productionPlan.isFallback).toBe(true);
       expect(artifacts.productionPlan.readiness.status).toBe("insufficient");

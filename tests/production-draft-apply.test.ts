@@ -47,7 +47,7 @@ async function buildDraft(draftId = "production-draft-apply-1"): Promise<Product
       searchRecipes: async () => []
     }
   );
-  const artifacts = await buildProductionArtifacts(spec, discoveryService);
+  const artifacts = await buildProductionArtifacts(spec, discoveryService, { context: { businessId: "local" } });
 
   return {
     schemaVersion: SCHEMA_VERSION,

@@ -5,6 +5,7 @@ import {
   createApprovalRequestRecord,
   createProductionApplyManifest,
   validateProductionDraft,
+  type ApprovedProductionSpec,
   type ApprovalRequestRecord,
   type AuditLogStore,
   type BusinessContext,
@@ -64,14 +65,27 @@ function sameApproval(left: ApprovalRequestRecord, right: ApprovalRequestRecord)
     left.decidedBy.source === right.decidedBy.source;
 }
 
-function sameAppliedArtifacts(left: ProductionApplyManifest, right: ProductionApplyManifest): boolean {
-  return left.schemaVersion === right.schemaVersion &&
-    left.businessId === right.businessId &&
-    left.approvedProductionSpecId === right.approvedProductionSpecId &&
-    left.eventSpecId === right.eventSpecId &&
-    left.planId === right.planId &&
-    left.purchaseListId === right.purchaseListId &&
-    areJsonValuesEqual(left.recipeIds, right.recipeIds);
+function manifestMatchesApprovedSpec(
+  manifest: ProductionApplyManifest,
+  approvedProductionSpec: ApprovedProductionSpec
+): boolean {
+  const appliedAt = new Date(manifest.appliedAt);
+  if (Number.isNaN(appliedAt.getTime())) return false;
+
+  try {
+    const expected = createProductionApplyManifest({
+      approvedProductionSpec,
+      actor: {
+        businessId: manifest.businessId,
+        name: manifest.appliedBy.name,
+        source: manifest.appliedBy.source
+      },
+      appliedAt
+    });
+    return areJsonValuesEqual(manifest, expected);
+  } catch {
+    return false;
+  }
 }
 
 async function compareOrInsert<T>(input: {
@@ -359,28 +373,32 @@ export function registerProductionApprovalRoutes(
         });
       }
 
-      const expectedManifest = createProductionApplyManifest({
+      const candidateManifest = createProductionApplyManifest({
         approvedProductionSpec: approvedSpec,
         actor
       });
       const existingManifest = await store.getApplyManifest(actor, approvedSpec.approvedProductionSpecId);
-      if (existingManifest && !sameAppliedArtifacts(existingManifest, expectedManifest)) {
-        return reply.code(409).send({ message: "ProductionApplyManifest existiert mit abweichendem Inhalt." });
-      }
+      let expectedPersistedClaim = existingManifest;
       if (!existingManifest) {
         applyFaultInjector?.("before_manifest_publish");
-        await store.insertApplyManifest(actor, expectedManifest);
-        const persistedManifest = await store.getApplyManifest(actor, approvedSpec.approvedProductionSpecId);
-        if (!persistedManifest || !sameAppliedArtifacts(persistedManifest, expectedManifest)) {
-          return reply.code(409).send({ message: "ProductionApplyManifest konnte nicht konfliktfrei veröffentlicht werden." });
-        }
+        const insertResult = await store.insertApplyManifest(actor, candidateManifest);
+        expectedPersistedClaim = insertResult === "created" ? candidateManifest : undefined;
+      }
+      const authoritativeManifest = await store.getApplyManifest(actor, approvedSpec.approvedProductionSpecId);
+      if (
+        !authoritativeManifest ||
+        !manifestMatchesApprovedSpec(authoritativeManifest, approvedSpec) ||
+        (expectedPersistedClaim && !areJsonValuesEqual(authoritativeManifest, expectedPersistedClaim))
+      ) {
+        return reply.code(409).send({ message: "ProductionApplyManifest konnte nicht konfliktfrei veröffentlicht werden." });
       }
 
-      await auditLog.logFor(actor, {
+      await auditLog.logFor({ businessId: authoritativeManifest.businessId }, {
         action: "production.approved_spec_applied",
         entityType: "ApprovedProductionSpec",
         entityId: approvedSpec.approvedProductionSpecId,
-        actor,
+        actor: authoritativeManifest.appliedBy,
+        at: authoritativeManifest.appliedAt,
         idempotencyKey: `production-apply:${approvedSpec.approvedProductionSpecId}`,
         summary: "Freigegebener Produktions-Snapshot in Produktobjekte übernommen.",
         details: {
