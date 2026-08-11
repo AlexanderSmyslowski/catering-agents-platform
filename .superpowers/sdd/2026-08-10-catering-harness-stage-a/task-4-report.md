@@ -113,3 +113,104 @@ Implementation commits through this round: `c87e8a1`, `a94bbd5`, and `97f91a2`.
 ### Bounded-History Follow-Up
 
 Released ticket and marker history remains durable per target, so acquisition scans grow linearly with repeated operations on that same target. The active 4,096-ticket pressure check is also advisory under simultaneous allocation. This does not weaken mutual exclusion or normal Task 4 behavior, where each immutable draft target has few operations, but safe queue compaction remains a focused maintenance follow-up rather than an untested cleanup inside this boundary change.
+
+## Final Protocol-Transition Boundary
+
+Task 4 does not claim a rolling upgrade between arbitrary Production-service builds. The supported Stage-A transition is the local launcher with all previous Production writers stopped:
+
+- New Production decisions acquire the canonical revision-independent draft lock and, during this transition, the prior revision-specific compatibility lock in deterministic order. This closes same-target overlap with the immediately preceding writer protocol without pretending that every historical revision key can be locked dynamically.
+- File-lock ownership now treats a matching live OS process fingerprint as authoritative even when a worker heartbeat is stale. Missing or unverifiable ownership evidence fails closed; a lock is reclaimed only with positive termination or process-incarnation evidence.
+- `start-local-stack.sh` holds one port-wide startup lock across worktrees and data roots before migration until its own Production process answers health. macOS uses the atomic PID-aware `shlock`; Linux uses an advisory `flock`. Signals release the lock and terminate the launcher.
+- The launcher checks screen sessions, repository processes, launchd supervision, and port 3103 before migration and immediately before starting Production. Health must return both `targetLockProtocol: "canonical-v2"` and the launcher's unique startup token, so an older or foreign process cannot satisfy readiness.
+- Hosted Production remains hard-disabled. Starting an old or manually managed Production binary outside this launcher is not a supported Stage-A transition path.
+
+The startup tests exercise two concurrent worktrees with different data roots, two concurrent stale-lock reclaimers, `SIGTERM` cleanup and takeover, a Production session appearing after migration, and a foreign canonical-v2 health response with the wrong startup token.
+
+Implementation commits through the transition boundary: `7ddce71`, `059dad0`, and `890c628`.
+
+### Final Focused Verification
+
+```text
+bash -n scripts/start-local-stack.sh
+passed.
+
+shellcheck scripts/start-local-stack.sh
+passed.
+
+npx vitest run tests/local-stack-migration-guard.test.ts tests/platform.test.ts \
+  --reporter=dot -t "local stack migration guard|exposes health endpoints"
+2 files passed; 9 tests passed, 50 skipped by the filter.
+
+npx tsc --noEmit
+passed.
+
+npm run build
+passed; TypeScript passed and Vite transformed 183 modules.
+
+git diff --check
+passed.
+```
+
+## Crash-Race Closure
+
+The final adversarial review reproduced three additional process-crash races and one bounded-liveness issue. They are closed in `828c091` and `e3062be`:
+
+- Only the canonical file-queue leader may inspect, reclaim, or acquire the compatibility lock. Multiple contenders can no longer act on the same stale observation and delete a freshly replaced legacy lock.
+- A terminated same-host ticket without a process fingerprint is reclaimable after its lease expires. A live or unverifiable owner still fails closed.
+- On macOS, the local launcher gives the migration worker its own PID lock before allowing migration to start. Killing only the launcher therefore cannot release the safety boundary while the migration continues. A normal signal waits for the worker and cleans up immediately. The migration is executed directly as `node --import tsx`, rather than through an npm supervisor whose child could outlive the lock-owning PID. On Linux, the direct migration process inherits the `flock` descriptor and the kernel keeps the lock until it exits.
+- The migration worker uses a separate Bash process and `$$`, rather than `BASHPID`, so the implementation remains compatible with macOS Bash 3.2.
+
+Focused verification on the committed fix:
+
+```text
+npx vitest run tests/target-critical-section.test.ts \
+  tests/production-decision-critical-section.test.ts \
+  tests/approved-production-spec.test.ts \
+  tests/production-draft-apply.test.ts \
+  tests/local-stack-migration-guard.test.ts \
+  tests/platform.test.ts --reporter=dot
+6 files passed; 103 tests passed, 1 skipped.
+
+npx tsc --noEmit
+passed.
+
+npm run build
+passed; TypeScript passed and Vite transformed 183 modules.
+
+bash -n scripts/start-local-stack.sh
+passed.
+
+shellcheck scripts/start-local-stack.sh
+passed.
+
+git diff --check
+passed.
+```
+
+## Final Repository Verification
+
+```text
+npm test -- --reporter=dot
+291 files passed, 1 skipped; 1509 tests passed, 14 skipped.
+Wall-clock duration: 50.61 seconds.
+
+npx tsc --noEmit
+passed.
+
+npm run build
+passed; TypeScript passed and Vite transformed 183 modules.
+
+bash -n scripts/start-local-stack.sh
+passed.
+
+shellcheck scripts/start-local-stack.sh
+passed.
+
+git diff --check
+passed.
+
+hidden/Bidi/control scan
+96 changed files scanned; 0 findings.
+```
+
+The current advisory database reports four production and five total high-severity npm findings. Task 4 changes no package manifest or lockfile relative to its base, so this is an unchanged repository-baseline gate failure rather than a dependency regression introduced here. It is reported without claiming a green audit and without mixing dependency maintenance into the production-contract change.
