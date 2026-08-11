@@ -89,6 +89,13 @@ describe("offer package batch pilot", () => {
     expect(pseudonymized.removedLineCount).toBeGreaterThanOrEqual(4);
   });
 
+  it("drops inline person names even when the same line contains offer evidence", () => {
+    const pseudonymized = pseudonymizeOfferText("Business Lunch fuer Max Mustermann 40 Personen als Buffet");
+
+    expect(pseudonymized.text).not.toContain("Max Mustermann");
+    expect(pseudonymized.removedLineCount).toBe(1);
+  });
+
   it("accepts only pseudonymized-approved classification inputs and curated package ids", () => {
     const input = buildOfferPackageClassificationInput({
       sourceHash: "sha256:test-source",

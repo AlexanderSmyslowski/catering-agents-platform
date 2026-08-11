@@ -112,6 +112,7 @@ const contactKeywordPattern = /\b(?:telefon|tel\.?|mobil|mobile|e-?mail|mail|kon
 const addressPattern = /\b(?:strasse|str\.|straße|weg|platz|allee|gasse|ufer|ring)\b/i;
 const salutationPattern = /^(?:sehr geehrte|sehr geehrter|liebe|lieber|dear)\b/i;
 const customerMarkerPattern = /^(?:an|kunde|kundin|firma|institut|adresse|veranstalter)\s*[:|-]/i;
+const inlinePersonPattern = /\b(?:für|fuer|von|an)\s+\p{Lu}[\p{L}'-]+\s+\p{Lu}[\p{L}'-]+/u;
 
 const offerEvidencePattern =
   /\b(?:personen|teilnehmer|gaeste|gäste|pax|buffet|flying|fingerfood|lunch|brunch|breakfast|fruehstueck|frühstück|dinner|abendessen|hochzeit|reception|empfang|conference|konferenz|tagung|meeting|kaffee|coffee|bbq|barbecue|crew|menue|menü|speisen|service|preis|eur|euro|netto|brutto|mwst|vitello|roastbeef|garnelen|spargel|dessert|brot|baguette|kaese|käse|getraenke|getränke|vegetarisch|vegan)\b/i;
@@ -131,7 +132,8 @@ function isSensitiveLine(line: string): boolean {
     contactKeywordPattern.test(line) ||
     addressPattern.test(line) ||
     salutationPattern.test(line) ||
-    customerMarkerPattern.test(line)
+    customerMarkerPattern.test(line) ||
+    inlinePersonPattern.test(line)
   );
 }
 
