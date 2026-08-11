@@ -1,11 +1,12 @@
-import type {
-  AcceptedEventSpec,
-  BusinessContext,
-  MenuComponent,
-  ProductionPlan,
-  Recipe
+import {
+  assertBusinessId,
+  classifyRecipeProductionTrust,
+  type AcceptedEventSpec,
+  type BusinessContext,
+  type MenuComponent,
+  type ProductionPlan,
+  type Recipe
 } from "@catering/shared-core";
-import { classifyRecipeProductionTrust } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import { recipeMenuCategoryConflictReason } from "../recipe-discovery/menu-category-compatibility.js";
 import { isBlockingPlanningIssue } from "./planning-readiness.js";
@@ -54,16 +55,18 @@ export async function buildRecipeComponentPlanningArtifacts({
   eventSpec,
   servings,
   discoveryService,
-  context = { businessId: "local" },
+  context,
   persistDiscoveredRecipes = true
 }: {
   component: MenuComponent;
   eventSpec: AcceptedEventSpec;
   servings: number;
   discoveryService: RecipeDiscoveryService;
-  context?: BusinessContext;
+  context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
 }): Promise<RecipeComponentPlanningArtifacts> {
+  if (!context) throw new Error("Ein Betriebskontext ist erforderlich.");
+  assertBusinessId(context.businessId);
   const rawResolution = component.recipeOverrideId
     ? await discoveryService.resolveRecipeOverride(component.recipeOverrideId, component, context)
     : await discoveryService.resolveRecipe(component, eventSpec, {

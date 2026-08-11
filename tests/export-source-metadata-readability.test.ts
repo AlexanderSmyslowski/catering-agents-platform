@@ -412,6 +412,7 @@ describe("export source metadata readability", () => {
       eventSpec: eventSpec(menuComponent),
       component: menuComponent,
       servings: 20,
+      context: { businessId: "local" },
       discoveryService: discoveryReturning(
         recipe({
           tier: "internet_fallback",

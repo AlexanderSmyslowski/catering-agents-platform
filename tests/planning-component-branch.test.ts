@@ -62,6 +62,18 @@ function discoveryService(): RecipeDiscoveryService & { resolveCalls: number } {
 }
 
 describe("planning component branch", () => {
+  it("rejects context-free direct calls before an early planning branch", async () => {
+    await expect((appendPlanningComponentBranchArtifacts as unknown as (
+      input: Record<string, unknown>
+    ) => Promise<unknown>)({
+      eventSpec: eventSpec(),
+      component: component("Brot & Baguette"),
+      servings: 40,
+      discoveryService: discoveryService(),
+      artifactAppender: artifactAppender()
+    })).rejects.toThrow("Betriebskontext");
+  });
+
   it("keeps implicit baker purchases ahead of recipe discovery", async () => {
     const appender = artifactAppender();
     const recipes = discoveryService();
@@ -70,6 +82,7 @@ describe("planning component branch", () => {
       eventSpec: eventSpec(),
       component: component("Brot & Baguette"),
       servings: 40,
+      context: { businessId: "local" },
       discoveryService: recipes,
       artifactAppender: appender
     });

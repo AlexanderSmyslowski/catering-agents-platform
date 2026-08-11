@@ -1,4 +1,8 @@
-import type { AcceptedEventSpec, BusinessContext } from "@catering/shared-core";
+import {
+  assertBusinessId,
+  type AcceptedEventSpec,
+  type BusinessContext
+} from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import {
   appendProcurementPlanningArtifacts,
@@ -18,7 +22,7 @@ export async function appendPlanningComponentBranchArtifacts(input: {
   component: MenuPlanComponent;
   servings: number;
   discoveryService: RecipeDiscoveryService;
-  context?: BusinessContext;
+  context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
   artifactAppender: PlanningArtifactAppender;
 }): Promise<void> {
@@ -27,10 +31,12 @@ export async function appendPlanningComponentBranchArtifacts(input: {
     component,
     servings,
     discoveryService,
-    context = { businessId: "local" },
+    context,
     persistDiscoveredRecipes = true,
     artifactAppender
   } = input;
+  if (!context) throw new Error("Ein Betriebskontext ist erforderlich.");
+  assertBusinessId(context.businessId);
 
   const bakerPurchaseArtifacts = buildImplicitBakerPurchasePlanningArtifacts({
     eventSpec,
