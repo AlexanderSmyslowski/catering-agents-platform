@@ -30,8 +30,8 @@ Zuerst lesen
 Aktueller Projektkontext
  • Repository: AlexanderSmyslowski/catering-agents-platform
  • Der reale GitHub-Repo-Stand ist fuehrend.
- • Der verbindliche Stage-A-Zielanker ist `origin/main` auf `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`.
- • Aufgaben 1 bis 7 sind durch die zusammengeführten PRs 590 bis 596 belegt. PR 596 wurde als `c6f530c7bae70bf52c3767b68620368060fd00cf` zusammengeführt; PR 597 redigiert fehlerhafte Provider-Kennungen zusätzlich und ist als `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b` enthalten.
+ • Der verbindliche Stage-A-Codeanker ist `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`; die geprüfte Übergabe wurde durch PR 598 als `5b879d5de22bf276d8e1a3d56e8e203303ece809` in `main` aufgenommen.
+ • Aufgaben 1 bis 7 sind durch die zusammengeführten PRs 590 bis 596 belegt. PR 596 wurde als `c6f530c7bae70bf52c3767b68620368060fd00cf` zusammengeführt; PR 597 redigiert fehlerhafte Provider-Kennungen zusätzlich und ist im Codeanker enthalten.
  • Der Stage-A-Kontrollpunkt ist bestanden: geschäftsbezogene Datei-/PostgreSQL-Grenzen, unveränderliche Angebots-/Produktionsartefakte, persistente Fälle/Quellen/Verläufe, explizite Produkt-Ports und ein geschlossenes Provider-Gate sind belegt.
  • OpenAI und Codex CLI unterliegen derselben serverseitigen Freigabegrenze vor Fetch beziehungsweise Subprozess; Fixture-Betrieb bleibt lokal. `ApprovalRequestRecord` bleibt die einzige fachliche Freigabewahrheit.
  • Die vollständige serielle Testsuite, Typprüfung, Build, beide Audits, interne Beta-Gates und die CI-Läufe von PR 596/597 waren grün. PostgreSQL-Konkurrenztests blieben wegen fehlender lokaler PostgreSQL-Instanz übersprungen.

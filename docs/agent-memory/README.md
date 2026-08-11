@@ -21,7 +21,7 @@ Versionierte Zwischenstaende werden in diesem Ordner abgelegt, zum Beispiel:
 - `memory_v5.16_2026-04-11.md`
 
 ## Aktueller Stand
-- Stage-A-Kontrollpunkt bestanden; `origin/main` steht auf `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`
+- Stage-A-Kontrollpunkt bestanden; der Codeanker ist `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`, die geprüfte Übergabe ist über PR 598 in `main` aufgenommen
 - Aufgaben 1 bis 7 sind zusammengeführt; PR 596 und die eng begrenzte Nachbesserung PR 597 sind abgeschlossen
 - Serielle Gesamtsuite, Typprüfung, Build, Audits, internes Beta-Gate und GitHub-CI sind grün; PostgreSQL-Konkurrenztests bleiben ohne lokale Datenbank übersprungen
 - Aufgabe 8 ist nicht begonnen; der nächste Schritt braucht einen ausdrücklichen Supervisor-Auftrag

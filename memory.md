@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.353
+version: 5.354
 date: 2026-08-11
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -11,7 +11,7 @@ Sie soll den aktuellen Projektstand, den Governance-Bauplan, die Leitplanken und
 Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 
 ## Repo-Kontext
-- **Stage-A-Kontrollpunkt (2026-08-11):** Aufgaben 1 bis 7 sind auf `origin/main` abgeschlossen. Der verbindliche Stand ist `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`; PR 596 wurde als `c6f530c7bae70bf52c3767b68620368060fd00cf` und die eng begrenzte Nachbesserung PR 597 als `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b` zusammengeführt.
+- **Stage-A-Kontrollpunkt (2026-08-11):** Aufgaben 1 bis 7 sind im Codeanker `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b` abgeschlossen. PR 596 wurde als `c6f530c7bae70bf52c3767b68620368060fd00cf` und die eng begrenzte Nachbesserung PR 597 als `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b` zusammengeführt; die geprüfte Übergabe wurde anschließend durch PR 598 als `5b879d5de22bf276d8e1a3d56e8e203303ece809` in `main` aufgenommen.
 - PR 596 verankert die serverseitige BYO-LLM-Datengrenze: externe Aufrufe von OpenAI und Codex CLI werden vor Fetch oder Subprozess ohne exakt passende Freigabe abgewiesen; Fixture-Betrieb bleibt lokal. Die Freigabe vergleicht Geschäft, Datenklasse, Zweck, Anbieter, Modell, Fähigkeit, Region, Endpunkt, Kosten, Aufbewahrung, Trainingsnutzung und Gültigkeit. Prompts, Antworten, Zugangsdaten und geschützte Provider-Kennungen gelangen nicht in Protokolle.
 - PR 597 redigiert zusätzlich Provider- und Request-Kennungen sowie Fixture-IDs aus fehlerhaften externen Antworten. Es entsteht keine zweite fachliche Freigabewahrheit: `ApprovalRequestRecord` bleibt die Produktwahrheit; die Providerfreigabe ist nur die technische Betriebsgrenze.
 - Der Stage-A-Kontrollpunkt ist fachlich bestanden: Datei- und PostgreSQL-Speicherung bleiben getrennt und geschäftsbezogen, Angebote und Produktionsartefakte sind unveränderlich, Fälle/Quellen/Verläufe persistent, Produktgrenzen über Ports explizit und direkte Freigabe-/Handoff-Umgehungen ausgeschlossen.
@@ -1710,3 +1710,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Der externe Provider-Gate ist vor Fetch und Subprozess geschlossen, wenn die serverseitige Freigabe nicht exakt passt. OpenAI und Codex CLI teilen dieselbe Grenze; Fixture-Betrieb bleibt lokal. `ApprovalRequestRecord` bleibt die einzige fachliche Freigabewahrheit.
 - Vollständige serielle Suite, Typprüfung, Build, beide Audits, internes Beta-Gate und die CI-Läufe von PR 596/597 waren grün. PostgreSQL-spezifische Konkurrenztests blieben wegen fehlender lokaler PostgreSQL-Instanz übersprungen. Keine echte externe KI-Ausführung, keine realen Unternehmens- oder Kundendaten und keine Infrastrukturänderung.
 - Aufgabe 8 bis 12 bleiben bis zu einer ausdrücklichen Supervisor-Entscheidung offen; dieser Eintrag ist eine geprüfte Übergabe und keine neue Roadmap.
+
+### 5.354 - 2026-08-11
+
+- Der Codeanker des Stage-A-Kontrollpunkts bleibt `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`; die dazugehörige geprüfte Übergabe wurde mit PR 598 als `5b879d5de22bf276d8e1a3d56e8e203303ece809` in `main` aufgenommen. Es gab keine Runtime-, API-, Persistenz- oder Infrastrukturänderung.

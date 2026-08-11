@@ -21,7 +21,7 @@ Dies ist der kanonische Einstiegspunkt fuer neue Chatfenster, Hermes Agent, Code
 Damit neue Sessions den konsolidierten Stand ohne Umwege finden. Die fuehrende Root-Memory-Datei ist `memory.md`.
 
 ## Aktueller Kurzstand
-- Stage-A-Kontrollpunkt bestanden; `origin/main` steht auf `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`
+- Stage-A-Kontrollpunkt bestanden; der Codeanker ist `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`, die geprüfte Übergabe ist über PR 598 in `main` aufgenommen
 - Aufgaben 1 bis 7 sind zusammengeführt; PR 596 und PR 597 sind abgeschlossen
 - Externe KI-Aufrufe bleiben ohne exakt passende serverseitige Freigabe geschlossen; Fixture-Betrieb bleibt lokal
 - Aufgabe 8 ist nicht begonnen; Aufgaben 8 bis 12 benötigen einen ausdrücklichen Supervisor-Auftrag
