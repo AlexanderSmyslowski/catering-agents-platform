@@ -473,6 +473,33 @@ describe("business target critical section", () => {
     }
   });
 
+  it("reclaims a stale same-host ticket from a terminated legacy owner without a fingerprint", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-legacy-ticket-dead-"));
+    const queuePath = `${targetLockPath(rootDir)}.queue`;
+    const ticketPath = path.join(queuePath, "ticket-000000000001.json");
+    mkdirSync(queuePath, { recursive: true });
+    writeFileSync(ticketPath, JSON.stringify({
+      pid: 999_999_999,
+      token: "terminated-legacy-owner",
+      lease: "heartbeat-v1",
+      hostname: hostname()
+    }));
+    const expired = new Date(Date.now() - 60_000);
+    utimesSync(ticketPath, expired, expired);
+    let entered = false;
+
+    try {
+      await expect(withBusinessTargetCriticalSection(lockInput(
+        { rootDir },
+        async () => { entered = true; }
+      ))).resolves.toBeUndefined();
+      expect(entered).toBe(true);
+      expect(existsSync(path.join(queuePath, "released-000000000001"))).toBe(true);
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("fails closed for a stale queue ticket owned by another host", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-foreign-ticket-"));
     const lockPath = targetLockPath(rootDir);
@@ -545,26 +572,32 @@ describe("business target critical section", () => {
     }
   });
 
-  it("holds the legacy lock boundary after the queue preflight", async () => {
+  it("holds the legacy lock boundary while the queued operation is active", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-legacy-race-"));
     const lockPath = targetLockPath(rootDir);
-    let entered = false;
+    let releaseOperation!: () => void;
+    const operationGate = new Promise<void>((resolve) => { releaseOperation = resolve; });
+    let signalEntered!: () => void;
+    const entered = new Promise<void>((resolve) => { signalEntered = resolve; });
     const pending = withBusinessTargetCriticalSection(lockInput(
       { rootDir },
-      async () => { entered = true; }
+      async () => {
+        signalEntered();
+        await operationGate;
+      }
     ));
 
-    // The async preflight has completed, but the queued leader has not resumed yet.
-    mkdirSync(path.dirname(lockPath), { recursive: true });
-    writeFileSync(lockPath, JSON.stringify({ pid: process.pid, token: "legacy-owner" }));
     try {
-      await delay(50);
-      expect(entered).toBe(false);
+      await entered;
+      expect(() => writeFileSync(
+        lockPath,
+        JSON.stringify({ pid: process.pid, token: "legacy-owner" }),
+        { flag: "wx" }
+      )).toThrow(expect.objectContaining({ code: "EEXIST" }));
     } finally {
-      if (existsSync(lockPath)) unlinkSync(lockPath);
+      releaseOperation();
       await pending;
       rmSync(rootDir, { recursive: true, force: true });
     }
-    expect(entered).toBe(true);
   });
 });

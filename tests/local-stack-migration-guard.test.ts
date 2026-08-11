@@ -94,6 +94,17 @@ async function waitForPath(filePath: string, timeoutMs = 2_000): Promise<void> {
   throw new Error(`Timed out waiting for ${filePath}`);
 }
 
+async function waitForFileContent(filePath: string, content: string, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(filePath) && readFileSync(filePath, "utf8").includes(content)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for ${content} in ${filePath}`);
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -266,6 +277,50 @@ describe("local stack migration guard", () => {
     });
     expect(retry.status).toBe(99);
   });
+
+  it("does not overlap migrations after the launcher is killed without its child", async () => {
+    const harness = createLauncherHarness("catering-local-start-orphan-");
+    writeExecutable(path.join(harness.binDir, "npm"), [
+      "#!/bin/sh",
+      `printf 'start:%s\\n' \"$$\" >>${JSON.stringify(harness.npmMarker)}`,
+      "sleep \"${TEST_MIGRATION_SLEEP_SECONDS:-0}\"",
+      `printf 'end:%s\\n' \"$$\" >>${JSON.stringify(harness.npmMarker)}`,
+      "exit \"${TEST_NPM_EXIT:-99}\""
+    ].join("\n"));
+    const child = spawn("bash", [harness.startScript], {
+      cwd: harness.root,
+      env: launcherEnv(harness, {
+        TEST_MIGRATION_SLEEP_SECONDS: "2.2",
+        TEST_NPM_EXIT: "99"
+      }),
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+    const launcherExited = new Promise<void>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", () => resolve());
+    });
+
+    await waitForFileContent(harness.npmMarker, "start:");
+    child.kill("SIGKILL");
+    await launcherExited;
+
+    const blocked = spawnSync("bash", [harness.startScript], {
+      cwd: harness.root,
+      encoding: "utf8",
+      env: launcherEnv(harness, { TEST_NPM_EXIT: "99" })
+    });
+    expect(blocked.status).toBe(1);
+    expect(readFileSync(harness.npmMarker, "utf8").match(/^start:/gm)).toHaveLength(1);
+
+    await waitForFileContent(harness.npmMarker, "end:");
+    const retry = spawnSync("bash", [harness.startScript], {
+      cwd: harness.root,
+      encoding: "utf8",
+      env: launcherEnv(harness, { TEST_NPM_EXIT: "99" })
+    });
+    expect(retry.status).toBe(99);
+    expect(readFileSync(harness.npmMarker, "utf8").match(/^start:/gm)).toHaveLength(2);
+  }, 10_000);
 
   it("requires the canonical production lock protocol in the health response", () => {
     const startScript = readFileSync("scripts/start-local-stack.sh", "utf8");

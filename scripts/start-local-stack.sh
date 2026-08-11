@@ -47,9 +47,11 @@ mkdir -p "${LOG_DIR}"
 mkdir -p "${DATA_ROOT}"
 DATA_ROOT="$(cd "${DATA_ROOT}" && pwd -P)"
 PRODUCTION_START_MUTEX="${CATERING_LOCAL_START_LOCK_FILE:-/tmp/catering-production-startup-3103-$(id -u).lock}"
+PRODUCTION_MIGRATION_MUTEX="${PRODUCTION_START_MUTEX}.migration"
 PRODUCTION_START_TOKEN="$$-${RANDOM}-$(date +%s)"
 START_MUTEX_HELD=0
 START_MUTEX_BACKEND=""
+MIGRATION_CHILD_PID=""
 
 if ! command -v screen >/dev/null 2>&1; then
   echo "GNU screen wird für den stabilen lokalen Stack benötigt." >&2
@@ -73,6 +75,14 @@ release_startup_mutex() {
 
 handle_startup_signal() {
   local exit_code="$1"
+  if [[ -n "${MIGRATION_CHILD_PID}" ]]; then
+    kill -TERM "${MIGRATION_CHILD_PID}" 2>/dev/null || true
+    wait "${MIGRATION_CHILD_PID}" 2>/dev/null || true
+    if [[ "$(cat "${PRODUCTION_MIGRATION_MUTEX}" 2>/dev/null || true)" == "${MIGRATION_CHILD_PID}" ]]; then
+      unlink "${PRODUCTION_MIGRATION_MUTEX}" 2>/dev/null || true
+    fi
+    MIGRATION_CHILD_PID=""
+  fi
   release_startup_mutex
   exit "${exit_code}"
 }
@@ -85,6 +95,17 @@ acquire_startup_mutex() {
       return 1
     fi
     START_MUTEX_BACKEND="shlock"
+    START_MUTEX_HELD=1
+    # A migration child deliberately outlives a launcher killed with SIGKILL. Its own PID lock
+    # prevents the next launcher from overlapping that still-running migration.
+    if ! shlock -f "${PRODUCTION_MIGRATION_MUTEX}" -p "$$"; then
+      echo "Eine vorherige Business-Scope-Migration läuft noch." >&2
+      release_startup_mutex
+      return 1
+    fi
+    if [[ "$(cat "${PRODUCTION_MIGRATION_MUTEX}" 2>/dev/null || true)" == "$$" ]]; then
+      unlink "${PRODUCTION_MIGRATION_MUTEX}" 2>/dev/null || true
+    fi
   elif command -v flock >/dev/null 2>&1; then
     exec 9>"${PRODUCTION_START_MUTEX}"
     if ! flock -n 9; then
@@ -93,11 +114,71 @@ acquire_startup_mutex() {
       return 1
     fi
     START_MUTEX_BACKEND="flock"
+    START_MUTEX_HELD=1
   else
     echo "Weder shlock noch flock ist verfügbar; der lokale Stack bleibt sicher gestoppt." >&2
     return 1
   fi
-  START_MUTEX_HELD=1
+}
+
+run_business_scope_migration() {
+  if [[ "${START_MUTEX_BACKEND}" != "shlock" ]]; then
+    # flock's open descriptor is inherited by the migration child. If the launcher dies, the
+    # kernel keeps the port-wide lock until that child exits.
+    CATERING_DATA_ROOT="${DATA_ROOT}" npm run migrate:business-scope -- \
+      --business-id "${DEFAULT_BUSINESS_ID}" --confirm-legacy-file-writers-quiesced
+    return
+  fi
+
+  local parent_pid="$$"
+  local gate_path="${PRODUCTION_MIGRATION_MUTEX}.go.${PRODUCTION_START_TOKEN}"
+  bash -c '
+    set -euo pipefail
+    migration_mutex="$1"
+    gate_path="$2"
+    parent_pid="$3"
+    data_root="$4"
+    business_id="$5"
+    migration_child_pid="$$"
+    cleanup_migration_worker() {
+      if [[ "$(cat "${migration_mutex}" 2>/dev/null || true)" == "${migration_child_pid}" ]]; then
+        unlink "${migration_mutex}" 2>/dev/null || true
+      fi
+      unlink "${gate_path}" 2>/dev/null || true
+    }
+    trap cleanup_migration_worker EXIT
+    trap "exit 130" INT
+    trap "exit 143" TERM
+    while [[ ! -f "${gate_path}" ]]; do
+      if ! kill -0 "${parent_pid}" 2>/dev/null; then
+        exit 143
+      fi
+      sleep 0.01
+    done
+    trap - EXIT INT TERM
+    exec env CATERING_DATA_ROOT="${data_root}" npm run migrate:business-scope -- \
+      --business-id "${business_id}" --confirm-legacy-file-writers-quiesced
+  ' _ "${PRODUCTION_MIGRATION_MUTEX}" "${gate_path}" "${parent_pid}" "${DATA_ROOT}" "${DEFAULT_BUSINESS_ID}" &
+  MIGRATION_CHILD_PID="$!"
+  local migration_child_pid="${MIGRATION_CHILD_PID}"
+  if ! shlock -f "${PRODUCTION_MIGRATION_MUTEX}" -p "${migration_child_pid}"; then
+    kill -TERM "${migration_child_pid}" 2>/dev/null || true
+    wait "${migration_child_pid}" 2>/dev/null || true
+    MIGRATION_CHILD_PID=""
+    echo "Die Business-Scope-Migration konnte ihre Aktivitätssperre nicht übernehmen." >&2
+    return 1
+  fi
+  : >"${gate_path}"
+  local migration_status=0
+  wait "${migration_child_pid}" || migration_status=$?
+  MIGRATION_CHILD_PID=""
+  unlink "${gate_path}" 2>/dev/null || true
+  if [[ "$(cat "${PRODUCTION_MIGRATION_MUTEX}" 2>/dev/null || true)" == "${migration_child_pid}" ]]; then
+    unlink "${PRODUCTION_MIGRATION_MUTEX}" 2>/dev/null || true
+  fi
+  if [[ "${migration_status}" != "0" ]]; then
+    return "${migration_status}"
+  fi
 }
 
 trap release_startup_mutex EXIT
@@ -222,7 +303,7 @@ fi
 
 printf '%s\n' "${DATA_ROOT}" >"${DATA_ROOT_FILE}"
 echo "Lokale Datenwurzel: ${DATA_ROOT}"
-CATERING_DATA_ROOT="${DATA_ROOT}" npm run migrate:business-scope -- --business-id "${DEFAULT_BUSINESS_ID}" --confirm-legacy-file-writers-quiesced
+run_business_scope_migration
 
 start_service() {
   local name="$1"

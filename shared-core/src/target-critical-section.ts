@@ -267,10 +267,10 @@ function startFileTargetLeaseHeartbeat(paths: string[]): () => void {
 function fileTargetOwnerIsCurrentIncarnation(owner: FileTargetLockMetadata): boolean | undefined {
   if (owner.hostname && owner.hostname !== CURRENT_HOSTNAME) return undefined;
   if (owner.processInstanceId === PROCESS_INSTANCE_ID && owner.pid === process.pid) return true;
+  if (!processIsAlive(owner.pid)) return false;
   // Worker threads share an OS process but load this module independently. Their instance IDs differ,
   // so only the OS fingerprint can disprove ownership without evicting a still-running worker.
   if (!owner.processFingerprint) return undefined;
-  if (!processIsAlive(owner.pid)) return false;
   const liveFingerprint = processFingerprint(owner.pid);
   return liveFingerprint === undefined ? undefined : liveFingerprint === owner.processFingerprint;
 }
@@ -488,7 +488,6 @@ async function acquireFileTargetLock(input: {
 }): Promise<() => void> {
   mkdirSync(path.dirname(input.lockPath), { recursive: true });
   const deadline = Date.now() + TARGET_LOCK_TIMEOUT_MS;
-  await waitForLegacyFileTargetLock(input.lockPath, deadline, input.legacyTimeoutMessage);
   const queuePath = `${input.lockPath}.queue`;
   mkdirSync(queuePath, { recursive: true, mode: 0o700 });
   const ticket = allocateFileTargetTicket(
@@ -504,6 +503,8 @@ async function acquireFileTargetLock(input: {
         blockingSequence = firstActiveFileTargetTicket(queuePath);
       }
       if (blockingSequence === ticket.sequence) {
+        // Only the canonical queue leader may inspect or reclaim the legacy path. A pre-queue
+        // stale check lets two processes delete a freshly replaced lock from an old observation.
         const legacyLock = await acquireLegacyFileTargetLock(
           input.lockPath,
           deadline,
