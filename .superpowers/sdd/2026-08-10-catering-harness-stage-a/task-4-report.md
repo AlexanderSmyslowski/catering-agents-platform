@@ -153,11 +153,11 @@ passed.
 
 ## Crash-Race Closure
 
-The final adversarial review reproduced three additional process-crash races and one bounded-liveness issue. They are closed in `828c091` and `e3062be`:
+The final adversarial review reproduced three additional process-crash races and one bounded-liveness issue. They are closed in `828c091`, `e3062be`, and `7f1543a`:
 
 - Only the canonical file-queue leader may inspect, reclaim, or acquire the compatibility lock. Multiple contenders can no longer act on the same stale observation and delete a freshly replaced legacy lock.
 - A terminated same-host ticket without a process fingerprint is reclaimable after its lease expires. A live or unverifiable owner still fails closed.
-- On macOS, the local launcher gives the migration worker its own PID lock before allowing migration to start. Killing only the launcher therefore cannot release the safety boundary while the migration continues. A normal signal waits for the worker and cleans up immediately. The migration is executed directly as `node --import tsx`, rather than through an npm supervisor whose child could outlive the lock-owning PID. On Linux, the direct migration process inherits the `flock` descriptor and the kernel keeps the lock until it exits.
+- On macOS, the local launcher gives the migration worker its own PID lock before allowing migration to start. Killing only the launcher therefore cannot release the safety boundary while the migration continues. A normal signal waits for the worker and cleans up immediately. The migration is executed directly as the resolved `node --import tsx` process, rather than through an npm supervisor or configurable wrapper whose child could outlive the lock-owning PID. On Linux, the direct migration process inherits the `flock` descriptor and the kernel keeps the lock until it exits.
 - The migration worker uses a separate Bash process and `$$`, rather than `BASHPID`, so the implementation remains compatible with macOS Bash 3.2.
 
 Focused verification on the committed fix:
@@ -192,7 +192,7 @@ passed.
 ```text
 npm test -- --reporter=dot
 291 files passed, 1 skipped; 1509 tests passed, 14 skipped.
-Wall-clock duration: 50.61 seconds.
+Wall-clock duration: 54.79 seconds.
 
 npx tsc --noEmit
 passed.
