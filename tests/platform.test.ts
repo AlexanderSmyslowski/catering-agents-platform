@@ -3267,6 +3267,7 @@ describe("catering agents platform", () => {
     expect(initialIntakeHealth.statusCode).toBe(200);
     expect(initialOfferHealth.statusCode).toBe(200);
     expect(initialProductionHealth.statusCode).toBe(200);
+    expect(initialProductionHealth.json().targetLockProtocol).toBe("canonical-v2");
     expect(initialExportHealth.statusCode).toBe(200);
 
     const seedResponses = await Promise.all([

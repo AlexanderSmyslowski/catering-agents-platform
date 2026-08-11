@@ -32,6 +32,8 @@ import {
 import type { ProductionHandoffReader } from "./ports/production-handoff-reader.js";
 import { HttpProductionHandoffReader } from "./gateways/http-production-handoff-reader.js";
 
+const PRODUCTION_TARGET_LOCK_PROTOCOL = "canonical-v2";
+
 export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
   discoveryService?: RecipeDiscoveryService;
@@ -165,7 +167,13 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   app.get("/health", async (_request, reply) => {
     if (hosted) {
-      return reply.send({ service: "production-service", status: "ok", timestamp: new Date().toISOString() });
+      return reply.send({
+        service: "production-service",
+        status: "ok",
+        targetLockProtocol: PRODUCTION_TARGET_LOCK_PROTOCOL,
+        startupToken: env.CATERING_PRODUCTION_START_TOKEN ?? null,
+        timestamp: new Date().toISOString()
+      });
     }
     const [plans, purchaseLists, recipes, auditEvents] = await Promise.all([
       store.listPlans(defaultBusinessContext),
@@ -177,6 +185,8 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     return reply.send({
       service: "production-service",
       status: "ok",
+      targetLockProtocol: PRODUCTION_TARGET_LOCK_PROTOCOL,
+      startupToken: env.CATERING_PRODUCTION_START_TOKEN ?? null,
       timestamp: new Date().toISOString(),
       counts: {
         productionPlans: plans.length,

@@ -10,6 +10,8 @@ DEFAULT_BUSINESS_ID="${CATERING_DEFAULT_BUSINESS_ID:-local}"
 TRUSTED_ACTOR_SECRET="${CATERING_TRUSTED_ACTOR_SECRET:-local-development-service-secret}"
 DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
+START_ATTEMPTS="${CATERING_LOCAL_START_ATTEMPTS:-30}"
+PRODUCTION_LOCK_PROTOCOL="canonical-v2"
 
 required_sessions=(
   "catering-ui"
@@ -42,16 +44,71 @@ LLM_MODEL="${CATERING_LLM_MODEL:-}"
 LLM_CLI_TIMEOUT_MS="${CATERING_LLM_CLI_TIMEOUT_MS:-120000}"
 
 mkdir -p "${LOG_DIR}"
+mkdir -p "${DATA_ROOT}"
+DATA_ROOT="$(cd "${DATA_ROOT}" && pwd -P)"
+PRODUCTION_START_MUTEX="${CATERING_LOCAL_START_LOCK_FILE:-/tmp/catering-production-startup-3103-$(id -u).lock}"
+PRODUCTION_START_TOKEN="$$-${RANDOM}-$(date +%s)"
+START_MUTEX_HELD=0
+START_MUTEX_BACKEND=""
 
 if ! command -v screen >/dev/null 2>&1; then
   echo "GNU screen wird für den stabilen lokalen Stack benötigt." >&2
   exit 1
 fi
 
+release_startup_mutex() {
+  if [[ "${START_MUTEX_HELD}" != "1" ]]; then
+    return 0
+  fi
+  if [[ "${START_MUTEX_BACKEND}" == "shlock" ]]; then
+    if [[ "$(cat "${PRODUCTION_START_MUTEX}" 2>/dev/null || true)" == "$$" ]]; then
+      unlink "${PRODUCTION_START_MUTEX}" 2>/dev/null || true
+    fi
+  elif [[ "${START_MUTEX_BACKEND}" == "flock" ]]; then
+    flock -u 9 2>/dev/null || true
+    exec 9>&-
+  fi
+  START_MUTEX_HELD=0
+}
+
+handle_startup_signal() {
+  local exit_code="$1"
+  release_startup_mutex
+  exit "${exit_code}"
+}
+
+acquire_startup_mutex() {
+  mkdir -p "$(dirname "${PRODUCTION_START_MUTEX}")"
+  if command -v shlock >/dev/null 2>&1; then
+    if ! shlock -f "${PRODUCTION_START_MUTEX}" -p "$$"; then
+      echo "Eine andere Instanz hält bereits die portweite Production-Start-Sperre." >&2
+      return 1
+    fi
+    START_MUTEX_BACKEND="shlock"
+  elif command -v flock >/dev/null 2>&1; then
+    exec 9>"${PRODUCTION_START_MUTEX}"
+    if ! flock -n 9; then
+      echo "Eine andere Instanz hält bereits die portweite Production-Start-Sperre." >&2
+      exec 9>&-
+      return 1
+    fi
+    START_MUTEX_BACKEND="flock"
+  else
+    echo "Weder shlock noch flock ist verfügbar; der lokale Stack bleibt sicher gestoppt." >&2
+    return 1
+  fi
+  START_MUTEX_HELD=1
+}
+
+trap release_startup_mutex EXIT
+trap 'handle_startup_signal 130' INT
+trap 'handle_startup_signal 143' TERM
+acquire_startup_mutex
+
 wait_for_url() {
   local url="$1"
   local label="$2"
-  local attempts=30
+  local attempts="${START_ATTEMPTS}"
 
   for _ in $(seq 1 "${attempts}"); do
     if curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf "${url}" >/dev/null 2>&1; then
@@ -62,6 +119,22 @@ wait_for_url() {
   done
 
   echo "${label} wurde nicht rechtzeitig erreichbar: ${url}" >&2
+  return 1
+}
+
+wait_for_production_protocol() {
+  local url="http://127.0.0.1:3103/health"
+  local response
+  for _ in $(seq 1 "${START_ATTEMPTS}"); do
+    response="$(curl --max-time "${CURL_MAX_TIME_SECONDS}" -sf "${url}" 2>/dev/null || true)"
+    if [[ "${response}" == *'"targetLockProtocol":"canonical-v2"'* ]] &&
+       [[ "${response}" == *'"startupToken":"'"${PRODUCTION_START_TOKEN}"'"'* ]]; then
+      echo "Produktion bereit: ${url}"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Produktion meldet nicht das erwartete Sperrprotokoll ${PRODUCTION_LOCK_PROTOCOL}." >&2
   return 1
 }
 
@@ -97,8 +170,51 @@ stack_session_exists() {
   return 1
 }
 
+production_port_is_bound() {
+  local probe_status=0
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:3103 -sTCP:LISTEN >/dev/null 2>&1 || probe_status=$?
+    if [[ "${probe_status}" == "1" ]]; then
+      return 1
+    fi
+    # A listener (0) and an indeterminate lsof failure (>1) both keep the transition closed.
+    return 0
+  fi
+  probe_status=0
+  node -e '
+    const server = require("node:net").createServer();
+    server.once("error", (error) => process.exit(error.code === "EADDRINUSE" ? 0 : 2));
+    server.listen(3103, "127.0.0.1", () => server.close(() => process.exit(1)));
+  ' || probe_status=$?
+  if [[ "${probe_status}" == "1" ]]; then
+    return 1
+  fi
+  # Bound (0) and indeterminate (2) are both unsafe for a protocol transition.
+  return 0
+}
+
+production_writer_is_quiescent() {
+  if screen_session_exists "catering-production"; then
+    echo "Eine bestehende Production-screen-Sitzung verhindert den sicheren Protokollwechsel." >&2
+    return 1
+  fi
+  if pgrep -f "${ROOT_DIR}/node_modules/.*production-service/src/server.ts" >/dev/null 2>&1; then
+    echo "Ein bestehender Production-Prozess verhindert den sicheren Protokollwechsel." >&2
+    return 1
+  fi
+  if [[ "$(uname -s)" == "Darwin" ]] &&
+     launchctl print "gui/$(id -u)/com.cateringagents.production" >/dev/null 2>&1; then
+    echo "Ein geladener Production-Supervisor verhindert den sicheren Protokollwechsel." >&2
+    return 1
+  fi
+  if production_port_is_bound; then
+    echo "Port 3103 ist bereits belegt; der Production-Protokollstand ist nicht verifizierbar." >&2
+    return 1
+  fi
+}
+
 # Scoped migrations snapshot legacy collections; an older live service could otherwise publish after completion.
-if stack_session_exists; then
+if stack_session_exists || ! production_writer_is_quiescent; then
   echo "Lokaler Stack laeuft bereits; Business-Scope-Migration erfordert ruhende Schreibprozesse." >&2
   echo "Bitte npm run local:stop ausfuehren und den Stack danach erneut starten." >&2
   exit 1
@@ -115,6 +231,10 @@ start_service() {
   local log_file="${LOG_DIR}/${name}.log"
 
   if screen_session_exists "${session_name}"; then
+    if [[ "${name}" == "production" ]]; then
+      echo "Während des Startvorgangs ist eine fremde Production-Sitzung erschienen." >&2
+      return 1
+    fi
     echo "${name} läuft bereits in screen (${session_name})."
     return 0
   fi
@@ -133,6 +253,7 @@ export CATERING_PRODUCTION_DRAFT_DATA_MODE="${PRODUCTION_DRAFT_DATA_MODE}"
 export CATERING_LLM_CLI_BIN="${LLM_CLI_BIN}"
 export CATERING_LLM_MODEL="${LLM_MODEL}"
 export CATERING_LLM_CLI_TIMEOUT_MS="${LLM_CLI_TIMEOUT_MS}"
+export CATERING_PRODUCTION_START_TOKEN="${PRODUCTION_START_TOKEN}"
 while true; do
   ${command} >>"${log_file}" 2>&1
   code=\$?
@@ -149,13 +270,15 @@ EOF
 
 start_service "intake" "PORT=3101 npm run dev:intake"
 start_service "offer" "PORT=3102 npm run dev:offer"
+production_writer_is_quiescent
 start_service "production" "PORT=3103 npm run dev:production"
 start_service "exports" "PORT=3104 npm run dev:exports"
 start_service "ui" "npm --workspace @catering/backoffice-ui run dev -- --host 0.0.0.0 --port 3200"
 
 wait_for_url "http://127.0.0.1:3101/health" "Intake"
 wait_for_url "http://127.0.0.1:3102/health" "Angebot"
-wait_for_url "http://127.0.0.1:3103/health" "Produktion"
+wait_for_production_protocol
+release_startup_mutex
 wait_for_url "http://127.0.0.1:3104/health" "Export"
 wait_for_url "http://127.0.0.1:3200" "Backoffice-UI"
 
