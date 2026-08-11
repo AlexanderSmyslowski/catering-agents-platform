@@ -44,6 +44,10 @@ Vor jedem echten Probe-Lauf muessen lokal geklaert sein:
 - `CATERING_SYNTHETIC_LLM_SLICE=1`,
 - `OPENAI_API_KEY` nur lokal ausserhalb des Repos gesetzt,
 - `CATERING_SYNTHETIC_LLM_MODEL` bewusst lokal gesetzt,
+- ein expliziter `CATERING_OPENAI_RESPONSES_URL`,
+- serverseitige Laufzeitfakten fuer Business, Region, Kosten, Retention und
+  vertraglich ausgeschlossene Trainingsnutzung,
+- eine passende `CATERING_LLM_PROCESSING_APPROVAL_FILE` ausserhalb des Repos,
 - nur ein vorab freigegebenes Low-Cost-Modell pro Operatorfenster,
 - ein expliziter Test- oder Monatskostenrahmen,
 - nur synthetische Fixtures im geplanten Lauf.

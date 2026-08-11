@@ -3,6 +3,7 @@ import {
   validateOpenAiSyntheticLiveTransportEnv,
   type OpenAiSyntheticLiveTransportEnv
 } from "./llm-readiness-openai-transport.js";
+import { redactByoLlmEndpointForAudit } from "./byo-llm-provider-data-policy.js";
 import {
   llmReadinessEvalFixtures,
   type LlmReadinessEvalFixture
@@ -143,7 +144,9 @@ export function runLlmReadinessSyntheticLivePreflight(
     promptSchemaId: promptSchemaEntry?.promptSchemaId,
     promptArtifactId: promptArtifact?.promptArtifactId,
     model: env.CATERING_SYNTHETIC_LLM_MODEL,
-    endpoint: env.CATERING_OPENAI_RESPONSES_URL,
+    endpoint: env.CATERING_OPENAI_RESPONSES_URL
+      ? redactByoLlmEndpointForAudit(env.CATERING_OPENAI_RESPONSES_URL)
+      : undefined,
     operatorName,
     budgetNote
   };

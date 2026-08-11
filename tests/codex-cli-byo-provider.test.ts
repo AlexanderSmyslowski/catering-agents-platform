@@ -1,12 +1,12 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildProductionApp, ProductionStore, type ClarificationDraft } from "@catering/production-service";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
+import { buildByoLlmAdapterFromEnv } from "../shared-core/src/byo-llm-runtime.js";
 import {
   AuditLogStore,
-  buildByoLlmAdapterFromEnv,
   byoLlmProviderBoundaryByKind,
   llmReadinessEvalFixtures,
   SCHEMA_VERSION,
@@ -16,6 +16,43 @@ import {
 const TRUSTED_SECRET = "codex-cli-byo-secret";
 const fixtureSpecId = "spec-synthetic-coffee-break";
 const localBusiness = { businessId: "local" } as const;
+const codexDescriptor = {
+  providerKind: "codex_cli" as const,
+  dataLeavesInstallation: true,
+  providerModel: "test-codex-model",
+  capability: "structured_output" as const,
+  actualRegion: "eu",
+  maximumEstimatedCostEur: 0.1,
+  retentionPolicy: "zero-retention",
+  trainingUse: "contractually_excluded" as const,
+  endpoint: "codex-test",
+  metadataVerified: true
+};
+
+function approvalFile(root: string): string {
+  const file = path.join(root, "llm-approval.json");
+  writeFileSync(file, JSON.stringify({
+    approvalId: "approval-codex-test",
+    businessId: "local",
+    providerKind: "codex_cli",
+    allowedDataClasses: ["personal_confidential"],
+    allowedPurposes: ["clarification_draft"],
+    allowedModels: ["test-codex-model"],
+    allowedCapabilities: ["structured_output"],
+    allowedRegions: ["eu"],
+    allowedEndpoints: ["codex-test"],
+    maxCostEurPerCall: 0.1,
+    retentionPolicy: "zero-retention",
+    trainingUse: "contractually_excluded",
+    legalBasisReference: "test",
+    approvedBy: "test",
+    // Keep the fixture valid regardless of the host clock used by the test runner.
+    approvedAt: "2020-01-01T00:00:00.000Z",
+    expiresAt: "2099-12-31T00:00:00.000Z"
+  }));
+  chmodSync(file, 0o600);
+  return file;
+}
 
 type MockCodexExecRequest = {
   command: string;
@@ -291,6 +328,11 @@ describe("Codex CLI BYO LLM provider", () => {
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
+      llmProviderDescriptor: codexDescriptor,
+      env: {
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalFile(dataRoot)
+      },
       buildLlmAdapter: () =>
         buildByoLlmAdapterFromEnv(
           {
@@ -346,6 +388,11 @@ describe("Codex CLI BYO LLM provider", () => {
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
+      llmProviderDescriptor: codexDescriptor,
+      env: {
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalFile(dataRoot)
+      },
       buildLlmAdapter: () =>
         buildByoLlmAdapterFromEnv(
           {

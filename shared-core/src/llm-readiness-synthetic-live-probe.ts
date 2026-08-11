@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   createLlmReadinessAgentAuditRecord,
   type LlmReadinessAgentAuditRecord
@@ -14,7 +15,12 @@ import {
   createOpenAiSyntheticLiveTransportFromEnv,
   type OpenAiSyntheticLiveTransportEnv
 } from "./llm-readiness-openai-transport.js";
-import type { LlmReadinessModelInput } from "./llm-readiness.js";
+import {
+  createByoLlmProviderDescriptor,
+  evaluateByoLlmProviderDataGate,
+  loadByoLlmExternalProcessingApprovalFromEnv
+} from "./byo-llm-provider-data-policy.js";
+import type { LlmReadinessModelInput, LlmReadinessSourceRef } from "./llm-readiness.js";
 import {
   createLlmReadinessRunResult,
   type LlmReadinessRunResult
@@ -67,10 +73,88 @@ function buildResultId(providerRunId: string): string {
   return `run-${providerRunId}`;
 }
 
+function sanitizeSyntheticFixtures(
+  fixtures: readonly LlmReadinessEvalFixture[]
+): readonly LlmReadinessEvalFixture[] {
+  const sanitizeSourceRefs = (sourceRefs: readonly LlmReadinessSourceRef[]) => sourceRefs.map((sourceRef, index) => ({
+    ...sourceRef,
+    // Source ids are operator-facing prompt material in this eval harness;
+    // hash even synthetic caller-supplied ids before they can leave the process.
+    objectId: `synthetic-ref-${createHash("sha256").update(sourceRef.objectId).digest("hex").slice(0, 16)}`,
+    label: `synthetic-source-${index + 1}`
+  }));
+  return fixtures.map((fixture) => {
+    const sourceRefs = sanitizeSourceRefs(fixture.input.sourceRefs);
+    return {
+      ...fixture,
+      // Caller-supplied fixture titles are not trusted provider input.
+      title: `Synthetic clarification fixture ${fixture.fixtureId}`,
+      input: {
+        ...fixture.input,
+        sourceRefs
+      },
+      expectedOutput: {
+        ...fixture.expectedOutput,
+        sourceRefs: sanitizeSourceRefs(fixture.expectedOutput.sourceRefs)
+      }
+    };
+  });
+}
+
+function evaluateExternalProbeApproval(
+  env: Record<string, string | undefined>
+): { allowed: boolean; errors: string[] } {
+  let approval;
+  try {
+    const businessId = env.CATERING_LLM_BUSINESS_ID?.trim() || env.CATERING_DEFAULT_BUSINESS_ID?.trim() || "local";
+    const model = env.CATERING_SYNTHETIC_LLM_MODEL?.trim() || "unknown";
+    const actualRegion = env.CATERING_LLM_PROCESSING_REGION?.trim() || "unknown";
+    const retentionPolicy = env.CATERING_LLM_RETENTION_POLICY?.trim() || "unknown";
+    const endpoint = env.CATERING_OPENAI_RESPONSES_URL?.trim() || "https://api.openai.com/v1/responses";
+    const trainingUse = env.CATERING_LLM_TRAINING_USE === "contractually_excluded"
+      ? "contractually_excluded"
+      : env.CATERING_LLM_TRAINING_USE === "allowed" ? "allowed" : "unknown";
+    const maximumEstimatedCostEur = Number(env.CATERING_LLM_MAX_ESTIMATED_COST_EUR ?? Number.MAX_VALUE);
+    const descriptor = createByoLlmProviderDescriptor({
+      providerKind: "openai",
+      dataLeavesInstallation: true,
+      providerModel: model,
+      capability: "structured_output",
+      actualRegion,
+      maximumEstimatedCostEur,
+      retentionPolicy,
+      trainingUse,
+      endpoint,
+      metadataVerified: Boolean(
+        businessId &&
+        env.CATERING_SYNTHETIC_LLM_MODEL?.trim() &&
+        env.CATERING_LLM_PROCESSING_REGION?.trim() &&
+        env.CATERING_LLM_MAX_ESTIMATED_COST_EUR?.trim() &&
+        env.CATERING_LLM_RETENTION_POLICY?.trim() &&
+        env.CATERING_LLM_TRAINING_USE === "contractually_excluded" &&
+        env.CATERING_OPENAI_RESPONSES_URL?.trim()
+      )
+    });
+    approval = loadByoLlmExternalProcessingApprovalFromEnv(env);
+
+    return evaluateByoLlmProviderDataGate({
+      provider: descriptor,
+      context: {
+        businessId,
+        dataClass: "synthetic_demo",
+        purpose: "clarification_draft"
+      },
+      approval
+    });
+  } catch {
+    return { allowed: false, errors: ["external provider metadata or approval is invalid"] };
+  }
+}
+
 export async function runLlmReadinessSyntheticLiveProbe(
   request: LlmReadinessSyntheticLiveProbeRequest
 ): Promise<LlmReadinessSyntheticLiveProbeResult> {
-  const fixtures = request.fixtures ?? llmReadinessEvalFixtures;
+  const fixtures = sanitizeSyntheticFixtures(request.fixtures ?? llmReadinessEvalFixtures);
   const fixture = findClarificationFixture(fixtures, request.fixtureId);
 
   if (!fixture) {
@@ -84,8 +168,37 @@ export async function runLlmReadinessSyntheticLiveProbe(
     };
   }
 
-  const transportOrError = request.transport ??
-    createOpenAiSyntheticLiveTransportFromEnv(request.env ?? {});
+  // The probe is an evaluation harness, not a second production ingestion
+  // path. A caller-supplied fixture must remain synthetic and draft-only; in
+  // particular, pseudonymized or confidential inputs must never reach its
+  // transport without the product use-case gate.
+  if (
+    fixture.input.policy.providerCalls !== "disabled" ||
+    fixture.input.policy.dataMode !== "synthetic_or_demo_only"
+  ) {
+    return {
+      ok: false,
+      errors: ["synthetic-live probe accepts only synthetic_demo fixtures"],
+      fixtureId: fixture.fixtureId
+    };
+  }
+
+  let transportOrError: LlmReadinessSyntheticLiveTransport | { errors: string[] };
+  if (request.transport) {
+    // A supplied transport is the in-process fake used by the evaluation
+    // harness. The CLI and product surfaces cannot inject this test seam.
+    transportOrError = request.transport;
+  } else {
+    const approvalDecision = evaluateExternalProbeApproval(request.env ?? {});
+    if (!approvalDecision.allowed) {
+      return {
+        ok: false,
+        errors: approvalDecision.errors,
+        fixtureId: fixture.fixtureId
+      };
+    }
+    transportOrError = createOpenAiSyntheticLiveTransportFromEnv(request.env ?? {});
+  }
 
   if (!("run" in transportOrError)) {
     return {
@@ -152,8 +265,10 @@ export async function runLlmReadinessSyntheticLiveProbe(
   }
 
   return {
-    ok: true,
-    errors: [],
+    // A persisted rejected run is still a valid audit artifact, but it is not
+    // a successful probe and must keep the mini-pilot fail-closed.
+    ok: response.ok,
+    errors: response.ok ? [] : response.errors,
     fixtureId: fixture.fixtureId,
     providerRunId,
     evaluation,

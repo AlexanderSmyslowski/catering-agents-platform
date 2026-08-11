@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,6 +14,7 @@ import {
   AuditLogStore,
   findLlmReadinessPromptArtifactByInputKind,
   llmReadinessContractVersion,
+  type ByoLlmDataClass,
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterRequest,
   type ProductionDraft
@@ -57,18 +58,69 @@ const sourceDocumentReader: SourceDocumentReader = {
   }
 };
 
+const externalProviderDescriptor = {
+  providerKind: "openai" as const,
+  dataLeavesInstallation: true,
+  providerModel: "mock-openai-production-document-test",
+  capability: "structured_output" as const,
+  actualRegion: "eu-test-1",
+  maximumEstimatedCostEur: 0.01,
+  retentionPolicy: "zero-retention",
+  trainingUse: "contractually_excluded" as const,
+  endpoint: "https://api.example.test/v1/responses",
+  metadataVerified: true
+};
+
+function writeExternalProcessingApproval(dataRoot: string): string {
+  const approvalPath = path.join(dataRoot, "external-processing-approval.json");
+  writeFileSync(approvalPath, JSON.stringify({
+    approvalId: "approval-local-production-document-test-v1",
+    businessId: "local",
+    providerKind: "openai",
+    allowedDataClasses: ["personal_confidential", "pseudonymized"],
+    allowedPurposes: ["production_draft_extraction", "production_draft_revision"],
+    allowedModels: [externalProviderDescriptor.providerModel],
+    allowedCapabilities: [externalProviderDescriptor.capability],
+    allowedRegions: [externalProviderDescriptor.actualRegion],
+    allowedEndpoints: [externalProviderDescriptor.endpoint],
+    maxCostEurPerCall: externalProviderDescriptor.maximumEstimatedCostEur,
+    retentionPolicy: externalProviderDescriptor.retentionPolicy,
+    trainingUse: externalProviderDescriptor.trainingUse,
+    legalBasisReference: "test-processing-approval",
+    approvedBy: "test-operator",
+    approvedAt: "2026-01-01T00:00:00.000Z",
+    expiresAt: "2027-01-01T00:00:00.000Z"
+  }), { mode: 0o600 });
+  chmodSync(approvalPath, 0o600);
+  return approvalPath;
+}
+
 function buildProductionApp(
   options: Parameters<typeof buildBaseProductionApp>[0] = {}
 ) {
+  const approvalPath = options.llmAdapter && options.dataRoot
+    ? writeExternalProcessingApproval(options.dataRoot)
+    : undefined;
   return buildBaseProductionApp({
     ...options,
+    ...(options.llmAdapter ? {
+      llmProviderDescriptor: externalProviderDescriptor
+    } : {}),
+    env: approvalPath
+      ? {
+          ...options.env,
+          CATERING_SYNTHETIC_LLM_SLICE: "1",
+          CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath
+        }
+      : options.env,
     sourceDocumentReader: options.sourceDocumentReader ?? sourceDocumentReader
   });
 }
 
 async function documentPayload(
   app: ReturnType<typeof buildProductionApp>,
-  text = documentText
+  text = documentText,
+  dataClass: ByoLlmDataClass = "personal_confidential"
 ) {
   const caseResponse = await app.inject({
     method: "POST",
@@ -88,7 +140,7 @@ async function documentPayload(
       mimeType: "text/plain",
       sizeBytes: content.byteLength,
       sha256: createHash("sha256").update(content).digest("hex"),
-      dataClass: "synthetic_demo",
+      dataClass,
       createdAt: "2026-06-14T09:00:00.000Z"
     },
     content
@@ -267,7 +319,7 @@ describe("ProductionDraft document BYO extraction", () => {
             documentId: payload.documentId,
             filename: "angebot-flying-buffet-anonymisiert.txt",
             mimeType: "text/plain",
-            dataClass: "synthetic_demo"
+            dataClass: "personal_confidential"
           })
         }),
         expect.objectContaining({
@@ -283,7 +335,7 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(await store.listPlans(localBusiness)).toHaveLength(0);
       expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
       expect(auditJson).toContain("production.production_draft_document_created");
-      expect(createdAudit?.details).toEqual({
+      expect(createdAudit?.details).toMatchObject({
         draftId: draft.draftId,
         caseId: payload.caseId,
         documentId: payload.documentId,
@@ -297,6 +349,14 @@ describe("ProductionDraft document BYO extraction", () => {
         outputTextHash: draft.source.outputHash,
         humanApprovalRequired: true,
         writesProductObject: false
+      });
+      expect(createdAudit?.details).toMatchObject({
+        policyProviderKind: "openai",
+        policyPurpose: "production_draft_extraction",
+        policyDataClass: "personal_confidential",
+        policySuccessClass: "success",
+        policyInputHash: expect.stringMatching(/^sha256:/),
+        policyOutputHash: expect.stringMatching(/^sha256:/)
       });
       expect(auditJson).not.toContain("VITELLO TONNATO");
       expect(auditJson).not.toContain("KOKOS-CHEESECAKE");
@@ -322,7 +382,7 @@ describe("ProductionDraft document BYO extraction", () => {
       store,
       llmAdapter: adapter,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_SYNTHETIC_LLM_SLICE: "1" }
     });
 
     try {
@@ -636,6 +696,25 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(retried.json<{ draft: ProductionDraft }>().draft).toEqual(persistedAfterAuditFailure[0]);
       expect(run).toHaveBeenCalledTimes(1);
       const persistedDraft = persistedAfterAuditFailure[0];
+      expect(persistedDraft.source.processingPolicy).toMatchObject({
+        approvalId: "approval-local-production-document-test-v1",
+        businessId: "local",
+        providerKind: "openai",
+        providerModel: externalProviderDescriptor.providerModel,
+        capability: externalProviderDescriptor.capability,
+        actualRegion: externalProviderDescriptor.actualRegion,
+        endpoint: "https://api.example.test",
+        maximumEstimatedCostEur: externalProviderDescriptor.maximumEstimatedCostEur,
+        retentionPolicy: externalProviderDescriptor.retentionPolicy,
+        trainingUse: "contractually_excluded",
+        purpose: "production_draft_extraction",
+        dataClass: "personal_confidential",
+        inputHash: expect.stringMatching(/^sha256:/),
+        sourceHash: expect.stringMatching(/^sha256:/),
+        projectionHash: expect.stringMatching(/^sha256:/),
+        outputHash: expect.stringMatching(/^sha256:/),
+        successClass: "success"
+      });
       expect(audits).toEqual([
         expect.objectContaining({
           entityId: persistedDraft.draftId,
@@ -652,11 +731,30 @@ describe("ProductionDraft document BYO extraction", () => {
             componentCount: persistedDraft.draftArtifacts.eventSpec?.menuPlan.length,
             openQuestionCount: persistedDraft.draftArtifacts.openQuestions?.length,
             outputTextHash: persistedDraft.source.outputHash,
+            policyApprovalId: "approval-local-production-document-test-v1",
+            policyBusinessId: "local",
+            policyProviderKind: "openai",
+            policyProviderModel: externalProviderDescriptor.providerModel,
+            policyCapability: externalProviderDescriptor.capability,
+            policyRegion: externalProviderDescriptor.actualRegion,
+            policyEndpoint: "https://api.example.test",
+            policyMaximumEstimatedCostEur: externalProviderDescriptor.maximumEstimatedCostEur,
+            policyRetentionPolicy: externalProviderDescriptor.retentionPolicy,
+            policyTrainingUse: "contractually_excluded",
+            policyPurpose: "production_draft_extraction",
+            policyDataClass: "personal_confidential",
+            policyInputHash: expect.stringMatching(/^sha256:/),
+            policySourceHash: expect.stringMatching(/^sha256:/),
+            policyProjectionHash: expect.stringMatching(/^sha256:/),
+            policyOutputHash: expect.stringMatching(/^sha256:/),
+            policySuccessClass: "success",
             humanApprovalRequired: true,
             writesProductObject: false
           }
         })
       ]);
+      expect(JSON.stringify(audits)).not.toContain("promptContext");
+      expect(JSON.stringify(audits)).not.toContain("providerResponse");
     } finally {
       await app.close();
     }
@@ -798,7 +896,7 @@ describe("ProductionDraft document BYO extraction", () => {
           mimeType: "text/plain",
           sizeBytes: correctedContent.byteLength,
           sha256: correctedSha256,
-          dataClass: "synthetic_demo",
+          dataClass: "personal_confidential",
           createdAt: "2026-06-14T10:00:00.000Z"
         },
         content: correctedContent
@@ -898,7 +996,7 @@ describe("ProductionDraft document BYO extraction", () => {
           mimeType: "text/plain",
           sizeBytes: correctedContent.byteLength,
           sha256: correctedSha256,
-          dataClass: "synthetic_demo",
+          dataClass: "personal_confidential",
           createdAt: "2026-06-14T10:00:00.000Z"
         },
         content: correctedContent
@@ -1035,7 +1133,7 @@ describe("ProductionDraft document BYO extraction", () => {
           mimeType: "text/plain",
           sizeBytes: correctedContent.byteLength,
           sha256: correctedSha256,
-          dataClass: "synthetic_demo",
+          dataClass: "personal_confidential",
           createdAt: "2026-06-15T09:00:00.000Z"
         },
         content: correctedContent
@@ -1333,6 +1431,38 @@ describe("ProductionDraft document BYO extraction", () => {
         expect.objectContaining({ artifactId: persistedAfterLoss!.draftId })
       ]);
       expect(revisionAudits).toHaveLength(1);
+      expect(persistedAfterLoss?.source.processingPolicy).toMatchObject({
+        approvalId: "approval-local-production-document-test-v1",
+        businessId: "local",
+        providerKind: "openai",
+        providerModel: externalProviderDescriptor.providerModel,
+        capability: externalProviderDescriptor.capability,
+        actualRegion: externalProviderDescriptor.actualRegion,
+        maximumEstimatedCostEur: externalProviderDescriptor.maximumEstimatedCostEur,
+        purpose: "production_draft_revision",
+        dataClass: "personal_confidential",
+        inputHash: expect.stringMatching(/^sha256:/),
+        sourceHash: expect.stringMatching(/^sha256:/),
+        projectionHash: expect.stringMatching(/^sha256:/),
+        outputHash: expect.stringMatching(/^sha256:/)
+      });
+      expect(revisionAudits[0]?.details).toMatchObject({
+        policyApprovalId: "approval-local-production-document-test-v1",
+        policyBusinessId: "local",
+        policyProviderKind: "openai",
+        policyProviderModel: externalProviderDescriptor.providerModel,
+        policyCapability: externalProviderDescriptor.capability,
+        policyRegion: externalProviderDescriptor.actualRegion,
+        policyMaximumEstimatedCostEur: externalProviderDescriptor.maximumEstimatedCostEur,
+        policyPurpose: "production_draft_revision",
+        policyDataClass: "personal_confidential",
+        policyInputHash: expect.stringMatching(/^sha256:/),
+        policySourceHash: expect.stringMatching(/^sha256:/),
+        policyProjectionHash: expect.stringMatching(/^sha256:/),
+        policyOutputHash: expect.stringMatching(/^sha256:/)
+      });
+      expect(JSON.stringify(revisionAudits)).not.toContain("promptContext");
+      expect(JSON.stringify(revisionAudits)).not.toContain("providerResponse");
       expect(caseAfterRetry).toMatchObject({
         status: "open",
         version: caseAfterLoss!.version + 1
@@ -1658,13 +1788,22 @@ describe("ProductionDraft document BYO extraction", () => {
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: await documentPayload(app)
+        payload: await documentPayload(app, documentText, "pseudonymized")
       });
-      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
+      const audits = await auditLog.listRecentFor({ businessId: "local" }, 10);
+      const auditJson = JSON.stringify(audits);
+      const createdAudit = audits.find((entry) =>
+        entry.action === "production.production_draft_document_created"
+      );
 
       expect(response.statusCode, response.body).toBe(201);
       expect(requests).toHaveLength(1);
       expect(requests[0].input.policy.dataMode).toBe("pseudonymized_approved");
+      expect(createdAudit?.details).toMatchObject({
+        policyProviderKind: "openai",
+        policyPurpose: "production_draft_extraction",
+        policyDataClass: "pseudonymized"
+      });
       expect(auditJson).not.toContain('"dataMode"');
     } finally {
       await app.close();
@@ -1842,10 +1981,22 @@ describe("ProductionDraft document BYO extraction", () => {
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-unavailable-production-draft-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => ({
+        ok: false,
+        errors: ["no synthetic fixture matches input"],
+        adapterId: "mock-unavailable-production-draft-adapter",
+        adapterMode: "synthetic_live",
+        promptSchemaId: request.promptSchemaId
+      })
+    };
     const app = buildProductionApp({
       dataRoot,
       store,
       auditLog,
+      llmAdapter: adapter,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });

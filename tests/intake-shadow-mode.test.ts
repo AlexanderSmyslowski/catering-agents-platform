@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -18,9 +18,45 @@ const trustedIntakeHeaders = {
 };
 
 const safeText = "Synthetische Demo: Business Lunch fuer 40 Personen als Buffet mit Tomatensuppe.";
+const externalProviderDescriptor = {
+  providerKind: "openai" as const,
+  dataLeavesInstallation: true,
+  providerModel: "mock-openai-intake-shadow-test",
+  capability: "structured_output" as const,
+  actualRegion: "eu-test-1",
+  maximumEstimatedCostEur: 0.01,
+  retentionPolicy: "zero-retention",
+  trainingUse: "contractually_excluded" as const,
+  endpoint: "https://api.example.test/v1/responses",
+  metadataVerified: true
+};
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-intake-shadow-mode-"));
+}
+
+function writeExternalProcessingApproval(dataRoot: string): string {
+  const approvalPath = path.join(dataRoot, "external-processing-approval.json");
+  writeFileSync(approvalPath, JSON.stringify({
+    approvalId: "approval-local-intake-shadow-test-v1",
+    businessId: "local",
+    providerKind: "openai",
+    allowedDataClasses: ["personal_confidential"],
+    allowedPurposes: ["intake_shadow_extraction"],
+    allowedModels: [externalProviderDescriptor.providerModel],
+    allowedCapabilities: [externalProviderDescriptor.capability],
+    allowedRegions: [externalProviderDescriptor.actualRegion],
+    allowedEndpoints: [externalProviderDescriptor.endpoint],
+    maxCostEurPerCall: externalProviderDescriptor.maximumEstimatedCostEur,
+    retentionPolicy: externalProviderDescriptor.retentionPolicy,
+    trainingUse: externalProviderDescriptor.trainingUse,
+    legalBasisReference: "test-processing-approval",
+    approvedBy: "test-operator",
+    approvedAt: "2026-01-01T00:00:00.000Z",
+    expiresAt: "2027-01-01T00:00:00.000Z"
+  }), { mode: 0o600 });
+  chmodSync(approvalPath, 0o600);
+  return approvalPath;
 }
 
 function extractionResponse(request: LlmReadinessProviderAdapterRequest) {
@@ -78,8 +114,12 @@ describe("intake shadow mode", () => {
       store,
       auditLog,
       llmAdapter: adapter,
+      llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: {
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalProcessingApproval(dataRoot)
+      }
     });
 
     try {
@@ -157,8 +197,12 @@ describe("intake shadow mode", () => {
       rootDir: dataRoot,
       store,
       llmAdapter: adapter,
+      llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: {
+        CATERING_SYNTHETIC_LLM_SLICE: "1",
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalProcessingApproval(dataRoot)
+      }
     });
 
     try {

@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  OpenAiSyntheticLiveTransport,
   allowedByoLlmDraftUseCaseByType,
   byoLlmBoundaryPolicy,
   byoLlmProviderBoundaryByKind,
@@ -10,6 +9,7 @@ import {
   type LlmReadinessModelInput,
   type LlmReadinessModelOutputCandidate
 } from "@catering/shared-core";
+import { OpenAiSyntheticLiveTransport } from "../shared-core/src/llm-readiness-openai-transport.js";
 
 function cloneSyntheticInput(): LlmReadinessModelInput {
   return structuredClone(llmReadinessEvalFixtures[0].input) as LlmReadinessModelInput;

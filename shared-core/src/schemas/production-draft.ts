@@ -35,7 +35,7 @@ export const productionDraftSchema = {
           }
         }
       }
-    },
+    }
   ],
   properties: {
     schemaVersion: { type: "string", maxLength: 32 },
@@ -81,7 +81,56 @@ export const productionDraftSchema = {
         modelId: { type: "string", maxLength: 160 },
         inputHash: { type: "string", maxLength: 160 },
         outputHash: { type: "string", maxLength: 160 },
-        runId: { type: "string", maxLength: 160 }
+        runId: { type: "string", maxLength: 160 },
+        dataClass: { enum: ["synthetic_demo", "anonymized", "pseudonymized", "private_business", "personal_confidential"] },
+        processingPolicy: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "businessId",
+            "providerKind",
+            "providerModel",
+            "capability",
+            "actualRegion",
+            "endpoint",
+            "maximumEstimatedCostEur",
+            "retentionPolicy",
+            "trainingUse",
+            "purpose",
+            "dataClass",
+            "inputHash",
+            "sourceHash",
+            "projectionHash",
+            "successClass"
+          ],
+          properties: {
+            approvalId: { type: "string", maxLength: 160 },
+            businessId: { type: "string", maxLength: 64 },
+            providerKind: { enum: ["fixture", "openai", "codex_cli", "custom_byo_provider"] },
+            providerModel: { type: "string", maxLength: 160 },
+            capability: { enum: ["structured_output", "document_understanding", "text_generation"] },
+            actualRegion: { type: "string", maxLength: 120 },
+            endpoint: { type: "string", maxLength: 500 },
+            maximumEstimatedCostEur: { type: "number", minimum: 0 },
+            retentionPolicy: { type: "string", maxLength: 240 },
+            trainingUse: { enum: ["contractually_excluded", "allowed", "unknown"] },
+            purpose: {
+              enum: [
+                "production_draft_extraction",
+                "production_draft_revision",
+                "clarification_draft",
+                "intake_shadow_extraction",
+                "offer_package_classification"
+              ]
+            },
+            dataClass: { enum: ["synthetic_demo", "anonymized", "pseudonymized", "private_business", "personal_confidential"] },
+            inputHash: { type: "string", maxLength: 160 },
+            sourceHash: { type: "string", maxLength: 160 },
+            projectionHash: { type: "string", maxLength: 160 },
+            outputHash: { type: "string", maxLength: 160 },
+            successClass: { enum: ["success", "policy_rejected", "provider_rejected"] }
+          }
+        }
       }
     },
     guardrails: {

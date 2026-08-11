@@ -2,6 +2,7 @@ import { runLlmReadinessSyntheticLivePreflight } from "@catering/shared-core";
 import {
   parseSyntheticLiveProbeCliArgs,
   runSyntheticLiveProbeCli,
+  sanitizeSyntheticLiveProbeCliResult,
   shouldFailSyntheticLiveProbeProcess,
   type SyntheticLiveProbeCliOptions
 } from "./run-synthetic-live-llm-readiness.js";
@@ -109,7 +110,18 @@ export async function main(): Promise<void> {
     env: process.env
   });
 
-  console.log(JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({
+    ...result,
+    errors: result.errors.map((error) => (
+      error === "mini-pilot policy is not fully marked as ready" ||
+      error.startsWith("miniPilot.") ||
+      error.startsWith("synthetic live slice") ||
+      error.startsWith("CATERING_")
+        ? error
+        : "synthetic-live mini-pilot check failed"
+    )),
+    probe: result.probe ? sanitizeSyntheticLiveProbeCliResult(result.probe) : undefined
+  }, null, 2));
 
   if (
     !result.ok ||

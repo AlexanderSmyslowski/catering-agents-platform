@@ -13,6 +13,7 @@ import {
   type LlmReadinessPromptSchemaRegistryEntry
 } from "./llm-readiness-prompt-schema-registry.js";
 import { validateLlmReadinessEvalOutputCandidateMatch } from "./llm-readiness-eval-harness.js";
+import type { ByoLlmProcessingPolicyMetadata } from "./byo-llm-provider-data-policy.js";
 
 export type LlmReadinessProviderAdapterMode = "fixture_only" | "synthetic_live";
 
@@ -38,6 +39,7 @@ export interface LlmReadinessProviderAdapterResponse {
   providerId?: string;
   providerRequestId?: string;
   usage?: LlmReadinessProviderUsage;
+  processingPolicy?: ByoLlmProcessingPolicyMetadata;
   outputCandidate?: LlmReadinessModelOutputCandidate;
 }
 
@@ -101,11 +103,29 @@ function buildInvalidResponse(
   };
 }
 
+function freezeFixtureValue<T>(value: T): T {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
+  for (const key of Reflect.ownKeys(value)) {
+    freezeFixtureValue((value as Record<PropertyKey, unknown>)[key]);
+  }
+  return Object.freeze(value);
+}
+
 export class FixtureOnlyLlmReadinessProviderAdapter implements LlmReadinessProviderAdapter {
   readonly adapterId = "llm-readiness-fixture-provider-adapter" as const;
   readonly adapterMode = "fixture_only" as const;
+  private readonly fixtures: readonly LlmReadinessEvalFixture[];
 
-  constructor(private readonly fixtures: readonly LlmReadinessEvalFixture[] = llmReadinessEvalFixtures) {}
+  constructor(fixtures: readonly LlmReadinessEvalFixture[] = llmReadinessEvalFixtures) {
+    this.fixtures = freezeFixtureValue(structuredClone(fixtures));
+    const intrinsicRun = this.run.bind(this);
+    Object.defineProperty(this, "run", {
+      configurable: false,
+      value: intrinsicRun,
+      writable: false
+    });
+    Object.freeze(this);
+  }
 
   async run(request: LlmReadinessProviderAdapterRequest): Promise<LlmReadinessProviderAdapterResponse> {
     const inputValidation = validateLlmReadinessModelInputCandidate(request.input);

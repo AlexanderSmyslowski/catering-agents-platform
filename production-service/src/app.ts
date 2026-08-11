@@ -2,13 +2,16 @@ import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import {
   AuditLogStore,
-  buildByoLlmAdapterFromEnv,
+  BoundaryGuardedLlmAdapter,
+  buildBoundaryGuardedLlmAdapterFromEnv,
+  loadByoLlmExternalProcessingApprovalFromEnv,
   createTrustedActorResolver,
   getDemoProductionSpecs,
   hostedMultiBusinessReady,
   internalRecipes,
   isDevAuthEnabled,
   resolveMinimalMvpRoleFromTrustedActor,
+  type ByoLlmProviderDescriptor,
   type LlmReadinessProviderAdapter,
   type LlmReadinessDataMode,
   type Queryable,
@@ -47,6 +50,7 @@ export interface ProductionAppOptions {
   auditLog?: AuditLogStore;
   llmAdapter?: LlmReadinessProviderAdapter;
   buildLlmAdapter?: () => LlmReadinessProviderAdapter;
+  llmProviderDescriptor?: ByoLlmProviderDescriptor;
   dataRoot?: string;
   databaseUrl?: string;
   pgPool?: Queryable;
@@ -161,11 +165,18 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
-  const buildLlmAdapter =
-    options.buildLlmAdapter ??
-    (options.llmAdapter
-      ? () => options.llmAdapter as LlmReadinessProviderAdapter
-      : () => buildByoLlmAdapterFromEnv(env));
+  const injectedAdapter = options.buildLlmAdapter ?? (options.llmAdapter ? () => options.llmAdapter as LlmReadinessProviderAdapter : undefined);
+  if (injectedAdapter && !options.llmProviderDescriptor) {
+    throw new Error("Injected BYO LLM adapters require an explicit server-owned llmProviderDescriptor.");
+  }
+  const buildLlmAdapter = (): BoundaryGuardedLlmAdapter => injectedAdapter && options.llmProviderDescriptor
+    ? new BoundaryGuardedLlmAdapter({
+        descriptor: options.llmProviderDescriptor,
+        delegate: injectedAdapter(),
+        approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env),
+        env
+      })
+    : buildBoundaryGuardedLlmAdapterFromEnv(env);
   const handoffReader = options.handoffReader ?? (env.CATERING_OFFER_SERVICE_URL
     ? new HttpProductionHandoffReader({ offerServiceUrl: env.CATERING_OFFER_SERVICE_URL, trustedServiceSecret: trustedActorSecret })
     : undefined);

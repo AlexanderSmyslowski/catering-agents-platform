@@ -1,6 +1,8 @@
 import type { DocumentIngestionStatus, DocumentIngestionWarning } from "./document-ingestion.js";
 import type { MinimalMvpRole, TrustedActor } from "./access-control.js";
 import type { BusinessId } from "./business-context.js";
+import type { ByoLlmDataClass } from "./data-classification.js";
+import type { ByoLlmProcessingPolicyMetadata } from "./byo-llm-provider-data-policy.js";
 
 export const SCHEMA_VERSION = "1.0.0";
 
@@ -378,6 +380,12 @@ export interface ProductionDraftSource {
   inputHash?: string;
   outputHash?: string;
   runId?: string;
+  dataClass?: ByoLlmDataClass;
+  /**
+   * Safe provider-processing provenance survives retries so audit repair never
+   * needs to retain a prompt or raw model response alongside the draft.
+   */
+  processingPolicy?: ByoLlmProcessingPolicyMetadata;
 }
 
 export interface ProductionDraftGuardrails {

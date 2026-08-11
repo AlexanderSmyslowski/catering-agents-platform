@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
-  buildByoLlmAdapterFromEnv,
+  buildBoundaryGuardedLlmAdapterFromEnv,
   buildOfferPackageClassificationInput,
   buildOfferPackageClassificationPromptContext,
   buildOfferPackagePilotReport,
@@ -9,7 +9,7 @@ import {
   loadCuratedOfferPackages,
   parseOfferPackageClassificationDraft,
   pseudonymizeOfferText,
-  type LlmReadinessProviderAdapter,
+  type BoundaryGuardedLlmAdapter,
   type LlmReadinessProviderAdapterResponse,
   type OfferPackageClassificationPrediction
 } from "@catering/shared-core";
@@ -173,13 +173,16 @@ function readSources(sourceDir: string, limit: number, sourceIds?: readonly stri
   return filtered;
 }
 
-function adapterForModel(model: string, env: Record<string, string | undefined>): LlmReadinessProviderAdapter {
-  return buildByoLlmAdapterFromEnv({
+function adapterForModel(model: string, env: Record<string, string | undefined>): BoundaryGuardedLlmAdapter {
+  const providerEnv = {
     ...env,
     CATERING_LLM_PROVIDER: env.CATERING_LLM_PROVIDER ?? "openai",
     CATERING_LLM_MODEL: model,
-    CATERING_SYNTHETIC_LLM_SLICE: "1"
-  }, {
+    // The batch command must not manufacture the provider opt-in. A live run
+    // is allowed only when the server-owned environment explicitly enables it.
+    CATERING_SYNTHETIC_LLM_SLICE: env.CATERING_SYNTHETIC_LLM_SLICE
+  };
+  return buildBoundaryGuardedLlmAdapterFromEnv(providerEnv, {
     providerRunIdPrefix: "offer-package-batch-pilot"
   });
 }
@@ -263,9 +266,10 @@ function assertBudgetBeforeNextRequest(
 async function classifySource(input: {
   source: SourceText;
   model: string;
-  adapter?: LlmReadinessProviderAdapter;
+  adapter?: BoundaryGuardedLlmAdapter;
   allowedPackageIds: readonly string[];
   dryRun: boolean;
+  businessId: string;
 }): Promise<OfferPackageClassificationPrediction> {
   const pseudonymized = pseudonymizeOfferText(input.source.text);
   const sourceHash = pseudonymized.sourceHash;
@@ -300,13 +304,19 @@ async function classifySource(input: {
     sourceHash,
     sourceId: `${input.source.sourceId}-${input.model.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`
   });
-  const adapterResponse: LlmReadinessProviderAdapterResponse = await input.adapter!.run({
+  const adapterResponse: LlmReadinessProviderAdapterResponse = await input.adapter!.execute({
     input: readinessInput,
     promptSchemaId: promptSchema.promptSchemaId,
     promptContext: buildOfferPackageClassificationPromptContext({
       pseudonymizedText: pseudonymized.text,
       packages: loadCuratedOfferPackages()
     })
+  }, {
+    businessId: input.businessId,
+    // A text transform alone is not an authorization record. Until a reviewed
+    // derived-source manifest exists, batch input remains conservatively private.
+    dataClass: "personal_confidential",
+    purpose: "offer_package_classification"
   });
 
   const parsed = adapterResponse.outputCandidate
@@ -320,6 +330,7 @@ async function classifySource(input: {
       providerId: adapterResponse.providerId,
       providerRequestId: adapterResponse.providerRequestId,
       usage: adapterResponse.usage,
+      processingPolicy: adapterResponse.processingPolicy,
       errors: [...new Set([...adapterResponse.errors, ...parsed.errors])]
     };
   }
@@ -333,6 +344,7 @@ async function classifySource(input: {
     providerId: adapterResponse.providerId,
     providerRequestId: adapterResponse.providerRequestId,
     usage: adapterResponse.usage,
+    processingPolicy: adapterResponse.processingPolicy,
     reviewFlags: buildLocalReviewFlags({
       packageId: parsed.draft.packageId,
       pseudonymizedText: pseudonymized.text
@@ -354,7 +366,7 @@ export async function runOfferPackageBatchPilotCli(
 
   const packages = loadCuratedOfferPackages();
   const packageIds = packages.map((item) => item.id);
-  const adapters = new Map<string, LlmReadinessProviderAdapter>();
+  const adapters = new Map<string, BoundaryGuardedLlmAdapter>();
   const predictions: OfferPackageClassificationPrediction[] = [];
 
   for (const source of sources) {
@@ -373,7 +385,8 @@ export async function runOfferPackageBatchPilotCli(
         model,
         adapter,
         allowedPackageIds: packageIds,
-        dryRun: options.dryRun
+        dryRun: options.dryRun,
+        businessId: env.CATERING_OFFER_BATCH_BUSINESS_ID ?? "local"
       }));
       writeReportCheckpoint({
         outputPath: options.outputPath,
