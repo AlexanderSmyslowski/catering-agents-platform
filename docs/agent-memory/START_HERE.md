@@ -21,11 +21,12 @@ Dies ist der kanonische Einstiegspunkt fuer neue Chatfenster, Hermes Agent, Code
 Damit neue Sessions den konsolidierten Stand ohne Umwege finden. Die fuehrende Root-Memory-Datei ist `memory.md`.
 
 ## Aktueller Kurzstand
-- Governance-Pfad bis Stufe 6c konsolidiert
-- Stufe 6c als kleiner read-only UI-/Transparenzschritt umgesetzt
-- keine neue Fachlogik, keine neue API, keine neue Persistenz, keine neue Freigabelogik
+- Stage-A-Kontrollpunkt bestanden; `origin/main` steht auf `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`
+- Aufgaben 1 bis 7 sind zusammengeführt; PR 596 und PR 597 sind abgeschlossen
+- Externe KI-Aufrufe bleiben ohne exakt passende serverseitige Freigabe geschlossen; Fixture-Betrieb bleibt lokal
+- Aufgabe 8 ist nicht begonnen; Aufgaben 8 bis 12 benötigen einen ausdrücklichen Supervisor-Auftrag
 - aktuelle Detailhistorie liegt unter `docs/agent-memory/`
-- `memory_current.md` bleibt als Referenzdatei erhalten
+- `memory_current.md` bleibt als historische Referenzdatei erhalten
 
 ## Hinweis fuer neue Agenten
 Beginne mit dem Central-Agent-Data-Hub-Startbefehl und danach mit `memory.md`.
