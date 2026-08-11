@@ -3,7 +3,9 @@ import multipart from "@fastify/multipart";
 import { createHash, randomUUID } from "node:crypto";
 import {
   AuditLogStore,
-  buildByoLlmAdapterFromEnv,
+  BoundaryGuardedLlmAdapter,
+  buildBoundaryGuardedLlmAdapterFromEnv,
+  loadByoLlmExternalProcessingApprovalFromEnv,
   createTrustedActorResolver,
   type CollectionStorageOptions,
   createLlmReadinessAgentAuditRecord,
@@ -21,6 +23,7 @@ import {
   validateAcceptedEventSpec,
   validateEventRequest,
   type LlmReadinessModelOutputCandidate,
+  type ByoLlmProviderDescriptor,
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterResponse,
   type AcceptedEventSpec,
@@ -162,6 +165,29 @@ function parseIntakeShadowSafetyMode(value: unknown): IntakeShadowSafetyMode | u
   return typeof value === "string" && intakeShadowSafetyModes.has(value as IntakeShadowSafetyMode)
     ? value as IntakeShadowSafetyMode
     : undefined;
+}
+
+function processingPolicyAuditDetails(policy: LlmReadinessProviderAdapterResponse["processingPolicy"]): Record<string, string | number | boolean | null | undefined> {
+  if (!policy) return { policySuccessClass: "missing" };
+  return {
+    policyApprovalId: policy.approvalId,
+    policyBusinessId: policy.businessId,
+    policyProviderKind: policy.providerKind,
+    policyProviderModel: policy.providerModel,
+    policyCapability: policy.capability,
+    policyActualRegion: policy.actualRegion,
+    policyEndpoint: policy.endpoint,
+    policyMaximumEstimatedCostEur: policy.maximumEstimatedCostEur,
+    policyRetentionPolicy: policy.retentionPolicy,
+    policyTrainingUse: policy.trainingUse,
+    policyPurpose: policy.purpose,
+    policyDataClass: policy.dataClass,
+    policySourceHash: policy.sourceHash,
+    policyProjectionHash: policy.projectionHash,
+    policyInputHash: policy.inputHash,
+    policyOutputHash: policy.outputHash,
+    policySuccessClass: policy.successClass
+  };
 }
 
 function parseIntakeShadowExtraction(outputCandidate?: LlmReadinessModelOutputCandidate): {
@@ -414,6 +440,7 @@ export interface IntakeAppOptions extends CollectionStorageOptions {
   sourceDocumentStore?: SourceDocumentStore;
   auditLog?: AuditLogStore;
   llmAdapter?: LlmReadinessProviderAdapter;
+  llmProviderDescriptor?: ByoLlmProviderDescriptor;
   trustedActorSecret?: string;
   env?: Record<string, string | undefined>;
 }
@@ -473,6 +500,9 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool
     });
+  if (options.llmAdapter && !options.llmProviderDescriptor) {
+    throw new Error("Injected BYO LLM adapters require an explicit server-owned llmProviderDescriptor.");
+  }
   const app = Fastify({
     logger: false,
     bodyLimit: DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes
@@ -636,18 +666,30 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       promptContext: text
     };
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-    let adapter: LlmReadinessProviderAdapter;
+    let adapter: BoundaryGuardedLlmAdapter;
     try {
-      adapter = options.llmAdapter ?? buildByoLlmAdapterFromEnv(env, {
-        providerRunIdPrefix: "intake-shadow"
-      });
+      adapter = options.llmAdapter && options.llmProviderDescriptor
+        ? new BoundaryGuardedLlmAdapter({
+            descriptor: options.llmProviderDescriptor,
+            delegate: options.llmAdapter,
+            approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env)
+          })
+        : buildBoundaryGuardedLlmAdapterFromEnv(env, {
+            providerRunIdPrefix: "intake-shadow"
+          });
     } catch (error) {
       return reply.code(500).send({
         message: error instanceof Error ? error.message : "BYO-LLM-Adapter konnte nicht gestartet werden."
       });
     }
 
-    const adapterResponse: LlmReadinessProviderAdapterResponse | undefined = await adapter.run(adapterRequest)
+    const adapterResponse: LlmReadinessProviderAdapterResponse | undefined = await adapter.execute(adapterRequest, {
+      businessId: actor.businessId,
+      // safetyMode is an evaluation label supplied by the caller, never a
+      // provider authorization classification for this legacy text endpoint.
+      dataClass: "personal_confidential",
+      purpose: "intake_shadow_extraction"
+    })
       .catch(async (error: unknown) => {
         await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "intake.shadow_extraction_rejected",
@@ -697,6 +739,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
           adapterMode: adapterResponse.adapterMode,
           providerId: adapterResponse.providerId,
           providerRequestId: adapterResponse.providerRequestId,
+          ...processingPolicyAuditDetails(adapterResponse.processingPolicy),
           errorCount: responseErrors.length
         }
       });
@@ -760,6 +803,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
         differenceCount: differences.filter((difference) => !difference.matches).length,
         providerId: adapterResponse.providerId,
         providerRequestId: adapterResponse.providerRequestId,
+        ...processingPolicyAuditDetails(adapterResponse.processingPolicy),
         writesProductObject: false
       }
     });

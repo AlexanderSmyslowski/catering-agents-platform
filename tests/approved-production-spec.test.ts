@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,6 +34,42 @@ const headers = {
   "x-catering-trusted-secret": TRUSTED_SECRET
 };
 const roots: string[] = [];
+const externalTestProviderDescriptor = {
+  providerKind: "openai" as const,
+  dataLeavesInstallation: true,
+  providerModel: "approved-production-spec-test-model",
+  capability: "structured_output" as const,
+  actualRegion: "test-region",
+  maximumEstimatedCostEur: 0,
+  retentionPolicy: "test-zero-retention",
+  trainingUse: "contractually_excluded" as const,
+  endpoint: "https://provider.test/approved-production-spec",
+  metadataVerified: true
+};
+
+function writeProcessingApproval(rootDir: string): string {
+  const approvalPath = path.join(rootDir, "llm-processing-approval.json");
+  writeFileSync(approvalPath, JSON.stringify({
+    approvalId: "approved-production-spec-test-approval",
+    businessId: "local",
+    providerKind: "openai",
+    allowedDataClasses: ["personal_confidential"],
+    allowedPurposes: ["production_draft_revision"],
+    allowedModels: [externalTestProviderDescriptor.providerModel],
+    allowedCapabilities: [externalTestProviderDescriptor.capability],
+    allowedRegions: [externalTestProviderDescriptor.actualRegion],
+    allowedEndpoints: [externalTestProviderDescriptor.endpoint],
+    maxCostEurPerCall: 0,
+    retentionPolicy: externalTestProviderDescriptor.retentionPolicy,
+    trainingUse: "contractually_excluded",
+    legalBasisReference: "test-only",
+    approvedBy: "test-operator",
+    approvedAt: "2026-01-01T00:00:00.000Z",
+    expiresAt: "2099-12-31T00:00:00.000Z"
+  }));
+  chmodSync(approvalPath, 0o600);
+  return approvalPath;
+}
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -179,6 +215,7 @@ function buildHarness(options: {
   const repository = new InMemoryRecipeRepository({ rootDir });
   const intakeStore = new InMemoryIntakeRecordsPort();
   const auditLog = new AuditLogStore({ rootDir });
+  const approvalPath = options.llmAdapter ? writeProcessingApproval(rootDir) : undefined;
   const app = buildProductionApp({
     dataRoot: rootDir,
     store,
@@ -186,10 +223,11 @@ function buildHarness(options: {
     intakeRecords: intakeStore,
     auditLog,
     llmAdapter: options.llmAdapter,
+    llmProviderDescriptor: options.llmAdapter ? externalTestProviderDescriptor : undefined,
     trustedActorSecret: TRUSTED_SECRET,
     productionApplyFaultInjector: options.applyFaultInjector,
     productionDecisionFaultInjector: options.decisionFaultInjector,
-    env: {}
+    env: approvalPath ? { CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath } : {}
   });
   return { app, auditLog, intakeStore, repository, store };
 }

@@ -2,8 +2,22 @@ export * from "./access-control.js";
 export * from "./approval-request.js";
 export * from "./audit-log.js";
 export * from "./byo-llm-boundary.js";
+export * from "./byo-llm-provider-data-policy.js";
 export * from "./business-context.js";
-export * from "./byo-llm-runtime.js";
+// Applications receive a boundary-guarded adapter from the public surface.
+// The raw transport factory stays module-private to low-level transport tests.
+export {
+  BoundaryGuardedLlmAdapter,
+  buildBoundaryGuardedLlmAdapterFromEnv,
+  byoLlmProviderDescriptorFromEnv,
+  createBoundaryGuardedLlmAdapter,
+  guardByoLlmAdapterForEnv
+} from "./byo-llm-runtime.js";
+export type {
+  BoundaryGuardedLlmAdapterOptions,
+  BuildByoLlmAdapterOptions,
+  ByoLlmRuntimeProvider
+} from "./byo-llm-runtime.js";
 export * from "./case-contracts.js";
 export * from "./conversation-projection.js";
 export * from "./data-classification.js";
@@ -18,7 +32,6 @@ export * from "./llm-readiness-agent-audit.js";
 export * from "./llm-readiness-draft-registry.js";
 export * from "./llm-readiness-eval-harness.js";
 export * from "./llm-readiness-mini-pilot-policy.js";
-export * from "./llm-readiness-openai-transport.js";
 export * from "./llm-readiness-prompt-artifacts.js";
 export * from "./llm-readiness-prompt-schema-registry.js";
 export * from "./llm-readiness-provider-adapter.js";

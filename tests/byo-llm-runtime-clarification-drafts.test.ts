@@ -1,12 +1,12 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildProductionApp, ProductionStore, type ClarificationDraft } from "@catering/production-service";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
+import { buildByoLlmAdapterFromEnv } from "../shared-core/src/byo-llm-runtime.js";
 import {
   AuditLogStore,
-  buildByoLlmAdapterFromEnv,
   buildProductionClarificationQuestions,
   llmReadinessContractVersion,
   llmReadinessEvalFixtures,
@@ -23,9 +23,45 @@ const trustedProductionHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
   "x-catering-trusted-secret": TRUSTED_SECRET
 };
+const externalProviderDescriptor = {
+  providerKind: "openai" as const,
+  dataLeavesInstallation: true,
+  providerModel: "clarification-draft-test-model",
+  capability: "structured_output" as const,
+  actualRegion: "test-region",
+  maximumEstimatedCostEur: 0,
+  retentionPolicy: "test-zero-retention",
+  trainingUse: "contractually_excluded" as const,
+  endpoint: "https://provider.test/clarification-draft",
+  metadataVerified: true
+};
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-byo-llm-drafts-"));
+}
+
+function writeExternalApproval(dataRoot: string): string {
+  const approvalPath = path.join(dataRoot, "clarification-draft-approval.json");
+  writeFileSync(approvalPath, JSON.stringify({
+    approvalId: "approval-local-clarification-draft-test",
+    businessId: "local",
+    providerKind: "openai",
+    allowedDataClasses: ["personal_confidential"],
+    allowedPurposes: ["clarification_draft"],
+    allowedModels: [externalProviderDescriptor.providerModel],
+    allowedCapabilities: [externalProviderDescriptor.capability],
+    allowedRegions: [externalProviderDescriptor.actualRegion],
+    allowedEndpoints: [externalProviderDescriptor.endpoint],
+    maxCostEurPerCall: 0,
+    retentionPolicy: externalProviderDescriptor.retentionPolicy,
+    trainingUse: "contractually_excluded",
+    legalBasisReference: "test-only",
+    approvedBy: "test-suite",
+    approvedAt: "2026-08-01T00:00:00.000Z",
+    expiresAt: "2099-12-31T00:00:00.000Z"
+  }));
+  chmodSync(approvalPath, 0o600);
+  return approvalPath;
 }
 
 function fixtureSpec(): AcceptedEventSpec {
@@ -232,13 +268,12 @@ describe("BYO LLM runtime clarification drafts", () => {
     await seedFixtureSpec(intakeStore);
     const invalidAdapter: LlmReadinessProviderAdapter = {
       adapterId: "invalid-fixture-adapter",
-      adapterMode: "fixture_only",
+      adapterMode: "synthetic_live",
       run: async (request) => ({
         ok: true,
         errors: [],
         adapterId: "invalid-fixture-adapter",
-        adapterMode: "fixture_only",
-        fixtureId: "llm-eval-synthetic-coffee-break-missing-attendees",
+        adapterMode: "synthetic_live",
         promptSchemaId: request.promptSchemaId,
         outputCandidate: {
           contractVersion: llmReadinessContractVersion,
@@ -259,8 +294,9 @@ describe("BYO LLM runtime clarification drafts", () => {
       intakeRecords: intakeStore,
       store,
       llmAdapter: invalidAdapter,
+      llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalApproval(dataRoot) }
     });
 
     try {
@@ -300,8 +336,9 @@ describe("BYO LLM runtime clarification drafts", () => {
       store,
       auditLog,
       llmAdapter: throwingAdapter,
+      llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalApproval(dataRoot) }
     });
 
     try {
@@ -314,7 +351,7 @@ describe("BYO LLM runtime clarification drafts", () => {
       const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 5));
 
       expect(response.statusCode).toBe(422);
-      expect(response.json<{ errors: string[] }>().errors).toContain("BYO-LLM-Aufruf ist fehlgeschlagen.");
+      expect(response.json<{ errors: string[] }>().errors).toContain("BYO LLM provider call failed");
       expect(await store.listClarificationDrafts({ businessId: "local" }, fixtureSpecId)).toEqual([]);
       expect(responseBody).not.toContain("raw prompt");
       expect(responseBody).not.toContain("provider response");

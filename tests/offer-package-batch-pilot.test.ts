@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -17,6 +17,30 @@ import {
 
 function tempRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-offer-package-pilot-"));
+}
+
+function writeProcessingApproval(root: string, endpoint: string): string {
+  const approvalPath = path.join(root, "llm-processing-approval.json");
+  writeFileSync(approvalPath, JSON.stringify({
+    approvalId: "offer-batch-test-approval",
+    businessId: "local",
+    providerKind: "openai",
+    allowedDataClasses: ["personal_confidential"],
+    allowedPurposes: ["offer_package_classification"],
+    allowedModels: ["gpt-5.5"],
+    allowedCapabilities: ["structured_output"],
+    allowedRegions: ["eu"],
+    allowedEndpoints: [endpoint],
+    maxCostEurPerCall: 1,
+    retentionPolicy: "zero-retention",
+    trainingUse: "contractually_excluded",
+    legalBasisReference: "test-policy",
+    approvedBy: "test-operator",
+    approvedAt: "2020-01-01T00:00:00.000Z",
+    expiresAt: "2099-12-31T00:00:00.000Z"
+  }));
+  chmodSync(approvalPath, 0o600);
+  return approvalPath;
 }
 
 async function listen(server: Server): Promise<string> {
@@ -400,6 +424,7 @@ describe("offer package batch pilot", () => {
       }));
     });
     const endpoint = await listen(server);
+    const approvalPath = writeProcessingApproval(root, endpoint);
 
     try {
       await expect(runOfferPackageBatchPilotCli([
@@ -415,8 +440,14 @@ describe("offer package batch pilot", () => {
         CATERING_LLM_PROVIDER: "openai",
         OPENAI_API_KEY: "sk-test",
         CATERING_LLM_BASE_URL: endpoint,
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath,
+        CATERING_LLM_PROVIDER_CAPABILITY: "structured_output",
+        CATERING_LLM_PROCESSING_REGION: "eu",
+        CATERING_LLM_MAX_ESTIMATED_COST_EUR: "0.1",
+        CATERING_LLM_RETENTION_POLICY: "zero-retention",
+        CATERING_LLM_TRAINING_USE: "contractually_excluded",
         CATERING_OPENAI_TIMEOUT_MS: "1000"
-      })).rejects.toThrow("reached --max-eur");
+      })).rejects.toThrow("Estimated spend 0.002000 EUR reached --max-eur 0.000001");
     } finally {
       await close(server);
     }
@@ -481,6 +512,7 @@ describe("offer package batch pilot", () => {
       _request.on("close", () => response.destroy());
     });
     const endpoint = await listen(server);
+    const approvalPath = writeProcessingApproval(root, endpoint);
 
     try {
       await expect(runOfferPackageBatchPilotCli([
@@ -493,6 +525,12 @@ describe("offer package batch pilot", () => {
         CATERING_LLM_PROVIDER: "openai",
         OPENAI_API_KEY: "sk-test",
         CATERING_LLM_BASE_URL: endpoint,
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath,
+        CATERING_LLM_PROVIDER_CAPABILITY: "structured_output",
+        CATERING_LLM_PROCESSING_REGION: "eu",
+        CATERING_LLM_MAX_ESTIMATED_COST_EUR: "0.1",
+        CATERING_LLM_RETENTION_POLICY: "zero-retention",
+        CATERING_LLM_TRAINING_USE: "contractually_excluded",
         CATERING_OPENAI_TIMEOUT_MS: "250",
         CATERING_OFFER_BATCH_INPUT_EUR_PER_1M_TOKENS: "0",
         CATERING_OFFER_BATCH_OUTPUT_EUR_PER_1M_TOKENS: "0"
@@ -509,6 +547,7 @@ describe("offer package batch pilot", () => {
     };
 
     expect(report.requestCount).toBe(2);
+    expect(requestCount).toBe(2);
     expect(report.providerRequestCount).toBe(2);
     expect(report.predictions).toHaveLength(2);
     expect(report.predictions[1]?.errors).toContain("OpenAI responses request timed out after 250ms");

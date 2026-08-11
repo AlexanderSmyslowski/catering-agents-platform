@@ -6,6 +6,7 @@ import {
 import {
   type LlmReadinessProviderUsage
 } from "../llm-readiness-provider-adapter.js";
+import type { ByoLlmProcessingPolicyMetadata } from "../byo-llm-provider-data-policy.js";
 import {
   loadCuratedOfferPackages,
   type CuratedOfferPackage
@@ -45,6 +46,7 @@ export interface OfferPackageClassificationPrediction {
   providerId?: string;
   providerRequestId?: string;
   usage?: LlmReadinessProviderUsage;
+  processingPolicy?: ByoLlmProcessingPolicyMetadata;
   reviewFlags?: string[];
   errors: string[];
 }

@@ -18,10 +18,12 @@ import {
   uploadErrorResponse,
   type AcceptedEventSpec,
   type AuditLogStore,
+  type BoundaryGuardedLlmAdapter,
+  type ByoLlmProcessingPolicyMetadata,
+  type ByoLlmDataClass,
   type LlmReadinessDataMode,
   type LlmReadinessModelInput,
   type LlmReadinessModelOutputCandidate,
-  type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterRequest,
   type LlmReadinessProviderAdapterResponse,
   type ProductionDraft,
@@ -73,6 +75,29 @@ function stableJson(value: unknown): string {
   }
 
   return JSON.stringify(value);
+}
+
+function processingPolicyAuditDetails(policy: ByoLlmProcessingPolicyMetadata | undefined) {
+  if (!policy) return {};
+  return {
+    policyApprovalId: policy.approvalId,
+    policyBusinessId: policy.businessId,
+    policyProviderKind: policy.providerKind,
+    policyProviderModel: policy.providerModel,
+    policyCapability: policy.capability,
+    policyRegion: policy.actualRegion,
+    policyEndpoint: policy.endpoint,
+    policyMaximumEstimatedCostEur: policy.maximumEstimatedCostEur,
+    policyRetentionPolicy: policy.retentionPolicy,
+    policyTrainingUse: policy.trainingUse,
+    policyPurpose: policy.purpose,
+    policyDataClass: policy.dataClass,
+    policyInputHash: policy.inputHash,
+    policySourceHash: policy.sourceHash,
+    policyProjectionHash: policy.projectionHash,
+    policyOutputHash: policy.outputHash,
+    policySuccessClass: policy.successClass
+  };
 }
 
 function productionDraftImportValidationMessage(errorMessage: string): string {
@@ -137,7 +162,7 @@ export interface ProductionArtifactRouteDependencies {
   sourceDocumentReader?: SourceDocumentReader;
   discoveryService: RecipeDiscoveryService;
   auditLog: AuditLogStore;
-  buildLlmAdapter: () => LlmReadinessProviderAdapter;
+  buildLlmAdapter: () => BoundaryGuardedLlmAdapter;
   productionDraftDataMode: LlmReadinessDataMode;
   handoffReader?: ProductionHandoffReader;
   trustedActorSecret?: string;
@@ -406,6 +431,7 @@ async function appendProductionDocumentCreatedAudit(
       componentCount: draft.draftArtifacts.eventSpec?.menuPlan.length ?? 0,
       openQuestionCount: draft.draftArtifacts.openQuestions?.length ?? 0,
       outputTextHash: draft.source.outputHash,
+      ...processingPolicyAuditDetails(draft.source.processingPolicy),
       humanApprovalRequired: true,
       writesProductObject: false
     })
@@ -447,6 +473,7 @@ async function finalizeProductionDraftRevision(
       changeRequestCount,
       changeRequestHash,
       reviewCardCount: revision.reviewCards.length,
+      ...processingPolicyAuditDetails(revision.source.processingPolicy),
       humanApprovalRequired: true,
       writesProductObject: false
     })
@@ -705,6 +732,7 @@ function buildProductionDraftFromExtraction(input: {
     filename: string;
     sha256: string;
     ingestedAt: string;
+    dataClass: ByoLlmDataClass;
   };
   outputCandidate: LlmReadinessModelOutputCandidate;
   adapterResponse: LlmReadinessProviderAdapterResponse;
@@ -822,7 +850,11 @@ function buildProductionDraftFromExtraction(input: {
       modelId: input.adapterResponse.adapterMode,
       inputHash: `sha256:${input.source.sha256}`,
       outputHash: hashText(input.outputCandidate.text),
-      runId: input.adapterResponse.providerRequestId
+      runId: input.adapterResponse.providerRequestId,
+      dataClass: input.source.dataClass,
+      ...(input.adapterResponse.processingPolicy
+        ? { processingPolicy: input.adapterResponse.processingPolicy }
+        : {})
     },
     guardrails: {
       draftOnly: true,
@@ -1297,7 +1329,7 @@ export function registerProductionArtifactRoutes(
       };
       const draftSeed = documentDraftId;
 
-      let adapter: LlmReadinessProviderAdapter;
+      let adapter: BoundaryGuardedLlmAdapter;
       try {
         adapter = buildLlmAdapter();
       } catch (error) {
@@ -1315,7 +1347,11 @@ export function registerProductionArtifactRoutes(
         });
       }
 
-      const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
+      const adapterResponse = await adapter.execute(adapterRequest, {
+        businessId: actor.businessId,
+        dataClass: storedSource.dataClass,
+        purpose: "production_draft_extraction"
+      }).catch(async (error: unknown) => {
         await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.production_draft_document_rejected",
           entityType: "ProductionDraft",
@@ -1383,7 +1419,8 @@ export function registerProductionArtifactRoutes(
             providerId: adapterResponse.providerId,
             providerRequestId: adapterResponse.providerRequestId,
             sourceSha256: sourceMetadata.sha256,
-            errorCount: responseErrors.length
+            errorCount: responseErrors.length,
+            ...processingPolicyAuditDetails(adapterResponse.processingPolicy)
           }),
           idempotencyKey: `production-document-draft-rejected:${documentDraftId}:validation`
         });
@@ -1412,7 +1449,8 @@ export function registerProductionArtifactRoutes(
           source: {
             filename: sourceMetadata.filename,
             sha256: sourceMetadata.sha256,
-            ingestedAt: sourceMetadata.ingestedAt
+            ingestedAt: sourceMetadata.ingestedAt,
+            dataClass: storedSource.dataClass
           },
           outputCandidate: adapterResponse.outputCandidate!,
           adapterResponse,
@@ -2116,7 +2154,7 @@ export function registerProductionArtifactRoutes(
         promptContext
       };
 
-      let adapter: LlmReadinessProviderAdapter;
+      let adapter: BoundaryGuardedLlmAdapter;
       try {
         adapter = buildLlmAdapter();
       } catch (error) {
@@ -2132,7 +2170,11 @@ export function registerProductionArtifactRoutes(
         });
       }
 
-      const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
+      const adapterResponse = await adapter.execute(adapterRequest, {
+        businessId: actor.businessId,
+        dataClass: draft.source.dataClass ?? "personal_confidential",
+        purpose: "production_draft_revision"
+      }).catch(async (error: unknown) => {
         await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.production_draft_revision_rejected",
           entityType: "ProductionDraft",
@@ -2201,7 +2243,8 @@ export function registerProductionArtifactRoutes(
             providerRequestId: adapterResponse.providerRequestId,
             changeRequestCount: requestedChanges.length,
             changeRequestHash,
-            errorCount: responseErrors.length
+            errorCount: responseErrors.length,
+            ...processingPolicyAuditDetails(adapterResponse.processingPolicy)
           }),
           idempotencyKey: `production-draft-revision-rejected:${input.inputId}:validation`
         });
@@ -2230,7 +2273,8 @@ export function registerProductionArtifactRoutes(
           source: {
             filename: sourceFilename,
             sha256: contextHash,
-            ingestedAt: new Date().toISOString()
+            ingestedAt: new Date().toISOString(),
+            dataClass: draft.source.dataClass ?? "personal_confidential"
           },
           outputCandidate: adapterResponse.outputCandidate!,
           adapterResponse,
@@ -2496,7 +2540,7 @@ export function registerProductionArtifactRoutes(
         promptSchemaId: promptSchema.promptSchemaId
       };
       const draftSeed = `draft-${spec.specId}-${randomUUID()}`;
-      let adapter: LlmReadinessProviderAdapter;
+      let adapter: BoundaryGuardedLlmAdapter;
       try {
         adapter = buildLlmAdapter();
       } catch (error) {
@@ -2505,7 +2549,13 @@ export function registerProductionArtifactRoutes(
         });
       }
 
-      const adapterResponse = await adapter.run(adapterRequest).catch(async (error: unknown) => {
+      const adapterResponse = await adapter.execute(adapterRequest, {
+        businessId: actorForRequest(request, trustedActorSecret, allowDevActorHeader).businessId,
+        // AcceptedEventSpec predates source data classification. Treat old specs
+        // as confidential until a stored source classification is available.
+        dataClass: "personal_confidential",
+        purpose: "clarification_draft"
+      }).catch(async (error: unknown) => {
         await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
           action: "production.clarification_draft_rejected",
           entityType: "ClarificationDraft",
@@ -2558,7 +2608,8 @@ export function registerProductionArtifactRoutes(
             fixtureId: adapterResponse.fixtureId,
             providerId: adapterResponse.providerId,
             providerRequestId: adapterResponse.providerRequestId,
-            errorCount: responseErrors.length
+            errorCount: responseErrors.length,
+            ...processingPolicyAuditDetails(adapterResponse.processingPolicy)
           })
         });
         return reply.code(422).send({
@@ -2613,6 +2664,7 @@ export function registerProductionArtifactRoutes(
           fixtureId: adapterResponse.fixtureId,
           providerId: adapterResponse.providerId,
           providerRequestId: adapterResponse.providerRequestId,
+          ...processingPolicyAuditDetails(adapterResponse.processingPolicy),
           humanApprovalRequired: true,
           writesProductObject: false
         })

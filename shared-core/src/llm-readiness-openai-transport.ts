@@ -409,7 +409,10 @@ export class OpenAiSyntheticLiveTransport implements LlmReadinessSyntheticLiveTr
           authorization: `Bearer ${this.options.apiKey}`
         },
         body: JSON.stringify(buildRequestBody(request, this.options.model)),
-        signal: abortController.signal
+        signal: abortController.signal,
+        // The approved endpoint is part of the provider contract. Do not let
+        // a redirect forward the request body to a different destination.
+        redirect: "error"
       });
     } catch (error) {
       const wasAborted = abortController.signal.aborted || (error instanceof Error && error.name === "AbortError");

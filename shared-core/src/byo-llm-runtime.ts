@@ -7,6 +7,16 @@ import {
 } from "./llm-readiness-openai-transport.js";
 import { validateByoLlmProviderRunBoundary } from "./byo-llm-boundary.js";
 import {
+  createByoLlmProviderDescriptor,
+  evaluateByoLlmProviderDataGate,
+  loadByoLlmExternalProcessingApprovalFromEnv,
+  type ByoLlmExternalProcessingApproval,
+  type ByoLlmProviderDataContext,
+  type ByoLlmProviderDescriptor,
+  projectByoLlmExternalPromptContext
+} from "./byo-llm-provider-data-policy.js";
+import { createHash } from "node:crypto";
+import {
   FixtureOnlyLlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterRequest,
@@ -22,6 +32,153 @@ export interface BuildByoLlmAdapterOptions {
   providerRunIdPrefix?: string;
 }
 
+export interface BoundaryGuardedLlmAdapterOptions {
+  descriptor: ByoLlmProviderDescriptor;
+  delegate: LlmReadinessProviderAdapter;
+  approvalResolver?: () => ByoLlmExternalProcessingApproval | undefined;
+}
+
+// Fixture calls pass through the same draft-only runtime guard as external
+// providers. Track only wrappers created here so a caller cannot imitate a
+// local fixture merely by choosing adapterMode: "fixture_only".
+const runtimeCreatedFixtureAdapters = new WeakMap<object, LlmReadinessProviderAdapter["run"]>();
+
+function isRuntimeCreatedFixtureAdapter(adapter: LlmReadinessProviderAdapter): boolean {
+  return runtimeCreatedFixtureAdapters.get(adapter) === adapter.run &&
+    Object.getPrototypeOf(adapter) === BoundaryGuardedByoLlmProviderAdapter.prototype;
+}
+
+/**
+ * The guarded adapter owns approval lookup so route handlers cannot forward a
+ * client supplied policy record into a provider transport.
+ */
+export class BoundaryGuardedLlmAdapter {
+  readonly adapterId: LlmReadinessProviderAdapter["adapterId"];
+  readonly adapterMode: LlmReadinessProviderAdapter["adapterMode"];
+
+  constructor(private readonly options: BoundaryGuardedLlmAdapterOptions) {
+    this.adapterId = options.delegate.adapterId;
+    this.adapterMode = options.delegate.adapterMode;
+  }
+
+  async execute(
+    request: LlmReadinessProviderAdapterRequest,
+    context: ByoLlmProviderDataContext
+  ): Promise<LlmReadinessProviderAdapterResponse> {
+    const inputHash = `sha256:${createHash("sha256").update(JSON.stringify(request.input)).digest("hex")}`;
+    const projection = projectByoLlmExternalPromptContext(request.promptContext);
+    const projectedRequest: LlmReadinessProviderAdapterRequest = this.options.descriptor.dataLeavesInstallation
+      ? {
+          ...request,
+          input: {
+            ...structuredClone(request.input),
+            sourceRefs: request.input.sourceRefs.map((sourceRef, index) => ({
+              ...sourceRef,
+              label: `external-source-${index + 1}`
+            }))
+          },
+          promptContext: projection.text
+        }
+      : request;
+    const projectionHash = `sha256:${createHash("sha256").update(JSON.stringify(projectedRequest)).digest("hex")}`;
+    const policyMetadata = (input: {
+      approvalId?: string;
+      outputHash?: string;
+      successClass: "success" | "policy_rejected" | "provider_rejected";
+    }) => ({
+      approvalId: input.approvalId,
+      businessId: context.businessId,
+      providerKind: this.options.descriptor.providerKind,
+      providerModel: this.options.descriptor.providerModel,
+      capability: this.options.descriptor.capability,
+      actualRegion: this.options.descriptor.actualRegion,
+      endpoint: this.options.descriptor.endpoint,
+      maximumEstimatedCostEur: this.options.descriptor.maximumEstimatedCostEur,
+      retentionPolicy: this.options.descriptor.retentionPolicy,
+      trainingUse: this.options.descriptor.trainingUse,
+      purpose: context.purpose,
+      dataClass: context.dataClass,
+      inputHash,
+      sourceHash: projection.sourceHash,
+      projectionHash,
+      outputHash: input.outputHash,
+      successClass: input.successClass
+    });
+    if (
+      this.options.descriptor.providerKind === "fixture" &&
+      !isRuntimeCreatedFixtureAdapter(this.options.delegate)
+    ) {
+      return {
+        ok: false,
+        errors: ["fixture provider descriptors require the built-in fixture adapter"],
+        adapterId: this.adapterId,
+        adapterMode: this.adapterMode,
+        promptSchemaId: request.promptSchemaId,
+        processingPolicy: policyMetadata({ successClass: "policy_rejected" })
+      };
+    }
+    let approval: ByoLlmExternalProcessingApproval | undefined;
+    try {
+      approval = this.options.approvalResolver?.();
+    } catch {
+      return {
+        ok: false,
+        errors: ["external processing approval could not be loaded"],
+        adapterId: this.adapterId,
+        adapterMode: this.adapterMode,
+        promptSchemaId: request.promptSchemaId,
+        processingPolicy: policyMetadata({ successClass: "policy_rejected" })
+      };
+    }
+    const decision = evaluateByoLlmProviderDataGate({
+      provider: this.options.descriptor,
+      context,
+      approval
+    });
+    if (!decision.allowed) {
+      return {
+        ok: false,
+        errors: decision.errors,
+        adapterId: this.adapterId,
+        adapterMode: this.adapterMode,
+        promptSchemaId: request.promptSchemaId,
+        processingPolicy: policyMetadata({ approvalId: decision.approvalId, successClass: "policy_rejected" })
+      };
+    }
+    let response: LlmReadinessProviderAdapterResponse;
+    try {
+      response = await this.options.delegate.run(projectedRequest);
+    } catch (error) {
+      const safeProviderError = error instanceof Error && /^OpenAI Responses request timed out after \d+ms$/.test(error.message)
+        ? error.message
+        : "BYO LLM provider call failed";
+      return {
+        ok: false,
+        errors: [safeProviderError],
+        adapterId: this.adapterId,
+        adapterMode: this.adapterMode,
+        promptSchemaId: request.promptSchemaId,
+        processingPolicy: policyMetadata({ approvalId: decision.approvalId, successClass: "provider_rejected" })
+      };
+    }
+    const outputHash = response.outputCandidate
+      ? `sha256:${createHash("sha256").update(response.outputCandidate.text).digest("hex")}`
+      : undefined;
+    return {
+      ...response,
+      processingPolicy: policyMetadata({
+        approvalId: decision.approvalId,
+        outputHash,
+        successClass: response.ok ? "success" : "provider_rejected"
+      })
+    };
+  }
+}
+
+export function createBoundaryGuardedLlmAdapter(options: BoundaryGuardedLlmAdapterOptions): BoundaryGuardedLlmAdapter {
+  return new BoundaryGuardedLlmAdapter(options);
+}
+
 function normalizedProvider(value: string | undefined): ByoLlmRuntimeProvider {
   const provider = value?.trim().toLowerCase() || "fixture";
   if (provider === "fixture" || provider === "openai" || provider === "codex_cli") {
@@ -29,6 +186,80 @@ function normalizedProvider(value: string | undefined): ByoLlmRuntimeProvider {
   }
 
   throw new Error(`Unsupported CATERING_LLM_PROVIDER "${value}". Expected "fixture", "openai" or "codex_cli".`);
+}
+
+function providerCapabilityFromEnv(
+  env: Record<string, string | undefined>,
+  provider: ByoLlmRuntimeProvider
+): ByoLlmProviderDescriptor["capability"] {
+  if (provider === "fixture") return "structured_output";
+  const configured = env.CATERING_LLM_PROVIDER_CAPABILITY?.trim();
+  if (configured === "structured_output" || configured === "document_understanding" || configured === "text_generation") {
+    return configured;
+  }
+  return "structured_output";
+}
+
+function hasVerifiedProviderCapability(value: string | undefined): boolean {
+  const configured = value?.trim();
+  return configured === "structured_output" || configured === "document_understanding" || configured === "text_generation";
+}
+
+export function byoLlmProviderDescriptorFromEnv(
+  env: Record<string, string | undefined> = process.env
+): ByoLlmProviderDescriptor {
+  const provider = normalizedProvider(env.CATERING_LLM_PROVIDER);
+  return createByoLlmProviderDescriptor({
+    providerKind: provider,
+    dataLeavesInstallation: provider !== "fixture",
+    providerModel: provider === "fixture" ? "fixture" : env.CATERING_LLM_MODEL?.trim() || "unknown",
+    capability: providerCapabilityFromEnv(env, provider),
+    actualRegion: provider === "fixture" ? "local" : env.CATERING_LLM_PROCESSING_REGION?.trim() || "unknown",
+    maximumEstimatedCostEur: provider === "fixture"
+      ? 0
+      // An unset external cost estimate must never make a provider look cheaper.
+      : Number(env.CATERING_LLM_MAX_ESTIMATED_COST_EUR ?? Number.MAX_VALUE),
+    retentionPolicy: provider === "fixture" ? "local-only" : env.CATERING_LLM_RETENTION_POLICY?.trim() || "unknown",
+    trainingUse: provider === "fixture" ? "contractually_excluded" : env.CATERING_LLM_TRAINING_USE === "contractually_excluded"
+      ? "contractually_excluded"
+      : env.CATERING_LLM_TRAINING_USE === "allowed" ? "allowed" : "unknown",
+    endpoint: provider === "fixture"
+      ? "local://fixture"
+      : provider === "openai"
+        ? env.CATERING_LLM_BASE_URL?.trim() || "https://api.openai.com/v1/responses"
+        : env.CATERING_LLM_CLI_BIN?.trim() || "codex",
+    metadataVerified: provider === "fixture" || Boolean(
+      env.CATERING_LLM_MODEL?.trim() &&
+      hasVerifiedProviderCapability(env.CATERING_LLM_PROVIDER_CAPABILITY) &&
+      env.CATERING_LLM_PROCESSING_REGION?.trim() &&
+      env.CATERING_LLM_MAX_ESTIMATED_COST_EUR?.trim() &&
+      env.CATERING_LLM_RETENTION_POLICY?.trim() &&
+      env.CATERING_LLM_TRAINING_USE === "contractually_excluded"
+    )
+  });
+}
+
+export function buildBoundaryGuardedLlmAdapterFromEnv(
+  env: Record<string, string | undefined> = process.env,
+  options: BuildByoLlmAdapterOptions = {}
+): BoundaryGuardedLlmAdapter {
+  return new BoundaryGuardedLlmAdapter({
+    descriptor: byoLlmProviderDescriptorFromEnv(env),
+    delegate: buildByoLlmAdapterFromEnv(env, options),
+    approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env)
+  });
+}
+
+export function guardByoLlmAdapterForEnv(
+  delegate: LlmReadinessProviderAdapter,
+  env: Record<string, string | undefined> = process.env
+): BoundaryGuardedLlmAdapter {
+  const descriptor = byoLlmProviderDescriptorFromEnv(env);
+  return new BoundaryGuardedLlmAdapter({
+    descriptor,
+    delegate,
+    approvalResolver: () => loadByoLlmExternalProcessingApprovalFromEnv(env)
+  });
 }
 
 function parseOptionalPositiveInteger(value: string | undefined, envName: string): number | undefined {
@@ -74,6 +305,13 @@ class BoundaryGuardedByoLlmProviderAdapter implements LlmReadinessProviderAdapte
   ) {
     this.adapterId = delegate.adapterId;
     this.adapterMode = delegate.adapterMode;
+    const intrinsicRun = this.run.bind(this);
+    Object.defineProperty(this, "run", {
+      configurable: false,
+      value: intrinsicRun,
+      writable: false
+    });
+    Object.freeze(this);
   }
 
   async run(request: LlmReadinessProviderAdapterRequest): Promise<LlmReadinessProviderAdapterResponse> {
@@ -120,11 +358,13 @@ export function buildByoLlmAdapterFromEnv(
   const provider = normalizedProvider(env.CATERING_LLM_PROVIDER);
 
   if (provider === "fixture") {
-    return new BoundaryGuardedByoLlmProviderAdapter(
+    const adapter = new BoundaryGuardedByoLlmProviderAdapter(
       provider,
       env,
       new FixtureOnlyLlmReadinessProviderAdapter()
     );
+    runtimeCreatedFixtureAdapters.set(adapter, adapter.run);
+    return adapter;
   }
 
   if (provider === "codex_cli") {

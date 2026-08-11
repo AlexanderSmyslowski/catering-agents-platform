@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  OpenAiSyntheticLiveTransport,
-  createOpenAiSyntheticLiveTransportFromEnv,
   llmReadinessEvalFixtures,
-  validateOpenAiSyntheticLiveTransportEnv,
   type LlmReadinessSyntheticLiveTransportRequest
 } from "@catering/shared-core";
+import {
+  OpenAiSyntheticLiveTransport,
+  createOpenAiSyntheticLiveTransportFromEnv,
+  validateOpenAiSyntheticLiveTransportEnv
+} from "../shared-core/src/llm-readiness-openai-transport.js";
 
 function buildRequest(): LlmReadinessSyntheticLiveTransportRequest {
   return {
@@ -71,6 +73,7 @@ describe("PA42 OpenAI synthetic live transport", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://api.openai.com/v1/responses");
       expect(init?.method).toBe("POST");
+      expect(init?.redirect).toBe("error");
       expect((init?.headers as Record<string, string>).authorization).toBe("Bearer sk-test");
 
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
