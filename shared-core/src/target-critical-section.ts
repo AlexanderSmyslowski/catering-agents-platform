@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
@@ -10,9 +11,11 @@ import {
   readdirSync,
   statSync,
   unlinkSync,
+  utimesSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
+import { hostname, platform } from "node:os";
 import { assertBusinessId, type BusinessContext } from "./business-context.js";
 import {
   resolveCollectionQueryable,
@@ -22,8 +25,12 @@ import {
 } from "./persistence.js";
 
 const targetMutexes = new Map<string, Promise<void>>();
+const processFingerprintCache = new Map<number, { checkedAt: number; value?: string }>();
+const PROCESS_INSTANCE_ID = randomUUID();
+const CURRENT_HOSTNAME = hostname();
 const TARGET_LOCK_TIMEOUT_MS = 10_000;
 const INVALID_TARGET_LOCK_STALE_MS = 30_000;
+const FILE_TARGET_LOCK_HEARTBEAT_MS = 5_000;
 const MAX_TARGET_LOCK_TICKETS = 4_096;
 
 export interface CriticalSectionTarget {
@@ -56,6 +63,10 @@ interface ConnectableQueryable extends Queryable {
 interface FileTargetLockMetadata {
   pid: number;
   token: string;
+  lease?: "heartbeat-v1";
+  hostname?: string;
+  processFingerprint?: string;
+  processInstanceId?: string;
 }
 
 interface FileTargetLockTicket {
@@ -91,6 +102,10 @@ function isPgMemMissingAdvisoryLock(error: unknown): boolean {
   return error instanceof Error &&
     (error.stack ?? "").includes("node_modules/pg-mem/") &&
     error.message.includes("pg_advisory_xact_lock");
+}
+
+function isPostgresLockTimeout(error: unknown): boolean {
+  return error instanceof Error && (error as Error & { code?: string }).code === "55P03";
 }
 
 async function withTargetMutex<T>(key: string, operation: () => Promise<T>): Promise<T> {
@@ -134,11 +149,67 @@ function processIsAlive(pid: number): boolean {
   }
 }
 
+function readProcessFingerprint(pid: number): string | undefined {
+  try {
+    if (platform() === "linux") {
+      const processStat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      const commandEnd = processStat.lastIndexOf(")");
+      if (commandEnd < 0) return undefined;
+      const fieldsAfterCommand = processStat.slice(commandEnd + 2).trim().split(/\s+/);
+      const startTimeTicks = fieldsAfterCommand[19];
+      return startTimeTicks ? `linux:${startTimeTicks}` : undefined;
+    }
+    if (platform() === "darwin") {
+      const startedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+        encoding: "utf8",
+        env: { ...process.env, LC_ALL: "C" },
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+      return startedAt ? `darwin:${startedAt}` : undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function processFingerprint(pid: number): string | undefined {
+  const cached = processFingerprintCache.get(pid);
+  if (cached && Date.now() - cached.checkedAt < 1_000) return cached.value;
+  const value = readProcessFingerprint(pid);
+  processFingerprintCache.set(pid, { checkedAt: Date.now(), value });
+  return value;
+}
+
+const CURRENT_PROCESS_FINGERPRINT = processFingerprint(process.pid);
+
+function currentFileTargetLockMetadata(token: string): FileTargetLockMetadata {
+  return {
+    pid: process.pid,
+    token,
+    lease: "heartbeat-v1",
+    hostname: CURRENT_HOSTNAME,
+    ...(CURRENT_PROCESS_FINGERPRINT ? { processFingerprint: CURRENT_PROCESS_FINGERPRINT } : {}),
+    processInstanceId: PROCESS_INSTANCE_ID
+  };
+}
+
 function readFileTargetLock(lockPath: string): FileTargetLockMetadata | undefined {
   try {
     const metadata = JSON.parse(readFileSync(lockPath, "utf8")) as Partial<FileTargetLockMetadata>;
     return typeof metadata.pid === "number" && typeof metadata.token === "string"
-      ? { pid: metadata.pid, token: metadata.token }
+      ? {
+          pid: metadata.pid,
+          token: metadata.token,
+          ...(metadata.lease === "heartbeat-v1" ? { lease: metadata.lease } : {}),
+          ...(typeof metadata.hostname === "string" ? { hostname: metadata.hostname } : {}),
+          ...(typeof metadata.processFingerprint === "string"
+            ? { processFingerprint: metadata.processFingerprint }
+            : {}),
+          ...(typeof metadata.processInstanceId === "string"
+            ? { processInstanceId: metadata.processInstanceId }
+            : {})
+        }
       : undefined;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof SyntaxError) return undefined;
@@ -153,6 +224,34 @@ function invalidFileTargetLockIsStale(lockPath: string): boolean {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
+}
+
+function startFileTargetLeaseHeartbeat(paths: string[]): () => void {
+  const refresh = () => {
+    const now = new Date(Date.now());
+    for (const targetPath of paths) {
+      try {
+        utimesSync(targetPath, now, now);
+      } catch {
+        // Same-host contenders also verify the OS process incarnation, so a missed refresh cannot
+        // evict a live owner. A missing path means release or crash recovery already won the race.
+      }
+    }
+  };
+  refresh();
+  const timer = setInterval(refresh, FILE_TARGET_LOCK_HEARTBEAT_MS);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
+function fileTargetOwnerIsCurrentIncarnation(owner: FileTargetLockMetadata): boolean | undefined {
+  if (owner.hostname && owner.hostname !== CURRENT_HOSTNAME) return undefined;
+  if (owner.pid === process.pid) {
+    return owner.processInstanceId === PROCESS_INSTANCE_ID;
+  }
+  if (!owner.processFingerprint) return undefined;
+  const liveFingerprint = processFingerprint(owner.pid);
+  return liveFingerprint === undefined ? undefined : liveFingerprint === owner.processFingerprint;
 }
 
 function unlinkIfPresent(filePath: string): void {
@@ -214,7 +313,7 @@ function allocateFileTargetTicket(
   let fd: number | undefined;
   try {
     fd = openSync(candidatePath, "wx", 0o600);
-    writeFileSync(fd, JSON.stringify({ pid: process.pid, token } satisfies FileTargetLockMetadata));
+    writeFileSync(fd, JSON.stringify(currentFileTargetLockMetadata(token)));
     fsyncSync(fd);
     closeSync(fd);
     fd = undefined;
@@ -256,8 +355,21 @@ function fileTargetTicketIsActive(queuePath: string, sequence: number): boolean 
   if (existsSync(path.join(queuePath, targetTicketReleaseName(sequence)))) return false;
   const ticketPath = path.join(queuePath, targetTicketName(sequence));
   const owner = readFileTargetLock(ticketPath);
-  if (owner && processIsAlive(owner.pid)) return true;
-  if (owner || invalidFileTargetLockIsStale(ticketPath)) {
+  // Queue tickets have always been short-lived leases. Expiry also recovers an old ticket whose PID
+  // was reused by a different process after the original owner crashed.
+  const leaseExpired = invalidFileTargetLockIsStale(ticketPath);
+  if (owner && processIsAlive(owner.pid)) {
+    const currentIncarnation = fileTargetOwnerIsCurrentIncarnation(owner);
+    if (currentIncarnation === true) return true;
+    // A fresh heartbeat is authoritative across worker threads and hosts. If OS-level incarnation
+    // lookup is unavailable, fail closed rather than evicting a possibly active owner.
+    if (!leaseExpired || currentIncarnation === undefined) return true;
+  }
+  if (leaseExpired) {
+    markFileTargetTicketReleased(queuePath, sequence);
+    return false;
+  }
+  if (owner) {
     markFileTargetTicketReleased(queuePath, sequence);
     return false;
   }
@@ -291,12 +403,59 @@ async function waitForLegacyFileTargetLock(
 ): Promise<void> {
   while (existsSync(lockPath)) {
     const owner = readFileTargetLock(lockPath);
-    if ((owner && !processIsAlive(owner.pid)) || (!owner && invalidFileTargetLockIsStale(lockPath))) {
+    const expiredHeartbeatLease = owner?.lease === "heartbeat-v1" &&
+      invalidFileTargetLockIsStale(lockPath) &&
+      fileTargetOwnerIsCurrentIncarnation(owner) === false;
+    if (
+      (owner && (!processIsAlive(owner.pid) || expiredHeartbeatLease)) ||
+      (!owner && invalidFileTargetLockIsStale(lockPath))
+    ) {
       unlinkIfPresent(lockPath);
       continue;
     }
     if (Date.now() >= deadline) throw new Error(legacyTimeoutMessage);
     await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+async function acquireLegacyFileTargetLock(
+  lockPath: string,
+  deadline: number,
+  legacyTimeoutMessage: string
+): Promise<{ release: () => void; path: string }> {
+  const token = randomUUID();
+  const candidatePath = `${lockPath}.candidate-${process.pid}-${token}`;
+  let fd: number | undefined;
+  try {
+    fd = openSync(candidatePath, "wx", 0o600);
+    writeFileSync(fd, JSON.stringify(currentFileTargetLockMetadata(token)));
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = undefined;
+
+    for (;;) {
+      try {
+        // The leader owns the legacy path as well as its queue ticket. This closes the rolling-version
+        // race in which an older process could otherwise enter after the one-time preflight.
+        linkSync(candidatePath, lockPath);
+        return {
+          path: lockPath,
+          release: () => {
+            const owner = readFileTargetLock(lockPath);
+            if (owner?.pid === process.pid && owner.token === token) unlinkIfPresent(lockPath);
+          }
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        await waitForLegacyFileTargetLock(lockPath, deadline, legacyTimeoutMessage);
+        if (Date.now() >= deadline) throw new Error(legacyTimeoutMessage);
+      }
+    }
+  } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd); } catch { /* cleanup below remains best-effort */ }
+    }
+    unlinkIfPresent(candidatePath);
   }
 }
 
@@ -325,11 +484,22 @@ async function acquireFileTargetLock(input: {
         blockingSequence = firstActiveFileTargetTicket(queuePath);
       }
       if (blockingSequence === ticket.sequence) {
+        const legacyLock = await acquireLegacyFileTargetLock(
+          input.lockPath,
+          deadline,
+          input.legacyTimeoutMessage
+        );
+        const stopHeartbeat = startFileTargetLeaseHeartbeat([ticket.path, legacyLock.path]);
         let released = false;
         return () => {
           if (released) return;
-          releaseFileTargetTicket(queuePath, ticket);
-          released = true;
+          stopHeartbeat();
+          try {
+            legacyLock.release();
+          } finally {
+            releaseFileTargetTicket(queuePath, ticket);
+            released = true;
+          }
         };
       }
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -350,11 +520,15 @@ async function withPostgresTransaction<T>(
     await client.query("BEGIN");
     transactionStarted = true;
     try {
+      await client.query("SELECT pg_catalog.set_config('lock_timeout', $1, true)", [
+        `${TARGET_LOCK_TIMEOUT_MS}ms`
+      ]);
       await client.query("SELECT pg_catalog.pg_advisory_xact_lock($1::bigint)", [
         targetAdvisoryLockKey(input.context, input.target)
       ]);
     } catch (error) {
       if (isPgMemMissingAdvisoryLock(error)) throw new PgMemAdvisoryLockUnavailable();
+      if (isPostgresLockTimeout(error)) throw new Error(input.timeoutMessage);
       throw error;
     }
     const result = await input.operation(client);
