@@ -61,6 +61,7 @@ function launcherEnv(
     PATH: `${harness.binDir}:${process.env.PATH ?? ""}`,
     CATERING_DATA_ROOT: dataRoot,
     CATERING_LOCAL_START_LOCK_FILE: path.join(dataRoot, ".test-production-startup-3103.lock"),
+    CATERING_NODE_BIN: path.join(harness.binDir, "npm"),
     ...extra
   };
 }
@@ -140,7 +141,8 @@ describe("local stack migration guard", () => {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
-        CATERING_DATA_ROOT: path.join(root, "data")
+        CATERING_DATA_ROOT: path.join(root, "data"),
+        CATERING_NODE_BIN: npm
       }
     });
 
@@ -174,7 +176,8 @@ describe("local stack migration guard", () => {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
-        CATERING_DATA_ROOT: path.join(root, "data")
+        CATERING_DATA_ROOT: path.join(root, "data"),
+        CATERING_NODE_BIN: npm
       }
     });
 
@@ -326,6 +329,12 @@ describe("local stack migration guard", () => {
     const startScript = readFileSync("scripts/start-local-stack.sh", "utf8");
     expect(startScript).toContain('"targetLockProtocol":"canonical-v2"');
     expect(startScript).toContain("wait_for_production_protocol");
+  });
+
+  it("runs migration in the PID that owns the activity lock", () => {
+    const startScript = readFileSync("scripts/start-local-stack.sh", "utf8");
+    expect(startScript).toContain('"${MIGRATION_NODE_BIN}" --import tsx');
+    expect(startScript).not.toContain("npm run migrate:business-scope");
   });
 
   it("rejects a production session that appears after migration", () => {

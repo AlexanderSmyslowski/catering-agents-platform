@@ -42,6 +42,13 @@ PRODUCTION_DRAFT_DATA_MODE="${CATERING_PRODUCTION_DRAFT_DATA_MODE:-synthetic_or_
 LLM_CLI_BIN="${CATERING_LLM_CLI_BIN:-codex}"
 LLM_MODEL="${CATERING_LLM_MODEL:-}"
 LLM_CLI_TIMEOUT_MS="${CATERING_LLM_CLI_TIMEOUT_MS:-120000}"
+MIGRATION_NODE_BIN="${CATERING_NODE_BIN:-}"
+if [[ -z "${MIGRATION_NODE_BIN}" ]]; then
+  if ! MIGRATION_NODE_BIN="$(command -v node)"; then
+    echo "Node.js wurde für die Business-Scope-Migration nicht gefunden." >&2
+    exit 1
+  fi
+fi
 
 mkdir -p "${LOG_DIR}"
 mkdir -p "${DATA_ROOT}"
@@ -125,7 +132,8 @@ run_business_scope_migration() {
   if [[ "${START_MUTEX_BACKEND}" != "shlock" ]]; then
     # flock's open descriptor is inherited by the migration child. If the launcher dies, the
     # kernel keeps the port-wide lock until that child exits.
-    CATERING_DATA_ROOT="${DATA_ROOT}" npm run migrate:business-scope -- \
+    CATERING_DATA_ROOT="${DATA_ROOT}" "${MIGRATION_NODE_BIN}" --import tsx \
+      "${ROOT_DIR}/scripts/migrate-local-business-scope.ts" \
       --business-id "${DEFAULT_BUSINESS_ID}" --confirm-legacy-file-writers-quiesced
     return
   fi
@@ -139,6 +147,8 @@ run_business_scope_migration() {
     parent_pid="$3"
     data_root="$4"
     business_id="$5"
+    node_runtime="$6"
+    root_dir="$7"
     migration_child_pid="$$"
     cleanup_migration_worker() {
       if [[ "$(cat "${migration_mutex}" 2>/dev/null || true)" == "${migration_child_pid}" ]]; then
@@ -156,9 +166,11 @@ run_business_scope_migration() {
       sleep 0.01
     done
     trap - EXIT INT TERM
-    exec env CATERING_DATA_ROOT="${data_root}" npm run migrate:business-scope -- \
+    exec env CATERING_DATA_ROOT="${data_root}" "${node_runtime}" --import tsx \
+      "${root_dir}/scripts/migrate-local-business-scope.ts" \
       --business-id "${business_id}" --confirm-legacy-file-writers-quiesced
-  ' _ "${PRODUCTION_MIGRATION_MUTEX}" "${gate_path}" "${parent_pid}" "${DATA_ROOT}" "${DEFAULT_BUSINESS_ID}" &
+  ' _ "${PRODUCTION_MIGRATION_MUTEX}" "${gate_path}" "${parent_pid}" "${DATA_ROOT}" \
+    "${DEFAULT_BUSINESS_ID}" "${MIGRATION_NODE_BIN}" "${ROOT_DIR}" &
   MIGRATION_CHILD_PID="$!"
   local migration_child_pid="${MIGRATION_CHILD_PID}"
   if ! shlock -f "${PRODUCTION_MIGRATION_MUTEX}" -p "${migration_child_pid}"; then
