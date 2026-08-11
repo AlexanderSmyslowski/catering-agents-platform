@@ -16,6 +16,10 @@ import {
   APPROVED_PRODUCTION_TEST_SECRET,
   runApprovedProductionWorkflow
 } from "./helpers/approved-production-workflow.js";
+import {
+  InMemoryIntakeRecordsPort,
+  bindTestIntakeRecordsPort
+} from "./support/in-memory-intake-records-port.js";
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-web-gate-"));
@@ -69,11 +73,14 @@ describe("production web recipe search gate", () => {
 
   it("does not materialize internet fallback recipes in the default production app", async () => {
     const dataRoot = createDataRoot();
+    const intakeRecords = new InMemoryIntakeRecordsPort();
     const app = buildProductionApp({
       dataRoot,
+      intakeRecords,
       trustedActorSecret: APPROVED_PRODUCTION_TEST_SECRET,
       env: { CATERING_DEV_AUTH: "1" }
     });
+    bindTestIntakeRecordsPort(app, intakeRecords);
 
     try {
       const response = await runApprovedProductionWorkflow(app, {

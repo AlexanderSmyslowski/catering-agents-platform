@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     environment:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      CATERING_DEFAULT_BUSINESS_ID: ${CATERING_DEFAULT_BUSINESS_ID:-local}
       CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
       INTAKE_PORT: 3101
       INTAKE_HOST: 0.0.0.0
@@ -40,6 +41,7 @@ services:
     restart: unless-stopped
     environment:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      CATERING_DEFAULT_BUSINESS_ID: ${CATERING_DEFAULT_BUSINESS_ID:-local}
       CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
       OFFER_PORT: 3102
       OFFER_HOST: 0.0.0.0
@@ -55,13 +57,17 @@ services:
     restart: unless-stopped
     environment:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      CATERING_DEFAULT_BUSINESS_ID: ${CATERING_DEFAULT_BUSINESS_ID:-local}
       CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
       CATERING_OFFER_SERVICE_URL: http://offer:3102
+      CATERING_INTAKE_SERVICE_URL: http://intake:3101
       PRODUCTION_PORT: 3103
       PRODUCTION_HOST: 0.0.0.0
     depends_on:
       postgres:
         condition: service_healthy
+      intake:
+        condition: service_started
     command: ["npm", "run", "dev:production"]
 
   exports:
@@ -71,6 +77,7 @@ services:
     restart: unless-stopped
     environment:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
+      CATERING_DEFAULT_BUSINESS_ID: ${CATERING_DEFAULT_BUSINESS_ID:-local}
       CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
       PRINT_EXPORT_PORT: 3104
       PRINT_EXPORT_HOST: 0.0.0.0
@@ -94,6 +101,7 @@ services:
       - "${HTTPS_PORT:-8443}:443"
     environment:
       CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}
+      CATERING_DEFAULT_BUSINESS_ID: ${CATERING_DEFAULT_BUSINESS_ID:-local}
       CADDY_EMAIL: ${CADDY_EMAIL:-ops@example.com}
       CATERING_BASIC_AUTH_USER: ${CATERING_BASIC_AUTH_USER:?Set CATERING_BASIC_AUTH_USER}
       CATERING_BASIC_AUTH_PASSWORD_HASH: ${CATERING_BASIC_AUTH_PASSWORD_HASH:?Set CATERING_BASIC_AUTH_PASSWORD_HASH}

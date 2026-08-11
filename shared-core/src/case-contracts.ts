@@ -75,6 +75,7 @@ export interface OfferCase extends CaseBase {
 export interface ProductionCase extends CaseBase {
   product: "production";
   productionHandoffId?: string;
+  sourceSpecId?: string;
   approvedProductionSpecId?: string;
   currentPlanId?: string;
   currentPurchaseListId?: string;

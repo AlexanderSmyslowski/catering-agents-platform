@@ -42,7 +42,7 @@ describe("HTTP production handoff reader", () => {
     });
 
     try {
-      await expect(reader.getHandoff({ businessId: "local" }, "handoff-redirect-probe"))
+      await expect(reader.get({ businessId: "local" }, "handoff-redirect-probe"))
         .rejects.toThrow("Produktionsübergabe konnte nicht geladen werden.");
       expect(targetRequests).toEqual([]);
     } finally {

@@ -51,6 +51,35 @@ function sameOptionalJsonValue<T>(left: T | undefined, right: T | undefined): bo
   return areJsonValuesEqual(left, right);
 }
 
+async function updateOfferCaseProjection(
+  store: OfferStore,
+  actor: TrustedActor,
+  caseId: string,
+  update: {
+    approvedOfferId?: string;
+    productionHandoffId?: string;
+    status?: "open" | "completed";
+  },
+  updatedAt: string
+): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const current = await store.getCase(actor, caseId);
+    if (!current) return;
+    const unchanged = Object.entries(update).every(([key, value]) =>
+      current[key as keyof typeof current] === value
+    );
+    if (unchanged) return;
+    const result = await store.updateCase(actor, caseId, current.version, {
+      ...current,
+      ...update,
+      version: current.version + 1,
+      updatedAt: current.updatedAt > updatedAt ? current.updatedAt : updatedAt
+    });
+    if (result === "updated" || result === "missing") return;
+  }
+  throw new Error("Angebotsauftrag wurde gleichzeitig zu oft verändert.");
+}
+
 export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApprovalRouteDependencies) {
   const { store, auditLog, requireOfferOperator, requireHandoffReader, actorForRequest } = deps;
   const decisionRepository = offerDecisionRepositoryFor(store);
@@ -87,6 +116,30 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     await logApprovedOfferAudit(actor, aggregate.approval, approvedOffer);
     return "ok" as const;
   };
+  const appendDecisionEvents = async (actor: TrustedActor, aggregate: OfferDecisionAggregate) => {
+    const approval = aggregate.approval;
+    const decisionEvent = await store.appendEventForArtifactCase(actor, approval.target.artifactId, {
+      at: approval.decidedAt,
+      role: "user",
+      kind: "review_decision",
+      text: approval.decision === "approved" ? "Angebotsentwurf freigegeben." : "Angebotsentwurf abgelehnt.",
+      artifactId: approval.approvalRequestId
+    });
+    if (aggregate.approvedOffer) {
+      await store.appendEventForArtifactCase(actor, approval.target.artifactId, {
+        at: aggregate.approvedOffer.approvedAt,
+        role: "system",
+        kind: "approval",
+        text: "Angebot freigegeben.",
+        artifactId: aggregate.approvedOffer.approvedOfferId
+      });
+      if (decisionEvent) {
+        await updateOfferCaseProjection(store, actor, decisionEvent.caseId, {
+          approvedOfferId: aggregate.approvedOffer.approvedOfferId
+        }, aggregate.approvedOffer.approvedAt);
+      }
+    }
+  };
 
   const sendAggregateResponse = async (
     actor: TrustedActor,
@@ -100,6 +153,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     if (projection === "approved_offer_conflict") {
       return reply.code(409).send({ message: "Freigegebenes Angebot stimmt nicht mit dem bestehenden Artefakt überein." });
     }
+    await appendDecisionEvents(actor, aggregate);
     return aggregate.approval.decision === "rejected"
       ? reply.code(201).send({ approval: aggregate.approval })
       : reply.code(201).send({ approval: aggregate.approval, approvedOffer: aggregate.approvedOffer });
@@ -398,6 +452,20 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       summary: "Freigegebenes Angebot an die Produktion übergeben.",
       details: { approvedOfferId: approvedOffer.approvedOfferId }
     });
+    const resultEvent = await store.appendEventForArtifactCase(actor, approvedOffer.sourceDraft.draftId, {
+      at: handoff.createdAt,
+      role: "system",
+      kind: "result",
+      text: "Angebot an die Produktion übergeben.",
+      artifactId: handoff.handoffId
+    });
+    if (resultEvent) {
+      await updateOfferCaseProjection(store, actor, resultEvent.caseId, {
+        approvedOfferId: approvedOffer.approvedOfferId,
+        productionHandoffId: handoff.handoffId,
+        status: "completed"
+      }, handoff.createdAt);
+    }
     return reply.code(201).send({ handoff });
   });
 

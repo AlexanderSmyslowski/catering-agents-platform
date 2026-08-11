@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildProductionApp } from "../production-service/src/app.js";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-trusted-identity-"));
@@ -13,7 +14,11 @@ const TRUSTED_SECRET = "test-shared-secret";
 describe("trusted identity access guards", () => {
   it("rejects spoofed x-actor-name when a trusted identity secret is configured", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET });
+    const app = buildProductionApp({
+      dataRoot,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
+      trustedActorSecret: TRUSTED_SECRET
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -34,7 +39,11 @@ describe("trusted identity access guards", () => {
 
   it("accepts a trusted proxy actor header when the shared secret matches", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET });
+    const app = buildProductionApp({
+      dataRoot,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
+      trustedActorSecret: TRUSTED_SECRET
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -54,7 +63,11 @@ describe("trusted identity access guards", () => {
 
   it("keeps explicit dev/test x-actor-name compatibility only when dev auth is enabled", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot, env: { CATERING_DEV_AUTH: "1" } });
+    const app = buildProductionApp({
+      dataRoot,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
+      env: { CATERING_DEV_AUTH: "1" }
+    });
 
     const response = await app.inject({
       method: "POST",

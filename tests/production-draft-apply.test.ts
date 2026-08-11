@@ -18,6 +18,7 @@ import {
   type ProductionDraft,
   type Recipe
 } from "@catering/shared-core";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 
 const TRUSTED_SECRET = "production-draft-apply-secret";
 const trustedProductionHeaders = {
@@ -171,15 +172,10 @@ function recipeCandidate(recipeId = "recipe-draft-vitello"): Recipe {
 
 async function importApproveAndApply(
   app: ReturnType<typeof buildProductionApp>,
+  store: ProductionStore,
   draft: ProductionDraft
 ) {
-  const imported = await app.inject({
-    method: "POST",
-    url: "/v1/production/drafts",
-    headers: trustedProductionHeaders,
-    payload: draft
-  });
-  expect(imported.statusCode).toBe(201);
+  await store.saveProductionDraft({ businessId: "local" }, draft);
 
   for (const card of draft.reviewCards) {
     const reviewed = await app.inject({
@@ -232,13 +228,14 @@ describe("ProductionDraft apply", () => {
       repository,
       store,
       auditLog,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
     const draft = await buildDraft();
 
     try {
-      const response = await importApproveAndApply(app, draft);
+      const response = await importApproveAndApply(app, store, draft);
       const body = response.json<{
         eventSpec: AcceptedEventSpec;
         plan: ProductionDraft["draftArtifacts"]["productionPlan"];
@@ -283,25 +280,20 @@ describe("ProductionDraft apply", () => {
     const app = buildProductionApp({
       dataRoot,
       store,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
     const draft = await buildDraft("production-draft-apply-pending");
 
     try {
-      const imported = await app.inject({
-        method: "POST",
-        url: "/v1/production/drafts",
-        headers: trustedProductionHeaders,
-        payload: draft
-      });
+      await store.saveProductionDraft({ businessId: "local" }, draft);
       const response = await app.inject({
         method: "POST",
         url: `/v1/production/drafts/${draft.draftId}/apply`,
         headers: trustedProductionHeaders
       });
 
-      expect(imported.statusCode).toBe(201);
       expect(response.statusCode).toBe(404);
       expect(await store.listPlans({ businessId: "local" })).toHaveLength(0);
       expect(await store.listPurchaseLists({ businessId: "local" })).toHaveLength(0);
@@ -317,6 +309,7 @@ describe("ProductionDraft apply", () => {
     const app = buildProductionApp({
       dataRoot,
       store,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
@@ -327,7 +320,7 @@ describe("ProductionDraft apply", () => {
     });
 
     try {
-      const response = await importApproveAndApply(app, draft);
+      const response = await importApproveAndApply(app, store, draft);
 
       expect(response.statusCode).toBe(409);
       expect(response.body).toContain("würde bestehende Produktobjekte überschreiben");
@@ -341,9 +334,12 @@ describe("ProductionDraft apply", () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
     const app = buildProductionApp({
       dataRoot,
       repository,
+      store,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
@@ -354,7 +350,7 @@ describe("ProductionDraft apply", () => {
     });
 
     try {
-      const response = await importApproveAndApply(app, draft);
+      const response = await importApproveAndApply(app, store, draft);
 
       expect(response.statusCode).toBe(409);
       expect(response.body).toContain("Recipe recipe-draft-vitello existiert bereits");

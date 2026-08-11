@@ -15,13 +15,35 @@ export type ProductionDocumentSubmitServices = {
     file: File,
     channel: IntakeDocumentChannel
   ) => Promise<Record<string, unknown>>;
-  createProductionDraftFromDocument: (file: File) => Promise<{ draft: ProductionDraft }>;
+  uploadSourceDocument: (file: File) => Promise<{ documentId: string }>;
+  createProductionCase: (input?: Record<string, never>) => Promise<{ case: { caseId: string } }>;
+  createProductionDraftFromDocument: (
+    caseId: string,
+    documentId: string
+  ) => Promise<{ draft: ProductionDraft }>;
+  createOfferCase: (input?: Record<string, never>) => Promise<{ case: { caseId: string } }>;
+  createOfferDraftFromRequest: (
+    caseId: string,
+    eventRequest: Record<string, unknown>
+  ) => Promise<Record<string, unknown>>;
+};
+
+export type StagedProductionDocument = {
+  file: File;
+  documentId: string;
+  caseId?: string;
 };
 
 export type ProductionDocumentSubmitCallbacks =
   ProductionDocumentSuccessActions &
   ProductionDocumentFailureResetActions & {
     setSubmitting: (submitting: boolean) => void;
+    setActiveProductionCaseId: (caseId: string) => void;
+    setActiveOfferCaseId: (caseId: string) => void;
+    setSelectedDraftId: (draftId: string) => void;
+    getStagedProductionDocument?: () => StagedProductionDocument | undefined;
+    setStagedProductionDocument?: (stage: StagedProductionDocument) => void;
+    clearStagedProductionDocument?: () => void;
     setProductionWorkspaceCleared: (cleared: boolean) => void;
     clearMessages: () => void;
     startIncomingProductionFile: (file: File, channel: IntakeDocumentChannel) => void;
@@ -35,6 +57,8 @@ export type ProductionDocumentSubmitActionInput =
   ProductionDocumentSubmitCallbacks & {
     intakeFile?: File | null;
     intakeChannel: IntakeDocumentChannel;
+    activeProductionCaseId?: string;
+    activeOfferCaseId?: string;
   };
 
 export type ProductionDocumentSubmitActions = {
@@ -45,7 +69,19 @@ export type ProductionDocumentSubmitActions = {
 
 export function buildProductionDocumentSubmitActions({
   createAcceptedSpecFromDocument,
+  uploadSourceDocument,
+  createProductionCase,
   createProductionDraftFromDocument,
+  activeProductionCaseId,
+  setActiveProductionCaseId,
+  createOfferCase,
+  createOfferDraftFromRequest,
+  activeOfferCaseId,
+  setActiveOfferCaseId,
+  setSelectedDraftId,
+  getStagedProductionDocument,
+  setStagedProductionDocument,
+  clearStagedProductionDocument,
   intakeFile,
   intakeChannel,
   setSubmitting,
@@ -83,7 +119,24 @@ export function buildProductionDocumentSubmitActions({
 
     try {
       if (target === "production_draft") {
-        await createProductionDraftFromDocument(file);
+        const existingStage = getStagedProductionDocument?.();
+        const reusableStage = existingStage?.file === file ? existingStage : undefined;
+        let documentId = reusableStage?.documentId;
+        let caseId = reusableStage?.caseId;
+
+        if (!documentId) {
+          documentId = (await uploadSourceDocument(file)).documentId;
+          setStagedProductionDocument?.({ file, documentId });
+        }
+        if (!caseId) {
+          caseId = activeProductionCaseId ?? (await createProductionCase({})).case.caseId;
+          if (!activeProductionCaseId) {
+            setActiveProductionCaseId(caseId);
+          }
+          setStagedProductionDocument?.({ file, documentId, caseId });
+        }
+        await createProductionDraftFromDocument(caseId, documentId);
+        clearStagedProductionDocument?.();
         await completeProductionDraftStateAfterDocumentSuccess(file, {
           completeIncomingProductionFile,
           completeDocumentProgress,
@@ -92,6 +145,22 @@ export function buildProductionDocumentSubmitActions({
         });
       } else {
         const response = await createAcceptedSpecFromDocument(file, channel);
+        const eventRequest = response.eventRequest;
+        if (!eventRequest || typeof eventRequest !== "object" || Array.isArray(eventRequest)) {
+          throw new Error("Das Dokument enthält keine gültige Angebotsanfrage.");
+        }
+        const caseId = activeOfferCaseId ?? (await createOfferCase({})).case.caseId;
+        if (!activeOfferCaseId) {
+          setActiveOfferCaseId(caseId);
+        }
+        const draft = await createOfferDraftFromRequest(
+          caseId,
+          eventRequest as Record<string, unknown>
+        );
+        if (typeof draft.draftId !== "string" || !draft.draftId) {
+          throw new Error("Der Angebotsentwurf enthält keine gültige ID.");
+        }
+        setSelectedDraftId(draft.draftId);
         await completeProductionStateAfterDocumentSuccess(file, response, {
           setFocusedProductionSpecId,
           completeIncomingProductionFile,

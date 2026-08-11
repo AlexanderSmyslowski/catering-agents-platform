@@ -20,16 +20,19 @@ describe("data safety and audit gates", () => {
       "manual_intake",
       "manual_spec",
       "document_upload",
+      "source_document_upload",
       "intake_seed_demo",
       "intake_shadow_extraction",
       "intake_archive_request",
       "intake_spec_update",
       "intake_spec_governance_finalize",
       "offer_draft_creation",
+      "offer_case_input",
       "offer_recipe_upload",
       "offer_variant_approval",
       "offer_seed_demo",
       "production_draft_prepare",
+      "production_case_input",
       "production_draft_import",
       "production_draft_document_extraction",
       "production_draft_revision",
@@ -61,6 +64,21 @@ describe("data safety and audit gates", () => {
       scope: "uploaded_internal",
       externalExposure: "none"
     });
+    expect(dataIngressPaths.find((path) => path.id === "source_document_upload")).toMatchObject({
+      scope: "uploaded_internal",
+      externalExposure: "none",
+      requiredGate: expect.stringContaining("upload validation")
+    });
+    expect(dataIngressPaths.find((path) => path.id === "offer_case_input")).toMatchObject({
+      scope: "operator_supplied_internal",
+      externalExposure: "none",
+      requiredGate: expect.stringContaining("offer_operator auth")
+    });
+    expect(dataIngressPaths.find((path) => path.id === "production_case_input")).toMatchObject({
+      scope: "operator_supplied_internal",
+      externalExposure: "none",
+      requiredGate: expect.stringContaining("immutable handoff reader")
+    });
     expect(dataIngressPaths.find((path) => path.id === "llm_readiness_draft")).toMatchObject({
       scope: "synthetic_or_demo_only",
       externalExposure: "blocked_until_decision"
@@ -80,8 +98,14 @@ describe("data safety and audit gates", () => {
       requiredGate: expect.stringContaining("CATERING_SYNTHETIC_LLM_SLICE")
     });
     expect(dataIngressPaths.find((path) => path.id === "production_draft_import")).toMatchObject({
+      scope: "read_only_evidence",
       externalExposure: "blocked_until_decision",
-      requiredGate: expect.stringContaining("no product writes")
+      requiredGate: expect.stringContaining("trusted service read")
+    });
+    expect(dataIngressPaths.find((path) => path.id === "production_draft_document_extraction")).toMatchObject({
+      scope: "uploaded_internal",
+      externalExposure: "blocked_until_decision",
+      requiredGate: expect.stringContaining("do not enable external providers")
     });
     expect(dataIngressPaths.find((path) => path.id === "production_draft_decision")).toMatchObject({
       externalExposure: "none",
@@ -107,10 +131,14 @@ describe("data safety and audit gates", () => {
         "POST /v1/intake/shadow/normalize",
         "POST /v1/intake/documents",
         "POST /v1/intake/documents/upload",
+        "POST /v1/intake/source-documents",
         "POST /v1/intake/requests/:requestId/archive",
         "PATCH /v1/intake/specs/:specId",
         "POST /v1/intake/spec-governance/finalize",
         "POST /v1/offers/drafts",
+        "POST /v1/offers/cases",
+        "POST /v1/offers/cases/:caseId/copies",
+        "POST /v1/offers/cases/:caseId/messages",
         "POST /v1/offers/from-text",
         "POST /v1/offers/drafts/:draftId/decision",
         "POST /v1/offers/seed-demo",
@@ -118,6 +146,10 @@ describe("data safety and audit gates", () => {
         "POST /v1/offers/recipes/upload",
         "PATCH /v1/offers/recipes/:recipeId/review",
         "POST /v1/production/drafts",
+        "POST /v1/production/cases",
+        "POST /v1/production/cases/from-handoff/:handoffId",
+        "POST /v1/production/cases/:caseId/copies",
+        "POST /v1/production/cases/:caseId/messages",
         "POST /v1/production/drafts/from-document",
         "POST /v1/production/drafts/:draftId/revise",
         "POST /v1/production/drafts/:draftId/prepare",
@@ -139,6 +171,7 @@ describe("data safety and audit gates", () => {
       expect.arrayContaining([
         "intake_normalized",
         "intake_documents_normalized",
+        "intake_source_document_storage_registered",
         "intake_soft_archive",
         "intake_manual_spec_created",
         "intake_spec_updated",
@@ -206,6 +239,7 @@ describe("data safety and audit gates", () => {
     expect(auditActions).toEqual(
       expect.arrayContaining([
         "intake.documents_normalized",
+        "intake.source_document_storage_registered",
         "intake.manual_spec_created",
         "intake.normalized",
         "intake.request_soft_archived",

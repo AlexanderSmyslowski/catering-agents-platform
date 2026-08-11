@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildIntakeApp } from "../intake-service/src/app.js";
 import { buildOfferApp } from "../offer-service/src/app.js";
 import { buildProductionApp } from "../production-service/src/app.js";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import { buildPrintExportApp } from "../print-export/src/index.js";
 
 const TRUSTED_SECRET = "pa8-shared-secret";
@@ -204,7 +205,11 @@ describe("PA8 read-path auth hardening", () => {
 
     let planId = "";
     let purchaseListId = "";
-    await withApp(buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET }), async (app) => {
+    await withApp(buildProductionApp({
+      dataRoot,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
+      trustedActorSecret: TRUSTED_SECRET
+    }), async (app) => {
       const seedResponse = await app.inject({
         method: "POST",
         url: "/v1/production/seed-demo",

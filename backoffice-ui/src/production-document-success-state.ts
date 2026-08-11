@@ -29,6 +29,13 @@ export async function completeProductionDraftStateAfterDocumentSuccess(
 ) {
   actions.completeIncomingProductionFile();
   actions.completeDocumentProgress();
-  await actions.refreshDashboard();
+  try {
+    await actions.refreshDashboard();
+  } catch {
+    actions.setNotice(
+      `KI-Entwurf für ${file.name} ist bereit zur Prüfung. Die Arbeitsfläche konnte nicht neu geladen werden; bitte lade die Seite neu.`
+    );
+    return;
+  }
   actions.setNotice(`KI-Entwurf für ${file.name} ist bereit zur Prüfung.`);
 }

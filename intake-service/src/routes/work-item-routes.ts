@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import {
+  areJsonValuesEqual,
   validateAcceptedEventSpec,
+  validateEventRequest,
   type AcceptedEventSpec,
   type AuditLogStore,
   type OperationalArchiveReasonCode,
@@ -36,6 +38,15 @@ export interface FinalizeSpecGovernanceBody {
 
 export interface ArchiveIntakeRequestBody {
   reasonCode?: OperationalArchiveReasonCode;
+}
+
+interface InternalSpecWriteBody {
+  acceptedEventSpec?: unknown;
+}
+
+interface InternalSpecReplacementBody {
+  expected?: unknown;
+  replacement?: unknown;
 }
 
 export interface IntakeWorkItemRouteDependencies {
@@ -86,6 +97,109 @@ export function registerIntakeWorkItemRoutes(
     requireIntakeOperator,
     actorForRequest
   } = deps;
+
+  const productionServiceActor = (
+    request: { headers: Record<string, string | string[] | undefined> }
+  ): TrustedActor | undefined => {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    return actor.trusted && actor.name === "Production-Service" ? actor : undefined;
+  };
+
+  app.get<{ Params: { requestId: string } }>(
+    "/v1/intake/internal/requests/:requestId",
+    async (request, reply) => {
+      const actor = productionServiceActor(request);
+      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      const eventRequest = await store.getRequest(actor, request.params.requestId);
+      if (!eventRequest) return reply.code(404).send({ message: "EventRequest nicht gefunden." });
+      return reply.send({ eventRequest: validateEventRequest(eventRequest) });
+    }
+  );
+
+  app.get<{ Params: { specId: string } }>(
+    "/v1/intake/internal/specs/:specId",
+    async (request, reply) => {
+      const actor = productionServiceActor(request);
+      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      const acceptedEventSpec = await store.getSpec(actor, request.params.specId);
+      if (!acceptedEventSpec) {
+        return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
+      }
+      return reply.send({ acceptedEventSpec: validateAcceptedEventSpec(acceptedEventSpec) });
+    }
+  );
+
+  app.put<{ Params: { specId: string }; Body: InternalSpecWriteBody }>(
+    "/v1/intake/internal/specs/:specId",
+    async (request, reply) => {
+      const actor = productionServiceActor(request);
+      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      let acceptedEventSpec: AcceptedEventSpec;
+      try {
+        acceptedEventSpec = validateAcceptedEventSpec(
+          request.body?.acceptedEventSpec as AcceptedEventSpec
+        );
+      } catch {
+        return reply.code(422).send({ message: "AcceptedEventSpec ist nicht schema-valide." });
+      }
+      if (acceptedEventSpec.specId !== request.params.specId) {
+        return reply.code(422).send({ message: "AcceptedEventSpec passt nicht zur angeforderten specId." });
+      }
+
+      const existing = await store.getSpec(actor, acceptedEventSpec.specId);
+      if (existing) {
+        if (areJsonValuesEqual(existing, acceptedEventSpec)) {
+          return reply.send({ result: "same_content" });
+        }
+        return reply.code(409).send({
+          message: `AcceptedEventSpec ${acceptedEventSpec.specId} existiert bereits mit abweichendem Inhalt.`
+        });
+      }
+      const inserted = await store.insertSpec(actor, acceptedEventSpec);
+      if (inserted === "created") {
+        return reply.code(201).send({ result: "created" });
+      }
+      const observed = await store.getSpec(actor, acceptedEventSpec.specId);
+      if (observed && areJsonValuesEqual(observed, acceptedEventSpec)) {
+        return reply.send({ result: "same_content" });
+      }
+      return reply.code(409).send({
+        message: `AcceptedEventSpec ${acceptedEventSpec.specId} konnte nicht konfliktfrei eingefügt werden.`
+      });
+    }
+  );
+
+  app.put<{ Params: { specId: string }; Body: InternalSpecReplacementBody }>(
+    "/v1/intake/internal/specs/:specId/replacement",
+    async (request, reply) => {
+      const actor = productionServiceActor(request);
+      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      let expected: AcceptedEventSpec;
+      let replacement: AcceptedEventSpec;
+      try {
+        expected = validateAcceptedEventSpec(request.body?.expected as AcceptedEventSpec);
+        replacement = validateAcceptedEventSpec(request.body?.replacement as AcceptedEventSpec);
+      } catch {
+        return reply.code(422).send({ message: "AcceptedEventSpec-Ersetzung ist nicht schema-valide." });
+      }
+      if (
+        expected.specId !== request.params.specId ||
+        replacement.specId !== request.params.specId
+      ) {
+        return reply.code(422).send({ message: "AcceptedEventSpec-Ersetzung muss dieselbe specId behalten." });
+      }
+      const result = await store.replaceSpec(actor, expected, replacement);
+      if (result === "missing") {
+        return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
+      }
+      if (result === "conflict") {
+        return reply.code(409).send({
+          message: "AcceptedEventSpec wurde zwischenzeitlich geändert. Bitte Daten neu laden."
+        });
+      }
+      return reply.send({ result });
+    }
+  );
 
   app.get("/v1/intake/requests", async (request, reply) => {
     const forbidden = requireIntakeOperator(request, reply, trustedActorSecret, allowDevActorHeader);

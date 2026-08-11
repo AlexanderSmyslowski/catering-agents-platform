@@ -79,6 +79,15 @@ export const dataIngressPaths = [
     requiredGate: "intake_operator auth and upload validation"
   },
   {
+    id: "source_document_upload",
+    service: "intake-service",
+    route: "POST /v1/intake/source-documents",
+    source: "operator supplied original source document",
+    scope: "uploaded_internal",
+    externalExposure: "none",
+    requiredGate: "intake_operator auth, upload validation, business-scoped immutable storage"
+  },
+  {
     id: "intake_seed_demo",
     service: "intake-service",
     route: "POST /v1/intake/seed-demo",
@@ -133,6 +142,15 @@ export const dataIngressPaths = [
     requiredGate: "offer_operator auth"
   },
   {
+    id: "offer_case_input",
+    service: "offer-service",
+    route: "POST /v1/offers/cases and POST /v1/offers/cases/:caseId/copies and POST /v1/offers/cases/:caseId/messages",
+    source: "operator case metadata or instruction",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "offer_operator auth, server-authored case identity and event provenance"
+  },
+  {
     id: "offer_recipe_upload",
     service: "offer-service",
     route: "POST /v1/offers/recipes/import-text and POST /v1/offers/recipes/upload",
@@ -169,22 +187,31 @@ export const dataIngressPaths = [
     requiredGate: "production_operator auth, deterministic non-persisting preparation, new review revision, no product writes"
   },
   {
+    id: "production_case_input",
+    service: "production-service",
+    route: "POST /v1/production/cases and POST /v1/production/cases/from-handoff/:handoffId and POST /v1/production/cases/:caseId/copies and POST /v1/production/cases/:caseId/messages",
+    source: "operator case metadata, instruction, or immutable offer handoff",
+    scope: "operator_supplied_internal",
+    externalExposure: "none",
+    requiredGate: "production_operator auth, server-authored case identity and event provenance, immutable handoff reader"
+  },
+  {
     id: "production_draft_import",
     service: "production-service",
     route: "POST /v1/production/drafts",
-    source: "validated ProductionDraft",
-    scope: "uploaded_internal",
+    source: "owned ProductionCase and canonical AcceptedEventSpec read through IntakeRecordsPort",
+    scope: "read_only_evidence",
     externalExposure: "blocked_until_decision",
-    requiredGate: "production_operator auth, validateProductionDraft, pending_review only, no product writes"
+    requiredGate: "production_operator auth, owned case, trusted service read, stable spec fingerprint, pending_review only, no product writes"
   },
   {
     id: "production_draft_document_extraction",
     service: "production-service",
     route: "POST /v1/production/drafts/from-document",
-    source: "operator-approved anonymized document and BYO-LLM draft adapter",
-    scope: "synthetic_or_demo_only",
+    source: "business-scoped immutable source document and BYO-LLM draft adapter",
+    scope: "uploaded_internal",
     externalExposure: "blocked_until_decision",
-    requiredGate: "production_operator auth, PA54-approved source, explicit CATERING_SYNTHETIC_LLM_SLICE opt-in, draft-only, no raw prompt/response persistence"
+    requiredGate: "production_operator auth, stable document reference and hash verification; do not enable external providers for confidential sources before Task 7; draft-only, no raw prompt/response persistence"
   },
   {
     id: "production_draft_revision",
@@ -330,6 +357,16 @@ export const auditEvidencePaths = [
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "product_mutation",
+    requiredRole: "intake_operator"
+  },
+  {
+    id: "intake_source_document_storage_registered",
+    service: "intake-service",
+    route: "POST /v1/intake/source-documents",
+    action: "intake.source_document_storage_registered",
+    evidenceKind: "audit_event",
+    readOnlyEvidence: true,
+    productApprovalEffect: "none",
     requiredRole: "intake_operator"
   },
   {

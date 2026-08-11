@@ -39,8 +39,27 @@ function input(
   return {
     createAcceptedSpecFromText: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-text-1" } })),
     intakeText: "Lunch fuer 40 Personen mit Tomatensuppe.",
-    createAcceptedSpecFromDocument: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-upload-1" } })),
+    createAcceptedSpecFromDocument: vi.fn(async () => ({
+      eventRequest: {
+        requestId: "request-upload-1",
+        channel: "pdf_upload",
+        receivedAt: "2026-07-10T10:00:00.000Z",
+        rawText: "Lunch fuer 40 Personen",
+        signals: {},
+        ambiguities: []
+      },
+      acceptedEventSpec: { specId: "spec-upload-1" }
+    })),
+    uploadSourceDocument: vi.fn(async () => ({ documentId: "source-document-1" })),
+    createProductionCase: vi.fn(async () => ({ case: { caseId: "production-case-1" } })),
     createProductionDraftFromDocument: vi.fn(async () => ({ draft: draft() })),
+    activeProductionCaseId: undefined,
+    setActiveProductionCaseId: vi.fn(),
+    createOfferCase: vi.fn(async () => ({ case: { caseId: "offer-case-1" } })),
+    createOfferDraftFromRequest: vi.fn(async () => ({ draftId: "offer-draft-upload-1" })),
+    activeOfferCaseId: undefined,
+    setActiveOfferCaseId: vi.fn(),
+    setSelectedDraftId: vi.fn(),
     intakeFile: selectedFile,
     intakeChannel: "pdf_upload",
     createAcceptedSpecFromManualForm: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-manual-1" } })),
@@ -112,7 +131,17 @@ describe("production intake actions app boundary", () => {
     expect(boundaryInput.manualSpecForm.setManualEventType).toHaveBeenCalledWith("lunch");
     expect(boundaryInput.createAcceptedSpecFromText).toHaveBeenCalledWith(boundaryInput.intakeText);
     expect(boundaryInput.createAcceptedSpecFromDocument).toHaveBeenCalledWith(selectedFile, "pdf_upload");
-    expect(boundaryInput.createProductionDraftFromDocument).toHaveBeenCalledWith(selectedFile);
+    expect(boundaryInput.createOfferCase).toHaveBeenCalledWith({});
+    expect(boundaryInput.createOfferDraftFromRequest).toHaveBeenCalledWith(
+      "offer-case-1",
+      expect.objectContaining({ requestId: "request-upload-1" })
+    );
+    expect(boundaryInput.setSelectedDraftId).toHaveBeenCalledWith("offer-draft-upload-1");
+    expect(boundaryInput.uploadSourceDocument).toHaveBeenCalledWith(selectedFile);
+    expect(boundaryInput.createProductionDraftFromDocument).toHaveBeenCalledWith(
+      "production-case-1",
+      "source-document-1"
+    );
     expect(boundaryInput.createAcceptedSpecFromManualForm).toHaveBeenCalledWith(manualInput());
     expect(boundaryInput.resetManualSpecDraft).toHaveBeenCalledTimes(1);
     expect(boundaryInput.setError).not.toHaveBeenCalled();
@@ -126,7 +155,11 @@ describe("production intake actions app boundary", () => {
     await boundary.processIncomingProductionFile(droppedFile, "email");
 
     expect(boundaryInput.startIncomingProductionFile).toHaveBeenCalledWith(droppedFile, "email");
-    expect(boundaryInput.createProductionDraftFromDocument).toHaveBeenCalledWith(droppedFile);
+    expect(boundaryInput.uploadSourceDocument).toHaveBeenCalledWith(droppedFile);
+    expect(boundaryInput.createProductionDraftFromDocument).toHaveBeenCalledWith(
+      "production-case-1",
+      "source-document-1"
+    );
     expect(boundaryInput.createAcceptedSpecFromDocument).not.toHaveBeenCalled();
   });
 });

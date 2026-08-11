@@ -8,6 +8,7 @@ import { buildProductionApp } from "../production-service/src/app.js";
 import { AuditLogStore } from "../shared-core/src/audit-log.js";
 import { RecipeLibrary } from "../shared-core/src/recipe-library.js";
 import { OfferStore } from "../offer-service/src/store.js";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-"));
@@ -19,7 +20,7 @@ const offerOperatorName = "Angebots-Mitarbeiter";
 describe("P4 audit and review traceability", () => {
   it("shows production seed-demo actions in the audit feed", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot });
+    const app = buildProductionApp({ dataRoot, intakeRecords: new InMemoryIntakeRecordsPort() });
 
     try {
       const seedResponse = await app.inject({

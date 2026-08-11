@@ -18,7 +18,12 @@ function input(
     })),
     buildCurrentSpecUpdateInput: vi.fn(() => ({ attendeeCount: 40 })),
     loadSpecIntoEditorState: vi.fn(() => "spec-plan-submit-1"),
+    createProductionCase: vi.fn(async () => ({ case: { caseId: "production-case-plan-1" } })),
     createProductionDraftFromAcceptedEventSpec: vi.fn(async () => ({ draft: { draftId: "draft-imported-1" } })),
+    activeProductionCaseId: undefined,
+    activeProductionCaseSpecId: undefined,
+    setActiveProductionCaseId: vi.fn(),
+    setActiveProductionCaseSpecId: vi.fn(),
     prepareProductionDraft: vi.fn(async () => ({ draft: { draftId: "draft-prepared-2" } })),
     setSubmitting: vi.fn(),
     setProductionWorkspaceCleared: vi.fn(),
@@ -95,7 +100,10 @@ describe("production planning controls", () => {
     await controls.handleCreatePlan(spec);
 
     expect(actionInput.updateAcceptedSpec).toHaveBeenCalledWith("spec-plan-submit-1", { attendeeCount: 40 });
-    expect(actionInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(spec);
+    expect(actionInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(
+      "production-case-plan-1",
+      spec
+    );
     expect(actionInput.prepareProductionDraft).toHaveBeenCalledWith("draft-imported-1");
     expect(actionInput.showProductionDraftReview).toHaveBeenCalledWith("draft-prepared-2");
     expect(actionInput.completePlanProgress).toHaveBeenCalledTimes(1);

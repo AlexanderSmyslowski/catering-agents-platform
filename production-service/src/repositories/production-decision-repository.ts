@@ -95,6 +95,29 @@ export function createProductionDecisionCollections(
   };
 }
 
+export function productionDecisionTargetScopeFor(
+  collections: ProductionDecisionCollections,
+  context: BusinessContext,
+  target: ApprovalRequestRecord["target"]
+): ProductionDecisionTargetScope {
+  return {
+    getDraft: (draftId) => collections.drafts.get(context, draftId),
+    setDraft: (draft) => collections.drafts.set(context, draft),
+    insertDraft: (draft) => collections.drafts.insert(context, draft),
+    insertDecisionAggregate: (aggregate) => collections.decisionAggregates.insert(context, aggregate),
+    getDecisionAggregate: (approvalRequestId) => collections.decisionAggregates.get(context, approvalRequestId),
+    getApproval: (approvalRequestId) => collections.approvals.get(context, approvalRequestId),
+    listApprovalsForTarget: async () => (await collections.approvals.list(context)).filter(
+      (approval) => approval.target.kind === target.kind &&
+        approval.target.artifactId === target.artifactId &&
+        approval.target.revision === target.revision
+    ),
+    insertApproval: (approval) => collections.approvals.insert(context, approval),
+    getApprovedProductionSpec: (id) => collections.approvedProductionSpecs.get(context, id),
+    insertApprovedProductionSpec: (spec) => collections.approvedProductionSpecs.insert(context, spec)
+  };
+}
+
 class InternalProductionDecisionRepository implements ProductionDecisionRepository {
   constructor(
     private readonly options: CollectionStorageOptions,
@@ -137,34 +160,10 @@ class InternalProductionDecisionRepository implements ProductionDecisionReposito
         const collections = transactionalQueryable
           ? createProductionDecisionCollections({ pgPool: transactionalQueryable })
           : this.collections;
-        return operation(this.scopeFor(collections, context, target));
+        return operation(productionDecisionTargetScopeFor(collections, context, target));
       }
     });
   }
-
-  private scopeFor(
-    collections: ProductionDecisionCollections,
-    context: BusinessContext,
-    target: ApprovalRequestRecord["target"]
-  ): ProductionDecisionTargetScope {
-    return {
-      getDraft: (draftId) => collections.drafts.get(context, draftId),
-      setDraft: (draft) => collections.drafts.set(context, draft),
-      insertDraft: (draft) => collections.drafts.insert(context, draft),
-      insertDecisionAggregate: (aggregate) => collections.decisionAggregates.insert(context, aggregate),
-      getDecisionAggregate: (approvalRequestId) => collections.decisionAggregates.get(context, approvalRequestId),
-      getApproval: (approvalRequestId) => collections.approvals.get(context, approvalRequestId),
-      listApprovalsForTarget: async () => (await collections.approvals.list(context)).filter(
-        (approval) => approval.target.kind === target.kind &&
-          approval.target.artifactId === target.artifactId &&
-          approval.target.revision === target.revision
-      ),
-      insertApproval: (approval) => collections.approvals.insert(context, approval),
-      getApprovedProductionSpec: (id) => collections.approvedProductionSpecs.get(context, id),
-      insertApprovedProductionSpec: (spec) => collections.approvedProductionSpecs.insert(context, spec)
-    };
-  }
-
 }
 
 export function registerProductionDecisionRepository(

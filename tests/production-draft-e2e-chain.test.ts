@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildIntakeApp } from "@catering/intake-service";
+import { buildIntakeApp, IntakeStore } from "@catering/intake-service";
 import { buildPrintExportApp } from "@catering/print-export";
 import {
   buildProductionApp,
@@ -23,6 +23,7 @@ import {
   type PurchaseList,
   type Recipe
 } from "@catering/shared-core";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 
 const TRUSTED_SECRET = "production-draft-e2e-chain-secret";
 const localBusiness = { businessId: "local" };
@@ -239,18 +240,11 @@ async function productCounts(
 }
 
 async function importDraft(
-  productionApp: ReturnType<typeof buildProductionApp>,
+  store: ProductionStore,
   draft: ProductionDraft
 ): Promise<ProductionDraft> {
-  const response = await productionApp.inject({
-    method: "POST",
-    url: "/v1/production/drafts",
-    headers: trustedHeaders("production_operator"),
-    payload: draft
-  });
-
-  expect(response.statusCode, response.body).toBe(201);
-  return response.json<{ draft: ProductionDraft }>().draft;
+  await store.saveProductionDraft(localBusiness, draft);
+  return draft;
 }
 
 async function decideAllReviewCards(
@@ -285,16 +279,22 @@ describe("ProductionDraft E2E chain", () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
     const productionApp = buildProductionApp({
       dataRoot,
       repository,
+      store,
+      intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
         CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
       }
     });
+    const intakeStore = new IntakeStore({ rootDir: dataRoot });
     const intakeApp = buildIntakeApp({
       rootDir: dataRoot,
+      store: intakeStore,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
@@ -312,7 +312,7 @@ describe("ProductionDraft E2E chain", () => {
         purchaseLists: 0
       });
 
-      const importedDraft = await importDraft(productionApp, draft);
+      const importedDraft = await importDraft(store, draft);
       expect(importedDraft.status).toBe("pending_review");
       await expect(repository.get(localBusiness, "recipe-draft-tomato-soup")).resolves.toBeUndefined();
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
@@ -354,6 +354,9 @@ describe("ProductionDraft E2E chain", () => {
       expect(applied.plan.planId).toBe(draft.draftArtifacts.productionPlan?.planId);
       expect(applied.purchaseList.purchaseListId).toBe(draft.draftArtifacts.purchaseList?.purchaseListId);
       expect(applied.recipes.map((recipe) => recipe.recipeId)).toEqual(["recipe-draft-tomato-soup"]);
+      for (const spec of await intakeRecords.listSpecs(localBusiness)) {
+        await intakeStore.saveSpec(localBusiness, spec);
+      }
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
         specs: 1,
         plans: 1,
@@ -443,7 +446,7 @@ describe("ProductionDraft E2E chain", () => {
             supersedesDraftId: `${draft.draftId}-newer`
           });
         } else {
-          await importDraft(productionApp, draft);
+          await importDraft(store, draft);
           if (arrange === "decision") {
             const rejection = await productionApp.inject({
               method: "POST",

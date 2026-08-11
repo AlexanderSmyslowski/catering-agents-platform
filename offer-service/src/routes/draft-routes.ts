@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
   createEventRequestFromText,
@@ -60,22 +61,39 @@ export function registerOfferDraftRoutes(
     return packagePreset ? createCuratedOfferDraft(eventRequest, packagePreset) : createOfferDraft(eventRequest);
   }
 
-  app.post<{ Body: EventRequest }>("/v1/offers/drafts", async (request, reply) => {
+  app.post<{ Body: EventRequest & { caseId?: string } }>("/v1/offers/drafts", async (request, reply) => {
     if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
       });
     }
 
-    const eventRequest = validateEventRequest(request.body);
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const caseId = typeof request.body?.caseId === "string" ? request.body.caseId.trim() : "";
+    if (!caseId) return reply.code(422).send({ message: "caseId ist erforderlich." });
+    if (!await store.getCase(actor, caseId)) {
+      return reply.code(404).send({ message: "Angebotsauftrag nicht gefunden." });
+    }
+    let eventRequest: EventRequest;
+    try {
+      const { caseId: _caseId, ...body } = request.body;
+      eventRequest = validateEventRequest(body as EventRequest);
+    } catch (error) {
+      return reply.code(422).send({
+        message: "EventRequest ist ungültig.",
+        errors: [error instanceof Error ? error.message : "Unbekannter Validierungsfehler."]
+      });
+    }
     const draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(eventRequest), businessId: actor.businessId, revision: 1 });
-    await store.saveDraft(actor, draft);
+    if (await store.saveDraftForCase(actor, caseId, draft) === "case_conflict") {
+      return reply.code(409).send({ message: "Dieser Angebotsentwurf gehört bereits zu einem anderen Auftrag." });
+    }
     await auditLog.logFor(actor, {
       action: "offer.draft_created",
       entityType: "OfferDraft",
       entityId: draft.draftId,
       actor,
+      idempotencyKey: `draft-created:${draft.draftId}`,
       summary: "Angebotsentwurf aus strukturierter Event-Anfrage erstellt.",
       details: {
         requestId: eventRequest.requestId,
@@ -86,26 +104,51 @@ export function registerOfferDraftRoutes(
     return reply.code(201).send(draft);
   });
 
-  app.post<{ Body: { text: string; requestId?: string } }>("/v1/offers/from-text", async (request, reply) => {
+  app.post<{ Body: { caseId?: unknown; text?: unknown; requestId?: unknown } }>("/v1/offers/from-text", async (request, reply) => {
     if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
       });
     }
 
-    const eventRequest = createEventRequestFromText({
-      requestId: request.body.requestId ?? `request-${Date.now()}`,
-      channel: "text",
-      rawText: request.body.text
-    });
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    if (!request.body || typeof request.body !== "object" || Array.isArray(request.body) ||
+      Object.keys(request.body).some((key) => !["caseId", "text", "requestId"].includes(key))) {
+      return reply.code(422).send({ message: "Freitext-Anfrage ist ungültig." });
+    }
+    const caseId = typeof request.body.caseId === "string" ? request.body.caseId.trim() : "";
+    const text = typeof request.body.text === "string" ? request.body.text.trim() : "";
+    const suppliedRequestId = request.body.requestId === undefined
+      ? undefined
+      : typeof request.body.requestId === "string" ? request.body.requestId.trim() : "";
+    if (!caseId || !text || suppliedRequestId === "") {
+      return reply.code(422).send({
+        message: "caseId und text sind erforderlich; requestId muss bei Angabe eine nichtleere Zeichenfolge sein."
+      });
+    }
+    // Browser retries may omit a command ID. Deriving it from the owned case and
+    // normalized input lets a lost-response retry recover the same draft.
+    const requestId = suppliedRequestId ?? `request-free-text-${createHash("sha256")
+      .update(`${actor.businessId}\0${caseId}\0${text}`)
+      .digest("hex")}`;
+    if (!await store.getCase(actor, caseId)) {
+      return reply.code(404).send({ message: "Angebotsauftrag nicht gefunden." });
+    }
+    const eventRequest = createEventRequestFromText({
+      requestId,
+      channel: "text",
+      rawText: text
+    });
     const draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(eventRequest), businessId: actor.businessId, revision: 1 });
-    await store.saveDraft(actor, draft);
+    if (await store.saveDraftForCase(actor, caseId, draft) === "case_conflict") {
+      return reply.code(409).send({ message: "Dieser Angebotsentwurf gehört bereits zu einem anderen Auftrag." });
+    }
     await auditLog.logFor(actor, {
       action: "offer.draft_created_from_text",
       entityType: "OfferDraft",
       entityId: draft.draftId,
       actor,
+      idempotencyKey: `draft-created:${draft.draftId}`,
       summary: "Angebotsentwurf aus Freitext erstellt.",
       details: {
         requestId: eventRequest.requestId,

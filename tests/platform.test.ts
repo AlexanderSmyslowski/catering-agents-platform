@@ -28,14 +28,22 @@ import {
   APPROVED_PRODUCTION_TEST_SECRET,
   runApprovedProductionWorkflow
 } from "./helpers/approved-production-workflow.js";
+import {
+  InMemoryIntakeRecordsPort,
+  bindTestIntakeRecordsPort,
+  testIntakeRecordsPortFor
+} from "./support/in-memory-intake-records-port.js";
 
 function buildProductionApp(
   options: ProductionAppOptions = {}
 ): ReturnType<typeof buildRawProductionApp> {
+  const intakeRecords = options.intakeRecords ?? new InMemoryIntakeRecordsPort();
   const app = buildRawProductionApp({
     ...options,
+    intakeRecords,
     trustedActorSecret: APPROVED_PRODUCTION_TEST_SECRET
   });
+  bindTestIntakeRecordsPort(app, intakeRecords);
   const inject = app.inject.bind(app);
   app.inject = ((input: any) => {
     if (typeof input === "string") return inject(input);
@@ -88,6 +96,21 @@ function baseEventRequest(text: string): EventRequest {
       }
     ]
   };
+}
+
+async function createOfferCase(
+  app: ReturnType<typeof buildOfferApp>,
+  headers?: Record<string, string>,
+  input: { eventTypeLabel?: string; attendeeCount?: number } = {}
+): Promise<string> {
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/offers/cases",
+    ...(headers ? { headers } : {}),
+    payload: input
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json<{ case: { caseId: string } }>().case.caseId;
 }
 
 function lunchOfferPdfText(): string {
@@ -1208,12 +1231,16 @@ describe("catering agents platform", () => {
     const request = baseEventRequest(
       "Meeting am 2026-06-03 fuer 35 Teilnehmer mit Kaffeepause und Croissants."
     );
+    const caseId = await createOfferCase(app, offerHeaders, {
+      eventTypeLabel: "Besprechung",
+      attendeeCount: 35
+    });
 
     const createResponse = await app.inject({
       method: "POST",
       url: "/v1/offers/drafts",
       headers: offerHeaders,
-      payload: request
+      payload: { ...request, caseId }
     });
 
     expect(createResponse.statusCode).toBe(201);
@@ -3232,7 +3259,8 @@ describe("catering agents platform", () => {
 
   it("exposes health endpoints and idempotent demo seeding across services", async () => {
     const dataRoot = createDataRoot();
-    const intakeApp = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeApp = buildIntakeApp(intakeStore);
     const offerApp = buildOfferApp({
       rootDir: dataRoot
     });
@@ -3297,6 +3325,11 @@ describe("catering agents platform", () => {
     seedResponses.forEach((response) => {
       expect(response.statusCode).toBe(201);
     });
+
+    const productionIntakeRecords = testIntakeRecordsPortFor(productionApp) as InMemoryIntakeRecordsPort;
+    for (const spec of await productionIntakeRecords.listSpecs({ businessId: "local" })) {
+      await intakeStore.saveSpec({ businessId: "local" }, spec);
+    }
 
     expect(seedResponses[0].json().seeded).toEqual(
       expect.arrayContaining([
@@ -3400,13 +3433,18 @@ describe("catering agents platform", () => {
   it("persists offer drafts across app restarts and exposes list endpoints", async () => {
     const dataRoot = createDataRoot();
     const firstApp = buildOfferApp(new OfferStore({ rootDir: dataRoot }));
+    const caseId = await createOfferCase(firstApp, undefined, {
+      eventTypeLabel: "Lunch",
+      attendeeCount: 70
+    });
 
     const createResponse = await firstApp.inject({
       method: "POST",
       url: "/v1/offers/drafts",
-      payload: baseEventRequest(
-        "Lunch am 2026-06-10 fuer 70 Teilnehmer mit Buffet und Dessert."
-      )
+      payload: {
+        ...baseEventRequest("Lunch am 2026-06-10 fuer 70 Teilnehmer mit Buffet und Dessert."),
+        caseId
+      }
     });
 
     const draft = createResponse.json();
@@ -3697,18 +3735,27 @@ describe("catering agents platform", () => {
   it("serves offer, production, and purchase list exports from persisted records", async () => {
     const dataRoot = createDataRoot();
     const offerApp = buildOfferApp(new OfferStore({ rootDir: dataRoot }));
+    const offerCaseId = await createOfferCase(offerApp, undefined, {
+      eventTypeLabel: "Lunch",
+      attendeeCount: 55
+    });
     const offerResponse = await offerApp.inject({
       method: "POST",
       url: "/v1/offers/from-text",
       payload: {
+        caseId: offerCaseId,
         text: "Lunch am 2026-08-14 fuer 55 Teilnehmer mit Buffet und Filterkaffee."
       }
     });
     const draft = offerResponse.json();
+    const partialOfferCaseId = await createOfferCase(offerApp, undefined, {
+      eventTypeLabel: "Konferenz"
+    });
     const partialOfferResponse = await offerApp.inject({
       method: "POST",
       url: "/v1/offers/from-text",
       payload: {
+        caseId: partialOfferCaseId,
         text: "Konferenz am 2026-06-03"
       }
     });
@@ -3801,10 +3848,15 @@ describe("catering agents platform", () => {
     await intakeApp.close();
 
     const offerApp = buildOfferApp(new OfferStore({ pgPool: pool }));
+    const caseId = await createOfferCase(offerApp, undefined, {
+      eventTypeLabel: "Empfang",
+      attendeeCount: 50
+    });
     await offerApp.inject({
       method: "POST",
       url: "/v1/offers/from-text",
       payload: {
+        caseId,
         text: "Empfang am 2026-07-04 fuer 50 Teilnehmer mit Flying Bites und Aperitif."
       }
     });
@@ -3925,6 +3977,11 @@ describe("catering agents platform", () => {
       )
     });
 
+    const offerCaseId = await createOfferCase(offerApp, undefined, {
+      eventTypeLabel: "Sommerempfang",
+      attendeeCount: 45
+    });
+
     const offerResponse = await offerApp.inject({
       method: "POST",
       url: "/v1/offers/from-text",
@@ -3932,6 +3989,7 @@ describe("catering agents platform", () => {
         "x-actor-name": "Angebots-Mitarbeiter"
       },
       payload: {
+        caseId: offerCaseId,
         text: "Sommerempfang am 2026-07-01 fuer 45 Teilnehmer mit Fingerfood und Getraenken."
       }
     });

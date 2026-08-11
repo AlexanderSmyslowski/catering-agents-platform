@@ -15,7 +15,6 @@ import {
   type RecipeSearchQuery,
   type WebRecipeCandidate
 } from "@catering/shared-core";
-import { IntakeStore } from "@catering/intake-service";
 import { DuckDuckGoRecipeSearchProvider } from "./recipe-discovery/duckduckgo-provider.js";
 import type { WebRecipeSearchProvider } from "./recipe-discovery/provider.js";
 import { RecipeDiscoveryService } from "./recipe-discovery/service.js";
@@ -31,6 +30,11 @@ import {
 } from "./routes/approval-routes.js";
 import type { ProductionHandoffReader } from "./ports/production-handoff-reader.js";
 import { HttpProductionHandoffReader } from "./gateways/http-production-handoff-reader.js";
+import { registerProductionCaseRoutes } from "./routes/case-routes.js";
+import type { IntakeRecordsPort } from "./ports/intake-records-port.js";
+import type { SourceDocumentReader } from "./ports/source-document-reader.js";
+import { HttpIntakeRecordsPort } from "./gateways/http-intake-records-port.js";
+import { HttpSourceDocumentReader } from "./gateways/http-source-document-reader.js";
 
 const PRODUCTION_TARGET_LOCK_PROTOCOL = "canonical-v2";
 
@@ -38,7 +42,8 @@ export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
   discoveryService?: RecipeDiscoveryService;
   store?: ProductionStore;
-  intakeStore?: IntakeStore;
+  intakeRecords?: IntakeRecordsPort;
+  sourceDocumentReader?: SourceDocumentReader;
   auditLog?: AuditLogStore;
   llmAdapter?: LlmReadinessProviderAdapter;
   buildLlmAdapter?: () => LlmReadinessProviderAdapter;
@@ -55,6 +60,17 @@ export interface ProductionAppOptions {
 class DisabledWebRecipeSearchProvider implements WebRecipeSearchProvider {
   async searchRecipes(_query: RecipeSearchQuery): Promise<WebRecipeCandidate[]> {
     return [];
+  }
+}
+
+class UnavailableIntakeRecordsPort implements IntakeRecordsPort {
+  async getRequest() { return undefined; }
+  async getSpec() { return undefined; }
+  async insertSpec(): Promise<"created"> {
+    throw new Error("Intake-Dienst ist nicht konfiguriert.");
+  }
+  async replaceSpec(): Promise<"updated"> {
+    throw new Error("Intake-Dienst ist nicht konfiguriert.");
   }
 }
 
@@ -126,13 +142,18 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
-  const intakeStore =
-    options.intakeStore ??
-    new IntakeStore({
-      rootDir: options.dataRoot,
-      databaseUrl: options.databaseUrl,
-      pgPool: options.pgPool
-    });
+  const intakeRecords = options.intakeRecords ?? (env.CATERING_INTAKE_SERVICE_URL
+    ? new HttpIntakeRecordsPort({
+        intakeServiceUrl: env.CATERING_INTAKE_SERVICE_URL,
+        trustedServiceSecret: trustedActorSecret
+      })
+    : new UnavailableIntakeRecordsPort());
+  const sourceDocumentReader = options.sourceDocumentReader ?? (env.CATERING_INTAKE_SERVICE_URL
+    ? new HttpSourceDocumentReader({
+        intakeServiceUrl: env.CATERING_INTAKE_SERVICE_URL,
+        trustedServiceSecret: trustedActorSecret
+      })
+    : undefined);
   const auditLog =
     options.auditLog ??
     new AuditLogStore({
@@ -164,6 +185,15 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   });
 
   app.register(multipart);
+
+  registerProductionCaseRoutes(app, {
+    store,
+    handoffReader,
+    trustedActorSecret,
+    allowDevActorHeader,
+    requireProductionOperator,
+    actorForRequest
+  });
 
   app.get("/health", async (_request, reply) => {
     if (hosted) {
@@ -199,7 +229,8 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   registerProductionArtifactRoutes(app, {
     store,
-    intakeStore,
+    intakeRecords,
+    sourceDocumentReader,
     discoveryService,
     auditLog,
     buildLlmAdapter,
@@ -214,7 +245,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   registerProductionApprovalRoutes(app, {
     store,
-    intakeStore,
+    intakeRecords,
     repository,
     auditLog,
     trustedActorSecret,
@@ -237,7 +268,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     const seeded = [];
     for (const spec of getDemoProductionSpecs()) {
       const artifacts = await buildProductionArtifacts(spec, discoveryService, { context: actor });
-      await intakeStore.saveSpec(actor, spec);
+      await intakeRecords.insertSpec(actor, spec);
       await store.savePlan(actor, artifacts.productionPlan);
       await store.savePurchaseList(actor, artifacts.purchaseList);
       seeded.push({

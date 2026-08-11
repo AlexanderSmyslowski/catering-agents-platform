@@ -123,7 +123,10 @@ function ApprovalBindingHarness() {
   const approvalAction = buildOfferApprovalAction({
     decideOfferDraft: async () => ({ approvedOffer: { approvedOfferId: "approved-a" } }),
     createProductionHandoff: async () => ({ handoff: { handoffId: "handoff-a" } }),
+    createProductionCaseFromHandoff: async () => ({ case: { caseId: "production-case-a" } }),
     createProductionDraftFromHandoff: async () => ({ draft: { draftId: "production-a" } }),
+    setActiveProductionCaseId: () => undefined,
+    clearActiveOfferCaseId: () => undefined,
     setSubmitting: () => undefined,
     clearMessages: () => undefined,
     refreshDashboard: async () => undefined,

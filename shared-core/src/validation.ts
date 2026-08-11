@@ -278,7 +278,7 @@ export function validateCaseEvent(value: CaseEvent): CaseEvent {
     case_created: ["sourceId", "artifactId", "sourceRef", "revisionRef"],
     case_copied: ["sourceId", "sourceRef", "revisionRef"],
     source_added: ["artifactId", "revisionRef"],
-    instruction: ["sourceId", "artifactId", "sourceRef", "revisionRef"],
+    instruction: ["artifactId", "sourceRef", "revisionRef"],
     revision_created: ["sourceId", "sourceRef"]
   };
   for (const field of forbiddenFieldsByKind[event.kind] ?? []) {

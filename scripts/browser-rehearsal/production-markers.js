@@ -2,18 +2,19 @@ async () => {
   const text = document.body.innerText;
   const missing = [
     "Produktionsagent",
-    "Was braucht die Produktion als Nächstes?",
-    "Beta-Pfad: Rückfragen -> Ergebnisobjekte -> Exporte/Audit.",
-    "Interner Arbeitsstand: Produktion, Einkauf, Exporte, Herkunft und offene Punkte bleiben sichtbar.",
-    "keine automatische Allergen-, Preis- oder Margenfreigabe",
-    "Rückfragenstatus:",
+    "Angebot hochladen oder Produktionsauftrag beschreiben",
+    "Ablauf: Quelle → KI-Entwurf → Prüfung → Plan",
+    "BESTANDSDATEN IM HINTERGRUND",
+    "Konferenz · 90 Teilnehmer · 2026-12-02",
     "Rückfragen und Antworten",
-    "Produktionsarbeit prüfen",
+    "PRÜFUNG VOR BERECHNUNG",
+    "Produktionsplan nacharbeiten",
     "Produktionsblatt exportieren",
-    "Einkaufsliste exportieren",
+    "1 Liste ohne Positionen",
+    "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
     "Audit-Spur",
     "Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.",
-    "keine rechtssichere Audit-Behauptung"
+    "Keine rechtssichere Audit-Behauptung."
   ].filter((marker) => !text.includes(marker));
   const exportLinks = [...document.querySelectorAll("a")]
     .map((anchor) => {
@@ -36,8 +37,8 @@ async () => {
   if (!planExportLink || !planId) {
     missing.push("Produktionsplan-Exportlink fehlt");
   }
-  if (!purchaseExportLink || !purchaseListId) {
-    missing.push("Einkaufslisten-Exportlink fehlt");
+  if (purchaseExportLink || purchaseListId) {
+    missing.push("leere Einkaufsliste bietet faelschlich einen CSV-Export an");
   }
   if (!text.includes("Plan-Kontext: aktueller Produktionsplan")) {
     missing.push("lesbarer aktueller Plan-Kontext fehlt");
@@ -54,27 +55,15 @@ async () => {
       missing.push(`aktueller Produktionsplan-Export ist im Browser nicht abrufbar: ${planExportResponse.status}`);
     } else {
       const planExportBody = await planExportResponse.text();
-      if (!planExportBody.includes(`Produktionsplan ${planId}`)) {
-        missing.push(`aktueller Produktionsplan-Exportinhalt passt nicht zu ${planId}`);
-      }
-    }
-  }
-  if (purchaseExportLink && purchaseListId) {
-    const purchaseExportResponse = await fetch(purchaseExportLink);
-    if (!purchaseExportResponse.ok) {
-      missing.push(`aktueller Einkaufslisten-Export ist im Browser nicht abrufbar: ${purchaseExportResponse.status}`);
-    } else {
-      const purchaseExportBody = await purchaseExportResponse.text();
       if (
-        !purchaseExportBody.includes(
-          `"group","item","normalizedQty","normalizedUnit","purchaseQty","purchaseUnit","supplierHint"`
-        )
+        !planExportBody.includes("<h1>Produktionsplan</h1>") ||
+        !planExportBody.includes("Klassifikation für Filterkaffee Station fehlt.")
       ) {
-        missing.push(`aktueller Einkaufslisten-Exportinhalt enthaelt keinen CSV-Header fuer ${purchaseListId}`);
+        missing.push("aktueller Produktionsplan-Exportinhalt passt nicht zum ausgewaehlten Vorgang");
       }
     }
   }
-  if (!text.includes("Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden")) {
+  if (!text.includes("Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen")) {
     missing.push("lesbarer Abschluss-Kontext fehlt");
   }
   if (text.includes("Abschluss-Kontext: planId ")) {
@@ -86,7 +75,7 @@ async () => {
   if (text.includes("Ältere Produktionsläufe") && !text.includes("Diese früheren Produktionsläufe sind Kontext aus anderen Vorgängen, nicht das aktuelle Ergebnis.")) {
     missing.push("aeltere Produktionslaeufe sind nicht klar als nicht aktuell markiert");
   }
-  const questionSummary = text.match(/Rückfragenstatus: offen (\d+) · beantwortet (\d+)/);
+  const questionSummary = text.match(/Rückfragen:\s*offen (\d+) · beantwortet (\d+)/);
   const questionPanelSummary = text.match(/Rückfragen und Antworten\s+offen (\d+) · beantwortet (\d+)/);
   if (!questionSummary) {
     missing.push("Rückfragenstatus-Zaehler fehlt");
@@ -101,25 +90,29 @@ async () => {
   ) {
     missing.push("Rückfragenstatus und Rückfragenpanel zeigen unterschiedliche Zaehler");
   }
-  const clearWorkspaceButton = buttons.find((button) => button.text.startsWith("Arbeitsbereich lokal leeren"));
+  const clearWorkspaceButton = buttons.find((button) =>
+    button.title.startsWith("Lokalen Arbeitsbereich leeren:")
+  );
   if (!clearWorkspaceButton) {
     missing.push("Arbeitsbereich-lokal-leeren-Aktion fehlt");
   } else if (clearWorkspaceButton.disabled) {
     missing.push("Arbeitsbereich-lokal-leeren-Aktion ist trotz aktuellem Ergebnis deaktiviert");
-  } else if (!clearWorkspaceButton.title.includes("Lokalen Arbeitsbereich leeren:")) {
+  } else if (!clearWorkspaceButton.title.includes("Konferenz · 90 Teilnehmer · 2026-12-02")) {
     missing.push("Arbeitsbereich-lokal-leeren-Aktion ist nicht mit aktuellem Kontext beschriftet");
   }
-  const archiveButton = buttons.find((button) => button.text === "Fehlupload archivieren");
+  const archiveButton = buttons.find((button) =>
+    button.title.startsWith("Fehlupload per Soft-Archiv aus dem aktiven Fokus nehmen:")
+  );
   if (!archiveButton) {
     missing.push("Fehlupload-Archiv-Aktion fehlt");
-  } else if (!archiveButton.disabled || archiveButton.title !== "Kein aktiver Intake-Kontext für ein Fehlupload-Archiv.") {
-    missing.push("Fehlupload-Archiv-Aktion ist ohne aktiven Intake-Kontext nicht sicher deaktiviert");
+  } else if (archiveButton.disabled || !archiveButton.title.includes("Intake-Anfrage im Fokus")) {
+    missing.push("Fehlupload-Archiv-Aktion ist nicht sicher an den aktuellen Intake-Kontext gebunden");
   }
-  const reprocessButton = buttons.find((button) => button.text === "Erneut mit ausgewähltem Typ verarbeiten");
-  if (!reprocessButton) {
-    missing.push("Wiederverarbeitungs-Aktion fehlt");
-  } else if (!reprocessButton.disabled) {
-    missing.push("Wiederverarbeitungs-Aktion ist ohne ausgewählte Datei nicht sicher deaktiviert");
+  const createDraftButton = buttons.find((button) => button.text === "KI-Entwurf erstellen");
+  if (!createDraftButton) {
+    missing.push("KI-Entwurf-erstellen-Aktion fehlt");
+  } else if (!createDraftButton.disabled) {
+    missing.push("KI-Entwurf-erstellen-Aktion ist ohne ausgewaehlte Datei nicht sicher deaktiviert");
   }
   if (missing.length > 0) {
     throw new Error(`Produktions-Rehearsal-Marker fehlen: ${missing.join(" | ")}`);

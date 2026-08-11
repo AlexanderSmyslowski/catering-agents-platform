@@ -353,6 +353,29 @@ export class IntakeStore {
     return this.specs.insert(context, spec);
   }
 
+  async replaceSpec(
+    context: BusinessContext,
+    expectedInput: AcceptedEventSpec,
+    replacementInput: AcceptedEventSpec
+  ): Promise<"updated" | "same_content" | "conflict" | "missing"> {
+    const expected = validateAcceptedEventSpec(expectedInput);
+    const replacement = validateAcceptedEventSpec(replacementInput);
+    if (expected.specId !== replacement.specId) {
+      throw new Error("AcceptedEventSpec-Ersetzung muss dieselbe specId behalten.");
+    }
+    const existing = await this.specs.get(context, expected.specId);
+    if (!existing) return "missing";
+    // A repeated service call after a successful write is safe even when its old expected snapshot is now stale.
+    if (areJsonValuesEqual(existing, replacement)) return "same_content";
+    if (isOperationallyArchived(existing)) return "conflict";
+    return this.specs.compareAndSetExact(
+      context,
+      expected.specId,
+      expected,
+      replacement
+    );
+  }
+
   async getSpec(context: BusinessContext, specId: string): Promise<AcceptedEventSpec | undefined> {
     return this.specs.get(context, specId);
   }

@@ -11,10 +11,18 @@ import {
 
 export type AppOfferRouteAppBoundaryInput =
   Omit<AppOfferRouteStateInput, "submitOfferText" | "approveDraft" | "createHandoff"> & {
+    createOfferCase: OfferTextSubmitActionInput["createOfferCase"];
     createOfferFromText: OfferTextSubmitActionInput["createOfferFromText"];
+    getOrCreateOfferRequestId: OfferTextSubmitActionInput["getOrCreateOfferRequestId"];
+    completeOfferRequestId: OfferTextSubmitActionInput["completeOfferRequestId"];
+    activeOfferCaseId?: string;
+    setActiveOfferCaseId: OfferTextSubmitActionInput["setActiveOfferCaseId"];
     decideOfferDraft: OfferApprovalActionInput["decideOfferDraft"];
     createProductionHandoff: OfferApprovalActionInput["createProductionHandoff"];
+    createProductionCaseFromHandoff: OfferApprovalActionInput["createProductionCaseFromHandoff"];
     createProductionDraftFromHandoff: OfferApprovalActionInput["createProductionDraftFromHandoff"];
+    setActiveProductionCaseId: OfferApprovalActionInput["setActiveProductionCaseId"];
+    clearActiveOfferCaseId: OfferApprovalActionInput["clearActiveOfferCaseId"];
     setSubmitting: OfferTextSubmitActionInput["setSubmitting"];
     clearMessages: OfferTextSubmitActionInput["clearMessages"];
     refreshDashboard: OfferTextSubmitActionInput["refreshDashboard"];
@@ -28,7 +36,12 @@ export function buildAppOfferRouteAppBoundary(
   input: AppOfferRouteAppBoundaryInput
 ): AppOfferRouteState {
   const submitOfferText = buildOfferTextSubmitAction({
+    createOfferCase: input.createOfferCase,
     createOfferFromText: input.createOfferFromText,
+    getOrCreateOfferRequestId: input.getOrCreateOfferRequestId,
+    completeOfferRequestId: input.completeOfferRequestId,
+    activeOfferCaseId: input.activeOfferCaseId,
+    setActiveOfferCaseId: input.setActiveOfferCaseId,
     offerText: input.offerText,
     setSubmitting: input.setSubmitting,
     clearMessages: input.clearMessages,
@@ -40,7 +53,10 @@ export function buildAppOfferRouteAppBoundary(
   const approvalAction = buildOfferApprovalAction({
     decideOfferDraft: input.decideOfferDraft,
     createProductionHandoff: input.createProductionHandoff,
+    createProductionCaseFromHandoff: input.createProductionCaseFromHandoff,
     createProductionDraftFromHandoff: input.createProductionDraftFromHandoff,
+    setActiveProductionCaseId: input.setActiveProductionCaseId,
+    clearActiveOfferCaseId: input.clearActiveOfferCaseId,
     setSubmitting: input.setSubmitting,
     clearMessages: input.clearMessages,
     refreshDashboard: input.refreshDashboard,

@@ -1,6 +1,7 @@
 () => {
   const candidates = [...document.querySelectorAll("a")];
   const link = candidates.find((anchor) =>
+    anchor.offsetParent !== null &&
     anchor.getAttribute("href") === "/produktion" &&
     (anchor.textContent ?? "").includes("Zur Produktion")
   );

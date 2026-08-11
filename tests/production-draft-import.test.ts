@@ -4,18 +4,17 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildProductionApp,
-  buildProductionArtifacts,
-  InMemoryRecipeRepository,
-  ProductionStore,
-  RecipeDiscoveryService
+  ProductionStore
 } from "@catering/production-service";
 import {
   AuditLogStore,
   createEventRequestFromText,
   normalizeEventRequestToSpec,
   SCHEMA_VERSION,
+  type ProductionCase,
   type ProductionDraft
 } from "@catering/shared-core";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 
 const TRUSTED_SECRET = "production-draft-import-secret";
 const localBusiness = { businessId: "local" };
@@ -88,25 +87,20 @@ function productionDraft(draftId = "production-draft-import-1"): ProductionDraft
   };
 }
 
-async function productionDraftWithUnreviewedPlan(): Promise<ProductionDraft> {
-  const draft = productionDraft("production-draft-unreviewed-plan");
-  const discoveryService = new RecipeDiscoveryService(
-    new InMemoryRecipeRepository(),
-    {
-      searchRecipes: async () => []
+async function createProductionCase(app: ReturnType<typeof buildProductionApp>): Promise<ProductionCase> {
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/production/cases",
+    headers: trustedProductionHeaders,
+    payload: {
+      customerName: "Synthetischer Kunde",
+      eventTypeLabel: "Buffet",
+      eventDate: "2026-09-18",
+      attendeeCount: 45
     }
-  );
-  const artifacts = await buildProductionArtifacts(draft.draftArtifacts.eventSpec!, discoveryService, {
-    context: { businessId: "local" }
   });
-
-  return {
-    ...draft,
-    draftArtifacts: {
-      ...draft.draftArtifacts,
-      productionPlan: artifacts.productionPlan
-    }
-  };
+  expect(response.statusCode, response.body).toBe(201);
+  return response.json<{ case: ProductionCase }>().case;
 }
 
 describe("ProductionDraft import", () => {
@@ -118,25 +112,30 @@ describe("ProductionDraft import", () => {
     }
   });
 
-  it("imports and lists a pending ProductionDraft without creating production product objects", async () => {
+  it("creates and lists a pending ProductionDraft from stable case and spec references", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
     const app = buildProductionApp({
       dataRoot,
       store,
+      intakeRecords,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
+    const spec = productionDraft().draftArtifacts.eventSpec!;
 
     try {
+      await intakeRecords.insertSpec(localBusiness, spec);
+      const productionCase = await createProductionCase(app);
       const response = await app.inject({
         method: "POST",
         url: "/v1/production/drafts",
         headers: trustedProductionHeaders,
-        payload: productionDraft()
+        payload: { caseId: productionCase.caseId, specId: spec.specId }
       });
       const listResponse = await app.inject({
         method: "GET",
@@ -152,7 +151,7 @@ describe("ProductionDraft import", () => {
       expect(await store.listPlans(localBusiness)).toHaveLength(0);
       expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
       expect(auditJson).toContain("production.production_draft_imported");
-      expect(auditJson).toContain("sha256:output-structured");
+      expect(auditJson).toContain(spec.specId);
       expect(auditJson).not.toContain("SECRET_REVIEW_SUMMARY");
       expect(auditJson).not.toContain("SECRET_DRAFT_NOTE");
       expect(auditJson).not.toContain("systemPrompt");
@@ -162,7 +161,7 @@ describe("ProductionDraft import", () => {
     }
   });
 
-  it("rejects schema-invalid or raw-leaking drafts with 422 and does not persist them", async () => {
+  it("rejects legacy snapshot payloads without echoing raw content or persisting them", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
@@ -172,9 +171,10 @@ describe("ProductionDraft import", () => {
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
-    const invalidDraft = structuredClone(productionDraft());
-    const eventSpec = invalidDraft.draftArtifacts.eventSpec as unknown as Record<string, unknown>;
-    eventSpec.prompt = "SECRET_RAW_PROMPT_PAYLOAD";
+    const invalidDraft = {
+      ...productionDraft(),
+      prompt: "SECRET_RAW_PROMPT_PAYLOAD"
+    };
 
     try {
       const response = await app.inject({
@@ -185,7 +185,7 @@ describe("ProductionDraft import", () => {
       });
 
       expect(response.statusCode).toBe(422);
-      expect(response.body).toContain("ProductionDraft ist nicht schema-valide.");
+      expect(response.body).toContain("caseId und specId");
       expect(response.body).not.toContain("SECRET_RAW_PROMPT_PAYLOAD");
       expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
     } finally {
@@ -193,105 +193,93 @@ describe("ProductionDraft import", () => {
     }
   });
 
-  it("rejects non-pending drafts at the import boundary without persisting them", async () => {
+  it("rejects client-owned fields alongside stable references", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
     const app = buildProductionApp({
       dataRoot,
       store,
+      intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
-    const rejectedDraft: ProductionDraft = {
-      ...productionDraft(),
-      status: "rejected"
-    };
+    const spec = productionDraft().draftArtifacts.eventSpec!;
 
     try {
+      await intakeRecords.insertSpec(localBusiness, spec);
+      const productionCase = await createProductionCase(app);
       const response = await app.inject({
         method: "POST",
         url: "/v1/production/drafts",
         headers: trustedProductionHeaders,
-        payload: rejectedDraft
+        payload: { caseId: productionCase.caseId, specId: spec.specId, status: "approved" }
       });
 
       expect(response.statusCode).toBe(422);
-      expect(response.body).toContain("pending_review");
+      expect(response.body).toContain("als einzige Referenzen");
       expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }
   });
 
-  it("rejects import when a material draft artifact has no matching review card", async () => {
+  it("returns 404 for an unknown production case without persisting a draft", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
     const app = buildProductionApp({
       dataRoot,
       store,
+      intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
-    const draft = await productionDraftWithUnreviewedPlan();
+    const spec = productionDraft().draftArtifacts.eventSpec!;
 
     try {
+      await intakeRecords.insertSpec(localBusiness, spec);
       const response = await app.inject({
         method: "POST",
         url: "/v1/production/drafts",
         headers: trustedProductionHeaders,
-        payload: draft
+        payload: { caseId: "production-case-unknown", specId: spec.specId }
       });
 
-      expect(response.statusCode).toBe(422);
-      expect(response.body).toContain("Review-Karten");
-      expect(response.body).toContain("productionPlan");
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toContain("Produktionsauftrag nicht gefunden");
       expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }
   });
 
-  it("rejects duplicate draft IDs without overwriting the existing draft", async () => {
+  it("returns 404 for an unknown spec without persisting a draft", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
     const app = buildProductionApp({
       dataRoot,
       store,
+      intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
-    const originalDraft = productionDraft("production-draft-duplicate");
-    const duplicateDraft: ProductionDraft = {
-      ...originalDraft,
-      source: {
-        ...originalDraft.source,
-        outputHash: "sha256:attempted-overwrite"
-      }
-    };
-
     try {
-      const imported = await app.inject({
+      const productionCase = await createProductionCase(app);
+      const response = await app.inject({
         method: "POST",
         url: "/v1/production/drafts",
         headers: trustedProductionHeaders,
-        payload: originalDraft
-      });
-      const duplicate = await app.inject({
-        method: "POST",
-        url: "/v1/production/drafts",
-        headers: trustedProductionHeaders,
-        payload: duplicateDraft
+        payload: { caseId: productionCase.caseId, specId: "spec-unknown" }
       });
 
-      expect(imported.statusCode).toBe(201);
-      expect(duplicate.statusCode).toBe(409);
-      expect(duplicate.body).toContain("ProductionDraft mit dieser ID existiert bereits.");
-      expect((await store.getProductionDraft(localBusiness, originalDraft.draftId))?.source.outputHash).toBe(
-        "sha256:output-structured"
-      );
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toContain("AcceptedEventSpec nicht gefunden");
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
     } finally {
       await app.close();
     }

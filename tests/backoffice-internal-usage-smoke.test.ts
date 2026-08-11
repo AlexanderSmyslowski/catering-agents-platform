@@ -406,10 +406,37 @@ describe("backoffice internal usage smoke", () => {
           });
         }
 
+        if (method === "POST" && url.endsWith("/api/production/v1/production/cases")) {
+          return new Response(JSON.stringify({ case: { caseId: "production-case-usage" } }), {
+            status: 201,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
         if (method === "POST" && url.endsWith("/api/production/v1/production/drafts")) {
-          const importedDraft = {
-            ...(body as ProductionDraft),
-            businessId: "local"
+          const importedDraft: ProductionDraft = {
+            schemaVersion: SCHEMA_VERSION,
+            businessId: "local",
+            draftId: "production-draft-imported-usage",
+            revision: 1,
+            status: "pending_review",
+            createdAt: "2026-04-10T09:34:00.000Z",
+            source: {
+              kind: "manual_import",
+              receivedAt: "2026-04-10T09:34:00.000Z",
+              sourceRef: `spec:${currentSpec?.specId ?? fixture.spec.specId}`
+            },
+            guardrails: {
+              draftOnly: true,
+              humanApprovalRequired: true,
+              writesProductObjects: false,
+              rawProviderPayloadStored: false,
+              knowledgeWritePolicy: "reviewed_only"
+            },
+            reviewCards: [],
+            draftArtifacts: {
+              eventSpec: currentSpec ?? fixture.plannedSpec
+            }
           };
           productionDrafts = [importedDraft];
           return new Response(JSON.stringify({ draft: importedDraft }), {
@@ -592,12 +619,20 @@ describe("backoffice internal usage smoke", () => {
     const importDraftCallIndex = fetchCalls.findIndex(
       (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/drafts")
     );
+    const createCaseCallIndex = fetchCalls.findIndex(
+      (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/cases")
+    );
     const prepareDraftCallIndex = fetchCalls.findIndex(
       (call) => call.method === "POST" && call.url.endsWith("/prepare")
     );
     expect(createdPlanViaPost).toBe(false);
     expect(saveAnswersCallIndex).toBeGreaterThanOrEqual(0);
-    expect(importDraftCallIndex).toBeGreaterThan(saveAnswersCallIndex);
+    expect(createCaseCallIndex).toBeGreaterThan(saveAnswersCallIndex);
+    expect(importDraftCallIndex).toBeGreaterThan(createCaseCallIndex);
+    expect(fetchCalls[importDraftCallIndex]?.body).toEqual({
+      caseId: "production-case-usage",
+      specId: fixture.spec.specId
+    });
     expect(prepareDraftCallIndex).toBeGreaterThan(importDraftCallIndex);
     expect(createPlanCallIndex).toBe(-1);
     expect(document.body.textContent ?? "").toContain("Produktionsentwurf wurde vorbereitet und wartet auf Prüfung.");

@@ -1,11 +1,15 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildProductionApp,
+  buildProductionApp as buildBaseProductionApp,
   ProductionStore
 } from "@catering/production-service";
+import type { SourceDocumentReader } from "../production-service/src/ports/source-document-reader.js";
+import { productionDecisionRepositoryFor } from "../production-service/src/repositories/production-store.js";
+import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import {
   AuditLogStore,
   findLlmReadinessPromptArtifactByInputKind,
@@ -37,12 +41,86 @@ function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-production-draft-document-byo-"));
 }
 
-function documentPayload(text = documentText) {
-  return {
-    filename: "angebot-flying-buffet-anonymisiert.txt",
-    mimeType: "text/plain",
-    contentBase64: Buffer.from(text, "utf8").toString("base64")
+const sourceDocuments = new Map<string, {
+  metadata: Awaited<ReturnType<SourceDocumentReader["getMetadata"]>>;
+  content: Uint8Array;
+}>();
+
+const sourceDocumentReader: SourceDocumentReader = {
+  async getMetadata(context, documentId) {
+    const stored = sourceDocuments.get(documentId)?.metadata;
+    return stored?.businessId === context.businessId ? stored : undefined;
+  },
+  async getContent(context, documentId) {
+    const stored = sourceDocuments.get(documentId);
+    return stored?.metadata?.businessId === context.businessId ? stored.content : undefined;
+  }
+};
+
+function buildProductionApp(
+  options: Parameters<typeof buildBaseProductionApp>[0] = {}
+) {
+  return buildBaseProductionApp({
+    ...options,
+    sourceDocumentReader: options.sourceDocumentReader ?? sourceDocumentReader
+  });
+}
+
+async function documentPayload(
+  app: ReturnType<typeof buildProductionApp>,
+  text = documentText
+) {
+  const caseResponse = await app.inject({
+    method: "POST",
+    url: "/v1/production/cases",
+    headers: trustedProductionHeaders,
+    payload: { eventTypeLabel: "Empfang", attendeeCount: 45 }
+  });
+  expect(caseResponse.statusCode, caseResponse.body).toBe(201);
+  const caseId = caseResponse.json<{ case: { caseId: string } }>().case.caseId;
+  const content = Buffer.from(text, "utf8");
+  const documentId = `source-document-${randomUUID()}`;
+  sourceDocuments.set(documentId, {
+    metadata: {
+      businessId: "local",
+      documentId,
+      filename: "angebot-flying-buffet-anonymisiert.txt",
+      mimeType: "text/plain",
+      sizeBytes: content.byteLength,
+      sha256: createHash("sha256").update(content).digest("hex"),
+      dataClass: "synthetic_demo",
+      createdAt: "2026-06-14T09:00:00.000Z"
+    },
+    content
+  });
+  return { caseId, documentId };
+}
+
+async function completeProductionCase(
+  store: ProductionStore,
+  caseId: string
+) {
+  const current = await store.getCase(localBusiness, caseId);
+  expect(current).toBeDefined();
+  const completedAt = new Date(Date.parse(current!.updatedAt) + 1).toISOString();
+  const completed = {
+    ...current!,
+    status: "completed" as const,
+    approvedProductionSpecId: "approved-production-spec-previous",
+    currentPlanId: "production-plan-previous",
+    currentPurchaseListId: "purchase-list-previous",
+    version: current!.version + 1,
+    updatedAt: completedAt
   };
+  expect(await store.updateCase(localBusiness, caseId, current!.version, completed)).toBe("updated");
+  await store.appendEvent(localBusiness, caseId, {
+    at: completedAt,
+    role: "system",
+    kind: "result",
+    text: "Vorheriger Produktionsplan und Einkaufsliste erstellt.",
+    artifactId: completed.currentPlanId
+  });
+  return completed;
 }
 
 function extractionResponse(request: LlmReadinessProviderAdapterRequest) {
@@ -119,19 +197,25 @@ describe("ProductionDraft document BYO extraction", () => {
       store,
       auditLog,
       llmAdapter: adapter,
+      sourceDocumentReader,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
 
     try {
+      const payload = await documentPayload(app);
       const response = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload()
+        payload
       });
       const draft = response.json<{ draft: ProductionDraft }>().draft;
-      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
+      const audits = await auditLog.listRecentFor({ businessId: "local" }, 10);
+      const auditJson = JSON.stringify(audits);
+      const createdAudit = audits.find((entry) =>
+        entry.action === "production.production_draft_document_created"
+      );
 
       expect(response.statusCode, response.body).toBe(201);
       expect(requests).toHaveLength(1);
@@ -141,6 +225,9 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(requests[0].promptContext).toContain("WEINGLÄSER");
       expect(requests[0].promptContext).toContain("8 MENÜSCHILDER");
       expect(draft.status).toBe("pending_review");
+      await expect(store.getCase(localBusiness, payload.caseId)).resolves.toMatchObject({
+        sourceSpecId: draft.draftArtifacts.eventSpec?.specId
+      });
       expect(draft.guardrails).toMatchObject({
         draftOnly: true,
         humanApprovalRequired: true,
@@ -171,14 +258,841 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(promptArtifact?.userPromptTemplate).toContain("Glaeser");
       expect(promptArtifact?.userPromptTemplate).toContain("keine Menuekomponenten");
       expect(draft.draftArtifacts.recipes).toBeUndefined();
+      expect(await store.listEvents(localBusiness, payload.caseId)).toEqual([
+        expect.objectContaining({ kind: "case_created" }),
+        expect.objectContaining({
+          kind: "source_added",
+          sourceId: payload.documentId,
+          sourceRef: expect.objectContaining({
+            documentId: payload.documentId,
+            filename: "angebot-flying-buffet-anonymisiert.txt",
+            mimeType: "text/plain",
+            dataClass: "synthetic_demo"
+          })
+        }),
+        expect.objectContaining({
+          kind: "draft_created",
+          artifactId: draft.draftId,
+          revisionRef: expect.objectContaining({
+            artifactType: "ProductionDraft",
+            artifactId: draft.draftId,
+            revision: 1
+          })
+        })
+      ]);
       expect(await store.listPlans(localBusiness)).toHaveLength(0);
       expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
       expect(auditJson).toContain("production.production_draft_document_created");
+      expect(createdAudit?.details).toEqual({
+        draftId: draft.draftId,
+        caseId: payload.caseId,
+        documentId: payload.documentId,
+        sourceSha256: draft.source.inputHash?.replace(/^sha256:/, ""),
+        providerId: draft.source.providerId,
+        modelId: draft.source.modelId,
+        runId: draft.source.runId,
+        reviewCardCount: draft.reviewCards.length,
+        componentCount: draft.draftArtifacts.eventSpec?.menuPlan.length,
+        openQuestionCount: draft.draftArtifacts.openQuestions?.length,
+        outputTextHash: draft.source.outputHash,
+        humanApprovalRequired: true,
+        writesProductObject: false
+      });
       expect(auditJson).not.toContain("VITELLO TONNATO");
       expect(auditJson).not.toContain("KOKOS-CHEESECAKE");
       expect(auditJson).not.toContain("promptContext");
       expect(auditJson).not.toContain("systemPrompt");
       expect(auditJson).not.toContain("providerResponse");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("records one source event when the same case document is processed concurrently", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-concurrent-source-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => extractionResponse(request)
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const payload = await documentPayload(app);
+      const appendEvent = store.appendEvent.bind(store);
+      let waitingAppends = 0;
+      let releaseAppends!: () => void;
+      const appendBarrier = new Promise<void>((resolve) => { releaseAppends = resolve; });
+      vi.spyOn(store, "appendEvent").mockImplementation(async (context, caseId, input, eventIdentity) => {
+        if (input.kind === "source_added" && waitingAppends < 2) {
+          waitingAppends += 1;
+          if (waitingAppends === 2) releaseAppends();
+          await appendBarrier;
+        }
+        return appendEvent(context, caseId, input, eventIdentity);
+      });
+      const request = () => app.inject({
+        method: "POST" as const,
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+
+      const responses = await Promise.all([request(), request()]);
+
+      expect(responses.map((response) => response.statusCode)).toEqual([201, 201]);
+      const responseDrafts = responses.map((response) => response.json<{ draft: ProductionDraft }>().draft);
+      const events = await store.listEvents(localBusiness, payload.caseId);
+      const sourceEvents = events
+        .filter((event) => event.kind === "source_added");
+      expect(sourceEvents).toEqual([
+        expect.objectContaining({
+          sourceId: payload.documentId,
+          sourceRef: expect.objectContaining({ documentId: payload.documentId })
+        })
+      ]);
+      expect(responseDrafts[0]).toEqual(responseDrafts[1]);
+      expect(await store.listProductionDrafts(localBusiness)).toEqual([responseDrafts[0]]);
+      expect(events.filter((event) => event.kind === "draft_created")).toEqual([
+        expect.objectContaining({ artifactId: responseDrafts[0].draftId })
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("reuses the case-scoped document draft after a lost response and repairs one draft-created event without recalling the provider", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-document-retry-adapter",
+      adapterMode: "synthetic_live",
+      run
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const payload = await documentPayload(app);
+      const appendEvent = store.appendEvent.bind(store);
+      let failDraftEventOnce = true;
+      vi.spyOn(store, "appendEvent").mockImplementation(async (context, caseId, input, eventIdentity) => {
+        if (input.kind === "draft_created" && failDraftEventOnce) {
+          failDraftEventOnce = false;
+          throw new Error("simulated response loss after draft persistence");
+        }
+        return appendEvent(context, caseId, input, eventIdentity);
+      });
+
+      const first = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+      const persistedAfterLoss = await store.listProductionDrafts(localBusiness);
+      const retried = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+      const retriedDraft = retried.json<{ draft: ProductionDraft }>().draft;
+      const draftEvents = (await store.listEvents(localBusiness, payload.caseId))
+        .filter((event) => event.kind === "draft_created");
+
+      expect(first.statusCode).toBe(500);
+      expect(persistedAfterLoss).toHaveLength(1);
+      expect(retried.statusCode, retried.body).toBe(201);
+      expect(retriedDraft).toEqual(persistedAfterLoss[0]);
+      expect(await store.listProductionDrafts(localBusiness)).toEqual([persistedAfterLoss[0]]);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(draftEvents).toEqual([
+        expect.objectContaining({
+          artifactId: persistedAfterLoss[0].draftId,
+          revisionRef: expect.objectContaining({ artifactId: persistedAfterLoss[0].draftId })
+        })
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("reopens a completed case exactly once when a new document draft survives a lost response", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: {
+        adapterId: "mock-document-continuation-adapter",
+        adapterMode: "synthetic_live",
+        run
+      },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const payload = await documentPayload(app);
+      const completed = await completeProductionCase(store, payload.caseId);
+      const appendEvent = store.appendEvent.bind(store);
+      let failDraftEventOnce = true;
+      vi.spyOn(store, "appendEvent").mockImplementation(async (context, caseId, input, eventIdentity) => {
+        if (input.kind === "draft_created" && failDraftEventOnce) {
+          failDraftEventOnce = false;
+          throw new Error("simulated response loss after continuation draft persistence");
+        }
+        return appendEvent(context, caseId, input, eventIdentity);
+      });
+      const request = () => app.inject({
+        method: "POST" as const,
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+
+      const first = await request();
+      expect(first.statusCode).toBe(500);
+      const afterLostResponse = await store.getCase(localBusiness, payload.caseId);
+      expect(afterLostResponse).toMatchObject({
+        status: "completed",
+        approvedProductionSpecId: completed.approvedProductionSpecId,
+        currentPlanId: completed.currentPlanId,
+        currentPurchaseListId: completed.currentPurchaseListId,
+        sourceSpecId: expect.any(String)
+      });
+
+      const retry = await request();
+      const afterRetry = await store.getCase(localBusiness, payload.caseId);
+      const secondRetry = await request();
+      const afterSecondRetry = await store.getCase(localBusiness, payload.caseId);
+
+      expect(retry.statusCode, retry.body).toBe(201);
+      expect(secondRetry.statusCode, secondRetry.body).toBe(201);
+      expect(afterRetry).toMatchObject({
+        status: "open",
+        version: afterLostResponse!.version + 1
+      });
+      expect(afterRetry?.approvedProductionSpecId).toBeUndefined();
+      expect(afterRetry?.currentPlanId).toBeUndefined();
+      expect(afterRetry?.currentPurchaseListId).toBeUndefined();
+      expect(afterSecondRetry).toEqual(afterRetry);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect((await store.listEvents(localBusiness, payload.caseId))
+        .filter((event) => event.kind === "draft_created")).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps a completed case unchanged when its already-applied document draft is retried", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: {
+        adapterId: "mock-applied-document-retry-adapter",
+        adapterMode: "synthetic_live",
+        run
+      },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const payload = await documentPayload(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const completed = await completeProductionCase(store, payload.caseId);
+
+      const retried = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+
+      expect(retried.statusCode, retried.body).toBe(201);
+      expect(await store.getCase(localBusiness, payload.caseId)).toEqual(completed);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect((await store.listEvents(localBusiness, payload.caseId))
+        .filter((event) => event.kind === "draft_created")).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not reopen a completed case when document draft generation fails before persistence", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: {
+        adapterId: "mock-rejected-document-continuation-adapter",
+        adapterMode: "synthetic_live",
+        run: async (request) => ({
+          ...extractionResponse(request),
+          ok: false,
+          errors: ["simulated invalid provider output"]
+        })
+      },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const payload = await documentPayload(app);
+      const completed = await completeProductionCase(store, payload.caseId);
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(await store.getCase(localBusiness, payload.caseId)).toEqual(completed);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("repairs one creation audit entry after audit persistence fails without recalling the provider", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-document-audit-retry-adapter",
+      adapterMode: "synthetic_live",
+      run
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      auditLog,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const payload = await documentPayload(app);
+      const logFor = auditLog.logFor.bind(auditLog);
+      let failCreatedAuditOnce = true;
+      vi.spyOn(auditLog, "logFor").mockImplementation(async (context, input) => {
+        if (input.action === "production.production_draft_document_created" && failCreatedAuditOnce) {
+          failCreatedAuditOnce = false;
+          throw new Error("simulated audit persistence failure");
+        }
+        return logFor(context, input);
+      });
+
+      const request = () => app.inject({
+        method: "POST" as const,
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+      const first = await request();
+      const persistedAfterAuditFailure = await store.listProductionDrafts(localBusiness);
+      const retried = await request();
+      const audits = (await auditLog.listRecentFor(localBusiness, 20))
+        .filter((entry) => entry.action === "production.production_draft_document_created");
+
+      expect(first.statusCode).toBe(500);
+      expect(persistedAfterAuditFailure).toHaveLength(1);
+      expect(retried.statusCode, retried.body).toBe(201);
+      expect(retried.json<{ draft: ProductionDraft }>().draft).toEqual(persistedAfterAuditFailure[0]);
+      expect(run).toHaveBeenCalledTimes(1);
+      const persistedDraft = persistedAfterAuditFailure[0];
+      expect(audits).toEqual([
+        expect.objectContaining({
+          entityId: persistedDraft.draftId,
+          action: "production.production_draft_document_created",
+          details: {
+            draftId: persistedDraft.draftId,
+            caseId: payload.caseId,
+            documentId: payload.documentId,
+            sourceSha256: persistedDraft.source.inputHash?.replace(/^sha256:/, ""),
+            providerId: persistedDraft.source.providerId,
+            modelId: persistedDraft.source.modelId,
+            runId: persistedDraft.source.runId,
+            reviewCardCount: persistedDraft.reviewCards.length,
+            componentCount: persistedDraft.draftArtifacts.eventSpec?.menuPlan.length,
+            openQuestionCount: persistedDraft.draftArtifacts.openQuestions?.length,
+            outputTextHash: persistedDraft.source.outputHash,
+            humanApprovalRequired: true,
+            writesProductObject: false
+          }
+        })
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a deterministic document draft whose persisted source lineage no longer matches the case source", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-document-lineage-adapter",
+      adapterMode: "synthetic_live",
+      run
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const payload = await documentPayload(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+      const draft = created.json<{ draft: ProductionDraft }>().draft;
+      await store.saveProductionDraft(localBusiness, {
+        ...draft,
+        source: {
+          ...draft.source,
+          inputHash: `sha256:${"0".repeat(64)}`
+        }
+      });
+
+      const retried = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+
+      expect(created.statusCode, created.body).toBe(201);
+      expect(retried.statusCode, retried.body).toBe(409);
+      expect(retried.json()).toMatchObject({ message: expect.stringContaining("Quelldokument") });
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("creates distinct case-scoped drafts when the same document is used for copied production cases", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "mock-copied-case-document-adapter",
+      adapterMode: "synthetic_live",
+      run
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: adapter,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const firstPayload = await documentPayload(app);
+      const copiedCaseResponse = await app.inject({
+        method: "POST",
+        url: "/v1/production/cases",
+        headers: trustedProductionHeaders,
+        payload: { eventTypeLabel: "Empfang", attendeeCount: 45 }
+      });
+      const copiedCaseId = copiedCaseResponse.json<{ case: { caseId: string } }>().case.caseId;
+      const createDraft = (caseId: string) => app.inject({
+        method: "POST" as const,
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: { caseId, documentId: firstPayload.documentId }
+      });
+
+      const first = await createDraft(firstPayload.caseId);
+      const copied = await createDraft(copiedCaseId);
+      const firstDraft = first.json<{ draft: ProductionDraft }>().draft;
+      const copiedDraft = copied.json<{ draft: ProductionDraft }>().draft;
+
+      expect(first.statusCode, first.body).toBe(201);
+      expect(copied.statusCode, copied.body).toBe(201);
+      expect(firstDraft.draftId).not.toBe(copiedDraft.draftId);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(2);
+      expect(run).toHaveBeenCalledTimes(2);
+      expect(await store.listEvents(localBusiness, firstPayload.caseId)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "draft_created", artifactId: firstDraft.draftId })])
+      );
+      expect(await store.listEvents(localBusiness, copiedCaseId)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "draft_created", artifactId: copiedDraft.draftId })])
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps corrected source documents as immutable revisions in the same production case", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: {
+        adapterId: "mock-corrected-document-adapter",
+        adapterMode: "synthetic_live",
+        run
+      },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const firstPayload = await documentPayload(app);
+      const correctedContent = Buffer.from(`${documentText}\nKORREKTUR: 50 PERSONEN`, "utf8");
+      const correctedDocumentId = `source-document-${randomUUID()}`;
+      const correctedSha256 = createHash("sha256").update(correctedContent).digest("hex");
+      sourceDocuments.set(correctedDocumentId, {
+        metadata: {
+          businessId: "local",
+          documentId: correctedDocumentId,
+          filename: "angebot-flying-buffet-korrigiert.txt",
+          mimeType: "text/plain",
+          sizeBytes: correctedContent.byteLength,
+          sha256: correctedSha256,
+          dataClass: "synthetic_demo",
+          createdAt: "2026-06-14T10:00:00.000Z"
+        },
+        content: correctedContent
+      });
+      const createDraft = (documentId: string) => app.inject({
+        method: "POST" as const,
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: { caseId: firstPayload.caseId, documentId }
+      });
+
+      const first = await createDraft(firstPayload.documentId);
+      const firstDraft = first.json<{ draft: ProductionDraft }>().draft;
+      const corrected = await createDraft(correctedDocumentId);
+      const correctedDraft = corrected.json<{ draft: ProductionDraft }>().draft;
+      const correctedRetry = await createDraft(correctedDocumentId);
+      const events = await store.listEvents(localBusiness, firstPayload.caseId);
+
+      expect(first.statusCode, first.body).toBe(201);
+      expect(corrected.statusCode, corrected.body).toBe(201);
+      expect(correctedRetry.statusCode, correctedRetry.body).toBe(201);
+      expect(correctedRetry.json<{ draft: ProductionDraft }>().draft).toEqual(correctedDraft);
+      expect(firstDraft.status).toBe("pending_review");
+      expect(correctedDraft).toMatchObject({
+        status: "pending_review",
+        revision: firstDraft.revision + 1,
+        supersedesDraftId: firstDraft.draftId
+      });
+      expect(correctedDraft.draftArtifacts.eventSpec?.sourceLineage).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ reference: firstDraft.source.inputHash }),
+          expect.objectContaining({ reference: `sha256:${correctedSha256}` })
+        ])
+      );
+      expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual({
+        ...firstDraft,
+        status: "superseded"
+      });
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(2);
+      expect(await store.getCase(localBusiness, firstPayload.caseId)).toMatchObject({
+        sourceSpecId: correctedDraft.draftArtifacts.eventSpec?.specId
+      });
+      expect(events.filter((event) => event.kind === "source_added")).toHaveLength(2);
+      expect(events.filter((event) => event.kind === "draft_created")).toEqual([
+        expect.objectContaining({ artifactId: firstDraft.draftId }),
+        expect.objectContaining({
+          artifactId: correctedDraft.draftId,
+          revisionRef: expect.objectContaining({
+            supersedesArtifactId: firstDraft.draftId,
+            revision: firstDraft.revision + 1
+          })
+        })
+      ]);
+      expect(run).toHaveBeenCalledTimes(2);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("finishes a corrected document commit after the new draft was published before the case advanced", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      llmAdapter: {
+        adapterId: "mock-corrected-document-recovery-adapter",
+        adapterMode: "synthetic_live",
+        run
+      },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const firstPayload = await documentPayload(app);
+      const first = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: firstPayload
+      });
+      expect(first.statusCode, first.body).toBe(201);
+      const firstDraft = first.json<{ draft: ProductionDraft }>().draft;
+      const caseBeforeCorrection = await store.getCase(localBusiness, firstPayload.caseId);
+
+      const correctedContent = Buffer.from(`${documentText}\nKORREKTUR: 50 PERSONEN`, "utf8");
+      const correctedDocumentId = `source-document-${randomUUID()}`;
+      const correctedSha256 = createHash("sha256").update(correctedContent).digest("hex");
+      sourceDocuments.set(correctedDocumentId, {
+        metadata: {
+          businessId: "local",
+          documentId: correctedDocumentId,
+          filename: "angebot-flying-buffet-korrigiert-recovery.txt",
+          mimeType: "text/plain",
+          sizeBytes: correctedContent.byteLength,
+          sha256: correctedSha256,
+          dataClass: "synthetic_demo",
+          createdAt: "2026-06-14T10:00:00.000Z"
+        },
+        content: correctedContent
+      });
+
+      const repository = productionDecisionRepositoryFor(store);
+      const originalCriticalSection = repository.withTargetCriticalSection.bind(repository);
+      let failAfterPublish = true;
+      vi.spyOn(repository, "withTargetCriticalSection").mockImplementation(
+        (context, target, operation) => originalCriticalSection(context, target, (scope) => operation({
+          ...scope,
+          insertDraft: async (draft) => {
+            const result = await scope.insertDraft(draft);
+            if (result === "created" && failAfterPublish) {
+              failAfterPublish = false;
+              throw new Error("injected failure after corrected draft publish");
+            }
+            return result;
+          }
+        }))
+      );
+      const requestCorrection = () => app.inject({
+        method: "POST" as const,
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: { caseId: firstPayload.caseId, documentId: correctedDocumentId }
+      });
+
+      const failed = await requestCorrection();
+      const draftsAfterFailure = await store.listProductionDrafts(localBusiness);
+      const publishedCorrection = draftsAfterFailure.find((draft) => draft.supersedesDraftId === firstDraft.draftId);
+
+      expect(failed.statusCode).toBe(500);
+      expect(publishedCorrection).toMatchObject({ status: "pending_review" });
+      expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual(firstDraft);
+      expect(await store.getCase(localBusiness, firstPayload.caseId)).toEqual(caseBeforeCorrection);
+      expect((await store.listEvents(localBusiness, firstPayload.caseId))
+        .filter((event) => event.kind === "draft_created" && event.artifactId === publishedCorrection?.draftId))
+        .toHaveLength(0);
+
+      const retry = await requestCorrection();
+      const recoveredDraft = retry.json<{ draft: ProductionDraft }>().draft;
+      const draftsAfterRecovery = await store.listProductionDrafts(localBusiness);
+
+      expect(retry.statusCode, retry.body).toBe(201);
+      expect(recoveredDraft).toEqual(publishedCorrection);
+      expect(run).toHaveBeenCalledTimes(2);
+      expect(draftsAfterRecovery).toHaveLength(2);
+      expect(draftsAfterRecovery.filter((draft) => draft.status === "pending_review")).toEqual([recoveredDraft]);
+      expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual({
+        ...firstDraft,
+        status: "superseded"
+      });
+      expect(await store.getCase(localBusiness, firstPayload.caseId)).toMatchObject({
+        sourceSpecId: recoveredDraft.draftArtifacts.eventSpec?.specId
+      });
+      expect((await store.listEvents(localBusiness, firstPayload.caseId))
+        .filter((event) => event.kind === "draft_created" && event.artifactId === recoveredDraft.draftId))
+        .toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("continues an applied document draft without rewriting its approved predecessor", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => extractionResponse(request));
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      intakeRecords: new InMemoryIntakeRecordsPort(),
+      llmAdapter: {
+        adapterId: "mock-applied-document-continuation-adapter",
+        adapterMode: "synthetic_live",
+        run
+      },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const firstPayload = await documentPayload(app);
+      const firstResponse = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: firstPayload
+      });
+      const firstDraft = firstResponse.json<{ draft: ProductionDraft }>().draft;
+      const preparedResponse = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${firstDraft.draftId}/prepare`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
+      const preparedDraft = preparedResponse.json<{ draft: ProductionDraft }>().draft;
+      for (const card of preparedDraft.reviewCards) {
+        const reviewed = await app.inject({
+          method: "PATCH",
+          url: `/v1/production/drafts/${preparedDraft.draftId}/review-cards/${card.cardId}`,
+          headers: trustedProductionHeaders,
+          payload: { decision: "fits" }
+        });
+        expect(reviewed.statusCode, reviewed.body).toBe(200);
+      }
+      const approved = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${preparedDraft.draftId}/decision`,
+        headers: trustedProductionHeaders,
+        payload: { decision: "approved" }
+      });
+      const approvedProductionSpecId = approved.json<{
+        approvedProductionSpec: { approvedProductionSpecId: string };
+      }>().approvedProductionSpec.approvedProductionSpecId;
+      const applied = await app.inject({
+        method: "POST",
+        url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
+      const approvedPredecessor = await store.getProductionDraft(localBusiness, preparedDraft.draftId);
+      const completedCase = await store.getCase(localBusiness, firstPayload.caseId);
+
+      const correctedContent = Buffer.from(`${documentText}\nKORREKTUR: DESSERT ENTFÄLLT`, "utf8");
+      const correctedDocumentId = `source-document-${randomUUID()}`;
+      const correctedSha256 = createHash("sha256").update(correctedContent).digest("hex");
+      sourceDocuments.set(correctedDocumentId, {
+        metadata: {
+          businessId: "local",
+          documentId: correctedDocumentId,
+          filename: "angebot-flying-buffet-korrigiert-ohne-dessert.txt",
+          mimeType: "text/plain",
+          sizeBytes: correctedContent.byteLength,
+          sha256: correctedSha256,
+          dataClass: "synthetic_demo",
+          createdAt: "2026-06-15T09:00:00.000Z"
+        },
+        content: correctedContent
+      });
+
+      const corrected = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: { caseId: firstPayload.caseId, documentId: correctedDocumentId }
+      });
+      const correctedDraft = corrected.json<{ draft: ProductionDraft }>().draft;
+      const correctedRetry = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload: { caseId: firstPayload.caseId, documentId: correctedDocumentId }
+      });
+      const reopenedCase = await store.getCase(localBusiness, firstPayload.caseId);
+
+      expect(firstResponse.statusCode, firstResponse.body).toBe(201);
+      expect(preparedResponse.statusCode, preparedResponse.body).toBe(201);
+      expect(approved.statusCode, approved.body).toBe(201);
+      expect(applied.statusCode, applied.body).toBe(200);
+      expect(approvedPredecessor).toMatchObject({
+        status: "approved"
+      });
+      expect(await store.getApplyManifest(localBusiness, approvedProductionSpecId)).toBeDefined();
+      expect(completedCase).toMatchObject({
+        status: "completed",
+        approvedProductionSpecId,
+        currentPlanId: expect.any(String),
+        currentPurchaseListId: expect.any(String)
+      });
+      expect(corrected.statusCode, corrected.body).toBe(201);
+      expect(correctedDraft).toMatchObject({
+        status: "pending_review",
+        revision: preparedDraft.revision + 1,
+        supersedesDraftId: preparedDraft.draftId
+      });
+      expect(await store.getProductionDraft(localBusiness, preparedDraft.draftId)).toEqual(approvedPredecessor);
+      expect(correctedRetry.statusCode, correctedRetry.body).toBe(201);
+      expect(correctedRetry.json<{ draft: ProductionDraft }>().draft).toEqual(correctedDraft);
+      expect(reopenedCase).toMatchObject({
+        status: "open",
+        sourceSpecId: correctedDraft.draftArtifacts.eventSpec?.specId
+      });
+      expect(reopenedCase?.approvedProductionSpecId).toBeUndefined();
+      expect(reopenedCase?.currentPlanId).toBeUndefined();
+      expect(reopenedCase?.currentPurchaseListId).toBeUndefined();
+      expect(correctedDraft.draftArtifacts.eventSpec?.sourceLineage).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ reference: firstDraft.source.inputHash }),
+          expect.objectContaining({ reference: `sha256:${correctedSha256}` })
+        ])
+      );
+      expect(run).toHaveBeenCalledTimes(2);
     } finally {
       await app.close();
     }
@@ -230,11 +1144,12 @@ describe("ProductionDraft document BYO extraction", () => {
     });
 
     try {
+      const payload = await documentPayload(app);
       const created = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload()
+        payload
       });
       const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
       const reviewed = await app.inject({
@@ -272,11 +1187,160 @@ describe("ProductionDraft document BYO extraction", () => {
         expect.arrayContaining(originalDraft.draftArtifacts.eventSpec?.sourceLineage ?? [])
       );
       expect(storedOriginal?.status).toBe("superseded");
+      expect((await store.listEvents(localBusiness, payload.caseId)).map((event) => event.kind)).toEqual([
+        "case_created",
+        "source_added",
+        "draft_created",
+        "review_decision",
+        "revision_created"
+      ]);
+      expect(await store.listEvents(localBusiness, payload.caseId)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "review_decision",
+            artifactId: originalDraft.draftId,
+            text: expect.stringContaining("Änderung nötig")
+          }),
+          expect.objectContaining({
+            kind: "revision_created",
+            artifactId: revision.draftId,
+            revisionRef: expect.objectContaining({
+              artifactType: "ProductionDraft",
+              artifactId: revision.draftId,
+              revision: 2,
+              supersedesArtifactId: originalDraft.draftId
+            })
+          })
+        ])
+      );
       expect(await store.listPlans(localBusiness)).toHaveLength(0);
       expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
       expect(auditJson).toContain("production.production_draft_revision_created");
       expect(auditJson).not.toContain(changeRequest);
       expect(auditJson).not.toContain("promptContext");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("recovers one persisted revision after a lost response without recalling the provider", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const run = vi.fn(async (request: LlmReadinessProviderAdapterRequest) => {
+      const response = extractionResponse(request);
+      if (run.mock.calls.length === 1) return response;
+
+      const extraction = JSON.parse(response.outputCandidate.text) as {
+        components: Array<{ label: string; note: string | null }>;
+      };
+      extraction.components = extraction.components.map((component) =>
+        component.label.startsWith("Kokos-Cheesecake")
+          ? { ...component, note: "Je Törtchen zwei frische Brombeeren anlegen." }
+          : component
+      );
+      return {
+        ...response,
+        providerRequestId: "req-production-draft-revision-recovery",
+        outputCandidate: {
+          ...response.outputCandidate,
+          outputId: "output-production-draft-revision-recovery",
+          text: JSON.stringify(extraction)
+        }
+      };
+    });
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      auditLog,
+      llmAdapter: {
+        adapterId: "mock-byo-production-draft-recovery-adapter",
+        adapterMode: "synthetic_live",
+        run
+      },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      const payload = await documentPayload(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
+      });
+      const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
+      const reviewed = await app.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${originalDraft.draftId}/review-cards/card-menu-component-4`,
+        headers: trustedProductionHeaders,
+        payload: {
+          decision: "change_requested",
+          operatorComment: "Je Törtchen nur zwei frische Brombeeren anlegen."
+        }
+      });
+      expect(reviewed.statusCode, reviewed.body).toBe(200);
+      const completed = await completeProductionCase(store, payload.caseId);
+      const appendEventForArtifactCase = store.appendEventForArtifactCase.bind(store);
+      let failRevisionEventOnce = true;
+      vi.spyOn(store, "appendEventForArtifactCase").mockImplementation(
+        async (context, artifactId, input, eventIdentity) => {
+          if (input.kind === "revision_created" && failRevisionEventOnce) {
+            failRevisionEventOnce = false;
+            throw new Error("simulated response loss after revision persistence");
+          }
+          return appendEventForArtifactCase(context, artifactId, input, eventIdentity);
+        }
+      );
+      const request = () => app.inject({
+        method: "POST" as const,
+        url: `/v1/production/drafts/${originalDraft.draftId}/revise`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
+
+      const first = await request();
+      const persistedAfterLoss = (await store.listProductionDrafts(localBusiness))
+        .find((draft) => draft.supersedesDraftId === originalDraft.draftId);
+      const caseAfterLoss = await store.getCase(localBusiness, payload.caseId);
+      const retry = await request();
+      const recoveredDraft = retry.json<{ draft: ProductionDraft }>().draft;
+      const caseAfterRetry = await store.getCase(localBusiness, payload.caseId);
+      const secondRetry = await request();
+      const caseAfterSecondRetry = await store.getCase(localBusiness, payload.caseId);
+      const revisionEvents = (await store.listEvents(localBusiness, payload.caseId))
+        .filter((event) => event.kind === "revision_created");
+      const revisionAudits = (await auditLog.listRecentFor(localBusiness, 20))
+        .filter((entry) => entry.action === "production.production_draft_revision_created");
+
+      expect(first.statusCode).toBe(500);
+      expect(persistedAfterLoss).toBeDefined();
+      expect(caseAfterLoss).toMatchObject({
+        status: "completed",
+        approvedProductionSpecId: completed.approvedProductionSpecId,
+        currentPlanId: completed.currentPlanId,
+        currentPurchaseListId: completed.currentPurchaseListId
+      });
+      expect(retry.statusCode, retry.body).toBe(201);
+      expect(secondRetry.statusCode, secondRetry.body).toBe(201);
+      expect(recoveredDraft).toEqual(persistedAfterLoss);
+      expect(secondRetry.json<{ draft: ProductionDraft }>().draft).toEqual(persistedAfterLoss);
+      expect(await store.listProductionDrafts(localBusiness)).toHaveLength(2);
+      expect(run).toHaveBeenCalledTimes(2);
+      expect(revisionEvents).toEqual([
+        expect.objectContaining({ artifactId: persistedAfterLoss!.draftId })
+      ]);
+      expect(revisionAudits).toHaveLength(1);
+      expect(caseAfterRetry).toMatchObject({
+        status: "open",
+        version: caseAfterLoss!.version + 1
+      });
+      expect(caseAfterRetry?.approvedProductionSpecId).toBeUndefined();
+      expect(caseAfterRetry?.currentPlanId).toBeUndefined();
+      expect(caseAfterRetry?.currentPurchaseListId).toBeUndefined();
+      expect(caseAfterSecondRetry).toEqual(caseAfterRetry);
     } finally {
       await app.close();
     }
@@ -304,11 +1368,12 @@ describe("ProductionDraft document BYO extraction", () => {
     });
 
     try {
+      const payload = await documentPayload(app);
       const created = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload()
+        payload
       });
       const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
       await app.inject({
@@ -358,11 +1423,12 @@ describe("ProductionDraft document BYO extraction", () => {
     });
 
     try {
+      const payload = await documentPayload(app);
       const created = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload()
+        payload
       });
       const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
       await store.saveProductionDraft(localBusiness, {
@@ -436,11 +1502,12 @@ describe("ProductionDraft document BYO extraction", () => {
     });
 
     try {
+      const payload = await documentPayload(app);
       const created = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload()
+        payload
       });
       const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
       await app.inject({
@@ -459,11 +1526,19 @@ describe("ProductionDraft document BYO extraction", () => {
         headers: trustedProductionHeaders,
         payload: {}
       });
+      const retry = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${originalDraft.draftId}/revise`,
+        headers: trustedProductionHeaders,
+        payload: {}
+      });
       const storedDrafts = await store.listProductionDrafts(localBusiness);
-      const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 20));
+      const audits = await auditLog.listRecentFor({ businessId: "local" }, 20);
+      const auditJson = JSON.stringify(audits);
 
       expect(revised.statusCode, revised.body).toBe(422);
-      expect(requests).toHaveLength(2);
+      expect(retry.statusCode, retry.body).toBe(422);
+      expect(requests).toHaveLength(3);
       expect(storedDrafts).toHaveLength(1);
       expect(storedDrafts[0]).toMatchObject({
         draftId: originalDraft.draftId,
@@ -472,6 +1547,10 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(auditJson).toContain("production.production_draft_revision_rejected");
       expect(auditJson).not.toContain(changeRequest);
       expect(auditJson).not.toContain("promptContext");
+      expect(audits.filter((entry) => entry.action === "production.production_draft_revision_rejected"))
+        .toHaveLength(1);
+      expect((await store.listEvents(localBusiness, payload.caseId)).map((message) => message.kind))
+        .toEqual(["case_created", "source_added", "draft_created", "review_decision", "error"]);
     } finally {
       await app.close();
     }
@@ -521,7 +1600,7 @@ describe("ProductionDraft document BYO extraction", () => {
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload()
+        payload: await documentPayload(app)
       });
       const originalDraft = created.json<{ draft: ProductionDraft }>().draft;
       await app.inject({
@@ -551,7 +1630,7 @@ describe("ProductionDraft document BYO extraction", () => {
     }
   });
 
-  it("uses the server-approved pseudonymized mode even when the client claims another mode", async () => {
+  it("uses the server-approved pseudonymized mode for a stable document reference", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
@@ -579,17 +1658,14 @@ describe("ProductionDraft document BYO extraction", () => {
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: {
-          ...documentPayload(),
-          dataMode: "synthetic_or_demo_only"
-        }
+        payload: await documentPayload(app)
       });
       const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
 
       expect(response.statusCode, response.body).toBe(201);
       expect(requests).toHaveLength(1);
       expect(requests[0].input.policy.dataMode).toBe("pseudonymized_approved");
-      expect(auditJson).toContain('"dataMode":"pseudonymized_approved"');
+      expect(auditJson).not.toContain('"dataMode"');
     } finally {
       await app.close();
     }
@@ -670,7 +1746,7 @@ describe("ProductionDraft document BYO extraction", () => {
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload(sourceText)
+        payload: await documentPayload(app, sourceText)
       });
       expect(response.statusCode, response.body).toBe(201);
       const draft = response.json<{ draft: ProductionDraft }>().draft;
@@ -740,16 +1816,22 @@ describe("ProductionDraft document BYO extraction", () => {
     });
 
     try {
+      const payload = await documentPayload(app);
       const response = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload()
+        payload
       });
 
       expect(response.statusCode).toBe(422);
       expect(response.body).toContain("ProductionDraft-Extraktion ist nicht schema-valide.");
       expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
+      expect((await store.listEvents(localBusiness, payload.caseId)).map((event) => event.kind)).toEqual([
+        "case_created",
+        "source_added",
+        "error"
+      ]);
     } finally {
       await app.close();
     }
@@ -759,26 +1841,44 @@ describe("ProductionDraft document BYO extraction", () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
     const app = buildProductionApp({
       dataRoot,
       store,
+      auditLog,
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
 
     try {
+      const payload = await documentPayload(app, "Buffet mit Vitello Tonnato für 45 Personen");
       const response = await app.inject({
         method: "POST",
         url: "/v1/production/drafts/from-document",
         headers: trustedProductionHeaders,
-        payload: documentPayload("Buffet mit Vitello Tonnato für 45 Personen")
+        payload
+      });
+      const retry = await app.inject({
+        method: "POST",
+        url: "/v1/production/drafts/from-document",
+        headers: trustedProductionHeaders,
+        payload
       });
 
       expect(response.statusCode).toBe(422);
+      expect(retry.statusCode).toBe(422);
       expect(response.body).toContain("Keine aktive KI-Verbindung für dieses Dokument");
       expect(await store.listProductionDrafts(localBusiness)).toHaveLength(0);
       expect(await store.listPlans(localBusiness)).toHaveLength(0);
       expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
+      expect((await store.listEvents(localBusiness, payload.caseId)).map((event) => event.kind)).toEqual([
+        "case_created",
+        "source_added",
+        "error"
+      ]);
+      expect((await auditLog.listRecentFor(localBusiness, 20))
+        .filter((entry) => entry.action === "production.production_draft_document_rejected"))
+        .toHaveLength(1);
     } finally {
       await app.close();
     }

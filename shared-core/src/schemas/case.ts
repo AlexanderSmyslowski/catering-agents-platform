@@ -132,6 +132,7 @@ export const caseSchema = {
         ...caseBaseProperties,
         product: { const: "production" },
         productionHandoffId: identifier,
+        sourceSpecId: identifier,
         approvedProductionSpecId: identifier,
         currentPlanId: identifier,
         currentPurchaseListId: identifier

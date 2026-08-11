@@ -22,7 +22,11 @@ import {
   createAcceptedSpecFromDocument,
   createAcceptedSpecFromManualForm,
   createAcceptedSpecFromText,
+  createOfferCase,
+  createOfferDraftFromRequest,
   createOfferFromText,
+  createProductionCase,
+  createProductionCaseFromHandoff,
   createProductionDraftFromAcceptedEventSpec,
   createProductionDraftFromDocument,
   decideOfferDraft,
@@ -32,12 +36,14 @@ import {
   seedDemoData,
   prepareProductionDraft,
   updateAcceptedSpec,
-  uploadRecipeFile
+  uploadRecipeFile,
+  uploadSourceDocument
 } from "./api.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
+import type { StagedProductionDocument } from "./production-document-submit-action.js";
 import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
 import { buildAppProductionRouteAppBoundary } from "./app-production-route-app-boundary.js";
@@ -101,6 +107,10 @@ export function App() {
     handleOperatorNameChange
   } = useOperatorNameState();
   const [offerText, setOfferText] = useState("");
+  const stagedOfferTextRequestRef = useRef<{ text: string; requestId: string } | undefined>(undefined);
+  const [activeOfferCaseId, setActiveOfferCaseId] = useState<string>();
+  const [activeProductionCaseId, setActiveProductionCaseId] = useState<string>();
+  const [activeProductionCaseSpecId, setActiveProductionCaseSpecId] = useState<string>();
   const {
     miniPilotRawResult,
     setMiniPilotRawResult,
@@ -168,6 +178,7 @@ export function App() {
   const deferredSearch = useDeferredValue(search);
   const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const stagedProductionDocumentRef = useRef<StagedProductionDocument | undefined>(undefined);
 
   const {
     filteredOfferDrafts,
@@ -380,6 +391,11 @@ export function App() {
     resetPlanProgress,
     resetIntakeRequestDetail,
     resetSpecEdit,
+    clearActiveProductionCaseId: () => {
+      setActiveProductionCaseId(undefined);
+      setActiveProductionCaseSpecId(undefined);
+      stagedProductionDocumentRef.current = undefined;
+    },
     uploadInputRef: productionUploadInputRef
   });
   const {
@@ -402,7 +418,23 @@ export function App() {
     createAcceptedSpecFromText,
     intakeText,
     createAcceptedSpecFromDocument,
+    uploadSourceDocument,
+    createProductionCase,
     createProductionDraftFromDocument,
+    activeProductionCaseId,
+    setActiveProductionCaseId,
+    getStagedProductionDocument: () => stagedProductionDocumentRef.current,
+    setStagedProductionDocument: (stage) => {
+      stagedProductionDocumentRef.current = stage;
+    },
+    clearStagedProductionDocument: () => {
+      stagedProductionDocumentRef.current = undefined;
+    },
+    createOfferCase,
+    createOfferDraftFromRequest,
+    activeOfferCaseId,
+    setActiveOfferCaseId,
+    setSelectedDraftId,
     intakeFile,
     intakeChannel,
     startIncomingProductionFile,
@@ -442,6 +474,11 @@ export function App() {
     buildCurrentSpecUpdateInput,
     loadSpecIntoEditorState,
     createProductionDraftFromAcceptedEventSpec,
+    createProductionCase,
+    activeProductionCaseId,
+    activeProductionCaseSpecId,
+    setActiveProductionCaseId,
+    setActiveProductionCaseSpecId,
     prepareProductionDraft,
     setSubmitting,
     setProductionWorkspaceCleared,
@@ -504,12 +541,17 @@ export function App() {
   const focusPromotedProductionSpec = (specId: string) => {
     rememberPromotedProductionSpecFocus(specId);
     setProductionWorkspaceCleared(false);
+    if (activeProductionCaseSpecId !== specId) {
+      setActiveProductionCaseId(undefined);
+      setActiveProductionCaseSpecId(undefined);
+    }
     setFocusedProductionSpecId(specId);
   };
 
   const refreshAfterProductionDraftDecision = async (appliedSpecId?: string) => {
     if (appliedSpecId) {
       setProductionWorkspaceCleared(false);
+      setActiveProductionCaseSpecId(appliedSpecId);
       setFocusedProductionSpecId(appliedSpecId);
     }
     await refreshDashboard();
@@ -592,10 +634,28 @@ export function App() {
     miniPilotStorageHintLabel
   });
   const { offerWorkbenchState } = buildAppOfferRouteAppBoundary({
+    createOfferCase,
     createOfferFromText,
+    getOrCreateOfferRequestId: (text) => {
+      const staged = stagedOfferTextRequestRef.current;
+      if (staged?.text === text) return staged.requestId;
+      const requestId = `request-ui-${globalThis.crypto.randomUUID()}`;
+      stagedOfferTextRequestRef.current = { text, requestId };
+      return requestId;
+    },
+    completeOfferRequestId: (requestId) => {
+      if (stagedOfferTextRequestRef.current?.requestId === requestId) {
+        stagedOfferTextRequestRef.current = undefined;
+      }
+    },
+    activeOfferCaseId,
+    setActiveOfferCaseId,
     decideOfferDraft,
     createProductionHandoff,
+    createProductionCaseFromHandoff,
     createProductionDraftFromHandoff,
+    setActiveProductionCaseId,
+    clearActiveOfferCaseId: () => setActiveOfferCaseId(undefined),
     submitting,
     setSubmitting,
     clearMessages,

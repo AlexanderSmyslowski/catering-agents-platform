@@ -7,6 +7,7 @@ export type ProductionWorkspaceResetActions = {
   resetPlanProgress: () => void;
   resetIntakeRequestDetail: () => void;
   resetSpecEdit: (markDismissed: boolean) => void;
+  clearActiveProductionCaseId: () => void;
   clearUploadInput: () => void;
 };
 
@@ -31,6 +32,7 @@ export function resetProductionWorkspace(actions: ProductionWorkspaceResetAction
   actions.resetPlanProgress();
   actions.resetIntakeRequestDetail();
   actions.resetSpecEdit(false);
+  actions.clearActiveProductionCaseId();
   actions.clearUploadInput();
 }
 

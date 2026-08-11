@@ -11,7 +11,10 @@ export type OfferApprovalBinding = {
 export type OfferApprovalActionInput = {
   decideOfferDraft: (draftId: string, revision: number, variantId: string) => Promise<{ approvedOffer?: { approvedOfferId: string } }>;
   createProductionHandoff: (approvedOfferId: string) => Promise<{ handoff?: { handoffId: string } }>;
-  createProductionDraftFromHandoff: (handoffId: string) => Promise<{ draft?: { draftId: string } }>;
+  createProductionCaseFromHandoff: (handoffId: string) => Promise<{ case: { caseId: string } }>;
+  createProductionDraftFromHandoff: (caseId: string, handoffId: string) => Promise<{ draft?: { draftId: string } }>;
+  setActiveProductionCaseId: (caseId: string) => void;
+  clearActiveOfferCaseId: () => void;
   setSubmitting: (submitting: boolean) => void;
   clearMessages: () => void;
   refreshDashboard: () => Promise<void>;
@@ -42,7 +45,12 @@ export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
     createHandoff: async (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => run(async () => {
       const result = await input.createProductionHandoff(approvedOfferId);
       if (!result.handoff?.handoffId) throw new Error("Produktionsübergabe fehlt.");
-      const productionResult = await input.createProductionDraftFromHandoff(result.handoff.handoffId);
+      const productionCase = await input.createProductionCaseFromHandoff(result.handoff.handoffId);
+      input.setActiveProductionCaseId(productionCase.case.caseId);
+      const productionResult = await input.createProductionDraftFromHandoff(
+        productionCase.case.caseId,
+        result.handoff.handoffId
+      );
       if (!productionResult.draft?.draftId) throw new Error("Produktionsentwurf fehlt.");
       input.setApprovalBinding?.({
         offerDraftId,
@@ -51,6 +59,7 @@ export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
         handoffId: result.handoff.handoffId,
         productionDraftId: productionResult.draft.draftId
       });
+      input.clearActiveOfferCaseId();
       input.setNotice("Freigegebenes Angebot wurde an die Produktion übergeben.");
       input.openProductionEntry(productionResult.draft.draftId);
     }, "Produktionsübergabe konnte nicht erstellt werden.")
