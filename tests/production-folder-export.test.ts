@@ -16,6 +16,7 @@ import {
 } from "@catering/shared-core";
 
 const TRUSTED_SECRET = "production-folder-secret";
+const localBusiness = { businessId: "local" } as const;
 
 const trustedHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
@@ -496,12 +497,12 @@ describe("production folder export", () => {
     const input = fixture();
     const intakeStore = new IntakeStore({ rootDir: dataRoot });
     const productionStore = new ProductionStore({ rootDir: dataRoot });
-    const recipeLibrary = new RecipeLibrary([], { rootDir: dataRoot });
+    const recipeLibrary = new RecipeLibrary({ rootDir: dataRoot });
     await intakeStore.saveSpec(input.spec);
-    await productionStore.savePlan(input.plan);
-    await productionStore.savePurchaseList(input.purchaseList);
-    await productionStore.saveClarificationAnswer(input.clarificationAnswer);
-    await recipeLibrary.save(input.recipe);
+    await productionStore.savePlan(localBusiness, input.plan);
+    await productionStore.savePurchaseList(localBusiness, input.purchaseList);
+    await productionStore.saveClarificationAnswer(localBusiness, input.clarificationAnswer);
+    await recipeLibrary.save(localBusiness, input.recipe);
     const app = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: TRUSTED_SECRET,

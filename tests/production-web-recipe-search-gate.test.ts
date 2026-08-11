@@ -12,6 +12,10 @@ import {
   buildProductionApp,
   isWebRecipeSearchEnabled
 } from "@catering/production-service";
+import {
+  APPROVED_PRODUCTION_TEST_SECRET,
+  runApprovedProductionWorkflow
+} from "./helpers/approved-production-workflow.js";
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-web-gate-"));
@@ -67,19 +71,18 @@ describe("production web recipe search gate", () => {
     const dataRoot = createDataRoot();
     const app = buildProductionApp({
       dataRoot,
+      trustedActorSecret: APPROVED_PRODUCTION_TEST_SECRET,
       env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
-      const response = await app.inject({
-        method: "POST",
-        url: "/v1/production/plans",
+      const response = await runApprovedProductionWorkflow(app, {
         payload: {
           eventSpec: mysteryBowlSpec()
         }
       });
 
-      expect(response.statusCode).toBe(201);
+      expect(response.statusCode, response.body).toBe(201);
       const body = response.json();
       expect(body.productionPlan.productionBatches).toHaveLength(0);
       expect(body.productionPlan.unresolvedItems.length).toBeGreaterThan(0);
@@ -88,7 +91,11 @@ describe("production web recipe search gate", () => {
 
       const recipesResponse = await app.inject({
         method: "GET",
-        url: "/v1/production/recipes"
+        url: "/v1/production/recipes",
+        headers: {
+          "x-catering-actor-name": "Produktions-Mitarbeiter",
+          "x-catering-trusted-secret": APPROVED_PRODUCTION_TEST_SECRET
+        }
       });
 
       expect(recipesResponse.statusCode).toBe(200);

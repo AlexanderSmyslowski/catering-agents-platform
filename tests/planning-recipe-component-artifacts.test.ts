@@ -93,12 +93,31 @@ function discoveryReturning(value: unknown): RecipeDiscoveryService {
 }
 
 describe("planning recipe component artifacts", () => {
+  it("rejects context-free direct planning calls", async () => {
+    await expect((buildRecipeComponentPlanningArtifacts as unknown as (
+      input: Record<string, unknown>
+    ) => Promise<unknown>)({
+      component: buildComponent(),
+      eventSpec: buildSpec(),
+      servings: 40,
+      discoveryService: discoveryReturning({
+        selection: {
+          componentId: "component-soup",
+          selectionReason: "Testauflösung",
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: []
+      })
+    })).rejects.toThrow("Betriebskontext");
+  });
+
   it("builds resolved recipe artifacts with the original recipe selection", async () => {
     const recipe = buildRecipe();
     const artifacts = await buildRecipeComponentPlanningArtifacts({
       component: buildComponent(),
       eventSpec: buildSpec(),
       servings: 40,
+      context: { businessId: "local" },
       discoveryService: discoveryReturning({
         recipe,
         selection: {
@@ -125,6 +144,7 @@ describe("planning recipe component artifacts", () => {
       component: buildComponent(),
       eventSpec: buildSpec(),
       servings: 40,
+      context: { businessId: "local" },
       discoveryService: discoveryReturning({
         selection: {
           componentId: "component-soup",
@@ -155,6 +175,7 @@ describe("planning recipe component artifacts", () => {
       component: buildComponent(),
       eventSpec: buildSpec({ productionConstraints: ["vegan"] }),
       servings: 40,
+      context: { businessId: "local" },
       discoveryService: discoveryReturning({
         recipe: buildRecipe({
           ingredients: [
@@ -214,6 +235,7 @@ describe("planning recipe component artifacts", () => {
       component: buildComponent({ recipeOverrideId: "recipe-manual" }),
       eventSpec: buildSpec(),
       servings: 20,
+      context: { businessId: "local" },
       discoveryService: discovery
     });
 

@@ -58,7 +58,9 @@ function productionDraft(
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId,
+    revision: 1,
     status: "pending_review",
     createdAt: "2026-07-01T12:00:00.000Z",
     source: {
@@ -78,9 +80,43 @@ function productionDraft(
       rawProviderPayloadStored: false,
       knowledgeWritePolicy: "reviewed_only"
     },
-    reviewCards,
+    reviewCards: [
+      ...reviewCards,
+      {
+        ...reviewCard("card-plan-coverage", "timeline"),
+        targetPath: "$.draftArtifacts.productionPlan",
+        targetId: `${draftId}-plan`,
+        requiredApproval: false
+      },
+      {
+        ...reviewCard("card-purchase-coverage", "purchase_item"),
+        targetPath: "$.draftArtifacts.purchaseList",
+        targetId: `${draftId}-purchase-list`,
+        requiredApproval: false
+      }
+    ],
     draftArtifacts: {
       eventSpec,
+      productionPlan: {
+        schemaVersion: SCHEMA_VERSION,
+        planId: `${draftId}-plan`,
+        eventSpecId: eventSpec.specId,
+        readiness: { status: "complete", reasons: [] },
+        productionBatches: [],
+        timeline: [],
+        kitchenSheets: [],
+        recipeSelections: [],
+        unresolvedItems: []
+      },
+      purchaseList: {
+        schemaVersion: SCHEMA_VERSION,
+        purchaseListId: `${draftId}-purchase-list`,
+        eventSpecId: eventSpec.specId,
+        items: [],
+        groupingMode: "group",
+        totals: { itemCount: 0, groups: [] }
+      },
+      recipes: [],
       openQuestions: [
         {
           field: "recipe.temperature",
@@ -105,7 +141,7 @@ async function importDraft(
     payload: draft
   });
 
-  expect(response.statusCode).toBe(201);
+  expect(response.statusCode, response.body).toBe(201);
   return response.json<{ draft: ProductionDraft }>().draft;
 }
 
@@ -240,20 +276,27 @@ describe("ProductionDraft review state", () => {
         method: "POST",
         url: "/v1/production/drafts/production-draft-review-1/decision",
         headers: trustedProductionHeaders,
-        payload: { approve: true }
+        payload: { decision: "approved" }
       });
-      const draft = response.json<{ draft: ProductionDraft }>().draft;
+      const body = response.json<{
+        approval: { approvalRequestId: string; decision: string };
+        approvedProductionSpec: { approvedProductionSpecId: string };
+      }>();
+      const draft = await store.getProductionDraft(localBusiness, "production-draft-review-1");
       const auditJson = JSON.stringify(await auditLog.listRecentFor({ businessId: "local" }, 10));
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(201);
+      expect(body.approval.decision).toBe("approved");
+      expect(body.approvedProductionSpec.approvedProductionSpecId).toMatch(/^approved-production-spec-/);
       expect(draft).toMatchObject({
         status: "approved",
-        approvedBy: "Produktions-Mitarbeiter"
+        approvedBy: "Produktions-Mitarbeiter",
+        approvalRequestId: body.approval.approvalRequestId
       });
-      expect(draft.approvedAt).toMatch(/^20/);
-      expect(await store.listPlans()).toHaveLength(0);
-      expect(await store.listPurchaseLists()).toHaveLength(0);
-      expect(auditJson).toContain("production.production_draft_approved");
+      expect(draft?.approvedAt).toMatch(/^20/);
+      expect(await store.listPlans(localBusiness)).toHaveLength(0);
+      expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
+      expect(auditJson).toContain("production.production_spec_approved");
       expect(auditJson).toContain('"writesProductObject":false');
       expect(auditJson).not.toContain("SECRET_TITLE_card-event");
       expect(auditJson).not.toContain("SECRET_DRAFT_NOTE");
@@ -262,7 +305,7 @@ describe("ProductionDraft review state", () => {
     }
   });
 
-  it("blocks approval while a review card is open or still marked as a blocking risk", async () => {
+  it("blocks approval while a blocking review card is open and permits it once the card fits", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
     const store = new ProductionStore({ rootDir: dataRoot });
@@ -282,7 +325,7 @@ describe("ProductionDraft review state", () => {
         method: "POST",
         url: "/v1/production/drafts/production-draft-blocking/decision",
         headers: trustedProductionHeaders,
-        payload: { approve: true }
+        payload: { decision: "approved" }
       });
 
       expect(openResponse.statusCode).toBe(422);
@@ -293,12 +336,11 @@ describe("ProductionDraft review state", () => {
         method: "POST",
         url: "/v1/production/drafts/production-draft-blocking/decision",
         headers: trustedProductionHeaders,
-        payload: { approve: true }
+        payload: { decision: "approved" }
       });
 
-      expect(blockingResponse.statusCode).toBe(422);
-      expect(blockingResponse.body).toContain("reviewCard card-blocking has blocking risk");
-      expect((await store.getProductionDraft(localBusiness, "production-draft-blocking"))?.status).toBe("pending_review");
+      expect(blockingResponse.statusCode).toBe(201);
+      expect((await store.getProductionDraft(localBusiness, "production-draft-blocking"))?.status).toBe("approved");
     } finally {
       await app.close();
     }
@@ -319,7 +361,7 @@ describe("ProductionDraft review state", () => {
         method: "POST",
         url: "/v1/production/drafts/production-draft-review-1/decision",
         headers: trustedProductionHeaders,
-        payload: { approve: false }
+        payload: { decision: "rejected" }
       });
       const editResponse = await app.inject({
         method: "PATCH",
@@ -328,8 +370,12 @@ describe("ProductionDraft review state", () => {
         payload: { decision: "fits" }
       });
 
-      expect(decisionResponse.statusCode).toBe(200);
-      expect(decisionResponse.json<{ draft: ProductionDraft }>().draft.status).toBe("rejected");
+      expect(decisionResponse.statusCode).toBe(201);
+      expect(decisionResponse.json<{ approval: { decision: string } }>().approval.decision).toBe("rejected");
+      expect((await new ProductionStore({ rootDir: dataRoot }).getProductionDraft(
+        localBusiness,
+        "production-draft-review-1"
+      ))?.status).toBe("rejected");
       expect(editResponse.statusCode).toBe(409);
     } finally {
       await app.close();

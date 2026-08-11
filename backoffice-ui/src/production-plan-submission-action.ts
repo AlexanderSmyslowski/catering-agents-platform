@@ -1,26 +1,26 @@
 import { getSpecLabel } from "./production-language.js";
 import {
-  completeProductionStateAfterPlanSuccess,
+  completeProductionStateAfterDraftPreparation,
   prepareProductionSpecForPlanning,
   resetProductionStateAfterPlanFailure,
   startProductionPlanRunState,
   type ProductionPlanFailureActions,
   type ProductionPlanStartActions,
-  type ProductionPlanSuccessActions,
+  type ProductionDraftPreparationSuccessActions,
   type ProductionSpecPlanningPreflightActions
 } from "./production-plan-result-state.js";
 
 export type ProductionPlanSubmissionServices = {
-  createProductionPlan: (
-    spec: Record<string, unknown>,
-    options?: { sourceReviewConfirmed?: boolean }
-  ) => Promise<Record<string, unknown>>;
+  createProductionDraftFromAcceptedEventSpec: (
+    spec: Record<string, unknown>
+  ) => Promise<{ draft: { draftId: string } }>;
+  prepareProductionDraft: (draftId: string) => Promise<{ draft: { draftId: unknown } }>;
 };
 
 export type ProductionPlanSubmissionCallbacks =
   ProductionSpecPlanningPreflightActions &
   ProductionPlanStartActions &
-  ProductionPlanSuccessActions &
+  ProductionDraftPreparationSuccessActions &
   ProductionPlanFailureActions & {
     setSubmitting: (submitting: boolean) => void;
     setProductionWorkspaceCleared: (cleared: boolean) => void;
@@ -34,7 +34,8 @@ export type ProductionPlanSubmissionActionInput =
   };
 
 export function buildProductionPlanSubmissionAction({
-  createProductionPlan,
+  createProductionDraftFromAcceptedEventSpec,
+  prepareProductionDraft,
   editingSpecId,
   setSubmitting,
   setProductionWorkspaceCleared,
@@ -42,16 +43,16 @@ export function buildProductionPlanSubmissionAction({
   persistCurrentSpecEdit,
   startPlanProgress,
   clearSelectedPlanId,
-  setSelectedPlanId,
   refreshDashboard,
   completePlanProgress,
   failPlanProgress,
   setNotice,
-  setError
+  setError,
+  showProductionDraftReview
 }: ProductionPlanSubmissionActionInput) {
   return async function handleCreatePlan(
     spec: Record<string, unknown>,
-    options?: { sourceReviewConfirmed?: boolean }
+    _options?: { sourceReviewConfirmed?: boolean }
   ) {
     setSubmitting(true);
     setProductionWorkspaceCleared(false);
@@ -68,14 +69,13 @@ export function buildProductionPlanSubmissionAction({
         clearSelectedPlanId,
         setNotice
       });
-      const response = options
-        ? await createProductionPlan(specForPlanning, options)
-        : await createProductionPlan(specForPlanning);
-      await completeProductionStateAfterPlanSuccess(response, {
-        setSelectedPlanId,
+      const imported = await createProductionDraftFromAcceptedEventSpec(specForPlanning);
+      const prepared = await prepareProductionDraft(imported.draft.draftId);
+      await completeProductionStateAfterDraftPreparation(prepared, {
         refreshDashboard,
         completePlanProgress,
-        setNotice
+        setNotice,
+        showProductionDraftReview
       });
     } catch (submitError) {
       resetProductionStateAfterPlanFailure(submitError, {

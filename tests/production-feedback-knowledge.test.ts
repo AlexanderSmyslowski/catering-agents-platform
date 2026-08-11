@@ -6,6 +6,7 @@ import { buildProductionApp, ProductionStore, type ProductionFeedbackDraft } fro
 import { AuditLogStore } from "@catering/shared-core";
 
 const TRUSTED_SECRET = "production-feedback-knowledge-secret";
+const localBusiness = { businessId: "local" } as const;
 const trustedProductionHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
   "x-catering-trusted-secret": TRUSTED_SECRET
@@ -131,8 +132,8 @@ describe("production feedback knowledge", () => {
           summary: "Gästefluss passte nach Umbau."
         }
       });
-      expect(await store.listProductionFeedbackDrafts()).toHaveLength(2);
-      expect(await store.listReviewedProductionFeedbackKnowledge()).toHaveLength(1);
+      expect(await store.listProductionFeedbackDrafts(localBusiness)).toHaveLength(2);
+      expect(await store.listReviewedProductionFeedbackKnowledge(localBusiness)).toHaveLength(1);
       expect(auditJson).not.toContain("Mengen passten in der Produktion.");
       expect(auditJson).not.toContain("Gästefluss passte nach Umbau.");
     } finally {
@@ -159,8 +160,8 @@ describe("production feedback knowledge", () => {
         payload: { approve: true }
       });
       expect(forbidden.statusCode).toBe(403);
-      expect((await store.getProductionFeedbackDraft(draft.feedbackId))?.status).toBe("pending_review");
-      expect(await store.listReviewedProductionFeedbackKnowledge()).toEqual([]);
+      expect((await store.getProductionFeedbackDraft(localBusiness, draft.feedbackId))?.status).toBe("pending_review");
+      expect(await store.listReviewedProductionFeedbackKnowledge(localBusiness)).toEqual([]);
 
       const approved = await app.inject({
         method: "POST",
@@ -225,8 +226,8 @@ describe("production feedback knowledge", () => {
       expect(oversized.statusCode).toBe(422);
       expect(oversized.body).toContain("maximal 1000 Zeichen");
 
-      expect(await store.listProductionFeedbackDrafts()).toEqual([]);
-      expect(await store.listReviewedProductionFeedbackKnowledge()).toEqual([]);
+      expect(await store.listProductionFeedbackDrafts(localBusiness)).toEqual([]);
+      expect(await store.listReviewedProductionFeedbackKnowledge(localBusiness)).toEqual([]);
     } finally {
       await app.close();
     }

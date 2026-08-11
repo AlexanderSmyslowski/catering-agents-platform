@@ -109,7 +109,9 @@ function discoveryFor(selectedRecipe: Recipe) {
 
 describe("ProductionSheet v1 via KitchenSheet", () => {
   it("carries structured production fields from the generated batch", async () => {
-    const artifacts = await buildProductionArtifacts(baseSpec(), discoveryFor(recipe()) as any);
+    const artifacts = await buildProductionArtifacts(baseSpec(), discoveryFor(recipe()) as any, {
+      context: { businessId: "local" }
+    });
 
     const [batch] = artifacts.productionPlan.productionBatches;
     const [sheet] = artifacts.productionPlan.kitchenSheets;
@@ -161,7 +163,9 @@ describe("ProductionSheet v1 via KitchenSheet", () => {
       dietTags: []
     });
 
-    const artifacts = await buildProductionArtifacts(blockedSpec, discoveryFor(blockedRecipe) as any);
+    const artifacts = await buildProductionArtifacts(blockedSpec, discoveryFor(blockedRecipe) as any, {
+      context: { businessId: "local" }
+    });
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.productionBatches).toHaveLength(0);

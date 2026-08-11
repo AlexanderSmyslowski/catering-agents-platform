@@ -9,6 +9,7 @@ import {
   createEventRequestFromManualForm,
   normalizeEventRequestToSpec,
   SCHEMA_VERSION,
+  type ProductionDraft,
   type Recipe
 } from "@catering/shared-core";
 import {
@@ -152,7 +153,7 @@ function buildUsageFlowFixture() {
   };
 
   const dataRoot = createDataRoot();
-  const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+  const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
   const recipe = createRecipe({
     recipeId: "vegetarische-tomatensuppe-usage",
     name: "Vegetarische Tomatensuppe",
@@ -171,14 +172,14 @@ function buildUsageFlowFixture() {
 }
 
 async function buildArtifactsForFixture(plannedSpec: ReturnType<typeof buildUsageFlowFixture>["plannedSpec"], repository: InMemoryRecipeRepository) {
-  await repository.save(createRecipe({
+  await repository.save({ businessId: "local" }, createRecipe({
     recipeId: "vegetarische-tomatensuppe-usage",
     name: "Vegetarische Tomatensuppe",
     ingredientName: "Tomaten",
     dietTags: ["vegetarian"]
   }));
   const discovery = new RecipeDiscoveryService(repository, new EmptyWebProvider());
-  return buildProductionArtifacts(plannedSpec, discovery);
+  return buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
 }
 
 async function renderAppRoute(pathname: string) {
@@ -210,7 +211,7 @@ afterEach(() => {
 });
 
 describe("backoffice internal usage smoke", () => {
-  it("walks one realistic internal catering flow from manual intake to a usable production plan", async () => {
+  it("walks one realistic internal catering flow into the reviewed ProductionDraft boundary", async () => {
     const fixture = buildUsageFlowFixture();
     const artifacts = await buildArtifactsForFixture(fixture.plannedSpec, fixture.repository);
 
@@ -219,6 +220,7 @@ describe("backoffice internal usage smoke", () => {
     let currentSpec: typeof fixture.spec | undefined;
     let currentPlan = undefined as typeof artifacts.productionPlan | undefined;
     let currentPurchaseList = undefined as typeof artifacts.purchaseList | undefined;
+    let productionDrafts: ProductionDraft[] = [];
     let createdPlanViaPost = false;
     const fetchCalls: Array<{ method: string; url: string; body?: unknown }> = [];
 
@@ -287,6 +289,13 @@ describe("backoffice internal usage smoke", () => {
             });
           }
           return new Response(JSON.stringify({ items: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (method === "GET" && url.endsWith("/api/production/v1/production/drafts")) {
+          return new Response(JSON.stringify({ items: productionDrafts, approvedProductionSpecs: [] }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
@@ -393,6 +402,77 @@ describe("backoffice internal usage smoke", () => {
         if (method === "GET" && url.endsWith(`/api/intake/v1/intake/requests/${currentRequestId}`)) {
           return new Response(JSON.stringify(currentRequest ?? fixture.request), {
             status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (method === "POST" && url.endsWith("/api/production/v1/production/drafts")) {
+          const importedDraft = {
+            ...(body as ProductionDraft),
+            businessId: "local"
+          };
+          productionDrafts = [importedDraft];
+          return new Response(JSON.stringify({ draft: importedDraft }), {
+            status: 201,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (
+          method === "POST" &&
+          url.endsWith(`/api/production/v1/production/drafts/${productionDrafts[0]?.draftId}/prepare`)
+        ) {
+          const sourceDraft = productionDrafts[0]!;
+          const preparedDraft: ProductionDraft = {
+            ...sourceDraft,
+            draftId: "production-draft-prepared-usage",
+            revision: sourceDraft.revision! + 1,
+            createdAt: "2026-04-10T09:35:00.000Z",
+            supersedesDraftId: sourceDraft.draftId,
+            reviewCards: [
+              {
+                cardId: "card-prepared-event-spec",
+                kind: "event_data",
+                title: "Eventdaten prüfen",
+                summary: "Eventdaten des vollständigen Produktions-Snapshots prüfen.",
+                decision: "pending",
+                requiredApproval: true
+              },
+              {
+                cardId: "card-prepared-plan",
+                kind: "timeline",
+                title: "Produktionsplan prüfen",
+                summary: "Ablauf und Zeiten fachlich bestätigen.",
+                decision: "pending",
+                requiredApproval: true
+              },
+              {
+                cardId: "card-prepared-purchase-list",
+                kind: "purchase_item",
+                title: "Einkaufsliste prüfen",
+                summary: "Mengen und Warengruppen fachlich bestätigen.",
+                decision: "pending",
+                requiredApproval: true
+              },
+              {
+                cardId: "card-prepared-recipe",
+                kind: "recipe",
+                title: "Vegetarische Tomatensuppe prüfen",
+                summary: "Rezept und Mengen fachlich bestätigen.",
+                decision: "pending",
+                requiredApproval: true
+              }
+            ],
+            draftArtifacts: {
+              eventSpec: currentSpec ?? fixture.plannedSpec,
+              productionPlan: artifacts.productionPlan,
+              purchaseList: artifacts.purchaseList,
+              recipes: [fixture.recipe]
+            }
+          };
+          productionDrafts = [{ ...sourceDraft, status: "superseded" }, preparedDraft];
+          return new Response(JSON.stringify({ draft: preparedDraft }), {
+            status: 201,
             headers: { "content-type": "application/json" }
           });
         }
@@ -509,46 +589,28 @@ describe("backoffice internal usage smoke", () => {
     const createPlanCallIndex = fetchCalls.findIndex(
       (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/plans")
     );
-    const createPlanBody = fetchCalls[createPlanCallIndex]?.body as
-      | { eventSpec?: { menuPlan?: Array<{ productionDecision?: { mode?: string } }> } }
-      | undefined;
-    const plannedComponent = createPlanBody?.eventSpec?.menuPlan?.[0] as
-      | {
-          menuCategory?: string;
-          productionDecision?: { mode?: string };
-          recipeOverrideId?: string;
-        }
-      | undefined;
-
-    expect(createdPlanViaPost).toBe(true);
+    const importDraftCallIndex = fetchCalls.findIndex(
+      (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/drafts")
+    );
+    const prepareDraftCallIndex = fetchCalls.findIndex(
+      (call) => call.method === "POST" && call.url.endsWith("/prepare")
+    );
+    expect(createdPlanViaPost).toBe(false);
     expect(saveAnswersCallIndex).toBeGreaterThanOrEqual(0);
-    expect(createPlanCallIndex).toBeGreaterThan(saveAnswersCallIndex);
-    expect(plannedComponent?.menuCategory).toBe("vegetarian");
-    expect(plannedComponent?.productionDecision?.mode).toBe("scratch");
-    expect(plannedComponent?.recipeOverrideId).toBe(fixture.recipe.recipeId);
+    expect(importDraftCallIndex).toBeGreaterThan(saveAnswersCallIndex);
+    expect(prepareDraftCallIndex).toBeGreaterThan(importDraftCallIndex);
+    expect(createPlanCallIndex).toBe(-1);
+    expect(document.body.textContent ?? "").toContain("Produktionsentwurf wurde vorbereitet und wartet auf Prüfung.");
+    expect(document.body.textContent ?? "").toContain("Produktionsplan prüfen");
+    expect(document.body.textContent ?? "").toContain("Einkaufsliste prüfen");
+    expect(document.body.textContent ?? "").toContain("Entwurf freigeben");
 
-    expect(document.body.textContent ?? "").toContain("Produktionsplan wurde erzeugt.");
+    expect(document.body.textContent ?? "").not.toContain("Produktionsplan wurde erzeugt.");
     expect(document.body.textContent ?? "").toContain("Status: vollständig");
-    expect(document.body.textContent ?? "").toContain("Offene Punkte: keine");
-    expect(document.body.textContent ?? "").toContain("Arbeitsblätter: 1");
-    expect(document.body.textContent ?? "").toContain("Rezeptblätter: 1");
-    expect(document.body.textContent ?? "").toContain("Rezeptauswahl: 1");
-    expect(document.body.textContent ?? "").toContain("Produktionsarbeit prüfen");
-    expect(document.body.textContent ?? "").toContain("Produktionsblatt exportieren");
-    expect(document.body.textContent ?? "").toContain("Einkaufsliste");
-    expect(document.body.textContent ?? "").toContain("Einkaufsliste exportieren für aktuellen Vorgang");
-    expect(document.body.textContent ?? "").not.toContain(
-      `Einkaufsliste exportieren für aktuellen Vorgang ${artifacts.purchaseList.purchaseListId}`
-    );
-    expect(document.body.textContent ?? "").toContain("Tomaten");
-    expect(findAnchorByText("Produktionsblatt exportieren").href).toContain(
-      `/api/exports/v1/exports/production-plans/${artifacts.productionPlan.planId}/html`
-    );
-    expect(findAnchorByText("Einkaufsliste exportieren").href).toContain(
-      `/api/exports/v1/exports/purchase-lists/${artifacts.purchaseList.purchaseListId}/csv`
-    );
+    expect(document.body.textContent ?? "").toContain("noch kein Produktionsplan");
+    expect(document.body.textContent ?? "").not.toContain("Produktionsblatt exportieren");
+    expect(document.body.textContent ?? "").not.toContain("Einkaufsliste exportieren");
     expect(document.body.textContent ?? "").toContain("Vegetarische Tomatensuppe");
-    expect(document.body.textContent ?? "").toContain("Küche, Beschaffung und Klärungen");
     expect(document.body.textContent ?? "").not.toContain("Status: unzureichend");
     expect(document.body.textContent ?? "").not.toContain("fallback");
     expect(document.body.textContent ?? "").not.toContain("blockiert");

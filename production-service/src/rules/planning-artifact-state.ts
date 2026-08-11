@@ -1,6 +1,7 @@
 import type {
   ProductionPlan,
-  PurchaseItem
+  PurchaseItem,
+  Recipe
 } from "@catering/shared-core";
 import type { PlanningArtifactAppender } from "./planning-artifact-appender.js";
 
@@ -10,6 +11,7 @@ export type PlanningArtifactState = {
   kitchenSheets: ProductionPlan["kitchenSheets"];
   timeline: ProductionPlan["timeline"];
   recipeSelections: ProductionPlan["recipeSelections"];
+  recipes: Recipe[];
   appender: PlanningArtifactAppender;
 };
 
@@ -21,6 +23,7 @@ export function createPlanningArtifactState(
   const kitchenSheets: ProductionPlan["kitchenSheets"] = [];
   const timeline: ProductionPlan["timeline"] = [];
   const recipeSelections: ProductionPlan["recipeSelections"] = [];
+  const recipes: Recipe[] = [];
 
   return {
     productionBatches,
@@ -28,12 +31,14 @@ export function createPlanningArtifactState(
     kitchenSheets,
     timeline,
     recipeSelections,
+    recipes,
     appender: {
       productionBatches,
       procurementItems,
       kitchenSheets,
       timeline,
       recipeSelections,
+      recipes,
       noteIssue
     }
   };

@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { newDb } from "pg-mem";
 import {
+  internalRecipes,
   SCHEMA_VERSION,
   normalizeEventRequestToSpec,
   parseUploadedRecipeText,
@@ -19,9 +20,39 @@ import {
   InMemoryRecipeRepository,
   ProductionStore,
   RecipeDiscoveryService,
-  buildProductionApp
+  buildProductionApp as buildRawProductionApp
 } from "@catering/production-service";
 import type { WebRecipeSearchProvider } from "@catering/production-service";
+import type { ProductionAppOptions } from "@catering/production-service";
+import {
+  APPROVED_PRODUCTION_TEST_SECRET,
+  runApprovedProductionWorkflow
+} from "./helpers/approved-production-workflow.js";
+
+function buildProductionApp(
+  options: ProductionAppOptions = {}
+): ReturnType<typeof buildRawProductionApp> {
+  const app = buildRawProductionApp({
+    ...options,
+    trustedActorSecret: APPROVED_PRODUCTION_TEST_SECRET
+  });
+  const inject = app.inject.bind(app);
+  app.inject = ((input: any) => {
+    if (typeof input === "string") return inject(input);
+    const actorName = input.headers?.["x-catering-actor-name"] ??
+      input.headers?.["x-actor-name"] ??
+      "Produktions-Mitarbeiter";
+    return inject({
+      ...input,
+      headers: {
+        "x-catering-actor-name": actorName,
+        "x-catering-trusted-secret": APPROVED_PRODUCTION_TEST_SECRET,
+        ...input.headers
+      }
+    });
+  }) as typeof app.inject;
+  return app;
+}
 
 class FakeWebProvider implements WebRecipeSearchProvider {
   constructor(private readonly candidates: WebRecipeCandidate[]) {}
@@ -38,8 +69,8 @@ async function saveReviewedUploadedRecipe(
   input: UploadedRecipeInput
 ) {
   const recipe = parseUploadedRecipeText(input);
-  await repository.save(recipe);
-  return repository.reviewRecipe(recipe.recipeId, { decision: "approve" });
+  await repository.save({ businessId: "local" }, recipe);
+  return repository.reviewRecipe({ businessId: "local" }, recipe.recipeId, { decision: "approve" });
 }
 
 function baseEventRequest(text: string): EventRequest {
@@ -338,7 +369,7 @@ describe("catering agents platform", () => {
 
   it("builds a synthetic Quick Lunch production plan across the core buffet anchors", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const recipeUploads = [
       {
         recipeName: "Veal Meatballs with Braised Onions",
@@ -508,9 +539,7 @@ describe("catering agents platform", () => {
       )
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -574,7 +603,7 @@ describe("catering agents platform", () => {
 
   it("builds a synthetic reception flying-bites production plan across internal recipe anchors", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const recipeUploads = [
       {
         recipeName: "Flying Bites Mini-Quiche Spinat Feta",
@@ -680,9 +709,7 @@ describe("catering agents platform", () => {
       }))
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -735,7 +762,7 @@ describe("catering agents platform", () => {
 
   it("builds a synthetic business-buffet plan with soup, hybrid quiche, and dessert anchors", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const recipeUploads = [
       {
         recipeName: "Tomatensuppe mit Basilikum",
@@ -844,9 +871,7 @@ describe("catering agents platform", () => {
       ]
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1057,7 +1082,7 @@ describe("catering agents platform", () => {
     const intakeApp = buildIntakeApp({
       rootDir: dataRoot
     });
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const productionApp = buildProductionApp({
       repository,
       discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
@@ -1086,7 +1111,7 @@ describe("catering agents platform", () => {
 
     expect(uploadResponse.statusCode).toBe(201);
     const recipeId = String(uploadResponse.json().recipe.recipeId);
-    await repository.reviewRecipe(recipeId, { decision: "approve" });
+    await repository.reviewRecipe({ businessId: "local" }, recipeId, { decision: "approve" });
 
     const createResponse = await intakeApp.inject({
       method: "POST",
@@ -1122,9 +1147,7 @@ describe("catering agents platform", () => {
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json().acceptedEventSpec.menuPlan[0].recipeOverrideId).toBe(recipeId);
 
-    const planResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const planResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: updateResponse.json().acceptedEventSpec
       }
@@ -1238,12 +1261,12 @@ describe("catering agents platform", () => {
 
   it("builds a production plan from the independent intake path using internal recipes", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.seed({ businessId: "local" }, internalRecipes);
+    const app = buildProductionApp({ dataRoot, repository });
     const spec = specWithComponent("Filterkaffee Station");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1259,7 +1282,9 @@ describe("catering agents platform", () => {
 
   it("adds hybrid and convenience purchases to the purchase list", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.seed({ businessId: "local" }, internalRecipes);
+    const app = buildProductionApp({ dataRoot, repository });
     const baseSpec = normalizeEventRequestToSpec(
       baseEventRequest(
         "Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Filterkaffee Station und Brot & Baguette."
@@ -1300,9 +1325,7 @@ describe("catering agents platform", () => {
       ]
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1345,7 +1368,8 @@ describe("catering agents platform", () => {
 
   it("builds a coffee-break production plan with internal recipe and purchase anchors", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository(undefined, { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.seed({ businessId: "local" }, internalRecipes);
     const recipeUploads = [
       {
         sourceRef: "test:coffee-break-blueberry-mini-muffins",
@@ -1448,9 +1472,7 @@ describe("catering agents platform", () => {
       ]
     };
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1506,7 +1528,7 @@ describe("catering agents platform", () => {
 
   it("creates clarification sheets when recipe resolution remains open", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const app = buildProductionApp({
       repository,
       discoveryService: new RecipeDiscoveryService(repository, new FakeWebProvider([])),
@@ -1514,9 +1536,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("Mystery Bowl", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1543,7 +1563,7 @@ describe("catering agents platform", () => {
     const app = buildProductionApp({
       dataRoot,
       discoveryService: new RecipeDiscoveryService(
-        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        new InMemoryRecipeRepository({ rootDir: dataRoot }),
         new FakeWebProvider([
           {
             url: "https://example.com/quiche",
@@ -1588,9 +1608,7 @@ describe("catering agents platform", () => {
       baseEventRequest("Konferenz am 2026-05-12 fuer 60 Teilnehmer. Buffet mit Quiche.")
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1607,7 +1625,7 @@ describe("catering agents platform", () => {
 
   it("keeps high confidence internet recipes review-required before production use", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/tomato-soup",
@@ -1678,9 +1696,7 @@ describe("catering agents platform", () => {
     });
     const spec = specWithComponent("Tomatensuppe");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1700,7 +1716,7 @@ describe("catering agents platform", () => {
 
   it("marks low confidence internet recipes as partial and review-required", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/weak-recipe",
@@ -1756,9 +1772,7 @@ describe("catering agents platform", () => {
     });
     const spec = specWithComponent("Mystery Bowl");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1775,7 +1789,7 @@ describe("catering agents platform", () => {
 
   it("skips invalid web recipe candidates instead of failing the production plan", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/broken-tomato-soup",
@@ -1814,9 +1828,7 @@ describe("catering agents platform", () => {
     });
     const spec = specWithComponent("Tomatensuppe");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1833,7 +1845,7 @@ describe("catering agents platform", () => {
 
   it("prefers vegan internet recipes for vegan menu components", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/chocolate-cake",
@@ -1954,9 +1966,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -1965,7 +1975,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toBe("Vegan Chocolate Cake");
     expect(storedRecipe?.dietTags).toContain("vegan");
     expect(body.productionPlan.recipeSelections[0].autoUsedInternetRecipe).toBe(false);
@@ -1976,7 +1986,7 @@ describe("catering agents platform", () => {
 
   it("finds imported internal recipes even when the offered dish name is only similar", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2009,9 +2019,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2026,7 +2034,7 @@ describe("catering agents platform", () => {
 
   it("does not mistake an unrelated internal vegan cake for Schokoladenkuchen", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2061,9 +2069,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2080,7 +2086,7 @@ describe("catering agents platform", () => {
 
   it("does not mistake an unrelated internal salad for Wildkräutersalat mit Petersilien-Vinaigrette", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2108,9 +2114,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2127,7 +2131,7 @@ describe("catering agents platform", () => {
 
   it("prefers the closer internal Krautsalat recipe over a generic winter salad", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2181,9 +2185,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2192,7 +2194,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toContain("Krautsalat mit Apfel");
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -2200,7 +2202,7 @@ describe("catering agents platform", () => {
 
   it("matches Nudelsalat offer wording to an internal Pasta-Salat recipe", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2234,9 +2236,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2247,7 +2247,7 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
     expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toContain("Pasta-Salat");
     expect(body.productionPlan.unresolvedItems).toHaveLength(0);
     await app.close();
@@ -2256,7 +2256,7 @@ describe("catering agents platform", () => {
 
   it("matches Kartoffelsalat offer wording to an internal Potato Salad recipe", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2290,9 +2290,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2303,7 +2301,7 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
     expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toContain("Potato Salad");
     expect(body.productionPlan.unresolvedItems).toHaveLength(0);
     await app.close();
@@ -2312,7 +2310,7 @@ describe("catering agents platform", () => {
 
   it("matches Kalbsbuletten and Kalbsfrikadellen offer wording to an internal Meatballs recipe", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2346,10 +2344,9 @@ describe("catering agents platform", () => {
           baseEventRequest(`Lunch am 2026-05-12 fuer 60 Teilnehmer. Buffet mit ${label}.`)
         )
       );
+      spec.specId = `${spec.specId}-${label.startsWith("KALBSBULETTEN") ? "buletten" : "frikadellen"}`;
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/v1/production/plans",
+      const response = await runApprovedProductionWorkflow(app, {
         payload: {
           eventSpec: spec
         }
@@ -2360,7 +2357,7 @@ describe("catering agents platform", () => {
       expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
       expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
       const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-      const storedRecipe = await repository.get(recipeId);
+      const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
       expect(storedRecipe?.name).toContain("Veal Meatballs");
       expect(body.productionPlan.unresolvedItems).toHaveLength(0);
     }
@@ -2371,7 +2368,7 @@ describe("catering agents platform", () => {
 
   it("matches Auberginenröllchen offer wording to an internal Eggplant Ricotta Rolls recipe", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2405,9 +2402,7 @@ describe("catering agents platform", () => {
       "vegetarian"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2418,7 +2413,7 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
     expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toContain("Eggplant Ricotta Rolls");
     expect(body.productionPlan.unresolvedItems).toHaveLength(0);
     expect(body.productionPlan.productionBatches).toHaveLength(1);
@@ -2429,7 +2424,7 @@ describe("catering agents platform", () => {
 
   it("matches Hummus offer wording to an internal Humus recipe spelling variant", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2457,9 +2452,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("Hummus", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2470,7 +2463,7 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
     expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toContain("Humus Tahini Dip");
     expect(body.productionPlan.unresolvedItems).toHaveLength(0);
 
@@ -2480,7 +2473,7 @@ describe("catering agents platform", () => {
 
   it("matches ASCII Gemuesepfanne offer wording to an internal Gemüsepfanne recipe", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
 
     await saveReviewedUploadedRecipe(
       repository,
@@ -2509,9 +2502,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("Gemuesepfanne", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2522,7 +2513,7 @@ describe("catering agents platform", () => {
     expect(body.productionPlan.recipeSelections[0].sourceTier).toBe("internal_approved");
     expect(body.productionPlan.recipeSelections[0].selectionReason).toContain("internen Bibliothek");
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toContain("Gemüsepfanne");
     expect(body.productionPlan.unresolvedItems).toHaveLength(0);
 
@@ -2532,7 +2523,7 @@ describe("catering agents platform", () => {
 
   it("rejects non-vegan internet recipes for vegan components even when the title looks close", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://essen-und-trinken.de/wildkraeutersalat",
@@ -2688,9 +2679,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2699,7 +2688,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toBe("Vegan Wild Herb Salad with Parsley Vinaigrette");
     expect(storedRecipe?.dietTags).toContain("vegan");
     expect(storedRecipe?.name).not.toContain("Wildkräutersalat Rezept");
@@ -2709,7 +2698,7 @@ describe("catering agents platform", () => {
 
   it("rejects generic mixed salad internet recipes for a specific wild herb salad component", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/mixed-salad",
@@ -2765,9 +2754,7 @@ describe("catering agents platform", () => {
     });
     const spec = singleComponentSpec("WILDKRÄUTERSALAT | PETERSILIEN-VINAIGRETTE", "vegan");
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2783,7 +2770,7 @@ describe("catering agents platform", () => {
 
   it("rejects lava cakes for a Schokoladenkuchen component", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/vegan-lava-cakes",
@@ -2844,9 +2831,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2862,7 +2847,7 @@ describe("catering agents platform", () => {
 
   it("rejects chocolate-covered strawberries for a Schokoladenkuchen component", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/chocolate-covered-strawberries",
@@ -2923,9 +2908,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -2941,7 +2924,7 @@ describe("catering agents platform", () => {
 
   it("prefers a concrete recipe over collection pages during internet fallback", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://chefkoch.de/top-50-kuchen",
@@ -3062,9 +3045,7 @@ describe("catering agents platform", () => {
       "vegan"
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const response = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
@@ -3073,7 +3054,7 @@ describe("catering agents platform", () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     const recipeId = String(body.productionPlan.recipeSelections[0].recipeId);
-    const storedRecipe = await repository.get(recipeId);
+    const storedRecipe = await repository.get({ businessId: "local" }, recipeId);
     expect(storedRecipe?.name).toBe("Vegan Chocolate Cake");
     expect(storedRecipe?.name).not.toContain("Top 50");
     await app.close();
@@ -3082,7 +3063,7 @@ describe("catering agents platform", () => {
 
   it("promotes reviewed internet recipes into the approved shared library", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/review-me",
@@ -3137,9 +3118,7 @@ describe("catering agents platform", () => {
       dataRoot
     });
 
-    const firstPlanResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const firstPlanResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: specWithComponent("Harissa Bowl")
       }
@@ -3167,11 +3146,12 @@ describe("catering agents platform", () => {
     expect(reviewResponse.json().recipe.source.tier).toBe("internal_approved");
     await offerApp.close();
 
-    const secondPlanResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const secondPlanResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
-        eventSpec: specWithComponent("Harissa Bowl")
+        eventSpec: {
+          ...specWithComponent("Harissa Bowl"),
+          specId: "spec-harissa-bowl-reviewed"
+        }
       }
     });
 
@@ -3216,7 +3196,7 @@ describe("catering agents platform", () => {
     const productionApp = buildProductionApp({
       dataRoot,
       discoveryService: new RecipeDiscoveryService(
-        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        new InMemoryRecipeRepository({ rootDir: dataRoot }),
         new FakeWebProvider([])
       )
     });
@@ -3235,9 +3215,7 @@ describe("catering agents platform", () => {
     expect(rejectResponse.statusCode).toBe(200);
     expect(rejectResponse.json().recipe.source.approvalState).toBe("rejected");
 
-    const planResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const planResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: specWithComponent("Smoked Pepper Dip")
       }
@@ -3261,7 +3239,7 @@ describe("catering agents platform", () => {
     const productionApp = buildProductionApp({
       dataRoot,
       discoveryService: new RecipeDiscoveryService(
-        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        new InMemoryRecipeRepository({ rootDir: dataRoot }),
         new FakeWebProvider([])
       )
     });
@@ -3289,6 +3267,7 @@ describe("catering agents platform", () => {
     expect(initialIntakeHealth.statusCode).toBe(200);
     expect(initialOfferHealth.statusCode).toBe(200);
     expect(initialProductionHealth.statusCode).toBe(200);
+    expect(initialProductionHealth.json().targetLockProtocol).toBe("canonical-v2");
     expect(initialExportHealth.statusCode).toBe(200);
 
     const seedResponses = await Promise.all([
@@ -3451,7 +3430,7 @@ describe("catering agents platform", () => {
 
   it("persists production plans, purchase lists, and discovered recipes across restarts", async () => {
     const dataRoot = createDataRoot();
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const store = new ProductionStore({ rootDir: dataRoot });
     const provider = new FakeWebProvider([
       {
@@ -3512,9 +3491,7 @@ describe("catering agents platform", () => {
       dataRoot
     });
 
-    const createResponse = await firstApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const createResponse = await runApprovedProductionWorkflow(firstApp, {
       payload: {
         eventSpec: specWithComponent("Linseneintopf")
       }
@@ -3555,7 +3532,7 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
-  it("requires explicit source review before planning unsafe uploaded intake sources", async () => {
+  it("requires the canonical human review flow for unsafe uploaded intake sources", async () => {
     const dataRoot = createDataRoot();
     const intakeStore = new IntakeStore({ rootDir: dataRoot });
     const unsafeRequest: EventRequest = {
@@ -3582,30 +3559,15 @@ describe("catering agents platform", () => {
     const spec = withProductionDecision(normalizeEventRequestToSpec(unsafeRequest));
     const app = buildProductionApp({ dataRoot });
 
-    const blockedResponse = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(0);
+
+    const reviewedResponse = await runApprovedProductionWorkflow(app, {
       payload: {
         eventSpec: spec
       }
     });
 
-    expect(blockedResponse.statusCode).toBe(422);
-    expect(blockedResponse.json()).toMatchObject({
-      message: "Quellenprüfung erforderlich, bevor Produktionsartefakte berechnet werden."
-    });
-    expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(0);
-
-    const confirmedResponse = await app.inject({
-      method: "POST",
-      url: "/v1/production/plans",
-      payload: {
-        eventSpec: spec,
-        sourceReviewConfirmed: true
-      }
-    });
-
-    expect(confirmedResponse.statusCode).toBe(201);
+    expect(reviewedResponse.statusCode).toBe(201);
     expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(1);
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
@@ -3662,9 +3624,7 @@ describe("catering agents platform", () => {
       method: "GET",
       url: "/v1/production/recipes"
     });
-    const planResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const planResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: specWithComponent("Humus Bowl")
       }
@@ -3755,10 +3715,10 @@ describe("catering agents platform", () => {
     const partialDraft = partialOfferResponse.json();
     await offerApp.close();
 
-    const productionApp = buildProductionApp({ dataRoot });
-    const productionResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.seed({ businessId: "local" }, internalRecipes);
+    const productionApp = buildProductionApp({ dataRoot, repository });
+    const productionResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: specWithComponent("Filterkaffee Station")
       }
@@ -3824,7 +3784,8 @@ describe("catering agents platform", () => {
     const { Pool } = db.adapters.createPg();
     const pool = new Pool();
 
-    const intakeApp = buildIntakeApp(new IntakeStore({ pgPool: pool }));
+    const intakeStore = new IntakeStore({ pgPool: pool });
+    const intakeApp = buildIntakeApp(intakeStore);
     const intakeResponse = await intakeApp.inject({
       method: "POST",
       url: "/v1/intake/normalize",
@@ -3836,6 +3797,7 @@ describe("catering agents platform", () => {
       intakeResponse.json().acceptedEventSpec,
       "vegan"
     );
+    await intakeStore.saveSpec(acceptedEventSpec);
     await intakeApp.close();
 
     const offerApp = buildOfferApp(new OfferStore({ pgPool: pool }));
@@ -3900,16 +3862,14 @@ describe("catering agents platform", () => {
         }
       }
     ]);
-    const repository = new InMemoryRecipeRepository([], { pgPool: pool });
+    const repository = new InMemoryRecipeRepository({ pgPool: pool });
     const productionApp = buildProductionApp({
       repository,
       store: new ProductionStore({ pgPool: pool }),
       discoveryService: new RecipeDiscoveryService(repository, provider),
       pgPool: pool
     });
-    const productionResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const productionResponse = await runApprovedProductionWorkflow(productionApp, {
       payload: {
         eventSpec: acceptedEventSpec
       }
@@ -3960,7 +3920,7 @@ describe("catering agents platform", () => {
     const productionApp = buildProductionApp({
       dataRoot,
       discoveryService: new RecipeDiscoveryService(
-        new InMemoryRecipeRepository(undefined, { rootDir: dataRoot }),
+        new InMemoryRecipeRepository({ rootDir: dataRoot }),
         new FakeWebProvider([])
       )
     });
@@ -3989,14 +3949,14 @@ describe("catering agents platform", () => {
     });
     expect(intakeResponse.statusCode).toBe(201);
 
-    const productionResponse = await productionApp.inject({
-      method: "POST",
-      url: "/v1/production/plans",
+    const productionEventSpec = withProductionDecision(intakeResponse.json().acceptedEventSpec);
+    await new IntakeStore({ rootDir: dataRoot }).saveSpec(productionEventSpec);
+    const productionResponse = await runApprovedProductionWorkflow(productionApp, {
       headers: {
         "x-actor-name": "Produktions-Mitarbeiter"
       },
       payload: {
-        eventSpec: withProductionDecision(intakeResponse.json().acceptedEventSpec)
+        eventSpec: productionEventSpec
       }
     });
     expect(productionResponse.statusCode).toBe(201);
@@ -4033,11 +3993,11 @@ describe("catering agents platform", () => {
     expect(
       auditEvents.some(
         (entry) =>
-          entry.action === "production.plan_created" &&
+          entry.action === "production.approved_spec_applied" &&
           entry.actor.name === "Produktions-Mitarbeiter"
       )
     ).toBe(true);
-    expect(auditEvents.some((entry) => entry.entityType === "ProductionPlan")).toBe(true);
+    expect(auditEvents.some((entry) => entry.entityType === "ApprovedProductionSpec")).toBe(true);
 
     await intakeApp.close();
     await offerApp.close();

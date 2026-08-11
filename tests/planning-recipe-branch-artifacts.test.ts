@@ -71,6 +71,24 @@ function discoveryService(resolution: Awaited<ReturnType<RecipeDiscoveryService[
 }
 
 describe("planning recipe branch artifacts", () => {
+  it("rejects context-free direct branch planning calls", async () => {
+    await expect((buildRecipeBranchPlanningArtifacts as unknown as (
+      input: Record<string, unknown>
+    ) => Promise<unknown>)({
+      eventSpec: eventSpec(),
+      component: component(),
+      servings: 30,
+      discoveryService: discoveryService({
+        selection: {
+          componentId: "component-focaccia",
+          selectionReason: "Testauflösung",
+          autoUsedInternetRecipe: false
+        },
+        unresolvedItems: []
+      })
+    })).rejects.toThrow("Betriebskontext");
+  });
+
   it("combines hybrid procurement items with resolved recipe artifacts", async () => {
     const artifacts = await buildRecipeBranchPlanningArtifacts({
       eventSpec: eventSpec(),
@@ -81,6 +99,7 @@ describe("planning recipe branch artifacts", () => {
         }
       }),
       servings: 30,
+      context: { businessId: "local" },
       discoveryService: discoveryService({
         recipe: recipe(),
         selection: {
@@ -109,6 +128,7 @@ describe("planning recipe branch artifacts", () => {
         }
       }),
       servings: 0,
+      context: { businessId: "local" },
       discoveryService: discoveryService({
         selection: {
           componentId: "component-focaccia",

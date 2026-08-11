@@ -23,6 +23,7 @@ export async function resolveWebRecipeCandidate(input: {
   eventSpec: AcceptedEventSpec;
   webProvider: WebRecipeSearchProvider;
   repository: WebRecipeRepositoryWriter;
+  persistWinner?: boolean;
   searchTrace: RecipeSearchTrace;
 }): Promise<WebRecipeResolution> {
   const {
@@ -30,6 +31,7 @@ export async function resolveWebRecipeCandidate(input: {
     eventSpec,
     webProvider,
     repository,
+    persistWinner = true,
     searchTrace
   } = input;
   const { candidates, webSearchFailed } = await collectWebRecipeCandidates({
@@ -49,7 +51,7 @@ export async function resolveWebRecipeCandidate(input: {
     });
   }
 
-  await repository.save(winner.recipe);
+  if (persistWinner) await repository.save(winner.recipe);
   appendWebRecipeWinnerTrace(searchTrace, winner.recipe);
 
   return buildWebRecipeWinnerResolution({

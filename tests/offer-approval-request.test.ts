@@ -200,6 +200,40 @@ describe("offer approval request", () => {
     }
   });
 
+  it("does not count released ticket history against the active queue limit", async () => {
+    const { store, rootDir } = buildTestHarness();
+    const target = { kind: "offer_draft" as const, artifactId: "draft-released-history", revision: 1 };
+    const targetIdentity = JSON.stringify({ businessId: "local", ...target });
+    const lockPath = path.join(
+      rootDir,
+      "businesses",
+      "local",
+      "offers",
+      ".decision-target-locks",
+      `${createHash("sha256").update(targetIdentity).digest("hex")}.lock`
+    );
+    const queuePath = `${lockPath}.queue`;
+    mkdirSync(queuePath, { recursive: true });
+    for (let sequence = 1; sequence <= 4_096; sequence += 1) {
+      const suffix = String(sequence).padStart(12, "0");
+      writeFileSync(
+        path.join(queuePath, `ticket-${suffix}.json`),
+        JSON.stringify({ pid: process.pid, token: `released-${suffix}` }),
+        { mode: 0o600 }
+      );
+      writeFileSync(path.join(queuePath, `released-${suffix}`), "", { mode: 0o600 });
+    }
+
+    let entered = false;
+    await decisionsFor(store).withTargetCriticalSection(
+      { businessId: "local" },
+      target,
+      async () => { entered = true; }
+    );
+
+    expect(entered).toBe(true);
+  }, 60_000);
+
   it("does not create an approved offer for a rejected draft", async () => {
     const app = buildTestApp();
     const draft = await createDraft(app);

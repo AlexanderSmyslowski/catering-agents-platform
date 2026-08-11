@@ -29,13 +29,13 @@ describe("data safety and audit gates", () => {
       "offer_recipe_upload",
       "offer_variant_approval",
       "offer_seed_demo",
-      "production_plan_creation",
+      "production_draft_prepare",
       "production_draft_import",
       "production_draft_document_extraction",
       "production_draft_revision",
       "production_draft_review_card_decision",
       "production_draft_decision",
-      "production_draft_apply",
+      "approved_production_spec_apply",
       "production_recipe_upload",
       "production_clarification_draft",
       "production_clarification_draft_decision",
@@ -87,9 +87,9 @@ describe("data safety and audit gates", () => {
       externalExposure: "none",
       requiredGate: expect.stringContaining("no product writes")
     });
-    expect(dataIngressPaths.find((path) => path.id === "production_draft_apply")).toMatchObject({
+    expect(dataIngressPaths.find((path) => path.id === "approved_production_spec_apply")).toMatchObject({
       externalExposure: "none",
-      requiredGate: expect.stringContaining("approved draft only")
+      requiredGate: expect.stringContaining("manifest published last")
     });
     expect(dataIngressPaths.find((path) => path.id === "web_recipe_search")).toMatchObject({
       externalExposure: "disabled_by_default",
@@ -120,10 +120,10 @@ describe("data safety and audit gates", () => {
         "POST /v1/production/drafts",
         "POST /v1/production/drafts/from-document",
         "POST /v1/production/drafts/:draftId/revise",
+        "POST /v1/production/drafts/:draftId/prepare",
         "POST /v1/production/drafts/:draftId/decision",
-        "POST /v1/production/drafts/:draftId/apply",
+        "POST /v1/production/approved-specs/:approvedProductionSpecId/apply",
         "PATCH /v1/production/drafts/:draftId/review-cards/:cardId",
-        "POST /v1/production/plans",
         "POST /v1/production/specs/:specId/clarification-drafts",
         "POST /v1/production/clarification-drafts/:draftId/decision",
         "POST /v1/production/seed-demo",
@@ -153,12 +153,11 @@ describe("data safety and audit gates", () => {
         "offer_recipe_imported_text",
         "offer_recipe_uploaded_file",
         "offer_recipe_reviewed",
-        "production_plan_created",
         "production_draft_imported",
         "production_draft_review_card_decided",
-        "production_draft_approved",
+        "production_spec_approved",
         "production_draft_rejected",
-        "production_draft_applied",
+        "approved_production_spec_applied",
         "production_seed_demo",
         "production_clarification_draft_created",
         "production_clarification_draft_rejected",
@@ -193,8 +192,7 @@ describe("data safety and audit gates", () => {
         "offer.approved",
         "recipe.imported_text",
         "recipe.uploaded_file",
-        "production.plan_created",
-        "production.production_draft_applied",
+        "production.approved_spec_applied",
         "production.seed_demo",
         "production.clarification_draft_approved",
         "recipe.reviewed"
@@ -224,9 +222,8 @@ describe("data safety and audit gates", () => {
         "production.clarification_draft_created",
         "production.clarification_draft_rejected",
         "production.clarification_draft_rejected_by_operator",
-        "production.plan_created",
-        "production.production_draft_approved",
-        "production.production_draft_applied",
+        "production.production_spec_approved",
+        "production.approved_spec_applied",
         "production.production_draft_document_created",
         "production.production_draft_document_rejected",
         "production.production_draft_imported",

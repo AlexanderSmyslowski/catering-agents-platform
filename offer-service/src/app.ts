@@ -156,7 +156,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     });
   const recipeLibrary =
     options.recipeLibrary ??
-    new RecipeLibrary(undefined, {
+    new RecipeLibrary({
       rootDir: storageOptions?.rootDir,
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool
@@ -185,7 +185,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     }
     const [drafts, recipes, auditEvents] = await Promise.all([
       store.listDrafts(defaultBusinessContext),
-      recipeLibrary.list(),
+      recipeLibrary.list(defaultBusinessContext),
       auditLog.countFor(defaultBusinessContext)
     ]);
     return reply.send({
@@ -254,7 +254,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     }
 
     return reply.send({
-      items: await recipeLibrary.list()
+      items: await recipeLibrary.list(actorForRequest(request, trustedActorSecret, allowDevActorHeader))
     });
   });
 
@@ -264,7 +264,10 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       return forbidden;
     }
 
-    const recipe = await recipeLibrary.get(request.params.recipeId);
+    const recipe = await recipeLibrary.get(
+      actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+      request.params.recipeId
+    );
     if (!recipe) {
       return reply.code(404).send({ message: "Rezept nicht gefunden." });
     }
@@ -280,8 +283,9 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     }
 
     const recipe = parseUploadedRecipeText(request.body);
-    await recipeLibrary.save(recipe);
-    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    await recipeLibrary.save(actor, recipe);
+    await auditLog.logFor(actor, {
       action: "recipe.imported_text",
       entityType: "Recipe",
       entityId: recipe.recipeId,
@@ -306,8 +310,9 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     try {
       const payload = await recipeImportFromMultipart(request);
       const recipe = parseUploadedRecipeText(payload);
-      await recipeLibrary.save(recipe);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      await recipeLibrary.save(actor, recipe);
+      await auditLog.logFor(actor, {
         action: "recipe.uploaded_file",
         entityType: "Recipe",
         entityId: recipe.recipeId,
@@ -336,8 +341,9 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
         });
       }
 
-      const recipe = await recipeLibrary.reviewRecipe(request.params.recipeId, request.body);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const recipe = await recipeLibrary.reviewRecipe(actor, request.params.recipeId, request.body);
+      await auditLog.logFor(actor, {
         action: "recipe.reviewed",
         entityType: "Recipe",
         entityId: recipe.recipeId,

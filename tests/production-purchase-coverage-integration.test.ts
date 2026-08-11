@@ -105,7 +105,7 @@ async function buildWithCurrentPlanning() {
     }
   };
 
-  return buildProductionArtifacts(spec, discovery as any);
+  return buildProductionArtifacts(spec, discovery as any, { context: { businessId: "local" } });
 }
 
 describe("production planning purchase coverage integration", () => {

@@ -1,6 +1,8 @@
-import type {
-  AcceptedEventSpec,
-  PurchaseItem
+import {
+  assertBusinessId,
+  type AcceptedEventSpec,
+  type BusinessContext,
+  type PurchaseItem
 } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import { procurementItemsForComponent } from "./procurement-rules.js";
@@ -21,13 +23,19 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
   component: MenuPlanComponent;
   servings: number;
   discoveryService: RecipeDiscoveryService;
+  context: BusinessContext;
+  persistDiscoveredRecipes?: boolean;
 }): Promise<RecipeBranchPlanningArtifacts> {
   const {
     eventSpec,
     component,
     servings,
-    discoveryService
+    discoveryService,
+    context,
+    persistDiscoveredRecipes = true
   } = input;
+  if (!context) throw new Error("Ein Betriebskontext ist erforderlich.");
+  assertBusinessId(context.businessId);
 
   return {
     procurementItems: procurementItemsForComponent(component, servings),
@@ -35,7 +43,9 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
       eventSpec,
       component,
       servings,
-      discoveryService
+      discoveryService,
+      context,
+      persistDiscoveredRecipes
     })
   };
 }

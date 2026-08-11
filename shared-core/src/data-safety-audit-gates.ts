@@ -160,13 +160,13 @@ export const dataIngressPaths = [
     requiredGate: "operations_audit_operator auth"
   },
   {
-    id: "production_plan_creation",
+    id: "production_draft_prepare",
     service: "production-service",
-    route: "POST /v1/production/plans",
-    source: "AcceptedEventSpec",
+    route: "POST /v1/production/drafts/:draftId/prepare",
+    source: "pending ProductionDraft",
     scope: "operator_supplied_internal",
-    externalExposure: "none",
-    requiredGate: "production_operator auth"
+    externalExposure: "blocked_until_decision",
+    requiredGate: "production_operator auth, deterministic non-persisting preparation, new review revision, no product writes"
   },
   {
     id: "production_draft_import",
@@ -211,16 +211,16 @@ export const dataIngressPaths = [
     source: "operator ProductionDraft approve/reject decision",
     scope: "operator_supplied_internal",
     externalExposure: "none",
-    requiredGate: "production_operator auth, explicit approve/reject, no product writes"
+    requiredGate: "production_operator auth, canonical ApprovalRequestRecord, complete reviewed snapshot, no product writes"
   },
   {
-    id: "production_draft_apply",
+    id: "approved_production_spec_apply",
     service: "production-service",
-    route: "POST /v1/production/drafts/:draftId/apply",
-    source: "operator ProductionDraft takeover decision",
+    route: "POST /v1/production/approved-specs/:approvedProductionSpecId/apply",
+    source: "immutable ApprovedProductionSpec",
     scope: "operator_supplied_internal",
     externalExposure: "none",
-    requiredGate: "production_operator auth, approved draft only, conflict check before product writes, recipes stay review_required"
+    requiredGate: "production_operator auth, business-scoped immutable approved snapshot, compare-or-insert artifacts, manifest published last"
   },
   {
     id: "production_recipe_upload",
@@ -473,16 +473,6 @@ export const auditEvidencePaths = [
     requiredRole: "offer_operator"
   },
   {
-    id: "production_plan_created",
-    service: "production-service",
-    route: "POST /v1/production/plans",
-    action: "production.plan_created",
-    evidenceKind: "audit_event",
-    readOnlyEvidence: true,
-    productApprovalEffect: "product_mutation",
-    requiredRole: "production_operator"
-  },
-  {
     id: "production_draft_imported",
     service: "production-service",
     route: "POST /v1/production/drafts",
@@ -543,10 +533,10 @@ export const auditEvidencePaths = [
     requiredRole: "production_operator"
   },
   {
-    id: "production_draft_approved",
+    id: "production_spec_approved",
     service: "production-service",
     route: "POST /v1/production/drafts/:draftId/decision",
-    action: "production.production_draft_approved",
+    action: "production.production_spec_approved",
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "draft_only",
@@ -563,10 +553,10 @@ export const auditEvidencePaths = [
     requiredRole: "production_operator"
   },
   {
-    id: "production_draft_applied",
+    id: "approved_production_spec_applied",
     service: "production-service",
-    route: "POST /v1/production/drafts/:draftId/apply",
-    action: "production.production_draft_applied",
+    route: "POST /v1/production/approved-specs/:approvedProductionSpecId/apply",
+    action: "production.approved_spec_applied",
     evidenceKind: "audit_event",
     readOnlyEvidence: true,
     productApprovalEffect: "product_mutation",

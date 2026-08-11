@@ -1,8 +1,10 @@
-import type {
-  AcceptedEventSpec,
-  MenuComponent,
-  RecipeSelection,
-  Recipe
+import {
+  assertBusinessId,
+  type AcceptedEventSpec,
+  type BusinessContext,
+  type MenuComponent,
+  type RecipeSelection,
+  type Recipe
 } from "@catering/shared-core";
 import { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 import { type WebRecipeSearchProvider } from "./provider.js";
@@ -28,9 +30,11 @@ export class RecipeDiscoveryService {
 
   async resolveRecipeOverride(
     recipeId: string,
-    component: MenuComponent
+    component: MenuComponent,
+    context: BusinessContext
   ): Promise<RecipeResolution> {
-    const recipe = await this.repository.get(recipeId);
+    const scopedContext = requireBusinessContext(context);
+    const recipe = await this.repository.get(scopedContext, recipeId);
     if (!recipe) {
       return buildMissingOverrideRecipeResolution({ recipeId, component });
     }
@@ -40,10 +44,15 @@ export class RecipeDiscoveryService {
 
   async resolveRecipe(
     component: MenuComponent,
-    eventSpec: AcceptedEventSpec
+    eventSpec: AcceptedEventSpec,
+    options: {
+      context: BusinessContext;
+      persistWebWinner?: boolean;
+    }
   ): Promise<RecipeResolution> {
+    const context = requireBusinessContext(options?.context);
     const searchTrace = createRecipeSearchTrace();
-    const repositoryCandidates = await this.repository.findCandidates(component);
+    const repositoryCandidates = await this.repository.findCandidates(context, component);
     const internalResolution = resolveInternalRecipeCandidate({
       repositoryCandidates,
       component,
@@ -59,8 +68,15 @@ export class RecipeDiscoveryService {
       component,
       eventSpec,
       webProvider: this.webProvider,
-      repository: this.repository,
+      repository: { save: (recipe) => this.repository.save(context, recipe) },
+      persistWinner: options.persistWebWinner !== false,
       searchTrace
     });
   }
+}
+
+function requireBusinessContext(context: BusinessContext | undefined): BusinessContext {
+  if (!context) throw new Error("Ein Betriebskontext ist erforderlich.");
+  assertBusinessId(context.businessId);
+  return context;
 }

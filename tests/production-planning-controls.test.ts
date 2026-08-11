@@ -18,7 +18,8 @@ function input(
     })),
     buildCurrentSpecUpdateInput: vi.fn(() => ({ attendeeCount: 40 })),
     loadSpecIntoEditorState: vi.fn(() => "spec-plan-submit-1"),
-    createProductionPlan: vi.fn(async () => ({ productionPlan: { planId: "plan-created-1" } })),
+    createProductionDraftFromAcceptedEventSpec: vi.fn(async () => ({ draft: { draftId: "draft-imported-1" } })),
+    prepareProductionDraft: vi.fn(async () => ({ draft: { draftId: "draft-prepared-2" } })),
     setSubmitting: vi.fn(),
     setProductionWorkspaceCleared: vi.fn(),
     setFocusedProductionSpecId: vi.fn(),
@@ -28,10 +29,10 @@ function input(
     clearMessages: vi.fn(),
     startPlanProgress: vi.fn(),
     clearSelectedPlanId: vi.fn(),
-    setSelectedPlanId: vi.fn(),
     completePlanProgress: vi.fn(),
     failPlanProgress: vi.fn(),
     setError: vi.fn(),
+    showProductionDraftReview: vi.fn(),
     ...overrides
   };
 }
@@ -87,15 +88,16 @@ describe("production planning controls", () => {
     ]);
   });
 
-  it("creates a production plan through the existing edited-spec preflight", async () => {
+  it("prepares a production draft through the existing edited-spec preflight", async () => {
     const actionInput = input();
     const controls = buildProductionPlanningControls(actionInput);
 
     await controls.handleCreatePlan(spec);
 
     expect(actionInput.updateAcceptedSpec).toHaveBeenCalledWith("spec-plan-submit-1", { attendeeCount: 40 });
-    expect(actionInput.createProductionPlan).toHaveBeenCalledWith(spec);
-    expect(actionInput.setSelectedPlanId).toHaveBeenCalledWith("plan-created-1");
+    expect(actionInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(spec);
+    expect(actionInput.prepareProductionDraft).toHaveBeenCalledWith("draft-imported-1");
+    expect(actionInput.showProductionDraftReview).toHaveBeenCalledWith("draft-prepared-2");
     expect(actionInput.completePlanProgress).toHaveBeenCalledTimes(1);
     expect(actionInput.failPlanProgress).not.toHaveBeenCalled();
   });

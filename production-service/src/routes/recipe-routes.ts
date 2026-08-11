@@ -131,8 +131,9 @@ export function registerProductionRecipeRoutes(
       return forbidden;
     }
 
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     return reply.send({
-      items: await repository.list()
+      items: await repository.list(actor)
     });
   });
 
@@ -142,7 +143,10 @@ export function registerProductionRecipeRoutes(
       return forbidden;
     }
 
-    const recipe = await repository.get(request.params.recipeId);
+    const recipe = await repository.get(
+      actorForRequest(request, trustedActorSecret, allowDevActorHeader),
+      request.params.recipeId
+    );
     if (!recipe) {
       return reply.code(404).send({ message: "Rezept nicht gefunden." });
     }
@@ -158,8 +162,9 @@ export function registerProductionRecipeRoutes(
     }
 
     const recipe = parseUploadedRecipeText(request.body);
-    await repository.save(recipe);
-    await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    await repository.save(actor, recipe);
+    await auditLog.logFor(actor, {
       action: "recipe.imported_text",
       entityType: "Recipe",
       entityId: recipe.recipeId,
@@ -184,8 +189,9 @@ export function registerProductionRecipeRoutes(
     try {
       const payload = await recipeImportFromMultipart(request);
       const recipe = parseUploadedRecipeText(payload);
-      await repository.save(recipe);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      await repository.save(actor, recipe);
+      await auditLog.logFor(actor, {
         action: "recipe.uploaded_file",
         entityType: "Recipe",
         entityId: recipe.recipeId,
@@ -214,8 +220,9 @@ export function registerProductionRecipeRoutes(
         });
       }
 
-      const recipe = await repository.reviewRecipe(request.params.recipeId, request.body);
-      await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const recipe = await repository.reviewRecipe(actor, request.params.recipeId, request.body);
+      await auditLog.logFor(actor, {
         action: "recipe.reviewed",
         entityType: "Recipe",
         entityId: recipe.recipeId,

@@ -1,8 +1,11 @@
 import {
+  assertBusinessId,
   validateAcceptedEventSpec,
   type AcceptedEventSpec,
+  type BusinessContext,
   type ProductionPlan,
-  type PurchaseList
+  type PurchaseList,
+  type Recipe
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.js";
@@ -16,8 +19,14 @@ import { appendPlanningComponentBranchArtifacts } from "./planning-component-bra
 
 export async function buildProductionArtifacts(
   eventSpecInput: AcceptedEventSpec,
-  discoveryService: RecipeDiscoveryService
-): Promise<{ productionPlan: ProductionPlan; purchaseList: PurchaseList }> {
+  discoveryService: RecipeDiscoveryService,
+  options: {
+    context: BusinessContext;
+    persistDiscoveredRecipes?: boolean;
+  }
+): Promise<{ productionPlan: ProductionPlan; purchaseList: PurchaseList; recipes: Recipe[] }> {
+  if (!options?.context) throw new Error("Ein Betriebskontext ist erforderlich.");
+  assertBusinessId(options.context.businessId);
   const eventSpec = validateAcceptedEventSpec(eventSpecInput);
   const issueCollector = createPlanningIssueCollector(eventSpec.missingFields);
   const {
@@ -32,6 +41,7 @@ export async function buildProductionArtifacts(
     kitchenSheets,
     timeline,
     recipeSelections,
+    recipes,
     appender: artifactAppender
   } = createPlanningArtifactState(noteIssue);
 
@@ -44,6 +54,8 @@ export async function buildProductionArtifacts(
         component,
         servings,
         discoveryService,
+        context: options.context,
+        persistDiscoveredRecipes: options.persistDiscoveredRecipes !== false,
         artifactAppender
       });
     } catch (error) {
@@ -70,14 +82,17 @@ export async function buildProductionArtifacts(
     uniqueBlockingIssues
   );
 
-  return buildFinalProductionArtifacts({
-    eventSpec,
-    readinessIssues: {
-      unresolvedItems,
-      warnings,
-      blockingIssues: uniqueBlockingIssues
-    },
-    operationalArtifacts,
-    recipeSelections,
-  });
+  return {
+    ...buildFinalProductionArtifacts({
+      eventSpec,
+      readinessIssues: {
+        unresolvedItems,
+        warnings,
+        blockingIssues: uniqueBlockingIssues
+      },
+      operationalArtifacts,
+      recipeSelections,
+    }),
+    recipes
+  };
 }

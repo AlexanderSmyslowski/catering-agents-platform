@@ -6,6 +6,7 @@ import {
   createTrustedActorResolver,
   getDemoProductionSpecs,
   hostedMultiBusinessReady,
+  internalRecipes,
   isDevAuthEnabled,
   resolveMinimalMvpRoleFromTrustedActor,
   type LlmReadinessProviderAdapter,
@@ -23,8 +24,15 @@ import { ProductionStore } from "./repositories/production-store.js";
 import { buildProductionArtifacts } from "./rules/planning.js";
 import { registerProductionArtifactRoutes } from "./routes/artifact-routes.js";
 import { registerProductionRecipeRoutes } from "./routes/recipe-routes.js";
+import {
+  registerProductionApprovalRoutes,
+  type ProductionApplyFaultPhase,
+  type ProductionDecisionFaultPhase
+} from "./routes/approval-routes.js";
 import type { ProductionHandoffReader } from "./ports/production-handoff-reader.js";
 import { HttpProductionHandoffReader } from "./gateways/http-production-handoff-reader.js";
+
+const PRODUCTION_TARGET_LOCK_PROTOCOL = "canonical-v2";
 
 export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
@@ -40,6 +48,8 @@ export interface ProductionAppOptions {
   trustedActorSecret?: string;
   handoffReader?: ProductionHandoffReader;
   env?: Record<string, string | undefined>;
+  productionDecisionFaultInjector?: (phase: ProductionDecisionFaultPhase) => void;
+  productionApplyFaultInjector?: (phase: ProductionApplyFaultPhase) => void;
 }
 
 class DisabledWebRecipeSearchProvider implements WebRecipeSearchProvider {
@@ -101,7 +111,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
   const repository =
     options.repository ??
-    new InMemoryRecipeRepository(undefined, {
+    new InMemoryRecipeRepository({
       rootDir: options.dataRoot,
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
@@ -143,26 +153,40 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     logger: false
   });
 
-  app.addHook("onRequest", async (request) => {
-    if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.url.split("?", 1)[0] === "/health") return;
+    const actor = actorForRequest(request);
+    if (!hosted && actor.businessId !== defaultBusinessContext.businessId) {
+      return reply.code(403).send({
+        message: "Der vertrauenswürdige Betriebskontext passt nicht zum konfigurierten Betrieb dieses lokalen Dienstes."
+      });
+    }
   });
 
   app.register(multipart);
 
   app.get("/health", async (_request, reply) => {
     if (hosted) {
-      return reply.send({ service: "production-service", status: "ok", timestamp: new Date().toISOString() });
+      return reply.send({
+        service: "production-service",
+        status: "ok",
+        targetLockProtocol: PRODUCTION_TARGET_LOCK_PROTOCOL,
+        startupToken: env.CATERING_PRODUCTION_START_TOKEN ?? null,
+        timestamp: new Date().toISOString()
+      });
     }
     const [plans, purchaseLists, recipes, auditEvents] = await Promise.all([
-      store.listPlans(),
-      store.listPurchaseLists(),
-      repository.list(),
+      store.listPlans(defaultBusinessContext),
+      store.listPurchaseLists(defaultBusinessContext),
+      repository.list(defaultBusinessContext),
       auditLog.countFor(defaultBusinessContext)
     ]);
 
     return reply.send({
       service: "production-service",
       status: "ok",
+      targetLockProtocol: PRODUCTION_TARGET_LOCK_PROTOCOL,
+      startupToken: env.CATERING_PRODUCTION_START_TOKEN ?? null,
       timestamp: new Date().toISOString(),
       counts: {
         productionPlans: plans.length,
@@ -176,7 +200,6 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   registerProductionArtifactRoutes(app, {
     store,
     intakeStore,
-    repository,
     discoveryService,
     auditLog,
     buildLlmAdapter,
@@ -189,6 +212,19 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     actorForRequest
   });
 
+  registerProductionApprovalRoutes(app, {
+    store,
+    intakeStore,
+    repository,
+    auditLog,
+    trustedActorSecret,
+    allowDevActorHeader,
+    requireProductionOperator,
+    actorForRequest,
+    decisionFaultInjector: options.productionDecisionFaultInjector,
+    applyFaultInjector: options.productionApplyFaultInjector
+  });
+
   app.post("/v1/production/seed-demo", async (request, reply) => {
     if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
@@ -196,12 +232,14 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       });
     }
 
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    await repository.seed(actor, internalRecipes);
     const seeded = [];
     for (const spec of getDemoProductionSpecs()) {
-      const artifacts = await buildProductionArtifacts(spec, discoveryService);
+      const artifacts = await buildProductionArtifacts(spec, discoveryService, { context: actor });
       await intakeStore.saveSpec(spec);
-      await store.savePlan(artifacts.productionPlan);
-      await store.savePurchaseList(artifacts.purchaseList);
+      await store.savePlan(actor, artifacts.productionPlan);
+      await store.savePurchaseList(actor, artifacts.purchaseList);
       seeded.push({
         specId: spec.specId,
         planId: artifacts.productionPlan.planId,
@@ -222,8 +260,8 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     return reply.code(201).send({
       seeded,
       counts: {
-        productionPlans: (await store.listPlans()).length,
-        purchaseLists: (await store.listPurchaseLists()).length
+        productionPlans: (await store.listPlans(actor)).length,
+        purchaseLists: (await store.listPurchaseLists(actor)).length
       }
     });
   });

@@ -163,7 +163,7 @@ describe("P4 audit and review traceability", () => {
     const dataRoot = createDataRoot();
     const auditLog = new AuditLogStore({ rootDir: dataRoot });
     const offerStore = new OfferStore({ rootDir: dataRoot });
-    const recipeLibrary = new RecipeLibrary(undefined, { rootDir: dataRoot });
+    const recipeLibrary = new RecipeLibrary({ rootDir: dataRoot });
     const app = buildOfferApp({ store: offerStore, recipeLibrary, auditLog });
 
     try {

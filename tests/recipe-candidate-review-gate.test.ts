@@ -123,6 +123,7 @@ async function buildArtifactsFor(selectedRecipe: Recipe) {
     eventSpec: eventSpec(menuComponent),
     component: menuComponent,
     servings: 40,
+    context: { businessId: "local" },
     discoveryService: discoveryReturning(selectedRecipe)
   });
 }

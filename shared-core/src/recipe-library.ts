@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import {
-  createPersistentCollection,
-  type CollectionStorageOptions,
-  type PersistentCollection
+  createBusinessScopedPersistentCollection,
+  type BusinessScopedPersistentCollection,
+  type CollectionStorageOptions
 } from "./persistence.js";
-import { internalRecipes } from "./fixtures/sample-data.js";
+import type { BusinessContext } from "./business-context.js";
 import { isTrustedProductionRecipe } from "./recipe-research-calculation-boundary.js";
 import { ingredientGroupHints, unitNormalization } from "./taxonomies/defaults.js";
 import {
@@ -677,24 +677,24 @@ export function isRecipeEligibleForOperationalPlanning(recipe: Recipe): boolean 
 }
 
 export class RecipeLibrary {
-  private readonly recipes: PersistentCollection<Recipe>;
+  private readonly recipes: BusinessScopedPersistentCollection<Recipe>;
 
-  constructor(
-    seed: Recipe[] | undefined = internalRecipes,
-    options?: CollectionStorageOptions
-  ) {
-    this.recipes = createPersistentCollection<Recipe>({
+  constructor(options?: CollectionStorageOptions) {
+    this.recipes = createBusinessScopedPersistentCollection<Recipe>({
       collectionName: "production/recipes",
       getId: (recipe) => recipe.recipeId,
       validate: validateRecipe,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
-      pgPool: options?.pgPool,
-      seed: seed ?? internalRecipes
+      pgPool: options?.pgPool
     });
   }
 
-  async findCandidates(label: { label: string }): Promise<Recipe[]> {
+  async findCandidates(
+    context: BusinessContext,
+    label: { label: string }
+  ): Promise<Recipe[]> {
+    assertRecipeBusinessContext(context);
     const rawLeftTokens = rawSearchTokens(label.label);
     const orderedLeftTokens = tokenizeSearchText(label.label);
     const leftTokens = new Set(orderedLeftTokens);
@@ -709,7 +709,7 @@ export class RecipeLibrary {
     );
     const normalizedLabel = normalizeSearchText(label.label);
 
-    return (await this.recipes.list())
+    return (await this.recipes.list(context))
       .filter(isRecipeEligibleForOperationalPlanning)
       .filter(
         (recipe) =>
@@ -790,22 +790,31 @@ export class RecipeLibrary {
       .map((item) => item.recipe);
   }
 
-  async save(recipe: Recipe): Promise<void> {
-    await this.recipes.set(recipe);
+  async save(context: BusinessContext, recipe: Recipe): Promise<void> {
+    assertRecipeBusinessContext(context);
+    await this.recipes.set(context, recipe);
   }
 
-  async get(recipeId: string): Promise<Recipe | undefined> {
-    return this.recipes.get(recipeId);
+  async insert(context: BusinessContext, recipe: Recipe): Promise<"created" | "exists"> {
+    assertRecipeBusinessContext(context);
+    return this.recipes.insert(context, recipe);
+  }
+
+  async get(context: BusinessContext, recipeId: string): Promise<Recipe | undefined> {
+    assertRecipeBusinessContext(context);
+    return this.recipes.get(context, recipeId);
   }
 
   async reviewRecipe(
+    context: BusinessContext,
     recipeId: string,
     input: {
       decision: RecipeReviewDecision;
       note?: string;
     }
   ): Promise<Recipe> {
-    const recipe = await this.get(recipeId);
+    assertRecipeBusinessContext(context);
+    const recipe = await this.get(context, recipeId);
     if (!recipe) {
       throw new Error(`Rezept ${recipeId} wurde nicht gefunden.`);
     }
@@ -841,11 +850,25 @@ export class RecipeLibrary {
       source
     });
 
-    await this.save(reviewed);
+    await this.save(context, reviewed);
     return reviewed;
   }
 
-  async list(): Promise<Recipe[]> {
-    return this.recipes.list();
+  async list(context: BusinessContext): Promise<Recipe[]> {
+    assertRecipeBusinessContext(context);
+    return this.recipes.list(context);
+  }
+
+  async seed(context: BusinessContext, recipes: readonly Recipe[]): Promise<void> {
+    assertRecipeBusinessContext(context);
+    for (const recipe of recipes) {
+      await this.recipes.insert(context, recipe);
+    }
+  }
+}
+
+function assertRecipeBusinessContext(context: BusinessContext): void {
+  if (!context || typeof context.businessId !== "string" || context.businessId.trim().length === 0) {
+    throw new Error("Ein nicht leerer Betriebskontext ist erforderlich.");
   }
 }

@@ -168,11 +168,13 @@ describe("internal recipe candidate resolution flow", () => {
     ) as Recipe;
     koepffTortilla.source.approvalState = "approved_internal";
     koepffTortilla.dietTags = ["vegetarian"];
-    const repository = new InMemoryRecipeRepository([], undefined);
-    await repository.save(koepffTortilla);
+    const repository = new InMemoryRecipeRepository();
+    await repository.save({ businessId: "local" }, koepffTortilla);
     const discovery = new RecipeDiscoveryService(repository, new NoopWebProvider());
 
-    const resolution = await discovery.resolveRecipe(menuComponent, eventSpec(menuComponent));
+    const resolution = await discovery.resolveRecipe(menuComponent, eventSpec(menuComponent), {
+      context: { businessId: "local" }
+    });
 
     // Regression diagnosis: fixed in the archetype layer; quiche now accepts tarte tokens.
     expect(resolution.recipe?.recipeId).toBe("koepff-tortilla-tarte-getrocknete-tomaten-oliven");

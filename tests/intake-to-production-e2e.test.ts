@@ -122,8 +122,8 @@ async function runParityFlow(
   const dataRoot = createDataRoot();
 
   try {
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
-    await repository.save(createRecipe(recipe));
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.save({ businessId: "local" }, createRecipe(recipe));
 
     const discovery = createDiscoveryService(repository);
     const plannedSpec = {
@@ -135,7 +135,7 @@ async function runParityFlow(
         }
       }))
     };
-    const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
+    const artifacts = await buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
 
     return {
       intakeReadiness: spec.readiness.status,
@@ -183,8 +183,8 @@ describe("manual form intake to production e2e", () => {
 
     const dataRoot = createDataRoot();
     try {
-      const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
-      await repository.save(
+      const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+      await repository.save({ businessId: "local" },
         createRecipe({
           recipeId: "tomatensuppe-manual",
           name: "Tomatensuppe",
@@ -203,7 +203,7 @@ describe("manual form intake to production e2e", () => {
         }))
       };
       const discovery = createDiscoveryService(repository);
-      const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
+      const artifacts = await buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
 
       expect(artifacts.productionPlan.readiness.status).toBe("complete");
       expect(artifacts.productionPlan.isFallback).not.toBe(true);
@@ -245,8 +245,8 @@ describe("manual form intake to production e2e", () => {
 
     const dataRoot = createDataRoot();
     try {
-      const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
-      await repository.save(
+      const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+      await repository.save({ businessId: "local" },
         createRecipe({
           recipeId: "bread-baguette-manual",
           name: "Bread & Baguette",
@@ -265,7 +265,7 @@ describe("manual form intake to production e2e", () => {
         }))
       };
       const discovery = createDiscoveryService(repository);
-      const artifacts = await buildProductionArtifacts(plannedSpec, discovery);
+      const artifacts = await buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
 
       expect(artifacts.productionPlan.isFallback).toBe(true);
       expect(artifacts.productionPlan.readiness.status).toBe("insufficient");
@@ -434,4 +434,3 @@ describe("manual form intake to production e2e", () => {
     });
   });
 });
-

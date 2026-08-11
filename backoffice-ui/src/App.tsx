@@ -23,13 +23,14 @@ import {
   createAcceptedSpecFromManualForm,
   createAcceptedSpecFromText,
   createOfferFromText,
-  createProductionPlan,
+  createProductionDraftFromAcceptedEventSpec,
   createProductionDraftFromDocument,
   decideOfferDraft,
   createProductionHandoff,
   createProductionDraftFromHandoff,
   reviewRecipe,
   seedDemoData,
+  prepareProductionDraft,
   updateAcceptedSpec,
   uploadRecipeFile
 } from "./api.js";
@@ -60,6 +61,7 @@ import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useOperatorNameState } from "./use-operator-name-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 import { openProductionDraftEntry } from "./production-entry-focus.js";
+import { announceProductionDraftReview } from "./production-draft-review-panel.js";
 import type { OfferApprovalBinding } from "./offer-approval-action.js";
 
 const PROMOTED_PRODUCTION_SPEC_FOCUS_KEY = "catering.promotedProductionSpecFocus";
@@ -439,7 +441,8 @@ export function App() {
     updateAcceptedSpec,
     buildCurrentSpecUpdateInput,
     loadSpecIntoEditorState,
-    createProductionPlan,
+    createProductionDraftFromAcceptedEventSpec,
+    prepareProductionDraft,
     setSubmitting,
     setProductionWorkspaceCleared,
     setFocusedProductionSpecId,
@@ -448,11 +451,11 @@ export function App() {
     clearMessages,
     startPlanProgress,
     clearSelectedPlanId: productionWorkspaceResetCallbacks.clearSelectedPlanId,
-    setSelectedPlanId,
     completePlanProgress,
     failPlanProgress,
     setNotice,
-    setError
+    setError,
+    showProductionDraftReview: announceProductionDraftReview
   });
 
   useProductionQuestionAutoOpen({

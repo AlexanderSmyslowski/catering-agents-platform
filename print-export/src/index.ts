@@ -356,7 +356,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     databaseUrl: options.databaseUrl,
     pgPool: options.pgPool
   });
-  const recipeLibrary = new RecipeLibrary(undefined, {
+  const recipeLibrary = new RecipeLibrary({
     rootDir: options.rootDir,
     databaseUrl: options.databaseUrl,
     pgPool: options.pgPool
@@ -368,8 +368,8 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     }
     const [offerDrafts, productionPlans, purchaseLists] = await Promise.all([
       offerStore.listDrafts(defaultBusinessContext),
-      productionStore.listPlans(),
-      productionStore.listPurchaseLists()
+      productionStore.listPlans(defaultBusinessContext),
+      productionStore.listPurchaseLists(defaultBusinessContext)
     ]);
 
     return reply.send({
@@ -415,7 +415,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
-      const plan = await productionStore.getPlan(request.params.planId);
+      const plan = await productionStore.getPlan(actorForRequest(request), request.params.planId);
       if (!plan) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
@@ -440,7 +440,8 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
-      const plan = await productionStore.getPlan(request.params.planId);
+      const actor = actorForRequest(request);
+      const plan = await productionStore.getPlan(actor, request.params.planId);
       if (!plan) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
@@ -457,9 +458,9 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         ])
       ];
       const [purchaseLists, recipes, clarificationAnswers] = await Promise.all([
-        productionStore.listPurchaseLists(),
-        Promise.all(recipeIds.map((recipeId) => recipeLibrary.get(recipeId))),
-        productionStore.listClarificationAnswers()
+        productionStore.listPurchaseLists(actor),
+        Promise.all(recipeIds.map((recipeId) => recipeLibrary.get(actor, recipeId))),
+        productionStore.listClarificationAnswers(actor)
       ]);
       const linkedRecipes = recipes.filter((recipe): recipe is Recipe => Boolean(recipe));
 
@@ -487,7 +488,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
-      const list = await productionStore.getPurchaseList(request.params.purchaseListId);
+      const list = await productionStore.getPurchaseList(actorForRequest(request), request.params.purchaseListId);
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
       }

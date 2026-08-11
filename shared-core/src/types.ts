@@ -584,13 +584,46 @@ export interface ProductionDraftArtifacts {
   notes?: string[];
 }
 
+export interface ApprovedProductionSpec {
+  schemaVersion: "1.0";
+  businessId: BusinessId;
+  approvedProductionSpecId: string;
+  sourceDraft: {
+    draftId: string;
+    revision: number;
+  };
+  approvalRequestId: string;
+  approvedAt: string;
+  artifacts: {
+    eventSpec: AcceptedEventSpec;
+    productionPlan: ProductionPlan;
+    purchaseList: PurchaseList;
+    recipes: Recipe[];
+  };
+}
+
+export interface ProductionApplyManifest {
+  schemaVersion: "1.0";
+  businessId: BusinessId;
+  approvedProductionSpecId: string;
+  eventSpecId: string;
+  planId: string;
+  purchaseListId: string;
+  recipeIds: string[];
+  appliedAt: string;
+  appliedBy: Pick<TrustedActor, "name" | "source">;
+}
+
 export interface ProductionDraft {
   schemaVersion: string;
-  businessId?: BusinessId;
+  businessId: BusinessId;
   draftId: string;
+  revision: number;
   status: ProductionDraftStatus;
   createdAt: string;
   supersedesDraftId?: string;
+  legacyApprovalState?: "unverified";
+  approvalRequestId?: string;
   approvedBy?: string;
   approvedAt?: string;
   appliedBy?: string;

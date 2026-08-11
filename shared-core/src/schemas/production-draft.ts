@@ -5,7 +5,9 @@ export const productionDraftSchema = {
   additionalProperties: false,
   required: [
     "schemaVersion",
+    "businessId",
     "draftId",
+    "revision",
     "status",
     "createdAt",
     "source",
@@ -34,27 +36,19 @@ export const productionDraftSchema = {
         }
       }
     },
-    {
-      if: {
-        required: ["status"],
-        properties: {
-          status: { const: "approved" }
-        }
-      },
-      then: {
-        required: ["approvedBy", "approvedAt"]
-      }
-    }
   ],
   properties: {
     schemaVersion: { type: "string", maxLength: 32 },
     businessId: { type: "string", pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" },
     draftId: { type: "string", maxLength: 160 },
+    revision: { type: "integer", minimum: 1, maximum: 2147483647 },
     status: {
       enum: ["pending_review", "approved", "rejected", "superseded"]
     },
     createdAt: { type: "string", maxLength: 80 },
     supersedesDraftId: { type: "string", maxLength: 160 },
+    legacyApprovalState: { const: "unverified" },
+    approvalRequestId: { type: "string", pattern: "^approval-[a-f0-9]{64}$" },
     approvedBy: { type: "string", maxLength: 160 },
     approvedAt: { type: "string", maxLength: 80 },
     appliedBy: { type: "string", maxLength: 160 },

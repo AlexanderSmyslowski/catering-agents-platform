@@ -1,6 +1,7 @@
 import type {
   ProductionPlan,
-  PurchaseItem
+  PurchaseItem,
+  Recipe
 } from "@catering/shared-core";
 import type { UnresolvedComponentArtifacts } from "./planning-unresolved-component-artifacts.js";
 import type { ProcurementPlanningArtifacts } from "./planning-procurement-artifacts.js";
@@ -13,6 +14,7 @@ export type PlanningArtifactAppender = {
   kitchenSheets: ProductionPlan["kitchenSheets"];
   timeline: ProductionPlan["timeline"];
   recipeSelections: ProductionPlan["recipeSelections"];
+  recipes?: Recipe[];
   noteIssue: (issue: string, blocking?: boolean) => void;
 };
 
@@ -41,6 +43,9 @@ export function appendRecipeComponentPlanningArtifacts(
   artifacts: RecipeComponentPlanningArtifacts
 ): void {
   appender.recipeSelections.push(artifacts.selection);
+  if (artifacts.recipe && !(appender.recipes ?? []).some((recipe) => recipe.recipeId === artifacts.recipe?.recipeId)) {
+    (appender.recipes ??= []).push(artifacts.recipe);
+  }
   for (const issue of artifacts.issues) {
     appender.noteIssue(issue.issue, issue.blocking);
   }

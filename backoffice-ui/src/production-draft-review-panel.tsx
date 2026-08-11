@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  applyProductionDraft,
+  applyApprovedProductionSpec,
   decideProductionDraft,
   decideProductionDraftReviewCard,
   loadProductionDrafts,
+  prepareProductionDraft,
   reviseProductionDraft,
   type ProductionDraft,
   type ProductionDraftReviewCard,
   type ProductionDraftReviewDecision
 } from "./api.js";
 import { productionDraftEntryId } from "./production-entry-focus.js";
+
+const productionDraftReviewEvent = "catering:production-draft-review";
+
+export function announceProductionDraftReview(draftId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(productionDraftReviewEvent, { detail: { draftId } }));
+}
 
 type ProductionDraftReviewPanelProps = {
   submitting: boolean;
@@ -139,14 +147,46 @@ export function formatProductionDraftArtifactSummary(draft: ProductionDraft): st
   return parts.length > 0 ? parts.join(", ") : "keine Fachartefakte";
 }
 
-function canApproveProductionDraft(draft: ProductionDraft): boolean {
-  return draft.status === "pending_review" &&
-    draft.reviewCards.length > 0 &&
-    draft.reviewCards.every((card) => card.decision === "fits" && card.riskLevel !== "blocking");
+function hasCompleteProductionSnapshot(draft: ProductionDraft): boolean {
+  const artifacts = draft.draftArtifacts;
+  if (!artifacts?.eventSpec || !artifacts.productionPlan || !artifacts.purchaseList || !Array.isArray(artifacts.recipes)) {
+    return false;
+  }
+
+  const recipeIds = new Set(artifacts.recipes.flatMap((recipe) =>
+    typeof recipe.recipeId === "string" ? [recipe.recipeId] : []
+  ));
+  const selections = Array.isArray(artifacts.productionPlan.recipeSelections)
+    ? artifacts.productionPlan.recipeSelections
+    : [];
+  return selections.every((selection) => {
+    const recipeId = asRecord(selection)?.recipeId;
+    return typeof recipeId !== "string" || recipeIds.has(recipeId);
+  });
 }
 
-function canApplyProductionDraft(draft: ProductionDraft): boolean {
-  return draft.status === "approved" && !draft.appliedAt;
+function canApproveProductionDraft(draft: ProductionDraft): boolean {
+  return draft.status === "pending_review" &&
+    hasCompleteProductionSnapshot(draft) &&
+    draft.reviewCards
+      .filter((card) => card.requiredApproval === true || card.riskLevel === "blocking")
+      .every((card) => card.decision === "fits");
+}
+
+function canPrepareProductionDraft(draft: ProductionDraft): boolean {
+  return draft.status === "pending_review" &&
+    Boolean(draft.draftArtifacts?.eventSpec) &&
+    !hasCompleteProductionSnapshot(draft);
+}
+
+function approvedSpecIdsFromProjection(
+  projections: Awaited<ReturnType<typeof loadProductionDrafts>>["approvedProductionSpecs"]
+): Record<string, string> {
+  return Object.fromEntries(
+    (projections ?? [])
+      .filter((projection) => !projection.applied)
+      .map((projection) => [projection.sourceDraft.draftId, projection.approvedProductionSpecId])
+  );
 }
 
 function canReviseProductionDraft(draft: ProductionDraft): boolean {
@@ -271,10 +311,13 @@ export function ProductionDraftReviewPanel({
   const [message, setMessage] = useState<string>();
   const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
   const [changeRequest, setChangeRequest] = useState("");
+  const [approvedSpecIds, setApprovedSpecIds] = useState<Record<string, string>>({});
   const panelRef = useRef<HTMLElement>(null);
-  const focusedDraftId = typeof window === "undefined"
-    ? undefined
-    : new URLSearchParams(window.location.search).get("productionDraftId")?.trim() || undefined;
+  const [focusedDraftId, setFocusedDraftId] = useState<string | undefined>(() =>
+    typeof window === "undefined"
+      ? undefined
+      : new URLSearchParams(window.location.search).get("productionDraftId")?.trim() || undefined
+  );
 
   async function reloadDrafts(options?: { clearMessage?: boolean }) {
     setLoading(true);
@@ -282,6 +325,7 @@ export function ProductionDraftReviewPanel({
     try {
       const response = await loadProductionDrafts();
       setDrafts(response.items);
+      setApprovedSpecIds(approvedSpecIdsFromProjection(response.approvedProductionSpecs));
       if (options?.clearMessage !== false) {
         setMessage(undefined);
       }
@@ -295,6 +339,18 @@ export function ProductionDraftReviewPanel({
 
   useEffect(() => {
     void reloadDrafts();
+  }, []);
+
+  useEffect(() => {
+    const handlePreparedDraft = (event: Event) => {
+      const detail = (event as CustomEvent<{ draftId?: unknown }>).detail;
+      const draftId = typeof detail?.draftId === "string" ? detail.draftId.trim() : "";
+      if (!draftId) return;
+      setFocusedDraftId(draftId);
+      void reloadDrafts({ clearMessage: false });
+    };
+    window.addEventListener(productionDraftReviewEvent, handlePreparedDraft);
+    return () => window.removeEventListener(productionDraftReviewEvent, handlePreparedDraft);
   }, []);
 
   useEffect(() => {
@@ -344,11 +400,29 @@ export function ProductionDraftReviewPanel({
     }
   }
 
-  async function decideDraft(draftId: string, approve: boolean) {
+  async function prepareDraft(draftId: string) {
     setLoading(true);
     try {
-      await decideProductionDraft(draftId, approve);
-      setMessage(approve ? "Produktionsentwurf freigegeben." : "Produktionsentwurf verworfen.");
+      const response = await prepareProductionDraft(draftId);
+      setFocusedDraftId(response.draft.draftId);
+      setMessage("Produktionsentwurf wurde vorbereitet.");
+      await reloadDrafts({ clearMessage: false });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht vorbereitet werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function decideDraft(draftId: string, decision: "approved" | "rejected") {
+    setLoading(true);
+    try {
+      const response = await decideProductionDraft(draftId, decision);
+      const approvedProductionSpecId = response.approvedProductionSpec?.approvedProductionSpecId;
+      if (approvedProductionSpecId) {
+        setApprovedSpecIds((current) => ({ ...current, [draftId]: approvedProductionSpecId }));
+      }
+      setMessage(decision === "approved" ? "Produktionsentwurf freigegeben." : "Produktionsentwurf verworfen.");
       await onDraftChanged?.();
       await reloadDrafts({ clearMessage: false });
     } catch (error) {
@@ -358,12 +432,18 @@ export function ProductionDraftReviewPanel({
     }
   }
 
-  async function applyDraft(draftId: string) {
+  async function applyDraft(draftId: string, approvedProductionSpecId: string) {
     setLoading(true);
     try {
-      const response = await applyProductionDraft(draftId);
+      const response = await applyApprovedProductionSpec(approvedProductionSpecId);
       setMessage("Produktionsentwurf übernommen.");
-      await onDraftChanged?.(response.applied?.specId);
+      const specId = typeof response.eventSpec.specId === "string" ? response.eventSpec.specId : undefined;
+      await onDraftChanged?.(specId);
+      setApprovedSpecIds((current) => {
+        const next = { ...current };
+        delete next[draftId];
+        return next;
+      });
       await reloadDrafts({ clearMessage: false });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht übernommen werden.");
@@ -373,7 +453,7 @@ export function ProductionDraftReviewPanel({
   }
 
   const visibleDrafts = drafts
-    .filter((draft) => draft.status === "pending_review" || canApplyProductionDraft(draft))
+    .filter((draft) => draft.status === "pending_review" || Boolean(approvedSpecIds[draft.draftId]))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const focusedDraft = focusedDraftId
     ? visibleDrafts.find((draft) => draft.draftId === focusedDraftId)
@@ -551,29 +631,38 @@ export function ProductionDraftReviewPanel({
                 </div>
               ) : null}
               <div className="action-row">
+                {canPrepareProductionDraft(draft) ? (
+                  <button
+                    className="secondary-button"
+                    disabled={submitting || loading}
+                    onClick={() => void prepareDraft(draft.draftId)}
+                  >
+                    Entwurf vorbereiten
+                  </button>
+                ) : null}
                 {draft.status === "pending_review" ? (
                   <>
                     <button
                       className="secondary-button"
                       disabled={submitting || loading || !canApproveProductionDraft(draft)}
-                      onClick={() => void decideDraft(draft.draftId, true)}
+                      onClick={() => void decideDraft(draft.draftId, "approved")}
                     >
                       Entwurf freigeben
                     </button>
                     <button
                       className="secondary-button"
                       disabled={submitting || loading}
-                      onClick={() => void decideDraft(draft.draftId, false)}
+                      onClick={() => void decideDraft(draft.draftId, "rejected")}
                     >
                       Entwurf verwerfen
                     </button>
                   </>
                 ) : null}
-                {canApplyProductionDraft(draft) ? (
+                {approvedSpecIds[draft.draftId] ? (
                   <button
                     className="secondary-button"
                     disabled={submitting || loading}
-                    onClick={() => void applyDraft(draft.draftId)}
+                    onClick={() => void applyDraft(draft.draftId, approvedSpecIds[draft.draftId]!)}
                   >
                     Entwurf übernehmen
                   </button>

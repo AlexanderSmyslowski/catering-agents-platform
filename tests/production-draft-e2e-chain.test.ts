@@ -123,18 +123,20 @@ function eventSpec(draftId: string): AcceptedEventSpec {
 async function buildDraft(draftId = "production-draft-e2e-chain-1"): Promise<ProductionDraft> {
   const spec = eventSpec(draftId);
   const fixtureRoot = createDataRoot("catering-agents-production-draft-fixture-");
-  const repository = new InMemoryRecipeRepository([], { rootDir: fixtureRoot });
+  const repository = new InMemoryRecipeRepository({ rootDir: fixtureRoot });
 
   try {
-    await repository.save(recipeCandidate());
+    await repository.save({ businessId: "local" }, recipeCandidate());
     const discoveryService = new RecipeDiscoveryService(repository, {
       searchRecipes: async () => []
     });
-    const artifacts = await buildProductionArtifacts(spec, discoveryService);
+    const artifacts = await buildProductionArtifacts(spec, discoveryService, { context: { businessId: "local" } });
 
     return {
       schemaVersion: SCHEMA_VERSION,
+      businessId: "local",
       draftId,
+      revision: 1,
       status: "pending_review",
       createdAt: "2026-07-01T12:00:00.000Z",
       source: {
@@ -282,7 +284,7 @@ describe("ProductionDraft E2E chain", () => {
   it("keeps imported drafts draft-only until approved apply materializes the production folder chain", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const repository = new InMemoryRecipeRepository([], { rootDir: dataRoot });
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const productionApp = buildProductionApp({
       dataRoot,
       repository,
@@ -312,7 +314,7 @@ describe("ProductionDraft E2E chain", () => {
 
       const importedDraft = await importDraft(productionApp, draft);
       expect(importedDraft.status).toBe("pending_review");
-      await expect(repository.get("recipe-draft-tomato-soup")).resolves.toBeUndefined();
+      await expect(repository.get(localBusiness, "recipe-draft-tomato-soup")).resolves.toBeUndefined();
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
         specs: 0,
         plans: 0,
@@ -324,10 +326,12 @@ describe("ProductionDraft E2E chain", () => {
         method: "POST",
         url: `/v1/production/drafts/${draft.draftId}/decision`,
         headers: trustedHeaders("production_operator"),
-        payload: { approve: true }
+        payload: { decision: "approved" }
       });
-      expect(approval.statusCode, approval.body).toBe(200);
-      expect(approval.json<{ draft: ProductionDraft }>().draft.status).toBe("approved");
+      expect(approval.statusCode, approval.body).toBe(201);
+      const approvedProductionSpecId = approval.json<{
+        approvedProductionSpec: { approvedProductionSpecId: string };
+      }>().approvedProductionSpec.approvedProductionSpecId;
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
         specs: 0,
         plans: 0,
@@ -336,20 +340,20 @@ describe("ProductionDraft E2E chain", () => {
 
       const apply = await productionApp.inject({
         method: "POST",
-        url: `/v1/production/drafts/${draft.draftId}/apply`,
+        url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
         headers: trustedHeaders("production_operator")
       });
       const applied = expectJsonResponse<{
-        draft: ProductionDraft;
-        applied: { specId?: string; planId?: string; purchaseListId?: string; recipeIds?: string[] };
+        eventSpec: AcceptedEventSpec;
+        plan: ProductionPlan;
+        purchaseList: PurchaseList;
+        recipes: Recipe[];
       }>(apply);
 
-      expect(applied.applied).toMatchObject({
-        specId: draft.draftArtifacts.eventSpec?.specId,
-        planId: draft.draftArtifacts.productionPlan?.planId,
-        purchaseListId: draft.draftArtifacts.purchaseList?.purchaseListId,
-        recipeIds: ["recipe-draft-tomato-soup"]
-      });
+      expect(applied.eventSpec.specId).toBe(draft.draftArtifacts.eventSpec?.specId);
+      expect(applied.plan.planId).toBe(draft.draftArtifacts.productionPlan?.planId);
+      expect(applied.purchaseList.purchaseListId).toBe(draft.draftArtifacts.purchaseList?.purchaseListId);
+      expect(applied.recipes.map((recipe) => recipe.recipeId)).toEqual(["recipe-draft-tomato-soup"]);
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
         specs: 1,
         plans: 1,
@@ -357,7 +361,7 @@ describe("ProductionDraft E2E chain", () => {
       });
       const purchaseListResponse = await productionApp.inject({
         method: "GET",
-        url: `/v1/production/purchase-lists/${applied.applied.purchaseListId}`,
+        url: `/v1/production/purchase-lists/${applied.purchaseList.purchaseListId}`,
         headers: trustedHeaders("production_operator")
       });
       const purchaseList = expectJsonResponse<PurchaseList>(purchaseListResponse);
@@ -379,7 +383,7 @@ describe("ProductionDraft E2E chain", () => {
 
       const folderExport = await exportApp.inject({
         method: "GET",
-        url: `/v1/exports/production-folders/${applied.applied.planId}/html`,
+        url: `/v1/exports/production-folders/${applied.plan.planId}/html`,
         headers: trustedHeaders("production_operator")
       });
       expect(folderExport.statusCode, folderExport.body).toBe(200);
@@ -392,7 +396,7 @@ describe("ProductionDraft E2E chain", () => {
       expect(folderExport.body).toContain(
         "<li>Tomaten garen, passieren und bis zur Ausgabe heißhalten.</li>"
       );
-      expect(folderExport.body).toContain("Status: Prüfung nötig");
+      expect(folderExport.body).toContain("Status: intern freigegeben");
       expect(folderExport.body).not.toContain("keine freigegebenen Rezeptkarten verknüpft");
     } finally {
       await Promise.all([
@@ -403,7 +407,7 @@ describe("ProductionDraft E2E chain", () => {
     }
   });
 
-  it("rejects apply for every non-approved draft status without changing product object counts", async () => {
+  it("keeps the retired draft Apply route unavailable for every draft status", async () => {
     const cases: Array<{ status: Exclude<ProductionDraftStatus, "approved">; arrange: "route" | "decision" | "store" }> = [
       { status: "pending_review", arrange: "route" },
       { status: "rejected", arrange: "decision" },
@@ -445,10 +449,11 @@ describe("ProductionDraft E2E chain", () => {
               method: "POST",
               url: `/v1/production/drafts/${draft.draftId}/decision`,
               headers: trustedHeaders("production_operator"),
-              payload: { approve: false }
+              payload: { decision: "rejected" }
             });
-            expect(rejection.statusCode, rejection.body).toBe(200);
-            expect(rejection.json<{ draft: ProductionDraft }>().draft.status).toBe(status);
+            expect(rejection.statusCode, rejection.body).toBe(201);
+            expect(rejection.json<{ approval: { decision: string } }>().approval.decision).toBe("rejected");
+            expect((await store.getProductionDraft(localBusiness, draft.draftId))?.status).toBe(status);
           }
         }
 
@@ -460,8 +465,7 @@ describe("ProductionDraft E2E chain", () => {
         });
         const after = await productCounts(intakeApp, productionApp);
 
-        expect(apply.statusCode, apply.body).toBe(409);
-        expect(apply.body).toContain("ProductionDraft muss vor der Übernahme freigegeben sein.");
+        expect(apply.statusCode, apply.body).toBe(404);
         expect(after).toEqual(before);
       } finally {
         await Promise.all([

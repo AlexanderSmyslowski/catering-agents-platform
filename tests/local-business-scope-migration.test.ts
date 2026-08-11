@@ -61,7 +61,9 @@ function legacyProductionDraft(draftId: string): ProductionDraft {
   }));
   return validateProductionDraft({
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId,
+    revision: 1,
     status: "pending_review",
     createdAt: "2026-08-10T00:00:00.000Z",
     source: {
@@ -246,14 +248,16 @@ describe("local business scope migration", () => {
       units: [
         { name: "stage-a-001-audit", status: "migrated" },
         { name: "stage-a-002-offers", status: "migrated" },
-        { name: "stage-a-003-production-drafts", status: "migrated" }
+        { name: "stage-a-003-production-drafts", status: "migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
       ]
     });
     await expect(runLocalBusinessScopeMigration({ rootDir, businessId: "local", ...confirmedLegacyFileWriters })).resolves.toMatchObject({
       units: [
         { name: "stage-a-001-audit", status: "already_migrated" },
         { name: "stage-a-002-offers", status: "already_migrated" },
-        { name: "stage-a-003-production-drafts", status: "already_migrated" }
+        { name: "stage-a-003-production-drafts", status: "already_migrated" },
+        { name: "stage-a-004-production-v2", status: "already_migrated" }
       ]
     });
 
@@ -269,14 +273,16 @@ describe("local business scope migration", () => {
       units: [
         { name: "stage-a-001-audit", status: "migrated" },
         { name: "stage-a-002-offers", status: "migrated" },
-        { name: "stage-a-003-production-drafts", status: "migrated" }
+        { name: "stage-a-003-production-drafts", status: "migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
       ]
     });
     await expect(runLocalBusinessScopeMigration({ rootDir, businessId: "local", ...confirmedLegacyFileWriters })).resolves.toEqual({
       units: [
         { name: "stage-a-001-audit", status: "already_migrated" },
         { name: "stage-a-002-offers", status: "already_migrated" },
-        { name: "stage-a-003-production-drafts", status: "already_migrated" }
+        { name: "stage-a-003-production-drafts", status: "already_migrated" },
+        { name: "stage-a-004-production-v2", status: "already_migrated" }
       ]
     });
   });
@@ -293,7 +299,8 @@ describe("local business scope migration", () => {
       units: [
         { name: "stage-a-001-audit", status: "migrated" },
         { name: "stage-a-002-offers", status: "migrated" },
-        { name: "stage-a-003-production-drafts", status: "migrated" }
+        { name: "stage-a-003-production-drafts", status: "migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
       ]
     });
 
@@ -328,7 +335,8 @@ describe("local business scope migration", () => {
       units: [
         { status: "already_migrated" },
         { name: "stage-a-002-offers", status: "migrated" },
-        { name: "stage-a-003-production-drafts", status: "migrated" }
+        { name: "stage-a-003-production-drafts", status: "migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
       ]
     });
   });
@@ -344,14 +352,16 @@ describe("local business scope migration", () => {
       units: [
         { status: "migrated" },
         { name: "stage-a-002-offers", status: "migrated" },
-        { name: "stage-a-003-production-drafts", status: "migrated" }
+        { name: "stage-a-003-production-drafts", status: "migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
       ]
     });
     await expect(runLocalBusinessScopeMigration({ pgPool: pool, businessId: "local", ...testOnlyPgMemFence })).resolves.toEqual({
       units: [
         { name: "stage-a-001-audit", status: "already_migrated" },
         { name: "stage-a-002-offers", status: "already_migrated" },
-        { name: "stage-a-003-production-drafts", status: "already_migrated" }
+        { name: "stage-a-003-production-drafts", status: "already_migrated" },
+        { name: "stage-a-004-production-v2", status: "already_migrated" }
       ]
     });
     await expect(legacy.list()).resolves.toEqual([legacyDraft]);
@@ -386,7 +396,8 @@ describe("local business scope migration", () => {
       units: [
         { status: "already_migrated" },
         { name: "stage-a-002-offers", status: "migrated" },
-        { name: "stage-a-003-production-drafts", status: "migrated" }
+        { name: "stage-a-003-production-drafts", status: "migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
       ]
     });
   });
@@ -406,7 +417,8 @@ describe("local business scope migration", () => {
       units: [
         { status: "already_migrated" },
         { status: "already_migrated" },
-        { name: "stage-a-003-production-drafts", status: "migrated" }
+        { name: "stage-a-003-production-drafts", status: "migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
       ]
     });
     const backfilledManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -422,7 +434,8 @@ describe("local business scope migration", () => {
       units: [
         { status: "already_migrated" },
         { status: "already_migrated" },
-        { name: "stage-a-003-production-drafts", status: "migrated" }
+        { name: "stage-a-003-production-drafts", status: "migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
       ]
     });
     const completion = await pool.query("SELECT legacy_handoff_discarded, discarded_handoff_count, stripped_handoff_hash FROM catering_business_migrations WHERE unit_name = 'stage-a-002-offers'");
@@ -454,13 +467,13 @@ describe("local business scope migration", () => {
       units: [{ status: "already_migrated" }, { status: "already_migrated" }, {
         name: "stage-a-003-production-drafts",
         status: "migrated"
-      }]
+      }, { name: "stage-a-004-production-v2", status: "migrated" }]
     });
     await expect(runLocalBusinessScopeMigration({ rootDir, businessId: "local", ...confirmedLegacyFileWriters })).resolves.toMatchObject({
       units: [{ status: "already_migrated" }, { status: "already_migrated" }, {
         name: "stage-a-003-production-drafts",
         status: "already_migrated"
-      }]
+      }, { name: "stage-a-004-production-v2", status: "already_migrated" }]
     });
 
     await expect(legacy.list()).resolves.toEqual([source]);
@@ -501,13 +514,13 @@ describe("local business scope migration", () => {
       units: [{ status: "migrated" }, { status: "migrated" }, {
         name: "stage-a-003-production-drafts",
         status: "migrated"
-      }]
+      }, { name: "stage-a-004-production-v2", status: "migrated" }]
     });
     await expect(runLocalBusinessScopeMigration({ pgPool: pool, businessId: "local", ...testOnlyPgMemFence })).resolves.toMatchObject({
       units: [{ status: "already_migrated" }, { status: "already_migrated" }, {
         name: "stage-a-003-production-drafts",
         status: "already_migrated"
-      }]
+      }, { name: "stage-a-004-production-v2", status: "already_migrated" }]
     });
 
     await expect(legacy.list()).resolves.toEqual([source]);
@@ -527,6 +540,169 @@ describe("local business scope migration", () => {
     );
     expect(completion.rows[0]).toMatchObject({ source_count: 1, target_count: 1 });
     expect(completion.rows[0]?.hash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("upgrades an approved draft left by an already-completed old stage-a-003 idempotently", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-business-migration-old-stage3-"));
+    dataRoots.push(rootDir);
+    const base = legacyProductionDraft("legacy-old-stage3-approved");
+    const approved = validateProductionDraft({
+      ...base,
+      status: "approved",
+      reviewCards: base.reviewCards.map((card) => ({
+        ...card,
+        decision: "fits",
+        decidedBy: "Legacy Operator",
+        decidedAt: "2026-08-09T11:59:00.000Z"
+      })),
+      approvalRequestId: `approval-${"a".repeat(64)}`,
+      approvedBy: "Legacy Operator",
+      approvedAt: "2026-08-09T12:00:00.000Z"
+    });
+    const legacy = createPersistentCollection<Record<string, unknown>>({
+      collectionName: "production/drafts",
+      getId: (draft) => String(draft.draftId),
+      rootDir
+    });
+    await legacy.set({ ...approved, businessId: undefined });
+    const scoped = createBusinessScopedPersistentCollection<ProductionDraft>({
+      collectionName: "production/drafts",
+      getId: (draft) => draft.draftId,
+      validate: validateProductionDraft,
+      rootDir
+    });
+    await scoped.set({ businessId: "local" }, approved);
+    const migrationManifestPath = path.join(
+      rootDir,
+      "businesses/local/migrations/business-scope-manifest.json"
+    );
+    mkdirSync(path.dirname(migrationManifestPath), { recursive: true });
+    writeFileSync(migrationManifestPath, JSON.stringify({ completed: {
+      "stage-a-001-audit": { completedAt: "2026-08-10T00:00:00.000Z", sourceCount: 0, targetCount: 0, hash: "a".repeat(64) },
+      "stage-a-002-offers": { completedAt: "2026-08-10T00:00:00.000Z", sourceCount: 0, targetCount: 0, hash: "b".repeat(64), discardedHandoffCount: 0 },
+      "stage-a-003-production-drafts": { completedAt: "2026-08-10T00:00:00.000Z", sourceCount: 1, targetCount: 1, hash: "c".repeat(64) }
+    } }));
+
+    await expect(runLocalBusinessScopeMigration({
+      rootDir,
+      businessId: "local",
+      ...confirmedLegacyFileWriters
+    })).resolves.toMatchObject({
+      units: [
+        { status: "already_migrated" },
+        { status: "already_migrated" },
+        { name: "stage-a-003-production-drafts", status: "already_migrated" },
+        { name: "stage-a-004-production-v2", status: "migrated" }
+      ]
+    });
+    await expect(scoped.get({ businessId: "local" }, approved.draftId)).resolves.toMatchObject({
+      status: "pending_review",
+      legacyApprovalState: "unverified"
+    });
+    await expect(runLocalBusinessScopeMigration({
+      rootDir,
+      businessId: "local",
+      ...confirmedLegacyFileWriters
+    })).resolves.toMatchObject({
+      units: [{ status: "already_migrated" }, { status: "already_migrated" },
+        { status: "already_migrated" }, { name: "stage-a-004-production-v2", status: "already_migrated" }]
+    });
+  });
+
+  it.each([
+    {
+      collectionName: "production/clarification-answers",
+      idKey: "answerId",
+      value: { answerId: "invalid-answer", status: "submitted", answerType: "yesNo" }
+    },
+    {
+      collectionName: "production/clarification-drafts",
+      idKey: "draftId",
+      value: { draftId: "invalid-clarification-draft", status: "pending_review", questions: [] }
+    },
+    {
+      collectionName: "production/feedback-drafts",
+      idKey: "feedbackId",
+      value: { feedbackId: "invalid-feedback", status: "approved", feedback: { summary: "" } }
+    }
+  ])("rejects invalid $collectionName records without publishing stage-a-004 completion", async ({
+    collectionName,
+    idKey,
+    value
+  }) => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-business-migration-invalid-v2-"));
+    dataRoots.push(rootDir);
+    const legacy = createPersistentCollection<Record<string, unknown>>({
+      collectionName,
+      getId: (record) => String(record[idKey]),
+      rootDir
+    });
+    await legacy.set(value);
+
+    await expect(runLocalBusinessScopeMigration({
+      rootDir,
+      businessId: "local",
+      ...confirmedLegacyFileWriters
+    })).rejects.toThrow();
+    const migrationManifestPath = path.join(
+      rootDir,
+      "businesses/local/migrations/business-scope-manifest.json"
+    );
+    const manifest = JSON.parse(readFileSync(migrationManifestPath, "utf8"));
+    expect(manifest.completed["stage-a-004-production-v2"]).toBeUndefined();
+  });
+
+  it("preserves unverified legacy approval evidence without inventing an ApprovalRequest", async () => {
+    const { Pool } = newDb({ noAstCoverageCheck: true }).adapters.createPg();
+    const pool: Queryable = new Pool();
+    const legacy = createPersistentCollection<Record<string, unknown>>({
+      collectionName: "production/drafts",
+      getId: (draft) => String(draft.draftId),
+      pgPool: pool
+    });
+    const source = {
+      ...legacyProductionDraft("legacy-approved-production"),
+      businessId: undefined,
+      revision: undefined,
+      status: "approved",
+      approvedBy: "Legacy Operator",
+      approvedAt: "2026-08-09T12:00:00.000Z"
+    };
+    await legacy.set(source);
+
+    await runLocalBusinessScopeMigration({
+      pgPool: pool,
+      businessId: "local",
+      ...testOnlyPgMemFence
+    });
+
+    const scoped = createBusinessScopedPersistentCollection<ProductionDraft>({
+      collectionName: "production/drafts",
+      getId: (draft) => draft.draftId,
+      validate: validateProductionDraft,
+      pgPool: pool
+    });
+    await expect(scoped.get({ businessId: "local" }, "legacy-approved-production")).resolves.toMatchObject({
+      businessId: "local",
+      revision: 1,
+      status: "pending_review",
+      legacyApprovalState: "unverified"
+    });
+    const approvals = createBusinessScopedPersistentCollection<Record<string, unknown>>({
+      collectionName: "production/approvals",
+      getId: (approval) => String(approval.approvalRequestId),
+      pgPool: pool
+    });
+    await expect(approvals.list({ businessId: "local" })).resolves.toHaveLength(0);
+    const completion = await pool.query(
+      "SELECT legacy_production_states FROM catering_business_migrations WHERE business_id = $1 AND unit_name = $2",
+      ["local", "stage-a-004-production-v2"]
+    );
+    expect(completion.rows[0]?.legacy_production_states).toEqual([{
+      draftId: "legacy-approved-production",
+      formerStatus: "approved",
+      sourceHash: expect.stringMatching(/^[a-f0-9]{64}$/)
+    }]);
   });
 
   it("keeps fenced file sources readable while cooperative and mode-bit guards reject later writes", async () => {

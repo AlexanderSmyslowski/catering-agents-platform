@@ -39,7 +39,9 @@ function productionDraft(draftId = "production-draft-import-1"): ProductionDraft
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    businessId: "local",
     draftId,
+    revision: 1,
     status: "pending_review",
     createdAt: "2026-07-01T12:00:00.000Z",
     source: {
@@ -94,7 +96,9 @@ async function productionDraftWithUnreviewedPlan(): Promise<ProductionDraft> {
       searchRecipes: async () => []
     }
   );
-  const artifacts = await buildProductionArtifacts(draft.draftArtifacts.eventSpec!, discoveryService);
+  const artifacts = await buildProductionArtifacts(draft.draftArtifacts.eventSpec!, discoveryService, {
+    context: { businessId: "local" }
+  });
 
   return {
     ...draft,
@@ -145,8 +149,8 @@ describe("ProductionDraft import", () => {
       expect(response.json<{ draft: ProductionDraft }>().draft.status).toBe("pending_review");
       expect(listResponse.statusCode).toBe(200);
       expect(listResponse.json<{ items: ProductionDraft[] }>().items).toHaveLength(1);
-      expect(await store.listPlans()).toHaveLength(0);
-      expect(await store.listPurchaseLists()).toHaveLength(0);
+      expect(await store.listPlans(localBusiness)).toHaveLength(0);
+      expect(await store.listPurchaseLists(localBusiness)).toHaveLength(0);
       expect(auditJson).toContain("production.production_draft_imported");
       expect(auditJson).toContain("sha256:output-structured");
       expect(auditJson).not.toContain("SECRET_REVIEW_SUMMARY");
