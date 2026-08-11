@@ -262,6 +262,8 @@ describe("BYO LLM provider data policy", () => {
           errors: ["provider returned secret prompt and response: customer@example.test"],
           adapterId: "test-delegate",
           adapterMode: "synthetic_live" as const,
+          providerId: "provider returned customer@example.test",
+          providerRequestId: "request contained customer@example.test",
           outputCandidate: structuredClone(llmReadinessEvalFixtures[0].expectedOutput)
         })
       }

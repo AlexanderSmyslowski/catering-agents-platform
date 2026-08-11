@@ -82,6 +82,13 @@ function safeExternalProviderErrors(errors: readonly string[]): string[] {
   return safe.length > 0 ? [...new Set(safe)] : ["BYO LLM provider call failed"];
 }
 
+function safeExternalProviderIdentifier(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return /^[A-Za-z0-9._:-]{1,160}$/.test(value)
+    ? value
+    : `opaque:${createHash("sha256").update(value).digest("hex")}`;
+}
+
 /**
  * The guarded adapter owns approval lookup so route handlers cannot forward a
  * client supplied policy record into a provider transport.
@@ -243,7 +250,10 @@ export class BoundaryGuardedLlmAdapter {
           // fail closed and never let its raw error text escape the boundary.
           ok: false,
           errors: safeExternalProviderErrors(response.errors),
-          outputCandidate: undefined
+          outputCandidate: undefined,
+          providerId: safeExternalProviderIdentifier(response.providerId),
+          providerRequestId: safeExternalProviderIdentifier(response.providerRequestId),
+          fixtureId: undefined
         }
       : response;
     return {
