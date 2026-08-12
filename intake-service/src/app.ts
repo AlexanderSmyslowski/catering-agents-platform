@@ -551,23 +551,46 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       }
 
       const body = request.body;
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return reply.code(422).send({
+          message: "Bitte eine gültige Beschreibung eingeben."
+        });
+      }
+
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-      const rawText = "rawInputs" in body
-        ? body.rawInputs.map((input) => input.content).join("\n")
-        : body.text;
+      const hasRawInputs = Object.prototype.hasOwnProperty.call(body, "rawInputs");
+      let eventRequest: EventRequest | undefined;
+      if (hasRawInputs) {
+        try {
+          eventRequest = validateEventRequest(body as EventRequest);
+        } catch {
+          return reply.code(422).send({
+            message: "Bitte eine gültige Beschreibung eingeben."
+          });
+        }
+      }
+
+      const textBody = body as {
+        text?: unknown;
+        channel?: EventRequest["source"]["channel"];
+        requestId?: unknown;
+      };
+      const rawText = eventRequest
+        ? eventRequest.rawInputs.map((input) => input.content).join("\n")
+        : textBody.text;
       if (typeof rawText !== "string" || !rawText.trim()) {
         return reply.code(422).send({
           message: "Bitte Beschreibung eingeben"
         });
       }
-      const eventRequest =
-        "rawInputs" in body
-          ? validateEventRequest(body)
-          : buildEventRequestFromText({
-              requestId: body.requestId ?? `request-${Date.now()}`,
-              channel: body.channel ?? "text",
-              rawText: body.text
-            });
+      eventRequest ??= buildEventRequestFromText({
+        requestId:
+          typeof textBody.requestId === "string" && textBody.requestId.trim()
+            ? textBody.requestId
+            : `request-${Date.now()}`,
+        channel: textBody.channel ?? "text",
+        rawText
+      });
 
       await store.saveRequest(actor, eventRequest);
       const spec = validateAcceptedEventSpec(
