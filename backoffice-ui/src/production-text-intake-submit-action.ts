@@ -25,6 +25,11 @@ export function buildProductionTextIntakeSubmitAction({
   setError
 }: ProductionTextIntakeSubmitInput) {
   return async function handleIntakeSubmit() {
+    if (!intakeText.trim()) {
+      setError("Bitte Beschreibung eingeben");
+      return;
+    }
+
     setSubmitting(true);
     setProductionWorkspaceCleared(false);
     clearMessages();

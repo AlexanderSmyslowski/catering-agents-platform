@@ -147,6 +147,19 @@ function ApprovalBindingHarness() {
 }
 
 describe("offer workbench approval binding", () => {
+  it.each(["", " \n\t "])(
+    "disables text draft creation for blank offer input while keeping meaningful text available",
+    (offerText) => {
+      const blankMarkup = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({ offerText })));
+      const filledMarkup = renderToStaticMarkup(
+        createElement(OfferConversationalWorkbench, props({ offerText: "Business Lunch fuer 35 Personen." }))
+      );
+
+      expect(blankMarkup).toMatch(/<button[^>]*disabled=""[^>]*>Entwurf aus Text erstellen<\/button>/);
+      expect(filledMarkup).toMatch(/<button(?:(?!disabled)[^>])*>Entwurf aus Text erstellen<\/button>/);
+    }
+  );
+
   it("hides draft A's handoff and production entry after draft B receives focus", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);

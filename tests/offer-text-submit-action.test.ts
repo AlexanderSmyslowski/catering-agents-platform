@@ -24,6 +24,23 @@ function input(overrides: Partial<OfferTextSubmitActionInput> = {}): OfferTextSu
 }
 
 describe("offer text submit action", () => {
+  it.each(["", " \n\t "])(
+    "rejects blank offer text before creating a case or calling the offer API",
+    async (offerText) => {
+      const actionInput = input({ offerText });
+      const submitOfferText = buildOfferTextSubmitAction(actionInput);
+
+      await submitOfferText();
+
+      expect(actionInput.createOfferCase).not.toHaveBeenCalled();
+      expect(actionInput.getOrCreateOfferRequestId).not.toHaveBeenCalled();
+      expect(actionInput.createOfferFromText).not.toHaveBeenCalled();
+      expect(actionInput.refreshDashboard).not.toHaveBeenCalled();
+      expect(actionInput.setError).toHaveBeenCalledWith("Bitte Beschreibung eingeben");
+      expect(actionInput.setSubmitting).not.toHaveBeenCalled();
+    }
+  );
+
   it("creates an offer draft and focuses the returned draft id", async () => {
     const calls: string[] = [];
     const actionInput = input({

@@ -276,7 +276,7 @@ export function OfferConversationalWorkbench({
           ) : null}
         </div>
         <div className="offer-composer__next-step">
-          <button disabled={submitting} onClick={() => void submitOfferText()}>
+          <button disabled={submitting || !offerText.trim()} onClick={() => void submitOfferText()}>
             Entwurf aus Text erstellen
           </button>
           <span>{focusedDraft ? `Aktueller Entwurf: ${focusedDraftLabel}` : "Als Nächstes: Anfrage einfügen"}</span>

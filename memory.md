@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.354
-date: 2026-08-11
+version: 5.356
+date: 2026-08-12
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1714,3 +1714,11 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.354 - 2026-08-11
 
 - Der Codeanker des Stage-A-Kontrollpunkts bleibt `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`; die dazugehörige geprüfte Übergabe wurde mit PR 598 als `5b879d5de22bf276d8e1a3d56e8e203303ece809` in `main` aufgenommen. Es gab keine Runtime-, API-, Persistenz- oder Infrastrukturänderung.
+
+### 5.355 - 2026-08-12
+
+- SB-02 ist an beiden Schreibgrenzen geschlossen: Die Produktionstexteingabe deaktiviert die Aktion bei leerem oder nur aus Leerraum bestehendem Text; die Submit-Aktion und `POST /v1/intake/normalize` weisen solche Eingaben mit `Bitte Beschreibung eingeben` vor jeder Speicherung ab. Gezielte Tests sichern Schreibwirkungsfreiheit, verständliche Fehlermeldung und den unveränderten gefüllten Pfad. Keine neue API, Persistenz oder Architektur.
+
+### 5.356 - 2026-08-12
+
+- SB-01 ist im bestehenden Angebotsweg geschlossen: Die Aktion `Entwurf aus Text erstellen` bleibt bei leerem oder nur aus Leerraum bestehendem Text deaktiviert; der Submit-Guard weist einen programmgesteuerten Leertext mit `Bitte Beschreibung eingeben` vor Fall- und API-Aufruf ab. Der gefüllte Angebotsweg bleibt unverändert; keine neue API, Persistenz oder Architektur.

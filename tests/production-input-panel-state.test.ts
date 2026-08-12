@@ -31,12 +31,28 @@ describe("production input panel state", () => {
       clearWorkspaceDisabled: true,
       archiveCurrentIntakeDisabled: true,
       submitDocumentDisabled: true,
+      submitTextDisabled: true,
       selectedFileName: undefined,
       showAnalysingProgress: false,
       showCompletedProgress: false,
       documentEtaLabel: "weniger als 1 Sekunde",
       uploadResultSummary: undefined
     });
+  });
+
+  it("only enables text evaluation for meaningful input", () => {
+    expect(
+      buildProductionInputPanelState({
+        submitting: false,
+        sourceInput: sourceInput({ intakeText: " \n\t " })
+      }).submitTextDisabled
+    ).toBe(true);
+    expect(
+      buildProductionInputPanelState({
+        submitting: false,
+        sourceInput: sourceInput({ intakeText: "Lunch fuer 40 Personen." })
+      }).submitTextDisabled
+    ).toBe(false);
   });
 
   it("keeps a retained file retryable and surfaces analysing progress with the eta label", () => {
