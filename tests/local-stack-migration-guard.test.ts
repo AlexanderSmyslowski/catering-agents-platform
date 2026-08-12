@@ -257,7 +257,9 @@ describe("local stack migration guard", () => {
         TEST_MIGRATION_SLEEP_SECONDS: "30",
         TEST_NPM_EXIT: "99"
       }),
-      stdio: ["ignore", "ignore", "pipe"]
+      // The detached migration worker may retain inherited stderr after its launcher exits.
+      // This test observes process and lock quiescence, not pipe closure of descendants.
+      stdio: ["ignore", "ignore", "ignore"]
     });
     const closed = new Promise<number | null>((resolve, reject) => {
       child.once("error", reject);
