@@ -20,6 +20,20 @@ function input(overrides: Partial<ProductionTextIntakeSubmitInput> = {}): Produc
 }
 
 describe("production text intake submit action", () => {
+  it.each(["", " \n\t "])("rejects blank production intake text before calling the write action", async (intakeText) => {
+    const actionsInput = input({ intakeText });
+    const submitIntakeText = buildProductionTextIntakeSubmitAction(actionsInput);
+
+    await submitIntakeText();
+
+    expect(actionsInput.createAcceptedSpecFromText).not.toHaveBeenCalled();
+    expect(actionsInput.refreshDashboard).not.toHaveBeenCalled();
+    expect(actionsInput.setNotice).not.toHaveBeenCalled();
+    expect(actionsInput.setProductionWorkspaceCleared).not.toHaveBeenCalled();
+    expect(actionsInput.setError).toHaveBeenCalledWith("Bitte Beschreibung eingeben");
+    expect(actionsInput.setSubmitting).not.toHaveBeenCalled();
+  });
+
   it("normalizes intake text and focuses the returned production spec", async () => {
     const calls: string[] = [];
     const actionsInput = input({

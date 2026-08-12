@@ -1697,3 +1697,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.352 - 2026-07-12
 
 - Der gemeinsame Caddy-Proxy importiert zusaetzliche serverseitige `*.caddy`-Site-Dateien aus einem nur lesbar eingebundenen, deploygeschuetzten Verzeichnis. `platform-infra/sites` bleibt ausserhalb von Git und wird durch den Hetzner-Rsync nicht geloescht; dadurch koennen anwendungseigene Hostbloecke einen Plattform-Neubau ueberleben. Der Vertrag ist in `tests/hetzner-deploy-script.test.ts` abgesichert und mit einer leeren sowie einer EventOS-belegten Site-Ablage gegen Caddy 2.10 validiert. Keine Aenderung an Produktlogik, API, Persistenz, Auth oder fachlichen Workflows.
+
+### 5.353 - 2026-08-12
+
+- SB-02 ist an beiden Schreibgrenzen geschlossen: Die Produktionstexteingabe deaktiviert die Aktion bei leerem oder nur aus Leerraum bestehendem Text; die Submit-Aktion und `POST /v1/intake/normalize` weisen solche Eingaben mit `Bitte Beschreibung eingeben` vor jeder Speicherung ab. Gezielte Tests sichern Schreibwirkungsfreiheit, verständliche Fehlermeldung und den unveränderten gefüllten Pfad. Keine neue API, Persistenz oder Architektur.

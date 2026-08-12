@@ -552,6 +552,14 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
 
       const body = request.body;
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const rawText = "rawInputs" in body
+        ? body.rawInputs.map((input) => input.content).join("\n")
+        : body.text;
+      if (typeof rawText !== "string" || !rawText.trim()) {
+        return reply.code(422).send({
+          message: "Bitte Beschreibung eingeben"
+        });
+      }
       const eventRequest =
         "rawInputs" in body
           ? validateEventRequest(body)
