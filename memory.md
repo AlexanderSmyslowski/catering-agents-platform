@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.351
-date: 2026-07-01
+version: 5.356
+date: 2026-08-12
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -11,6 +11,12 @@ Sie soll den aktuellen Projektstand, den Governance-Bauplan, die Leitplanken und
 Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 
 ## Repo-Kontext
+- **Stage-A-Kontrollpunkt (2026-08-11):** Aufgaben 1 bis 7 sind im Codeanker `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b` abgeschlossen. PR 596 wurde als `c6f530c7bae70bf52c3767b68620368060fd00cf` und die eng begrenzte Nachbesserung PR 597 als `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b` zusammengeführt; die geprüfte Übergabe wurde anschließend durch PR 598 als `5b879d5de22bf276d8e1a3d56e8e203303ece809` in `main` aufgenommen.
+- PR 596 verankert die serverseitige BYO-LLM-Datengrenze: externe Aufrufe von OpenAI und Codex CLI werden vor Fetch oder Subprozess ohne exakt passende Freigabe abgewiesen; Fixture-Betrieb bleibt lokal. Die Freigabe vergleicht Geschäft, Datenklasse, Zweck, Anbieter, Modell, Fähigkeit, Region, Endpunkt, Kosten, Aufbewahrung, Trainingsnutzung und Gültigkeit. Prompts, Antworten, Zugangsdaten und geschützte Provider-Kennungen gelangen nicht in Protokolle.
+- PR 597 redigiert zusätzlich Provider- und Request-Kennungen sowie Fixture-IDs aus fehlerhaften externen Antworten. Es entsteht keine zweite fachliche Freigabewahrheit: `ApprovalRequestRecord` bleibt die Produktwahrheit; die Providerfreigabe ist nur die technische Betriebsgrenze.
+- Der Stage-A-Kontrollpunkt ist fachlich bestanden: Datei- und PostgreSQL-Speicherung bleiben getrennt und geschäftsbezogen, Angebote und Produktionsartefakte sind unveränderlich, Fälle/Quellen/Verläufe persistent, Produktgrenzen über Ports explizit und direkte Freigabe-/Handoff-Umgehungen ausgeschlossen.
+- Verifiziert: `npm test -- --maxWorkers=1` mit 305 bestandenen und 1 übersprungenen Testdateien sowie 1.744 bestandenen und 14 übersprungenen Tests; `npx tsc --noEmit`, `npm run build`, `npm audit --omit=dev`, `npm audit`, interne Beta-Gates und die GitHub-CI von PR 596 und PR 597 sind grün. Die 11 PostgreSQL-Schema-/Konkurrenztests bleiben ohne lokale PostgreSQL-Instanz übersprungen. Es gab keine echte externe KI-Ausführung und keine Verarbeitung realer Unternehmens- oder Kundendaten.
+- Aufgabe 8 ist nicht begonnen. Nach diesem Kontrollpunkt wartet jede weitere Stage-A-Arbeit auf einen ausdrücklichen Supervisor-Auftrag.
 - PA65 ist als kleiner Runtime-/Contract-Anker umgesetzt: `docs/architecture/PA65_SYNTHETIC_LIVE_MINI_PILOT_SUMMARY_SIGNAL.md` gibt dem vorhandenen Mini-Pilot-Check ein lesbares `summary`-Signal mit Status, Grund und naechstem sicheren Schritt. Kein neuer Providerpfad, keine UI, keine Persistenz, kein Deployment und keine Schreibwirkung.
 - PA64 ist als kleiner Runtime-/Contract-Anker umgesetzt: `docs/architecture/PA64_SYNTHETIC_LIVE_MINI_PILOT_CHECK_ENTRY.md` buendelt den vorhandenen Preflight und den PA63-guarded Probe-Lauf zu einem einzigen lokalen Mini-Pilot-Check-Einstieg mit gemeinsamem JSON-Ergebnis. Kein neuer Providerpfad, keine UI, keine Persistenz, keine Deployment-Ausweitung und keine Schreibwirkung.
 - PA63 ist als kleiner Runtime-/Contract-Anker umgesetzt: `docs/architecture/PA63_SYNTHETIC_LIVE_MINI_PILOT_PROBE_GUARD.md` haengt einen dedizierten lokalen Probe-Entry hart an den vorhandenen PA62-Mini-Pilot-Rahmen. Der neue Entry laeuft nur mit bestaetigtem Mini-Pilot-Preflight, bleibt aber weiter lokal, draft-only und ohne neue Runtime-, Deployment- oder Schreibpfade.
@@ -1698,10 +1704,21 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 - Der gemeinsame Caddy-Proxy importiert zusaetzliche serverseitige `*.caddy`-Site-Dateien aus einem nur lesbar eingebundenen, deploygeschuetzten Verzeichnis. `platform-infra/sites` bleibt ausserhalb von Git und wird durch den Hetzner-Rsync nicht geloescht; dadurch koennen anwendungseigene Hostbloecke einen Plattform-Neubau ueberleben. Der Vertrag ist in `tests/hetzner-deploy-script.test.ts` abgesichert und mit einer leeren sowie einer EventOS-belegten Site-Ablage gegen Caddy 2.10 validiert. Keine Aenderung an Produktlogik, API, Persistenz, Auth oder fachlichen Workflows.
 
-### 5.353 - 2026-08-12
+### 5.353 - 2026-08-11
+
+- Stage A wurde bis zum Kontrollpunkt fortgesetzt. Die Aufgaben 1 bis 7 sind auf `origin/main` durch die zusammengeführten PRs 590 bis 596 belegt; PR 596 erhielt mit PR 597 noch eine eng begrenzte Redigierung fehlerhafter Provider-Kennungen. Der endgültige `main`-SHA ist `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`.
+- Der externe Provider-Gate ist vor Fetch und Subprozess geschlossen, wenn die serverseitige Freigabe nicht exakt passt. OpenAI und Codex CLI teilen dieselbe Grenze; Fixture-Betrieb bleibt lokal. `ApprovalRequestRecord` bleibt die einzige fachliche Freigabewahrheit.
+- Vollständige serielle Suite, Typprüfung, Build, beide Audits, internes Beta-Gate und die CI-Läufe von PR 596/597 waren grün. PostgreSQL-spezifische Konkurrenztests blieben wegen fehlender lokaler PostgreSQL-Instanz übersprungen. Keine echte externe KI-Ausführung, keine realen Unternehmens- oder Kundendaten und keine Infrastrukturänderung.
+- Aufgabe 8 bis 12 bleiben bis zu einer ausdrücklichen Supervisor-Entscheidung offen; dieser Eintrag ist eine geprüfte Übergabe und keine neue Roadmap.
+
+### 5.354 - 2026-08-11
+
+- Der Codeanker des Stage-A-Kontrollpunkts bleibt `51f6cbc36f9f3ec93f5b7fd7d5d7cdb170e15e3b`; die dazugehörige geprüfte Übergabe wurde mit PR 598 als `5b879d5de22bf276d8e1a3d56e8e203303ece809` in `main` aufgenommen. Es gab keine Runtime-, API-, Persistenz- oder Infrastrukturänderung.
+
+### 5.355 - 2026-08-12
 
 - SB-02 ist an beiden Schreibgrenzen geschlossen: Die Produktionstexteingabe deaktiviert die Aktion bei leerem oder nur aus Leerraum bestehendem Text; die Submit-Aktion und `POST /v1/intake/normalize` weisen solche Eingaben mit `Bitte Beschreibung eingeben` vor jeder Speicherung ab. Gezielte Tests sichern Schreibwirkungsfreiheit, verständliche Fehlermeldung und den unveränderten gefüllten Pfad. Keine neue API, Persistenz oder Architektur.
 
-### 5.354 - 2026-08-12
+### 5.356 - 2026-08-12
 
 - SB-01 ist im bestehenden Angebotsweg geschlossen: Die Aktion `Entwurf aus Text erstellen` bleibt bei leerem oder nur aus Leerraum bestehendem Text deaktiviert; der Submit-Guard weist einen programmgesteuerten Leertext mit `Bitte Beschreibung eingeben` vor Fall- und API-Aufruf ab. Der gefüllte Angebotsweg bleibt unverändert; keine neue API, Persistenz oder Architektur.
