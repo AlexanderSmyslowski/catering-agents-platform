@@ -40,6 +40,7 @@ export type ProductionInputPanelState = {
   clearWorkspaceDisabled: boolean;
   archiveCurrentIntakeDisabled: boolean;
   submitDocumentDisabled: boolean;
+  submitTextDisabled: boolean;
   selectedFileName?: string;
   showAnalysingProgress: boolean;
   showCompletedProgress: boolean;
@@ -420,6 +421,7 @@ export function buildProductionInputPanelState(input: {
     clearWorkspaceDisabled: input.submitting || !input.sourceInput.canClearWorkspace,
     archiveCurrentIntakeDisabled: input.submitting || !input.sourceInput.canArchiveCurrentIntake,
     submitDocumentDisabled: input.submitting || !input.sourceInput.intakeFile,
+    submitTextDisabled: input.submitting || !input.sourceInput.intakeText.trim(),
     selectedFileName: input.sourceInput.intakeFile?.name,
     showAnalysingProgress:
       input.sourceInput.documentPhase === "analysing" && Boolean(input.sourceInput.activeDocumentName),

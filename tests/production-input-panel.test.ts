@@ -107,6 +107,17 @@ describe("production input panel", () => {
     expect(markup).not.toContain("+ Angebot auswählen");
   });
 
+  it.each(["", " \n\t "])(
+    "disables text evaluation for blank input but keeps it available for meaningful text",
+    (intakeText) => {
+      const blankMarkup = renderPanel(buildSourceInput({ intakeText }));
+      const filledMarkup = renderPanel(buildSourceInput({ intakeText: "Lunch fuer 40 Personen." }));
+
+      expect(blankMarkup).toMatch(/<button[^>]*disabled=""[^>]*>Text auswerten<\/button>/);
+      expect(filledMarkup).toMatch(/<button(?:(?!disabled)[^>])*>Text auswerten<\/button>/);
+    }
+  );
+
   it("keeps progress visible only for accepted processing states", () => {
     const rejectedMarkup = renderPanel(
       buildSourceInput({

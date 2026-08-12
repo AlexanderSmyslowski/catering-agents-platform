@@ -494,7 +494,7 @@ export function ProductionInputPanel({
             placeholder="Beispiel: Bitte 120 statt 100 Gäste berücksichtigen; Dessert entfällt."
           />
           <div className="action-row">
-            <button disabled={submitting} onClick={() => void sourceInputActions.submitText()}>
+            <button disabled={panelState.submitTextDisabled} onClick={() => void sourceInputActions.submitText()}>
               {compactInputMode ? "Korrektur auswerten" : "Text auswerten"}
             </button>
           </div>
