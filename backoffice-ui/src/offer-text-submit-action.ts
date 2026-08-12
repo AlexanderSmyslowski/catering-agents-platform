@@ -32,6 +32,11 @@ export function buildOfferTextSubmitAction({
   setError
 }: OfferTextSubmitActionInput) {
   return async function handleOfferSubmit() {
+    if (!offerText.trim()) {
+      setError("Bitte Beschreibung eingeben");
+      return;
+    }
+
     setSubmitting(true);
     clearMessages();
     try {
