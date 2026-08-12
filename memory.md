@@ -1701,3 +1701,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.353 - 2026-08-12
 
 - SB-02 ist an beiden Schreibgrenzen geschlossen: Die Produktionstexteingabe deaktiviert die Aktion bei leerem oder nur aus Leerraum bestehendem Text; die Submit-Aktion und `POST /v1/intake/normalize` weisen solche Eingaben mit `Bitte Beschreibung eingeben` vor jeder Speicherung ab. Gezielte Tests sichern Schreibwirkungsfreiheit, verständliche Fehlermeldung und den unveränderten gefüllten Pfad. Keine neue API, Persistenz oder Architektur.
+
+### 5.354 - 2026-08-12
+
+- SB-01 ist im bestehenden Angebotsweg geschlossen: Die Aktion `Entwurf aus Text erstellen` bleibt bei leerem oder nur aus Leerraum bestehendem Text deaktiviert; der Submit-Guard weist einen programmgesteuerten Leertext mit `Bitte Beschreibung eingeben` vor Fall- und API-Aufruf ab. Der gefüllte Angebotsweg bleibt unverändert; keine neue API, Persistenz oder Architektur.
