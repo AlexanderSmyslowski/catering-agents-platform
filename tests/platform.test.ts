@@ -268,6 +268,78 @@ describe("catering agents platform", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
+  it("rejects malformed rawInputs before any intake write or audit", async () => {
+    const dataRoot = createDataRoot();
+    const app = buildIntakeApp(new IntakeStore({ rootDir: dataRoot }));
+
+    const eventRequestEnvelope = {
+      schemaVersion: SCHEMA_VERSION,
+      source: {
+        channel: "text",
+        receivedAt: "2026-08-12T10:00:00.000Z"
+      }
+    } as const;
+    const malformedPayloads: Array<Record<string, unknown>> = [
+      { ...eventRequestEnvelope, requestId: "malformed-raw-inputs-null", rawInputs: null },
+      { ...eventRequestEnvelope, requestId: "malformed-raw-inputs-object", rawInputs: {} },
+      {
+        ...eventRequestEnvelope,
+        requestId: "malformed-raw-inputs-string",
+        rawInputs: "Lunch fuer 20 Personen"
+      },
+      { ...eventRequestEnvelope, requestId: "malformed-raw-inputs-empty-entry", rawInputs: [{}] },
+      {
+        ...eventRequestEnvelope,
+        requestId: "malformed-raw-inputs-content-entry",
+        rawInputs: [{ kind: "text", content: 42 }]
+      }
+    ];
+
+    try {
+      for (const payload of malformedPayloads) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/v1/intake/normalize",
+          payload
+        });
+
+        expect(response.statusCode, JSON.stringify(payload)).toBe(422);
+        expect(response.json()).toEqual({ message: "Bitte eine gültige Beschreibung eingeben." });
+      }
+
+      expect((await app.inject({ method: "GET", url: "/health" })).json().counts).toEqual({
+        requests: 0,
+        acceptedSpecs: 0,
+        auditEvents: 0
+      });
+
+      const validEventRequest = await app.inject({
+        method: "POST",
+        url: "/v1/intake/normalize",
+        payload: {
+          schemaVersion: SCHEMA_VERSION,
+          requestId: "raw-inputs-valid-1",
+          source: {
+            channel: "text",
+            receivedAt: "2026-08-12T10:00:00.000Z"
+          },
+          rawInputs: [
+            {
+              kind: "text",
+              content: "Konferenz am 2026-09-10 fuer 40 Personen mit Lunchbuffet."
+            }
+          ]
+        }
+      });
+
+      expect(validEventRequest.statusCode).toBe(201);
+      expect(validEventRequest.json().eventRequest.requestId).toBe("raw-inputs-valid-1");
+    } finally {
+      await app.close();
+      rmSync(dataRoot, { recursive: true, force: true });
+    }
+  });
+
   it("normalizes uploaded intake documents into the canonical AcceptedEventSpec", async () => {
     const dataRoot = createDataRoot();
     const app = buildIntakeApp({
