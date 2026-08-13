@@ -33,6 +33,10 @@ import {
   decideOfferDraft,
   createProductionHandoff,
   createProductionDraftFromHandoff,
+  copyOfferCase,
+  copyProductionCase,
+  loadOfferCaseSummaries,
+  loadProductionCaseSummaries,
   reviewRecipe,
   prepareProductionDraft,
   updateAcceptedSpec,
@@ -75,6 +79,8 @@ import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 import { openProductionDraftEntry } from "./production-entry-focus.js";
 import { announceProductionDraftReview } from "./production-draft-review-panel.js";
+import { CaseHistoryPanel } from "./case-history-panel.js";
+import { buildCaseHistoryState } from "./case-history-state.js";
 import type { OfferApprovalBinding } from "./offer-approval-action.js";
 import type { CaseSummary, ServiceHealthState, WorkspaceRefreshOptions } from "./api.js";
 import type { OfferProductShellData } from "./offer-product-app.js";
@@ -239,6 +245,12 @@ function ProductWorkspaceView({
     clearRecipeUploadDraft
   } = useRecipeUploadDraft();
   const [search, setSearch] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyItems, setHistoryItems] = useState(availableCases);
+  const [historyServerFiltered, setHistoryServerFiltered] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string>();
+  const historyRequestVersion = useRef(0);
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [offerApprovalBinding, setOfferApprovalBinding] = useState<OfferApprovalBinding>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
@@ -255,6 +267,71 @@ function ProductWorkspaceView({
   const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(
     initialProductionWorkspace.cleared
   );
+
+  useEffect(() => {
+    if (!historySearch.trim()) {
+      setHistoryItems(availableCases);
+      setHistoryServerFiltered(false);
+    }
+  }, [availableCases, historySearch]);
+
+  const historyState = useMemo(
+    () => buildCaseHistoryState(
+      historyItems,
+      historySearch,
+      route === "offer" ? activeOfferCaseId : activeProductionCaseId,
+      { serverFiltered: historyServerFiltered, serverOrdered: true }
+    ),
+    [activeOfferCaseId, activeProductionCaseId, historyItems, historySearch, historyServerFiltered, route]
+  );
+
+  const handleHistorySearchChange = async (value: string) => {
+    setHistorySearch(value);
+    const version = ++historyRequestVersion.current;
+    if (!value.trim()) {
+      setHistoryItems(availableCases);
+      setHistoryServerFiltered(false);
+      setHistoryError(undefined);
+      setHistoryLoading(false);
+      return;
+    }
+    setHistoryLoading(true);
+    setHistoryError(undefined);
+    try {
+      const items = route === "offer"
+        ? await loadOfferCaseSummaries(value)
+        : await loadProductionCaseSummaries(value);
+      if (version === historyRequestVersion.current) {
+        setHistoryItems(items);
+        setHistoryServerFiltered(true);
+      }
+    } catch (cause) {
+      if (version === historyRequestVersion.current) {
+        setHistoryError(cause instanceof Error ? cause.message : "Aufträge konnten nicht gesucht werden.");
+        setHistoryItems([]);
+        setHistoryServerFiltered(true);
+      }
+    } finally {
+      if (version === historyRequestVersion.current) {
+        setHistoryLoading(false);
+      }
+    }
+  };
+
+  const handleHistoryCopy = async (caseId: string) => {
+    const copied = route === "offer"
+      ? await copyOfferCase(caseId)
+      : await copyProductionCase(caseId);
+    if (route === "offer") {
+      setActiveOfferCaseId(copied.case.caseId);
+    } else {
+      setActiveProductionCaseId(copied.case.caseId);
+    }
+    setHistorySearch("");
+    setHistoryServerFiltered(false);
+    setHistoryItems([copied.case, ...historyItems.filter((item) => item.caseId !== copied.case.caseId)]);
+    await refreshDashboard();
+  };
 
   const setProductionSpecFocus = (specId: string | undefined) => {
     setFocusedProductionSpecId(specId);
@@ -868,33 +945,23 @@ function ProductWorkspaceView({
     <>
       <AppFeedbackShell error={loaderError ?? error} notice={notice} loading={loading} route={route} />
 
-      {availableCases.length > 0 ? (
-        <details
-          className={`panel secondary-workspace ${route === "offer" ? "offer-history-details" : "production-filter-details"}`}
-        >
-          <summary>Frühere {route === "offer" ? "Angebots" : "Produktions"}aufträge öffnen · {availableCases.length} {availableCases.length === 1 ? "Auftrag" : "Aufträge"}</summary>
-          <ul className="quiet-list">
-            {availableCases.map((currentCase) => (
-              <li key={currentCase.caseId}>
-                <button
-                  className="quiet-list__button"
-                  type="button"
-                  onClick={() => {
-                    if (route === "offer") {
-                      setActiveOfferCaseId(currentCase.caseId);
-                    } else {
-                      setActiveProductionCaseId(currentCase.caseId);
-                    }
-                  }}
-                >
-                  <strong>{currentCase.displayName}</strong>
-                  <span>{currentCase.status}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
+      <CaseHistoryPanel
+        product={route === "offer" ? "offer" : "production"}
+        items={historyState.items}
+        activeCaseId={historyState.activeCaseId}
+        search={historySearch}
+        onSearchChange={(value) => void handleHistorySearchChange(value)}
+        onOpen={(caseId) => {
+          if (route === "offer") {
+            setActiveOfferCaseId(caseId);
+          } else {
+            setActiveProductionCaseId(caseId);
+          }
+        }}
+        onCopy={handleHistoryCopy}
+        loading={historyLoading}
+        error={historyError}
+      />
 
       <AppRouteContent {...appRouteContentState} />
     </>

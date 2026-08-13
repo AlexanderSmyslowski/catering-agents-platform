@@ -149,18 +149,20 @@ export function registerSourceDocumentRoutes(
     actorForRequest
   } = deps;
 
-  const productionServiceActor = (
+  const trustedSourceServiceActor = (
     request: { headers: Record<string, string | string[] | undefined> }
   ): TrustedActor | undefined => {
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
-    return actor.trusted && actor.name === "Production-Service" ? actor : undefined;
+    return actor.trusted && (actor.name === "Production-Service" || actor.name === "Offer-Service")
+      ? actor
+      : undefined;
   };
 
   app.get<{ Params: { documentId: string } }>(
     "/v1/intake/internal/source-documents/:documentId",
     async (request, reply) => {
-      const actor = productionServiceActor(request);
-      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      const actor = trustedSourceServiceActor(request);
+      if (!actor) return reply.code(403).send({ message: "Interner Quelldokument-Dienst erforderlich." });
       const sourceDocument = await sourceDocumentStore.getMetadata(
         actor,
         request.params.documentId
@@ -177,8 +179,8 @@ export function registerSourceDocumentRoutes(
   app.get<{ Params: { documentId: string } }>(
     "/v1/intake/internal/source-documents/:documentId/content",
     async (request, reply) => {
-      const actor = productionServiceActor(request);
-      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      const actor = trustedSourceServiceActor(request);
+      if (!actor) return reply.code(403).send({ message: "Interner Quelldokument-Dienst erforderlich." });
       const [metadata, content] = await Promise.all([
         sourceDocumentStore.getMetadata(actor, request.params.documentId),
         sourceDocumentStore.getContent(actor, request.params.documentId)

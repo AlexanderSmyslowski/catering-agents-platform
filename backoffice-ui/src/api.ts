@@ -745,6 +745,45 @@ export type ProductCaseSummary = {
   status: string;
 };
 
+function caseSearchQuery(search: string): string {
+  const normalized = search.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  return normalized ? `?search=${encodeURIComponent(normalized)}` : "";
+}
+
+export async function loadOfferCaseSummaries(search = ""): Promise<CaseSummary[]> {
+  const response = await fetchJson<{ items: CaseSummary[] }>(
+    `/api/offers/v1/offers/cases${caseSearchQuery(search)}`,
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.offer
+  );
+  return response.items;
+}
+
+export async function loadProductionCaseSummaries(search = ""): Promise<CaseSummary[]> {
+  const response = await fetchJson<{ items: CaseSummary[] }>(
+    `/api/production/v1/production/cases${caseSearchQuery(search)}`,
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+  return response.items;
+}
+
+export async function copyOfferCase(caseId: string): Promise<{ case: CaseSummary; events: CaseEvent[] }> {
+  return fetchJson<{ case: CaseSummary; events: CaseEvent[] }>(
+    `/api/offers/v1/offers/cases/${encodeURIComponent(caseId)}/copies`,
+    { method: "POST", body: "{}" },
+    DEFAULT_MUTATION_ACTOR_NAMES.offer
+  );
+}
+
+export async function copyProductionCase(caseId: string): Promise<{ case: CaseSummary; events: CaseEvent[] }> {
+  return fetchJson<{ case: CaseSummary; events: CaseEvent[] }>(
+    `/api/production/v1/production/cases/${encodeURIComponent(caseId)}/copies`,
+    { method: "POST", body: "{}" },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
+
 export type StoredSourceDocumentSummary = {
   documentId: string;
   filename: string;
