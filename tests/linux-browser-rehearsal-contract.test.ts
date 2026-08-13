@@ -12,6 +12,20 @@ const browserShell = readFileSync(resolve(root, "scripts/browser-rehearsal-shell
 describe("Linux browser rehearsal governance", () => {
   it("requires a real Ubuntu browser job with a hard, fail-closed rehearsal", () => {
     expect(workflow).toContain("browser-rehearsal:");
+    const browserJob = workflow.slice(workflow.indexOf("\n  browser-rehearsal:"));
+    const jobEnv = browserJob.match(/\n    env:\n(?<body>(?:      .*\n)+?)\n    steps:/u)?.groups?.body ?? "";
+    const npmSteps = browserJob
+      .split(/\n      - name: /u)
+      .slice(1)
+      .filter((step) => /run:.*\bnpm\b|^\s+npx\b/mu.test(step));
+
+    expect(jobEnv).not.toMatch(/\$\{\{\s*runner\./u);
+    expect(npmSteps).toHaveLength(3);
+    for (const step of npmSteps) {
+      expect(step).toContain(
+        "env:\n          npm_config_cache: ${{ runner.temp }}/catering-npm-cache",
+      );
+    }
     expect(workflow).toContain("runs-on: ubuntu-latest");
     expect(workflow).toContain("playwright-cli install-browser chrome-for-testing");
     expect(workflow).toContain("CATERING_BROWSER_CLI");
