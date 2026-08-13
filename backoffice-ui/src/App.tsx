@@ -703,6 +703,7 @@ function ProductWorkspaceView({
     productionRouteFilterState,
     productionRouteMainLayoutState
   } = buildAppProductionRouteAppBoundary({
+    activeProductionCaseId,
     viewState: productionRouteViewState,
     submitting,
     dragActive,

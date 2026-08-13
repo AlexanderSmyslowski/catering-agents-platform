@@ -13,8 +13,11 @@ import type {
   ProductionDraft,
   ProductionDraftReviewDecision
 } from "../backoffice-ui/src/api.js";
+import * as api from "../backoffice-ui/src/api.js";
 
 const originalFetch = globalThis.fetch;
+const activeCaseId = "case-production-draft-review-ui";
+const productionDraftsUrl = `/api/production/v1/production/drafts?caseId=${activeCaseId}`;
 
 function draftFixture(): ProductionDraft {
   return {
@@ -173,7 +176,7 @@ describe("ProductionDraftReviewPanel", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+      if (url === productionDraftsUrl && method === "GET") {
         return jsonResponse({ items: [draft], approvedProductionSpecs });
       }
 
@@ -226,7 +229,11 @@ describe("ProductionDraftReviewPanel", () => {
     const onDraftChanged = vi.fn(async () => undefined);
 
     await act(async () => {
-      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, onDraftChanged }));
+      root.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        caseId: activeCaseId,
+        onDraftChanged
+      }));
       await flushPromises();
     });
 
@@ -345,7 +352,7 @@ describe("ProductionDraftReviewPanel", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
-      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+      if (url === productionDraftsUrl && method === "GET") {
         return jsonResponse({ items: drafts, approvedProductionSpecs: [] });
       }
       if (
@@ -360,7 +367,7 @@ describe("ProductionDraftReviewPanel", () => {
     globalThis.fetch = fetchMock as typeof fetch;
 
     await act(async () => {
-      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId }));
       await flushPromises();
     });
 
@@ -406,7 +413,7 @@ describe("ProductionDraftReviewPanel", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
-      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+      if (url === productionDraftsUrl && method === "GET") {
         return jsonResponse({
           items: [approvedDraft],
           approvedProductionSpecs: [{
@@ -437,7 +444,7 @@ describe("ProductionDraftReviewPanel", () => {
     document.body.appendChild(firstContainer);
     const firstRoot = createRoot(firstContainer);
     await act(async () => {
-      firstRoot.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      firstRoot.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId }));
       await flushPromises();
       firstRoot.unmount();
     });
@@ -449,6 +456,7 @@ describe("ProductionDraftReviewPanel", () => {
     await act(async () => {
       reloadedRoot.render(createElement(ProductionDraftReviewPanel, {
         submitting: false,
+        caseId: activeCaseId,
         onDraftChanged
       }));
       await flushPromises();
@@ -475,6 +483,51 @@ describe("ProductionDraftReviewPanel", () => {
     await act(async () => reloadedRoot.unmount());
   });
 
+  it("does not apply a late Fall-A response after switching to Fall B", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    let resolveA: ((value: Awaited<ReturnType<typeof api.loadProductionDrafts>>) => void) | undefined;
+    let resolveB: ((value: Awaited<ReturnType<typeof api.loadProductionDrafts>>) => void) | undefined;
+    const loadDrafts = vi.spyOn(api, "loadProductionDrafts").mockImplementation((caseId) =>
+      new Promise((resolve) => {
+        if (caseId === "case-a") resolveA = resolve;
+        else resolveB = resolve;
+      })
+    );
+    const draftFor = (draftId: string, title: string): ProductionDraft => ({
+      ...draftFixture(),
+      draftId,
+      draftArtifacts: {
+        ...draftFixture().draftArtifacts,
+        eventSpec: { event: { title } }
+      }
+    });
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: "case-a" }));
+      await flushPromises();
+    });
+    expect(loadDrafts).toHaveBeenCalledWith("case-a");
+    expect(resolveA).toBeDefined();
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: "case-b" }));
+      resolveA?.({ items: [draftFor("draft-a", "Fall A")], approvedProductionSpecs: [] });
+      await flushPromises();
+    });
+
+    expect(container.textContent).not.toContain("Fall A");
+    expect(resolveB).toBeDefined();
+    resolveB?.({ items: [draftFor("draft-b", "Fall B")], approvedProductionSpecs: [] });
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(container.textContent).toContain("Fall B");
+
+    await act(async () => root.unmount());
+  });
+
   it("collects one concrete change request before offering a new AI revision", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -498,7 +551,7 @@ describe("ProductionDraftReviewPanel", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
 
-      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+      if (url === productionDraftsUrl && method === "GET") {
         return jsonResponse({ items: predecessor ? [draft, predecessor] : [draft] });
       }
       if (
@@ -556,7 +609,7 @@ describe("ProductionDraftReviewPanel", () => {
     globalThis.fetch = fetchMock as typeof fetch;
 
     await act(async () => {
-      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId }));
       await flushPromises();
     });
 
@@ -646,7 +699,7 @@ describe("ProductionDraftReviewPanel", () => {
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
-      if (url === "/api/production/v1/production/drafts" && method === "GET") {
+      if (url === productionDraftsUrl && method === "GET") {
         return jsonResponse({ items: [draft] });
       }
       if (url.endsWith("/review-cards/card-recipe-1") && method === "PATCH") {
@@ -663,7 +716,7 @@ describe("ProductionDraftReviewPanel", () => {
     }) as typeof fetch;
 
     await act(async () => {
-      root.render(createElement(ProductionDraftReviewPanel, { submitting: false }));
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId }));
       await flushPromises();
     });
     await act(async () => {
@@ -721,6 +774,7 @@ describe("ProductionDraftReviewPanel", () => {
     await act(async () => {
       root.render(createElement(ProductionDraftReviewPanel, {
         submitting: false,
+        caseId: activeCaseId,
         embedded: true,
         latestOnly: true
       }));
@@ -757,7 +811,12 @@ describe("ProductionDraftReviewPanel", () => {
     globalThis.fetch = vi.fn(async () => jsonResponse({ items: [selectedDraft, newerDraft] })) as typeof fetch;
 
     await act(async () => {
-      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, embedded: true, latestOnly: true }));
+      root.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        caseId: activeCaseId,
+        embedded: true,
+        latestOnly: true
+      }));
       await flushPromises();
     });
 
@@ -802,6 +861,7 @@ describe("ProductionDraftReviewPanel", () => {
     await act(async () => {
       root.render(createElement(ProductionDraftReviewPanel, {
         submitting: false,
+        caseId: activeCaseId,
         embedded: true,
         latestOnly: true
       }));
@@ -838,6 +898,7 @@ describe("ProductionDraftReviewPanel", () => {
     await act(async () => {
       root.render(createElement(ProductionDraftReviewPanel, {
         submitting: false,
+        caseId: activeCaseId,
         embedded: true,
         latestOnly: true
       }));

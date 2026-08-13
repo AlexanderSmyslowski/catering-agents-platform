@@ -2,13 +2,16 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AcceptedEventSpec } from "@catering/shared-core";
 import { App } from "../backoffice-ui/src/App.js";
 import { OfferProductApp } from "../backoffice-ui/src/offer-product-app.js";
 import { ProductionProductApp } from "../backoffice-ui/src/production-product-app.js";
+import { ProductionDraftReviewPanel } from "../backoffice-ui/src/production-draft-review-panel.js";
+import { ProductionQuestionPanel, type ProductionQuestionPanelProps } from "../backoffice-ui/src/production-question-panel.js";
 import { useOfferWorkspaceData } from "../backoffice-ui/src/use-offer-workspace-data.js";
 import { useProductionWorkspaceData } from "../backoffice-ui/src/use-production-workspace-data.js";
 import * as api from "../backoffice-ui/src/api.js";
-import type { ProductionProductData } from "../backoffice-ui/src/api.js";
+import type { ProductionDraft, ProductionProductData } from "../backoffice-ui/src/api.js";
 
 const roots: Root[] = [];
 
@@ -58,6 +61,51 @@ function offerProductData(draft?: unknown) {
 
 function productionPlan(planId: string, eventSpecId: string) {
   return { planId, eventSpecId, readiness: { status: "complete", reasons: [] }, productionBatches: [], kitchenSheets: [], recipeSelections: [] };
+}
+
+function acceptedSpecSentinel(specId: string, title: string): AcceptedEventSpec {
+  return {
+    schemaVersion: "1.0",
+    specId,
+    lifecycle: { commercialState: "manual" },
+    readiness: { status: "complete", reasons: [] },
+    sourceLineage: [{ sourceType: "manual_input", reference: `${specId}-request` }],
+    event: { title },
+    attendees: { expected: 30 },
+    servicePlan: { eventType: "Empfang", serviceForm: "Buffet", modules: [] },
+    menuPlan: []
+  };
+}
+
+function productionDraftSentinel(draftId: string, title: string): ProductionDraft {
+  return {
+    schemaVersion: "1.0",
+    businessId: "local",
+    draftId,
+    revision: 1,
+    status: "pending_review",
+    createdAt: "2026-08-13T00:00:00.000Z",
+    source: { kind: "fixture", receivedAt: "2026-08-13T00:00:00.000Z" },
+    guardrails: {
+      draftOnly: true,
+      humanApprovalRequired: true,
+      writesProductObjects: false,
+      rawProviderPayloadStored: false,
+      knowledgeWritePolicy: "reviewed_only"
+    },
+    reviewCards: [{
+      cardId: `${draftId}-card`,
+      kind: "event_data",
+      title: "Fall prüfen",
+      summary: title,
+      decision: "pending",
+      targetId: `${draftId}-spec`,
+      requiredApproval: true
+    }],
+    draftArtifacts: {
+      eventSpec: { specId: `${draftId}-spec`, event: { title } }
+    }
+  } as unknown as ProductionDraft;
 }
 
 function productionProductData(plan?: unknown, purchaseList?: unknown, activeCaseId?: string): ProductionProductData {
@@ -161,6 +209,58 @@ function WorkspaceProbe({
   return createElement("output", null, product.data.activeCase?.displayName ?? "leer");
 }
 
+function productionQuestionPanelProps(activeCaseId?: string): ProductionQuestionPanelProps {
+  const title = activeCaseId === "case-b" ? "Fall B" : "Fall A";
+  const specId = activeCaseId === "case-b" ? "spec-b" : "spec-a";
+  return {
+    activeCaseId,
+    questionState: {
+      focusedProductionSpec: { specId, event: { title } },
+      focusedSpecReadinessLabel: "vollständig",
+      selectedPlan: undefined,
+      selectedPlanReadinessLabel: undefined,
+      currentSpecPurchaseLists: [],
+      productionQuestions: [],
+      productionAssumptions: [],
+      productionConversationProjection: { sessionId: `session-${specId}`, messages: [] },
+      workbenchSpecFacts: [],
+      intakeRequestDetail: null,
+      filteredSpecs: [],
+      documentPhase: "done" as const,
+      productionWorkspaceCleared: false
+    },
+    questionActions: {
+      openSpecForQuestions: () => undefined,
+      refreshAfterDraftDecision: async () => undefined
+    },
+    submitting: false,
+    editorState: {
+      editingSpecId: undefined,
+      editingEventType: "",
+      editingEventDate: "",
+      editingAttendeeCount: "",
+      editingServiceForm: "",
+      editingMenuItems: "",
+      editingComponentStates: {},
+      hasFocusedSpecEditChanges: false,
+      recipes: []
+    },
+    editorActions: {
+      setEditingEventType: () => undefined,
+      setEditingEventDate: () => undefined,
+      setEditingEventSchedule: () => undefined,
+      setEditingAttendeeCount: () => undefined,
+      setEditingServiceForm: () => undefined,
+      setEditingMenuItems: () => undefined,
+      updateEditingComponentState: () => undefined,
+      beginSpecEdit: () => undefined,
+      saveSpecEdit: async () => undefined,
+      createPlan: async () => undefined,
+      resetSpecEdit: () => undefined
+    }
+  };
+}
+
 afterEach(() => {
   for (const root of roots.splice(0)) {
     act(() => root.unmount());
@@ -215,12 +315,133 @@ describe("independent product loader boundaries", () => {
         { purchaseListId: "purchase-b", eventSpecId: "spec-b", items: [] }
       )
     );
+    const loadDrafts = vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({
+      items: [
+        productionDraftSentinel("draft-a", "Fall A"),
+        productionDraftSentinel("draft-b", "Fall B")
+      ],
+      approvedProductionSpecs: []
+    });
 
     const { container } = await renderAt("/produktion");
 
     expect(loadProduct).toHaveBeenCalledWith(undefined);
+    expect(loadDrafts).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("Fall A");
+    expect(container.textContent).not.toContain("Fall B");
     expect(container.innerHTML).not.toContain("plan-b");
     expect(container.innerHTML).not.toContain("purchase-b");
+  });
+
+  it("does not load or display Fall-A/Fall-B production drafts without an active case", async () => {
+    const loadDrafts = vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({
+      items: [
+        productionDraftSentinel("draft-a", "Fall A"),
+        productionDraftSentinel("draft-b", "Fall B")
+      ],
+      approvedProductionSpecs: []
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        embedded: true,
+        latestOnly: true,
+        resumeMode: true
+      }));
+      await flush();
+    });
+
+    expect(loadDrafts).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("Fall A");
+    expect(container.textContent).not.toContain("Fall B");
+  });
+
+  it("loads and displays only the drafts bound to the active production case", async () => {
+    const loadDrafts = vi.spyOn(api, "loadProductionDrafts").mockImplementation(async (caseId) => ({
+      items: caseId === "case-a"
+        ? [productionDraftSentinel("draft-a", "Fall A")]
+        : caseId === "case-b"
+          ? [productionDraftSentinel("draft-b", "Fall B")]
+          : [],
+      approvedProductionSpecs: []
+    }));
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        embedded: true,
+        latestOnly: true,
+        resumeMode: true,
+        caseId: "case-a"
+      } as never));
+      await flush();
+    });
+
+    expect(loadDrafts).toHaveBeenCalledWith("case-a");
+    expect(container.textContent).toContain("Fall A");
+    expect(container.textContent).not.toContain("Fall B");
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, {
+        submitting: false,
+        embedded: true,
+        latestOnly: true,
+        resumeMode: true,
+        caseId: "case-b"
+      } as never));
+      await flush();
+    });
+
+    expect(loadDrafts).toHaveBeenLastCalledWith("case-b");
+    expect(container.textContent).toContain("Fall B");
+    expect(container.textContent).not.toContain("Fall A");
+  });
+
+  it("carries the active case through the real production question review path", async () => {
+    const loadDrafts = vi.spyOn(api, "loadProductionDrafts").mockImplementation(async (caseId) => ({
+      items: caseId === "case-a"
+        ? [productionDraftSentinel("draft-a", "Fall A")]
+        : caseId === "case-b"
+          ? [productionDraftSentinel("draft-b", "Fall B")]
+          : [],
+      approvedProductionSpecs: []
+    }));
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+
+    await act(async () => {
+      root.render(createElement(ProductionQuestionPanel, productionQuestionPanelProps("case-a")));
+      await flush();
+    });
+    expect(loadDrafts).toHaveBeenCalledWith("case-a");
+    expect(container.textContent).toContain("Fall A");
+    expect(container.textContent).not.toContain("Fall B");
+
+    await act(async () => {
+      root.render(createElement(ProductionQuestionPanel, productionQuestionPanelProps("case-b")));
+      await flush();
+    });
+    expect(loadDrafts).toHaveBeenLastCalledWith("case-b");
+    expect(container.textContent).toContain("Fall B");
+    expect(container.textContent).not.toContain("Fall A");
+
+    await act(async () => {
+      root.render(createElement(ProductionQuestionPanel, productionQuestionPanelProps(undefined)));
+      await flush();
+    });
+    expect(container.textContent).not.toContain("Fall A");
+    expect(container.textContent).not.toContain("Fall B");
   });
 
   it("reloads the actual offer shell with the newly created case reference", async () => {
@@ -282,11 +503,22 @@ describe("independent product loader boundaries", () => {
           }
         } as unknown as ProductionProductData;
       }
-      return productionProductData(
+      const productData = productionProductData(
         activeCaseId === "case-a" ? productionPlan("plan-a", "spec-a") : productionPlan("plan-b", "spec-b"),
         activeCaseId === "case-a" ? { purchaseListId: "purchase-a", eventSpecId: "spec-a", items: [] } : { purchaseListId: "purchase-b", eventSpecId: "spec-b", items: [] },
         activeCaseId
       );
+      return {
+        ...productData,
+        acceptedSpecs: [acceptedSpecSentinel(
+          activeCaseId === "case-a" ? "spec-a" : "spec-b",
+          activeCaseId === "case-a" ? "Fall A" : "Fall B"
+        )]
+      };
+    });
+    const loadDrafts = vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({
+      items: [productionDraftSentinel("draft-a", "Fall A")],
+      approvedProductionSpecs: []
     });
     const { container } = await renderAt("/produktion");
 
@@ -301,6 +533,9 @@ describe("independent product loader boundaries", () => {
     expect(productionShell).not.toBeNull();
     expect(activeCaseIds).toContain("case-a");
     expect(activeCaseIds.at(-1)).toBe("case-a");
+    expect(loadDrafts).toHaveBeenCalledWith("case-a");
+    expect(loadDrafts.mock.calls.filter(([caseId]) => caseId === "case-a")).toHaveLength(2);
+    expect(container.textContent).toContain("Fall A");
     expect(container.innerHTML).not.toContain("plan-b");
     expect(container.innerHTML).not.toContain("purchase-b");
     expect(loadProduct).not.toHaveBeenCalledWith("case-b");
@@ -510,6 +745,60 @@ describe("independent product loader boundaries", () => {
     expect(state.currentPurchaseList?.purchaseListId).toBe("list-a");
     expect(calls.some((url) => url.endsWith("/api/production/v1/production/plans"))).toBe(false);
     expect(calls.some((url) => url.endsWith("/api/production/v1/production/purchase-lists"))).toBe(false);
+  });
+
+  it("rejects a plan response whose id differs from the active case reference", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/production/v1/production/cases")) {
+        return Response.json({ items: [] });
+      }
+      if (url.endsWith("/api/production/v1/production/cases/case-a")) {
+        return Response.json({
+          case: {
+            caseId: "case-a", product: "production", displayName: "A", status: "open",
+            schemaVersion: "1.0", businessId: "local", version: 1, createdAt: "", updatedAt: "",
+            currentPlanId: "plan-a"
+          },
+          events: []
+        });
+      }
+      if (url.endsWith("/api/production/v1/production/plans/plan-a")) {
+        return Response.json({ planId: "plan-b", eventSpecId: "spec-b" });
+      }
+      throw new Error(`Unerwartete Planladung: ${url}`);
+    }));
+
+    const state = await api.loadProductionWorkspaceState("case-a");
+
+    expect(state.currentPlan).toBeUndefined();
+  });
+
+  it("rejects a purchase-list response whose id differs from the active case reference", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/production/v1/production/cases")) {
+        return Response.json({ items: [] });
+      }
+      if (url.endsWith("/api/production/v1/production/cases/case-a")) {
+        return Response.json({
+          case: {
+            caseId: "case-a", product: "production", displayName: "A", status: "open",
+            schemaVersion: "1.0", businessId: "local", version: 1, createdAt: "", updatedAt: "",
+            currentPurchaseListId: "list-a"
+          },
+          events: []
+        });
+      }
+      if (url.endsWith("/api/production/v1/production/purchase-lists/list-a")) {
+        return Response.json({ purchaseListId: "list-b", eventSpecId: "spec-b" });
+      }
+      throw new Error(`Unerwartete Einkaufslistenladung: ${url}`);
+    }));
+
+    const state = await api.loadProductionWorkspaceState("case-a");
+
+    expect(state.currentPurchaseList).toBeUndefined();
   });
 
   it("rehydrates the persisted production draft and approved specification for the active case", async () => {

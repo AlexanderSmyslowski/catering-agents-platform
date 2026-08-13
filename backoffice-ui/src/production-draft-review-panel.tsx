@@ -21,6 +21,7 @@ export function announceProductionDraftReview(draftId: string): void {
 
 type ProductionDraftReviewPanelProps = {
   submitting: boolean;
+  caseId?: string;
   embedded?: boolean;
   latestOnly?: boolean;
   resumeMode?: boolean;
@@ -299,6 +300,7 @@ function ProductionDraftRevisionResult({
 
 export function ProductionDraftReviewPanel({
   submitting,
+  caseId,
   embedded = false,
   latestOnly = false,
   resumeMode = false,
@@ -313,6 +315,8 @@ export function ProductionDraftReviewPanel({
   const [changeRequest, setChangeRequest] = useState("");
   const [approvedSpecIds, setApprovedSpecIds] = useState<Record<string, string>>({});
   const panelRef = useRef<HTMLElement>(null);
+  const reloadVersion = useRef(0);
+  const previousCaseId = useRef(caseId);
   const [focusedDraftId, setFocusedDraftId] = useState<string | undefined>(() =>
     typeof window === "undefined"
       ? undefined
@@ -320,10 +324,21 @@ export function ProductionDraftReviewPanel({
   );
 
   async function reloadDrafts(options?: { clearMessage?: boolean }) {
+    const version = ++reloadVersion.current;
+    const activeCaseId = caseId?.trim();
+    if (!activeCaseId) {
+      setDrafts([]);
+      setApprovedSpecIds({});
+      setHasLoaded(true);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setLoadError(undefined);
     try {
-      const response = await loadProductionDrafts();
+      const response = await loadProductionDrafts(activeCaseId);
+      if (version !== reloadVersion.current) return;
       setDrafts(response.items);
       setApprovedSpecIds(approvedSpecIdsFromProjection(response.approvedProductionSpecs));
       if (options?.clearMessage !== false) {
@@ -332,16 +347,25 @@ export function ProductionDraftReviewPanel({
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Unbekannter Ladefehler.");
     } finally {
-      setHasLoaded(true);
-      setLoading(false);
+      if (version === reloadVersion.current) {
+        setHasLoaded(true);
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
+    setDrafts([]);
+    setApprovedSpecIds({});
+    if (previousCaseId.current !== caseId) {
+      setFocusedDraftId(undefined);
+    }
+    previousCaseId.current = caseId;
     void reloadDrafts();
-  }, []);
+  }, [caseId]);
 
   useEffect(() => {
+    if (!caseId?.trim()) return;
     const handlePreparedDraft = (event: Event) => {
       const detail = (event as CustomEvent<{ draftId?: unknown }>).detail;
       const draftId = typeof detail?.draftId === "string" ? detail.draftId.trim() : "";
@@ -351,7 +375,7 @@ export function ProductionDraftReviewPanel({
     };
     window.addEventListener(productionDraftReviewEvent, handlePreparedDraft);
     return () => window.removeEventListener(productionDraftReviewEvent, handlePreparedDraft);
-  }, []);
+  }, [caseId]);
 
   useEffect(() => {
     if (!focusedDraftId || !drafts.some((draft) => draft.draftId === focusedDraftId)) return;

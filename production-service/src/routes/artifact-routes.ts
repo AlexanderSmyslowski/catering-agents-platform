@@ -1705,26 +1705,32 @@ export function registerProductionArtifactRoutes(
     return reply.code(201).send({ draft });
   });
 
-  app.get("/v1/production/drafts", async (request, reply) => {
+  app.get<{ Querystring: { caseId?: string } }>("/v1/production/drafts", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
 
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const requestedCaseId = request.query?.caseId;
     const [items, approvedProductionSpecs, applyManifests] = await Promise.all([
-      store.listProductionDrafts(actor),
+      store.listProductionDrafts(actor, requestedCaseId),
       store.listApprovedProductionSpecs(actor),
       store.listApplyManifests(actor)
     ]);
+    const scopedDraftIds = requestedCaseId === undefined
+      ? undefined
+      : new Set(items.map((draft) => draft.draftId));
     const appliedIds = new Set(applyManifests.map((manifest) => manifest.approvedProductionSpecId));
     return reply.send({
       items,
-      approvedProductionSpecs: approvedProductionSpecs.map((spec) => ({
+      approvedProductionSpecs: approvedProductionSpecs
+        .filter((spec) => scopedDraftIds === undefined || scopedDraftIds.has(spec.sourceDraft.draftId))
+        .map((spec) => ({
         approvedProductionSpecId: spec.approvedProductionSpecId,
         sourceDraft: spec.sourceDraft,
         applied: appliedIds.has(spec.approvedProductionSpecId)
-      }))
+        }))
     });
   });
 

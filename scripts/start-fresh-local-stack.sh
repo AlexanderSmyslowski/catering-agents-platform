@@ -18,8 +18,11 @@ fi
 unset CATERING_DATABASE_URL
 unset DATABASE_URL
 export CATERING_DATA_ROOT="${FRESH_DATA_ROOT}"
-if [[ "${1:-}" == "--seed-demo" ]]; then
+if [[ "$#" -eq 1 && "${1}" == "--seed-demo" ]]; then
   bash "${ROOT_DIR}/scripts/start-local-stack.sh" --seed-demo
+elif [[ "$#" -gt 0 ]]; then
+  echo "Unbekannte Fresh-Start-Option(en): $*. Erlaubt ist nur --seed-demo." >&2
+  exit 2
 else
   bash "${ROOT_DIR}/scripts/start-local-stack.sh"
 fi

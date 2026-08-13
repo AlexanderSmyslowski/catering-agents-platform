@@ -16,6 +16,7 @@ import type { ProductionRouteViewState } from "./production-route-view-state.js"
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 
 export type ProductionRouteMainLayoutStateInput = {
+  activeProductionCaseId?: string;
   viewState: ProductionRouteViewState;
   submitting: boolean;
   sourceInput: ProductionSourceInputValues;
@@ -34,6 +35,7 @@ export type ProductionRouteMainLayoutStateInput = {
 };
 
 export function buildProductionRouteMainLayoutState({
+  activeProductionCaseId,
   viewState,
   submitting,
   sourceInput,
@@ -51,6 +53,7 @@ export function buildProductionRouteMainLayoutState({
   miniPilotStorageHintLabel
 }: ProductionRouteMainLayoutStateInput): ProductionRouteMainLayoutProps {
   return {
+    activeProductionCaseId,
     ...viewState,
     submitting,
     sourceInput,

@@ -1,4 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync, writeFileSync, chmodSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { buildProductionConversationProjection } from "../shared-core/src/conversation-projection.js";
 import { getDemoProductionAnsweredClarificationAnchor } from "../shared-core/src/fixtures/demo-scenarios.js";
 import { describe, expect, it } from "vitest";
@@ -97,11 +100,43 @@ describe("local ops check contract", () => {
     expect(freshStartScript).toContain("unset DATABASE_URL");
     expect(freshStartScript).toContain("export CATERING_DATA_ROOT");
     expect(freshStartScript).toContain("scripts/start-local-stack.sh");
-    expect(freshStartScript).toContain('if [[ "${1:-}" == "--seed-demo" ]]');
+    expect(freshStartScript).toContain('if [[ "$#" -eq 1 && "${1}" == "--seed-demo" ]]');
     expect(readmeDoc).toContain("`npm run local:start:fresh` stoppt den laufenden Stack");
     expect(testingDoc).toContain("`npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert");
     expect(testingDoc).toContain("loescht keine Repo-Daten unter `./data`");
     expect(testingDoc).toContain("bevorzugte Startweg");
+  });
+
+  it("rejects unknown fresh-start options instead of silently changing the run mode", () => {
+    expect(freshStartScript).toContain('elif [[ "$#" -gt 0 ]]');
+    expect(freshStartScript).toContain("Unbekannte Fresh-Start-Option(en)");
+    expect(freshStartScript).toContain("exit 2");
+  });
+
+  it("rejects an unknown fresh-start option at runtime before invoking the stack", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-fresh-start-contract-"));
+    const fakeStop = path.join(root, "stop.sh");
+    const fakeStart = path.join(root, "start.sh");
+    const marker = path.join(root, "started");
+    writeFileSync(fakeStop, "#!/bin/bash\nexit 0\n");
+    writeFileSync(fakeStart, `#!/bin/bash\ntouch ${JSON.stringify(marker)}\n`);
+    chmodSync(fakeStop, 0o755);
+    chmodSync(fakeStart, 0o755);
+    const script = freshStartScript
+      .replace('ROOT_DIR="$(cd "${BASH_SOURCE[0]}/.." && pwd)"', `ROOT_DIR=${JSON.stringify(root)}`)
+      .replace('bash "${ROOT_DIR}/scripts/stop-local-stack.sh"', `bash ${JSON.stringify(fakeStop)}`)
+      .replace('bash "${ROOT_DIR}/scripts/start-local-stack.sh"', `bash ${JSON.stringify(fakeStart)}`);
+    const scriptPath = path.join(root, "fresh.sh");
+    writeFileSync(scriptPath, script);
+    chmodSync(scriptPath, 0o755);
+    try {
+      expect(() => execFileSync("bash", [scriptPath, "--unknown"], { encoding: "utf8", stdio: "pipe" })).toThrow();
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      if (existsSync("/usr/bin/trash")) {
+        execFileSync("/usr/bin/trash", [root], { stdio: "ignore" });
+      }
+    }
   });
 
   it("documents the compact local demo runbook commands and their bounded roles", () => {

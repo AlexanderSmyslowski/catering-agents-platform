@@ -12,6 +12,7 @@ import {
 const noop = () => undefined;
 const noopAsync = async () => undefined;
 const originalFetch = globalThis.fetch;
+const activeCaseId = "case-production-input-transition";
 
 const sourceInputActions: ProductionSourceInputActions = {
   uploadInputRef: { current: null },
@@ -84,6 +85,7 @@ function panel(
       notes: ""
     },
     manualInputActions,
+    activeCaseId,
     focusedProductionSpec: includeFocusedSpec ? focusedSpec : undefined,
     productionQuestions: ["Welche Herstellungsart gilt für Vitello tonnato?"],
     productionAssumptions: []
@@ -269,6 +271,7 @@ describe("production input panel upload transition", () => {
           archiveCurrentIntakeTitle: "Kein Intake-Kontext"
         },
         sourceInputActions,
+        activeCaseId,
         manualInput: {
           eventType: "",
           eventDate: "",

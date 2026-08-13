@@ -371,7 +371,11 @@ describe("backoffice internal usage smoke", () => {
           });
         }
 
-        if (method === "GET" && url.endsWith("/api/production/v1/production/drafts")) {
+        if (
+          method === "GET" &&
+          activeProductionCaseId &&
+          url === `/api/production/v1/production/drafts?caseId=${activeProductionCaseId}`
+        ) {
           return new Response(JSON.stringify({ items: productionDrafts, approvedProductionSpecs: [] }), {
             status: 200,
             headers: { "content-type": "application/json" }

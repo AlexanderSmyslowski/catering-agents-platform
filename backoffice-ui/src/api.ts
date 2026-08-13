@@ -423,7 +423,10 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
           undefined,
           DEFAULT_MUTATION_ACTOR_NAMES.production
         ).then((plan) => (
-          detail.case.sourceSpecId && plan.eventSpecId !== detail.case.sourceSpecId ? undefined : plan
+          plan.planId !== detail.case.currentPlanId ||
+          (detail.case.sourceSpecId && plan.eventSpecId !== detail.case.sourceSpecId)
+            ? undefined
+            : plan
         ))
       : Promise.resolve(undefined),
     detail.case.currentPurchaseListId
@@ -432,7 +435,8 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
           undefined,
           DEFAULT_MUTATION_ACTOR_NAMES.production
         ).then((purchaseList) => (
-          detail.case.sourceSpecId && purchaseList.eventSpecId !== detail.case.sourceSpecId
+          purchaseList.purchaseListId !== detail.case.currentPurchaseListId ||
+          (detail.case.sourceSpecId && purchaseList.eventSpecId !== detail.case.sourceSpecId)
             ? undefined
             : purchaseList
         ))
