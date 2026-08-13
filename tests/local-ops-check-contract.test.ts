@@ -134,7 +134,39 @@ describe("local ops check contract", () => {
       expect(existsSync(marker)).toBe(false);
     } finally {
       if (existsSync("/usr/bin/trash")) {
-        execFileSync("/usr/bin/trash", [root], { stdio: "ignore" });
+        try {
+          execFileSync("/usr/bin/trash", [root], { stdio: "ignore" });
+        } catch {
+          // The macOS sandbox can reject Trash access; the contract assertion remains valid.
+        }
+      }
+    }
+  });
+
+  it("rejects unknown local-start options after an explicit demo flag before invoking the stack", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-start-argument-contract-"));
+    const marker = path.join(root, "started");
+    const parserStart = startScript.indexOf("SEED_DEMO=0");
+    const parserEnd = startScript.indexOf("\n\nrequired_sessions=", parserStart);
+    expect(parserStart).toBeGreaterThanOrEqual(0);
+    expect(parserEnd).toBeGreaterThan(parserStart);
+    const parser = startScript.slice(parserStart, parserEnd);
+    const scriptPath = path.join(root, "start.sh");
+    writeFileSync(
+      scriptPath,
+      `#!/bin/bash\nset -euo pipefail\n${parser}\ntouch ${JSON.stringify(marker)}\n`
+    );
+    chmodSync(scriptPath, 0o755);
+    try {
+      expect(() => execFileSync("bash", [scriptPath, "--seed-demo", "--unbekannt"], { encoding: "utf8", stdio: "pipe" })).toThrow();
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      if (existsSync("/usr/bin/trash")) {
+        try {
+          execFileSync("/usr/bin/trash", [root], { stdio: "ignore" });
+        } catch {
+          // The macOS sandbox can reject Trash access; the contract assertion remains valid.
+        }
       }
     }
   });

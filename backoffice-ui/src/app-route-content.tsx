@@ -1,16 +1,15 @@
-import type { ComponentProps } from "react";
 import type { AppRoute } from "./app-shell-state.js";
-import { HomeRoute } from "./home-route.js";
-import { OfferConversationalWorkbench } from "./offer-workbench.js";
-import { ProductionRouteFilterPanel } from "./production-route-filter-panel.js";
-import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
+import { HomeRoute, type HomeRouteProps } from "./home-route.js";
+import { OfferConversationalWorkbench, type OfferWorkbenchProps } from "./offer-workbench.js";
+import { ProductionRouteFilterPanel, type ProductionRouteFilterPanelProps } from "./production-route-filter-panel.js";
+import { ProductionRouteMainLayout, type ProductionRouteMainLayoutProps } from "./production-route-main-layout.js";
 
 export type AppRouteContentProps = {
   route: AppRoute;
-  home: ComponentProps<typeof HomeRoute>;
-  offerWorkbench: ComponentProps<typeof OfferConversationalWorkbench>;
-  productionFilter: ComponentProps<typeof ProductionRouteFilterPanel>;
-  productionMain: ComponentProps<typeof ProductionRouteMainLayout>;
+  home: HomeRouteProps;
+  offerWorkbench: OfferWorkbenchProps;
+  productionFilter: ProductionRouteFilterPanelProps;
+  productionMain: ProductionRouteMainLayoutProps;
 };
 
 export function AppRouteContent({

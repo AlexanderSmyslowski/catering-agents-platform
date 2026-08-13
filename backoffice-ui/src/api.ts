@@ -27,6 +27,21 @@ export interface DashboardState {
   auditEvents: Array<Record<string, unknown>>;
 }
 
+/**
+ * Domain-typed data that the three product routes may render. The legacy
+ * DashboardState remains available only to the old refresh helpers and is not
+ * a route-controller contract.
+ */
+export interface ProductRouteDashboard {
+  intakeRequests: IntakeRequestDetail[];
+  acceptedSpecs: AcceptedEventSpec[];
+  offerDrafts: OfferDraft[];
+  productionPlans: ProductionPlan[];
+  purchaseLists: PurchaseList[];
+  recipes: Recipe[];
+  auditEvents: AuditEntry[];
+}
+
 export interface OfferWorkspaceState {
   cases: CaseSummary[];
   activeCase?: OfferCase;

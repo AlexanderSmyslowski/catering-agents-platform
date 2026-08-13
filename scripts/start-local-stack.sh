@@ -13,11 +13,12 @@ CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 START_ATTEMPTS="${CATERING_LOCAL_START_ATTEMPTS:-30}"
 PRODUCTION_LOCK_PROTOCOL="canonical-v2"
 SEED_DEMO=0
-if [[ "${1:-}" == "--seed-demo" ]]; then
+if [[ "$#" -gt 0 ]]; then
+  if [[ "$#" -ne 1 || "${1}" != "--seed-demo" ]]; then
+    echo "Unbekannte Startoption(en): $*" >&2
+    exit 2
+  fi
   SEED_DEMO=1
-elif [[ -n "${1:-}" ]]; then
-  echo "Unbekannte Startoption: ${1}" >&2
-  exit 2
 fi
 
 required_sessions=(
