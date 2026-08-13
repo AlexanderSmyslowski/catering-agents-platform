@@ -10,6 +10,7 @@ const rehearsal = readFileSync(resolve(root, "scripts/check-browser-rehearsal.sh
 const browserShell = readFileSync(resolve(root, "scripts/browser-rehearsal-shell.sh"), "utf8");
 const homeMarkers = readFileSync(resolve(root, "scripts/browser-rehearsal/home-markers.js"), "utf8");
 const homeToOffer = readFileSync(resolve(root, "scripts/browser-rehearsal/home-to-offer.js"), "utf8");
+const offerEmptyMarkers = readFileSync(resolve(root, "scripts/browser-rehearsal/offer-empty-markers.js"), "utf8");
 
 const runMarkerContract = (mode: "eventual" | "permanent") =>
   spawnSync(
@@ -235,6 +236,37 @@ describe("Linux browser rehearsal governance", () => {
     expect(result.stderr).toContain("attempt=30");
     expect(result.stderr).not.toContain("attempt=31");
     expect(result.stderr).toContain("Navigation wartet auf /angebot; aktuell /");
+  });
+
+  it("binds the empty offer marker to a fresh zero-count state", () => {
+    const requiredText = [
+      "Angebotsagent",
+      "Kundenanfrage einfügen und Entwurf prüfen",
+      "Die App erstellt einen prüfbaren Angebotsentwurf.",
+      "Frühere Angebotsaufträge öffnen",
+      "0 Aufträge"
+    ].join("\n");
+    const buildMarkerCheck = (innerText: string) => {
+      const document = {
+        body: { innerText },
+        querySelectorAll: () => []
+      };
+      return new Function(
+        "document",
+        "location",
+        `return (${offerEmptyMarkers});`
+      )(document, { pathname: "/angebot" }) as () => { route: string; markers: string };
+    };
+
+    expect(buildMarkerCheck(requiredText)()).toEqual({ route: "/angebot", markers: "offer-empty-ok" });
+    for (const nonEmptyCount of ["2 Aufträge", "10 Aufträge"]) {
+      expect(() => buildMarkerCheck(requiredText.replace("0 Aufträge", nonEmptyCount))()).toThrow(
+        "0 Aufträge"
+      );
+    }
+    expect(() => buildMarkerCheck(requiredText.replace("Frühere Angebotsaufträge öffnen", ""))()).toThrow(
+      "Frühere Angebotsaufträge öffnen"
+    );
   });
 
   it("rejects a missing browser CLI before opening a stack or session", () => {
