@@ -220,6 +220,7 @@ describe("backoffice internal usage smoke", () => {
     let currentSpec: typeof fixture.spec | undefined;
     let currentPlan = undefined as typeof artifacts.productionPlan | undefined;
     let currentPurchaseList = undefined as typeof artifacts.purchaseList | undefined;
+    let activeProductionCaseId: string | undefined;
     let productionDrafts: ProductionDraft[] = [];
     let createdPlanViaPost = false;
     const fetchCalls: Array<{ method: string; url: string; body?: unknown }> = [];
@@ -260,6 +261,71 @@ describe("backoffice internal usage smoke", () => {
         }
         fetchCalls.push({ method, url, body });
 
+        if (method === "GET" && url.endsWith("/api/production/v1/production/cases")) {
+          return new Response(
+            JSON.stringify({
+              items: activeProductionCaseId && currentSpec
+                ? [
+                    {
+                      caseId: activeProductionCaseId,
+                      product: "production",
+                      displayName: "Konferenz - 12.07.2026 - 24 Personen",
+                      status: "open",
+                      createdAt: "2026-04-10T09:34:00.000Z",
+                      updatedAt: "2026-04-10T09:34:00.000Z"
+                    }
+                  ]
+                : []
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+
+        if (
+          method === "GET" &&
+          activeProductionCaseId &&
+          url.endsWith(`/api/production/v1/production/cases/${activeProductionCaseId}`)
+        ) {
+          return new Response(
+            JSON.stringify({
+              case: {
+                schemaVersion: "1.0",
+                businessId: "local",
+                caseId: activeProductionCaseId,
+                product: "production",
+                displayName: "Konferenz - 12.07.2026 - 24 Personen",
+                status: "open",
+                version: 1,
+                createdAt: "2026-04-10T09:34:00.000Z",
+                updatedAt: "2026-04-10T09:34:00.000Z",
+                sourceSpecId: currentSpec?.specId,
+                ...(currentPlan ? { currentPlanId: currentPlan.planId } : {}),
+                ...(currentPurchaseList ? { currentPurchaseListId: currentPurchaseList.purchaseListId } : {})
+              },
+              events: [
+                {
+                  businessId: "local",
+                  eventId: "production-case-usage-source",
+                  caseId: activeProductionCaseId,
+                  sequence: 1,
+                  at: "2026-04-10T09:34:00.000Z",
+                  role: "system",
+                  kind: "source_added",
+                  text: "Quelle verknüpft.",
+                  sourceRef: {
+                    sourceId: "source-production-usage",
+                    requestId: currentRequest?.requestId,
+                    dataClass: "synthetic_demo",
+                    addedAt: "2026-04-10T09:34:00.000Z"
+                  }
+                }
+              ],
+              ...(productionDrafts.at(-1) ? { currentDraft: productionDrafts.at(-1) } : {})
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+
         if (method === "GET" && url.endsWith("/api/intake/v1/intake/requests")) {
           return new Response(JSON.stringify({ items: currentRequest ? [currentRequest] : [] }), {
             status: 200,
@@ -269,6 +335,17 @@ describe("backoffice internal usage smoke", () => {
 
         if (method === "GET" && url.endsWith("/api/intake/v1/intake/specs")) {
           return new Response(JSON.stringify({ items: currentSpec ? [currentSpec] : [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (
+          method === "GET" &&
+          currentSpec &&
+          url.endsWith(`/api/intake/v1/intake/specs/${currentSpec.specId}`)
+        ) {
+          return new Response(JSON.stringify(currentSpec), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
@@ -407,6 +484,7 @@ describe("backoffice internal usage smoke", () => {
         }
 
         if (method === "POST" && url.endsWith("/api/production/v1/production/cases")) {
+          activeProductionCaseId = "production-case-usage";
           return new Response(JSON.stringify({ case: { caseId: "production-case-usage" } }), {
             status: 201,
             headers: { "content-type": "application/json" }
@@ -520,13 +598,11 @@ describe("backoffice internal usage smoke", () => {
 
     const homeRoute = await renderAppRoute("/");
 
-    expect(document.body.textContent ?? "").toContain("Interner Arbeitsstand");
-    expect(document.body.textContent ?? "").toContain("Angebotsagent öffnen");
-    expect(document.body.textContent ?? "").toContain("Produktionsagent öffnen");
-    const offerStartLink = findAnchorByText("Angebotsagent öffnen");
-    const productionStartLink = findAnchorByText("Produktionsagent öffnen");
+    expect(document.body.textContent ?? "").toContain("Neuen Auftrag beginnen");
+    expect(document.body.textContent ?? "").toContain("Frühere Aufträge");
+    expect(document.body.textContent ?? "").not.toContain("Bestandsdaten im Hintergrund");
+    const offerStartLink = findAnchorByText("Neuen Auftrag beginnen");
     expect(offerStartLink.getAttribute("href")).toBe("/angebot");
-    expect(productionStartLink.getAttribute("href")).toBe("/produktion");
 
     await act(async () => {
       homeRoute.root.unmount();
@@ -596,14 +672,16 @@ describe("backoffice internal usage smoke", () => {
       Array.from(select.options).some((option) => option.value === fixture.recipe.recipeId)
     );
 
-    if (!categorySelect || !productionModeSelect || !recipeSelect) {
+    if (!categorySelect || !productionModeSelect) {
       throw new Error("Required component controls were not rendered");
     }
 
     await act(async () => {
       setNativeValue(categorySelect, "vegetarian");
       setNativeValue(productionModeSelect, "scratch");
-      setNativeValue(recipeSelect, fixture.recipe.recipeId);
+      if (recipeSelect) {
+        setNativeValue(recipeSelect, fixture.recipe.recipeId);
+      }
       findButtonByText("Speichern und Berechnung starten").click();
       await flush(8);
     });

@@ -18,7 +18,11 @@ fi
 unset CATERING_DATABASE_URL
 unset DATABASE_URL
 export CATERING_DATA_ROOT="${FRESH_DATA_ROOT}"
-bash "${ROOT_DIR}/scripts/start-local-stack.sh" --seed-demo
+if [[ "${1:-}" == "--seed-demo" ]]; then
+  bash "${ROOT_DIR}/scripts/start-local-stack.sh" --seed-demo
+else
+  bash "${ROOT_DIR}/scripts/start-local-stack.sh"
+fi
 
 echo
 echo "Frischlauf bereit."

@@ -15,8 +15,10 @@ const startScript = readFileSync("scripts/start-local-stack.sh", "utf8");
 describe("local ops check contract", () => {
   it("keeps the audit window wide enough for a running local stack and reports missing seed evidence deterministically", () => {
     expect(checkScript).toContain("/v1/production/audit/events?limit=200");
+    expect(checkScript).toContain('START_COMMAND="npm run local:start"');
+    expect(checkScript).toContain('DEMO_START_COMMAND="npm run local:start:demo"');
     expect(checkScript).toContain("Kein production.seed_demo-Beleg unter den letzten ${payload.items.length} Audit-Eintraegen gefunden.");
-    expect(checkScript).toContain("Bitte lokalen Stack kontrolliert mit npm run local:start neu seed-en.");
+    expect(checkScript).toContain("Bitte lokalen Stack kontrolliert mit npm run local:start:demo neu starten.");
     expect(checkScript).toContain("production.seed_demo-Beleg hat eine unerwartete Summary.");
     expect(checkScript).toContain("production.seed_demo-Beleg hat eine unerwartete entityId.");
   });
@@ -66,7 +68,10 @@ describe("local ops check contract", () => {
     expect(stopScript).toContain("rm -f \"${DATA_ROOT_FILE}\"");
   });
 
-  it("starts an empty local operator stack through the ChatGPT subscription transport", () => {
+  it("keeps the default local stack empty and exposes explicit demo starts", () => {
+    expect(packageJson.scripts["local:start"]).toBe("bash ./scripts/start-local-stack.sh");
+    expect(packageJson.scripts["local:start"]).not.toContain("--seed-demo");
+    expect(packageJson.scripts["local:start:demo"]).toBe("bash ./scripts/start-local-stack.sh --seed-demo");
     expect(packageJson.scripts["local:start:subscription"]).toBe(
       "npm run local:stop && CATERING_LLM_PROVIDER=codex_cli CATERING_SYNTHETIC_LLM_SLICE=1 CATERING_PRODUCTION_DRAFT_DATA_MODE=pseudonymized_approved bash ./scripts/start-local-stack.sh"
     );
@@ -81,6 +86,7 @@ describe("local ops check contract", () => {
 
   it("provides a controlled fresh local rehearsal start without deleting repo data", () => {
     expect(packageJson.scripts["local:start:fresh"]).toBe("bash ./scripts/start-fresh-local-stack.sh");
+    expect(packageJson.scripts["local:start:fresh:demo"]).toBe("bash ./scripts/start-fresh-local-stack.sh --seed-demo");
     expect(existsSync("scripts/start-fresh-local-stack.sh")).toBe(true);
     expect(freshStartScript).toContain("mktemp -d");
     expect(freshStartScript).toContain("catering-agents-rehearsal-");
@@ -91,7 +97,7 @@ describe("local ops check contract", () => {
     expect(freshStartScript).toContain("unset DATABASE_URL");
     expect(freshStartScript).toContain("export CATERING_DATA_ROOT");
     expect(freshStartScript).toContain("scripts/start-local-stack.sh");
-    expect(freshStartScript).toContain("--seed-demo");
+    expect(freshStartScript).toContain('if [[ "${1:-}" == "--seed-demo" ]]');
     expect(readmeDoc).toContain("`npm run local:start:fresh` stoppt den laufenden Stack");
     expect(testingDoc).toContain("`npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert");
     expect(testingDoc).toContain("loescht keine Repo-Daten unter `./data`");
@@ -99,7 +105,7 @@ describe("local ops check contract", () => {
   });
 
   it("documents the compact local demo runbook commands and their bounded roles", () => {
-    expect(testingDoc).toContain("`npm run local:start` startet den lokalen Stack mit Demo-Seeding");
+    expect(packageJson.scripts["local:start:demo"]).toContain("--seed-demo");
     expect(readmeDoc).toContain("`npm run local:start:subscription`");
     expect(testingDoc).toContain("`npm run local:start:subscription` startet den leeren lokalen Operator-Stack");
     expect(testingDoc).toContain("operatorfreigegebene, anonymisierte Dokumente");
@@ -168,7 +174,7 @@ describe("local ops check contract", () => {
     }
 
     for (const expectedLocalCheckAnchor of [
-      "Startweg vorhanden",
+      "Standardstart (leer)",
       "Erwartungsankerpruefung",
       "/v1/intake/requests",
       "/v1/intake/specs",
@@ -233,7 +239,8 @@ describe("local ops check contract", () => {
   });
 
   it("keeps the C8 acceptance path discoverable and tied to real repo anchors", () => {
-    expect(packageJson.scripts["local:start"]).toBe("bash ./scripts/start-local-stack.sh --seed-demo");
+    expect(packageJson.scripts["local:start"]).toBe("bash ./scripts/start-local-stack.sh");
+    expect(packageJson.scripts["local:start:demo"]).toBe("bash ./scripts/start-local-stack.sh --seed-demo");
     expect(packageJson.scripts["local:start:fresh"]).toBe("bash ./scripts/start-fresh-local-stack.sh");
     expect(packageJson.scripts["local:status"]).toBe("bash ./scripts/status-local-stack.sh");
     expect(packageJson.scripts["local:check"]).toBe("bash ./scripts/check-local-ops.sh");

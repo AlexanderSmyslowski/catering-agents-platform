@@ -246,6 +246,8 @@ describe("UI critical path rehearsal", () => {
       createdAt: "2026-06-09T08:00:00.000Z"
     };
     const fetchCalls: Array<{ method: string; url: string }> = [];
+    const offerCaseId = "offer-case-ui-critical-path-1";
+    const productionCaseId = "production-case-ui-critical-path-1";
     const storage = new Map<string, string>();
     const localStorageMock = {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -273,6 +275,130 @@ describe("UI critical path rehearsal", () => {
           input instanceof Request ? input.method : init?.method ?? "GET"
         ).toUpperCase();
         fetchCalls.push({ method, url });
+
+        if (method === "GET" && url.endsWith("/api/offers/v1/offers/cases")) {
+          return Response.json({
+            items: [
+              {
+                caseId: offerCaseId,
+                product: "offer",
+                displayName: "UI Critical Path Lunch",
+                status: "open",
+                createdAt: "2026-06-09T08:00:00.000Z",
+                updatedAt: "2026-06-09T08:00:00.000Z"
+              }
+            ]
+          });
+        }
+
+        if (method === "GET" && url.endsWith(`/api/offers/v1/offers/cases/${offerCaseId}`)) {
+          return Response.json({
+            case: {
+              schemaVersion: "1.0",
+              businessId: "local",
+              caseId: offerCaseId,
+              product: "offer",
+              displayName: "UI Critical Path Lunch",
+              status: "open",
+              version: 1,
+              createdAt: "2026-06-09T08:00:00.000Z",
+              updatedAt: "2026-06-09T08:00:00.000Z"
+            },
+            events: [
+              {
+                businessId: "local",
+                eventId: `${offerCaseId}-draft`,
+                caseId: offerCaseId,
+                sequence: 1,
+                at: "2026-06-09T08:00:00.000Z",
+                role: "system",
+                kind: "artifact_attached",
+                text: "Angebotsentwurf verknüpft.",
+                revisionRef: {
+                  artifactType: "OfferDraft",
+                  artifactId: offerDraft.draftId,
+                  revision: 1,
+                  createdAt: "2026-06-09T08:00:00.000Z"
+                },
+                sourceRef: {
+                  sourceId: `${offerCaseId}-source`,
+                  requestId: request.requestId,
+                  dataClass: "synthetic_demo",
+                  addedAt: "2026-06-09T08:00:00.000Z"
+                }
+              }
+            ],
+            currentDraft: offerDraft
+          });
+        }
+
+        if (method === "GET" && url.endsWith("/api/production/v1/production/cases")) {
+          return Response.json({
+            items: [
+              {
+                caseId: productionCaseId,
+                product: "production",
+                displayName: "UI Critical Path Lunch",
+                status: "open",
+                createdAt: "2026-06-09T08:00:00.000Z",
+                updatedAt: "2026-06-09T08:00:00.000Z"
+              }
+            ]
+          });
+        }
+
+        if (method === "GET" && url.endsWith(`/api/production/v1/production/cases/${productionCaseId}`)) {
+          return Response.json({
+            case: {
+              schemaVersion: "1.0",
+              businessId: "local",
+              caseId: productionCaseId,
+              product: "production",
+              displayName: "UI Critical Path Lunch",
+              status: "open",
+              version: 1,
+              createdAt: "2026-06-09T08:00:00.000Z",
+              updatedAt: "2026-06-09T08:00:00.000Z",
+              sourceSpecId: promotedSpec.specId,
+              currentPlanId: artifacts.productionPlan.planId,
+              currentPurchaseListId: artifacts.purchaseList.purchaseListId
+            },
+            events: [
+              {
+                businessId: "local",
+                eventId: `${productionCaseId}-source`,
+                caseId: productionCaseId,
+                sequence: 1,
+                at: "2026-06-09T08:00:00.000Z",
+                role: "system",
+                kind: "source_added",
+                text: "Quelle verknüpft.",
+                sourceRef: {
+                  sourceId: `${productionCaseId}-source`,
+                  requestId: request.requestId,
+                  dataClass: "synthetic_demo",
+                  addedAt: "2026-06-09T08:00:00.000Z"
+                }
+              }
+            ]
+          });
+        }
+
+        if (method === "GET" && url.endsWith(`/api/production/v1/production/plans/${artifacts.productionPlan.planId}`)) {
+          return Response.json(artifacts.productionPlan);
+        }
+
+        if (method === "GET" && url.endsWith(`/api/production/v1/production/purchase-lists/${artifacts.purchaseList.purchaseListId}`)) {
+          return Response.json(artifacts.purchaseList);
+        }
+
+        if (method === "GET" && url.endsWith(`/api/production/v1/production/recipes/${recipe.recipeId}`)) {
+          return Response.json(recipe);
+        }
+
+        if (method === "GET" && url.endsWith(`/api/intake/v1/intake/specs/${promotedSpec.specId}`)) {
+          return Response.json(promotedSpec);
+        }
 
         if (method === "GET" && url.endsWith("/api/intake/v1/intake/requests")) {
           return Response.json({ items: [request] });
@@ -349,9 +475,10 @@ describe("UI critical path rehearsal", () => {
 
     try {
       const homeRoute = await renderAppRoute("/");
-      expect(document.body.textContent ?? "").toContain("Interner Arbeitsstand");
-      expect(findAnchorByText("Angebotsagent \u00f6ffnen").getAttribute("href")).toBe("/angebot");
-      expect(findAnchorByText("Produktionsagent \u00f6ffnen").getAttribute("href")).toBe("/produktion");
+      expect(document.body.textContent ?? "").toContain("Neuen Auftrag beginnen");
+      expect(document.body.textContent ?? "").toContain("Frühere Aufträge");
+      expect(document.body.textContent ?? "").not.toContain("Bestandsdaten im Hintergrund");
+      expect(findAnchorByText("Neuen Auftrag beginnen").getAttribute("href")).toBe("/angebot");
 
       await act(async () => {
         homeRoute.root.unmount();
@@ -392,7 +519,10 @@ describe("UI critical path rehearsal", () => {
       expect(document.body.textContent ?? "").toContain(
         "Angebotsvariante wurde freigegeben."
       );
-      expect(findAnchorByText("Zur Produktion").getAttribute("href")).toBe("/produktion");
+      const productionHandoff = Array.from(document.querySelectorAll("a")).find(
+        (anchor) => anchor.getAttribute("href") === "/produktion"
+      ) as HTMLAnchorElement | undefined;
+      expect(productionHandoff).toBeTruthy();
 
       await act(async () => {
         offerRoute.root.unmount();

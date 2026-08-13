@@ -238,6 +238,148 @@ function installProductionAcceptanceMocks(
     )
   };
 
+  const fallbackPlan = {
+    planId: "plan-production-fallback-1",
+    eventSpecId: planSpecId,
+    readiness: options.completeSpec
+      ? {
+          status: "complete",
+          reasons: []
+        }
+      : {
+          status: "insufficient",
+          reasons: ["Glutenfrei-Konflikt bleibt ungelöst."]
+        },
+    isFallback: !options.completeSpec,
+    fallbackReason: options.completeSpec ? undefined : "Glutenfrei-Konflikt bleibt ungelöst.",
+    unresolvedItems: options.completeSpec
+      ? []
+      : ["Glutenfrei-Konflikt bleibt ungelöst.", "Klassifikation für Brot-Baguette fehlt."],
+    productionBatches: [],
+    kitchenSheets: [],
+    recipeSelections: options.withRecipeReviewStates
+      ? [
+          { componentId: "approved", recipeId: "recipe-approved-1", selectionReason: "Intern freigegeben." },
+          { componentId: "review", recipeId: "recipe-review-1", selectionReason: "Prüfung nötig." },
+          { componentId: "rejected", recipeId: "recipe-rejected-1", selectionReason: "Abgelehnt." }
+        ]
+      : []
+  };
+  const currentPlan = options.withoutPlans || planSpecId !== specId
+    ? undefined
+    : options.withQuickLunchMixedPlan
+    ? quickLunchPlan
+    : fallbackPlan;
+  const currentPurchaseList = options.withQuickLunchMixedPlan
+    ? {
+        purchaseListId: "purchase-quick-lunch-mixed-1",
+        eventSpecId: specId,
+        totals: { itemCount: 3 },
+        items: [
+          { displayName: "Baguette", purchaseQty: 120, purchaseUnit: "Stück" },
+          { displayName: "Brot", purchaseQty: 120, purchaseUnit: "Stück" },
+          { displayName: "Petersilie", purchaseQty: 2, purchaseUnit: "kg" }
+        ]
+      }
+    : options.withCurrentPurchaseList && purchaseListSpecId === specId
+    ? {
+        purchaseListId: "purchase-production-current-1",
+        eventSpecId: specId,
+        totals: {
+          itemCount: options.withEmptyCurrentPurchaseList
+            ? 0
+            : options.withInstructionLikeCurrentPurchaseItem
+            ? 3
+            : 2
+        },
+        items: options.withEmptyCurrentPurchaseList
+          ? []
+          : [
+              { articleName: "Glutenfreies Baguette", purchaseQty: 4, purchaseUnit: "Stück" },
+              { articleName: "Olivenöl", purchaseQty: 1, purchaseUnit: "l" },
+              ...(options.withInstructionLikeCurrentPurchaseItem
+                ? [{ articleName: "Mix veal, breadcrumbs and eggs.", purchaseQty: 16.2, purchaseUnit: "pcs" }]
+                : [])
+            ]
+      }
+    : undefined;
+  const productionCaseId = "production-case-fallback-1";
+  const searchCaseId = "production-case-search-target-1";
+
+  const productionCaseSummary = (caseId: string, displayName: string) => ({
+    caseId,
+    product: "production",
+    displayName,
+    status: "open",
+    createdAt: "2026-05-21T08:00:00.000Z",
+    updatedAt: "2026-05-21T08:30:00.000Z"
+  });
+
+  const productionCaseDetail = (caseId: string, caseSpecId: string, displayName: string) => {
+    const plan = caseSpecId === specId ? currentPlan : undefined;
+    const purchaseList = caseSpecId === specId ? currentPurchaseList : undefined;
+    const caseRecord = {
+      schemaVersion: "1.0",
+      businessId: "demo-business",
+      caseId,
+      product: "production",
+      displayName,
+      status: "open",
+      version: 1,
+      createdAt: "2026-05-21T08:00:00.000Z",
+      updatedAt: "2026-05-21T08:30:00.000Z",
+      sourceSpecId: caseSpecId,
+      ...(plan ? { currentPlanId: plan.planId } : {}),
+      ...(purchaseList ? { currentPurchaseListId: purchaseList.purchaseListId } : {})
+    };
+    const caseEvents = [
+      {
+        businessId: "demo-business",
+        eventId: `event-${caseId}-created`,
+        caseId,
+        sequence: 1,
+        at: "2026-05-21T08:00:00.000Z",
+        role: "system",
+        kind: "case_created",
+        text: "Auftrag angelegt."
+      },
+      {
+        businessId: "demo-business",
+        eventId: `event-${caseId}-source`,
+        caseId,
+        sequence: 2,
+        at: "2026-05-21T08:01:00.000Z",
+        role: "system",
+        kind: "source_added",
+        text: "Quelle verknüpft.",
+        sourceRef: {
+          sourceId: `source-${caseId}`,
+          requestId: caseSpecId === searchSpecId ? searchRequestId : requestId,
+          dataClass: "synthetic_demo",
+          addedAt: "2026-05-21T08:01:00.000Z"
+        }
+      },
+      ...(options.withAuditEvent && caseSpecId === specId
+        ? [
+            {
+              businessId: "demo-business",
+              eventId: `event-${caseId}-plan`,
+              caseId,
+              sequence: 3,
+              at: "2026-05-21T09:15:00.000Z",
+              role: "Küche",
+              kind: "production.plan.created",
+              text: "Produktionsplan erstellt"
+            }
+          ]
+        : [])
+    ];
+    return {
+      case: caseRecord,
+      events: caseEvents
+    };
+  };
+
   if (options.withSubmittedClarificationAnswer) {
     const questions = buildProductionClarificationQuestions({ spec: focusedSpec });
     const [question] = questions;
@@ -266,6 +408,121 @@ function installProductionAcceptanceMocks(
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
+      if (url.endsWith("/api/production/v1/production/cases") && (!init?.method || init.method === "GET")) {
+        const cases =
+          options.withoutSpecs
+            ? []
+              : [
+                  ...(archivedSpecIds.has(specId)
+                    ? []
+                    : [
+                        productionCaseSummary(
+                          productionCaseId,
+                          "Konferenz · 36 Teilnehmer · 2026-07-13"
+                        )
+                      ]),
+                  ...(options.withSearchTargetSpec
+                    ? [productionCaseSummary(searchCaseId, "Archivsuche Ziel · 12 Teilnehmer · 2099-05-26")]
+                    : [])
+                ];
+        return new Response(JSON.stringify({ items: cases }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      const productionCaseMatch = url.match(/\/api\/production\/v1\/production\/cases\/([^/]+)$/);
+      if (productionCaseMatch && (!init?.method || init.method === "GET")) {
+        const caseId = productionCaseMatch[1];
+        if (
+          caseId === productionCaseId &&
+          !options.withoutSpecs &&
+          !options.withPlanOnlyArtifacts &&
+          !archivedSpecIds.has(specId)
+        ) {
+          return new Response(
+            JSON.stringify(
+              productionCaseDetail(
+                caseId,
+                specId,
+                "Konferenz · 36 Teilnehmer · 2026-07-13"
+              )
+            ),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        if (caseId === searchCaseId && options.withSearchTargetSpec) {
+          return new Response(
+            JSON.stringify(
+              productionCaseDetail(
+                caseId,
+                searchSpecId,
+                "Archivsuche Ziel · 12 Teilnehmer · 2099-05-26"
+              )
+            ),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        return new Response(JSON.stringify({ message: "Production case not found" }), {
+          status: 404,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      const productionPlanDetailMatch = url.match(/\/api\/production\/v1\/production\/plans\/([^/]+)$/);
+      if (productionPlanDetailMatch && (!init?.method || init.method === "GET")) {
+        const planId = productionPlanDetailMatch[1];
+        const plan = [currentPlan, quickLunchPlan].find((candidate) => candidate?.planId === planId);
+        if (plan) {
+          return new Response(JSON.stringify(plan), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+        return new Response(JSON.stringify({ message: "Production plan not found" }), {
+          status: 404,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      const productionPurchaseDetailMatch = url.match(
+        /\/api\/production\/v1\/production\/purchase-lists\/([^/]+)$/
+      );
+      if (productionPurchaseDetailMatch && (!init?.method || init.method === "GET")) {
+        const purchaseListId = productionPurchaseDetailMatch[1];
+        if (currentPurchaseList?.purchaseListId === purchaseListId) {
+          return new Response(JSON.stringify(currentPurchaseList), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+        return new Response(JSON.stringify({ message: "Purchase list not found" }), {
+          status: 404,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      const productionRecipeDetailMatch = url.match(/\/api\/production\/v1\/production\/recipes\/([^/]+)$/);
+      if (productionRecipeDetailMatch && (!init?.method || init.method === "GET")) {
+        const recipeId = productionRecipeDetailMatch[1];
+        return new Response(
+          JSON.stringify({
+            recipeId,
+            name: recipeId === "recipe-approved-1"
+              ? "Freigegebenes Baguette"
+              : recipeId === "recipe-review-1"
+              ? "Baguette in Prüfung"
+              : "Abgelehnte Baguette-Variante",
+            source: recipeId === "recipe-approved-1"
+              ? { tier: "internal_verified", approvalState: "approved_internal" }
+              : recipeId === "recipe-review-1"
+              ? { tier: "digitized_cookbook", approvalState: "review_required" }
+              : { tier: "internet_fallback", approvalState: "rejected" }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
       if (url.endsWith("/api/intake/v1/intake/requests")) {
         return new Response(
           JSON.stringify({
@@ -290,6 +547,27 @@ function installProductionAcceptanceMocks(
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
+      }
+
+      const productionSpecDetailMatch = url.match(/\/api\/intake\/v1\/intake\/specs\/([^/]+)$/);
+      if (productionSpecDetailMatch) {
+        const requestedSpecId = productionSpecDetailMatch[1];
+        if (requestedSpecId === specId && !options.withoutSpecs && !archivedSpecIds.has(specId)) {
+          return new Response(JSON.stringify(focusedSpec), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+        if (requestedSpecId === searchSpecId && options.withSearchTargetSpec) {
+          return new Response(JSON.stringify(searchTargetSpec), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+        return new Response(JSON.stringify({ message: "Intake spec not found" }), {
+          status: 404,
+          headers: { "content-type": "application/json" }
+        });
       }
 
       if (url.endsWith("/api/intake/v1/intake/specs")) {
@@ -361,6 +639,13 @@ function installProductionAcceptanceMocks(
 
       if (url.endsWith("/api/offers/v1/offers/drafts")) {
         return new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/production/v1/production/drafts")) {
+        return new Response(JSON.stringify({ items: [], approvedProductionSpecs: [] }), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
@@ -759,7 +1044,8 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(rendered.text).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
     expect(rendered.text).toContain("Frühere Produktionsaufträge öffnen");
-    expect(rendered.text).toContain("Konferenz · 36 Teilnehmer · 2026-07-13");
+    expect(rendered.text).not.toContain("Aktueller Vorgang");
+    expect(rendered.text).not.toContain("Produktionsplan aus gespeicherter Spezifikation");
     expect(rendered.text).not.toContain("Bestandsdaten im Hintergrund");
     expect(rendered.text).not.toContain("Rückfragen und Antworten");
     expect(rendered.text).not.toContain("Produktionsblatt exportieren");
@@ -842,23 +1128,51 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Offene Punkte: keine");
   });
 
-  it("keeps switchable production specs addressable by unique question action labels", async () => {
+  it("keeps explicit production case selection bound to the visible specification", async () => {
     installProductionAcceptanceMocks({ withSearchTargetSpec: true });
 
-    const { container, root } = await renderProductionRouteInteractive();
+    const { container, root } = await renderProductionRouteInteractive({ openFirstJob: false });
 
     try {
-      const actionLabels = Array.from(
+      await act(async () => {
+        await flushProductionRouteUpdates(12);
+      });
+      const unboundActionLabels = Array.from(
         container.querySelectorAll("button[aria-label^='Rückfragen öffnen:']")
       ).map((button) => button.getAttribute("aria-label"));
+      expect(unboundActionLabels).toEqual([]);
 
-      expect(actionLabels).toContain(
-        "Rückfragen öffnen: Archivsuche Ziel · 12 Teilnehmer · 2099-05-26 · Klarheit: vollständig"
-      );
-      expect(actionLabels).toContain(
-        "Rückfragen öffnen: Konferenz · 36 Teilnehmer · 2026-07-13 · Klarheit: unzureichend"
-      );
-      expect(new Set(actionLabels).size).toBe(actionLabels.length);
+      const history = container.querySelector(".production-filter-details") as HTMLDetailsElement | null;
+      if (!history) {
+        throw new Error("Production history filter not found");
+      }
+      history.open = true;
+      const currentCaseButton = Array.from(history.querySelectorAll(".quiet-list__button")).find((button) =>
+        (button.textContent ?? "").includes("Konferenz · 36 Teilnehmer · 2026-07-13")
+      ) as HTMLButtonElement | undefined;
+      expect(currentCaseButton).toBeTruthy();
+
+      await act(async () => {
+        currentCaseButton?.click();
+        await flushProductionRouteUpdates(12);
+      });
+
+      const currentData = container.querySelector(".question-window__spec")?.textContent ?? "";
+      expect(currentData).toContain("Konferenz · 36 Teilnehmer · 2026-07-13");
+      expect(currentData).not.toContain("Archivsuche Ziel · 12 Teilnehmer · 2099-05-26");
+
+      const searchCaseButton = Array.from(history.querySelectorAll(".quiet-list__button")).find((button) =>
+        (button.textContent ?? "").includes("Archivsuche Ziel · 12 Teilnehmer · 2099-05-26")
+      ) as HTMLButtonElement | undefined;
+      expect(searchCaseButton).toBeTruthy();
+      await act(async () => {
+        searchCaseButton?.click();
+        await flushProductionRouteUpdates(12);
+      });
+
+      const searchData = container.querySelector(".question-window__spec")?.textContent ?? "";
+      expect(searchData).toContain("Archivsuche Ziel · 12 Teilnehmer · 2099-05-26");
+      expect(searchData).not.toContain("Konferenz · 36 Teilnehmer · 2026-07-13");
     } finally {
       await act(async () => {
         root.unmount();
@@ -881,7 +1195,10 @@ describe("backoffice production acceptance smoke", () => {
         });
       }
 
-      if (url.endsWith("/api/production/v1/production/cases")) {
+      if (
+        url.endsWith("/api/production/v1/production/cases") &&
+        (init?.method ?? "GET").toUpperCase() === "POST"
+      ) {
         return new Response(JSON.stringify({ case: { caseId: "production-case-wrong-offer" } }), {
           status: 201,
           headers: { "content-type": "application/json" }
@@ -1323,7 +1640,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Aktueller Vorgang");
   });
 
-  it("marks older production objects and purchase lists as non-current context", async () => {
+  it("does not project older global production objects into the selected context", async () => {
     installProductionAcceptanceMocks({
       completeSpec: true,
       withCurrentPurchaseList: true,
@@ -1336,14 +1653,10 @@ describe("backoffice production acceptance smoke", () => {
       "Hier erscheinen die Ergebnisse für den aktuell ausgewählten Vorgang. Ältere geladene Läufe bleiben eingeklappt getrennt und sind kein aktueller Vorgang."
     );
     expect(content).toContain("Nur bei Bedarf aufklappen; ältere Läufe sind nicht der aktuelle Vorgang.");
-    expect(content).toContain("Ältere Produktionsläufe");
     expect(content).toContain("Einzelheiten zu diesem Produktionsplan");
-    expect(content).toContain(
-      "Diese früheren Produktionsläufe sind Kontext aus anderen Vorgängen, nicht das aktuelle Ergebnis."
-    );
-    expect(content).toContain("Ältere Einkaufslisten");
-    expect(content).toContain("Nur bei Bedarf aufklappen; ältere Listen sind kein aktueller Vorgang.");
-    expect(content).toContain("Ältere Einkaufsliste aus anderem Vorgang - nicht aktueller Vorgang.");
+    expect(content).not.toContain("Alte Testposition");
+    expect(content).not.toContain("plan-production-previous-1");
+    expect(content).not.toContain("purchase-production-previous-1");
     expect(content).toContain("Aktueller Vorgang");
   });
 

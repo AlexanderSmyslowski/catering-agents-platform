@@ -12,6 +12,13 @@ DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 START_ATTEMPTS="${CATERING_LOCAL_START_ATTEMPTS:-30}"
 PRODUCTION_LOCK_PROTOCOL="canonical-v2"
+SEED_DEMO=0
+if [[ "${1:-}" == "--seed-demo" ]]; then
+  SEED_DEMO=1
+elif [[ -n "${1:-}" ]]; then
+  echo "Unbekannte Startoption: ${1}" >&2
+  exit 2
+fi
 
 required_sessions=(
   "catering-ui"
@@ -373,7 +380,7 @@ release_startup_mutex
 wait_for_url "http://127.0.0.1:3104/health" "Export"
 wait_for_url "http://127.0.0.1:3200" "Backoffice-UI"
 
-if [[ "${1:-}" == "--seed-demo" ]]; then
+if [[ "${SEED_DEMO}" == "1" ]]; then
   seed_demo_data
 fi
 

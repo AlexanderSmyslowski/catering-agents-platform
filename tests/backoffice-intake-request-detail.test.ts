@@ -39,6 +39,66 @@ describe("backoffice intake request detail", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url.endsWith("/api/production/v1/production/cases")) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  caseId: "production-case-request-detail-1",
+                  product: "production",
+                  displayName: "Konferenz · 45 Teilnehmer · 2026-04-18",
+                  status: "open",
+                  createdAt: "2026-04-10T09:30:00.000Z",
+                  updatedAt: "2026-04-10T09:30:00.000Z"
+                }
+              ]
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        if (url.endsWith("/api/production/v1/production/cases/production-case-request-detail-1")) {
+          return new Response(
+            JSON.stringify({
+              case: {
+                schemaVersion: "1.0",
+                businessId: "demo-business",
+                caseId: "production-case-request-detail-1",
+                product: "production",
+                displayName: "Konferenz · 45 Teilnehmer · 2026-04-18",
+                status: "open",
+                version: 1,
+                createdAt: "2026-04-10T09:30:00.000Z",
+                updatedAt: "2026-04-10T09:30:00.000Z",
+                sourceSpecId: spec.specId
+              },
+              events: [
+                {
+                  businessId: "demo-business",
+                  eventId: "production-case-request-detail-1-source",
+                  caseId: "production-case-request-detail-1",
+                  sequence: 1,
+                  at: "2026-04-10T09:30:00.000Z",
+                  role: "system",
+                  kind: "source_added",
+                  text: "Quelle verknüpft.",
+                  sourceRef: {
+                    sourceId: "source-request-detail-1",
+                    requestId: "request-detail-1",
+                    dataClass: "synthetic_demo",
+                    addedAt: "2026-04-10T09:30:00.000Z"
+                  }
+                }
+              ]
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        if (url.endsWith(`/api/intake/v1/intake/specs/${spec.specId}`)) {
+          return new Response(JSON.stringify(spec), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
         if (url.includes("/api/intake/v1/intake/requests/request-detail-1")) {
           return new Response(
             JSON.stringify({

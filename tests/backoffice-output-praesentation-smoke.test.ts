@@ -243,11 +243,168 @@ function installBackofficeMocks(
   vi.stubGlobal("localStorage", localStorageMock);
 
   const { dashboard, requestDetail } = createDashboardResponse(blocked, schedule);
+  const activeSpec = dashboard.acceptedSpecs[0]!;
+  const activePlan = dashboard.productionPlans[0]!;
+  const activePurchaseList = dashboard.purchaseLists[0]!;
+  const activeOfferDraft = {
+    ...dashboard.offerDrafts[0]!,
+    proposedEventSpec: activeSpec
+  };
+  const offerCaseId = blocked ? "presentation-offer-case-blocked" : "presentation-offer-case-success";
+  const productionCaseId = blocked ? "presentation-production-case-blocked" : "presentation-production-case-success";
 
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+
+      if (url.endsWith("/api/offers/v1/offers/cases")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                caseId: offerCaseId,
+                product: "offer",
+                displayName: "Lunch-Angebot für 45 Personen",
+                status: "open",
+                createdAt: "2026-07-01T09:00:00.000Z",
+                updatedAt: "2026-07-01T09:05:00.000Z"
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith(`/api/offers/v1/offers/cases/${offerCaseId}`)) {
+        return new Response(
+          JSON.stringify({
+            case: {
+              schemaVersion: "1.0",
+              businessId: "demo-business",
+              caseId: offerCaseId,
+              product: "offer",
+              displayName: "Lunch-Angebot für 45 Personen",
+              status: "open",
+              version: 1,
+              createdAt: "2026-07-01T09:00:00.000Z",
+              updatedAt: "2026-07-01T09:05:00.000Z"
+            },
+            events: [
+              {
+                businessId: "demo-business",
+                eventId: `${offerCaseId}-draft`,
+                caseId: offerCaseId,
+                sequence: 1,
+                at: "2026-07-01T09:05:00.000Z",
+                role: "system",
+                kind: "artifact_attached",
+                text: "Angebotsentwurf verknüpft.",
+                revisionRef: {
+                  artifactType: "OfferDraft",
+                  artifactId: dashboard.offerDrafts[0]!.draftId,
+                  revision: 1,
+                  createdAt: "2026-07-01T09:05:00.000Z"
+                },
+                sourceRef: {
+                  sourceId: `${offerCaseId}-source`,
+                  requestId: requestDetail.requestId,
+                  dataClass: "synthetic_demo",
+                  addedAt: "2026-07-01T09:05:00.000Z"
+                }
+              }
+            ],
+            currentDraft: activeOfferDraft
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/api/production/v1/production/cases")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                caseId: productionCaseId,
+                product: "production",
+                displayName: "Lunch · 45 Teilnehmer · 2026-07-01",
+                status: "open",
+                createdAt: "2026-07-01T09:00:00.000Z",
+                updatedAt: "2026-07-01T09:05:00.000Z"
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith(`/api/production/v1/production/cases/${productionCaseId}`)) {
+        return new Response(
+          JSON.stringify({
+            case: {
+              schemaVersion: "1.0",
+              businessId: "demo-business",
+              caseId: productionCaseId,
+              product: "production",
+              displayName: "Lunch · 45 Teilnehmer · 2026-07-01",
+              status: "open",
+              version: 1,
+              createdAt: "2026-07-01T09:00:00.000Z",
+              updatedAt: "2026-07-01T09:05:00.000Z",
+              sourceSpecId: activeSpec.specId,
+              currentPlanId: activePlan.planId,
+              currentPurchaseListId: activePurchaseList.purchaseListId
+            },
+            events: [
+              {
+                businessId: "demo-business",
+                eventId: `${productionCaseId}-source`,
+                caseId: productionCaseId,
+                sequence: 1,
+                at: "2026-07-01T09:05:00.000Z",
+                role: "system",
+                kind: "source_added",
+                text: "Quelle verknüpft.",
+                sourceRef: {
+                  sourceId: `${productionCaseId}-source-ref`,
+                  requestId: requestDetail.requestId,
+                  dataClass: "synthetic_demo",
+                  addedAt: "2026-07-01T09:05:00.000Z"
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith(`/api/production/v1/production/plans/${activePlan.planId}`)) {
+        return new Response(JSON.stringify(activePlan), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith(`/api/production/v1/production/purchase-lists/${activePurchaseList.purchaseListId}`)) {
+        return new Response(JSON.stringify(activePurchaseList), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith("/api/production/v1/production/recipes/recipe-vegetarian-tomato-soup")) {
+        return new Response(JSON.stringify(dashboard.recipes[0]), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.endsWith(`/api/intake/v1/intake/specs/${activeSpec.specId}`)) {
+        return new Response(JSON.stringify(activeSpec), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
 
       if (url.endsWith("/api/intake/v1/intake/requests")) {
         return new Response(JSON.stringify({ items: dashboard.intakeRequests }), {
