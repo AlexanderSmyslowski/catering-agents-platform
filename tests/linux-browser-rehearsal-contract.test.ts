@@ -8,6 +8,7 @@ const shellPath = resolve(root, "scripts/browser-rehearsal-shell.sh");
 const workflow = readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8");
 const rehearsal = readFileSync(resolve(root, "scripts/check-browser-rehearsal.sh"), "utf8");
 const browserShell = readFileSync(resolve(root, "scripts/browser-rehearsal-shell.sh"), "utf8");
+const homeMarkers = readFileSync(resolve(root, "scripts/browser-rehearsal/home-markers.js"), "utf8");
 
 const runMarkerContract = (mode: "eventual" | "permanent") =>
   spawnSync(
@@ -94,6 +95,50 @@ describe("Linux browser rehearsal governance", () => {
     expect(browserShell).toContain("report.requests.length === 0");
     expect(rehearsal).toContain("check_current_page_markers_at_viewports");
     expect(browserShell).toContain("CATERING_BROWSER_CLI");
+  });
+
+  it("executes the home marker contract against the rendered portal actions", () => {
+    expect(homeMarkers).not.toContain("Interner Arbeitsstand");
+    expect(homeMarkers).not.toContain("Arbeitsweg: Start");
+    expect(homeMarkers).not.toContain("keine automatische Allergen");
+    expect(homeMarkers).not.toContain("Bestands- und Demo-Kontext");
+    expect(homeMarkers).not.toContain("/produktion");
+    expect(rehearsal).toContain('click_rehearsal_link "Angebot -> Produktion" "/produktion"');
+
+    const actionLinks = [
+      {
+        offsetParent: {},
+        textContent: "Neuen Auftrag beginnen",
+        getAttribute: (name: string) => (name === "href" ? "/angebot" : null)
+      },
+      {
+        offsetParent: {},
+        textContent: "Frühere Aufträge",
+        getAttribute: (name: string) => (name === "href" ? "/angebot#history" : null)
+      }
+    ];
+    const portalDocument = {
+      body: { innerText: "Catering-Agenten\nNeuen Auftrag beginnen\nFrühere Aufträge" },
+      querySelectorAll: (selector: string) =>
+        selector === "nav[aria-label='Startauswahl'] a" ? actionLinks : []
+    };
+    const buildMarkerCheck = (document: typeof portalDocument) =>
+      new Function(
+        "document",
+        "location",
+        `return (${homeMarkers});`
+      )(document, { pathname: "/" }) as () => { route: string; markers: string };
+
+    expect(buildMarkerCheck(portalDocument)()).toEqual({ route: "/", markers: "home-ok" });
+
+    const missingHistoryActionDocument = {
+      ...portalDocument,
+      querySelectorAll: (selector: string) =>
+        selector === "nav[aria-label='Startauswahl'] a" ? actionLinks.slice(0, 1) : []
+    };
+    expect(() => buildMarkerCheck(missingHistoryActionDocument)()).toThrow(
+      "Startaktion fehlt: Frühere Aufträge -> /angebot#history"
+    );
   });
 
   it("rejects a missing browser CLI before opening a stack or session", () => {
