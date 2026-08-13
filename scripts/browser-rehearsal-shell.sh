@@ -47,6 +47,64 @@ check_current_page_markers() {
   printf '  %s: Browser-Marker sichtbar\n' "${label}"
 }
 
+check_viewport() {
+  local label="$1"
+  local width="$2"
+  local height="$3"
+
+  run_browser resize "${width}" "${height}" >/dev/null
+  run_browser eval "() => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    if (viewport.width !== ${width} || viewport.height !== ${height}) {
+      throw new Error(\"${label} erwartet ${width}x${height}, erhalten \" + JSON.stringify(viewport));
+    }
+    if (document.documentElement.scrollWidth > document.documentElement.clientWidth) {
+      throw new Error(\"${label} hat horizontales Scrollen\");
+    }
+    return viewport;
+  }" >/dev/null
+  printf '  %s: Viewport %sx%s und keine horizontale Überbreite\n' "${label}" "${width}" "${height}"
+}
+
+check_current_page_markers_at_viewports() {
+  local label="$1"
+  local marker_script="$2"
+
+  check_viewport "${label} Desktop" 1440 900
+  check_current_page_markers "${label} Desktop" "${marker_script}"
+  check_viewport "${label} Mobil" 390 844
+  check_current_page_markers "${label} Mobil" "${marker_script}"
+  check_viewport "${label} Desktop Abschluss" 1440 900
+}
+
+require_empty_console_report() {
+  node -e 'const report = JSON.parse(process.argv[1]); if (!Array.isArray(report.messages) || report.messages.length !== 0) process.exit(1);' "$1"
+}
+
+require_nonempty_request_report() {
+  node -e 'const report = JSON.parse(process.argv[1]); if (!Array.isArray(report.requests) || report.requests.length === 0) process.exit(1);' "$1"
+}
+
+check_browser_diagnostics() {
+  local console_report
+  local request_report
+
+  console_report="$(run_browser --json console error)"
+  if ! require_empty_console_report "${console_report}"; then
+    echo "Browser-Rehearsal meldet Konsolenfehler oder einen unlesbaren Fehlerbericht." >&2
+    printf '%s\n' "${console_report}" >&2
+    return 1
+  fi
+
+  request_report="$(run_browser --json requests --filter '/api/')"
+  if ! require_nonempty_request_report "${request_report}"; then
+    echo "Browser-Rehearsal konnte keinen API-Requestbericht lesen." >&2
+    printf '%s\n' "${request_report}" >&2
+    return 1
+  fi
+  printf '  Browser-Diagnose: keine Konsolenfehler; API-Requestbericht vorhanden\n'
+}
+
 click_rehearsal_link() {
   local label="$1"
   local target_path="$2"

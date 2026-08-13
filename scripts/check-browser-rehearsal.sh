@@ -81,20 +81,21 @@ offer_to_production="$(load_rehearsal_script "offer-to-production.js")"
 open_production_history_item="$(load_rehearsal_script "open-production-history-item.js")"
 
 echo "Browser-Navigations- und Markerpruefung:"
-check_current_page_markers "Start" "${home_markers}"
+check_current_page_markers_at_viewports "Start" "${home_markers}"
 click_rehearsal_link "Start -> Angebot" "/angebot" "${home_to_offer}"
-check_current_page_markers "Angebot leerer Start" "${offer_empty_markers}"
+check_current_page_markers_at_viewports "Angebot leerer Start" "${offer_empty_markers}"
 check_current_page_markers "Angebot Auftrag bewusst geoeffnet" "${open_offer_history_item}"
-check_current_page_markers "Angebot" "${offer_markers}"
+check_current_page_markers_at_viewports "Angebot" "${offer_markers}"
 click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
-check_current_page_markers "Produktion leerer Start" "${production_empty_markers}"
+check_current_page_markers_at_viewports "Produktion leerer Start" "${production_empty_markers}"
 check_current_page_markers "Produktion Auftrag bewusst geoeffnet" "${open_production_history_item}"
-check_current_page_markers "Produktion" "${production_markers}"
+check_current_page_markers_at_viewports "Produktion" "${production_markers}"
 check_current_page_markers "Produktion offene Rueckfragen" "${open_question_markers}"
 if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
   run_browser reload >/dev/null
   check_current_page_markers "Produktion Submit-Reload leerer Start" "${production_empty_markers}"
   check_current_page_markers "Produktion Submit-Reload gespeichert" "${submitted_reload_markers}"
+  check_browser_diagnostics
   echo ""
   echo "Browser-Rehearsal-Antwortpfad bestaetigt: Lunch-Auftrag wurde auf 43 Teilnehmer aktualisiert; Produktionsplan und ehrlicher Leerzustand der Einkaufsliste bleiben nach Reload sichtbar."
   echo "Grenze: mutierender Fresh-Rehearsal-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
@@ -103,6 +104,7 @@ fi
 if [[ "${ARCHIVE_INTAKE}" == "1" ]]; then
   run_browser reload >/dev/null
   check_current_page_markers "Produktion Archiv-Reload stabil" "${archive_reload_markers}"
+  check_browser_diagnostics
   echo ""
   echo "Browser-Rehearsal-Archivpfad bestaetigt: synthetischer aktiver Intake-Kontext wurde per Soft-Archiv aus dem Fokus genommen."
   echo "Grenze: mutierender Fresh-Rehearsal-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
@@ -119,6 +121,7 @@ check_current_page_markers "Produktion Ergebnis-Kontext erneut bewusst geoeffnet
 check_current_page_markers "Produktion Ergebnis-Reload stabil" "${production_result_reload_markers}"
 if [[ "${FAILED_UPLOAD}" == "1" ]]; then
   check_current_page_markers "Produktion Failed-Upload sicher" "${failed_upload_markers}"
+  check_browser_diagnostics
   echo ""
   echo "Browser-Rehearsal-Fehluploadpfad bestaetigt: synthetischer nicht erlaubter Upload leert stale Produktionskontext, zeigt den Fehler und bleibt retrybar."
   echo "Grenze: mutierender Fresh-Rehearsal-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
@@ -127,6 +130,8 @@ fi
 check_current_page_markers "Produktion lokal geleert" "${clear_workspace_markers}"
 run_browser reload >/dev/null
 check_current_page_markers "Produktion lokales Leeren nach Reload konsistent" "${clear_workspace_reload_markers}"
+
+check_browser_diagnostics
 
 echo ""
 echo "Browser-Rehearsal-Kernpfad bestaetigt: Start -> Angebot -> Produktion -> Rueckfragen -> Ergebnisobjekte -> Exporte/Audit -> lokales Leeren."

@@ -32,3 +32,31 @@ jobs:
 
       - name: Test
         run: npm test
+
+  browser-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      npm_config_cache: ${{ runner.temp }}/catering-npm-cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Playwright CLI and Chromium
+        run: |
+          npx --yes --package @playwright/cli playwright-cli install-browser chrome-for-testing
+          chmod +x scripts/ci-browser-cli.sh
+          echo "CATERING_BROWSER_CLI=$GITHUB_WORKSPACE/scripts/ci-browser-cli.sh" >> "$GITHUB_ENV"
+
+      - name: Browser rehearsal
+        run: timeout 300 npm run browser:rehearsal:full-fresh
