@@ -128,26 +128,45 @@ click_rehearsal_link() {
   local target_path="$2"
   local click_script="$3"
   local attempts=30
+  local attempt
+  local last_error=""
+  local navigation_check
 
-  run_browser eval "${click_script}" >/dev/null
+  if ! last_error="$(run_browser eval "${click_script}" 2>&1)"; then
+    printf '  %s: Navigationklick nach %s fehlgeschlagen\n' "${label}" "${target_path}" >&2
+    if [[ -n "${last_error}" ]]; then
+      printf '%s\n' "${last_error}" >&2
+    else
+      echo 'Keine konkrete CLI-/Navigationsfehlermeldung erhalten.' >&2
+    fi
+    return 1
+  fi
 
-  for _ in $(seq 1 "${attempts}"); do
-    if run_browser eval "() => {
+  navigation_check="() => {
       if (location.pathname !== \"${target_path}\") {
         throw new Error(\"${label} wartet auf ${target_path}, aktuell \" + location.pathname);
       }
       return { route: location.pathname };
-    }" >/dev/null 2>&1; then
+    }"
+
+  for attempt in $(seq 1 "${attempts}"); do
+    if last_error="$(run_browser eval "${navigation_check}" 2>&1)"; then
       printf '  %s: Browser-Navigation nach %s bestaetigt\n' "${label}" "${target_path}"
       return 0
     fi
-    sleep 0.2
+    if (( attempt < attempts )); then
+      sleep 0.2
+    fi
   done
 
-  run_browser eval "() => {
-    throw new Error(\"${label} navigierte nicht stabil nach ${target_path}; aktuell \" + location.pathname);
-  }" >/dev/null
-  printf '  %s: Browser-Navigation nach %s bestaetigt\n' "${label}" "${target_path}"
+  printf '  %s: Browser-Navigation nach %s nach %s Versuchen nicht bestaetigt\n' \
+    "${label}" "${target_path}" "${attempts}" >&2
+  if [[ -n "${last_error}" ]]; then
+    printf '%s\n' "${last_error}" >&2
+  else
+    echo 'Keine konkrete CLI-/Navigationsfehlermeldung erhalten.' >&2
+  fi
+  return 1
 }
 
 require_fresh_mutation_scope() {

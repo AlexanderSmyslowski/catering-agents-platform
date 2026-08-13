@@ -9,6 +9,7 @@ const workflow = readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8")
 const rehearsal = readFileSync(resolve(root, "scripts/check-browser-rehearsal.sh"), "utf8");
 const browserShell = readFileSync(resolve(root, "scripts/browser-rehearsal-shell.sh"), "utf8");
 const homeMarkers = readFileSync(resolve(root, "scripts/browser-rehearsal/home-markers.js"), "utf8");
+const homeToOffer = readFileSync(resolve(root, "scripts/browser-rehearsal/home-to-offer.js"), "utf8");
 
 const runMarkerContract = (mode: "eventual" | "permanent") =>
   spawnSync(
@@ -45,6 +46,53 @@ run_browser() {
   return 0
 }
 check_current_page_markers "Marker-Vertrag" "$2"
+`,
+      "browser-contract",
+      shellPath,
+      mode,
+    ],
+    { cwd: root, encoding: "utf8" },
+  );
+
+const runNavigationContract = (mode: "click-failure" | "path-failure") =>
+  spawnSync(
+    "bash",
+    [
+      "-c",
+      `
+source "$1"
+set -euo pipefail
+exec 3>&2
+state_file="$(mktemp /tmp/catering-navigation-contract.XXXXXX)"
+cleanup_state() {
+  if [[ -x /usr/bin/trash ]]; then
+    /usr/bin/trash "$state_file" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_state EXIT
+printf '0' > "$state_file"
+sleep() { :; }
+run_browser() {
+  local calls
+  if [[ "$2" == "click-failure" ]]; then
+    printf 'Startaktion /angebot nicht klickbar\\n'
+    return 1
+  fi
+  if [[ "$2" == "click-success" ]]; then
+    return 0
+  fi
+  calls="$(<"$state_file")"
+  calls=$((calls + 1))
+  printf '%s' "$calls" > "$state_file"
+  printf 'attempt=%s\\n' "$calls" >&3
+  printf 'Navigation wartet auf /angebot; aktuell /\\n'
+  return 1
+}
+click_script="click-success"
+if [[ "$2" == "click-failure" ]]; then
+  click_script="click-failure"
+fi
+click_rehearsal_link "Navigation-Vertrag" "/angebot" "$click_script"
 `,
       "browser-contract",
       shellPath,
@@ -139,6 +187,54 @@ describe("Linux browser rehearsal governance", () => {
     expect(() => buildMarkerCheck(missingHistoryActionDocument)()).toThrow(
       "Startaktion fehlt: Frühere Aufträge -> /angebot#history"
     );
+  });
+
+  it("clicks the actual portal offer action and rejects the legacy label", () => {
+    expect(homeToOffer).not.toContain("Angebotsagent öffnen");
+    expect(homeToOffer).toContain("Neuen Auftrag beginnen");
+
+    let clicks = 0;
+    const actualLink = {
+      offsetParent: {},
+      textContent: "Neuen Auftrag beginnen",
+      getAttribute: (name: string) => (name === "href" ? "/angebot" : null),
+      click: () => {
+        clicks += 1;
+      }
+    };
+    const buildNavigation = (links: typeof actualLink[]) => {
+      const document = { querySelectorAll: () => links };
+      return new Function("document", `return (${homeToOffer});`)(document) as () => {
+        clicked: string;
+      };
+    };
+
+    expect(buildNavigation([actualLink])()).toEqual({ clicked: "Neuen Auftrag beginnen" });
+    expect(clicks).toBe(1);
+
+    const legacyLink = {
+      ...actualLink,
+      textContent: "Angebotsagent öffnen"
+    };
+    expect(() => buildNavigation([legacyLink])()).toThrow(
+      "Start-Link zum Angebotsagent fehlt: Neuen Auftrag beginnen -> /angebot"
+    );
+  });
+
+  it("surfaces a failed click with its concrete browser error", () => {
+    const result = runNavigationContract("click-failure");
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Startaktion /angebot nicht klickbar");
+  });
+
+  it("fails bounded navigation waits with the last concrete path error", () => {
+    const result = runNavigationContract("path-failure");
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("attempt=30");
+    expect(result.stderr).not.toContain("attempt=31");
+    expect(result.stderr).toContain("Navigation wartet auf /angebot; aktuell /");
   });
 
   it("rejects a missing browser CLI before opening a stack or session", () => {
