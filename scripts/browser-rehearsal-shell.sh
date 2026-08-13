@@ -42,9 +42,27 @@ require_ui_shell() {
 check_current_page_markers() {
   local label="$1"
   local marker_script="$2"
+  local attempts=30
+  local attempt
+  local last_error=""
 
-  run_browser eval "${marker_script}" >/dev/null
-  printf '  %s: Browser-Marker sichtbar\n' "${label}"
+  for attempt in $(seq 1 "${attempts}"); do
+    if last_error="$(run_browser eval "${marker_script}" 2>&1)"; then
+      printf '  %s: Browser-Marker sichtbar\n' "${label}"
+      return 0
+    fi
+    if (( attempt < attempts )); then
+      sleep 0.2
+    fi
+  done
+
+  printf '  %s: Browser-Marker nach %s Versuchen nicht sichtbar\n' "${label}" "${attempts}" >&2
+  if [[ -n "${last_error}" ]]; then
+    printf '%s\n' "${last_error}" >&2
+  else
+    echo 'Keine konkrete CLI-/Markerfehlermeldung erhalten.' >&2
+  fi
+  return 1
 }
 
 check_viewport() {

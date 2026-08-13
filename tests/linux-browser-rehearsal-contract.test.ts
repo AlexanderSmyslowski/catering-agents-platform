@@ -9,6 +9,49 @@ const workflow = readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8")
 const rehearsal = readFileSync(resolve(root, "scripts/check-browser-rehearsal.sh"), "utf8");
 const browserShell = readFileSync(resolve(root, "scripts/browser-rehearsal-shell.sh"), "utf8");
 
+const runMarkerContract = (mode: "eventual" | "permanent") =>
+  spawnSync(
+    "bash",
+    [
+      "-c",
+      `
+source "$1"
+set -euo pipefail
+exec 3>&2
+state_file="$(mktemp /tmp/catering-marker-contract.XXXXXX)"
+cleanup_state() {
+  if [[ -x /usr/bin/trash ]]; then
+    /usr/bin/trash "$state_file" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_state EXIT
+printf '0' > "$state_file"
+sleep() { :; }
+run_browser() {
+  local calls
+  calls="$(<"$state_file")"
+  calls=$((calls + 1))
+  printf '%s' "$calls" > "$state_file"
+  printf 'attempt=%s\\n' "$calls" >&3
+  if [[ "$2" == "eventual" && "$calls" -lt 3 ]]; then
+    printf 'marker pending on attempt %s\\n' "$calls"
+    return 1
+  fi
+  if [[ "$2" == "permanent" ]]; then
+    printf 'marker missing on attempt %s\\n' "$calls"
+    return 1
+  fi
+  return 0
+}
+check_current_page_markers "Marker-Vertrag" "$2"
+`,
+      "browser-contract",
+      shellPath,
+      mode,
+    ],
+    { cwd: root, encoding: "utf8" },
+  );
+
 describe("Linux browser rehearsal governance", () => {
   it("requires a real Ubuntu browser job with a hard, fail-closed rehearsal", () => {
     expect(workflow).toContain("browser-rehearsal:");
@@ -76,5 +119,21 @@ describe("Linux browser rehearsal governance", () => {
     expect(run("require_empty_console_report", "not-json").status).not.toBe(0);
     expect(run("require_nonempty_request_report", '{"requests":[{"url":"/api/health"}]}').status).toBe(0);
     expect(run("require_nonempty_request_report", '{"requests":[]}').status).not.toBe(0);
+  });
+
+  it("retries a marker that appears during asynchronous initialisation", () => {
+    const result = runMarkerContract("eventual");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Browser-Marker sichtbar");
+    expect(result.stderr).toContain("attempt=3");
+  });
+
+  it("fails bounded marker retries with the last concrete CLI error", () => {
+    const result = runMarkerContract("permanent");
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("attempt=30");
+    expect(result.stderr).toContain("marker missing on attempt 30");
   });
 });
