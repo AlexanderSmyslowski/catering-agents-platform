@@ -66,6 +66,8 @@ export function buildAppOfferRouteState(input: AppOfferRouteStateInput): AppOffe
       activeDraft: input.activeDraft,
       selectedDraft: input.selectedDraft,
       setSelectedDraftId: input.setSelectedDraftId,
+      selectedVariantId: input.selectedVariantId,
+      setSelectedVariantId: input.setSelectedVariantId,
       approveDraft: input.approveDraft,
       approvalBinding: input.approvalBinding,
       createHandoff: input.createHandoff,

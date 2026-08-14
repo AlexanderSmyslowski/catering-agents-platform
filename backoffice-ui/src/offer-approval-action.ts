@@ -1,4 +1,6 @@
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
+import { productionDraftIdForHandoff } from "./production-entry-focus.js";
+import type { ApprovedOffer, ProductionHandoff } from "@catering/shared-core";
 
 export type OfferApprovalBinding = {
   offerDraftId: string;
@@ -7,6 +9,33 @@ export type OfferApprovalBinding = {
   handoffId?: string;
   productionDraftId?: string;
 };
+
+/** Project the complete persisted approval/handoff records into the browser
+ * action contract. The source draft remains the authority after a reload. */
+export function buildOfferApprovalBinding(
+  approvedOffer?: Pick<ApprovedOffer, "approvedOfferId" | "sourceDraft">,
+  handoff?: Pick<ProductionHandoff, "handoffId" | "source" | "approvedOfferId">
+): OfferApprovalBinding | undefined {
+  const source = approvedOffer?.sourceDraft ?? handoff?.source;
+  const approvedOfferId = approvedOffer?.approvedOfferId ?? handoff?.approvedOfferId;
+  if (!source || !approvedOfferId || !source.draftId || !Number.isInteger(source.revision) || source.revision < 1) {
+    return undefined;
+  }
+  if (approvedOffer && handoff && (
+    approvedOffer.approvedOfferId !== handoff.approvedOfferId ||
+    approvedOffer.sourceDraft.draftId !== handoff.source.draftId ||
+    approvedOffer.sourceDraft.revision !== handoff.source.revision
+  )) {
+    return undefined;
+  }
+  return {
+    offerDraftId: source.draftId,
+    offerDraftRevision: source.revision,
+    approvedOfferId,
+    ...(handoff?.handoffId ? { handoffId: handoff.handoffId } : {}),
+    ...(handoff?.handoffId ? { productionDraftId: productionDraftIdForHandoff(handoff.handoffId) } : {})
+  };
+}
 
 export type OfferApprovalActionInput = {
   decideOfferDraft: (draftId: string, revision: number, variantId: string) => Promise<{ approvedOffer?: { approvedOfferId: string } }>;

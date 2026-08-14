@@ -7,6 +7,7 @@ import {
   formatProductionDraftReviewDecisionLabel,
   formatProductionDraftSourceLabel,
   formatProductionDraftStatusLabel,
+  announceProductionDraftRefresh,
   ProductionDraftReviewPanel
 } from "../backoffice-ui/src/production-draft-review-panel.js";
 import type {
@@ -823,6 +824,39 @@ describe("ProductionDraftReviewPanel", () => {
     expect(document.body.textContent ?? "").toContain("Übergebener Entwurf");
     expect(document.body.textContent ?? "").not.toContain("Neuer Entwurf");
     expect(document.activeElement?.id).toBe("production-draft-draft-from-handoff");
+    await act(async () => root.unmount());
+  });
+
+  it("reloads its local state when a global production action completes", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === productionDraftsUrl && (init?.method ?? "GET") === "GET") {
+        return jsonResponse({ items: [draftFixture()], approvedProductionSpecs: [] });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId }));
+      await flushPromises();
+    });
+    const initialLoads = fetchMock.mock.calls.filter(([input]) => String(input) === productionDraftsUrl).length;
+
+    await act(async () => {
+      announceProductionDraftRefresh();
+      await flushPromises();
+      await flushPromises();
+    });
+
+    const refreshedLoads = fetchMock.mock.calls.filter(([input]) => String(input) === productionDraftsUrl).length;
+    expect(refreshedLoads).toBeGreaterThan(initialLoads);
     await act(async () => root.unmount());
   });
 

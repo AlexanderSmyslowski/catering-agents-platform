@@ -36,7 +36,9 @@ import {
   createProductionCaseFromHandoff,
   createProductionDraftFromAcceptedEventSpec,
   createProductionDraftFromDocument,
+  applyApprovedProductionSpec,
   decideOfferDraft,
+  decideProductionDraft,
   createProductionHandoff,
   createProductionDraftFromHandoff,
   copyOfferCase,
@@ -44,6 +46,7 @@ import {
   loadOfferCaseSummaries,
   loadProductionCaseSummaries,
   reviewRecipe,
+  reviseProductionDraft,
   prepareProductionDraft,
   updateAcceptedSpec,
   uploadRecipeFile,
@@ -83,14 +86,37 @@ import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
 import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
-import { openProductionDraftEntry } from "./production-entry-focus.js";
-import { announceProductionDraftReview } from "./production-draft-review-panel.js";
+import { openProductionDraftEntry, productionDraftIdForHandoff } from "./production-entry-focus.js";
+import {
+  announceProductionDraftReview,
+  announceProductionDraftRefresh,
+  canApproveProductionDraft,
+  canRequestProductionRevision
+} from "./production-draft-review-panel.js";
 import { CaseHistoryPanel } from "./case-history-panel.js";
 import { buildCaseHistoryState } from "./case-history-state.js";
-import type { OfferApprovalBinding } from "./offer-approval-action.js";
-import type { CaseSummary, ProductRouteDashboard, ServiceHealthState, WorkspaceRefreshOptions } from "./api.js";
+import {
+  buildCaseNextAction,
+  type CaseNextAction,
+  type CaseNextActionInput,
+  type CaseNextDraftState
+} from "./case-next-action.js";
+import { CaseNextActionBar } from "./case-next-action-bar.js";
+import { createCaseNextActionRunner, type CaseNextActionRunner } from "./case-next-action-runner.js";
+import {
+  buildOfferApprovalBinding,
+  type OfferApprovalBinding
+} from "./offer-approval-action.js";
+import type {
+  CaseSummary,
+  ProductRouteDashboard,
+  ProductionDraft,
+  ServiceHealthState,
+  WorkspaceRefreshOptions
+} from "./api.js";
 import type { OfferProductShellData } from "./offer-product-app.js";
 import type { ProductionProductShellData } from "./production-product-app.js";
+import type { OfferWorkbenchProps } from "./offer-workbench.js";
 
 // Product shells render the masthead before this shared feedback and route content.
 // <RouteMasthead />
@@ -133,7 +159,174 @@ type ProductWorkspaceProps = {
   activeProductionSpecId?: string;
   setActiveProductionSpecId: (specId: string | undefined) => void;
   availableCases: CaseSummary[];
+  currentOfferApprovedOfferId?: string;
+  currentOfferHandoffId?: string;
+  currentOfferApprovalBinding?: OfferApprovalBinding;
+  currentProductionDraftId?: string;
+  currentProductionDraft?: ProductionDraft;
+  currentApprovedProductionSpecId?: string;
+  currentProductionResultArtifactId?: string;
 };
+
+function offerDraftNextState(draft?: OfferDraft): CaseNextDraftState | undefined {
+  if (!draft) {
+    return undefined;
+  }
+
+  const status = draft.reviewStatus;
+  if (
+    status?.priceReviewStatus === "verified" &&
+    status.taxReviewStatus === "verified" &&
+    status.allergenReviewStatus === "verified" &&
+    status.hygieneTemperatureReviewStatus === "verified" &&
+    status.sourceSecured &&
+    status.publishApproved
+  ) {
+    return "ready_for_approval";
+  }
+
+  return "pending_review";
+}
+
+export function productionDraftNextState(draft?: ProductionDraft): CaseNextDraftState | undefined {
+  if (!draft) {
+    return undefined;
+  }
+
+  if (draft.status !== "pending_review") {
+    return undefined;
+  }
+
+  if (draft.reviewCards.some((card) => card.decision === "change_requested") && canRequestProductionRevision(draft)) {
+    return "change_requested";
+  }
+
+  return canApproveProductionDraft(draft) ? "ready_for_approval" : "pending_review";
+}
+
+export function buildOfferNextAction(input: CaseNextActionInput & { draft?: OfferDraft }): CaseNextAction {
+  const { draft, ...actionInput } = input;
+  return buildCaseNextAction({
+    ...actionInput,
+    product: "offer",
+    draftState: draft ? offerDraftNextState(draft) : actionInput.draftState
+  });
+}
+
+export function buildProductionNextAction(
+  input: Omit<CaseNextActionInput, "product" | "draftState"> & { draft?: ProductionDraft }
+): CaseNextAction {
+  const { draft, ...actionInput } = input;
+  return buildCaseNextAction({
+    ...actionInput,
+    product: "production",
+    draftState: productionDraftNextState(draft)
+  });
+}
+
+export type ProductWorkspaceNextActionContext = {
+  route: Exclude<AppRoute, "home">;
+  action: CaseNextAction;
+  offerWorkbenchState: Pick<OfferWorkbenchProps, "approveDraft" | "createHandoff">;
+  offerApprovalBinding?: OfferApprovalBinding;
+  activeOfferDraft?: OfferDraft;
+  openProductionEntry?: (draftId: string) => void;
+  setSelectedDraftId?: (draftId: string) => void;
+  decideProductionDraft?: (draftId: string, decision: "approved" | "rejected") => Promise<unknown>;
+  reviseProductionDraft?: (draftId: string) => Promise<unknown>;
+  applyApprovedProductionSpec?: (specId: string) => Promise<{ eventSpec: { specId?: unknown } }>;
+  refreshDashboard?: (options?: WorkspaceRefreshOptions) => Promise<void>;
+  setActiveProductionSpecId?: (specId: string | undefined) => void;
+  setNotice: (message: string) => void;
+  focus: (selector: string) => void;
+};
+
+/** Execute the same action path used by the global bar, with persisted route
+ * state and the local production review panel kept in sync. */
+export async function runProductWorkspaceNextAction(
+  input: ProductWorkspaceNextActionContext
+): Promise<void> {
+  const { action } = input;
+  switch (action.kind) {
+    case "add_source":
+      input.focus(input.route === "offer"
+        ? '[aria-label="Kundenanfrage als Text"]'
+        : ".production-column--input textarea");
+      return;
+    case "review_draft":
+      if (input.route === "offer") {
+        input.setSelectedDraftId?.(action.targetId);
+        input.focus(".offer-calm-summary");
+      } else {
+        announceProductionDraftReview(action.targetId);
+        input.focus('[aria-label="Produktionsentwurf-Prüfung"]');
+      }
+      return;
+    case "approve_offer": {
+      const revision = input.activeOfferDraft?.revision;
+      if (input.route !== "offer" || revision === undefined) {
+        throw new Error("Angebotsfreigabe ist ohne den aktiven Entwurf nicht zulässig.");
+      }
+      await input.offerWorkbenchState.approveDraft(action.draftId, revision, action.variantId);
+      return;
+    }
+    case "send_handoff": {
+      const binding = input.offerApprovalBinding;
+      if (input.route !== "offer" || !binding || binding.approvedOfferId !== action.approvedOfferId || !input.offerWorkbenchState.createHandoff) {
+        throw new Error("Produktionsübergabe ist ohne bestätigte Angebotsbindung nicht zulässig.");
+      }
+      await input.offerWorkbenchState.createHandoff(binding.offerDraftId, binding.offerDraftRevision, binding.approvedOfferId);
+      return;
+    }
+    case "request_revision":
+      if (input.route === "production") {
+        if (!input.reviseProductionDraft || !input.refreshDashboard) {
+          throw new Error("Produktionsüberarbeitung ist nicht verfügbar.");
+        }
+        await input.reviseProductionDraft(action.draftId);
+        await input.refreshDashboard();
+        announceProductionDraftRefresh();
+        input.setNotice("Neuer Produktionsentwurf wurde für die angeforderte Überarbeitung erstellt.");
+        input.focus('[aria-label="Produktionsentwurf-Prüfung"]');
+      } else {
+        input.setNotice("Der Änderungswunsch wird im aktiven Angebotsprüfpanel weiterbearbeitet.");
+        input.focus(".offer-calm-summary");
+      }
+      return;
+    case "inspect_handoff":
+      input.setNotice(`Übergabe ${action.handoffId} wurde geöffnet.`);
+      input.openProductionEntry?.(productionDraftIdForHandoff(action.handoffId));
+      return;
+    case "approve_production":
+      if (input.route !== "production" || !input.decideProductionDraft || !input.refreshDashboard) {
+        throw new Error("Produktionsfreigabe ist nur im Produktionsfall zulässig.");
+      }
+      await input.decideProductionDraft(action.draftId, "approved");
+      await input.refreshDashboard();
+      announceProductionDraftRefresh();
+      input.setNotice("Produktionsentwurf wurde freigegeben.");
+      input.focus('[aria-label="Produktionsentwurf-Prüfung"]');
+      return;
+    case "apply_approved":
+      if (input.route !== "production" || !input.applyApprovedProductionSpec || !input.refreshDashboard) {
+        throw new Error("Der Produktionsstand kann nur im Produktionsfall übernommen werden.");
+      }
+      const applied = await input.applyApprovedProductionSpec(action.approvedProductionSpecId);
+      const appliedSpecId = typeof applied.eventSpec.specId === "string" ? applied.eventSpec.specId : undefined;
+      input.setActiveProductionSpecId?.(appliedSpecId);
+      await input.refreshDashboard({ focusedSpecId: appliedSpecId });
+      announceProductionDraftRefresh();
+      input.setNotice("Freigegebener Produktionsstand wurde als Plan und Einkauf übernommen.");
+      input.focus(".production-column--objects");
+      return;
+    case "inspect_result":
+      input.setNotice(`Produktionsresultat ${action.artifactId} ist bereits vorhanden.`);
+      input.focus(".production-column--objects");
+      return;
+    case "complete":
+      return;
+  }
+}
 
 function projectOfferWorkspace(product: OfferProductShellData): ProductRouteDashboard {
   if (!product.data.activeCase) {
@@ -197,9 +390,21 @@ function ProductWorkspaceView({
   boundProductionCaseSpecId,
   setActiveProductionCaseId,
   setActiveProductionSpecId,
-  availableCases
+  availableCases,
+  currentOfferApprovedOfferId,
+  currentOfferHandoffId,
+  currentOfferApprovalBinding,
+  currentProductionDraftId,
+  currentProductionDraft,
+  currentApprovedProductionSpecId,
+  currentProductionResultArtifactId
 }: ProductWorkspaceProps) {
   const [submitting, setSubmitting] = useState(false);
+  const nextActionRunnerRef = useRef<CaseNextActionRunner | undefined>(undefined);
+  if (!nextActionRunnerRef.current) {
+    nextActionRunnerRef.current = createCaseNextActionRunner(setSubmitting);
+  }
+  const nextActionRunner = nextActionRunnerRef.current;
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [offerText, setOfferText] = useState("");
@@ -225,7 +430,8 @@ function ProductWorkspaceView({
   const [historyError, setHistoryError] = useState<string>();
   const historyRequestVersion = useRef(0);
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
-  const [offerApprovalBinding, setOfferApprovalBinding] = useState<OfferApprovalBinding>();
+  const [selectedVariantId, setSelectedVariantId] = useState<string>();
+  const [offerApprovalBinding, setOfferApprovalBinding] = useState<OfferApprovalBinding | undefined>(currentOfferApprovalBinding);
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [initialProductionWorkspace] = useState(() => {
     const focusedSpecId = consumePromotedProductionSpecFocus(route);
@@ -240,6 +446,16 @@ function ProductWorkspaceView({
   const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(
     initialProductionWorkspace.cleared
   );
+
+  useEffect(() => {
+    setOfferApprovalBinding(currentOfferApprovalBinding);
+  }, [
+    currentOfferApprovalBinding?.approvedOfferId,
+    currentOfferApprovalBinding?.handoffId,
+    currentOfferApprovalBinding?.offerDraftId,
+    currentOfferApprovalBinding?.offerDraftRevision,
+    currentOfferApprovalBinding?.productionDraftId
+  ]);
 
   useEffect(() => {
     if (!historySearch.trim()) {
@@ -411,8 +627,26 @@ function ProductWorkspaceView({
   }, [activeOfferCaseId, activeOfferDraftId, route]);
 
   useEffect(() => {
-    setOfferApprovalBinding(undefined);
-  }, [activeOfferCaseId]);
+    setOfferApprovalBinding(currentOfferApprovalBinding);
+  }, [
+    activeOfferCaseId,
+    currentOfferApprovalBinding?.approvedOfferId,
+    currentOfferApprovalBinding?.handoffId,
+    currentOfferApprovalBinding?.offerDraftId,
+    currentOfferApprovalBinding?.offerDraftRevision,
+    currentOfferApprovalBinding?.productionDraftId
+  ]);
+
+  useEffect(() => {
+    if (route !== "offer") {
+      setSelectedVariantId(undefined);
+      return;
+    }
+    const variants = Array.isArray(activeOfferDraft?.variantSet) ? activeOfferDraft.variantSet : [];
+    setSelectedVariantId((current) => current && variants.some((variant) => variant.variantId === current)
+      ? current
+      : undefined);
+  }, [activeOfferDraft?.draftId, activeOfferDraft?.revision, route]);
 
   const {
     focusedProductionSpec,
@@ -877,6 +1111,8 @@ function ProductWorkspaceView({
      selectedDraft: selectedDraft ? buildRecordView(selectedDraft) : undefined,
     approvalBinding: offerApprovalBinding,
     setSelectedDraftId,
+    selectedVariantId,
+    setSelectedVariantId,
       filteredSpecs: buildRecordViewProjection(filteredSpecs),
       activeSpec: activeOfferSpec ? buildRecordView(activeOfferSpec) : undefined,
     completeSpecCount: offerHandoffCounts.complete,
@@ -916,6 +1152,86 @@ function ProductWorkspaceView({
     productionMain: productionRouteMainLayoutState
   });
 
+  const activeCaseStatus = availableCases.find((candidate) =>
+    candidate.caseId === (route === "offer" ? activeOfferCaseId : activeProductionCaseId)
+  )?.status ?? "open";
+  const nextActionInput: CaseNextActionInput = {
+    product: route,
+    caseStatus: activeCaseStatus,
+    hasSource: dashboard.intakeRequests.length > 0 || dashboard.acceptedSpecs.length > 0,
+    currentDraftId: route === "offer" ? activeOfferDraft?.draftId : currentProductionDraftId,
+    selectedVariantId: route === "offer" ? selectedVariantId : undefined,
+    draftState: route === "offer" ? offerDraftNextState(activeOfferDraft) : undefined,
+    approvedOfferId: route === "offer"
+      ? currentOfferApprovedOfferId ?? offerApprovalBinding?.approvedOfferId
+      : undefined,
+    handoffId: route === "offer"
+      ? currentOfferHandoffId ?? offerApprovalBinding?.handoffId
+      : undefined,
+    approvedProductionSpecId: route === "production" ? currentApprovedProductionSpecId : undefined,
+    resultArtifactId: route === "production" ? currentProductionResultArtifactId : undefined
+  };
+  const nextAction = useMemo(() => {
+    if (route === "production") {
+      return buildProductionNextAction({
+        caseStatus: nextActionInput.caseStatus,
+        hasSource: nextActionInput.hasSource,
+        currentDraftId: nextActionInput.currentDraftId,
+        approvedProductionSpecId: nextActionInput.approvedProductionSpecId,
+        resultArtifactId: nextActionInput.resultArtifactId,
+        draft: currentProductionDraft
+      });
+    }
+
+    return buildOfferNextAction({ ...nextActionInput, draft: activeOfferDraft });
+  }, [
+    currentProductionDraft,
+    nextActionInput.approvedOfferId,
+    nextActionInput.approvedProductionSpecId,
+    nextActionInput.caseStatus,
+    nextActionInput.currentDraftId,
+    nextActionInput.selectedVariantId,
+    nextActionInput.draftState,
+    nextActionInput.handoffId,
+    nextActionInput.hasSource,
+    nextActionInput.product,
+    nextActionInput.resultArtifactId,
+    route
+  ]);
+
+  async function runNextAction(action: CaseNextAction): Promise<void> {
+    const focus = (selector: string) => {
+      const element = document.querySelector<HTMLElement>(selector);
+      element?.focus({ preventScroll: true });
+      element?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+    };
+
+    const mutating = action.kind === "approve_offer" ||
+      action.kind === "send_handoff" ||
+      action.kind === "approve_production" ||
+      action.kind === "apply_approved" ||
+      (action.kind === "request_revision" && route === "production");
+
+    await nextActionRunner.run(mutating, async () => {
+      await runProductWorkspaceNextAction({
+        route,
+        action,
+        offerWorkbenchState,
+        offerApprovalBinding,
+        activeOfferDraft,
+        openProductionEntry: openProductionDraftEntry,
+        setSelectedDraftId,
+        decideProductionDraft,
+        reviseProductionDraft,
+        applyApprovedProductionSpec,
+        refreshDashboard,
+        setActiveProductionSpecId,
+        setNotice,
+        focus
+      });
+    });
+  }
+
   const routeContent = (
     <>
       <AppFeedbackShell error={loaderError ?? error} notice={notice} loading={loading} route={route} />
@@ -936,6 +1252,13 @@ function ProductWorkspaceView({
         onCopy={handleHistoryCopy}
         loading={historyLoading}
         error={historyError}
+      />
+
+      <CaseNextActionBar
+        action={nextAction}
+        onAction={(action) => void runNextAction(action).catch((cause) => setError(cause instanceof Error ? cause.message : "Nächster Schritt konnte nicht ausgeführt werden."))}
+        busy={submitting}
+        error={error}
       />
 
       <AppRouteContent {...appRouteContentState} />
@@ -981,6 +1304,9 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
             setActiveProductionSpecId={setActiveProductionSpecId}
             setActiveProductionCaseId={setActiveProductionCaseId}
             availableCases={product.data.cases}
+            currentOfferApprovedOfferId={product.data.approvedOffer?.approvedOfferId}
+            currentOfferHandoffId={product.data.handoff?.handoffId}
+            currentOfferApprovalBinding={buildOfferApprovalBinding(product.data.approvedOffer, product.data.handoff)}
           />
         )}
       </OfferProductApp>
@@ -1010,6 +1336,10 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
           activeProductionSpecId={activeProductionSpecId}
           setActiveProductionSpecId={setActiveProductionSpecId}
           availableCases={product.data.cases}
+          currentProductionDraftId={product.data.currentDraft?.draftId}
+          currentProductionDraft={product.data.currentDraft}
+          currentApprovedProductionSpecId={product.data.approvedProductionSpec?.approvedProductionSpecId}
+          currentProductionResultArtifactId={product.data.currentPlan?.planId ?? product.data.currentPurchaseList?.purchaseListId}
         />
       )}
     </ProductionProductApp>
