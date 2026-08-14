@@ -169,20 +169,47 @@ click_rehearsal_link() {
   return 1
 }
 
+is_fresh_data_root() {
+  local candidate="$1"
+  local candidate_real
+  local marker_path
+  local marker_parent_real
+
+  [[ "${candidate}" = /* ]] || return 1
+  [[ -d "${candidate}" && ! -L "${candidate}" ]] || return 1
+  [[ "${candidate}" =~ ^/.*\/catering-agents-rehearsal-[[:alnum:]]{6}$ ]] || return 1
+  candidate_real="$(cd "${candidate}" && pwd -P)" || return 1
+  [[ "${candidate_real}" == "${candidate}" ]] || return 1
+  [[ -n "${CATERING_FRESH_OWNER_MARKER:-}" && -n "${CATERING_FRESH_RUN_TOKEN:-}" ]] || return 1
+  marker_path="${candidate}/.catering-rehearsal-owner-${CATERING_FRESH_RUN_TOKEN}"
+  [[ "${CATERING_FRESH_OWNER_MARKER}" == "${marker_path}" ]] || return 1
+  [[ -f "${marker_path}" && ! -L "${marker_path}" ]] || return 1
+  [[ "$(<"${marker_path}")" == "${CATERING_FRESH_RUN_TOKEN}" ]] || return 1
+  marker_parent_real="$(cd "$(dirname "${marker_path}")" && pwd -P)" || return 1
+  [[ "${marker_parent_real}" == "${candidate_real}" ]]
+}
+
 require_fresh_mutation_scope() {
   local submit_answers="$1"
   local archive_intake="$2"
   local failed_upload="$3"
-  local allow_persistent_mutation="$4"
-  local data_root_file="$5"
+  local create_offer_case="$4"
+  local allow_persistent_mutation="$5"
+  local data_root_file="$6"
   local recorded_data_root
 
-  if [[ "${submit_answers}" != "1" && "${archive_intake}" != "1" && "${failed_upload}" != "1" ]]; then
+  if [[ "${submit_answers}" != "1" && "${archive_intake}" != "1" && "${failed_upload}" != "1" && "${create_offer_case}" != "1" ]]; then
     return 0
   fi
 
   recorded_data_root="$(cat "${data_root_file}" 2>/dev/null || true)"
-  if [[ "${allow_persistent_mutation}" != "1" && "${recorded_data_root}" != *"catering-agents-rehearsal-"* ]]; then
+  if [[ "${create_offer_case}" == "1" ]] && ! is_fresh_data_root "${recorded_data_root}"; then
+    echo "Synthetischer Angebotsfall darf nur unter einer Fresh-Datenwurzel angelegt werden." >&2
+    echo "Starte vorher: npm run local:start:fresh" >&2
+    echo "Aktuelle Datenwurzel: ${recorded_data_root:-unbekannt}" >&2
+    exit 2
+  fi
+  if [[ "${allow_persistent_mutation}" != "1" ]] && ! is_fresh_data_root "${recorded_data_root}"; then
     echo "Mutierender Browser-Rehearsal mutiert synthetische lokale Daten und erwartet einen Fresh-Run." >&2
     echo "Starte vorher: npm run local:start:fresh" >&2
     echo "Aktuelle Datenwurzel: ${recorded_data_root:-unbekannt}" >&2

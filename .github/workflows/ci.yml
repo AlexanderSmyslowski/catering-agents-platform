@@ -41,6 +41,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Install GNU screen
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y screen
+          screen --version
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:

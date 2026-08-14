@@ -9,6 +9,7 @@ CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 SUBMIT_ANSWERS="${CATERING_BROWSER_REHEARSAL_SUBMIT_ANSWERS:-0}"
 ARCHIVE_INTAKE="${CATERING_BROWSER_REHEARSAL_ARCHIVE_INTAKE:-0}"
 FAILED_UPLOAD="${CATERING_BROWSER_REHEARSAL_FAILED_UPLOAD:-0}"
+CREATE_OFFER_CASE="${CATERING_BROWSER_REHEARSAL_CREATE_OFFER_CASE:-0}"
 ALLOW_PERSISTENT_MUTATION="${CATERING_BROWSER_REHEARSAL_ALLOW_PERSISTENT_MUTATION:-0}"
 DATA_ROOT_FILE="${ROOT_DIR}/.runtime/local-stack/data-root.txt"
 
@@ -23,6 +24,7 @@ require_fresh_mutation_scope \
   "${SUBMIT_ANSWERS}" \
   "${ARCHIVE_INTAKE}" \
   "${FAILED_UPLOAD}" \
+  "${CREATE_OFFER_CASE}" \
   "${ALLOW_PERSISTENT_MUTATION}" \
   "${DATA_ROOT_FILE}"
 
@@ -50,6 +52,7 @@ home_markers="$(load_rehearsal_script "home-markers.js")"
 offer_empty_markers="$(load_rehearsal_script "offer-empty-markers.js")"
 offer_markers="$(load_rehearsal_script "offer-markers.js")"
 production_empty_markers="$(load_rehearsal_script "production-empty-markers.js")"
+production_handoff_markers="$(load_rehearsal_script "production-handoff-markers.js")"
 production_markers="$(load_rehearsal_script "production-markers.js")"
 
 load_rehearsal_script_with_modes() {
@@ -84,11 +87,25 @@ echo "Browser-Navigations- und Markerpruefung:"
 check_current_page_markers_at_viewports "Start" "${home_markers}"
 click_rehearsal_link "Start -> Angebot" "/angebot" "${home_to_offer}"
 check_current_page_markers_at_viewports "Angebot leerer Start" "${offer_empty_markers}"
+if [[ "${CREATE_OFFER_CASE}" == "1" ]]; then
+  offer_case_seed="$(load_rehearsal_script "create-offer-case.js")"
+  run_browser eval "${offer_case_seed}" >/dev/null
+  run_browser reload >/dev/null
+  echo "Synthetischer Angebotsfall und Entwurf ueber den geschuetzten Fallvertrag angelegt."
+fi
 check_current_page_markers "Angebot Auftrag bewusst geoeffnet" "${open_offer_history_item}"
 check_current_page_markers_at_viewports "Angebot" "${offer_markers}"
 click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
 check_current_page_markers_at_viewports "Produktion leerer Start" "${production_empty_markers}"
 check_current_page_markers "Produktion Auftrag bewusst geoeffnet" "${open_production_history_item}"
+if [[ "${CREATE_OFFER_CASE}" == "1" ]]; then
+  check_current_page_markers_at_viewports "Produktion Angebots-Handoff" "${production_handoff_markers}"
+  check_browser_diagnostics
+  echo ""
+  echo "Fresh-Rehearsal-Handoff bestaetigt: Angebotsfreigabe, Produktionsübergabe, ProductionCase und fallgebundener Produktionsentwurf sind sichtbar; noch nicht erzeugte Pläne bleiben offen."
+  echo "Grenze: lokaler synthetischer Browser-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
+  exit 0
+fi
 check_current_page_markers_at_viewports "Produktion" "${production_markers}"
 check_current_page_markers "Produktion offene Rueckfragen" "${open_question_markers}"
 if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then
