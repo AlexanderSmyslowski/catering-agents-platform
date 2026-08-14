@@ -66,21 +66,30 @@ async () => {
       "/api/production/v1/production/cases",
       productionHeaders,
     );
-    return (productionList?.items ?? []).find((item) =>
-      item.product === "production" && typeof item.caseId === "string" &&
-      item.productionHandoffId === handoffId && item.sourceSpecId === expectedSpecId
+    const candidates = (productionList?.items ?? []).filter((item) =>
+      item?.product === "production" &&
+      typeof item.caseId === "string" && item.caseId.trim().length > 0
     );
+    for (const candidate of candidates) {
+      let detail;
+      try {
+        detail = await fetchJson(
+          `/api/production/v1/production/cases/${encodeURIComponent(candidate.caseId)}`,
+          productionHeaders,
+        );
+      } catch {
+        continue;
+      }
+      const detailCase = detail?.case;
+      if (detailCase?.caseId === candidate.caseId &&
+        detailCase.productionHandoffId === handoffId && detailCase.sourceSpecId === expectedSpecId) {
+        return detailCase;
+      }
+    }
+    return undefined;
   });
   if (!productionCase?.caseId) {
     throw new Error("Produktionsfall aus dem bestätigten Handoff fehlt oder passt nicht zur Angebotsidentität.");
-  }
-  const productionDetail = await fetchJson(
-    `/api/production/v1/production/cases/${encodeURIComponent(productionCase.caseId)}`,
-    productionHeaders,
-  );
-  if (productionDetail?.case?.caseId !== productionCase.caseId ||
-    productionDetail.case.productionHandoffId !== handoffId || productionDetail.case.sourceSpecId !== expectedSpecId) {
-    throw new Error("Produktionsfall ist nicht über Handoff und AcceptedEventSpec gebunden.");
   }
 
   sessionStorage.setItem("catering.browser-rehearsal.production-case-id", productionCase.caseId);

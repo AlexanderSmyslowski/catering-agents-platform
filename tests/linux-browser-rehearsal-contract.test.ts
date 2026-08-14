@@ -972,6 +972,86 @@ describe("Linux browser rehearsal governance", () => {
     expect(calls.some((path) => path.includes("search="))).toBe(false);
   });
 
+  it("resolves provenance from the production detail after a summary-only list response", async () => {
+    const confirmScript = readFileSync(
+      resolve(root, "scripts/browser-rehearsal/confirm-production-handoff.js"),
+      "utf8",
+    );
+    const session = new Map([
+      ["catering.browser-rehearsal.offer-case-id", "offer-case-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-draft-id", "draft-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-approved-offer-id", "approved-offer-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-spec-id", "spec-browser-rehearsal-offer-case"],
+    ]);
+    const calls: string[] = [];
+    const fetch = async (path: string) => {
+      calls.push(path);
+      let payload: unknown;
+      if (path.includes("/offers/cases/")) {
+        payload = {
+          case: {
+            caseId: "offer-case-browser-rehearsal",
+            product: "offer",
+            productionHandoffId: "handoff-browser-rehearsal",
+          },
+          events: [{ kind: "result", artifactId: "handoff-browser-rehearsal" }],
+        };
+      } else if (path.includes("/offers/handoffs/")) {
+        payload = {
+          handoff: {
+            handoffId: "handoff-browser-rehearsal",
+            approvedOfferId: "approved-offer-browser-rehearsal",
+            source: { draftId: "draft-browser-rehearsal" },
+            eventSpecSnapshot: { specId: "spec-browser-rehearsal-offer-case" },
+          },
+        };
+      } else if (path.endsWith("/production/cases")) {
+        // This is the actual CaseSummary shape: provenance is not projected.
+        payload = {
+          items: [{
+            caseId: "production-case-browser-rehearsal",
+            product: "production",
+            displayName: "Besprechung - 06.11.2026 - 35 Personen",
+            status: "open",
+            createdAt: "2026-11-06T09:00:00.000Z",
+            updatedAt: "2026-11-06T09:00:00.000Z",
+          }],
+        };
+      } else {
+        payload = {
+          case: {
+            caseId: "production-case-browser-rehearsal",
+            product: "production",
+            productionHandoffId: "handoff-browser-rehearsal",
+            sourceSpecId: "spec-browser-rehearsal-offer-case",
+          },
+        };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify(payload) };
+    };
+    const confirmHandoff = new Function(
+      "fetch",
+      "sessionStorage",
+      "location",
+      `return (${confirmScript});`,
+    )(
+      fetch,
+      {
+        getItem: (key: string) => session.get(key) ?? null,
+        setItem: (key: string, value: string) => { session.set(key, value); },
+      },
+      { pathname: "/produktion" },
+    ) as () => Promise<unknown>;
+
+    await expect(confirmHandoff()).resolves.toMatchObject({
+      route: "/produktion",
+      caseId: "production-case-browser-rehearsal",
+      handoffId: "handoff-browser-rehearsal",
+      sourceSpecId: "spec-browser-rehearsal-offer-case",
+    });
+    expect(calls).toContain("/api/production/v1/production/cases/production-case-browser-rehearsal");
+  });
+
   it("waits for the rendered handoff action to become enabled after approval refresh", async () => {
     let approved = false;
     let handoffCreated = false;
