@@ -1728,6 +1728,24 @@ describe("Linux browser rehearsal governance", () => {
     expect(run("require_empty_console_report", '{"messages":[{"level":"error"}]}').status).not.toBe(0);
     expect(run("require_nonempty_request_report", '{"requests":[{"url":"/api/health"}]}').status).toBe(0);
     expect(run("require_nonempty_request_report", '{"requests":[]}').status).not.toBe(0);
+    const requestCliReport =
+      "344. [GET] http://127.0.0.1:3200/api/offers/v1/offers/cases => [200] OK\n" +
+      "551. [GET] http://127.0.0.1:3200/api/offers/health";
+    expect(run("require_nonempty_request_report", JSON.stringify({ result: requestCliReport })).status).toBe(0);
+    expect(run("require_nonempty_request_report", JSON.stringify({ result: 42 })).status).not.toBe(0);
+    expect(run("require_nonempty_request_report", JSON.stringify({ result: "" })).status).not.toBe(0);
+    expect(
+      run("require_nonempty_request_report", JSON.stringify({ result: "No requests captured" })).status,
+    ).not.toBe(0);
+    expect(
+      run("require_nonempty_request_report", JSON.stringify({ result: "344. [GET]" })).status,
+    ).not.toBe(0);
+    expect(
+      run(
+        "require_nonempty_request_report",
+        JSON.stringify({ result: requestCliReport, extra: "unexpected" }),
+      ).status,
+    ).not.toBe(0);
   });
 
   it("retries a marker that appears during asynchronous initialisation", () => {

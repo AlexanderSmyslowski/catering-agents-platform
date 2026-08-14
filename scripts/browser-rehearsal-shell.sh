@@ -130,7 +130,26 @@ require_empty_console_report() {
 }
 
 require_nonempty_request_report() {
-  node -e 'const report = JSON.parse(process.argv[1]); if (!Array.isArray(report.requests) || report.requests.length === 0) process.exit(1);' "$1"
+  node -e '
+    let report;
+    try {
+      report = JSON.parse(process.argv[1] ?? "");
+    } catch {
+      process.exit(1);
+    }
+
+    if (report && Array.isArray(report.requests)) {
+      if (Object.prototype.hasOwnProperty.call(report, "result") || report.requests.length === 0) process.exit(1);
+      process.exit(0);
+    }
+
+    const keys = report && typeof report === "object" && !Array.isArray(report) ? Object.keys(report) : [];
+    if (keys.length !== 1 || keys[0] !== "result" || typeof report.result !== "string") process.exit(1);
+
+    const lines = report.result.trim().split(/\r?\n/);
+    const requestLine = /^\d+\. \[(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE)\] https?:\/\/\S+(?: => \[\d{3}\](?: .*)?)?$/;
+    if (lines.length === 0 || lines.some((line) => !requestLine.test(line))) process.exit(1);
+  ' "$1"
 }
 
 check_browser_diagnostics() {
