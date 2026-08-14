@@ -179,6 +179,6 @@ export function selectProductOfferSpecForDraft(
     return undefined;
   }
   return [...acceptedSpecs].reverse().find((spec) =>
-    spec.sourceLineage.some((source) => source.reference.trim() === normalizedDraftId)
+    spec.sourceLineage?.some((source) => source.reference.trim() === normalizedDraftId) ?? false
   );
 }

@@ -17,4 +17,25 @@ describe("typed product route boundary", () => {
       expect(source, relativePath).not.toContain("toPresentation");
     }
   });
+
+  it("does not import legacy projection helpers into the actual route controller", () => {
+    for (const relativePath of routeFiles) {
+      const source = readFileSync(path.resolve(relativePath), "utf8");
+      expect(source, relativePath).not.toContain("app-route-legacy-adapter");
+      expect(source, relativePath).not.toContain("toLegacy");
+      expect(source, relativePath).not.toContain("legacyDashboard");
+    }
+  });
+
+  it("keeps the legacy adapter behind one explicit view-boundary translation", () => {
+    const boundarySource = readFileSync(path.resolve("backoffice-ui/src/app-route-content-state.ts"), "utf8");
+    expect(boundarySource).toContain("app-route-legacy-adapter");
+  });
+
+  it("keeps route state strictly typed without a legacy overload or first-record discriminator", () => {
+    const routeStateSource = readFileSync(path.resolve("backoffice-ui/src/app-dashboard-route-state.ts"), "utf8");
+    expect(routeStateSource).not.toContain("LegacyAppDashboardRouteState");
+    expect(routeStateSource).not.toContain("isLegacyRouteInput");
+    expect(routeStateSource).not.toContain("[0]");
+  });
 });

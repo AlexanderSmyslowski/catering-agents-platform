@@ -13,17 +13,17 @@ import {
 import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
-import {
-  toLegacyDashboardProjection,
-  toLegacyRecord,
-  toLegacyRecordMap,
-  toLegacyRecords
-} from "./app-route-legacy-adapter.js";
 import { AppRouteContent } from "./app-route-content.js";
 import { HomePortalApp } from "./home-portal-app.js";
 import { OfferProductApp } from "./offer-product-app.js";
 import { ProductionProductApp } from "./production-product-app.js";
-import { buildAppRouteContentState } from "./app-route-content-state.js";
+import {
+  buildAppRouteContentState,
+  buildDashboardViewProjection,
+  buildRecordView,
+  buildRecordViewMap,
+  buildRecordViewProjection
+} from "./app-route-content-state.js";
 import {
   archiveIntakeRequest,
   createAcceptedSpecFromDocument,
@@ -359,7 +359,7 @@ function ProductWorkspaceView({
   } = useProductionPlanProgress();
   const manualSpecForm = useProductionManualSpecForm();
   const deferredSearch = useDeferredValue(search);
-  const legacyDashboard = useMemo(() => toLegacyDashboardProjection(dashboard), [dashboard]);
+  const viewDashboard = useMemo(() => buildDashboardViewProjection(dashboard), [dashboard]);
   const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
   const stagedProductionDocumentRef = useRef<StagedProductionDocument | undefined>(undefined);
@@ -421,8 +421,8 @@ function ProductWorkspaceView({
   } = useMemo(
     () =>
       buildProductionFocusState({
-        acceptedSpecs: legacyDashboard.acceptedSpecs,
-        filteredSpecs: toLegacyRecords(filteredSpecs),
+        acceptedSpecs: viewDashboard.acceptedSpecs,
+        filteredSpecs: buildRecordViewProjection(filteredSpecs),
         focusedProductionSpecId,
         productionArtifactSpecIds,
         productionWorkspaceCleared,
@@ -430,7 +430,7 @@ function ProductWorkspaceView({
         searchText: deferredSearch
       }),
     [
-      legacyDashboard.acceptedSpecs,
+      viewDashboard.acceptedSpecs,
       deferredSearch,
       filteredSpecs,
       focusedProductionSpecId,
@@ -482,11 +482,11 @@ function ProductWorkspaceView({
     () =>
       buildProductionArtifactSelectionAppBoundary({
         focusedProductionSpecId: String(focusedProductionSpec?.specId ?? ""),
-        orderedPlans: toLegacyRecords(orderedPlans),
-        orderedPurchaseLists: toLegacyRecords(orderedPurchaseLists),
+        orderedPlans: buildRecordViewProjection(orderedPlans),
+        orderedPurchaseLists: buildRecordViewProjection(orderedPurchaseLists),
         productionWorkspaceCleared,
         selectedPlanId,
-        specById: toLegacyRecordMap(specById)
+        specById: buildRecordViewMap(specById)
       }),
     [
       focusedProductionSpec?.specId,
@@ -507,9 +507,9 @@ function ProductWorkspaceView({
   } = useMemo(
     () =>
       buildProductionConversationState({
-       focusedProductionSpec: focusedProductionSpec ? toLegacyRecord(focusedProductionSpec) : undefined,
+       focusedProductionSpec: focusedProductionSpec ? buildRecordView(focusedProductionSpec) : undefined,
        focusedProductionSpecRecord: focusedProductionSpecRecord
-         ? toLegacyRecord(focusedProductionSpecRecord)
+         ? buildRecordView(focusedProductionSpecRecord)
          : undefined,
         intakeRequestDetail,
         currentSpecPlans,
@@ -532,7 +532,7 @@ function ProductWorkspaceView({
     productionQuestions,
     currentSpecPurchaseLists,
     currentSpecPlans,
-    filteredAuditEvents: toLegacyRecords(filteredAuditEvents),
+    filteredAuditEvents: buildRecordViewProjection(filteredAuditEvents),
     currentIntakeRequestId,
     focusedProductionSpec,
     selectedPlan,
@@ -544,7 +544,7 @@ function ProductWorkspaceView({
     productionConversationProjection,
     workbenchSpecFacts,
     intakeRequestDetailError,
-    filteredSpecs: toLegacyRecords(filteredSpecs),
+    filteredSpecs: buildRecordViewProjection(filteredSpecs),
     documentPhase,
     planPhase,
     planningSpecLabel,
@@ -552,7 +552,7 @@ function ProductWorkspaceView({
     planEtaSeconds,
     selectedPlanComponentsById,
     archivedPlans,
-    specById: toLegacyRecordMap(specById),
+    specById: buildRecordViewMap(specById),
     archivedPurchaseLists,
     recipeReviewStatusLabel,
     recipeUsageStatusLabel,
@@ -560,7 +560,7 @@ function ProductWorkspaceView({
     recipeCount,
     recipeName,
     recipeFile,
-    filteredRecipes: toLegacyRecords(filteredRecipes)
+    filteredRecipes: buildRecordViewProjection(filteredRecipes)
   });
   const {
     productionWorkspaceResetCallbacks,
@@ -790,7 +790,7 @@ function ProductWorkspaceView({
     editingMenuItems,
     editingComponentStates,
     hasFocusedSpecEditChanges,
-     recipes: toLegacyRecords(dashboard.recipes),
+      recipes: buildRecordViewProjection(dashboard.recipes),
     isInitialProductionLoading,
     productionPlanCount: dashboard.productionPlans.length,
     purchaseListCount: dashboard.purchaseLists.length,
@@ -799,7 +799,7 @@ function ProductWorkspaceView({
     reviewRequiredRecipeCount: recipeReviewCounts.reviewRequired,
     productionServiceStatus: serviceHealth.production.status,
     productionServiceCounts: serviceHealth.production.counts,
-     filteredSpecs: toLegacyRecords(filteredSpecs),
+     filteredSpecs: buildRecordViewProjection(filteredSpecs),
     search,
     setSearch,
     manualInput: manualSpecInput,
@@ -868,13 +868,13 @@ function ProductWorkspaceView({
     submitIntakeDocument: handleOfferIntakeDocumentSubmit,
     manualInput: manualSpecInput,
     manualActions: manualSpecActions,
-     filteredOfferDrafts: toLegacyRecords(filteredOfferDrafts),
-     activeDraft: activeOfferDraft ? toLegacyRecord(activeOfferDraft) : undefined,
-     selectedDraft: selectedDraft ? toLegacyRecord(selectedDraft) : undefined,
+     filteredOfferDrafts: buildRecordViewProjection(filteredOfferDrafts),
+     activeDraft: activeOfferDraft ? buildRecordView(activeOfferDraft) : undefined,
+     selectedDraft: selectedDraft ? buildRecordView(selectedDraft) : undefined,
     approvalBinding: offerApprovalBinding,
     setSelectedDraftId,
-     filteredSpecs: toLegacyRecords(filteredSpecs),
-     activeSpec: activeOfferSpec ? toLegacyRecord(activeOfferSpec) : undefined,
+      filteredSpecs: buildRecordViewProjection(filteredSpecs),
+      activeSpec: activeOfferSpec ? buildRecordView(activeOfferSpec) : undefined,
     completeSpecCount: offerHandoffCounts.complete,
     partialSpecCount: offerHandoffCounts.partial,
     miniPilotRawResult,
@@ -900,12 +900,12 @@ function ProductWorkspaceView({
     route,
     home: {
       isInitialHomeLoading,
-      dashboard: legacyDashboard,
+      dashboard: viewDashboard,
       serviceHealth,
       offerHandoffCounts,
       recipeReviewCounts,
       latestIntakeRequestSummary,
-      filteredAuditEvents: toLegacyRecords(filteredAuditEvents)
+      filteredAuditEvents: buildRecordViewProjection(filteredAuditEvents)
     },
     offerWorkbench: offerWorkbenchState,
     productionFilter: productionRouteFilterState,

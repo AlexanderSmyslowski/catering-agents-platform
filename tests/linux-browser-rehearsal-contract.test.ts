@@ -351,7 +351,8 @@ describe("Linux browser rehearsal governance", () => {
     expect(browserShell).toContain("require_empty_console_report");
     expect(browserShell).toContain("require_nonempty_request_report");
     expect(browserShell).toContain("JSON.parse");
-    expect(browserShell).toContain("report.requests.length === 0");
+    expect(browserShell).toContain('typeof request.url !== "string"');
+    expect(browserShell).toContain("request.url.trim() === \"\"");
     expect(rehearsal).toContain("check_current_page_markers_at_viewports");
     expect(browserShell).toContain("CATERING_BROWSER_CLI");
   });
@@ -1726,8 +1727,12 @@ describe("Linux browser rehearsal governance", () => {
     ).not.toBe(0);
     expect(run("require_empty_console_report", "not-json").status).not.toBe(0);
     expect(run("require_empty_console_report", '{"messages":[{"level":"error"}]}').status).not.toBe(0);
+    expect(run("require_empty_console_report", '{"messages":[],"unexpected":true}').status).not.toBe(0);
     expect(run("require_nonempty_request_report", '{"requests":[{"url":"/api/health"}]}').status).toBe(0);
     expect(run("require_nonempty_request_report", '{"requests":[]}').status).not.toBe(0);
+    for (const malformedRequests of ['{"requests":[null]}', '{"requests":[{}]}', '{"requests":["garbage"]}']) {
+      expect(run("require_nonempty_request_report", malformedRequests).status).not.toBe(0);
+    }
     const requestCliReport =
       "344. [GET] http://127.0.0.1:3200/api/offers/v1/offers/cases => [200] OK\n" +
       "551. [GET] http://127.0.0.1:3200/api/offers/health";

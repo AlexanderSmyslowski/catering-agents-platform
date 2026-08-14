@@ -106,12 +106,12 @@ require_empty_console_report() {
     }
 
     if (report !== undefined) {
-      if (report && Array.isArray(report.messages)) {
-        if (Object.prototype.hasOwnProperty.call(report, "result") || report.messages.length !== 0) process.exit(1);
+      const keys = report && typeof report === "object" && !Array.isArray(report) ? Object.keys(report) : [];
+      if (keys.length === 1 && keys[0] === "messages" && Array.isArray(report.messages)) {
+        if (report.messages.length !== 0) process.exit(1);
         process.exit(0);
       }
 
-      const keys = report && typeof report === "object" && !Array.isArray(report) ? Object.keys(report) : [];
       if (keys.length !== 1 || keys[0] !== "result" || typeof report.result !== "string") process.exit(1);
       raw = report.result;
     }
@@ -138,12 +138,18 @@ require_nonempty_request_report() {
       process.exit(1);
     }
 
-    if (report && Array.isArray(report.requests)) {
-      if (Object.prototype.hasOwnProperty.call(report, "result") || report.requests.length === 0) process.exit(1);
+    const keys = report && typeof report === "object" && !Array.isArray(report) ? Object.keys(report) : [];
+    if (keys.length === 1 && keys[0] === "requests" && Array.isArray(report.requests)) {
+      const validMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "CONNECT", "TRACE"]);
+      const validRequests = report.requests.length > 0 && report.requests.every((request) => {
+        if (!request || typeof request !== "object" || Array.isArray(request) || typeof request.url !== "string") return false;
+        if (request.url.trim() === "") return false;
+        return request.method === undefined || (typeof request.method === "string" && validMethods.has(request.method));
+      });
+      if (!validRequests) process.exit(1);
       process.exit(0);
     }
 
-    const keys = report && typeof report === "object" && !Array.isArray(report) ? Object.keys(report) : [];
     if (keys.length !== 1 || keys[0] !== "result" || typeof report.result !== "string") process.exit(1);
 
     const lines = report.result.replace(/\r\n/g, "\n").split("\n");

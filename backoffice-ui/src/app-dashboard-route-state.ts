@@ -1,11 +1,6 @@
 import type { ProductRouteDashboard } from "./api.js";
 import type { AcceptedEventSpec, OfferDraft } from "@catering/shared-core";
 import {
-  buildLegacyAppDashboardRouteState,
-  type LegacyAppDashboardRouteState,
-  type LegacyAppDashboardRouteStateInput
-} from "./app-dashboard-route-legacy.js";
-import {
   formatLatestIntakeRequest,
   type AppRoute
 } from "./app-shell-state.js";
@@ -35,14 +30,7 @@ export type AppDashboardRouteStateInput = {
   selectedDraftId?: string;
 };
 
-export function buildAppDashboardRouteState(input: AppDashboardRouteStateInput): AppDashboardRouteState;
-export function buildAppDashboardRouteState(input: LegacyAppDashboardRouteStateInput): LegacyAppDashboardRouteState;
-export function buildAppDashboardRouteState(
-  input: AppDashboardRouteStateInput | LegacyAppDashboardRouteStateInput
-): AppDashboardRouteState | LegacyAppDashboardRouteState {
-  if (isLegacyRouteInput(input)) {
-    return buildLegacyAppDashboardRouteState(input);
-  }
+export function buildAppDashboardRouteState(input: AppDashboardRouteStateInput): AppDashboardRouteState {
   return buildTypedAppDashboardRouteState(input);
 }
 
@@ -93,19 +81,4 @@ function buildTypedAppDashboardRouteState(input: AppDashboardRouteStateInput): A
       selectedDraft?.draftId
     )
   };
-}
-
-function isLegacyRouteInput(
-  input: AppDashboardRouteStateInput | LegacyAppDashboardRouteStateInput
-): input is LegacyAppDashboardRouteStateInput {
-  const candidate = input.dashboard.acceptedSpecs[0];
-  if (candidate && !("schemaVersion" in candidate)) {
-    return true;
-  }
-  const draft = input.dashboard.offerDrafts[0];
-  if (draft && !("revision" in draft)) {
-    return true;
-  }
-  const plan = input.dashboard.productionPlans[0];
-  return Boolean(plan && !("schemaVersion" in plan));
 }
