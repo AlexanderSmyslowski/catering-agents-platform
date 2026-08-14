@@ -97,13 +97,23 @@ check_current_page_markers_at_viewports() {
 
 require_empty_console_report() {
   node -e '
-    const raw = process.argv[1] ?? "";
+    let raw = process.argv[1] ?? "";
+    let report;
     try {
-      const report = JSON.parse(raw);
-      if (!report || !Array.isArray(report.messages) || report.messages.length !== 0) process.exit(1);
-      process.exit(0);
+      report = JSON.parse(raw);
     } catch {
-      // Ubuntu browser CLI emits a text summary instead of JSON for zero errors.
+      report = undefined;
+    }
+
+    if (report !== undefined) {
+      if (report && Array.isArray(report.messages)) {
+        if (Object.prototype.hasOwnProperty.call(report, "result") || report.messages.length !== 0) process.exit(1);
+        process.exit(0);
+      }
+
+      const keys = report && typeof report === "object" && !Array.isArray(report) ? Object.keys(report) : [];
+      if (keys.length !== 1 || keys[0] !== "result" || typeof report.result !== "string") process.exit(1);
+      raw = report.result;
     }
 
     const lines = raw.trim().split(/\r?\n/);

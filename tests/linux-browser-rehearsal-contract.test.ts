@@ -1694,6 +1694,17 @@ describe("Linux browser rehearsal governance", () => {
         'Total messages: 3 (Errors: 0, Warnings: 0)\nReturning 0 messages for level "error"',
       ).status,
     ).toBe(0);
+    const zeroErrorCliReport =
+      'Total messages: 3 (Errors: 0, Warnings: 0)\nReturning 0 messages for level "error"\n';
+    expect(run("require_empty_console_report", JSON.stringify({ result: zeroErrorCliReport })).status).toBe(0);
+    expect(run("require_empty_console_report", JSON.stringify({ result: 42 })).status).not.toBe(0);
+    expect(run("require_empty_console_report", JSON.stringify({ result: "not a report" })).status).not.toBe(0);
+    expect(
+      run(
+        "require_empty_console_report",
+        JSON.stringify({ result: zeroErrorCliReport, extra: "unexpected" }),
+      ).status,
+    ).not.toBe(0);
     expect(
       run(
         "require_empty_console_report",
