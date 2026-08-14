@@ -90,7 +90,8 @@ async () => {
   });
   const approvedOfferId = approvedCasePayload.case.approvedOfferId;
   const handoffButton = await waitFor("Produktions-Handoff-Aktion", () => [...document.querySelectorAll("button")].find((button) =>
-    (button.textContent ?? "").replace(/\s+/gu, " ").trim() === "An Produktion übergeben"
+    (button.textContent ?? "").replace(/\s+/gu, " ").trim() === "An Produktion übergeben" &&
+    !button.disabled && button.getAttribute("aria-disabled") !== "true"
   ));
   handoffButton.click();
 

@@ -681,6 +681,7 @@ describe("Linux browser rehearsal governance", () => {
     };
     const handoffButton = {
       textContent: "An Produktion übergeben",
+      getAttribute: () => null,
       click: () => {
         void fetch("/api/offers/v1/offers/approved/approved-offer-browser-rehearsal/handoffs", { method: "POST" });
         void fetch("/api/production/v1/production/cases/from-handoff/handoff-browser-rehearsal", { method: "POST" });
@@ -754,6 +755,131 @@ describe("Linux browser rehearsal governance", () => {
     await expect(openCase()).resolves.toMatchObject({ handoffId: "handoff-browser-rehearsal", productionCaseId: "production-case-browser-rehearsal" });
     expect(productionCaseCreated).toBe(true);
     expect(calls.some((path) => path.includes("/offers/approved/approved-offer-browser-rehearsal/handoffs"))).toBe(true);
+  });
+
+  it("waits for the rendered handoff action to become enabled after approval refresh", async () => {
+    let approved = false;
+    let handoffCreated = false;
+    const handoffButton = {
+      textContent: "An Produktion übergeben",
+      disabled: true,
+      getAttribute: (name: string) => name === "aria-disabled" ? null : null,
+      click: () => {
+        if (handoffButton.disabled) return;
+        handoffCreated = true;
+      },
+    };
+    const selectedCaseButton = {
+      textContent: "Browser-Rehearsal - Besprechung - 06.11.2026 - 35 Personen",
+      getAttribute: (name: string) => name === "aria-pressed" ? "true" : null,
+      click: () => undefined,
+    };
+    const historyDetails = {
+      open: false,
+      querySelector: (selector: string) => selector === "summary"
+        ? { textContent: "Frühere Angebotsaufträge öffnen · 1 Auftrag" }
+        : null,
+      querySelectorAll: (selector: string) => selector === "button[data-action='open-case']"
+        ? [selectedCaseButton]
+        : [],
+    };
+    const handoffDetails = {
+      open: false,
+      querySelector: (selector: string) => selector === "summary"
+        ? { textContent: "Für die Produktion übernommene Veranstaltungen" }
+        : null,
+      querySelectorAll: () => [],
+    };
+    const approvalButton = {
+      textContent: "Variante freigeben: Standard",
+      click: () => {
+        approved = true;
+        setTimeout(() => { handoffButton.disabled = false; }, 20);
+      },
+    };
+    const document = {
+      body: {
+        get innerText() {
+          return [
+            "Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause.",
+            approved ? "Angebotsvariante wurde freigegeben." : "",
+            handoffCreated ? "Freigegebenes Angebot wurde an die Produktion übergeben." : "",
+          ].join(" ");
+        },
+      },
+      querySelectorAll: (selector: string) => {
+        if (selector === "details") return [historyDetails, handoffDetails];
+        if (selector === "button") return approved && !handoffCreated ? [handoffButton] : [approvalButton];
+        if (selector === "a[href='/produktion']") return handoffCreated ? [{ offsetParent: {}, textContent: "Zur Produktion" }] : [];
+        return [];
+      },
+      querySelector: (selector: string) => selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : null,
+    };
+    const sessionStorage = { getItem: () => "offer-case-browser-rehearsal", setItem: () => undefined };
+    const fetch = async (path: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        if (path.includes("/offers/cases/")) {
+          return {
+            case: {
+              caseId: "offer-case-browser-rehearsal",
+              product: "offer",
+              displayName: "Browser-Rehearsal - Besprechung - 06.11.2026 - 35 Personen",
+              ...(approved ? { approvedOfferId: "approved-offer-browser-rehearsal" } : {}),
+              ...(handoffCreated ? { productionHandoffId: "handoff-browser-rehearsal" } : {}),
+            },
+            events: [
+              { revisionRef: { artifactType: "OfferDraft", artifactId: "draft-browser-rehearsal" } },
+              ...(approved ? [{ kind: "approval", artifactId: "approved-offer-browser-rehearsal" }] : []),
+              ...(handoffCreated ? [{ kind: "result", artifactId: "handoff-browser-rehearsal" }] : []),
+            ],
+          };
+        }
+        if (path.includes("/offers/drafts/")) {
+          return {
+            draftId: "draft-browser-rehearsal",
+            eventSummary: "Besprechung für 35 Teilnehmer als Kaffeepause.",
+            proposedEventSpec: { specId: "spec-browser-rehearsal-offer-case" },
+          };
+        }
+        if (path.includes("/offers/approved/") && path.includes("/handoffs")) {
+          handoffCreated = true;
+          return {
+            handoff: {
+              handoffId: "handoff-browser-rehearsal",
+              approvedOfferId: "approved-offer-browser-rehearsal",
+              source: { draftId: "draft-browser-rehearsal" },
+              eventSpecSnapshot: { specId: "spec-browser-rehearsal-offer-case" },
+            },
+          };
+        }
+        if (path.includes("/offers/handoffs/")) {
+          return {
+            handoff: {
+              handoffId: "handoff-browser-rehearsal",
+              approvedOfferId: "approved-offer-browser-rehearsal",
+              source: { draftId: "draft-browser-rehearsal" },
+              eventSpecSnapshot: { specId: "spec-browser-rehearsal-offer-case" },
+            },
+          };
+        }
+        if (path.includes("/production/cases?")) {
+          return { items: [{ caseId: "production-case-browser-rehearsal", product: "production", displayName: "Besprechung · 35 Teilnehmer · 2026-11-06" }] };
+        }
+        if (path.includes("/production/cases/")) {
+          return { case: { caseId: "production-case-browser-rehearsal", productionHandoffId: "handoff-browser-rehearsal", sourceSpecId: "spec-browser-rehearsal-offer-case" } };
+        }
+        return { draftId: "production-draft-browser-rehearsal" };
+      },
+    });
+    const openCase = new Function(
+      "document", "fetch", "sessionStorage", "location", `return (${openOfferHistoryItem});`,
+    )(document, fetch, sessionStorage, { pathname: "/angebot" }) as () => Promise<unknown>;
+
+    await expect(openCase()).resolves.toMatchObject({ handoffId: "handoff-browser-rehearsal" });
+    expect(handoffButton.disabled).toBe(false);
+    expect(handoffCreated).toBe(true);
   });
 
   it("fails closed when the rendered case action does not confirm selection", async () => {
