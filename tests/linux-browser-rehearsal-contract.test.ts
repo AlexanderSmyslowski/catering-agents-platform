@@ -1756,7 +1756,7 @@ describe("Linux browser rehearsal governance", () => {
         { cwd: root, encoding: "utf8" },
       );
     const requestLine = "344. [GET] http://127.0.0.1:3200/api/offers/health => [200] OK";
-    const marker = "Note: 688 static requests not shown, run with --static option.";
+    const marker = "Note: 688 static requests not shown, run with --static option to see them.";
 
     expect(run(JSON.stringify({ result: `${requestLine}\n\n${marker}\n` })).status).toBe(0);
 
@@ -1767,6 +1767,7 @@ describe("Linux browser rehearsal governance", () => {
       `${requestLine}\n\n${marker.replace("688", "0")}`,
       `${requestLine}\n\n${marker.replace("688", "-1")}`,
       `${requestLine}\n\n${marker.replace("static requests not shown", "requests omitted")}`,
+      `${requestLine}\n\nNote: 688 static requests not shown, run with --static option.`,
       `${requestLine}\n\nNote: static requests not shown, run with --static option.`,
       `${requestLine}\n\n${marker}\nUnexpected diagnostic`,
     ];

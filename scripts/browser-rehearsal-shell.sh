@@ -149,7 +149,7 @@ require_nonempty_request_report() {
     const lines = report.result.replace(/\r\n/g, "\n").split("\n");
     if (lines[lines.length - 1] === "") lines.pop();
     const requestLine = /^\d+\. \[(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE)\] https?:\/\/\S+(?: => \[\d{3}\](?: .*)?)?$/;
-    const completionMarker = /^Note: [1-9][0-9]* static requests not shown, run with --static option\.$/;
+    const completionMarker = /^Note: [1-9][0-9]* static requests not shown, run with --static option to see them\.$/;
     const lastLine = lines[lines.length - 1];
     let requestLines = lines;
     if (completionMarker.test(lastLine ?? "")) {
