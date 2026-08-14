@@ -1,4 +1,12 @@
-export type ProductionRouteFocusSpec = Record<string, unknown>;
+/** Typed identity/provenance fields needed to focus a production spec. */
+export type ProductionRouteFocusSpec = {
+  specId?: string;
+  requestId?: string;
+  sourceLineage?: Array<{
+    sourceType?: string;
+    reference?: string;
+  }>;
+};
 export {
   canArchiveCurrentIntake,
   canClearProductionWorkspace,
@@ -27,17 +35,17 @@ export {
   formatPurchaseZoneStatusLabel
 } from "./production-route-artifact-status-state.js";
 
-export function selectProductionIntakeRequestId(spec: Record<string, unknown> | undefined): string | undefined {
+export function selectProductionIntakeRequestId(spec: ProductionRouteFocusSpec | undefined): string | undefined {
   const requestId = spec?.requestId;
   if (typeof requestId === "string" && requestId.trim()) {
     return requestId.trim();
   }
 
-  const sourceLineage = Array.isArray(spec?.sourceLineage) ? spec?.sourceLineage : [];
+  const sourceLineage = spec?.sourceLineage ?? [];
   const intakeSource = sourceLineage.find((lineage) => {
-    const sourceType = String((lineage as Record<string, unknown>)?.sourceType ?? "");
+    const sourceType = lineage.sourceType ?? "";
     return sourceType === "manual_input" || sourceType === "pdf" || sourceType === "email";
-  }) as Record<string, unknown> | undefined;
+  });
   const reference = intakeSource?.reference;
   return typeof reference === "string" && reference.trim() ? reference.trim() : undefined;
 }

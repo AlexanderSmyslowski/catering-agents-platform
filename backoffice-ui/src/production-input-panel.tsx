@@ -67,6 +67,7 @@ export type ProductionSourceInputActions = {
 
 type ProductionInputPanelProps = {
   submitting: boolean;
+  activeCaseId?: string;
   sourceInput: ProductionSourceInputValues;
   sourceInputActions: ProductionSourceInputActions;
   manualInput: ProductionManualInputValues;
@@ -136,6 +137,7 @@ function isPdfFile(file: File | null): file is File {
 
 export function ProductionInputPanel({
   submitting,
+  activeCaseId,
   sourceInput,
   sourceInputActions,
   manualInput,
@@ -162,7 +164,7 @@ export function ProductionInputPanel({
   const hasFocusedProductionContext = Boolean(focusedProductionSpec) || Boolean(hasActiveProductionContext);
   const compactInputMode = hasUploadResultSummary || completedDocument;
   const secondaryInputsOpen = !compactInputMode && !hasFocusedProductionContext;
-  const showPersistedDraftReview = !hasUploadReview && !hasFocusedProductionContext;
+  const showPersistedDraftReview = Boolean(activeCaseId?.trim()) && !hasUploadReview;
   const uploadReviewAction = panelState.uploadResultSummary
     ? buildUploadReviewAction(panelState.uploadResultSummary)
     : undefined;
@@ -199,6 +201,7 @@ export function ProductionInputPanel({
       {showPersistedDraftReview ? (
         <ProductionDraftReviewPanel
           submitting={submitting}
+          caseId={activeCaseId}
           embedded
           latestOnly
           resumeMode
@@ -350,6 +353,7 @@ export function ProductionInputPanel({
                       </header>
                       <ProductionDraftReviewPanel
                         submitting={submitting}
+                        caseId={activeCaseId}
                         embedded
                         latestOnly
                         onDraftChanged={onDraftChanged}

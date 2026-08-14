@@ -619,10 +619,23 @@ export class ProductionStore {
     return draft ? productionDraftForContext(context, draft) : undefined;
   }
 
-  async listProductionDrafts(context: BusinessContext): Promise<ProductionDraft[]> {
+  async listProductionDrafts(context: BusinessContext, caseId?: string): Promise<ProductionDraft[]> {
     assertBusinessContext(context);
     const drafts = await this.productionDrafts.list(context);
+    const normalizedCaseId = caseId?.trim();
+    const linkedDraftIds = normalizedCaseId === undefined
+      ? undefined
+      : new Set(
+        (await this.caseEvents.list(context))
+          .filter((event) =>
+            event.caseId === normalizedCaseId &&
+            (event.kind === "draft_created" || event.kind === "revision_created")
+          )
+          .flatMap((event) => [event.artifactId, event.revisionRef?.artifactId])
+          .filter((artifactId): artifactId is string => typeof artifactId === "string")
+      );
     return drafts
+      .filter((draft) => linkedDraftIds === undefined || linkedDraftIds.has(draft.draftId))
       .map((draft) => productionDraftForContext(context, draft))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }

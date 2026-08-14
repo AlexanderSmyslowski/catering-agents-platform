@@ -8,15 +8,26 @@ import {
   validateEventRequest,
   validateOfferDraft,
   type AuditLogStore,
+  type CaseSourceRef,
   type EventRequest,
   type TrustedActor
 } from "@catering/shared-core";
 import { selectCuratedPackage } from "../../../shared-core/src/rules/curated-offer-selection.js";
 import type { OfferStore } from "../store.js";
+import type { SourceDocumentMetadataReader } from "../ports/source-document-reader.js";
+
+class SourceDocumentVerificationError extends Error {
+  readonly statusCode = 422;
+}
+
+class SourceDocumentReaderUnavailableError extends Error {
+  readonly statusCode = 503;
+}
 
 export interface OfferDraftRouteDependencies {
   store: OfferStore;
   auditLog: AuditLogStore;
+  sourceDocumentReader?: SourceDocumentMetadataReader;
   trustedActorSecret?: string;
   allowDevActorHeader: boolean;
   isOfferOperator: (
@@ -44,12 +55,55 @@ export function registerOfferDraftRoutes(
   const {
     store,
     auditLog,
+    sourceDocumentReader,
     trustedActorSecret,
     allowDevActorHeader,
     isOfferOperator,
     requireOfferOperator,
     actorForRequest
   } = deps;
+
+  async function verifiedSourceRefs(
+    actor: TrustedActor,
+    eventRequest: EventRequest
+  ): Promise<CaseSourceRef[]> {
+    const documentIds = [...new Set(eventRequest.rawInputs
+      .map((input) => input.documentId?.trim())
+      .filter((documentId): documentId is string => Boolean(documentId)))];
+    if (documentIds.length === 0) return [];
+    if (!sourceDocumentReader) {
+      throw new SourceDocumentReaderUnavailableError(
+        "Quelldokumente können im Angebotsdienst derzeit nicht verifiziert werden."
+      );
+    }
+
+    const refs: CaseSourceRef[] = [];
+    for (const documentId of documentIds) {
+      let metadata;
+      try {
+        metadata = await sourceDocumentReader.getMetadata({ businessId: actor.businessId }, documentId);
+      } catch {
+        throw new SourceDocumentReaderUnavailableError(
+          "Quelldokumente können im Angebotsdienst derzeit nicht verifiziert werden."
+        );
+      }
+      if (!metadata || metadata.businessId !== actor.businessId || metadata.documentId !== documentId) {
+        throw new SourceDocumentVerificationError(
+          "Quelldokument konnte nicht verifiziert werden."
+        );
+      }
+      refs.push({
+        sourceId: metadata.documentId,
+        documentId: metadata.documentId,
+        filename: metadata.filename,
+        mimeType: metadata.mimeType,
+        sha256: metadata.sha256,
+        dataClass: metadata.dataClass,
+        addedAt: metadata.createdAt
+      });
+    }
+    return refs;
+  }
 
   function createPortfolioAwareOfferDraft(eventRequest: EventRequest) {
     const spec = normalizeEventRequestToSpec(eventRequest, {
@@ -84,8 +138,21 @@ export function registerOfferDraftRoutes(
         errors: [error instanceof Error ? error.message : "Unbekannter Validierungsfehler."]
       });
     }
+    let sourceRefs: CaseSourceRef[];
+    try {
+      sourceRefs = await verifiedSourceRefs(actor, eventRequest);
+    } catch (error) {
+      const statusCode = error instanceof SourceDocumentVerificationError || error instanceof SourceDocumentReaderUnavailableError
+        ? error.statusCode
+        : 503;
+      return reply.code(statusCode).send({
+        message: error instanceof SourceDocumentVerificationError || error instanceof SourceDocumentReaderUnavailableError
+          ? error.message
+          : "Quelldokument konnte nicht verifiziert werden."
+      });
+    }
     const draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(eventRequest), businessId: actor.businessId, revision: 1 });
-    if (await store.saveDraftForCase(actor, caseId, draft) === "case_conflict") {
+    if (await store.saveDraftForCase(actor, caseId, draft, sourceRefs) === "case_conflict") {
       return reply.code(409).send({ message: "Dieser Angebotsentwurf gehört bereits zu einem anderen Auftrag." });
     }
     await auditLog.logFor(actor, {

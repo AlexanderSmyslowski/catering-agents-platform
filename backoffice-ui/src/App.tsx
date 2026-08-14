@@ -1,22 +1,29 @@
 import {
   useDeferredValue,
+  useEffect,
   useMemo,
   useRef,
   useState
 } from "react";
-import { DashboardShell } from "../components/dashboard-shell.js";
 import {
   detectRoute,
-  getBaseUrl,
-  getPathname
+  getPathname,
+  type AppRoute
 } from "./app-shell-state.js";
 import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
 import { AppRouteContent } from "./app-route-content.js";
-import { buildAppRouteContentState } from "./app-route-content-state.js";
-import { RouteMasthead } from "./route-masthead.js";
-import { buildAppSeedDemoAction } from "./app-seed-demo-action.js";
+import { HomePortalApp } from "./home-portal-app.js";
+import { OfferProductApp } from "./offer-product-app.js";
+import { ProductionProductApp } from "./production-product-app.js";
+import {
+  buildAppRouteContentState,
+  buildDashboardViewProjection,
+  buildRecordView,
+  buildRecordViewMap,
+  buildRecordViewProjection
+} from "./app-route-content-state.js";
 import {
   archiveIntakeRequest,
   createAcceptedSpecFromDocument,
@@ -32,13 +39,25 @@ import {
   decideOfferDraft,
   createProductionHandoff,
   createProductionDraftFromHandoff,
+  copyOfferCase,
+  copyProductionCase,
+  loadOfferCaseSummaries,
+  loadProductionCaseSummaries,
   reviewRecipe,
-  seedDemoData,
   prepareProductionDraft,
   updateAcceptedSpec,
   uploadRecipeFile,
   uploadSourceDocument
 } from "./api.js";
+import type {
+  AcceptedEventSpec,
+  AuditEntry,
+  OfferDraft,
+  ProductionPlan,
+  PurchaseList,
+  Recipe
+} from "@catering/shared-core";
+import type { IntakeRequestDetail } from "./api.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
@@ -54,7 +73,6 @@ import { buildProductionRecipeControls } from "./production-recipe-controls.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 import { buildProductionWorkspaceAppBoundary } from "./production-workspace-app-boundary.js";
 import { buildProductionPlanningControls } from "./production-planning-controls.js";
-import { useAppDashboardData } from "./use-app-dashboard-data.js";
 import { useProductionSpecEditor } from "./use-production-spec-editor.js";
 import { useProductionQuestionAutoOpen } from "./use-production-question-auto-open.js";
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
@@ -64,11 +82,20 @@ import { useProductionManualSpecForm } from "./use-production-manual-spec-form.j
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
 import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
-import { useOperatorNameState } from "./use-operator-name-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
 import { openProductionDraftEntry } from "./production-entry-focus.js";
 import { announceProductionDraftReview } from "./production-draft-review-panel.js";
+import { CaseHistoryPanel } from "./case-history-panel.js";
+import { buildCaseHistoryState } from "./case-history-state.js";
 import type { OfferApprovalBinding } from "./offer-approval-action.js";
+import type { CaseSummary, ProductRouteDashboard, ServiceHealthState, WorkspaceRefreshOptions } from "./api.js";
+import type { OfferProductShellData } from "./offer-product-app.js";
+import type { ProductionProductShellData } from "./production-product-app.js";
+
+// Product shells render the masthead before this shared feedback and route content.
+// <RouteMasthead />
+// <AppFeedbackShell />
+// <AppRouteContent />
 
 const PROMOTED_PRODUCTION_SPEC_FOCUS_KEY = "catering.promotedProductionSpecFocus";
 
@@ -90,26 +117,93 @@ function consumePromotedProductionSpecFocus(route: string): string | undefined {
   return specId || undefined;
 }
 
-export function App() {
-  const route = useMemo(() => detectRoute(getPathname()), []);
-  const baseUrl = useMemo(() => getBaseUrl(), []);
+type ProductWorkspaceProps = {
+  route: Exclude<AppRoute, "home">;
+  dashboard: ProductRouteDashboard;
+  serviceHealth: ServiceHealthState;
+  loading: boolean;
+  loaderError?: string;
+  refreshDashboard: (options?: WorkspaceRefreshOptions) => Promise<void>;
+  activeOfferCaseId?: string;
+  activeOfferDraftId?: string;
+  setActiveOfferCaseId: (caseId: string | undefined) => void;
+  activeProductionCaseId?: string;
+  boundProductionCaseSpecId?: string;
+  setActiveProductionCaseId: (caseId: string | undefined) => void;
+  activeProductionSpecId?: string;
+  setActiveProductionSpecId: (specId: string | undefined) => void;
+  availableCases: CaseSummary[];
+};
+
+function projectOfferWorkspace(product: OfferProductShellData): ProductRouteDashboard {
+  if (!product.data.activeCase) {
+    return {
+      intakeRequests: [],
+      acceptedSpecs: [],
+      offerDrafts: [],
+      productionPlans: [],
+      purchaseLists: [],
+      recipes: [],
+      auditEvents: []
+    };
+  }
+
+  return {
+    intakeRequests: product.intakeRequests,
+    acceptedSpecs: product.acceptedSpecs,
+    offerDrafts: product.data.currentDraft ? [product.data.currentDraft] : [],
+    productionPlans: [],
+    purchaseLists: [],
+    recipes: [],
+    auditEvents: []
+  };
+}
+
+function projectProductionWorkspace(product: ProductionProductShellData): ProductRouteDashboard {
+  if (!product.data.activeCase && product.acceptedSpecs.length === 0) {
+    return {
+      intakeRequests: [],
+      acceptedSpecs: [],
+      offerDrafts: [],
+      productionPlans: [],
+      purchaseLists: [],
+      recipes: [],
+      auditEvents: []
+    };
+  }
+
+  return {
+    intakeRequests: product.intakeRequests,
+    acceptedSpecs: product.acceptedSpecs,
+    offerDrafts: [],
+    productionPlans: product.data.currentPlan ? [product.data.currentPlan] : [],
+    purchaseLists: product.data.currentPurchaseList ? [product.data.currentPurchaseList] : [],
+    recipes: product.data.referencedRecipes,
+    auditEvents: product.auditEvents
+  };
+}
+
+function ProductWorkspaceView({
+  route,
+  dashboard,
+  serviceHealth,
+  loading,
+  loaderError,
+  refreshDashboard,
+  activeOfferCaseId,
+  activeOfferDraftId,
+  setActiveOfferCaseId,
+  activeProductionCaseId,
+  boundProductionCaseSpecId,
+  setActiveProductionCaseId,
+  setActiveProductionSpecId,
+  availableCases
+}: ProductWorkspaceProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  const {
-    dashboard,
-    serviceHealth,
-    loading,
-    refreshDashboard
-  } = useAppDashboardData({ setError });
-  const {
-    operatorName,
-    handleOperatorNameChange
-  } = useOperatorNameState();
   const [offerText, setOfferText] = useState("");
   const stagedOfferTextRequestRef = useRef<{ text: string; requestId: string } | undefined>(undefined);
-  const [activeOfferCaseId, setActiveOfferCaseId] = useState<string>();
-  const [activeProductionCaseId, setActiveProductionCaseId] = useState<string>();
   const [activeProductionCaseSpecId, setActiveProductionCaseSpecId] = useState<string>();
   const {
     miniPilotRawResult,
@@ -124,6 +218,12 @@ export function App() {
     clearRecipeUploadDraft
   } = useRecipeUploadDraft();
   const [search, setSearch] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyItems, setHistoryItems] = useState(availableCases);
+  const [historyServerFiltered, setHistoryServerFiltered] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string>();
+  const historyRequestVersion = useRef(0);
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [offerApprovalBinding, setOfferApprovalBinding] = useState<OfferApprovalBinding>();
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
@@ -140,6 +240,89 @@ export function App() {
   const [productionWorkspaceCleared, setProductionWorkspaceCleared] = useState(
     initialProductionWorkspace.cleared
   );
+
+  useEffect(() => {
+    if (!historySearch.trim()) {
+      setHistoryItems(availableCases);
+      setHistoryServerFiltered(false);
+    }
+  }, [availableCases, historySearch]);
+
+  const historyState = useMemo(
+    () => buildCaseHistoryState(
+      historyItems,
+      historySearch,
+      route === "offer" ? activeOfferCaseId : activeProductionCaseId,
+      { serverFiltered: historyServerFiltered, serverOrdered: true }
+    ),
+    [activeOfferCaseId, activeProductionCaseId, historyItems, historySearch, historyServerFiltered, route]
+  );
+
+  const handleHistorySearchChange = async (value: string) => {
+    setHistorySearch(value);
+    const version = ++historyRequestVersion.current;
+    if (!value.trim()) {
+      setHistoryItems(availableCases);
+      setHistoryServerFiltered(false);
+      setHistoryError(undefined);
+      setHistoryLoading(false);
+      return;
+    }
+    setHistoryLoading(true);
+    setHistoryError(undefined);
+    try {
+      const items = route === "offer"
+        ? await loadOfferCaseSummaries(value)
+        : await loadProductionCaseSummaries(value);
+      if (version === historyRequestVersion.current) {
+        setHistoryItems(items);
+        setHistoryServerFiltered(true);
+      }
+    } catch (cause) {
+      if (version === historyRequestVersion.current) {
+        setHistoryError(cause instanceof Error ? cause.message : "Aufträge konnten nicht gesucht werden.");
+        setHistoryItems([]);
+        setHistoryServerFiltered(true);
+      }
+    } finally {
+      if (version === historyRequestVersion.current) {
+        setHistoryLoading(false);
+      }
+    }
+  };
+
+  const handleHistoryCopy = async (caseId: string) => {
+    const copied = route === "offer"
+      ? await copyOfferCase(caseId)
+      : await copyProductionCase(caseId);
+    if (route === "offer") {
+      setActiveOfferCaseId(copied.case.caseId);
+    } else {
+      setActiveProductionCaseId(copied.case.caseId);
+    }
+    setHistorySearch("");
+    setHistoryServerFiltered(false);
+    setHistoryItems([copied.case, ...historyItems.filter((item) => item.caseId !== copied.case.caseId)]);
+    await refreshDashboard();
+  };
+
+  const setProductionSpecFocus = (specId: string | undefined) => {
+    setFocusedProductionSpecId(specId);
+    if (route === "production") {
+      setActiveProductionSpecId(specId);
+    }
+  };
+
+  useEffect(() => {
+    if (route !== "production" || !activeProductionCaseId) {
+      return;
+    }
+
+    const caseSpecId = boundProductionCaseSpecId?.trim();
+    setProductionSpecFocus(caseSpecId || undefined);
+    setProductionWorkspaceCleared(!caseSpecId);
+  }, [activeProductionCaseId, boundProductionCaseSpecId, route]);
+
   const {
     intakeText,
     setIntakeText,
@@ -176,6 +359,7 @@ export function App() {
   } = useProductionPlanProgress();
   const manualSpecForm = useProductionManualSpecForm();
   const deferredSearch = useDeferredValue(search);
+  const viewDashboard = useMemo(() => buildDashboardViewProjection(dashboard), [dashboard]);
   const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
   const stagedProductionDocumentRef = useRef<StagedProductionDocument | undefined>(undefined);
@@ -217,6 +401,18 @@ export function App() {
       selectedDraftId
     ]
   );
+
+  useEffect(() => {
+    if (route !== "offer") {
+      return;
+    }
+
+    setSelectedDraftId(activeOfferDraftId);
+  }, [activeOfferCaseId, activeOfferDraftId, route]);
+
+  useEffect(() => {
+    setOfferApprovalBinding(undefined);
+  }, [activeOfferCaseId]);
 
   const {
     focusedProductionSpec,
@@ -271,7 +467,11 @@ export function App() {
     resetSpecEdit,
     updateEditingComponentState,
     buildCurrentSpecUpdateInput
-  } = useProductionSpecEditor({ focusedProductionSpec: focusedProductionSpecRecord });
+  } = useProductionSpecEditor({
+    focusedProductionSpec: focusedProductionSpecRecord
+      ? buildRecordView(focusedProductionSpecRecord)
+      : undefined
+  });
 
   const {
     currentProductionSpecId,
@@ -286,11 +486,11 @@ export function App() {
     () =>
       buildProductionArtifactSelectionAppBoundary({
         focusedProductionSpecId: String(focusedProductionSpec?.specId ?? ""),
-        orderedPlans,
-        orderedPurchaseLists,
+        orderedPlans: buildRecordViewProjection(orderedPlans),
+        orderedPurchaseLists: buildRecordViewProjection(orderedPurchaseLists),
         productionWorkspaceCleared,
         selectedPlanId,
-        specById
+        specById: buildRecordViewMap(specById)
       }),
     [
       focusedProductionSpec?.specId,
@@ -311,8 +511,10 @@ export function App() {
   } = useMemo(
     () =>
       buildProductionConversationState({
-        focusedProductionSpec,
-        focusedProductionSpecRecord,
+       focusedProductionSpec: focusedProductionSpec ? buildRecordView(focusedProductionSpec) : undefined,
+       focusedProductionSpecRecord: focusedProductionSpecRecord
+         ? buildRecordView(focusedProductionSpecRecord)
+         : undefined,
         intakeRequestDetail,
         currentSpecPlans,
         currentSpecPurchaseLists
@@ -334,7 +536,7 @@ export function App() {
     productionQuestions,
     currentSpecPurchaseLists,
     currentSpecPlans,
-    filteredAuditEvents,
+    filteredAuditEvents: buildRecordViewProjection(filteredAuditEvents),
     currentIntakeRequestId,
     focusedProductionSpec,
     selectedPlan,
@@ -346,7 +548,7 @@ export function App() {
     productionConversationProjection,
     workbenchSpecFacts,
     intakeRequestDetailError,
-    filteredSpecs,
+    filteredSpecs: buildRecordViewProjection(filteredSpecs),
     documentPhase,
     planPhase,
     planningSpecLabel,
@@ -354,7 +556,7 @@ export function App() {
     planEtaSeconds,
     selectedPlanComponentsById,
     archivedPlans,
-    specById,
+    specById: buildRecordViewMap(specById),
     archivedPurchaseLists,
     recipeReviewStatusLabel,
     recipeUsageStatusLabel,
@@ -362,7 +564,7 @@ export function App() {
     recipeCount,
     recipeName,
     recipeFile,
-    filteredRecipes
+    filteredRecipes: buildRecordViewProjection(filteredRecipes)
   });
   const {
     productionWorkspaceResetCallbacks,
@@ -386,7 +588,7 @@ export function App() {
     setProductionWorkspaceCleared,
     resetIntakeDraft,
     resetDocumentProgress,
-    setFocusedProductionSpecId,
+    setFocusedProductionSpecId: setProductionSpecFocus,
     setSelectedPlanId,
     resetPlanProgress,
     resetIntakeRequestDetail,
@@ -394,6 +596,7 @@ export function App() {
     clearActiveProductionCaseId: () => {
       setActiveProductionCaseId(undefined);
       setActiveProductionCaseSpecId(undefined);
+      setProductionSpecFocus(undefined);
       stagedProductionDocumentRef.current = undefined;
     },
     uploadInputRef: productionUploadInputRef
@@ -455,7 +658,7 @@ export function App() {
     setSubmitting,
     setProductionWorkspaceCleared,
     clearMessages,
-    setFocusedProductionSpecId,
+    setFocusedProductionSpecId: setProductionSpecFocus,
     refreshDashboard,
     setNotice,
     setError
@@ -482,7 +685,7 @@ export function App() {
     prepareProductionDraft,
     setSubmitting,
     setProductionWorkspaceCleared,
-    setFocusedProductionSpecId,
+    setFocusedProductionSpecId: setProductionSpecFocus,
     resetSpecEdit,
     refreshDashboard,
     clearMessages,
@@ -514,15 +717,6 @@ export function App() {
     processIncomingProductionFile
   });
 
-  const handleSeedDemoData = buildAppSeedDemoAction({
-    seedDemoData,
-    setSubmitting,
-    clearMessages,
-    refreshDashboard,
-    setNotice,
-    setError
-  });
-
   const productionRecipeControls = buildProductionRecipeControls({
     uploadRecipeFile,
     reviewRecipe,
@@ -545,14 +739,14 @@ export function App() {
       setActiveProductionCaseId(undefined);
       setActiveProductionCaseSpecId(undefined);
     }
-    setFocusedProductionSpecId(specId);
+    setProductionSpecFocus(specId);
   };
 
   const refreshAfterProductionDraftDecision = async (appliedSpecId?: string) => {
     if (appliedSpecId) {
       setProductionWorkspaceCleared(false);
       setActiveProductionCaseSpecId(appliedSpecId);
-      setFocusedProductionSpecId(appliedSpecId);
+      setProductionSpecFocus(appliedSpecId);
     }
     await refreshDashboard();
   };
@@ -561,6 +755,7 @@ export function App() {
     productionRouteFilterState,
     productionRouteMainLayoutState
   } = buildAppProductionRouteAppBoundary({
+    activeProductionCaseId,
     viewState: productionRouteViewState,
     submitting,
     dragActive,
@@ -599,7 +794,7 @@ export function App() {
     editingMenuItems,
     editingComponentStates,
     hasFocusedSpecEditChanges,
-    recipes: dashboard.recipes,
+      recipes: buildRecordViewProjection(dashboard.recipes),
     isInitialProductionLoading,
     productionPlanCount: dashboard.productionPlans.length,
     purchaseListCount: dashboard.purchaseLists.length,
@@ -608,7 +803,7 @@ export function App() {
     reviewRequiredRecipeCount: recipeReviewCounts.reviewRequired,
     productionServiceStatus: serviceHealth.production.status,
     productionServiceCounts: serviceHealth.production.counts,
-    filteredSpecs,
+     filteredSpecs: buildRecordViewProjection(filteredSpecs),
     search,
     setSearch,
     manualInput: manualSpecInput,
@@ -677,13 +872,13 @@ export function App() {
     submitIntakeDocument: handleOfferIntakeDocumentSubmit,
     manualInput: manualSpecInput,
     manualActions: manualSpecActions,
-    filteredOfferDrafts,
-    activeDraft: activeOfferDraft,
-    selectedDraft,
+     filteredOfferDrafts: buildRecordViewProjection(filteredOfferDrafts),
+     activeDraft: activeOfferDraft ? buildRecordView(activeOfferDraft) : undefined,
+     selectedDraft: selectedDraft ? buildRecordView(selectedDraft) : undefined,
     approvalBinding: offerApprovalBinding,
     setSelectedDraftId,
-    filteredSpecs,
-    activeSpec: activeOfferSpec,
+      filteredSpecs: buildRecordViewProjection(filteredSpecs),
+      activeSpec: activeOfferSpec ? buildRecordView(activeOfferSpec) : undefined,
     completeSpecCount: offerHandoffCounts.complete,
     partialSpecCount: offerHandoffCounts.partial,
     miniPilotRawResult,
@@ -705,39 +900,144 @@ export function App() {
     saveSpecEdit: handleSaveSpecEdit,
     resetSpecEdit
   });
-  const appRouteShellState = buildAppRouteShellState({
-    route,
-    baseUrl,
-    operatorName,
-    loading,
-    submitting,
-    onOperatorNameChange: handleOperatorNameChange,
-    onSeedDemoData: handleSeedDemoData,
-    onRefreshDashboard: refreshDashboard
-  });
   const appRouteContentState = buildAppRouteContentState({
     route,
     home: {
       isInitialHomeLoading,
-      dashboard,
+      dashboard: viewDashboard,
       serviceHealth,
       offerHandoffCounts,
       recipeReviewCounts,
       latestIntakeRequestSummary,
-      filteredAuditEvents
+      filteredAuditEvents: buildRecordViewProjection(filteredAuditEvents)
     },
     offerWorkbench: offerWorkbenchState,
     productionFilter: productionRouteFilterState,
     productionMain: productionRouteMainLayoutState
   });
 
-  return (
-    <DashboardShell {...appRouteShellState.shell}>
-      <RouteMasthead {...appRouteShellState.masthead} />
+  const routeContent = (
+    <>
+      <AppFeedbackShell error={loaderError ?? error} notice={notice} loading={loading} route={route} />
 
-      <AppFeedbackShell error={error} notice={notice} loading={loading} route={route} />
+      <CaseHistoryPanel
+        product={route === "offer" ? "offer" : "production"}
+        items={historyState.items}
+        activeCaseId={historyState.activeCaseId}
+        search={historySearch}
+        onSearchChange={(value) => void handleHistorySearchChange(value)}
+        onOpen={(caseId) => {
+          if (route === "offer") {
+            setActiveOfferCaseId(caseId);
+          } else {
+            setActiveProductionCaseId(caseId);
+          }
+        }}
+        onCopy={handleHistoryCopy}
+        loading={historyLoading}
+        error={historyError}
+      />
 
       <AppRouteContent {...appRouteContentState} />
-    </DashboardShell>
+    </>
+  );
+
+  return routeContent;
+}
+
+type ProductRouteControllerProps = {
+  route: Exclude<AppRoute, "home">;
+  shell: Parameters<typeof OfferProductApp>[0]["shell"];
+  masthead: Parameters<typeof OfferProductApp>[0]["masthead"];
+};
+
+/** Own the active case reference above each product shell so loaders can never
+ * fall back to a global first record when the operator changes workspaces. */
+function ProductRouteController({ route, shell, masthead }: ProductRouteControllerProps) {
+  const [activeOfferCaseId, setActiveOfferCaseId] = useState<string>();
+  const [activeProductionCaseId, setActiveProductionCaseId] = useState<string>();
+  const [activeProductionSpecId, setActiveProductionSpecId] = useState<string>();
+
+  if (route === "offer") {
+    return (
+      <OfferProductApp
+        shell={shell}
+        masthead={masthead}
+        activeCaseId={activeOfferCaseId}
+      >
+        {(product) => (
+          <ProductWorkspaceView
+            route="offer"
+            dashboard={projectOfferWorkspace(product)}
+            serviceHealth={product.serviceHealth}
+            loading={product.loading}
+            loaderError={product.error}
+            refreshDashboard={product.refresh}
+            activeOfferCaseId={activeOfferCaseId}
+            activeOfferDraftId={product.data.currentDraft?.draftId}
+            setActiveOfferCaseId={setActiveOfferCaseId}
+            activeProductionCaseId={activeProductionCaseId}
+            activeProductionSpecId={activeProductionSpecId}
+            setActiveProductionSpecId={setActiveProductionSpecId}
+            setActiveProductionCaseId={setActiveProductionCaseId}
+            availableCases={product.data.cases}
+          />
+        )}
+      </OfferProductApp>
+    );
+  }
+
+  return (
+    <ProductionProductApp
+      shell={shell}
+      masthead={masthead}
+      activeCaseId={activeProductionCaseId}
+      activeSpecId={activeProductionCaseId ? undefined : activeProductionSpecId}
+    >
+      {(product) => (
+        <ProductWorkspaceView
+          route="production"
+          dashboard={projectProductionWorkspace(product)}
+          serviceHealth={product.serviceHealth}
+          loading={product.loading}
+          loaderError={product.error}
+          refreshDashboard={product.refresh}
+          activeOfferCaseId={activeOfferCaseId}
+          setActiveOfferCaseId={setActiveOfferCaseId}
+          activeProductionCaseId={activeProductionCaseId}
+          boundProductionCaseSpecId={product.data.activeCase?.sourceSpecId}
+          setActiveProductionCaseId={setActiveProductionCaseId}
+          activeProductionSpecId={activeProductionSpecId}
+          setActiveProductionSpecId={setActiveProductionSpecId}
+          availableCases={product.data.cases}
+        />
+      )}
+    </ProductionProductApp>
+  );
+}
+
+/** Resolve the three product routes before handing control to the workbench. */
+export function App() {
+  const route = detectRoute(getPathname());
+  const routeShellState = buildAppRouteShellState({
+    route,
+    baseUrl: typeof window === "undefined" ? "" : window.location.origin,
+    operatorName: "",
+    loading: false,
+    submitting: false,
+    onOperatorNameChange: () => undefined,
+    onSeedDemoData: async () => undefined,
+    onRefreshDashboard: async () => undefined
+  });
+
+  if (route === "home") {
+    return <HomePortalApp shell={routeShellState.shell} />;
+  }
+  return (
+    <ProductRouteController
+      route={route}
+      shell={routeShellState.shell}
+      masthead={routeShellState.masthead}
+    />
   );
 }

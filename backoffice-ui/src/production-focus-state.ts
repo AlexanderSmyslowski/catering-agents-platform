@@ -2,16 +2,17 @@ import {
   selectFocusedProductionSpec,
   selectProductionIntakeRequestId
 } from "./production-route-state.js";
+import type { ProductionRouteFocusSpec } from "./production-route-state.js";
 
 export type ProductionFocusState = {
-  focusedProductionSpec?: Record<string, unknown>;
-  focusedProductionSpecRecord?: Record<string, unknown>;
+  focusedProductionSpec?: ProductionRouteFocusSpec;
+  focusedProductionSpecRecord?: ProductionRouteFocusSpec;
   currentIntakeRequestId?: string;
 };
 
 export function buildProductionFocusState(input: {
-  acceptedSpecs: Array<Record<string, unknown>>;
-  filteredSpecs: Array<Record<string, unknown>>;
+  acceptedSpecs: ProductionRouteFocusSpec[];
+  filteredSpecs: ProductionRouteFocusSpec[];
   focusedProductionSpecId?: string;
   productionArtifactSpecIds: string[];
   productionWorkspaceCleared: boolean;
@@ -27,7 +28,7 @@ export function buildProductionFocusState(input: {
     route: input.route,
     searchText: input.searchText
   });
-  const focusedProductionSpecRecord = focusedProductionSpec as Record<string, unknown> | undefined;
+  const focusedProductionSpecRecord = focusedProductionSpec;
 
   return {
     focusedProductionSpec,

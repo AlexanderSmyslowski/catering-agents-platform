@@ -101,6 +101,53 @@ async function createProductionCase(
   return response.json<{ case: ProductionCase }>().case;
 }
 
+async function approveDraftForCase(
+  app: ReturnType<typeof buildProductionApp>,
+  intakeRecords: InMemoryIntakeRecordsPort,
+  caseId: string,
+  spec: ReturnType<typeof handoff>["eventSpecSnapshot"]
+) {
+  await intakeRecords.insertSpec({ businessId: "alpha" }, spec);
+  const created = await app.inject({
+    method: "POST",
+    url: "/v1/production/drafts",
+    headers: alphaHeaders,
+    payload: { caseId, specId: spec.specId }
+  });
+  expect(created.statusCode, created.body).toBe(201);
+
+  const prepared = await app.inject({
+    method: "POST",
+    url: `/v1/production/drafts/${created.json().draft.draftId}/prepare`,
+    headers: alphaHeaders,
+    payload: {}
+  });
+  expect(prepared.statusCode, prepared.body).toBe(201);
+
+  for (const card of prepared.json().draft.reviewCards) {
+    const reviewed = await app.inject({
+      method: "PATCH",
+      url: `/v1/production/drafts/${prepared.json().draft.draftId}/review-cards/${card.cardId}`,
+      headers: alphaHeaders,
+      payload: { decision: "fits" }
+    });
+    expect(reviewed.statusCode, reviewed.body).toBe(200);
+  }
+
+  const approved = await app.inject({
+    method: "POST",
+    url: `/v1/production/drafts/${prepared.json().draft.draftId}/decision`,
+    headers: alphaHeaders,
+    payload: { decision: "approved" }
+  });
+  expect(approved.statusCode, approved.body).toBe(201);
+  return {
+    createdDraftId: created.json().draft.draftId as string,
+    draftId: prepared.json().draft.draftId as string,
+    approvedProductionSpecId: approved.json().approvedProductionSpec.approvedProductionSpecId as string
+  };
+}
+
 async function completeProductionCase(
   store: ProductionStore,
   caseId: string
@@ -752,6 +799,109 @@ describe("production case routes", () => {
     expect(secondEvents.filter((event) => event.kind === "draft_created")).toEqual([
       expect.objectContaining({ artifactId: second.json().draft.draftId })
     ]);
+  });
+
+  it("lists only drafts linked to the requested production case", async () => {
+    const { app, intakeRecords } = buildHarness();
+    const firstCase = await createProductionCase(app);
+    const secondCase = await createProductionCase(app, { customerName: "Zweiter Auftrag" });
+    const spec = handoff().eventSpecSnapshot;
+    await intakeRecords.insertSpec({ businessId: "alpha" }, spec);
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/production/drafts",
+      headers: alphaHeaders,
+      payload: { caseId: firstCase.caseId, specId: spec.specId }
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: "/v1/production/drafts",
+      headers: alphaHeaders,
+      payload: { caseId: secondCase.caseId, specId: spec.specId }
+    });
+    expect(first.statusCode, first.body).toBe(201);
+    expect(second.statusCode, second.body).toBe(201);
+
+    const firstScoped = await app.inject({
+      method: "GET",
+      url: `/v1/production/drafts?caseId=${firstCase.caseId}`,
+      headers: alphaHeaders
+    });
+    const secondScoped = await app.inject({
+      method: "GET",
+      url: `/v1/production/drafts?caseId=${secondCase.caseId}`,
+      headers: alphaHeaders
+    });
+
+    expect(firstScoped.statusCode, firstScoped.body).toBe(200);
+    expect(secondScoped.statusCode, secondScoped.body).toBe(200);
+    expect(firstScoped.json().items.map((draft: { draftId: string }) => draft.draftId)).toEqual([
+      first.json().draft.draftId
+    ]);
+    expect(secondScoped.json().items.map((draft: { draftId: string }) => draft.draftId)).toEqual([
+      second.json().draft.draftId
+    ]);
+  });
+
+  it("does not return approval projections belonging to another production case", async () => {
+    const { app, intakeRecords } = buildHarness();
+    const firstCase = await createProductionCase(app);
+    const secondCase = await createProductionCase(app, { customerName: "Zweiter Auftrag" });
+    const firstSpec = { ...handoff().eventSpecSnapshot, specId: "spec-route-case-a" };
+    const secondSpec = { ...handoff().eventSpecSnapshot, specId: "spec-route-case-b" };
+    const emptyScoped = await app.inject({
+      method: "GET",
+      url: `/v1/production/drafts?caseId=${firstCase.caseId}`,
+      headers: alphaHeaders
+    });
+    const unknownScoped = await app.inject({
+      method: "GET",
+      url: "/v1/production/drafts?caseId=production-case-unknown",
+      headers: alphaHeaders
+    });
+    expect(emptyScoped.statusCode, emptyScoped.body).toBe(200);
+    expect(emptyScoped.json()).toEqual({ items: [], approvedProductionSpecs: [] });
+    expect(unknownScoped.statusCode, unknownScoped.body).toBe(200);
+    expect(unknownScoped.json()).toEqual({ items: [], approvedProductionSpecs: [] });
+    const firstApproval = await approveDraftForCase(app, intakeRecords, firstCase.caseId, firstSpec);
+    const secondApproval = await approveDraftForCase(app, intakeRecords, secondCase.caseId, secondSpec);
+
+    const firstScoped = await app.inject({
+      method: "GET",
+      url: `/v1/production/drafts?caseId=${firstCase.caseId}`,
+      headers: alphaHeaders
+    });
+    const secondScoped = await app.inject({
+      method: "GET",
+      url: `/v1/production/drafts?caseId=${secondCase.caseId}`,
+      headers: alphaHeaders
+    });
+
+    expect(firstScoped.statusCode, firstScoped.body).toBe(200);
+    expect(secondScoped.statusCode, secondScoped.body).toBe(200);
+    expect(firstScoped.json().items.map((draft: { draftId: string }) => draft.draftId)).toEqual([
+      firstApproval.draftId,
+      firstApproval.createdDraftId
+    ]);
+    expect(secondScoped.json().items.map((draft: { draftId: string }) => draft.draftId)).toEqual([
+      secondApproval.draftId,
+      secondApproval.createdDraftId
+    ]);
+    expect(firstScoped.json().approvedProductionSpecs).toEqual([{
+      approvedProductionSpecId: firstApproval.approvedProductionSpecId,
+      sourceDraft: { draftId: firstApproval.draftId, revision: 2 },
+      applied: false
+    }]);
+    expect(secondScoped.json().approvedProductionSpecs).toEqual([{
+      approvedProductionSpecId: secondApproval.approvedProductionSpecId,
+      sourceDraft: { draftId: secondApproval.draftId, revision: 2 },
+      applied: false
+    }]);
+    expect(JSON.stringify(firstScoped.json())).not.toContain(secondApproval.approvedProductionSpecId);
+    expect(JSON.stringify(firstScoped.json())).not.toContain(secondApproval.draftId);
+    expect(JSON.stringify(secondScoped.json())).not.toContain(firstApproval.approvedProductionSpecId);
+    expect(JSON.stringify(secondScoped.json())).not.toContain(firstApproval.draftId);
   });
 
   it("repairs one draft-created event when a canonical spec import is retried after event persistence failed", async () => {

@@ -1,47 +1,52 @@
-import type { DashboardState } from "./api.js";
+import type { ProductRouteDashboard } from "./api.js";
+import type { AcceptedEventSpec, OfferDraft } from "@catering/shared-core";
 import {
   formatLatestIntakeRequest,
   type AppRoute
 } from "./app-shell-state.js";
 import {
-  countOfferHandoffReadiness,
-  filterDashboardRecords,
-  isInitialHomeDashboardLoading,
-  isInitialProductionDashboardLoading,
-  selectOfferSpecForDraft,
-  selectRecordByStringId,
+  countProductOfferHandoffReadiness,
+  filterProductRouteRecords,
+  isInitialProductHomeDashboardLoading,
+  isInitialProductProductionDashboardLoading,
+  selectProductOfferDraft,
+  selectProductOfferSpecForDraft,
   type OfferHandoffCounts
 } from "./app-dashboard-selectors.js";
 import {
-  buildProductionDashboardRecordsState,
-  type ProductionDashboardRecordsState
+  buildProductProductionDashboardRecordsState,
+  type ProductProductionDashboardRecordsState
 } from "./production-dashboard-records-state.js";
 import {
-  buildProductionRecipeStatusSummaryState,
+  buildProductRecipeStatusSummaryState,
   type ProductionRecipeStatusSummaryState
 } from "./production-recipe-status-state.js";
 
 export type AppDashboardRouteStateInput = {
-  dashboard: DashboardState;
+  dashboard: ProductRouteDashboard;
   route: AppRoute;
   loading: boolean;
   searchText: string;
   selectedDraftId?: string;
 };
 
-export type AppDashboardRouteState = ProductionDashboardRecordsState &
+export function buildAppDashboardRouteState(input: AppDashboardRouteStateInput): AppDashboardRouteState {
+  return buildTypedAppDashboardRouteState(input);
+}
+
+export type AppDashboardRouteState = ProductProductionDashboardRecordsState &
   ProductionRecipeStatusSummaryState & {
-    filteredOfferDrafts: DashboardState["offerDrafts"];
+    filteredOfferDrafts: OfferDraft[];
     offerHandoffCounts: OfferHandoffCounts;
     latestIntakeRequestSummary: string;
     isInitialHomeLoading: boolean;
     isInitialProductionLoading: boolean;
-    selectedDraft: Record<string, unknown> | undefined;
-    activeOfferDraft: Record<string, unknown> | undefined;
-    activeOfferSpec: Record<string, unknown> | undefined;
+    selectedDraft: OfferDraft | undefined;
+    activeOfferDraft: OfferDraft | undefined;
+    activeOfferSpec: AcceptedEventSpec | undefined;
   };
 
-export function buildAppDashboardRouteState(input: AppDashboardRouteStateInput): AppDashboardRouteState {
+function buildTypedAppDashboardRouteState(input: AppDashboardRouteStateInput): AppDashboardRouteState {
   const {
     dashboard,
     route,
@@ -49,8 +54,8 @@ export function buildAppDashboardRouteState(input: AppDashboardRouteStateInput):
     searchText,
     selectedDraftId
   } = input;
-  const filteredOfferDrafts = filterDashboardRecords(dashboard.offerDrafts, searchText);
-  const productionRecords = buildProductionDashboardRecordsState({
+  const filteredOfferDrafts = filterProductRouteRecords(dashboard.offerDrafts, searchText);
+  const productionRecords = buildProductProductionDashboardRecordsState({
     acceptedSpecs: dashboard.acceptedSpecs,
     productionPlans: dashboard.productionPlans,
     purchaseLists: dashboard.purchaseLists,
@@ -58,22 +63,22 @@ export function buildAppDashboardRouteState(input: AppDashboardRouteStateInput):
     recipes: dashboard.recipes,
     searchText
   });
-  const recipeStatus = buildProductionRecipeStatusSummaryState({ recipes: dashboard.recipes });
-  const selectedDraft = selectRecordByStringId(dashboard.offerDrafts, "draftId", selectedDraftId);
+  const recipeStatus = buildProductRecipeStatusSummaryState({ recipes: dashboard.recipes });
+  const selectedDraft = selectProductOfferDraft(dashboard.offerDrafts, selectedDraftId);
 
   return {
     filteredOfferDrafts,
     ...productionRecords,
     ...recipeStatus,
-    offerHandoffCounts: countOfferHandoffReadiness(dashboard.acceptedSpecs),
+    offerHandoffCounts: countProductOfferHandoffReadiness(dashboard.acceptedSpecs),
     latestIntakeRequestSummary: formatLatestIntakeRequest(dashboard.intakeRequests),
-    isInitialHomeLoading: isInitialHomeDashboardLoading({ route, loading, dashboard }),
-    isInitialProductionLoading: isInitialProductionDashboardLoading({ route, loading, dashboard }),
+    isInitialHomeLoading: isInitialProductHomeDashboardLoading({ route, loading, dashboard }),
+    isInitialProductionLoading: isInitialProductProductionDashboardLoading({ route, loading, dashboard }),
     selectedDraft,
     activeOfferDraft: selectedDraft,
-    activeOfferSpec: selectOfferSpecForDraft(
+    activeOfferSpec: selectProductOfferSpecForDraft(
       dashboard.acceptedSpecs,
-      selectedDraft ? String(selectedDraft.draftId ?? "") : undefined
+      selectedDraft?.draftId
     )
   };
 }

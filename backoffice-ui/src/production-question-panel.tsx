@@ -66,7 +66,8 @@ export type ProductionQuestionPanelActions = {
   refreshAfterDraftDecision?: (appliedSpecId?: string) => Promise<void>;
 };
 
-type ProductionQuestionPanelProps = {
+export type ProductionQuestionPanelProps = {
+  activeCaseId?: string;
   questionState: ProductionQuestionPanelState;
   questionActions: ProductionQuestionPanelActions;
   submitting: boolean;
@@ -75,6 +76,7 @@ type ProductionQuestionPanelProps = {
 };
 
 export function ProductionQuestionPanel({
+  activeCaseId,
   questionState,
   questionActions,
   submitting,
@@ -269,6 +271,7 @@ export function ProductionQuestionPanel({
             />
             <ProductionDraftReviewPanel
               submitting={submitting}
+              caseId={activeCaseId}
               onDraftChanged={refreshAfterDraftDecision}
             />
           </div>

@@ -11,6 +11,7 @@ import {
   type ApprovedOffer,
   type BusinessContext,
   type BusinessScopedPersistentCollection,
+  type CaseSourceRef,
   type CollectionStorageOptions,
   type CaseEvent,
   type OfferCase,
@@ -344,7 +345,8 @@ export class OfferStore {
   async saveDraftForCase(
     context: BusinessContext,
     caseId: string,
-    draft: OfferDraft
+    draft: OfferDraft,
+    sourceRefs: readonly CaseSourceRef[] = []
   ): Promise<"saved" | "case_conflict"> {
     const normalizedDraft = validateOfferDraft(draft);
     const storage = this.storageOptions ?? {};
@@ -382,6 +384,50 @@ export class OfferStore {
         if (linkedCaseIds[0] && linkedCaseIds[0] !== caseId) return "case_conflict";
 
         await saveOfferDraftInCollection(draftCollection, context, normalizedDraft);
+        for (const sourceRef of sourceRefs) {
+          const existingSourceEvent = (await caseCollections.events.list(context)).find(
+            (event) => event.caseId === caseId
+              && event.kind === "source_added"
+              && event.sourceId === sourceRef.sourceId
+          );
+          if (existingSourceEvent) {
+            if (!areJsonValuesEqual(existingSourceEvent.sourceRef, sourceRef)) {
+              throw new Error("Bestehende Angebotsquelle stimmt nicht mit der verifizierten Quelldatei überein.");
+            }
+            continue;
+          }
+          const sourceEventId = `offer-case-source-event-${createHash("sha256")
+            .update(`${context.businessId}\0${caseId}\0${sourceRef.sourceId}`)
+            .digest("hex")}`;
+          const racedSourceEvent = await caseCollections.events.get(context, sourceEventId);
+          if (racedSourceEvent) {
+            if (!areJsonValuesEqual(racedSourceEvent.sourceRef, sourceRef)) {
+              throw new Error("Bestehende Angebotsquelle stimmt nicht mit der verifizierten Quelldatei überein.");
+            }
+            continue;
+          }
+          const sourceSequence = (await caseCollections.events.list(context))
+            .filter((event) => event.caseId === caseId)
+            .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
+          const sourceEvent = validateCaseEventForProduct({
+            businessId: context.businessId,
+            eventId: sourceEventId,
+            caseId,
+            sequence: sourceSequence,
+            at: new Date().toISOString(),
+            role: "system",
+            kind: "source_added",
+            text: "Verifizierte Angebotsquelle gespeichert.",
+            sourceId: sourceRef.sourceId,
+            sourceRef
+          }, "offer");
+          if (await caseCollections.events.insert(context, sourceEvent) !== "created") {
+            const raced = await caseCollections.events.get(context, sourceEventId);
+            if (!raced || !areJsonValuesEqual(raced.sourceRef, sourceRef)) {
+              throw new Error("Die verifizierte Angebotsquelle konnte nicht eindeutig gespeichert werden.");
+            }
+          }
+        }
         let draftEvent = (await caseCollections.events.list(context)).find(
           (event) => event.caseId === caseId
             && event.kind === "draft_created"

@@ -24,6 +24,8 @@ import { OfferStore } from "./store.js";
 import { registerOfferApprovalRoutes } from "./routes/approval-routes.js";
 import { registerOfferCaseRoutes } from "./routes/case-routes.js";
 import { registerOfferDraftRoutes } from "./routes/draft-routes.js";
+import { HttpSourceDocumentMetadataReader } from "./gateways/http-source-document-metadata-reader.js";
+import type { SourceDocumentMetadataReader } from "./ports/source-document-reader.js";
 
 interface RecipeTextImportBody {
   text: string;
@@ -43,6 +45,7 @@ export interface OfferAppOptions extends CollectionStorageOptions {
   recipeLibrary?: RecipeLibrary;
   auditLog?: AuditLogStore;
   trustedActorSecret?: string;
+  sourceDocumentReader?: SourceDocumentMetadataReader;
   env?: Record<string, string | undefined>;
 }
 
@@ -170,6 +173,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool
     });
+  const sourceDocumentReader = options.sourceDocumentReader ?? (env.CATERING_INTAKE_SERVICE_URL
+    ? new HttpSourceDocumentMetadataReader({
+        intakeServiceUrl: env.CATERING_INTAKE_SERVICE_URL,
+        trustedServiceSecret: trustedActorSecret
+      })
+    : undefined);
 
   const app = Fastify({
     logger: false
@@ -211,6 +220,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   registerOfferDraftRoutes(app, {
     store,
     auditLog,
+    sourceDocumentReader,
     trustedActorSecret,
     allowDevActorHeader,
     isOfferOperator,

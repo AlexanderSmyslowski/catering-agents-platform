@@ -5,7 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
 DATA_ROOT_FILE="${RUNTIME_DIR}/data-root.txt"
-START_COMMAND="npm run local:start --seed-demo"
+START_COMMAND="npm run local:start"
+DEMO_START_COMMAND="npm run local:start:demo"
 DEV_AUTH_HINT="CATERING_DEV_AUTH=1"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 DEFAULT_BUSINESS_ID="${CATERING_DEFAULT_BUSINESS_ID:-local}"
@@ -117,7 +118,7 @@ NODE
 
 for session_name in "${required_sessions[@]}"; do
   if ! screen_session_exists "${session_name}"; then
-    echo "Lokaler Stack nicht vollstaendig gestartet. Bitte zuerst: ${START_COMMAND}" >&2
+    echo "Lokaler Stack nicht vollstaendig gestartet. Der Standardstart bleibt leer; fuer diesen Demo-Check bitte zuerst: ${DEMO_START_COMMAND}" >&2
     exit 1
   fi
 done
@@ -134,7 +135,8 @@ fi
 
 data_root="${requested_data_root:-${recorded_data_root:-${ROOT_DIR}/data}}"
 
-echo "Startweg vorhanden: ${START_COMMAND}"
+echo "Standardstart (leer): ${START_COMMAND}"
+echo "Pruefstart mit synthetischen Demo-Daten: ${DEMO_START_COMMAND}"
 echo "Lokaler Dev-Auth-Modus: ${DEV_AUTH_HINT} in local:start-Serviceprozessen erwartet"
 echo "Lokale Datenwurzel: ${data_root}"
 echo ""
@@ -322,7 +324,7 @@ process.stdin.on("end", () => {
     const actions = [...new Set(payload.items.map((entry) => entry.action).filter(Boolean))].slice(0, 8);
     console.error(
       `Kein production.seed_demo-Beleg unter den letzten ${payload.items.length} Audit-Eintraegen gefunden. ` +
-      `Bitte lokalen Stack kontrolliert mit npm run local:start neu seed-en. Sichtbare Aktionen: ${actions.join(", ") || "keine"}.`
+      `Bitte lokalen Stack kontrolliert mit npm run local:start:demo neu starten. Sichtbare Aktionen: ${actions.join(", ") || "keine"}.`
     );
     process.exit(1);
   }

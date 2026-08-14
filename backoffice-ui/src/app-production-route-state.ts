@@ -62,6 +62,7 @@ export function buildAppProductionRouteState(
     productionObjectsActions,
     productionRecipeActions: input.recipeActions,
     productionRouteMainLayoutState: buildProductionRouteMainLayoutState({
+      activeProductionCaseId: input.activeProductionCaseId,
       viewState: input.viewState,
       submitting: input.submitting,
       sourceInput: input.sourceInput,

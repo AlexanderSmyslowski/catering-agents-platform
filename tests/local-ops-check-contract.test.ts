@@ -1,4 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync, writeFileSync, chmodSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { buildProductionConversationProjection } from "../shared-core/src/conversation-projection.js";
 import { getDemoProductionAnsweredClarificationAnchor } from "../shared-core/src/fixtures/demo-scenarios.js";
 import { describe, expect, it } from "vitest";
@@ -15,8 +18,10 @@ const startScript = readFileSync("scripts/start-local-stack.sh", "utf8");
 describe("local ops check contract", () => {
   it("keeps the audit window wide enough for a running local stack and reports missing seed evidence deterministically", () => {
     expect(checkScript).toContain("/v1/production/audit/events?limit=200");
+    expect(checkScript).toContain('START_COMMAND="npm run local:start"');
+    expect(checkScript).toContain('DEMO_START_COMMAND="npm run local:start:demo"');
     expect(checkScript).toContain("Kein production.seed_demo-Beleg unter den letzten ${payload.items.length} Audit-Eintraegen gefunden.");
-    expect(checkScript).toContain("Bitte lokalen Stack kontrolliert mit npm run local:start neu seed-en.");
+    expect(checkScript).toContain("Bitte lokalen Stack kontrolliert mit npm run local:start:demo neu starten.");
     expect(checkScript).toContain("production.seed_demo-Beleg hat eine unerwartete Summary.");
     expect(checkScript).toContain("production.seed_demo-Beleg hat eine unerwartete entityId.");
   });
@@ -66,7 +71,10 @@ describe("local ops check contract", () => {
     expect(stopScript).toContain("rm -f \"${DATA_ROOT_FILE}\"");
   });
 
-  it("starts an empty local operator stack through the ChatGPT subscription transport", () => {
+  it("keeps the default local stack empty and exposes explicit demo starts", () => {
+    expect(packageJson.scripts["local:start"]).toBe("bash ./scripts/start-local-stack.sh");
+    expect(packageJson.scripts["local:start"]).not.toContain("--seed-demo");
+    expect(packageJson.scripts["local:start:demo"]).toBe("bash ./scripts/start-local-stack.sh --seed-demo");
     expect(packageJson.scripts["local:start:subscription"]).toBe(
       "npm run local:stop && CATERING_LLM_PROVIDER=codex_cli CATERING_SYNTHETIC_LLM_SLICE=1 CATERING_PRODUCTION_DRAFT_DATA_MODE=pseudonymized_approved bash ./scripts/start-local-stack.sh"
     );
@@ -81,6 +89,7 @@ describe("local ops check contract", () => {
 
   it("provides a controlled fresh local rehearsal start without deleting repo data", () => {
     expect(packageJson.scripts["local:start:fresh"]).toBe("bash ./scripts/start-fresh-local-stack.sh");
+    expect(packageJson.scripts["local:start:fresh:demo"]).toBe("bash ./scripts/start-fresh-local-stack.sh --seed-demo");
     expect(existsSync("scripts/start-fresh-local-stack.sh")).toBe(true);
     expect(freshStartScript).toContain("mktemp -d");
     expect(freshStartScript).toContain("catering-agents-rehearsal-");
@@ -91,15 +100,79 @@ describe("local ops check contract", () => {
     expect(freshStartScript).toContain("unset DATABASE_URL");
     expect(freshStartScript).toContain("export CATERING_DATA_ROOT");
     expect(freshStartScript).toContain("scripts/start-local-stack.sh");
-    expect(freshStartScript).toContain("--seed-demo");
+    expect(freshStartScript).toContain('if [[ "$#" -eq 1 && "${1}" == "--seed-demo" ]]');
     expect(readmeDoc).toContain("`npm run local:start:fresh` stoppt den laufenden Stack");
     expect(testingDoc).toContain("`npm run local:start:fresh` stoppt den laufenden lokalen Stack kontrolliert");
     expect(testingDoc).toContain("loescht keine Repo-Daten unter `./data`");
     expect(testingDoc).toContain("bevorzugte Startweg");
   });
 
+  it("rejects unknown fresh-start options instead of silently changing the run mode", () => {
+    expect(freshStartScript).toContain('elif [[ "$#" -gt 0 ]]');
+    expect(freshStartScript).toContain("Unbekannte Fresh-Start-Option(en)");
+    expect(freshStartScript).toContain("exit 2");
+  });
+
+  it("rejects an unknown fresh-start option at runtime before invoking the stack", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-fresh-start-contract-"));
+    const fakeStop = path.join(root, "stop.sh");
+    const fakeStart = path.join(root, "start.sh");
+    const marker = path.join(root, "started");
+    writeFileSync(fakeStop, "#!/bin/bash\nexit 0\n");
+    writeFileSync(fakeStart, `#!/bin/bash\ntouch ${JSON.stringify(marker)}\n`);
+    chmodSync(fakeStop, 0o755);
+    chmodSync(fakeStart, 0o755);
+    const script = freshStartScript
+      .replace('ROOT_DIR="$(cd "${BASH_SOURCE[0]}/.." && pwd)"', `ROOT_DIR=${JSON.stringify(root)}`)
+      .replace('bash "${ROOT_DIR}/scripts/stop-local-stack.sh"', `bash ${JSON.stringify(fakeStop)}`)
+      .replace('bash "${ROOT_DIR}/scripts/start-local-stack.sh"', `bash ${JSON.stringify(fakeStart)}`);
+    const scriptPath = path.join(root, "fresh.sh");
+    writeFileSync(scriptPath, script);
+    chmodSync(scriptPath, 0o755);
+    try {
+      expect(() => execFileSync("bash", [scriptPath, "--unknown"], { encoding: "utf8", stdio: "pipe" })).toThrow();
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      if (existsSync("/usr/bin/trash")) {
+        try {
+          execFileSync("/usr/bin/trash", [root], { stdio: "ignore" });
+        } catch {
+          // The macOS sandbox can reject Trash access; the contract assertion remains valid.
+        }
+      }
+    }
+  });
+
+  it("rejects unknown local-start options after an explicit demo flag before invoking the stack", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-start-argument-contract-"));
+    const marker = path.join(root, "started");
+    const parserStart = startScript.indexOf("SEED_DEMO=0");
+    const parserEnd = startScript.indexOf("\n\nrequired_sessions=", parserStart);
+    expect(parserStart).toBeGreaterThanOrEqual(0);
+    expect(parserEnd).toBeGreaterThan(parserStart);
+    const parser = startScript.slice(parserStart, parserEnd);
+    const scriptPath = path.join(root, "start.sh");
+    writeFileSync(
+      scriptPath,
+      `#!/bin/bash\nset -euo pipefail\n${parser}\ntouch ${JSON.stringify(marker)}\n`
+    );
+    chmodSync(scriptPath, 0o755);
+    try {
+      expect(() => execFileSync("bash", [scriptPath, "--seed-demo", "--unbekannt"], { encoding: "utf8", stdio: "pipe" })).toThrow();
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      if (existsSync("/usr/bin/trash")) {
+        try {
+          execFileSync("/usr/bin/trash", [root], { stdio: "ignore" });
+        } catch {
+          // The macOS sandbox can reject Trash access; the contract assertion remains valid.
+        }
+      }
+    }
+  });
+
   it("documents the compact local demo runbook commands and their bounded roles", () => {
-    expect(testingDoc).toContain("`npm run local:start` startet den lokalen Stack mit Demo-Seeding");
+    expect(packageJson.scripts["local:start:demo"]).toContain("--seed-demo");
     expect(readmeDoc).toContain("`npm run local:start:subscription`");
     expect(testingDoc).toContain("`npm run local:start:subscription` startet den leeren lokalen Operator-Stack");
     expect(testingDoc).toContain("operatorfreigegebene, anonymisierte Dokumente");
@@ -168,7 +241,7 @@ describe("local ops check contract", () => {
     }
 
     for (const expectedLocalCheckAnchor of [
-      "Startweg vorhanden",
+      "Standardstart (leer)",
       "Erwartungsankerpruefung",
       "/v1/intake/requests",
       "/v1/intake/specs",
@@ -233,7 +306,8 @@ describe("local ops check contract", () => {
   });
 
   it("keeps the C8 acceptance path discoverable and tied to real repo anchors", () => {
-    expect(packageJson.scripts["local:start"]).toBe("bash ./scripts/start-local-stack.sh --seed-demo");
+    expect(packageJson.scripts["local:start"]).toBe("bash ./scripts/start-local-stack.sh");
+    expect(packageJson.scripts["local:start:demo"]).toBe("bash ./scripts/start-local-stack.sh --seed-demo");
     expect(packageJson.scripts["local:start:fresh"]).toBe("bash ./scripts/start-fresh-local-stack.sh");
     expect(packageJson.scripts["local:status"]).toBe("bash ./scripts/status-local-stack.sh");
     expect(packageJson.scripts["local:check"]).toBe("bash ./scripts/check-local-ops.sh");

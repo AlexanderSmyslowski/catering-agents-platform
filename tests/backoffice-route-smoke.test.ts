@@ -4,15 +4,20 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
 
+type RouteSmokeRecord = Record<string, unknown>;
 type RouteSmokeDashboardFixture = {
-  intakeRequests?: Array<Record<string, unknown>>;
-  acceptedSpecs?: Array<Record<string, unknown>>;
-  offerDrafts?: Array<Record<string, unknown>>;
-  productionPlans?: Array<Record<string, unknown>>;
-  purchaseLists?: Array<Record<string, unknown>>;
-  recipes?: Array<Record<string, unknown>>;
-  auditEvents?: Array<Record<string, unknown>>;
-  intakeRequestDetails?: Record<string, Record<string, unknown>>;
+  intakeRequests?: Array<RouteSmokeRecord & { requestId?: string }>;
+  acceptedSpecs?: Array<RouteSmokeRecord & { specId?: string }>;
+  offerDrafts?: Array<RouteSmokeRecord & {
+    draftId?: string;
+    revision?: number;
+    proposedEventSpec?: RouteSmokeRecord;
+  }>;
+  productionPlans?: Array<RouteSmokeRecord & { planId?: string }>;
+  purchaseLists?: Array<RouteSmokeRecord & { purchaseListId?: string }>;
+  recipes?: Array<RouteSmokeRecord & { recipeId?: string }>;
+  auditEvents?: Array<RouteSmokeRecord>;
+  intakeRequestDetails?: Record<string, RouteSmokeRecord>;
 };
 
 function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture = {}) {
@@ -36,10 +41,168 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
   });
   vi.stubGlobal("localStorage", localStorageMock);
 
+  const firstOfferDraft = fixture.offerDrafts?.[0];
+  const firstProductionPlan = fixture.productionPlans?.[0];
+  const firstPurchaseList = fixture.purchaseLists?.[0];
+  const firstSpec = fixture.acceptedSpecs?.[0];
+  const firstRequest = fixture.intakeRequests?.[0];
+  const offerCaseId = firstOfferDraft?.draftId ? `offer-case-${String(firstOfferDraft.draftId)}` : undefined;
+  const productionCaseId = firstSpec?.specId || firstProductionPlan?.planId || firstPurchaseList?.purchaseListId
+    ? `production-case-${String(firstSpec?.specId ?? firstProductionPlan?.planId ?? firstPurchaseList?.purchaseListId)}`
+    : undefined;
+  const sourceRef = firstRequest?.requestId
+    ? {
+        sourceId: `source-${String(firstRequest.requestId)}`,
+        requestId: String(firstRequest.requestId),
+        dataClass: "synthetic_demo",
+        addedAt: "2026-04-10T09:30:00.000Z"
+      }
+    : undefined;
+  const offerDraft = firstOfferDraft
+    ? {
+        ...firstOfferDraft,
+        proposedEventSpec: firstOfferDraft.proposedEventSpec ?? firstSpec
+      }
+    : undefined;
+  const offerEvents = offerCaseId && offerDraft
+    ? [{
+        businessId: "local",
+        eventId: `${offerCaseId}-draft-created`,
+        caseId: offerCaseId,
+        sequence: 1,
+        at: "2026-04-10T09:30:00.000Z",
+        role: "system",
+        kind: "draft_created",
+        text: "Angebotsentwurf erstellt.",
+        ...(sourceRef ? { sourceRef } : {}),
+        revisionRef: {
+          artifactType: "OfferDraft",
+          artifactId: String(offerDraft.draftId),
+          revision: Number(offerDraft.revision ?? 1),
+          createdAt: "2026-04-10T09:30:00.000Z"
+        }
+      }]
+    : [];
+  const productionEvents = productionCaseId
+    ? [{
+        businessId: "local",
+        eventId: `${productionCaseId}-created`,
+        caseId: productionCaseId,
+        sequence: 1,
+        at: "2026-04-10T09:30:00.000Z",
+        role: "system",
+        kind: "case_created",
+        text: "Produktionsauftrag angelegt.",
+        ...(sourceRef ? { sourceRef } : {})
+      }]
+    : [];
+
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+
+      if (url.endsWith("/api/offers/v1/offers/cases")) {
+        return new Response(
+          JSON.stringify({
+            items: offerCaseId
+              ? [{ caseId: offerCaseId, product: "offer", displayName: "Angebotsfall", status: "open", createdAt: "2026-04-10T09:30:00.000Z", updatedAt: "2026-04-10T09:30:00.000Z" }]
+              : []
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (offerCaseId && url.endsWith(`/api/offers/v1/offers/cases/${encodeURIComponent(offerCaseId)}`)) {
+        return new Response(
+          JSON.stringify({
+            case: {
+              caseId: offerCaseId,
+              product: "offer",
+              displayName: "Angebotsfall",
+              status: "open",
+              schemaVersion: "1.0",
+              businessId: "local",
+              version: 1,
+              createdAt: "2026-04-10T09:30:00.000Z",
+              updatedAt: "2026-04-10T09:30:00.000Z"
+            },
+            events: offerEvents,
+            ...(offerDraft ? { currentDraft: offerDraft } : {})
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/api/production/v1/production/cases")) {
+        return new Response(
+          JSON.stringify({
+            items: productionCaseId
+              ? [{ caseId: productionCaseId, product: "production", displayName: "Produktionsfall", status: "open", createdAt: "2026-04-10T09:30:00.000Z", updatedAt: "2026-04-10T09:30:00.000Z" }]
+              : []
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.startsWith("/api/production/v1/production/drafts")) {
+        return new Response(JSON.stringify({ items: [], approvedProductionSpecs: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (productionCaseId && url.endsWith(`/api/production/v1/production/cases/${encodeURIComponent(productionCaseId)}`)) {
+        return new Response(
+          JSON.stringify({
+            case: {
+              caseId: productionCaseId,
+              product: "production",
+              displayName: "Produktionsfall",
+              status: "open",
+              schemaVersion: "1.0",
+              businessId: "local",
+              version: 1,
+              createdAt: "2026-04-10T09:30:00.000Z",
+              updatedAt: "2026-04-10T09:30:00.000Z",
+              ...(firstSpec?.specId ? { sourceSpecId: String(firstSpec.specId) } : {}),
+              ...(firstProductionPlan?.planId ? { currentPlanId: String(firstProductionPlan.planId) } : {}),
+              ...(firstPurchaseList?.purchaseListId ? { currentPurchaseListId: String(firstPurchaseList.purchaseListId) } : {})
+            },
+            events: productionEvents
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      const offerDraftDetailMatch = url.match(/\/api\/offers\/v1\/offers\/drafts\/([^/?#]+)$/);
+      if (offerDraftDetailMatch && offerDraft && String(offerDraft.draftId) === decodeURIComponent(offerDraftDetailMatch[1])) {
+        return new Response(JSON.stringify(offerDraft), { status: 200, headers: { "content-type": "application/json" } });
+      }
+
+      const productionPlanDetailMatch = url.match(/\/api\/production\/v1\/production\/plans\/([^/?#]+)$/);
+      if (productionPlanDetailMatch) {
+        const plan = fixture.productionPlans?.find((item) => String(item.planId) === decodeURIComponent(productionPlanDetailMatch[1]));
+        if (plan) return new Response(JSON.stringify(plan), { status: 200, headers: { "content-type": "application/json" } });
+      }
+
+      const purchaseListDetailMatch = url.match(/\/api\/production\/v1\/production\/purchase-lists\/([^/?#]+)$/);
+      if (purchaseListDetailMatch) {
+        const purchaseList = fixture.purchaseLists?.find((item) => String(item.purchaseListId) === decodeURIComponent(purchaseListDetailMatch[1]));
+        if (purchaseList) return new Response(JSON.stringify(purchaseList), { status: 200, headers: { "content-type": "application/json" } });
+      }
+
+      const recipeDetailMatch = url.match(/\/api\/production\/v1\/production\/recipes\/([^/?#]+)$/);
+      if (recipeDetailMatch) {
+        const recipe = fixture.recipes?.find((item) => String(item.recipeId) === decodeURIComponent(recipeDetailMatch[1]));
+        if (recipe) return new Response(JSON.stringify(recipe), { status: 200, headers: { "content-type": "application/json" } });
+      }
+
+      const specDetailMatch = url.match(/\/api\/intake\/v1\/intake\/specs\/([^/?#]+)$/);
+      if (specDetailMatch) {
+        const spec = fixture.acceptedSpecs?.find((item) => String(item.specId) === decodeURIComponent(specDetailMatch[1]));
+        if (spec) return new Response(JSON.stringify(spec), { status: 200, headers: { "content-type": "application/json" } });
+      }
 
       if (url.endsWith("/api/intake/v1/intake/requests")) {
         return new Response(JSON.stringify({ items: fixture.intakeRequests ?? [] }), {
@@ -177,7 +340,7 @@ async function renderRouteWithFirstHistorySelection(
 
   await act(async () => {
     firstJob.click();
-    await flush();
+    await flush(20);
   });
 
   const result = {
@@ -267,16 +430,18 @@ describe("backoffice route smoke", () => {
     const home = (await renderRoute("/")).text;
     expect(home).toContain("Catering-Agenten");
     expect(home).toMatch(/gemeinsam.*regelkern/i);
-    expect(home).toContain("Interner Arbeitsstand");
-    expect(home).toContain("Arbeitsweg: Start → Angebot → Produktion → Rückfragen → Exporte.");
-    expect(home).toContain("Grenze: nur interne Demo- oder Testdaten; keine externe Freigabe und keine Produktionsfreigabe.");
-    expect(home).toContain("Prüfung: Quellen, offene Punkte und Exporte sichtbar halten; keine automatische Allergen-, Preis- oder Margenfreigabe.");
+    expect(home).toContain("Neuen Auftrag beginnen");
+    expect(home).toContain("Frühere Aufträge");
+    expect(home).not.toContain("Interner Arbeitsstand");
+    expect(home).not.toContain("Operative Spezifikationen");
+    expect(home).not.toContain("Produktionspläne");
+    expect(home).not.toContain("Änderungsprotokoll");
     expect(home).not.toContain("Reviewer-Hinweis");
     expect(home).not.toContain("Rehearsal-Go");
     expect(home).not.toContain("Interner Mini-Pilot");
     expect(home).not.toContain("Draft-Probe lokal und kontrolliert prüfen");
     expect(home).not.toContain("ready oder blocked mit Grund und nächstem sicheren Schritt direkt im JSON-Ergebnis.");
-    expect(home).toContain("Anfrage, Angebot, Produktion, Einkauf und Export gemeinsam prüfen.");
+    expect(home).not.toContain("Anfrage, Angebot, Produktion, Einkauf und Export gemeinsam prüfen.");
 
     const offer = await renderRoute("/angebot");
     expect(offer.text).toContain("Angebotsagent");
@@ -301,15 +466,12 @@ describe("backoffice route smoke", () => {
 
     const home = (await renderRoute("/")).text;
 
-    expect(home).toContain("Plattformdaten werden geladen; noch kein Datenbestand bewertet.");
-    expect(home).toContain("Übergabe wird geladen; noch keine Übergabe-Bewertung.");
-    expect(home).toContain("Angebotsdaten werden geladen; noch keine Entwurfsbewertung.");
-    expect(home).toContain("Produktionsdaten werden geladen; noch keine Plan-/Einkaufslistenbewertung.");
-    expect(home).toContain("Rezeptbestand wird geladen; noch keine Review-Bewertung.");
-    expect(home).toContain("Healthcheck läuft · Zähler werden geladen · letzte Erfassung wird geladen");
-    expect(home).toContain("Änderungen werden geladen; noch kein Audit-/Handoff-Befund.");
-    expect(home).not.toContain("0 operative Datensätze stehen dienstübergreifend bereit.");
-    expect(home).not.toContain("Noch keine Änderungen geladen.");
+    expect(home).toContain("Neuen Auftrag beginnen");
+    expect(home).toContain("Frühere Aufträge");
+    expect(home).not.toContain("Plattformdaten werden geladen");
+    expect(home).not.toContain("operative Datensätze");
+    expect(home).not.toContain("Healthcheck läuft");
+    expect(home).not.toContain("Änderungen werden geladen");
   });
 
   it("keeps the production initial loading state from looking like an empty production workspace", async () => {
@@ -334,25 +496,17 @@ describe("backoffice route smoke", () => {
     const home = await renderRoute("/");
     const homeDocument = new DOMParser().parseFromString(home.html, "text/html");
 
-    const offerNav = findAnchorByText(homeDocument, "Angebotsagent");
-    const productionNav = findAnchorByText(homeDocument, "Produktionsagent");
-    const offerShortcut = findAnchorByText(homeDocument, "Angebotsagent öffnen");
-    const productionShortcut = findAnchorByText(homeDocument, "Produktionsagent öffnen");
-    const offerCard = findRouteCardAnchor(homeDocument, "Kundenanfrage zu einem belastbaren Angebot verdichten");
-    const productionCard = findRouteCardAnchor(homeDocument, "Küchenvorbereitung mit Rezepten und Einkaufslisten steuern");
+    const offerNav = findAnchorByText(homeDocument, "Neuen Auftrag beginnen");
+    const historyNav = findAnchorByText(homeDocument, "Frühere Aufträge");
 
     expect(offerNav.getAttribute("href")).toBe("/angebot");
-    expect(offerShortcut.getAttribute("href")).toBe("/angebot");
-    expect(offerCard.getAttribute("href")).toBe("/angebot");
-    expect(productionNav.getAttribute("href")).toBe("/produktion");
-    expect(productionShortcut.getAttribute("href")).toBe("/produktion");
-    expect(productionCard.getAttribute("href")).toBe("/produktion");
+    expect(historyNav.getAttribute("href")).toBe("/angebot#history");
 
     const offer = (await renderRoute(offerNav.getAttribute("href") ?? "")).text;
     expect(offer).toContain("Angebotsagent");
     expect(offer).toContain("Kundenanfrage einfügen und Entwurf prüfen");
 
-    const production = (await renderRoute(productionNav.getAttribute("href") ?? "")).text;
+    const production = (await renderRoute("/produktion")).text;
     expect(production).toContain("Produktionsagent");
     expect(production).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
     expect(production).toContain("Frühere Produktionsaufträge öffnen");
@@ -451,11 +605,10 @@ describe("backoffice route smoke", () => {
     });
 
     const home = (await renderRoute("/")).text;
-    expect(home).toContain("Arbeitsweg: Start → Angebot → Produktion → Rückfragen → Exporte.");
-    expect(home).toContain("1 operative Datensätze stehen dienstübergreifend bereit.");
-    expect(home).toContain("1 kaufmännische Entwürfe können direkt übernommen werden.");
-    expect(home).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
-    expect(home).toContain("Korridor-Demo vorbereitet · Actor: Betriebs-/Audit-Operator · Action: production.seed_demo");
+    expect(home).toContain("Neuen Auftrag beginnen");
+    expect(home).toContain("Frühere Aufträge");
+    expect(home).not.toContain("operative Datensätze");
+    expect(home).not.toContain("Korridor-Demo vorbereitet");
 
     const offer = await renderRouteWithFirstHistorySelection("/angebot");
     expect(offer.text).toContain("Aktueller Entwurf: Korridor Lunchangebot");
@@ -490,7 +643,8 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/corridor-purchase-1/csv");
     expect(production.text).toContain("Audit-Spur");
-    expect(production.text).toContain("Korridor-Demo vorbereitet · Betriebs-/Audit-Operator · production.seed_demo");
+    expect(production.text).toContain("Produktionsauftrag angelegt.");
+    expect(production.text).not.toContain("Korridor-Demo vorbereitet");
     expect(production.text).not.toContain("Produktionsfreigabe erteilt");
   });
 
@@ -526,13 +680,11 @@ describe("backoffice route smoke", () => {
 
     const home = (await renderRoute("/")).text;
 
-    expect(home).toContain("Erfassung");
-    expect(home).toContain("letzte Erfassung: Dateiupload");
+    expect(home).not.toContain("Erfassung");
+    expect(home).not.toContain("letzte Erfassung: Dateiupload");
     expect(home).not.toContain("intake-source-warning-1");
-    expect(home).toContain("Quelle: kundenanfrage-b21.pdf");
-    expect(home).toContain(
-      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
-    );
+    expect(home).not.toContain("Quelle: kundenanfrage-b21.pdf");
+    expect(home).not.toContain("Dokumentprüfung: Lesbarkeit: Textextraktion unsicher");
     expect(home).not.toContain("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd");
   });
 
@@ -567,7 +719,8 @@ describe("backoffice route smoke", () => {
     expect(offer).toContain("Kundenanfrage einfügen und Entwurf prüfen");
     expect(offer).toContain("Frühere Angebotsaufträge öffnen");
     expect(offer).toContain("1 Auftrag");
-    expect(offer).toContain("Sommerfest mit Buffet · 1 Variante · 1 offener Punkt");
+    expect(offer).toContain("Angebotsfall");
+    expect(offer).not.toContain("Sommerfest mit Buffet · 1 Variante · 1 offener Punkt");
     expect(offer).not.toContain("Zusammenfassung");
     expect(offer).not.toContain("Angebotsentwurf prüfen");
     expect(offer).not.toContain("Variante übernehmen: Basis");
@@ -616,11 +769,76 @@ describe("backoffice route smoke", () => {
     ];
     const postedBodies: Array<Record<string, unknown>> = [];
     const approvalBodies: Array<Record<string, unknown>> = [];
+    let createdOfferDraft: Record<string, unknown> | undefined;
 
     installBackofficeEnvironmentMocks({ acceptedSpecs, offerDrafts });
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+
+      if (
+        url.endsWith("/api/offers/v1/offers/cases") &&
+        (init?.method ?? "GET").toUpperCase() === "GET"
+      ) {
+        return new Response(
+          JSON.stringify({
+            items: createdOfferDraft
+              ? [
+                  {
+                    caseId: "offer-case-c3",
+                    product: "offer",
+                    displayName: "C3 Sommerfest-Angebot",
+                    status: "open",
+                    createdAt: "2026-08-20T09:00:00.000Z",
+                    updatedAt: "2026-08-20T09:00:00.000Z"
+                  }
+                ]
+              : []
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (
+        url.endsWith("/api/offers/v1/offers/cases/offer-case-c3") &&
+        (init?.method ?? "GET").toUpperCase() === "GET"
+      ) {
+        return new Response(
+          JSON.stringify({
+            case: {
+              schemaVersion: "1.0",
+              businessId: "local",
+              caseId: "offer-case-c3",
+              product: "offer",
+              displayName: "C3 Sommerfest-Angebot",
+              status: "open",
+              version: 1,
+              createdAt: "2026-08-20T09:00:00.000Z",
+              updatedAt: "2026-08-20T09:00:00.000Z"
+            },
+            events: [
+              {
+                businessId: "local",
+                eventId: "offer-case-c3-draft",
+                caseId: "offer-case-c3",
+                sequence: 1,
+                at: "2026-08-20T09:00:00.000Z",
+                role: "system",
+                kind: "artifact_attached",
+                text: "Angebotsentwurf verknüpft.",
+                revisionRef: {
+                  artifactType: "OfferDraft",
+                  artifactId: "c3-draft-created",
+                  revision: 1,
+                  createdAt: "2026-08-20T09:00:00.000Z"
+                }
+              }
+            ],
+            ...(createdOfferDraft ? { currentDraft: createdOfferDraft } : {})
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
 
       if (
         url.endsWith("/api/offers/v1/offers/cases") &&
@@ -643,8 +861,9 @@ describe("backoffice route smoke", () => {
           customerFacingText: "Gerne bieten wir ein Sommerfest für 80 Personen an.",
           internalWorkingText: "Interne Angebotsnotiz: Buffet und Getränkepaket prüfen."
         };
-        offerDrafts.push(createdDraft);
-        return new Response(JSON.stringify(createdDraft), {
+        createdOfferDraft = { ...createdDraft, proposedEventSpec: acceptedSpecs[0] };
+        offerDrafts.push(createdOfferDraft);
+        return new Response(JSON.stringify(createdOfferDraft), {
           status: 201,
           headers: { "content-type": "application/json" }
         });
@@ -677,6 +896,21 @@ describe("backoffice route smoke", () => {
           status: 200,
           headers: { "content-type": "application/json" }
         });
+      }
+
+      if (url.endsWith("/api/intake/v1/intake/specs/c3-spec-complete")) {
+        return new Response(
+          JSON.stringify({
+            ...acceptedSpecs[0],
+            specId: "c3-spec-complete",
+            requestId: "c3-request-promoted",
+            event: { type: "lunch", date: "2026-08-20" },
+            servicePlan: { serviceForm: "buffet", eventType: "lunch" },
+            attendees: { expected: 80 },
+            readiness: { status: "complete", reasons: [] }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
       }
 
       if (url.endsWith("/api/intake/v1/intake/specs")) {
@@ -794,7 +1028,7 @@ describe("backoffice route smoke", () => {
     });
     container.remove();
 
-    const production = await renderRouteWithFirstHistorySelection("/produktion");
+    const production = await renderRoute("/produktion");
     expect(production.text).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
   });
 
@@ -1030,16 +1264,11 @@ describe("backoffice route smoke", () => {
 
     const home = (await renderRoute("/")).text;
 
-    expect(home).toContain("Operative Spezifikationen");
-    expect(home).toContain("2 operative Datensätze stehen dienstübergreifend bereit.");
-    expect(home).toContain("1 vollständig · 1 teilweise vollständig");
-    expect(home).toContain("1 kaufmännische Entwürfe können direkt übernommen werden.");
-    expect(home).toContain("1 Küchenpläne · 1 Einkaufslisten mit Rezept- und Einkaufsbezug sind verfügbar.");
-    expect(home).toContain("2 Rezepte · 1 intern freigegeben · 1 Prüfung nötig");
-    expect(home).toContain("letzte Erfassung: manuelle Eingabe");
-    expect(home).toContain(
-      "1 Änderungen geladen · neueste: Demo-Daten geladen · Actor: Mia · Action: seed_demo · 2026-07-01T10:05:00.000Z"
-    );
+    expect(home).toContain("Neuen Auftrag beginnen");
+    expect(home).toContain("Frühere Aufträge");
+    expect(home).not.toContain("Operative Spezifikationen");
+    expect(home).not.toContain("operative Datensätze");
+    expect(home).not.toContain("Demo-Daten geladen");
   });
 
   it("keeps home audit and handoff markers framed as internal working evidence", async () => {
@@ -1057,11 +1286,10 @@ describe("backoffice route smoke", () => {
 
     const home = (await renderRoute("/")).text;
 
-    expect(home).toContain("Änderungsprotokoll");
-    expect(home).toContain("Demo-Startweg belegt · Actor: Betriebs-/Audit-Operator · Action: production.seed_demo");
-    expect(home).toContain(
-      "Audit-/Handoff-Hinweis: interne Arbeitsbelege für Demo-/Beta-Prüfung; keine externe Freigabe, keine Produktionsfreigabe, keine echte-Daten-Freigabe und kein rechtssicherer Compliance-Nachweis."
-    );
+    expect(home).toContain("Neuen Auftrag beginnen");
+    expect(home).toContain("Frühere Aufträge");
+    expect(home).not.toContain("Änderungsprotokoll");
+    expect(home).not.toContain("Demo-Startweg belegt");
     expect(home).not.toContain("Produktionsfreigabe erteilt");
     expect(home).not.toContain("Compliance-Nachweis erbracht");
     expect(home).not.toContain("echte Daten freigegeben");

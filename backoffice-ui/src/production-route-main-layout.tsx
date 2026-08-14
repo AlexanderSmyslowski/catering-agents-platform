@@ -43,6 +43,7 @@ import {
 } from "./production-workbench.js";
 
 export type ProductionRouteMainLayoutProps = {
+  activeProductionCaseId?: string;
   workbenchSummary: ProductionWorkbenchSummary;
   workbenchNextStep: ProductionWorkbenchNextStep;
   submitting: boolean;
@@ -70,6 +71,7 @@ export type ProductionRouteMainLayoutProps = {
 };
 
 export function ProductionRouteMainLayout({
+  activeProductionCaseId,
   workbenchSummary,
   workbenchNextStep,
   submitting,
@@ -123,6 +125,7 @@ export function ProductionRouteMainLayout({
           <div className="production-column production-column--input">
             <ProductionInputPanel
               submitting={submitting}
+              activeCaseId={activeProductionCaseId}
               sourceInput={sourceInput}
               sourceInputActions={sourceInputActions}
               manualInput={manualInput}
@@ -139,6 +142,7 @@ export function ProductionRouteMainLayout({
         questionsSlot: (
           <div className="production-column production-column--questions">
             <ProductionQuestionPanel
+              activeCaseId={activeProductionCaseId}
               questionState={questionState}
               questionActions={questionActions}
               submitting={submitting}

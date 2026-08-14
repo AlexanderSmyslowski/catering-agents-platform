@@ -1,3 +1,22 @@
+import type {
+  ApprovedOffer,
+  ApprovedProductionSpec,
+  AcceptedEventSpec,
+  AuditEntry,
+  CaseEvent,
+  CaseSourceRef,
+  CaseSummary,
+  OfferCase,
+  OfferDraft,
+  ProductionCase,
+  ProductionPlan,
+  ProductionHandoff,
+  PurchaseList,
+  Recipe
+} from "@catering/shared-core";
+
+export type { CaseSummary } from "@catering/shared-core";
+
 export interface DashboardState {
   intakeRequests: Array<Record<string, unknown>>;
   acceptedSpecs: Array<Record<string, unknown>>;
@@ -7,6 +26,56 @@ export interface DashboardState {
   recipes: Array<Record<string, unknown>>;
   auditEvents: Array<Record<string, unknown>>;
 }
+
+/**
+ * Domain-typed data that the three product routes may render. The legacy
+ * DashboardState remains available only to the old refresh helpers and is not
+ * a route-controller contract.
+ */
+export interface ProductRouteDashboard {
+  intakeRequests: IntakeRequestDetail[];
+  acceptedSpecs: AcceptedEventSpec[];
+  offerDrafts: OfferDraft[];
+  productionPlans: ProductionPlan[];
+  purchaseLists: PurchaseList[];
+  recipes: Recipe[];
+  auditEvents: AuditEntry[];
+}
+
+export interface OfferWorkspaceState {
+  cases: CaseSummary[];
+  activeCase?: OfferCase;
+  activeEvents: CaseEvent[];
+  activeSources: CaseSourceRef[];
+  currentDraft?: OfferDraft;
+  approvedOffer?: ApprovedOffer;
+  handoff?: ProductionHandoff;
+}
+
+export interface ProductionWorkspaceState {
+  cases: CaseSummary[];
+  activeCase?: ProductionCase;
+  activeEvents: CaseEvent[];
+  activeSources: CaseSourceRef[];
+  currentDraft?: ProductionDraft;
+  approvedProductionSpec?: ApprovedProductionSpec;
+  currentPlan?: ProductionPlan;
+  currentPurchaseList?: PurchaseList;
+  referencedRecipes: Recipe[];
+}
+
+const emptyOfferWorkspaceState: OfferWorkspaceState = {
+  cases: [],
+  activeEvents: [],
+  activeSources: []
+};
+
+const emptyProductionWorkspaceState: ProductionWorkspaceState = {
+  cases: [],
+  activeEvents: [],
+  activeSources: [],
+  referencedRecipes: []
+};
 
 export interface IntakeRequestDetail extends Record<string, unknown> {
   requestId: string;
@@ -143,6 +212,29 @@ export interface ServiceHealthState {
   exports: ServiceHealth;
 }
 
+export interface OfferProductData {
+  workspace: OfferWorkspaceState;
+  intakeRequests: IntakeRequestDetail[];
+  acceptedSpecs: AcceptedEventSpec[];
+  offerDrafts: OfferDraft[];
+  serviceHealth: ServiceHealthState;
+}
+
+export interface ProductionProductData {
+  workspace: ProductionWorkspaceState;
+  intakeRequests: IntakeRequestDetail[];
+  acceptedSpecs: AcceptedEventSpec[];
+  productionPlans: ProductionPlan[];
+  purchaseLists: PurchaseList[];
+  recipes: Recipe[];
+  auditEvents: AuditEntry[];
+  serviceHealth: ServiceHealthState;
+}
+
+export interface WorkspaceRefreshOptions {
+  focusedSpecId?: string;
+}
+
 const OPERATOR_NAME_STORAGE_KEY = "catering.operatorName";
 const MINI_PILOT_RESULT_STORAGE_KEY = "catering.miniPilotRawResult";
 const AUDIT_OPERATOR_NAME = "Betriebs-/Audit-Operator";
@@ -213,45 +305,369 @@ async function fetchJson<T>(input: string, init?: RequestInit, defaultActorName?
   return (await response.json()) as T;
 }
 
-export async function loadDashboardState(): Promise<DashboardState> {
-  const [intakeRequests, acceptedSpecs, offerDrafts, productionPlans, purchaseLists, recipes, auditEvents] =
-    await Promise.all([
-      fetchJson<{ items: Array<Record<string, unknown>> }>(
-        "/api/intake/v1/intake/requests",
+function sourcesFromCaseEvents(events: CaseEvent[]): CaseSourceRef[] {
+  const sources = new Map<string, CaseSourceRef>();
+  for (const event of events) {
+    if (event.sourceRef) {
+      sources.set(event.sourceRef.sourceId, event.sourceRef);
+    }
+  }
+  return [...sources.values()];
+}
+
+function artifactIdFromCaseEvents(events: CaseEvent[], artifactType: "OfferDraft" | "ProductionDraft"): string | undefined {
+  return [...events]
+    .sort((left, right) => right.sequence - left.sequence)
+    .map((event) => event.revisionRef)
+    .find((reference) => reference?.artifactType === artifactType)?.artifactId;
+}
+
+function unknownServiceHealth(service: string): ServiceHealth {
+  return { service, status: "unknown", timestamp: "", counts: {} };
+}
+
+function serviceHealthStateFor(domain: "offer" | "production", health: ServiceHealth): ServiceHealthState {
+  return {
+    intake: unknownServiceHealth("intake-service"),
+    offers: domain === "offer" ? health : unknownServiceHealth("offer-service"),
+    production: domain === "production" ? health : unknownServiceHealth("production-service"),
+    exports: unknownServiceHealth("print-export")
+  };
+}
+
+function auditEntriesFromCaseEvents(events: CaseEvent[]): AuditEntry[] {
+  return [...events]
+    .sort((left, right) => right.sequence - left.sequence)
+    .map((event) => ({
+    auditId: event.eventId,
+    businessId: event.businessId,
+    at: event.at,
+    action: event.kind,
+    entityType: "case",
+    entityId: event.caseId,
+    actor: {
+      name: event.role,
+      source: "case-event"
+    },
+    summary: event.text.trim() || `Fallereignis: ${event.kind}`
+  }));
+}
+
+export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<OfferWorkspaceState> {
+  const { items: cases } = await fetchJson<{ items: CaseSummary[] }>(
+    "/api/offers/v1/offers/cases",
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.offer
+  );
+
+  if (!activeCaseId) {
+    return { ...emptyOfferWorkspaceState, cases };
+  }
+
+  const detail = await fetchJson<{
+    case: OfferCase;
+    events: CaseEvent[];
+    currentDraft?: OfferDraft;
+    approvedOffer?: ApprovedOffer;
+    handoff?: ProductionHandoff;
+  }>(
+    `/api/offers/v1/offers/cases/${encodeURIComponent(activeCaseId)}`,
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.offer
+  );
+  if (detail.case.caseId !== activeCaseId || detail.case.product !== "offer") {
+    return { ...emptyOfferWorkspaceState, cases };
+  }
+  const activeEvents = detail.events.filter((event) => event.caseId === activeCaseId);
+  const draftId = artifactIdFromCaseEvents(activeEvents, "OfferDraft");
+  const currentDraft = detail.currentDraft && (!draftId || detail.currentDraft.draftId === draftId)
+    ? detail.currentDraft
+    : draftId
+      ? await fetchJson<OfferDraft>(
+          `/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.offer
+        ).then((draft) => (draft.draftId === draftId ? draft : undefined))
+      : undefined;
+  const handoff = detail.handoff
+    ?? (detail.case.productionHandoffId
+      ? await fetchJson<{ handoff: ProductionHandoff }>(
+          `/api/offers/v1/offers/handoffs/${encodeURIComponent(detail.case.productionHandoffId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.offer
+        ).then((result) => result.handoff)
+      : undefined);
+  return {
+    cases,
+    activeCase: detail.case,
+    activeEvents,
+    activeSources: sourcesFromCaseEvents(activeEvents),
+    ...(currentDraft ? { currentDraft } : {}),
+    ...(detail.approvedOffer ? { approvedOffer: detail.approvedOffer } : {}),
+    ...(handoff ? { handoff } : {})
+  };
+}
+
+export async function loadProductionWorkspaceState(activeCaseId?: string): Promise<ProductionWorkspaceState> {
+  const { items: cases } = await fetchJson<{ items: CaseSummary[] }>(
+    "/api/production/v1/production/cases",
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+  const base: ProductionWorkspaceState = { cases, activeEvents: [], activeSources: [], referencedRecipes: [] };
+  if (!activeCaseId) return base;
+
+  const detail = await fetchJson<{
+    case: ProductionCase;
+    events: CaseEvent[];
+    currentDraft?: ProductionDraft;
+    approvedProductionSpec?: ApprovedProductionSpec;
+  }>(
+    `/api/production/v1/production/cases/${encodeURIComponent(activeCaseId)}`,
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+  if (detail.case.caseId !== activeCaseId || detail.case.product !== "production") {
+    return { ...emptyProductionWorkspaceState, cases };
+  }
+  const activeEvents = detail.events.filter((event) => event.caseId === activeCaseId);
+  const [currentPlan, currentPurchaseList] = await Promise.all([
+    detail.case.currentPlanId
+      ? fetchJson<ProductionPlan>(
+          `/api/production/v1/production/plans/${encodeURIComponent(detail.case.currentPlanId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.production
+        ).then((plan) => (
+          plan.planId !== detail.case.currentPlanId ||
+          (detail.case.sourceSpecId && plan.eventSpecId !== detail.case.sourceSpecId)
+            ? undefined
+            : plan
+        ))
+      : Promise.resolve(undefined),
+    detail.case.currentPurchaseListId
+      ? fetchJson<PurchaseList>(
+          `/api/production/v1/production/purchase-lists/${encodeURIComponent(detail.case.currentPurchaseListId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.production
+        ).then((purchaseList) => (
+          purchaseList.purchaseListId !== detail.case.currentPurchaseListId ||
+          (detail.case.sourceSpecId && purchaseList.eventSpecId !== detail.case.sourceSpecId)
+            ? undefined
+            : purchaseList
+        ))
+      : Promise.resolve(undefined)
+  ]);
+  const recipeIds = (currentPlan?.recipeSelections ?? [])
+    .map((selection) => selection.recipeId)
+    .filter((recipeId): recipeId is string => Boolean(recipeId));
+  const referencedRecipes = await Promise.all(
+    [...new Set(recipeIds)].map((recipeId) =>
+      fetchJson<Recipe>(
+        `/api/production/v1/production/recipes/${encodeURIComponent(recipeId)}`,
         undefined,
-        DEFAULT_MUTATION_ACTOR_NAMES.intake
-      ),
-      fetchJson<{ items: Array<Record<string, unknown>> }>(
-        "/api/intake/v1/intake/specs",
-        undefined,
-        DEFAULT_MUTATION_ACTOR_NAMES.intake
-      ),
-      fetchJson<{ items: Array<Record<string, unknown>> }>(
+        DEFAULT_MUTATION_ACTOR_NAMES.production
+      )
+    )
+  );
+  return {
+    ...base,
+    activeCase: detail.case,
+    activeEvents,
+    activeSources: sourcesFromCaseEvents(activeEvents),
+    referencedRecipes,
+    ...(detail.currentDraft ? { currentDraft: detail.currentDraft } : {}),
+    ...(detail.approvedProductionSpec ? { approvedProductionSpec: detail.approvedProductionSpec } : {}),
+    ...(currentPlan ? { currentPlan } : {}),
+    ...(currentPurchaseList ? { currentPurchaseList } : {})
+  };
+}
+
+export async function loadOfferWorkspaceHealth(): Promise<ServiceHealth> {
+  return fetchJson<ServiceHealth>("/api/offers/health");
+}
+
+export async function loadProductionWorkspaceHealth(): Promise<ServiceHealth> {
+  return fetchJson<ServiceHealth>("/api/production/health");
+}
+
+export async function loadOfferProductData(activeCaseId?: string): Promise<OfferProductData> {
+  const [workspace, health] = await Promise.all([
+    loadOfferWorkspaceState(activeCaseId),
+    loadOfferWorkspaceHealth()
+  ]);
+
+  const activeRequestIds = new Set(
+    [
+      ...workspace.activeSources.map((source) => source.requestId?.trim()),
+      ...workspace.activeEvents.map((event) => event.sourceRef?.requestId?.trim())
+    ]
+      .filter((requestId): requestId is string => Boolean(requestId))
+  );
+  const activeSpecIds = new Set(
+    [
+      workspace.currentDraft?.proposedEventSpec?.specId,
+      workspace.handoff?.eventSpecSnapshot.specId,
+      ...workspace.activeEvents.flatMap((event) => [
+        event.artifactId,
+        event.revisionRef?.artifactId
+      ])
+    ].filter((specId): specId is string => Boolean(specId?.trim()))
+  );
+  const [intakeRequests, acceptedSpecs] = await Promise.all([
+    Promise.all([...activeRequestIds].map(async (requestId) => {
+      try {
+        return await fetchJson<IntakeRequestDetail>(
+          `/api/intake/v1/intake/requests/${encodeURIComponent(requestId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.intake
+        );
+      } catch {
+        return undefined;
+      }
+    })).then((items) => items.filter((item): item is IntakeRequestDetail => item !== undefined)),
+    Promise.all([...activeSpecIds].map(async (specId) => {
+      try {
+        return await fetchJson<AcceptedEventSpec>(
+          `/api/intake/v1/intake/specs/${encodeURIComponent(specId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.intake
+        );
+      } catch {
+        return undefined;
+      }
+    })).then((items) => items.filter((item): item is AcceptedEventSpec => item !== undefined))
+  ]);
+
+  return {
+    workspace,
+    intakeRequests: activeCaseId ? intakeRequests : [],
+    acceptedSpecs: activeCaseId ? acceptedSpecs : [],
+    offerDrafts: workspace.currentDraft ? [workspace.currentDraft] : [],
+    serviceHealth: serviceHealthStateFor("offer", health)
+  };
+}
+
+export async function loadProductionProductData(
+  activeCaseId?: string,
+  focusedSpecId?: string
+): Promise<ProductionProductData> {
+  const [workspace, health] = await Promise.all([
+    loadProductionWorkspaceState(activeCaseId),
+    loadProductionWorkspaceHealth()
+  ]);
+
+  const activeRequestIds = new Set(
+    [
+      ...workspace.activeSources.map((source) => source.requestId?.trim()),
+      ...workspace.activeEvents.map((event) => event.sourceRef?.requestId?.trim())
+    ]
+      .filter((requestId): requestId is string => Boolean(requestId))
+  );
+  const activeSpecIds = new Set(
+    [
+      workspace.activeCase?.sourceSpecId,
+      workspace.currentPlan?.eventSpecId,
+      workspace.currentPurchaseList?.eventSpecId
+    ].filter((specId): specId is string => Boolean(specId?.trim()))
+  );
+  if (focusedSpecId) activeSpecIds.add(focusedSpecId);
+  const [intakeRequests, acceptedSpecs] = await Promise.all([
+    Promise.all([...activeRequestIds].map(async (requestId) => {
+      try {
+        return await fetchJson<IntakeRequestDetail>(
+          `/api/intake/v1/intake/requests/${encodeURIComponent(requestId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.intake
+        );
+      } catch {
+        return undefined;
+      }
+    })).then((items) => items.filter((item): item is IntakeRequestDetail => item !== undefined)),
+    Promise.all([...activeSpecIds].map(async (specId) => {
+      try {
+        return await fetchJson<AcceptedEventSpec>(
+          `/api/intake/v1/intake/specs/${encodeURIComponent(specId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.intake
+        );
+      } catch {
+        return undefined;
+      }
+    })).then((items) => items.filter((item): item is AcceptedEventSpec => item !== undefined))
+  ]);
+
+  return {
+    workspace,
+    intakeRequests: activeCaseId ? intakeRequests : [],
+    acceptedSpecs: activeCaseId || focusedSpecId ? acceptedSpecs : [],
+    productionPlans: workspace.currentPlan ? [workspace.currentPlan] : [],
+    purchaseLists: workspace.currentPurchaseList ? [workspace.currentPurchaseList] : [],
+    recipes: workspace.referencedRecipes,
+    auditEvents: activeCaseId ? auditEntriesFromCaseEvents(workspace.activeEvents) : [],
+    serviceHealth: serviceHealthStateFor("production", health)
+  };
+}
+
+export type DashboardScope = "home" | "offer" | "production";
+
+export async function loadDashboardState(scope: DashboardScope = "home"): Promise<DashboardState> {
+  const intakeRequestsPromise = fetchJson<{ items: Array<Record<string, unknown>> }>(
+    "/api/intake/v1/intake/requests",
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.intake
+  );
+  const acceptedSpecsPromise = fetchJson<{ items: Array<Record<string, unknown>> }>(
+    "/api/intake/v1/intake/specs",
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.intake
+  );
+
+  const offerDraftsPromise = scope === "production"
+    ? Promise.resolve({ items: [] as Array<Record<string, unknown>> })
+    : fetchJson<{ items: Array<Record<string, unknown>> }>(
         "/api/offers/v1/offers/drafts",
         undefined,
         DEFAULT_MUTATION_ACTOR_NAMES.offer
-      ),
-      fetchJson<{ items: Array<Record<string, unknown>> }>(
-        "/api/production/v1/production/plans",
-        undefined,
-        DEFAULT_MUTATION_ACTOR_NAMES.production
-      ),
-      fetchJson<{ items: Array<Record<string, unknown>> }>(
-        "/api/production/v1/production/purchase-lists",
-        undefined,
-        DEFAULT_MUTATION_ACTOR_NAMES.production
-      ),
-      fetchJson<{ items: Array<Record<string, unknown>> }>(
-        "/api/production/v1/production/recipes",
-        undefined,
-        DEFAULT_MUTATION_ACTOR_NAMES.production
-      ),
-      fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/audit/events?limit=30", {
-        headers: {
-          "x-actor-name": AUDIT_OPERATOR_NAME
-        }
-      })
-    ]);
+      );
+  const productionPromises = scope === "offer"
+    ? {
+        plans: Promise.resolve({ items: [] as Array<Record<string, unknown>> }),
+        purchaseLists: Promise.resolve({ items: [] as Array<Record<string, unknown>> }),
+        recipes: Promise.resolve({ items: [] as Array<Record<string, unknown>> }),
+        auditEvents: Promise.resolve({ items: [] as Array<Record<string, unknown>> })
+      }
+    : {
+        plans: fetchJson<{ items: Array<Record<string, unknown>> }>(
+          "/api/production/v1/production/plans",
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.production
+        ),
+        purchaseLists: fetchJson<{ items: Array<Record<string, unknown>> }>(
+          "/api/production/v1/production/purchase-lists",
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.production
+        ),
+        recipes: fetchJson<{ items: Array<Record<string, unknown>> }>(
+          "/api/production/v1/production/recipes",
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.production
+        ),
+        auditEvents: fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/audit/events?limit=30", {
+          headers: {
+            "x-actor-name": AUDIT_OPERATOR_NAME
+          }
+        })
+      };
+
+  const [intakeRequests, acceptedSpecs, offerDrafts, productionPlans, purchaseLists, recipes, auditEvents] = await Promise.all([
+    intakeRequestsPromise,
+    acceptedSpecsPromise,
+    offerDraftsPromise,
+    productionPromises.plans,
+    productionPromises.purchaseLists,
+    productionPromises.recipes,
+    productionPromises.auditEvents
+  ]);
 
   return {
     intakeRequests: intakeRequests.items,
@@ -286,18 +702,26 @@ export async function archiveIntakeRequest(
   );
 }
 
-export async function loadServiceHealth(): Promise<ServiceHealthState> {
+export async function loadServiceHealth(scope: DashboardScope = "home"): Promise<ServiceHealthState> {
+  const intakePromise = fetchJson<ServiceHealth>("/api/intake/health");
+  const offersPromise = scope === "production"
+    ? Promise.resolve(undefined)
+    : fetchJson<ServiceHealth>("/api/offers/health");
+  const productionPromise = scope === "offer"
+    ? Promise.resolve(undefined)
+    : fetchJson<ServiceHealth>("/api/production/health");
+  const exportsPromise = fetchJson<ServiceHealth>("/api/exports/health");
   const [intake, offers, production, exportsHealth] = await Promise.all([
-    fetchJson<ServiceHealth>("/api/intake/health"),
-    fetchJson<ServiceHealth>("/api/offers/health"),
-    fetchJson<ServiceHealth>("/api/production/health"),
-    fetchJson<ServiceHealth>("/api/exports/health")
+    intakePromise,
+    offersPromise,
+    productionPromise,
+    exportsPromise
   ]);
 
   return {
     intake,
-    offers,
-    production,
+    offers: offers ?? { service: "offer-service", status: "unknown", timestamp: "", counts: {} },
+    production: production ?? { service: "production-service", status: "unknown", timestamp: "", counts: {} },
     exports: exportsHealth
   };
 }
@@ -335,6 +759,45 @@ export type ProductCaseSummary = {
   displayName: string;
   status: string;
 };
+
+function caseSearchQuery(search: string): string {
+  const normalized = search.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  return normalized ? `?search=${encodeURIComponent(normalized)}` : "";
+}
+
+export async function loadOfferCaseSummaries(search = ""): Promise<CaseSummary[]> {
+  const response = await fetchJson<{ items: CaseSummary[] }>(
+    `/api/offers/v1/offers/cases${caseSearchQuery(search)}`,
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.offer
+  );
+  return response.items;
+}
+
+export async function loadProductionCaseSummaries(search = ""): Promise<CaseSummary[]> {
+  const response = await fetchJson<{ items: CaseSummary[] }>(
+    `/api/production/v1/production/cases${caseSearchQuery(search)}`,
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+  return response.items;
+}
+
+export async function copyOfferCase(caseId: string): Promise<{ case: CaseSummary; events: CaseEvent[] }> {
+  return fetchJson<{ case: CaseSummary; events: CaseEvent[] }>(
+    `/api/offers/v1/offers/cases/${encodeURIComponent(caseId)}/copies`,
+    { method: "POST", body: "{}" },
+    DEFAULT_MUTATION_ACTOR_NAMES.offer
+  );
+}
+
+export async function copyProductionCase(caseId: string): Promise<{ case: CaseSummary; events: CaseEvent[] }> {
+  return fetchJson<{ case: CaseSummary; events: CaseEvent[] }>(
+    `/api/production/v1/production/cases/${encodeURIComponent(caseId)}/copies`,
+    { method: "POST", body: "{}" },
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+}
 
 export type StoredSourceDocumentSummary = {
   documentId: string;
@@ -540,9 +1003,10 @@ export async function decideClarificationDraft(draftId: string, approve: boolean
   );
 }
 
-export async function loadProductionDrafts() {
+export async function loadProductionDrafts(caseId?: string) {
+  const query = caseId ? `?caseId=${encodeURIComponent(caseId)}` : "";
   return fetchJson<ProductionDraftListResponse>(
-    "/api/production/v1/production/drafts",
+    `/api/production/v1/production/drafts${query}`,
     undefined,
     DEFAULT_MUTATION_ACTOR_NAMES.production
   );

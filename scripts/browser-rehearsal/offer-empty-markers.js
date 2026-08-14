@@ -4,9 +4,11 @@
     "Angebotsagent",
     "Kundenanfrage einfügen und Entwurf prüfen",
     "Die App erstellt einen prüfbaren Angebotsentwurf.",
-    "Frühere Angebotsaufträge öffnen",
-    "2 Aufträge"
+    "Frühere Angebotsaufträge öffnen"
   ].filter((marker) => !text.includes(marker));
+  if (!/(?:^|\s)0 Aufträge(?:$|\s)/u.test(text)) {
+    missing.push("0 Aufträge");
+  }
   const visibleHandoff = [...document.querySelectorAll("a[href='/produktion']")]
     .some((anchor) => anchor.offsetParent !== null && (anchor.textContent ?? "").includes("Zur Produktion"));
   if (visibleHandoff) {

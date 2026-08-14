@@ -18,7 +18,7 @@ type HandoffCounts = {
   partial: number;
 };
 
-type HomeRouteProps = {
+export type HomeRouteProps = {
   isInitialHomeLoading: boolean;
   dashboard: DashboardState;
   serviceHealth: ServiceHealthState;
