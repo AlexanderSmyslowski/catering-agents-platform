@@ -141,9 +141,19 @@ require_nonempty_request_report() {
     const keys = report && typeof report === "object" && !Array.isArray(report) ? Object.keys(report) : [];
     if (keys.length === 1 && keys[0] === "requests" && Array.isArray(report.requests)) {
       const validMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "CONNECT", "TRACE"]);
+      const validUrl = (value) => {
+        if (typeof value !== "string" || value.length === 0 || value.trim() !== value || /\s/.test(value)) return false;
+        if (value.startsWith("/")) return !value.startsWith("//");
+        try {
+          const parsed = new URL(value);
+          return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname !== "";
+        } catch {
+          return false;
+        }
+      };
       const validRequests = report.requests.length > 0 && report.requests.every((request) => {
         if (!request || typeof request !== "object" || Array.isArray(request) || typeof request.url !== "string") return false;
-        if (request.url.trim() === "") return false;
+        if (!validUrl(request.url)) return false;
         return request.method === undefined || (typeof request.method === "string" && validMethods.has(request.method));
       });
       if (!validRequests) process.exit(1);

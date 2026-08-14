@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 const routeFiles = [
   "backoffice-ui/src/App.tsx",
   "backoffice-ui/src/app-dashboard-route-state.ts",
-  "backoffice-ui/src/app-route-content.tsx"
+  "backoffice-ui/src/app-route-content.tsx",
+  "backoffice-ui/src/production-focus-state.ts"
 ];
 
 describe("typed product route boundary", () => {
@@ -37,5 +38,13 @@ describe("typed product route boundary", () => {
     expect(routeStateSource).not.toContain("LegacyAppDashboardRouteState");
     expect(routeStateSource).not.toContain("isLegacyRouteInput");
     expect(routeStateSource).not.toContain("[0]");
+  });
+
+  it("keeps the production focus boundary domain-typed", () => {
+    const focusSource = readFileSync(path.resolve("backoffice-ui/src/production-focus-state.ts"), "utf8");
+    expect(focusSource).not.toContain("Record<string, unknown>");
+    const appSource = readFileSync(path.resolve("backoffice-ui/src/App.tsx"), "utf8");
+    expect(appSource).toContain("acceptedSpecs: dashboard.acceptedSpecs");
+    expect(appSource).not.toContain("acceptedSpecs: viewDashboard.acceptedSpecs");
   });
 });

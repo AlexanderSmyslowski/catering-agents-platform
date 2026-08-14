@@ -421,8 +421,8 @@ function ProductWorkspaceView({
   } = useMemo(
     () =>
       buildProductionFocusState({
-        acceptedSpecs: viewDashboard.acceptedSpecs,
-        filteredSpecs: buildRecordViewProjection(filteredSpecs),
+        acceptedSpecs: dashboard.acceptedSpecs,
+        filteredSpecs,
         focusedProductionSpecId,
         productionArtifactSpecIds,
         productionWorkspaceCleared,
@@ -430,7 +430,7 @@ function ProductWorkspaceView({
         searchText: deferredSearch
       }),
     [
-      viewDashboard.acceptedSpecs,
+      dashboard.acceptedSpecs,
       deferredSearch,
       filteredSpecs,
       focusedProductionSpecId,
@@ -467,7 +467,11 @@ function ProductWorkspaceView({
     resetSpecEdit,
     updateEditingComponentState,
     buildCurrentSpecUpdateInput
-  } = useProductionSpecEditor({ focusedProductionSpec: focusedProductionSpecRecord });
+  } = useProductionSpecEditor({
+    focusedProductionSpec: focusedProductionSpecRecord
+      ? buildRecordView(focusedProductionSpecRecord)
+      : undefined
+  });
 
   const {
     currentProductionSpecId,

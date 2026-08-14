@@ -352,7 +352,8 @@ describe("Linux browser rehearsal governance", () => {
     expect(browserShell).toContain("require_nonempty_request_report");
     expect(browserShell).toContain("JSON.parse");
     expect(browserShell).toContain('typeof request.url !== "string"');
-    expect(browserShell).toContain("request.url.trim() === \"\"");
+    expect(browserShell).toContain("const validUrl =");
+    expect(browserShell).toContain("validUrl(request.url)");
     expect(rehearsal).toContain("check_current_page_markers_at_viewports");
     expect(browserShell).toContain("CATERING_BROWSER_CLI");
   });
@@ -1732,6 +1733,17 @@ describe("Linux browser rehearsal governance", () => {
     expect(run("require_nonempty_request_report", '{"requests":[]}').status).not.toBe(0);
     for (const malformedRequests of ['{"requests":[null]}', '{"requests":[{}]}', '{"requests":["garbage"]}']) {
       expect(run("require_nonempty_request_report", malformedRequests).status).not.toBe(0);
+    }
+    for (const malformedRequestUrls of [
+      '{"requests":[{"url":"garbage"}]}',
+      '{"requests":[{"url":"ftp://example.test/api/health"}]}',
+      '{"requests":[{"url":""}]}',
+      '{"requests":[{"url":"api/health"}]}',
+      '{"requests":[{"url":"https://"}]}',
+      '{"requests":[{"url":"https://?"}]}',
+      '{"requests":[{"url":"//example.test/api/health"}]}',
+    ]) {
+      expect(run("require_nonempty_request_report", malformedRequestUrls).status).not.toBe(0);
     }
     const requestCliReport =
       "344. [GET] http://127.0.0.1:3200/api/offers/v1/offers/cases => [200] OK\n" +
