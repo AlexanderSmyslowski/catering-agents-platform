@@ -1544,11 +1544,33 @@ describe("Linux browser rehearsal governance", () => {
     expect(() => buildMarkerCheck("0 Aufträge\n5 Aufträge")()).toThrow("widersprüchlicher Auftragszähler");
   });
 
-  it("binds the fresh production handoff marker to the generated case instead of seeded plan data", () => {
-    expect(productionHandoffMarkers).toContain("Besprechung · 35 Teilnehmer · 2026-11-06");
-    expect(productionHandoffMarkers).toContain("Produktionsentwurf");
+  it("binds the fresh production handoff marker to the generated case list before explicit opening", () => {
+    expect(productionHandoffMarkers).toContain("Produktionsagent");
+    expect(productionHandoffMarkers).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+    expect(productionHandoffMarkers).toContain("Frühere Produktionsaufträge öffnen · 1 Auftrag");
     expect(productionHandoffMarkers).toContain("veralteter Demo-Produktionsfall");
     expect(productionHandoffMarkers).not.toContain("Produktionsplan-Exportlink fehlt");
+  });
+
+  it("accepts the handoff route before an explicit production case is opened", async () => {
+    const document = {
+      body: {
+        innerText: [
+          "Produktionsagent",
+          "Angebot hochladen oder Produktionsauftrag beschreiben",
+          "Ablauf: Quelle → KI-Entwurf → Prüfung → Plan",
+          "Frühere Produktionsaufträge öffnen · 1 Auftrag",
+        ].join("\n"),
+      },
+      querySelectorAll: () => [],
+    };
+    const runMarker = new Function(
+      "document",
+      "location",
+      `return (${productionHandoffMarkers});`,
+    )(document, { pathname: "/produktion" }) as () => Promise<{ route: string; markers: string }>;
+
+    await expect(runMarker()).resolves.toEqual({ route: "/produktion", markers: "production-handoff-ok" });
   });
 
   it("rejects a missing browser CLI before opening a stack or session", () => {

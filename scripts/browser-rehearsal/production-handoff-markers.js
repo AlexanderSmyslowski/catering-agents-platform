@@ -2,10 +2,9 @@ async () => {
   const text = document.body.innerText;
   const missing = [
     "Produktionsagent",
-    "Besprechung · 35 Teilnehmer · 2026-11-06",
-    "Produktionsentwurf",
-    "Prüfung vor Berechnung",
-    "Frühere Produktionsaufträge öffnen"
+    "Angebot hochladen oder Produktionsauftrag beschreiben",
+    "Ablauf: Quelle → KI-Entwurf → Prüfung → Plan",
+    "Frühere Produktionsaufträge öffnen · 1 Auftrag"
   ].filter((marker) => !text.includes(marker));
   const legacyDemoLabel = ["Konferenz", "90 Teilnehmer", "2026-12-02"].join(" · ");
   if (text.includes(legacyDemoLabel)) {
