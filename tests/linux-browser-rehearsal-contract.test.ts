@@ -1679,7 +1679,7 @@ describe("Linux browser rehearsal governance", () => {
     expect(result.stderr).toContain("CATERING_BROWSER_CLI ist gesetzt, aber nicht ausfuehrbar");
   });
 
-  it("rejects malformed and empty diagnostic JSON", () => {
+  it("accepts the exact zero-error CLI report and rejects contradictory diagnostics", () => {
     const run = (functionName: string, report: string) =>
       spawnSync(
         "bash",
@@ -1688,7 +1688,33 @@ describe("Linux browser rehearsal governance", () => {
       );
 
     expect(run("require_empty_console_report", '{"messages":[]}').status).toBe(0);
+    expect(
+      run(
+        "require_empty_console_report",
+        'Total messages: 3 (Errors: 0, Warnings: 0)\nReturning 0 messages for level "error"',
+      ).status,
+    ).toBe(0);
+    expect(
+      run(
+        "require_empty_console_report",
+        'Total messages: 3 (Errors: 1, Warnings: 0)\nReturning 0 messages for level "error"',
+      ).status,
+    ).not.toBe(0);
+    expect(
+      run(
+        "require_empty_console_report",
+        'Total messages: 3 (Errors: 0, Warnings: 0)\nReturning 1 messages for level "error"',
+      ).status,
+    ).not.toBe(0);
+    expect(run("require_empty_console_report", "Total messages: 3 (Errors: 0, Warnings: 0)").status).not.toBe(0);
+    expect(
+      run(
+        "require_empty_console_report",
+        'Total messages: 3 (Errors: 0, Warnings: 0)\nReturning 0 messages for level "warning"',
+      ).status,
+    ).not.toBe(0);
     expect(run("require_empty_console_report", "not-json").status).not.toBe(0);
+    expect(run("require_empty_console_report", '{"messages":[{"level":"error"}]}').status).not.toBe(0);
     expect(run("require_nonempty_request_report", '{"requests":[{"url":"/api/health"}]}').status).toBe(0);
     expect(run("require_nonempty_request_report", '{"requests":[]}').status).not.toBe(0);
   });

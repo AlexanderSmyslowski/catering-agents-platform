@@ -96,7 +96,27 @@ check_current_page_markers_at_viewports() {
 }
 
 require_empty_console_report() {
-  node -e 'const report = JSON.parse(process.argv[1]); if (!Array.isArray(report.messages) || report.messages.length !== 0) process.exit(1);' "$1"
+  node -e '
+    const raw = process.argv[1] ?? "";
+    try {
+      const report = JSON.parse(raw);
+      if (!report || !Array.isArray(report.messages) || report.messages.length !== 0) process.exit(1);
+      process.exit(0);
+    } catch {
+      // Ubuntu browser CLI emits a text summary instead of JSON for zero errors.
+    }
+
+    const lines = raw.trim().split(/\r?\n/);
+    const summary = lines[0]?.match(/^Total messages: ([0-9]+) \(Errors: ([0-9]+), Warnings: ([0-9]+)\)$/);
+    const returned = lines[1]?.match(/^Returning ([0-9]+) messages for level "error"$/);
+    if (
+      lines.length !== 2 ||
+      !summary ||
+      !returned ||
+      Number(summary[2]) !== 0 ||
+      Number(returned[1]) !== 0
+    ) process.exit(1);
+  ' "$1"
 }
 
 require_nonempty_request_report() {
