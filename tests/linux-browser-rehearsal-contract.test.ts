@@ -841,7 +841,7 @@ describe("Linux browser rehearsal governance", () => {
                 eventSpecSnapshot: { specId: "spec-browser-rehearsal-offer-case" },
               },
             }
-          : path.includes("/production/cases?")
+          : path.endsWith("/production/cases")
             ? {
                 items: [{
                   caseId: "production-case-browser-rehearsal",
@@ -883,10 +883,93 @@ describe("Linux browser rehearsal governance", () => {
     expect(calls).toEqual([
       "/api/offers/v1/offers/cases/offer-case-browser-rehearsal",
       "/api/offers/v1/offers/handoffs/handoff-browser-rehearsal",
-      "/api/production/v1/production/cases?search=Browser-Rehearsal%20-%20Besprechung%20-%2006.11.2026%20-%2035%20Personen",
+      "/api/production/v1/production/cases",
       "/api/production/v1/production/cases/production-case-browser-rehearsal",
     ]);
     expect(session.get("catering.browser-rehearsal.production-case-id")).toBe("production-case-browser-rehearsal");
+  });
+
+  it("confirms a production case when offer and production display names differ", async () => {
+    const confirmScript = readFileSync(
+      resolve(root, "scripts/browser-rehearsal/confirm-production-handoff.js"),
+      "utf8",
+    );
+    const session = new Map([
+      ["catering.browser-rehearsal.offer-case-id", "offer-case-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-draft-id", "draft-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-approved-offer-id", "approved-offer-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-spec-id", "spec-browser-rehearsal-offer-case"],
+    ]);
+    const calls: string[] = [];
+    const fetch = async (path: string) => {
+      calls.push(path);
+      let payload: unknown;
+      if (path.includes("/offers/cases/")) {
+        payload = {
+          case: {
+            caseId: "offer-case-browser-rehearsal",
+            product: "offer",
+            displayName: "Browser-Rehearsal - Besprechung - 06.11.2026 - 35 Personen",
+            productionHandoffId: "handoff-browser-rehearsal",
+          },
+          events: [{ kind: "result", artifactId: "handoff-browser-rehearsal" }],
+        };
+      } else if (path.includes("/offers/handoffs/")) {
+        payload = {
+          handoff: {
+            handoffId: "handoff-browser-rehearsal",
+            approvedOfferId: "approved-offer-browser-rehearsal",
+            source: { draftId: "draft-browser-rehearsal" },
+            eventSpecSnapshot: { specId: "spec-browser-rehearsal-offer-case" },
+          },
+        };
+      } else if (path.includes("/production/cases?")) {
+        // The real production route cannot find a production case by the offer
+        // display name: its typed case formatter uses a different wording.
+        payload = { items: [] };
+      } else if (path.endsWith("/production/cases")) {
+        payload = {
+          items: [{
+            caseId: "production-case-browser-rehearsal",
+            product: "production",
+            displayName: "Besprechung - 06.11.2026 - 35 Personen",
+            productionHandoffId: "handoff-browser-rehearsal",
+            sourceSpecId: "spec-browser-rehearsal-offer-case",
+          }],
+        };
+      } else {
+        payload = {
+          case: {
+            caseId: "production-case-browser-rehearsal",
+            productionHandoffId: "handoff-browser-rehearsal",
+            sourceSpecId: "spec-browser-rehearsal-offer-case",
+          },
+        };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify(payload) };
+    };
+    const confirmHandoff = new Function(
+      "fetch",
+      "sessionStorage",
+      "location",
+      `return (${confirmScript});`,
+    )(
+      fetch,
+      {
+        getItem: (key: string) => session.get(key) ?? null,
+        setItem: (key: string, value: string) => { session.set(key, value); },
+      },
+      { pathname: "/produktion" },
+    ) as () => Promise<unknown>;
+
+    await expect(confirmHandoff()).resolves.toMatchObject({
+      route: "/produktion",
+      caseId: "production-case-browser-rehearsal",
+      handoffId: "handoff-browser-rehearsal",
+      sourceSpecId: "spec-browser-rehearsal-offer-case",
+    });
+    expect(calls).toContain("/api/production/v1/production/cases");
+    expect(calls.some((path) => path.includes("search="))).toBe(false);
   });
 
   it("waits for the rendered handoff action to become enabled after approval refresh", async () => {
@@ -1002,7 +1085,7 @@ describe("Linux browser rehearsal governance", () => {
             },
           };
         }
-        if (path.includes("/production/cases?")) {
+        if (path.endsWith("/production/cases")) {
           return { items: [{ caseId: "production-case-browser-rehearsal", product: "production", displayName: "Besprechung · 35 Teilnehmer · 2026-11-06" }] };
         }
         if (path.includes("/production/cases/")) {

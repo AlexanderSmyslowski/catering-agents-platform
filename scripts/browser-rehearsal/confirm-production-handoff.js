@@ -63,11 +63,11 @@ async () => {
 
   const productionCase = await waitFor("Produktionsfall", async () => {
     const productionList = await fetchJson(
-      `/api/production/v1/production/cases?search=${encodeURIComponent(offerCase.case.displayName)}`,
+      "/api/production/v1/production/cases",
       productionHeaders,
     );
     return (productionList?.items ?? []).find((item) =>
-      item.product === "production" && item.displayName === "Besprechung · 35 Teilnehmer · 2026-11-06" &&
+      item.product === "production" && typeof item.caseId === "string" &&
       item.productionHandoffId === handoffId && item.sourceSpecId === expectedSpecId
     );
   });
