@@ -1748,6 +1748,33 @@ describe("Linux browser rehearsal governance", () => {
     ).not.toBe(0);
   });
 
+  it("accepts only the exact final static-request completion marker", () => {
+    const run = (report: string) =>
+      spawnSync(
+        "bash",
+        ["-c", 'source "$1"; require_nonempty_request_report "$2"', "browser-contract", shellPath, report],
+        { cwd: root, encoding: "utf8" },
+      );
+    const requestLine = "344. [GET] http://127.0.0.1:3200/api/offers/health => [200] OK";
+    const marker = "Note: 688 static requests not shown, run with --static option.";
+
+    expect(run(JSON.stringify({ result: `${requestLine}\n\n${marker}\n` })).status).toBe(0);
+
+    const invalidReports = [
+      `${requestLine}\n${marker}`,
+      `${marker}\n\n${requestLine}`,
+      `${requestLine}\n\n${marker}\n\n${marker}`,
+      `${requestLine}\n\n${marker.replace("688", "0")}`,
+      `${requestLine}\n\n${marker.replace("688", "-1")}`,
+      `${requestLine}\n\n${marker.replace("static requests not shown", "requests omitted")}`,
+      `${requestLine}\n\nNote: static requests not shown, run with --static option.`,
+      `${requestLine}\n\n${marker}\nUnexpected diagnostic`,
+    ];
+    for (const report of invalidReports) {
+      expect(run(JSON.stringify({ result: report })).status).not.toBe(0);
+    }
+  });
+
   it("retries a marker that appears during asynchronous initialisation", () => {
     const result = runMarkerContract("eventual");
 

@@ -146,9 +146,17 @@ require_nonempty_request_report() {
     const keys = report && typeof report === "object" && !Array.isArray(report) ? Object.keys(report) : [];
     if (keys.length !== 1 || keys[0] !== "result" || typeof report.result !== "string") process.exit(1);
 
-    const lines = report.result.trim().split(/\r?\n/);
+    const lines = report.result.replace(/\r\n/g, "\n").split("\n");
+    if (lines[lines.length - 1] === "") lines.pop();
     const requestLine = /^\d+\. \[(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE)\] https?:\/\/\S+(?: => \[\d{3}\](?: .*)?)?$/;
-    if (lines.length === 0 || lines.some((line) => !requestLine.test(line))) process.exit(1);
+    const completionMarker = /^Note: [1-9][0-9]* static requests not shown, run with --static option\.$/;
+    const lastLine = lines[lines.length - 1];
+    let requestLines = lines;
+    if (completionMarker.test(lastLine ?? "")) {
+      if (lines.length < 3 || lines[lines.length - 2] !== "") process.exit(1);
+      requestLines = lines.slice(0, -2);
+    }
+    if (requestLines.length === 0 || requestLines.some((line) => !requestLine.test(line))) process.exit(1);
   ' "$1"
 }
 
