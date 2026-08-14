@@ -23,6 +23,10 @@ const productionHandoffMarkers = readFileSync(
   resolve(root, "scripts/browser-rehearsal/production-handoff-markers.js"),
   "utf8",
 );
+const openProductionHistoryItem = readFileSync(
+  resolve(root, "scripts/browser-rehearsal/open-production-history-item.js"),
+  "utf8",
+);
 const createOfferCase = readFileSync(
   resolve(root, "scripts/browser-rehearsal/create-offer-case.js"),
   "utf8",
@@ -1571,6 +1575,97 @@ describe("Linux browser rehearsal governance", () => {
     )(document, { pathname: "/produktion" }) as () => Promise<{ route: string; markers: string }>;
 
     await expect(runMarker()).resolves.toEqual({ route: "/produktion", markers: "production-handoff-ok" });
+  });
+
+  it("opens the rendered production case through its stored case identity without a display-name fallback", async () => {
+    const caseId = "production-case-browser-rehearsal";
+    const handoffId = "handoff-browser-rehearsal";
+    const sourceSpecId = "spec-browser-rehearsal-offer-case";
+    let selected = false;
+    let clicks = 0;
+    const historyButton = {
+      textContent: "Besprechung - 06.11.2026 - 35 Personen",
+      getAttribute: (name: string) => name === "aria-pressed" ? String(selected) : null,
+      click: () => {
+        clicks += 1;
+        selected = true;
+      },
+    };
+    const historyDetails = {
+      open: false,
+      querySelector: (selector: string) => selector === "summary"
+        ? { textContent: "Frühere Produktionsaufträge öffnen · 1 Auftrag" }
+        : null,
+      querySelectorAll: (selector: string) => selector === "button[data-action='open-case']"
+        ? [historyButton]
+        : [],
+    };
+    const document = {
+      body: {
+        get innerText() {
+          return selected
+            ? "Besprechung - 06.11.2026 - 35 Personen Produktionsplan berechnen"
+            : "Besprechung - 06.11.2026 - 35 Personen";
+        },
+      },
+      querySelectorAll: (selector: string) => selector === "details" ? [historyDetails] : [],
+    };
+    const calls: string[] = [];
+    const fetch = async (path: string) => {
+      calls.push(path);
+      if (path.endsWith("/production/cases")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [{ caseId, product: "production", displayName: "Besprechung - 06.11.2026 - 35 Personen" }],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          case: {
+            caseId,
+            product: "production",
+            productionHandoffId: handoffId,
+            sourceSpecId,
+          },
+        }),
+      };
+    };
+    const sessionStorage = {
+      getItem: (key: string) => ({
+        "catering.browser-rehearsal.production-case-id": caseId,
+        "catering.browser-rehearsal.production-handoff-id": handoffId,
+        "catering.browser-rehearsal.production-spec-id": sourceSpecId,
+      }[key] ?? null),
+    };
+    const openCase = new Function(
+      "document",
+      "fetch",
+      "sessionStorage",
+      "location",
+      `return (${openProductionHistoryItem});`,
+    )(document, fetch, sessionStorage, { pathname: "/produktion" }) as () => Promise<{
+      selected: string;
+      caseId: string;
+      handoffId: string;
+      sourceSpecId: string;
+    }>;
+
+    await expect(openCase()).resolves.toEqual({
+      selected: caseId,
+      caseId,
+      handoffId,
+      sourceSpecId,
+    });
+    expect(clicks).toBe(1);
+    expect(calls).toEqual([
+      `/api/production/v1/production/cases/${caseId}`,
+      "/api/production/v1/production/cases",
+    ]);
   });
 
   it("rejects a missing browser CLI before opening a stack or session", () => {

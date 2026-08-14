@@ -2,7 +2,6 @@ async () => {
   if (location.pathname !== "/produktion") {
     throw new Error(`Produktionsfall kann nur auf /produktion geöffnet werden, aktuell ${location.pathname}`);
   }
-  const expectedLabel = "Besprechung · 35 Teilnehmer · 2026-11-06";
   const expectedSpecId = sessionStorage.getItem("catering.browser-rehearsal.production-spec-id")?.trim();
   const expectedCaseId = sessionStorage.getItem("catering.browser-rehearsal.production-case-id")?.trim();
   const expectedHandoffId = sessionStorage.getItem("catering.browser-rehearsal.production-handoff-id")?.trim();
@@ -23,10 +22,27 @@ async () => {
   );
   if (!historyDetails) throw new Error("Produktions-Historie fehlt");
   historyDetails.open = true;
-  const historyButton = [...historyDetails.querySelectorAll("button")].find((button) =>
-    (button.textContent ?? "").includes(expectedLabel)
+  const listResponse = await fetch("/api/production/v1/production/cases", {
+    headers: { "x-actor-name": "Produktions-Mitarbeiter" },
+  });
+  const listPayload = await listResponse.json();
+  const cases = Array.isArray(listPayload?.items) ? listPayload.items : [];
+  const matchingCases = cases.filter((item) =>
+    item?.caseId === expectedCaseId && item?.product === "production"
   );
-  if (!historyButton) throw new Error(`Synthetischer Produktionsauftrag fehlt: ${expectedLabel}`);
+  if (
+    !listResponse.ok ||
+    cases.length !== 1 ||
+    matchingCases.length !== 1
+  ) {
+    throw new Error("Produktionsfallliste ist nicht eindeutig an die gespeicherte Case-ID gebunden.");
+  }
+
+  const historyButtons = [...historyDetails.querySelectorAll("button[data-action='open-case']")];
+  if (historyButtons.length !== 1) {
+    throw new Error("Produktionsfall-Schaltfläche ist nicht eindeutig an die gespeicherte Case-ID gebunden.");
+  }
+  const historyButton = historyButtons[0];
   historyButton.click();
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -34,9 +50,9 @@ async () => {
     const text = document.body.innerText;
     const hasWorkflowContext = ["Produktionsplan berechnen", "Rückfragen beantworten", "Produktionsarbeit prüfen"]
       .some((marker) => text.includes(marker));
-    if (text.includes(expectedLabel) && hasWorkflowContext) {
-      return { selected: expectedLabel, caseId: expectedCaseId, handoffId: expectedHandoffId, sourceSpecId: expectedSpecId };
+    if (historyButton.getAttribute("aria-pressed") === "true" && hasWorkflowContext) {
+      return { selected: expectedCaseId, caseId: expectedCaseId, handoffId: expectedHandoffId, sourceSpecId: expectedSpecId };
     }
   }
-  throw new Error(`Produktionsauftrag wurde geöffnet, aber kein fallgebundener Arbeitskontext fokussiert: ${expectedLabel}`);
+  throw new Error(`Produktionsauftrag wurde geöffnet, aber kein fallgebundener Arbeitskontext fokussiert: ${expectedCaseId}`);
 }
