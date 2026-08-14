@@ -81,6 +81,8 @@ clear_workspace_reload_markers="$(load_rehearsal_script "clear-workspace-reload-
 home_to_offer="$(load_rehearsal_script "home-to-offer.js")"
 open_offer_history_item="$(load_rehearsal_script "open-offer-history-item.js")"
 offer_to_production="$(load_rehearsal_script "offer-to-production.js")"
+handoff_offer_case="$(load_rehearsal_script "handoff-offer-case.js")"
+confirm_production_handoff="$(load_rehearsal_script "confirm-production-handoff.js")"
 open_production_history_item="$(load_rehearsal_script "open-production-history-item.js")"
 
 echo "Browser-Navigations- und Markerpruefung:"
@@ -92,20 +94,23 @@ if [[ "${CREATE_OFFER_CASE}" == "1" ]]; then
   run_browser eval "${offer_case_seed}" >/dev/null
   run_browser reload >/dev/null
   echo "Synthetischer Angebotsfall und Entwurf ueber den geschuetzten Fallvertrag angelegt."
-fi
-check_current_page_markers "Angebot Auftrag bewusst geoeffnet" "${open_offer_history_item}"
-check_current_page_markers_at_viewports "Angebot" "${offer_markers}"
-click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
-check_current_page_markers_at_viewports "Produktion leerer Start" "${production_empty_markers}"
-check_current_page_markers "Produktion Auftrag bewusst geoeffnet" "${open_production_history_item}"
-if [[ "${CREATE_OFFER_CASE}" == "1" ]]; then
+  check_current_page_markers "Angebot Auftrag bewusst geoeffnet" "${open_offer_history_item}"
+  check_current_page_markers_at_viewports "Angebot" "${offer_markers}"
+  click_rehearsal_link "Angebot -> Produktion Handoff" "/produktion" "${handoff_offer_case}"
+  check_current_page_markers "Produktions-Handoff serverseitig bestaetigt" "${confirm_production_handoff}"
   check_current_page_markers_at_viewports "Produktion Angebots-Handoff" "${production_handoff_markers}"
+  check_current_page_markers "Produktion Auftrag bewusst geoeffnet" "${open_production_history_item}"
   check_browser_diagnostics
   echo ""
   echo "Fresh-Rehearsal-Handoff bestaetigt: Angebotsfreigabe, Produktionsübergabe, ProductionCase und fallgebundener Produktionsentwurf sind sichtbar; noch nicht erzeugte Pläne bleiben offen."
   echo "Grenze: lokaler synthetischer Browser-Beleg; keine Produktionsfreigabe, keine echten Daten, keine Compliance-Aussage."
   exit 0
 fi
+check_current_page_markers "Angebot Auftrag bewusst geoeffnet" "${open_offer_history_item}"
+check_current_page_markers_at_viewports "Angebot" "${offer_markers}"
+click_rehearsal_link "Angebot -> Produktion" "/produktion" "${offer_to_production}"
+check_current_page_markers_at_viewports "Produktion leerer Start" "${production_empty_markers}"
+check_current_page_markers "Produktion Auftrag bewusst geoeffnet" "${open_production_history_item}"
 check_current_page_markers_at_viewports "Produktion" "${production_markers}"
 check_current_page_markers "Produktion offene Rueckfragen" "${open_question_markers}"
 if [[ "${SUBMIT_ANSWERS}" == "1" ]]; then

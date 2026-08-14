@@ -20,7 +20,6 @@ async () => {
     return payload;
   };
   const offerHeaders = { "x-actor-name": "Angebots-Mitarbeiter" };
-  const productionHeaders = { "x-actor-name": "Produktions-Mitarbeiter" };
   const readOfferCase = () => fetchJson(
     `/api/offers/v1/offers/cases/${encodeURIComponent(expectedCaseId)}`,
     offerHeaders,
@@ -89,48 +88,8 @@ async () => {
     return typeof approvedOfferId === "string" && approvalEvent ? payload : undefined;
   });
   const approvedOfferId = approvedCasePayload.case.approvedOfferId;
-  const handoffButton = await waitFor("Produktions-Handoff-Aktion", () => [...document.querySelectorAll("button")].find((button) =>
-    (button.textContent ?? "").replace(/\s+/gu, " ").trim() === "An Produktion übergeben" &&
-    !button.disabled && button.getAttribute("aria-disabled") !== "true"
-  ));
-  handoffButton.click();
-
-  const handedOffCasePayload = await waitFor("Produktions-Handoff", async () => {
-    const payload = await readOfferCase();
-    const handoffId = payload?.case?.productionHandoffId;
-    const resultEvent = (payload?.events ?? []).find((event) => event.kind === "result" && event.artifactId === handoffId);
-    return typeof handoffId === "string" && resultEvent ? payload : undefined;
-  });
-  const handoffId = handedOffCasePayload.case.productionHandoffId;
-  const handoffPayload = await fetchJson(`/api/offers/v1/offers/handoffs/${encodeURIComponent(handoffId)}`, productionHeaders);
-  const handoff = handoffPayload?.handoff;
-  if (handoff?.handoffId !== handoffId || handoff.approvedOfferId !== approvedOfferId ||
-    handoff.source?.draftId !== draftId || handoff.eventSpecSnapshot?.specId !== expectedSpecId) {
-    throw new Error("Produktions-Handoff ist nicht vollständig an Freigabe, Entwurf und AcceptedEventSpec gebunden.");
-  }
-  await waitFor("Produktionsnavigation", () => [...document.querySelectorAll("a[href='/produktion']")].some((anchor) =>
-    anchor.offsetParent !== null && (anchor.textContent ?? "").includes("Zur Produktion")
-  ) && document.body.innerText.includes("Freigegebenes Angebot wurde an die Produktion übergeben."));
-
-  const productionCase = await waitFor("Produktionsfall", async () => {
-    const productionList = await fetchJson(
-      `/api/production/v1/production/cases?search=${encodeURIComponent(initialCasePayload.case.displayName)}`,
-      productionHeaders,
-    );
-    return (productionList?.items ?? []).find((item) =>
-      item.product === "production" && item.displayName === "Besprechung · 35 Teilnehmer · 2026-11-06"
-    );
-  });
-  if (!productionCase?.caseId) throw new Error("Produktionsfall aus dem bestätigten Handoff fehlt oder passt nicht zur Angebotsidentität.");
-  const productionDetail = await fetchJson(
-    `/api/production/v1/production/cases/${encodeURIComponent(productionCase.caseId)}`,
-    productionHeaders,
-  );
-  if (productionDetail?.case?.caseId !== productionCase.caseId || productionDetail.case.productionHandoffId !== handoffId ||
-    productionDetail.case.sourceSpecId !== expectedSpecId) throw new Error("Produktionsfall ist nicht über Handoff und AcceptedEventSpec gebunden.");
-
-  sessionStorage.setItem("catering.browser-rehearsal.production-case-id", productionCase.caseId);
-  sessionStorage.setItem("catering.browser-rehearsal.production-handoff-id", handoffId);
-  sessionStorage.setItem("catering.browser-rehearsal.production-spec-id", expectedSpecId);
-  return { selected: historyButton.textContent?.trim() ?? "", caseId: expectedCaseId, draftId, approvedOfferId, handoffId, productionCaseId: productionCase.caseId };
+  sessionStorage.setItem("catering.browser-rehearsal.offer-draft-id", draftId);
+  sessionStorage.setItem("catering.browser-rehearsal.offer-approved-offer-id", approvedOfferId);
+  sessionStorage.setItem("catering.browser-rehearsal.offer-spec-id", expectedSpecId);
+  return { selected: historyButton.textContent?.trim() ?? "", caseId: expectedCaseId, draftId, approvedOfferId };
 }

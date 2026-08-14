@@ -664,7 +664,7 @@ describe("Linux browser rehearsal governance", () => {
     await expect(openCase()).rejects.toThrow("Freigabezustand");
   });
 
-  it("drives the approved offer through the real handoff and production-case contracts", async () => {
+  it("drives the approved offer to the explicit handoff boundary", async () => {
     let approved = false;
     let handoffCreated = false;
     let productionCaseCreated = false;
@@ -750,16 +750,149 @@ describe("Linux browser rehearsal governance", () => {
     };
     const openCase = new Function(
       "document", "fetch", "sessionStorage", "location", `return (${openOfferHistoryItem});`,
-    )(document, fetch, sessionStorage, { pathname: "/angebot" }) as () => Promise<{ handoffId?: string; productionCaseId?: string }>;
+    )(document, fetch, sessionStorage, { pathname: "/angebot" }) as () => Promise<{
+      caseId: string;
+      draftId: string;
+      approvedOfferId: string;
+    }>;
 
-    await expect(openCase()).resolves.toMatchObject({ handoffId: "handoff-browser-rehearsal", productionCaseId: "production-case-browser-rehearsal" });
-    expect(productionCaseCreated).toBe(true);
-    expect(calls.some((path) => path.includes("/offers/approved/approved-offer-browser-rehearsal/handoffs"))).toBe(true);
+    await expect(openCase()).resolves.toMatchObject({
+      caseId: "offer-case-browser-rehearsal",
+      draftId: "draft-browser-rehearsal",
+      approvedOfferId: "approved-offer-browser-rehearsal",
+    });
+    expect(productionCaseCreated).toBe(false);
+    expect(calls.some((path) => path.includes("/offers/approved/approved-offer-browser-rehearsal/handoffs"))).toBe(false);
+  });
+
+  it("uses an explicit handoff action as the route transition to production", async () => {
+    const handoffScript = readFileSync(
+      resolve(root, "scripts/browser-rehearsal/handoff-offer-case.js"),
+      "utf8",
+    );
+    expect(rehearsal).toContain('load_rehearsal_script "handoff-offer-case.js"');
+    const createFlow = rehearsal.slice(
+      rehearsal.indexOf('if [[ "${CREATE_OFFER_CASE}" == "1" ]]'),
+      rehearsal.indexOf("\nfi", rehearsal.indexOf('if [[ "${CREATE_OFFER_CASE}" == "1" ]]')),
+    );
+    expect(createFlow).toContain('click_rehearsal_link "Angebot -> Produktion Handoff" "/produktion" "${handoff_offer_case}"');
+    expect(createFlow).not.toContain('"${offer_to_production}"');
+    let route = "/angebot";
+    let clicks = 0;
+    const handoffButton = {
+      textContent: "An Produktion übergeben",
+      disabled: false,
+      getAttribute: (name: string) => name === "aria-disabled" ? "false" : null,
+      click: () => {
+        clicks += 1;
+        route = "/produktion";
+      },
+    };
+    const document = {
+      querySelectorAll: (selector: string) => selector === "button" ? [handoffButton] : [],
+    };
+    const location = { get pathname() { return route; } };
+    const session = new Map([
+      ["catering.browser-rehearsal.offer-case-id", "offer-case-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-approved-offer-id", "approved-offer-browser-rehearsal"],
+    ]);
+    const startHandoff = new Function(
+      "document",
+      "location",
+      "sessionStorage",
+      `return (${handoffScript});`,
+    )(document, location, { getItem: (key: string) => session.get(key) ?? null }) as () => Promise<unknown>;
+
+    await expect(startHandoff()).resolves.toMatchObject({ route: "/angebot", clicked: true });
+    expect(clicks).toBe(1);
+    expect(route).toBe("/produktion");
+  });
+
+  it("confirms the server handoff after the browser has reached production", async () => {
+    const confirmScript = readFileSync(
+      resolve(root, "scripts/browser-rehearsal/confirm-production-handoff.js"),
+      "utf8",
+    );
+    const session = new Map([
+      ["catering.browser-rehearsal.offer-case-id", "offer-case-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-draft-id", "draft-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-approved-offer-id", "approved-offer-browser-rehearsal"],
+      ["catering.browser-rehearsal.offer-spec-id", "spec-browser-rehearsal-offer-case"],
+    ]);
+    const calls: string[] = [];
+    const fetch = async (path: string) => {
+      calls.push(path);
+      const payload = path.includes("/offers/cases/")
+        ? {
+            case: {
+              caseId: "offer-case-browser-rehearsal",
+              product: "offer",
+              displayName: "Browser-Rehearsal - Besprechung - 06.11.2026 - 35 Personen",
+              productionHandoffId: "handoff-browser-rehearsal",
+            },
+            events: [{ kind: "result", artifactId: "handoff-browser-rehearsal" }],
+          }
+        : path.includes("/offers/handoffs/")
+          ? {
+              handoff: {
+                handoffId: "handoff-browser-rehearsal",
+                approvedOfferId: "approved-offer-browser-rehearsal",
+                source: { draftId: "draft-browser-rehearsal" },
+                eventSpecSnapshot: { specId: "spec-browser-rehearsal-offer-case" },
+              },
+            }
+          : path.includes("/production/cases?")
+            ? {
+                items: [{
+                  caseId: "production-case-browser-rehearsal",
+                  product: "production",
+                  displayName: "Besprechung · 35 Teilnehmer · 2026-11-06",
+                  productionHandoffId: "handoff-browser-rehearsal",
+                  sourceSpecId: "spec-browser-rehearsal-offer-case",
+                }],
+              }
+            : {
+                case: {
+                  caseId: "production-case-browser-rehearsal",
+                  productionHandoffId: "handoff-browser-rehearsal",
+                  sourceSpecId: "spec-browser-rehearsal-offer-case",
+                },
+              };
+      return { ok: true, status: 200, text: async () => JSON.stringify(payload) };
+    };
+    const confirmHandoff = new Function(
+      "fetch",
+      "sessionStorage",
+      "location",
+      `return (${confirmScript});`,
+    )(
+      fetch,
+      {
+        getItem: (key: string) => session.get(key) ?? null,
+        setItem: (key: string, value: string) => { session.set(key, value); },
+      },
+      { pathname: "/produktion" },
+    ) as () => Promise<unknown>;
+
+    await expect(confirmHandoff()).resolves.toMatchObject({
+      route: "/produktion",
+      caseId: "production-case-browser-rehearsal",
+      handoffId: "handoff-browser-rehearsal",
+      sourceSpecId: "spec-browser-rehearsal-offer-case",
+    });
+    expect(calls).toEqual([
+      "/api/offers/v1/offers/cases/offer-case-browser-rehearsal",
+      "/api/offers/v1/offers/handoffs/handoff-browser-rehearsal",
+      "/api/production/v1/production/cases?search=Browser-Rehearsal%20-%20Besprechung%20-%2006.11.2026%20-%2035%20Personen",
+      "/api/production/v1/production/cases/production-case-browser-rehearsal",
+    ]);
+    expect(session.get("catering.browser-rehearsal.production-case-id")).toBe("production-case-browser-rehearsal");
   });
 
   it("waits for the rendered handoff action to become enabled after approval refresh", async () => {
     let approved = false;
     let handoffCreated = false;
+    let route = "/angebot";
     const handoffButton = {
       textContent: "An Produktion übergeben",
       disabled: true,
@@ -767,6 +900,7 @@ describe("Linux browser rehearsal governance", () => {
       click: () => {
         if (handoffButton.disabled) return;
         handoffCreated = true;
+        route = "/produktion";
       },
     };
     const selectedCaseButton = {
@@ -815,7 +949,11 @@ describe("Linux browser rehearsal governance", () => {
       },
       querySelector: (selector: string) => selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : null,
     };
-    const sessionStorage = { getItem: () => "offer-case-browser-rehearsal", setItem: () => undefined };
+    const session = new Map([["catering.browser-rehearsal.offer-case-id", "offer-case-browser-rehearsal"]]);
+    const sessionStorage = {
+      getItem: (key: string) => session.get(key) ?? null,
+      setItem: (key: string, value: string) => { session.set(key, value); },
+    };
     const fetch = async (path: string) => ({
       ok: true,
       status: 200,
@@ -877,8 +1015,20 @@ describe("Linux browser rehearsal governance", () => {
       "document", "fetch", "sessionStorage", "location", `return (${openOfferHistoryItem});`,
     )(document, fetch, sessionStorage, { pathname: "/angebot" }) as () => Promise<unknown>;
 
-    await expect(openCase()).resolves.toMatchObject({ handoffId: "handoff-browser-rehearsal" });
+    const handoffScript = readFileSync(
+      resolve(root, "scripts/browser-rehearsal/handoff-offer-case.js"),
+      "utf8",
+    );
+    await expect(openCase()).resolves.toMatchObject({ approvedOfferId: "approved-offer-browser-rehearsal" });
+    await new Promise((resolve) => setTimeout(resolve, 30));
     expect(handoffButton.disabled).toBe(false);
+    const startHandoff = new Function(
+      "document",
+      "location",
+      "sessionStorage",
+      `return (${handoffScript});`,
+    )(document, { get pathname() { return route; } }, sessionStorage) as () => Promise<unknown>;
+    await expect(startHandoff()).resolves.toMatchObject({ target: "/produktion", clicked: true });
     expect(handoffCreated).toBe(true);
   });
 
