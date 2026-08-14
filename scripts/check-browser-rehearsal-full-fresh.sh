@@ -268,7 +268,7 @@ run_fresh_rehearsal() {
     return "${start_status}"
   fi
   record_fresh_root
-  export CATERING_FRESH_OWNER_MARKER CATERING_FRESH_RUN_TOKEN
+  export CATERING_FRESH_OWNER_MARKER="${FRESH_OWNER_MARKER}" CATERING_FRESH_RUN_TOKEN="${FRESH_RUN_TOKEN}"
   run_owned_command "$@"
   bash "${ROOT_DIR}/scripts/stop-local-stack.sh"
   STACK_LIFECYCLE_ACTIVE=0

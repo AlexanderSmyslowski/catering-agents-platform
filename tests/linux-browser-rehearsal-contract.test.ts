@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -242,6 +242,54 @@ const cleanupFreshQuarantineFixture = (fixtureRoot: string, tempRoot: string) =>
   rmSync(tempRoot, { recursive: true, force: true });
 };
 
+const runFreshRootPropagationContract = () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "catering-fresh-propagation-fixture-"));
+  const tempRoot = realpathSync(mkdtempSync(join(tmpdir(), "catering-fresh-propagation-tmp-")));
+  const scriptsRoot = join(fixtureRoot, "scripts");
+  const runtimeRoot = join(fixtureRoot, ".runtime", "local-stack");
+  mkdirSync(scriptsRoot, { recursive: true });
+  mkdirSync(runtimeRoot, { recursive: true });
+  writeFileSync(join(scriptsRoot, "check-browser-rehearsal-full-fresh.sh"), fullFreshRehearsal);
+  writeFileSync(join(scriptsRoot, "browser-rehearsal-shell.sh"), browserShell);
+  writeFileSync(
+    join(scriptsRoot, "start-fresh-local-stack.sh"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      "ROOT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")/..\" && pwd)\"",
+      "parent=\"${CATERING_FRESH_DATA_PARENT:?}\"",
+      "root=\"$(mktemp -d \"${parent%/}/catering-agents-rehearsal-XXXXXX\")\"",
+      "printf '%s\\n' \"$root\" > \"$ROOT_DIR/.runtime/local-stack/data-root.txt\"",
+    ].join("\n") + "\n",
+  );
+  writeFileSync(join(scriptsRoot, "stop-local-stack.sh"), "#!/usr/bin/env bash\nexit 0\n");
+  writeFileSync(
+    join(scriptsRoot, "check-browser-rehearsal.sh"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      "ROOT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")/..\" && pwd)\"",
+      "source \"$ROOT_DIR/scripts/browser-rehearsal-shell.sh\"",
+      "require_fresh_mutation_scope 0 0 0 1 0 \"$ROOT_DIR/.runtime/local-stack/data-root.txt\"",
+      "printf 'child-scope-ok\\n'",
+    ].join("\n") + "\n",
+  );
+  for (const scriptName of [
+    "check-browser-rehearsal-full-fresh.sh",
+    "start-fresh-local-stack.sh",
+    "stop-local-stack.sh",
+    "check-browser-rehearsal.sh",
+  ]) {
+    chmodSync(join(scriptsRoot, scriptName), 0o755);
+  }
+  const result = spawnSync("bash", [join(scriptsRoot, "check-browser-rehearsal-full-fresh.sh")], {
+    cwd: fixtureRoot,
+    env: { ...process.env, TMPDIR: tempRoot },
+    encoding: "utf8",
+  });
+  return { fixtureRoot, tempRoot, result };
+};
+
 describe("Linux browser rehearsal governance", () => {
   it("requires a real Ubuntu browser job with a hard, fail-closed rehearsal", () => {
     expect(workflow).toContain("browser-rehearsal:");
@@ -378,6 +426,16 @@ describe("Linux browser rehearsal governance", () => {
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
       rmSync(realRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards the owned Fresh-Root marker to the child rehearsal process", () => {
+    const { fixtureRoot, tempRoot, result } = runFreshRootPropagationContract();
+    try {
+      expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+      expect(result.stdout).toContain("child-scope-ok");
+    } finally {
+      cleanupFreshQuarantineFixture(fixtureRoot, tempRoot);
     }
   });
 
