@@ -1737,6 +1737,7 @@ describe("Linux browser rehearsal governance", () => {
     for (const malformedRequestUrls of [
       '{"requests":[{"url":"garbage"}]}',
       '{"requests":[{"url":"ftp://example.test/api/health"}]}',
+      '{"requests":[{"url":"/garbage"}]}',
       '{"requests":[{"url":""}]}',
       '{"requests":[{"url":"api/health"}]}',
       '{"requests":[{"url":"https://"}]}',

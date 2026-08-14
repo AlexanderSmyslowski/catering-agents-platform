@@ -44,7 +44,17 @@ describe("typed product route boundary", () => {
     const focusSource = readFileSync(path.resolve("backoffice-ui/src/production-focus-state.ts"), "utf8");
     expect(focusSource).not.toContain("Record<string, unknown>");
     const appSource = readFileSync(path.resolve("backoffice-ui/src/App.tsx"), "utf8");
-    expect(appSource).toContain("acceptedSpecs: dashboard.acceptedSpecs");
-    expect(appSource).not.toContain("acceptedSpecs: viewDashboard.acceptedSpecs");
+    const focusCall = appSource.match(/buildProductionFocusState\(\{([\s\S]*?)\n\s*\}\)/u)?.[1] ?? "";
+    expect(focusCall).toContain("acceptedSpecs: dashboard.acceptedSpecs");
+    expect(focusCall).toMatch(/^\s*filteredSpecs,\s*$/mu);
+    expect(focusCall).not.toContain("filteredSpecs: viewDashboard.filteredSpecs");
+    const routeStateSource = readFileSync(path.resolve("backoffice-ui/src/app-dashboard-route-state.ts"), "utf8");
+    expect(routeStateSource).toContain("buildProductProductionDashboardRecordsState");
+    const productionRecordsSource = readFileSync(
+      path.resolve("backoffice-ui/src/production-dashboard-records-state.ts"),
+      "utf8"
+    );
+    expect(productionRecordsSource).toContain("filteredSpecs: AcceptedEventSpec[]");
+    expect(productionRecordsSource).toContain("const filteredSpecs = filterProductRouteRecords");
   });
 });

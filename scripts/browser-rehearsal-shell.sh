@@ -143,7 +143,7 @@ require_nonempty_request_report() {
       const validMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "CONNECT", "TRACE"]);
       const validUrl = (value) => {
         if (typeof value !== "string" || value.length === 0 || value.trim() !== value || /\s/.test(value)) return false;
-        if (value.startsWith("/")) return !value.startsWith("//");
+        if (value.startsWith("/")) return value.startsWith("/api/");
         try {
           const parsed = new URL(value);
           return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname !== "";
