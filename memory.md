@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.356
-date: 2026-08-12
+version: 5.357
+date: 2026-08-15
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1722,3 +1722,9 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.356 - 2026-08-12
 
 - SB-01 ist im bestehenden Angebotsweg geschlossen: Die Aktion `Entwurf aus Text erstellen` bleibt bei leerem oder nur aus Leerraum bestehendem Text deaktiviert; der Submit-Guard weist einen programmgesteuerten Leertext mit `Bitte Beschreibung eingeben` vor Fall- und API-Aufruf ab. Der gefüllte Angebotsweg bleibt unverändert; keine neue API, Persistenz oder Architektur.
+
+### 5.357 - 2026-08-15
+
+- PR 611 repariert die dokumentierten Produktionsreferenz-CLI-Flags: `--source`, `--expectation`, `--provider` und `--report` werden explizit auf `sourcePath`, `expectationPath`, `provider` und `reportPath` abgebildet; unbekannte, doppelte, fehlende oder wertlose Argumente bleiben fail-closed. Der korrigierte Runner ist mit 4/4 fokussierten P1-Regressionsfällen sowie TypeScript, Build und Shell-Syntax geprüft.
+- PDF-Produktionsreferenzen laufen über den bestehenden `validateUploadedDocument`-/`ingestDocument`-Pfad; der Provider erhält extrahierten Text statt PDF-Rohbytes, während der SHA-256-Bezug den unveränderten Originalbytes gilt. Der lokale Test prüft die Extraktion mit injiziertem Offline-Transport; ein echter externer Provideraufruf ist nicht Bestandteil des Nachweises.
+- Der Scope bleibt auf die bereits geprüften zwei Reparaturdateien plus diese Memory-Historie begrenzt. Keine neue API, Persistenz, Migration, Deploymentlogik oder Produktdaten; unterstützte Dateityp-, Größen-, Lesbarkeits-, Autorisierungs- und Providerfehler bleiben fail-closed. Die bekannten lokalen Critical-Section-Ausnahmen sind gegenüber der Basis unverändert und werden nicht als grüner Vollsuite-Nachweis ausgegeben; PR-CI 31864109063 (build-and-test 94962287506, browser-rehearsal 94962287484) war am unveränderten Reparatur-Head terminal grün.
