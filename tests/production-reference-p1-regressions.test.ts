@@ -179,6 +179,9 @@ describe("post-merge production reference P1 regressions", () => {
     expect(JSON.parse(readFileSync(reportPath, "utf8"))).toMatchObject({
       ok: false,
       sourceSha256: `sha256:${createHash("sha256").update(pdfBytes).digest("hex")}`,
+      promptSchemaId: "production-draft-extraction-prompt-schema.v0",
+      promptArtifactId: "production-draft-extraction.prompt",
+      promptVersion: "v0",
       errorClasses: ["source_contract_failed"]
     });
   });
@@ -219,7 +222,12 @@ describe("post-merge production reference P1 regressions", () => {
     expect(capture.providerCalls).toBe(1);
     expect(capture.promptContext).toBe("Kaffee und Kuchen · extrahierter Angebotstext");
     expect(capture.promptContext).not.toContain("%PDF-1.7");
-    expect(readFileSync(reportPath, "utf8")).toContain(sourceHash);
+    expect(JSON.parse(readFileSync(reportPath, "utf8"))).toMatchObject({
+      sourceSha256: sourceHash,
+      promptSchemaId: "production-draft-extraction-prompt-schema.v0",
+      promptArtifactId: "production-draft-extraction.prompt",
+      promptVersion: "v0"
+    });
   });
 
   it("keeps unsupported, oversized and unreadable sources fail-closed", async () => {

@@ -1733,3 +1733,8 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 - Der Produktionsreferenz-Runner prüft nach Pfad- und Autorisierungsprüfung den SHA-256 der gelesenen Originalbytes vor Dokumentvalidierung und Textextraktion. Bei einer Abweichung wird deterministisch `source_contract_failed` berichtet, ohne PDF-/Dokumentparser oder Providertransport aufzurufen; bei identischem Hash bleibt der bestehende Validierungs-, Extraktions- und PDF-Erfolgspfad erhalten.
 - Der P2-Regressionsvertrag belegt diesen Reihenfolgeanker, den unveränderten Originalbyte-Hash im Report, den einmaligen Extraktions- und Provideraufruf bei Übereinstimmung sowie die bisherigen fail-closed Quellenfehler. Es gibt keine neue API, Persistenz, Migration oder externe Providerausführung.
+
+### 5.359 - 2026-08-15
+
+- Der vorgezogene `source_contract_failed`-Report löst das registrierte Produktionsreferenz-Promptschema nun vor der Hash-Fehlerantwort auf und führt `promptSchemaId`, `promptArtifactId` und `promptVersion` vollständig mit. Die Hash-Prüfung bleibt vor jeder Dokument-/PDF-Extraktion; bei Abweichung bleiben Extraktor und Providertransport unaufgerufen.
+- Der Regressionstest prüft die vollständigen Reportmetadaten im Hash-Mismatch- und PDF-Erfolgspfad sowie weiterhin null Aufrufe bei Abweichung und genau einen Extraktions-/Provideraufruf bei Übereinstimmung. CLI-Flag-Mapping, Offline-Transport und bestehende fail-closed Quellenverträge bleiben unverändert; keine API, Persistenz, Migration, echte Providerausführung oder Produktionsdaten.
