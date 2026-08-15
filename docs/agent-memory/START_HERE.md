@@ -15,7 +15,7 @@ Dies ist der kanonische Einstiegspunkt fuer neue Chatfenster, Hermes Agent, Code
 3. `AGENTS.md`
 4. `HANDOFF_PROMPT.md`
 5. `docs/agent-memory/README.md`
-6. `docs/agent-memory/memory_v5.23_2026-04-11.md`
+6. `docs/agent-memory/memory_v5.361_2026-08-15.md`
 
 ## Warum diese Datei existiert
 Damit neue Sessions den konsolidierten Stand ohne Umwege finden. Die fuehrende Root-Memory-Datei ist `memory.md`.
