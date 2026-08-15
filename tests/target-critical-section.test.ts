@@ -11,6 +11,7 @@ import {
   utimesSync,
   writeFileSync
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { hostname, tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -61,6 +62,19 @@ function lockInput<T>(
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function processFingerprintAvailable(): boolean {
+  if (process.platform === "linux") return true;
+  if (process.platform !== "darwin") return false;
+  try {
+    return execFileSync("ps", ["-o", "lstart=", "-p", String(process.pid)], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 class MockPostgresAdvisoryLocks {
@@ -302,7 +316,7 @@ describe("business target critical section", () => {
     }
   });
 
-  it("reclaims an expired file ticket even when its PID has been reused", async () => {
+  it("reclaims an expired file ticket only when its PID reuse is verifiable", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-lease-stale-"));
     const lockPath = targetLockPath(rootDir);
     const queuePath = `${lockPath}.queue`;
@@ -323,14 +337,24 @@ describe("business target critical section", () => {
       { rootDir },
       async () => { entered = true; }
     ));
+    const fingerprintVerified = processFingerprintAvailable();
 
     try {
-      await Promise.race([
-        pending,
-        delay(250).then(() => { throw new Error("expired ticket was not reclaimed"); })
-      ]);
-      expect(entered).toBe(true);
-      expect(existsSync(path.join(queuePath, "released-000000000001"))).toBe(true);
+      if (fingerprintVerified) {
+        await Promise.race([
+          pending,
+          delay(250).then(() => { throw new Error("expired ticket was not reclaimed"); })
+        ]);
+        expect(entered).toBe(true);
+        expect(existsSync(path.join(queuePath, "released-000000000001"))).toBe(true);
+      } else {
+        await delay(100);
+        expect(entered).toBe(false);
+        expect(existsSync(path.join(queuePath, "released-000000000001"))).toBe(false);
+        writeFileSync(path.join(queuePath, "released-000000000001"), "");
+        await pending;
+        expect(entered).toBe(true);
+      }
     } finally {
       if (!existsSync(path.join(queuePath, "released-000000000001"))) {
         writeFileSync(path.join(queuePath, "released-000000000001"), "");
@@ -403,7 +427,11 @@ describe("business target critical section", () => {
       const ownerMetadata = JSON.parse(
         readFileSync(path.join(ownerQueuePath, ownerTicketName!), "utf8")
       ) as Record<string, unknown>;
-      expect(ownerMetadata.processFingerprint).toEqual(expect.any(String));
+      if (processFingerprintAvailable()) {
+        expect(ownerMetadata.processFingerprint).toEqual(expect.any(String));
+      } else {
+        expect(ownerMetadata.processFingerprint).toBeUndefined();
+      }
       const probeQueuePath = `${targetLockPath(probeRoot)}.queue`;
       mkdirSync(probeQueuePath, { recursive: true });
       const copiedTicket = path.join(probeQueuePath, "ticket-000000000001.json");

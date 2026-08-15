@@ -48,7 +48,7 @@ function delay(milliseconds: number): Promise<void> {
 }
 
 describe("critical-section baseline regressions", () => {
-  it("publishes a process fingerprint and reclaims one expired PID-reuse ticket", async () => {
+  it("reclaims expired PID-reuse tickets only when the process identity is verifiable", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-critical-baseline-fingerprint-"));
     let releaseOwner!: () => void;
     let signalOwner!: () => void;
@@ -65,7 +65,7 @@ describe("critical-section baseline regressions", () => {
       const ticketName = readdirSync(queuePath).find((name) => name.startsWith("ticket-"));
       expect(ticketName).toBeDefined();
       const metadata = JSON.parse(readFileSync(path.join(queuePath, ticketName!), "utf8")) as Record<string, unknown>;
-      expect(metadata.processFingerprint).toEqual(expect.any(String));
+      const fingerprintVerified = typeof metadata.processFingerprint === "string";
 
       releaseOwner();
       await owner;
@@ -83,9 +83,19 @@ describe("critical-section baseline regressions", () => {
       utimesSync(staleTicket, expired, expired);
 
       let entered = false;
-      await withBusinessTargetCriticalSection(input(rootDir, async () => { entered = true; }));
-      expect(entered).toBe(true);
-      expect(readdirSync(queuePath).filter((name) => name === "released-000000000002")).toHaveLength(1);
+      const pending = withBusinessTargetCriticalSection(input(rootDir, async () => { entered = true; }));
+      if (fingerprintVerified) {
+        await pending;
+        expect(entered).toBe(true);
+        expect(readdirSync(queuePath).filter((name) => name === "released-000000000002")).toHaveLength(1);
+      } else {
+        await delay(100);
+        expect(entered).toBe(false);
+        expect(readdirSync(queuePath).filter((name) => name === "released-000000000002")).toHaveLength(0);
+        writeFileSync(path.join(queuePath, "released-000000000002"), "");
+        await pending;
+        expect(entered).toBe(true);
+      }
     } finally {
       releaseOwner?.();
       await owner.catch(() => undefined);

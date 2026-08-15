@@ -68,3 +68,8 @@ Pflicht fuer fortlaufende Arbeit
  • memory.md bei jeder relevanten Neuerung versioniert aktualisieren
  • neue Eintraege in der Versionshistorie unten anhaengen
  • keine stillen inhaltlichen Verschiebungen
+
+Aktueller Handoff-Override – 2026-08-15
+ • PR #612 auf `loop/stage-a-complete-chain` ist der ungemergte Stage-A-Task-12-Kandidat. Er umfasst lokale Business-Scope-Migration, die unveränderliche Angebots-zu-Produktionskette, Business-Isolation, UI-Reload-/Search-/Revision-/Copy-Verträge und die nach Ersatztests entfernten Kompatibilitätspfade.
+ • `hostedMultiBusinessReady` ist im Kandidaten codefest `true`, weil Route-, Store-, Audit- und HTML-/CSV-Export-Matrix geprüft wurden. Kein Umgebungsflag kann dieses Gate umgehen.
+ • Der geprüfte Basisstand vor dem uncommitteten Folgefix ist `2b2b05d5a57ab216fe31fbe599f4a114983e5c89` gegen `main` `66f354c7715e766b59d9f6407638c05da5ad3394`; der aktuelle Folgefix behandelt verweigertes macOS-`ps` fail-closed und wartet auf unabhängige Prüfung. Frühere Aussagen, dass Aufgaben 8–12 noch offen seien, sind historische Handoff-Stände und nicht der aktuelle Kandidatenstatus.

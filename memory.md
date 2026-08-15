@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.358
+version: 5.360
 date: 2026-08-15
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1738,3 +1738,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 - Der vorgezogene `source_contract_failed`-Report löst das registrierte Produktionsreferenz-Promptschema nun vor der Hash-Fehlerantwort auf und führt `promptSchemaId`, `promptArtifactId` und `promptVersion` vollständig mit. Die Hash-Prüfung bleibt vor jeder Dokument-/PDF-Extraktion; bei Abweichung bleiben Extraktor und Providertransport unaufgerufen.
 - Der Regressionstest prüft die vollständigen Reportmetadaten im Hash-Mismatch- und PDF-Erfolgspfad sowie weiterhin null Aufrufe bei Abweichung und genau einen Extraktions-/Provideraufruf bei Übereinstimmung. CLI-Flag-Mapping, Offline-Transport und bestehende fail-closed Quellenverträge bleiben unverändert; keine API, Persistenz, Migration, echte Providerausführung oder Produktionsdaten.
+
+### 5.360 - 2026-08-15
+
+- Stage A Task 12 ist im ungemergten PR-#612-Kandidaten auf `loop/stage-a-complete-chain` umgesetzt: lokale Business-Scope-Migration, die unveränderliche Angebots-zu-Produktionskette, die vollständige Business-Isolationsmatrix, der reale UI-/Reload-/Search-/Revision-/Copy-Fluss sowie die freigegebenen Kompatibilitäts- und Persistence-Boundary-Entfernungen sind durch den Kandidatenscope belegt. `hostedMultiBusinessReady` ist codefest `true`, weil die Matrix aus Route-, Store-, Audit- und HTML-/CSV-Exportverträgen grün geprüft wurde; der Wert bleibt unabhängig von Umgebungsflags.
+- Der Kandidat ist noch nicht in `main` übernommen: der geprüfte PR-Head vor diesem Folgefix ist `2b2b05d5a57ab216fe31fbe599f4a114983e5c89`, Basis und `main` bleiben `66f354c7715e766b59d9f6407638c05da5ad3394`. Frühere Einträge mit „Aufgabe 8 nicht begonnen“ beziehungsweise „Aufgaben 8 bis 12 offen“ sind historische Übergabestände und werden für den aktuellen Kandidaten ausdrücklich überholt; sie bleiben als Historie erhalten.
+- Der P2-Fix für sandboxiertes macOS behandelt einen verweigerten `ps`-Aufruf jetzt strikt als unverifizierbare Prozessidentität. Eine instanzlokale `Date.now() - process.uptime()`-Schätzung wird nicht mehr als Fingerprint persistiert; dadurch kann eine alte Mtime keinen Live-Lock bei unabhängig geladenen Modulinstanzen freigeben. Der Darwin-Regressionstest simuliert zwei Modulinstanzen mit um eine Millisekunde verschobenen Zeitpunkten und prüft die unveränderte Sperre; Linux- und `ps`-Erfolgspfade bleiben unberührt.
+- Die Dokumentation hält den Stand als Kandidat für eine erneute unabhängige Prüfung fest. Es gibt keine neue API, Persistenzwelt, Migration gegen Produktdaten, externe Providerausführung, Produktionsschreibwirkung, Deployment-, Tag- oder Releaseaktion.

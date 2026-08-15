@@ -202,14 +202,10 @@ function readProcessFingerprint(pid: number): string | undefined {
         }).trim();
         if (startedAt) return `darwin:${startedAt}`;
       } catch {
-        // Sandboxed macOS runners may deny process inspection. The current PID still has a
-        // stable, process-wide start estimate that worker-module instances can share; other
-        // PIDs remain unverifiable and therefore fail closed below.
-        if (pid !== process.pid) return undefined;
-        const startedAtMilliseconds = Math.round(Date.now() - process.uptime() * 1_000);
-        return Number.isFinite(startedAtMilliseconds)
-          ? `darwin:${pid}:${startedAtMilliseconds}`
-          : undefined;
+        // Sandboxed macOS runners may deny process inspection. A module-local time estimate is
+        // not a process identity: independently loaded workers can disagree by one millisecond.
+        // Keep the owner unverifiable so lease age cannot release a live critical section.
+        return undefined;
       }
     }
   } catch {
