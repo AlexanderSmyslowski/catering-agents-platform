@@ -4,7 +4,9 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   buildBoundaryGuardedLlmAdapterFromEnv,
+  ingestDocument,
   loadByoLlmExternalProcessingApprovalFromEnv,
+  validateUploadedDocument,
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterResponse,
   type ProductionDraftReferenceAssessment,
@@ -118,12 +120,18 @@ function parseExpectation(filePath: string): ProductionDraftReferenceExpectation
 
 function parseArgs(argv: readonly string[]): ProductionReferenceCommandOptions {
   const values: Partial<Record<"sourcePath" | "expectationPath" | "provider" | "reportPath", string>> = {};
+  const keyForArgument: Record<string, keyof typeof values> = {
+    "--source": "sourcePath",
+    "--expectation": "expectationPath",
+    "--provider": "provider",
+    "--report": "reportPath"
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (!["--source", "--expectation", "--provider", "--report"].includes(arg)) {
+    const key = keyForArgument[arg];
+    if (!key) {
       throw new Error("unknown or malformed command argument");
     }
-    const key = arg.slice(2) as keyof typeof values;
     if (values[key] !== undefined) throw new Error("duplicate command argument");
     const value = argv[index + 1];
     if (!value || value.startsWith("--")) throw new Error("command arguments require a value");
@@ -142,6 +150,23 @@ function parseArgs(argv: readonly string[]): ProductionReferenceCommandOptions {
     provider: values.provider as ProductionReferenceProvider,
     reportPath: values.reportPath
   };
+}
+
+function mimeTypeForSourcePath(sourcePath: string): string {
+  switch (path.extname(sourcePath).toLowerCase()) {
+    case ".pdf":
+      return "application/pdf";
+    case ".txt":
+      return "text/plain";
+    case ".md":
+      return "text/markdown";
+    case ".eml":
+      return "message/rfc822";
+    case ".pages":
+      return "application/vnd.apple.pages";
+    default:
+      throw new Error("source file type is not supported");
+  }
 }
 
 function buildInput(sourceHash: string, caseId: string) {
@@ -219,10 +244,32 @@ export async function runProductionReferenceQualityCommand(
   const expectationPath = assertSafeRegularFile(options.expectationPath, "expectation");
   const reportPath = assertReportPath(options.reportPath);
   const expectation = parseExpectation(expectationPath);
-  const sourceBytes = readFileSync(sourcePath);
-  const sourceHash = sha256(sourceBytes);
   const promptSchema = findLlmReadinessPromptSchemaEntryByInputKind("production_draft_request");
   if (!promptSchema) throw new Error("production draft prompt schema is unavailable");
+  const sourceBytes = readFileSync(sourcePath);
+  const sourceHash = sha256(sourceBytes);
+  if (sourceHash !== expectation.sourceSha256) {
+    const report = reportFor(options, expectation, {
+      sourceSha256: sourceHash,
+      promptSchemaId: promptSchema.promptSchemaId,
+      promptArtifactId: promptSchema.promptArtifactId,
+      promptVersion: promptSchema.promptVersion,
+      errorClasses: ["source_contract_failed"]
+    });
+    writeReport(reportPath, report);
+    return { ok: false, reportPath, errorClasses: report.errorClasses };
+  }
+
+  const sourceDocument = {
+    filename: path.basename(sourcePath),
+    mimeType: mimeTypeForSourcePath(sourcePath),
+    content: sourceBytes
+  };
+  validateUploadedDocument(sourceDocument, "intake");
+  const ingestion = await ingestDocument({ document: sourceDocument, context: "intake" });
+  if (ingestion.status !== "extracted" || !ingestion.extractedText?.trim()) {
+    throw new Error("source document text extraction failed");
+  }
 
   const baseReport = reportFor(options, expectation, {
     sourceSha256: sourceHash,
@@ -230,18 +277,13 @@ export async function runProductionReferenceQualityCommand(
     promptArtifactId: promptSchema.promptArtifactId,
     promptVersion: promptSchema.promptVersion
   });
-  if (sourceHash !== expectation.sourceSha256) {
-    const report = { ...baseReport, errorClasses: ["source_contract_failed"] };
-    writeReport(reportPath, report);
-    return { ok: false, reportPath, errorClasses: report.errorClasses };
-  }
 
   const input = buildInput(sourceHash, expectation.caseId);
   const response = options.transport
     ? await options.transport.run({
         input,
         promptSchemaId: promptSchema.promptSchemaId,
-        promptContext: sourceBytes.toString("utf8")
+        promptContext: ingestion.extractedText
       })
     : await buildBoundaryGuardedLlmAdapterFromEnv(
         { ...env, CATERING_LLM_PROVIDER: options.provider },
@@ -250,7 +292,7 @@ export async function runProductionReferenceQualityCommand(
           {
             input,
             promptSchemaId: promptSchema.promptSchemaId,
-            promptContext: sourceBytes.toString("utf8")
+            promptContext: ingestion.extractedText
           },
           {
             businessId: env.CATERING_LLM_BUSINESS_ID ?? "local",
