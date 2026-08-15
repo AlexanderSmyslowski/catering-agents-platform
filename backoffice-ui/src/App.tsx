@@ -609,8 +609,7 @@ function ProductWorkspaceView({
     failPlanProgress
   } = useProductionPlanProgress();
   const manualSpecForm = useProductionManualSpecForm();
-  // Case-history search is server-side context navigation, not a workspace-record filter.
-  const workspaceSearchText = "";
+  const [workspaceSearchText, setWorkspaceSearchText] = useState("");
   const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
   const stagedProductionDocumentRef = useRef<StagedProductionDocument | undefined>(undefined);
@@ -647,7 +646,8 @@ function ProductWorkspaceView({
       dashboard,
       loading,
       route,
-      selectedDraftId
+      selectedDraftId,
+      workspaceSearchText
     ]
   );
 
@@ -702,7 +702,8 @@ function ProductWorkspaceView({
       focusedProductionSpecId,
       productionArtifactSpecIds,
       productionWorkspaceCleared,
-      route
+      route,
+      workspaceSearchText
     ]
   );
 
@@ -1243,6 +1244,27 @@ function ProductWorkspaceView({
   const routeContent = (
     <>
       <AppFeedbackShell error={loaderError ?? error} notice={notice} loading={loading} route={route} />
+
+      <section className="panel secondary-workspace" aria-labelledby={`${route}-workspace-filter-label`}>
+        <label
+          className="field-label"
+          id={`${route}-workspace-filter-label`}
+          htmlFor={`${route}-workspace-search`}
+        >
+          Aktiven Arbeitsbereich filtern
+        </label>
+        <input
+          id={`${route}-workspace-search`}
+          type="search"
+          value={workspaceSearchText}
+          onChange={(event) => setWorkspaceSearchText(event.target.value)}
+          placeholder="Spec, Plan, Rezept oder Audit suchen"
+          autoComplete="off"
+        />
+        <p className="helper-text">
+          Filtert nur sichtbare Arbeitsbereichsdaten; die Auftragshistorie bleibt unabhängig.
+        </p>
+      </section>
 
       <CaseHistoryPanel
         product={route === "offer" ? "offer" : "production"}

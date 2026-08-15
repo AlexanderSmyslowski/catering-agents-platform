@@ -594,6 +594,75 @@ describe("independent product loader boundaries", () => {
     expect(container.textContent).toContain("Küchenkontext");
   });
 
+  it("keeps case-history search separate from the local production-workspace filter", async () => {
+    const caseA = {
+      caseId: "case-a",
+      product: "production" as const,
+      displayName: "Fall A",
+      status: "open" as const,
+      createdAt: "",
+      updatedAt: ""
+    };
+    const loadProduct = vi.spyOn(api, "loadProductionProductData").mockImplementation(async (activeCaseId) => {
+      const matchingSpec = acceptedSpecSentinel("spec-a", "Küchenkontext");
+      matchingSpec.event = { type: "reception", date: "2026-08-20" };
+      matchingSpec.menuPlan = [{ componentId: "matching", label: "Küchenkontext" }] as never;
+      const unrelatedSpec = acceptedSpecSentinel("spec-b", "Nebenbestand");
+      unrelatedSpec.event = { type: "reception", date: "2026-08-21" };
+      unrelatedSpec.menuPlan = [{ componentId: "unrelated", label: "Nebenbestand" }] as never;
+      return {
+        ...productionProductData(
+          productionPlan("plan-a", "spec-a"),
+          { purchaseListId: "purchase-a", eventSpecId: "spec-a", items: [] },
+          activeCaseId ?? "case-a"
+        ),
+        workspace: {
+          ...productionProductData(
+            productionPlan("plan-a", "spec-a"),
+            { purchaseListId: "purchase-a", eventSpecId: "spec-a", items: [] },
+            activeCaseId ?? "case-a"
+          ).workspace,
+          cases: [caseA]
+        },
+        acceptedSpecs: [matchingSpec, unrelatedSpec]
+      };
+    });
+    const { container, fetchMock } = await renderAt("/produktion?productionCaseId=case-a");
+    await act(async () => {
+      await flush();
+    });
+
+    expect(loadProduct).toHaveBeenLastCalledWith("case-a");
+    const historySearch = container.querySelector("#production-case-history-search") as HTMLInputElement;
+    const workspaceSearch = container.querySelector("#production-workspace-search") as HTMLInputElement;
+    expect(workspaceSearch).not.toBeNull();
+    expect(workspaceSearch.type).toBe("search");
+    expect(container.querySelector("label[for='production-workspace-search']")?.textContent).toContain("Arbeitsbereich");
+
+    await act(async () => {
+      setNativeValue(workspaceSearch, "Küchen");
+      await flush();
+    });
+    expect(workspaceSearch.value).toBe("Küchen");
+    expect(historySearch.value).toBe("");
+    expect(container.textContent).toContain("Küchenkontext");
+    expect(container.textContent).not.toContain("Nebenbestand");
+
+    await act(async () => {
+      setNativeValue(historySearch, "menu.pdf");
+      await flush();
+    });
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/production/v1/production/cases?search=menu.pdf"))).toBe(true);
+    expect(workspaceSearch.value).toBe("Küchen");
+
+    await act(async () => {
+      setNativeValue(workspaceSearch, "");
+      await flush();
+    });
+    expect(historySearch.value).toBe("menu.pdf");
+    expect(container.textContent).toContain("2026-08-21");
+  });
+
   it("passes a positive offer sentinel through the offer shell loader and health boundary", async () => {
     const loadProduct = vi.spyOn(api, "loadOfferProductData").mockResolvedValue({
       workspace: {
