@@ -245,6 +245,16 @@ export async function runProductionReferenceQualityCommand(
   const reportPath = assertReportPath(options.reportPath);
   const expectation = parseExpectation(expectationPath);
   const sourceBytes = readFileSync(sourcePath);
+  const sourceHash = sha256(sourceBytes);
+  if (sourceHash !== expectation.sourceSha256) {
+    const report = reportFor(options, expectation, {
+      sourceSha256: sourceHash,
+      errorClasses: ["source_contract_failed"]
+    });
+    writeReport(reportPath, report);
+    return { ok: false, reportPath, errorClasses: report.errorClasses };
+  }
+
   const sourceDocument = {
     filename: path.basename(sourcePath),
     mimeType: mimeTypeForSourcePath(sourcePath),
@@ -255,7 +265,6 @@ export async function runProductionReferenceQualityCommand(
   if (ingestion.status !== "extracted" || !ingestion.extractedText?.trim()) {
     throw new Error("source document text extraction failed");
   }
-  const sourceHash = sha256(sourceBytes);
   const promptSchema = findLlmReadinessPromptSchemaEntryByInputKind("production_draft_request");
   if (!promptSchema) throw new Error("production draft prompt schema is unavailable");
 
@@ -265,11 +274,6 @@ export async function runProductionReferenceQualityCommand(
     promptArtifactId: promptSchema.promptArtifactId,
     promptVersion: promptSchema.promptVersion
   });
-  if (sourceHash !== expectation.sourceSha256) {
-    const report = { ...baseReport, errorClasses: ["source_contract_failed"] };
-    writeReport(reportPath, report);
-    return { ok: false, reportPath, errorClasses: report.errorClasses };
-  }
 
   const input = buildInput(sourceHash, expectation.caseId);
   const response = options.transport

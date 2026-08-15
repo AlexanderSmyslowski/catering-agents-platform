@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -42,11 +42,12 @@ function writeApproval(root: string): string {
   return approvalPath;
 }
 
-function adapter(capture: { promptContext?: string }): LlmReadinessProviderAdapter {
+function adapter(capture: { promptContext?: string; providerCalls?: number }): LlmReadinessProviderAdapter {
   return {
     adapterId: "injected-provider-test",
     adapterMode: "synthetic_live",
     async run(request) {
+      capture.providerCalls = (capture.providerCalls ?? 0) + 1;
       capture.promptContext = request.promptContext;
       return {
         ok: true,
@@ -139,6 +140,49 @@ describe("post-merge production reference P1 regressions", () => {
     }
   });
 
+  it("writes a source contract report without extracting or calling the provider when the hash mismatches", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-reference-p1-hash-"));
+    roots.push(root);
+    const pdfBytes = Buffer.from("%PDF-1.7\nwrong source bytes\n%%EOF\n", "latin1");
+    const sourcePath = path.join(root, "source.pdf");
+    const expectationPath = path.join(root, "expectation.json");
+    const reportPath = path.join(root, "report.json");
+    writeFileSync(sourcePath, pdfBytes);
+    writeFileSync(expectationPath, JSON.stringify({
+      ...expectation,
+      sourceSha256: `sha256:${"0".repeat(64)}`
+    }));
+
+    let extractionCalls = 0;
+    vi.mocked(pdf).mockImplementation(async () => {
+      extractionCalls += 1;
+      throw new Error("PDF extraction must not run for a mismatched source");
+    });
+    const capture: { promptContext?: string; providerCalls?: number } = {};
+    const result = await runProductionReferenceQualityCommand({
+      sourcePath,
+      expectationPath,
+      provider: "codex_cli",
+      reportPath,
+      env: {
+        CATERING_LLM_PROCESSING_APPROVAL_FILE: writeApproval(root),
+        CATERING_LLM_MODEL: "injected-model"
+      },
+      transport: adapter(capture)
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reportPath).toBe(path.join(realpathSync(path.dirname(reportPath)), path.basename(reportPath)));
+    expect(result.errorClasses).toEqual(["source_contract_failed"]);
+    expect(extractionCalls).toBe(0);
+    expect(capture.providerCalls).toBeUndefined();
+    expect(JSON.parse(readFileSync(reportPath, "utf8"))).toMatchObject({
+      ok: false,
+      sourceSha256: `sha256:${createHash("sha256").update(pdfBytes).digest("hex")}`,
+      errorClasses: ["source_contract_failed"]
+    });
+  });
+
   it("passes extracted PDF text to the provider while hashing the original bytes", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-reference-p1-pdf-"));
     roots.push(root);
@@ -150,12 +194,14 @@ describe("post-merge production reference P1 regressions", () => {
     writeFileSync(sourcePath, pdfBytes);
     writeFileSync(expectationPath, JSON.stringify({ ...expectation, sourceSha256: sourceHash }));
 
+    let extractionCalls = 0;
     vi.mocked(pdf).mockImplementation(async (received) => {
+      extractionCalls += 1;
       expect(Buffer.from(received).subarray(0, 8).toString("latin1")).toBe("%PDF-1.7");
       return { text: "Kaffee und Kuchen · extrahierter Angebotstext" } as Awaited<ReturnType<typeof pdf>>;
     });
 
-    const capture: { promptContext?: string } = {};
+    const capture: { promptContext?: string; providerCalls?: number } = {};
     const result = await runProductionReferenceQualityCommand({
       sourcePath,
       expectationPath,
@@ -169,6 +215,8 @@ describe("post-merge production reference P1 regressions", () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(extractionCalls).toBe(1);
+    expect(capture.providerCalls).toBe(1);
     expect(capture.promptContext).toBe("Kaffee und Kuchen · extrahierter Angebotstext");
     expect(capture.promptContext).not.toContain("%PDF-1.7");
     expect(readFileSync(reportPath, "utf8")).toContain(sourceHash);
@@ -184,8 +232,15 @@ describe("post-merge production reference P1 regressions", () => {
       CATERING_LLM_MODEL: "injected-model"
     };
 
+    const writeExpectationFor = (content: Uint8Array) => writeFileSync(expectationPath, JSON.stringify({
+      ...expectation,
+      sourceSha256: `sha256:${createHash("sha256").update(content).digest("hex")}`
+    }));
+
     const unsupportedPath = path.join(root, "source.csv");
-    writeFileSync(unsupportedPath, "not a supported document");
+    const unsupportedBytes = Buffer.from("not a supported document");
+    writeFileSync(unsupportedPath, unsupportedBytes);
+    writeExpectationFor(unsupportedBytes);
     await expect(runProductionReferenceQualityCommand({
       sourcePath: unsupportedPath,
       expectationPath,
@@ -196,7 +251,9 @@ describe("post-merge production reference P1 regressions", () => {
     })).rejects.toThrow(/source file type is not supported/i);
 
     const oversizedPath = path.join(root, "oversized.pdf");
-    writeFileSync(oversizedPath, Buffer.alloc(25 * 1024 * 1024 + 1, 0x41));
+    const oversizedBytes = Buffer.alloc(25 * 1024 * 1024 + 1, 0x41);
+    writeFileSync(oversizedPath, oversizedBytes);
+    writeExpectationFor(oversizedBytes);
     await expect(runProductionReferenceQualityCommand({
       sourcePath: oversizedPath,
       expectationPath,
@@ -207,7 +264,9 @@ describe("post-merge production reference P1 regressions", () => {
     })).rejects.toThrow(/zu groß|maximal/i);
 
     const unreadablePath = path.join(root, "unreadable.pdf");
-    writeFileSync(unreadablePath, "%PDF-1.7\nraw syntax\n%%EOF\n", "latin1");
+    const unreadableBytes = Buffer.from("%PDF-1.7\nraw syntax\n%%EOF\n", "latin1");
+    writeFileSync(unreadablePath, unreadableBytes);
+    writeExpectationFor(unreadableBytes);
     vi.mocked(pdf).mockResolvedValue({ text: "%PDF-1.7\nraw syntax" } as Awaited<ReturnType<typeof pdf>>);
     await expect(runProductionReferenceQualityCommand({
       sourcePath: unreadablePath,

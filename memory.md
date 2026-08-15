@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.357
+version: 5.358
 date: 2026-08-15
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1728,3 +1728,8 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - PR 611 repariert die dokumentierten Produktionsreferenz-CLI-Flags: `--source`, `--expectation`, `--provider` und `--report` werden explizit auf `sourcePath`, `expectationPath`, `provider` und `reportPath` abgebildet; unbekannte, doppelte, fehlende oder wertlose Argumente bleiben fail-closed. Der korrigierte Runner ist mit 4/4 fokussierten P1-Regressionsfällen sowie TypeScript, Build und Shell-Syntax geprüft.
 - PDF-Produktionsreferenzen laufen über den bestehenden `validateUploadedDocument`-/`ingestDocument`-Pfad; der Provider erhält extrahierten Text statt PDF-Rohbytes, während der SHA-256-Bezug den unveränderten Originalbytes gilt. Der lokale Test prüft die Extraktion mit injiziertem Offline-Transport; ein echter externer Provideraufruf ist nicht Bestandteil des Nachweises.
 - Der Scope bleibt auf die bereits geprüften zwei Reparaturdateien plus diese Memory-Historie begrenzt. Keine neue API, Persistenz, Migration, Deploymentlogik oder Produktdaten; unterstützte Dateityp-, Größen-, Lesbarkeits-, Autorisierungs- und Providerfehler bleiben fail-closed. Die bekannten lokalen Critical-Section-Ausnahmen sind gegenüber der Basis unverändert und werden nicht als grüner Vollsuite-Nachweis ausgegeben; PR-CI 31864109063 (build-and-test 94962287506, browser-rehearsal 94962287484) war am unveränderten Reparatur-Head terminal grün.
+
+### 5.358 - 2026-08-15
+
+- Der Produktionsreferenz-Runner prüft nach Pfad- und Autorisierungsprüfung den SHA-256 der gelesenen Originalbytes vor Dokumentvalidierung und Textextraktion. Bei einer Abweichung wird deterministisch `source_contract_failed` berichtet, ohne PDF-/Dokumentparser oder Providertransport aufzurufen; bei identischem Hash bleibt der bestehende Validierungs-, Extraktions- und PDF-Erfolgspfad erhalten.
+- Der P2-Regressionsvertrag belegt diesen Reihenfolgeanker, den unveränderten Originalbyte-Hash im Report, den einmaligen Extraktions- und Provideraufruf bei Übereinstimmung sowie die bisherigen fail-closed Quellenfehler. Es gibt keine neue API, Persistenz, Migration oder externe Providerausführung.
