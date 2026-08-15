@@ -1,5 +1,4 @@
 import {
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -610,7 +609,8 @@ function ProductWorkspaceView({
     failPlanProgress
   } = useProductionPlanProgress();
   const manualSpecForm = useProductionManualSpecForm();
-  const deferredSearch = useDeferredValue(historySearch);
+  // Case-history search is server-side context navigation, not a workspace-record filter.
+  const workspaceSearchText = "";
   const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
   const stagedProductionDocumentRef = useRef<StagedProductionDocument | undefined>(undefined);
@@ -640,12 +640,11 @@ function ProductWorkspaceView({
         dashboard,
         route,
         loading,
-        searchText: deferredSearch,
+        searchText: workspaceSearchText,
         selectedDraftId
       }),
     [
       dashboard,
-      deferredSearch,
       loading,
       route,
       selectedDraftId
@@ -695,11 +694,10 @@ function ProductWorkspaceView({
         productionArtifactSpecIds,
         productionWorkspaceCleared,
         route,
-        searchText: deferredSearch
+        searchText: workspaceSearchText
       }),
     [
       dashboard.acceptedSpecs,
-      deferredSearch,
       filteredSpecs,
       focusedProductionSpecId,
       productionArtifactSpecIds,

@@ -541,6 +541,59 @@ describe("independent product loader boundaries", () => {
     expect(loadProduct).not.toHaveBeenCalledWith("case-b");
   });
 
+  it("keeps the active production context when history search matches only a source filename", async () => {
+    const caseA = {
+      caseId: "case-a",
+      product: "production" as const,
+      displayName: "Fall A",
+      status: "open",
+      createdAt: "",
+      updatedAt: ""
+    };
+    const loadProduct = vi.spyOn(api, "loadProductionProductData").mockImplementation(async (activeCaseId) => {
+      if (!activeCaseId) {
+        return {
+          ...productionProductData(),
+          workspace: {
+            ...productionProductData().workspace,
+            cases: [caseA]
+          }
+        } as unknown as ProductionProductData;
+      }
+
+      const acceptedSpec = acceptedSpecSentinel("spec-a", "Küchenkontext");
+      acceptedSpec.menuPlan = [{ componentId: "context", label: "Küchenkontext" }] as never;
+      return {
+        ...productionProductData(
+          productionPlan("plan-a", "spec-a"),
+          { purchaseListId: "purchase-a", eventSpecId: "spec-a", items: [] },
+          activeCaseId
+        ),
+        acceptedSpecs: [acceptedSpec]
+      };
+    });
+    const { container, fetchMock } = await renderAt("/produktion?productionCaseId=case-a");
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/production/v1/production/cases?search=")) {
+        return Response.json({ items: [caseA] });
+      }
+      return responseFor(url);
+    });
+
+    expect(loadProduct).toHaveBeenLastCalledWith("case-a");
+    expect(container.textContent).toContain("Küchenkontext");
+
+    const historySearch = container.querySelector("#production-case-history-search") as HTMLInputElement;
+    await act(async () => {
+      setNativeValue(historySearch, "menu.pdf");
+      await flush();
+    });
+
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/production/v1/production/cases?search=menu.pdf"))).toBe(true);
+    expect(container.textContent).toContain("Küchenkontext");
+  });
+
   it("passes a positive offer sentinel through the offer shell loader and health boundary", async () => {
     const loadProduct = vi.spyOn(api, "loadOfferProductData").mockResolvedValue({
       workspace: {

@@ -66,6 +66,13 @@ export interface LegacyMigrationReader<T> {
   get(id: string): Promise<T | undefined>;
 }
 
+type LegacyMigrationReaderOptions<T> = CollectionStorageOptions & {
+  collectionName: string;
+  getId: (item: T) => string;
+  getVersion?: (item: T) => number | undefined;
+  validate?: (value: T) => T;
+};
+
 function sanitizeKey(key: string): string {
   return encodeURIComponent(key);
 }
@@ -770,9 +777,17 @@ export function createPersistentCollection<T>(
 }
 
 export function createLegacyMigrationReader<T>(
-  options: PersistentCollectionOptions<T>
+  options: LegacyMigrationReaderOptions<T>
 ): LegacyMigrationReader<T> {
-  const collection = createPersistentCollection(options);
+  const collection = createPersistentCollection({
+    rootDir: options.rootDir,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool,
+    collectionName: options.collectionName,
+    getId: options.getId,
+    getVersion: options.getVersion,
+    validate: options.validate
+  });
   return {
     list: () => collection.list(),
     get: (id) => collection.get(id)
