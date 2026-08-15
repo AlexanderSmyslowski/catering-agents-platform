@@ -57,6 +57,14 @@ export interface TrustedActorRequest {
   headers: Record<string, string | string[] | undefined>;
 }
 
+export function assertTrustedActorConfiguration(
+  options: Pick<TrustedActorOptions, "requireTrustedBusinessId" | "trustedActorSecret">
+): void {
+  if (options.requireTrustedBusinessId && !options.trustedActorSecret?.trim()) {
+    throw new Error("CATERING_TRUSTED_ACTOR_SECRET must be configured for hosted profile.");
+  }
+}
+
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) {
     return value[0];
@@ -310,6 +318,8 @@ export function trustedActorFromHeaders(
 export function createTrustedActorResolver<TRequest extends TrustedActorRequest>(
   options: TrustedActorOptions | ((request: TRequest) => TrustedActorOptions)
 ): (request: TRequest) => TrustedActor {
+  if (typeof options !== "function") assertTrustedActorConfiguration(options);
+
   const actorByRequest = new WeakMap<object, TrustedActor>();
   return (request) => {
     const cached = actorByRequest.get(request);
