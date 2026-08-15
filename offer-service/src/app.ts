@@ -2,6 +2,7 @@ import Fastify, { type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import {
   AuditLogStore,
+  assertBusinessId,
   createTrustedActorResolver,
   createOfferDraft,
   createUploadSourceMetadata,
@@ -120,6 +121,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   const env = options.env ?? process.env;
   const defaultBusinessContext = { businessId: env.CATERING_DEFAULT_BUSINESS_ID ?? "local" };
   const hosted = env.CATERING_DEPLOYMENT_PROFILE === "hosted";
+  if (hosted) assertBusinessId(defaultBusinessContext.businessId);
   if (hosted && !hostedMultiBusinessReady) {
     throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
   }

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +12,7 @@ import { ProductionDraftReviewPanel } from "../backoffice-ui/src/production-draf
 import { ProductionQuestionPanel, type ProductionQuestionPanelProps } from "../backoffice-ui/src/production-question-panel.js";
 import { useOfferWorkspaceData } from "../backoffice-ui/src/use-offer-workspace-data.js";
 import { useProductionWorkspaceData } from "../backoffice-ui/src/use-production-workspace-data.js";
+import { buildProductProductionDashboardRecordsState } from "../backoffice-ui/src/production-dashboard-records-state.js";
 import * as api from "../backoffice-ui/src/api.js";
 import type { ProductionDraft, ProductionProductData } from "../backoffice-ui/src/api.js";
 
@@ -661,6 +664,50 @@ describe("independent product loader boundaries", () => {
     });
     expect(historySearch.value).toBe("menu.pdf");
     expect(container.textContent).toContain("2026-08-21");
+  });
+
+  it("filters every active production record family through the same workspace query", () => {
+    const state = buildProductProductionDashboardRecordsState({
+      acceptedSpecs: [
+        acceptedSpecSentinel("spec-kitchen", "Küchenkontext"),
+        acceptedSpecSentinel("spec-other", "Nebenbestand")
+      ],
+      productionPlans: [
+        { planId: "plan-kitchen", eventSpecId: "spec-kitchen", label: "Küchenplan" },
+        { planId: "plan-other", eventSpecId: "spec-other", label: "Nebenplan" }
+      ] as never,
+      purchaseLists: [
+        { purchaseListId: "purchase-kitchen", eventSpecId: "spec-kitchen", label: "Kücheneinkauf" },
+        { purchaseListId: "purchase-other", eventSpecId: "spec-other", label: "Nebeneinkauf" }
+      ] as never,
+      recipes: [
+        { recipeId: "recipe-kitchen", name: "Küchenrezept" },
+        { recipeId: "recipe-other", name: "Nebenrezept" }
+      ] as never,
+      auditEvents: [
+        { auditId: "audit-kitchen", summary: "Küchenprüfung" },
+        { auditId: "audit-other", summary: "Nebenprüfung" }
+      ] as never,
+      searchText: "Küchen"
+    });
+
+    expect(state.filteredSpecs.map((item) => item.specId)).toEqual(["spec-kitchen"]);
+    expect(state.orderedPlans.map((item) => item.planId)).toEqual(["plan-kitchen"]);
+    expect(state.orderedPurchaseLists.map((item) => item.purchaseListId)).toEqual(["purchase-kitchen"]);
+    expect(state.filteredRecipes.map((item) => item.recipeId)).toEqual(["recipe-kitchen"]);
+    expect(state.filteredAuditEvents.map((item) => item.auditId)).toEqual(["audit-kitchen"]);
+  });
+
+  it("keeps US-037 mapped to the independent production-workspace proof", () => {
+    const tracker = readFileSync(
+      path.resolve(import.meta.dirname, "../docs/product/CANONICAL_USER_STORY_TRACKER.csv"),
+      "utf8"
+    );
+    const row = tracker.split("\n").find((line) => line.startsWith("US-037,"));
+    expect(row).toBeDefined();
+    expect(row).toContain("backoffice-ui/src/App.tsx; backoffice-ui/src/app-dashboard-route-state.ts; backoffice-ui/src/production-dashboard-records-state.ts");
+    expect(row).toContain("tests/product-shell-data-boundary.test.tsx");
+    expect(row).not.toContain("tests/stage-a-product-flow.test.tsx");
   });
 
   it("passes a positive offer sentinel through the offer shell loader and health boundary", async () => {

@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildOfferApp } from "@catering/offer-service";
-import { AuditLogStore } from "@catering/shared-core";
+import { AuditLogStore, type EventRequest, type UploadSourceMetadata } from "@catering/shared-core";
 import { buildIntakeApp } from "../intake-service/src/app.js";
+import { IntakeStore } from "../intake-service/src/store.js";
 import { createSourceDocumentStore } from "../intake-service/src/source-document-store.js";
 import { HttpSourceDocumentMetadataReader } from "../offer-service/src/gateways/http-source-document-metadata-reader.js";
 import { OfferStore } from "../offer-service/src/store.js";
@@ -62,7 +63,7 @@ async function createCase(app: ReturnType<typeof buildOfferApp>) {
   return response.json<{ case: { caseId: string } }>().case.caseId;
 }
 
-function eventRequest(documentId: string, sourceMetadata: Record<string, unknown>) {
+function eventRequest(documentId: string, sourceMetadata: UploadSourceMetadata): EventRequest {
   return {
     schemaVersion: "1.0.0",
     requestId: `request-${documentId}`,
@@ -82,9 +83,20 @@ afterEach(() => {
 
 describe("serverseitige Angebots-Provenienzbrücke", () => {
   it("uses only server-verified source metadata for the case history", async () => {
+    const canonicalRequest = eventRequest("source-server-1", {
+      filename: serverMetadata.filename,
+      mimeType: serverMetadata.mimeType,
+      sizeBytes: serverMetadata.sizeBytes,
+      sha256: serverMetadata.sha256,
+      ingestedAt: serverMetadata.createdAt,
+      uploadContext: "intake"
+    });
     const reader: SourceDocumentMetadataReader = {
       getMetadata: vi.fn(async (_context, documentId) =>
         documentId === "source-server-1" ? serverMetadata : undefined
+      ),
+      getRequest: vi.fn(async (_context, requestId) =>
+        requestId === canonicalRequest.requestId ? canonicalRequest : undefined
       )
     };
     const harness = buildHarness(reader);
@@ -122,9 +134,54 @@ describe("serverseitige Angebots-Provenienzbrücke", () => {
     expect(JSON.stringify(sourceEvent)).not.toContain("client-forged.pdf");
   });
 
+  it("rejects client content when it conflicts with the server-owned intake request", async () => {
+    const canonicalRequest = eventRequest("source-server-1", {
+      filename: serverMetadata.filename,
+      mimeType: serverMetadata.mimeType,
+      sizeBytes: serverMetadata.sizeBytes,
+      sha256: serverMetadata.sha256,
+      ingestedAt: serverMetadata.createdAt,
+      uploadContext: "intake"
+    });
+    const reader: SourceDocumentMetadataReader = {
+      getMetadata: vi.fn(async () => serverMetadata),
+      getRequest: vi.fn(async (_context, requestId) =>
+        requestId === canonicalRequest.requestId ? canonicalRequest : undefined
+      )
+    };
+    const harness = buildHarness(reader);
+    const caseId = await createCase(harness.app);
+    const forged = eventRequest("source-server-1", {
+      filename: serverMetadata.filename,
+      mimeType: serverMetadata.mimeType,
+      sizeBytes: serverMetadata.sizeBytes,
+      sha256: serverMetadata.sha256,
+      ingestedAt: serverMetadata.createdAt,
+      uploadContext: "intake"
+    });
+    forged.rawInputs[0].content = "client-controlled replacement";
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/v1/offers/drafts",
+      headers,
+      payload: { caseId, ...forged }
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(await harness.store.listEvents({ businessId: "alpha" }, caseId)).toHaveLength(1);
+  });
+
   it("rejects an unregistered document before any draft or source event is written", async () => {
     const reader: SourceDocumentMetadataReader = {
-      getMetadata: vi.fn(async () => undefined)
+      getMetadata: vi.fn(async () => undefined),
+      getRequest: vi.fn(async () => eventRequest("source-unknown", {
+        filename: "unknown.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 1,
+        sha256: "b".repeat(64),
+        ingestedAt: "2026-08-13T10:00:00.000Z",
+        uploadContext: "intake"
+      }))
     };
     const harness = buildHarness(reader);
     const caseId = await createCase(harness.app);
@@ -190,14 +247,25 @@ describe("serverseitige Angebots-Provenienzbrücke", () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-offer-provenance-intake-"));
     roots.push(rootDir);
     const sourceDocumentStore = createSourceDocumentStore({ rootDir });
+    const intakeStore = new IntakeStore({ rootDir });
     const content = new Uint8Array(42);
     const registeredMetadata = {
       ...serverMetadata,
       sha256: createHash("sha256").update(content).digest("hex")
     } satisfies StoredSourceDocument;
     await sourceDocumentStore.insert({ businessId: "alpha" }, registeredMetadata, content);
+    const canonicalRequest = eventRequest(registeredMetadata.documentId, {
+      filename: registeredMetadata.filename,
+      mimeType: registeredMetadata.mimeType,
+      sizeBytes: registeredMetadata.sizeBytes,
+      sha256: registeredMetadata.sha256,
+      ingestedAt: registeredMetadata.createdAt,
+      uploadContext: "intake"
+    });
+    await intakeStore.saveRequest({ businessId: "alpha" }, canonicalRequest);
     const intakeApp = buildIntakeApp({
       rootDir,
+      store: intakeStore,
       sourceDocumentStore,
       trustedActorSecret: trustedSecret,
       env: {
@@ -226,6 +294,8 @@ describe("serverseitige Angebots-Provenienzbrücke", () => {
       .resolves.toEqual(registeredMetadata);
     await expect(reader.getMetadata({ businessId: "beta" }, registeredMetadata.documentId))
       .rejects.toThrow("Quelldokument");
+    await expect(reader.getRequest({ businessId: "alpha" }, canonicalRequest.requestId))
+      .resolves.toEqual(canonicalRequest);
     await intakeApp.close();
   });
 });

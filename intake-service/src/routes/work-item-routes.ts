@@ -105,11 +105,20 @@ export function registerIntakeWorkItemRoutes(
     return actor.trusted && actor.name === "Production-Service" ? actor : undefined;
   };
 
+  const internalRequestReaderActor = (
+    request: { headers: Record<string, string | string[] | undefined> }
+  ): TrustedActor | undefined => {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    return actor.trusted && (actor.name === "Production-Service" || actor.name === "Offer-Service")
+      ? actor
+      : undefined;
+  };
+
   app.get<{ Params: { requestId: string } }>(
     "/v1/intake/internal/requests/:requestId",
     async (request, reply) => {
-      const actor = productionServiceActor(request);
-      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      const actor = internalRequestReaderActor(request);
+      if (!actor) return reply.code(403).send({ message: "Interner Request-Leser erforderlich." });
       const eventRequest = await store.getRequest(actor, request.params.requestId);
       if (!eventRequest) return reply.code(404).send({ message: "EventRequest nicht gefunden." });
       return reply.send({ eventRequest: validateEventRequest(eventRequest) });

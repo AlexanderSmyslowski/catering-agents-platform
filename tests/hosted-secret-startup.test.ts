@@ -48,7 +48,8 @@ describe("hosted trusted actor startup contract", () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-hosted-configured-"));
     const env = {
       ...hostedWithoutSecret,
-      CATERING_TRUSTED_ACTOR_SECRET: "test-only-hosted-secret"
+      CATERING_TRUSTED_ACTOR_SECRET: "test-only-hosted-secret",
+      CATERING_DEFAULT_BUSINESS_ID: "acme-main"
     };
     const apps = [
       buildIntakeApp({ rootDir, env }),
@@ -59,6 +60,25 @@ describe("hosted trusted actor startup contract", () => {
 
     for (const app of apps) {
       await app.close();
+    }
+  });
+
+  it("rejects an invalid hosted default business ID before any service starts", () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-hosted-business-id-"));
+    const env = {
+      ...hostedWithoutSecret,
+      CATERING_TRUSTED_ACTOR_SECRET: "test-only-hosted-secret",
+      CATERING_DEFAULT_BUSINESS_ID: "INVALID BUSINESS ID"
+    };
+    const builders: Array<[string, () => unknown]> = [
+      ["intake", () => buildIntakeApp({ rootDir, env })],
+      ["offer", () => buildOfferApp({ rootDir, env })],
+      ["production", () => buildProductionApp({ dataRoot: rootDir, env })],
+      ["print export", () => buildPrintExportApp({ rootDir, env })]
+    ];
+
+    for (const [name, build] of builders) {
+      expect(build, name).toThrow("Ungültige Betriebskennung.");
     }
   });
 });
