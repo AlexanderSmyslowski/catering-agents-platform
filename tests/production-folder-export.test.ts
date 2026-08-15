@@ -452,6 +452,16 @@ describe("production folder export", () => {
     expect(html).toMatch(/\.recipe-card, \.purchase-group\s*{\s*break-after:\s*page;\s*page-break-after:\s*always;/);
   });
 
+  it("covers every recipe ingredient in the purchase list", () => {
+    const input = fixture();
+    const purchasedIngredientIds = new Set(
+      input.purchaseList.items.flatMap((item) => item.sourceRecipes.includes(input.recipe.recipeId) ? [item.ingredientId] : [])
+    );
+    for (const ingredient of input.recipe.ingredients) {
+      expect(purchasedIngredientIds, ingredient.name).toContain(ingredient.ingredientId);
+    }
+  });
+
   it("states honestly when a linked recipe card is unavailable", () => {
     const input = fixture();
     const html = renderProductionFolderHtml({

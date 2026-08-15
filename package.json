@@ -17,6 +17,7 @@
     "checkpoint": "bash ./scripts/create-checkpoint.sh",
     "import:recipes:caterings": "tsx scripts/import-catering-recipes.ts",
     "import:recipes:koepff": "tsx scripts/import-koepff-recipes.ts",
+    "quality:production-reference": "tsx scripts/check-production-reference-case.ts",
     "import:offer-portfolio": "tsx scripts/import-offer-portfolio.ts",
     "local:start": "bash ./scripts/start-local-stack.sh",
     "local:start:demo": "bash ./scripts/start-local-stack.sh --seed-demo",

@@ -43,6 +43,7 @@ export * from "./llm-readiness.js";
 export * from "./persistence.js";
 export * from "./json-equality.js";
 export * from "./production-clarification.js";
+export * from "./production-reference-quality.js";
 export * from "./production-apply-manifest.js";
 export * from "./recipe-research-calculation-boundary.js";
 export * from "./recipe-library.js";
