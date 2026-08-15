@@ -8,11 +8,12 @@ export function productionDraftIdForHandoff(handoffId: string): string {
   return `production-draft-handoff-${handoffId}`;
 }
 
-export function productionDraftEntryUrl(draftId: string): string {
+export function productionDraftEntryUrl(draftId: string, productionCaseId?: string): string {
   const encodedDraftId = encodeURIComponent(draftId);
-  return `/produktion?productionDraftId=${encodedDraftId}#${productionDraftEntryId(draftId)}`;
+  const encodedCaseId = productionCaseId ? `&productionCaseId=${encodeURIComponent(productionCaseId)}` : "";
+  return `/produktion?productionDraftId=${encodedDraftId}${encodedCaseId}#${productionDraftEntryId(draftId)}`;
 }
 
-export function openProductionDraftEntry(draftId: string): void {
-  if (typeof window !== "undefined") window.location.assign(productionDraftEntryUrl(draftId));
+export function openProductionDraftEntry(draftId: string, productionCaseId?: string): void {
+  if (typeof window !== "undefined") window.location.assign(productionDraftEntryUrl(draftId, productionCaseId));
 }

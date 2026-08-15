@@ -12,6 +12,8 @@ export interface CaseNextActionInput {
   nextReviewTargetId?: string;
   approvedOfferId?: string;
   handoffId?: string;
+  /** Distinguish a verified persisted binding from contradictory server IDs. */
+  approvalBindingState?: "valid" | "invalid" | "absent";
   approvedProductionSpecId?: string;
   resultArtifactId?: string;
 }
@@ -46,6 +48,16 @@ export function buildCaseNextAction(input: CaseNextActionInput): CaseNextAction 
     return { kind: "inspect_result", label: "Ergebnis öffnen", artifactId: input.resultArtifactId };
   }
 
+  if (input.product === "offer" && input.approvalBindingState === "invalid") {
+    return nonEmpty(input.currentDraftId)
+      ? {
+          kind: "review_draft",
+          label: "Nächsten Prüfpunkt öffnen",
+          targetId: input.nextReviewTargetId?.trim() || input.currentDraftId
+        }
+      : { kind: "add_source", label: "Quelle hinzufügen" };
+  }
+
   if (input.product === "offer" && nonEmpty(input.handoffId)) {
     return { kind: "inspect_handoff", label: "Übergabe öffnen", handoffId: input.handoffId };
   }
@@ -56,6 +68,10 @@ export function buildCaseNextAction(input: CaseNextActionInput): CaseNextAction 
       label: "Plan und Einkauf erstellen",
       approvedProductionSpecId: input.approvedProductionSpecId
     };
+  }
+
+  if (input.product === "offer" && nonEmpty(input.approvedOfferId)) {
+    return { kind: "send_handoff", label: "An Produktion übergeben", approvedOfferId: input.approvedOfferId };
   }
 
   if (input.draftState === "change_requested" && nonEmpty(input.currentDraftId)) {
@@ -82,10 +98,6 @@ export function buildCaseNextAction(input: CaseNextActionInput): CaseNextAction 
 
   if (input.product === "production" && input.draftState === "ready_for_approval" && nonEmpty(input.currentDraftId)) {
     return { kind: "approve_production", label: "Produktionsstand freigeben", draftId: input.currentDraftId };
-  }
-
-  if (input.product === "offer" && nonEmpty(input.approvedOfferId)) {
-    return { kind: "send_handoff", label: "An Produktion übergeben", approvedOfferId: input.approvedOfferId };
   }
 
   if (!input.hasSource) {

@@ -143,6 +143,14 @@ function consumePromotedProductionSpecFocus(route: string): string | undefined {
   return specId || undefined;
 }
 
+function productionCaseIdFromLocation(route: string): string | undefined {
+  if (route !== "production" || typeof window === "undefined") {
+    return undefined;
+  }
+  const caseId = new URLSearchParams(window.location.search).get("productionCaseId")?.trim();
+  return caseId || undefined;
+}
+
 type ProductWorkspaceProps = {
   route: Exclude<AppRoute, "home">;
   dashboard: ProductRouteDashboard;
@@ -162,6 +170,7 @@ type ProductWorkspaceProps = {
   currentOfferApprovedOfferId?: string;
   currentOfferHandoffId?: string;
   currentOfferApprovalBinding?: OfferApprovalBinding;
+  resolveProductionCaseFromHandoff?: (handoffId: string) => Promise<{ caseId: string }>;
   currentProductionDraftId?: string;
   currentProductionDraft?: ProductionDraft;
   currentApprovedProductionSpecId?: string;
@@ -230,7 +239,8 @@ export type ProductWorkspaceNextActionContext = {
   offerWorkbenchState: Pick<OfferWorkbenchProps, "approveDraft" | "createHandoff">;
   offerApprovalBinding?: OfferApprovalBinding;
   activeOfferDraft?: OfferDraft;
-  openProductionEntry?: (draftId: string) => void;
+  openProductionEntry?: (draftId: string, productionCaseId?: string) => void;
+  resolveProductionCaseFromHandoff?: (handoffId: string) => Promise<{ caseId: string }>;
   setSelectedDraftId?: (draftId: string) => void;
   decideProductionDraft?: (draftId: string, decision: "approved" | "rejected") => Promise<unknown>;
   reviseProductionDraft?: (draftId: string) => Promise<unknown>;
@@ -294,8 +304,19 @@ export async function runProductWorkspaceNextAction(
       }
       return;
     case "inspect_handoff":
+      if (
+        input.route !== "offer" ||
+        !input.offerApprovalBinding?.handoffId ||
+        input.offerApprovalBinding.handoffId !== action.handoffId
+      ) {
+        throw new Error("Übergabe ist ohne bestätigte Angebotsbindung nicht zulässig.");
+      }
+      if (!input.resolveProductionCaseFromHandoff) {
+        throw new Error("Produktionsfall der Übergabe konnte nicht aufgelöst werden.");
+      }
+      const productionCase = await input.resolveProductionCaseFromHandoff(action.handoffId);
       input.setNotice(`Übergabe ${action.handoffId} wurde geöffnet.`);
-      input.openProductionEntry?.(productionDraftIdForHandoff(action.handoffId));
+      input.openProductionEntry?.(productionDraftIdForHandoff(action.handoffId), productionCase.caseId);
       return;
     case "approve_production":
       if (input.route !== "production" || !input.decideProductionDraft || !input.refreshDashboard) {
@@ -394,6 +415,7 @@ function ProductWorkspaceView({
   currentOfferApprovedOfferId,
   currentOfferHandoffId,
   currentOfferApprovalBinding,
+  resolveProductionCaseFromHandoff,
   currentProductionDraftId,
   currentProductionDraft,
   currentApprovedProductionSpecId,
@@ -432,6 +454,22 @@ function ProductWorkspaceView({
   const [selectedDraftId, setSelectedDraftId] = useState<string>();
   const [selectedVariantId, setSelectedVariantId] = useState<string>();
   const [offerApprovalBinding, setOfferApprovalBinding] = useState<OfferApprovalBinding | undefined>(currentOfferApprovalBinding);
+  const persistedApprovalDataPresent = Boolean(currentOfferApprovedOfferId || currentOfferHandoffId);
+  const localBindingForCurrentDraft = offerApprovalBinding &&
+    offerApprovalBinding.offerDraftId === activeOfferDraftId
+    ? offerApprovalBinding
+    : undefined;
+  const effectiveOfferApprovalBinding = currentOfferApprovalBinding ??
+    (persistedApprovalDataPresent ? undefined : localBindingForCurrentDraft);
+  const approvalBindingState = route === "offer"
+    ? currentOfferApprovalBinding
+      ? "valid"
+      : currentOfferApprovedOfferId || currentOfferHandoffId
+        ? "invalid"
+        : localBindingForCurrentDraft
+          ? "valid"
+          : "absent"
+    : undefined;
   const [selectedPlanId, setSelectedPlanId] = useState<string>();
   const [initialProductionWorkspace] = useState(() => {
     const focusedSpecId = consumePromotedProductionSpecFocus(route);
@@ -1109,7 +1147,7 @@ function ProductWorkspaceView({
      filteredOfferDrafts: buildRecordViewProjection(filteredOfferDrafts),
      activeDraft: activeOfferDraft ? buildRecordView(activeOfferDraft) : undefined,
      selectedDraft: selectedDraft ? buildRecordView(selectedDraft) : undefined,
-    approvalBinding: offerApprovalBinding,
+    approvalBinding: effectiveOfferApprovalBinding,
     setSelectedDraftId,
     selectedVariantId,
     setSelectedVariantId,
@@ -1163,11 +1201,12 @@ function ProductWorkspaceView({
     selectedVariantId: route === "offer" ? selectedVariantId : undefined,
     draftState: route === "offer" ? offerDraftNextState(activeOfferDraft) : undefined,
     approvedOfferId: route === "offer"
-      ? currentOfferApprovedOfferId ?? offerApprovalBinding?.approvedOfferId
+      ? effectiveOfferApprovalBinding?.approvedOfferId
       : undefined,
     handoffId: route === "offer"
-      ? currentOfferHandoffId ?? offerApprovalBinding?.handoffId
+      ? effectiveOfferApprovalBinding?.handoffId
       : undefined,
+    approvalBindingState,
     approvedProductionSpecId: route === "production" ? currentApprovedProductionSpecId : undefined,
     resultArtifactId: route === "production" ? currentProductionResultArtifactId : undefined
   };
@@ -1193,6 +1232,7 @@ function ProductWorkspaceView({
     nextActionInput.selectedVariantId,
     nextActionInput.draftState,
     nextActionInput.handoffId,
+    nextActionInput.approvalBindingState,
     nextActionInput.hasSource,
     nextActionInput.product,
     nextActionInput.resultArtifactId,
@@ -1206,7 +1246,8 @@ function ProductWorkspaceView({
       element?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
     };
 
-    const mutating = action.kind === "approve_offer" ||
+    const mutating = action.kind === "inspect_handoff" ||
+      action.kind === "approve_offer" ||
       action.kind === "send_handoff" ||
       action.kind === "approve_production" ||
       action.kind === "apply_approved" ||
@@ -1217,9 +1258,10 @@ function ProductWorkspaceView({
         route,
         action,
         offerWorkbenchState,
-        offerApprovalBinding,
+        offerApprovalBinding: effectiveOfferApprovalBinding,
         activeOfferDraft,
         openProductionEntry: openProductionDraftEntry,
+        resolveProductionCaseFromHandoff,
         setSelectedDraftId,
         decideProductionDraft,
         reviseProductionDraft,
@@ -1278,7 +1320,9 @@ type ProductRouteControllerProps = {
  * fall back to a global first record when the operator changes workspaces. */
 function ProductRouteController({ route, shell, masthead }: ProductRouteControllerProps) {
   const [activeOfferCaseId, setActiveOfferCaseId] = useState<string>();
-  const [activeProductionCaseId, setActiveProductionCaseId] = useState<string>();
+  const [activeProductionCaseId, setActiveProductionCaseId] = useState<string | undefined>(
+    () => productionCaseIdFromLocation(route)
+  );
   const [activeProductionSpecId, setActiveProductionSpecId] = useState<string>();
 
   if (route === "offer") {
@@ -1307,6 +1351,8 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
             currentOfferApprovedOfferId={product.data.approvedOffer?.approvedOfferId}
             currentOfferHandoffId={product.data.handoff?.handoffId}
             currentOfferApprovalBinding={buildOfferApprovalBinding(product.data.approvedOffer, product.data.handoff)}
+            resolveProductionCaseFromHandoff={async (handoffId) =>
+              (await createProductionCaseFromHandoff(handoffId)).case}
           />
         )}
       </OfferProductApp>

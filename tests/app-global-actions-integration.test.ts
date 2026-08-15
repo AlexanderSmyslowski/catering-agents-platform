@@ -10,9 +10,12 @@ import {
 } from "../backoffice-ui/src/offer-approval-action.js";
 import {
   productionDraftNextState,
+  buildOfferNextAction,
   runProductWorkspaceNextAction
 } from "../backoffice-ui/src/App.js";
+import { productionDraftEntryUrl } from "../backoffice-ui/src/production-entry-focus.js";
 import type { ApprovedOffer, ProductionHandoff } from "@catering/shared-core";
+import { loadProductionWorkspaceState } from "../backoffice-ui/src/api.js";
 import type { ProductionDraft } from "../backoffice-ui/src/api.js";
 
 afterEach(() => {
@@ -124,6 +127,39 @@ function persistedApproval(): { approvedOffer: ApprovedOffer; handoff: Productio
 }
 
 describe("global action integration contracts", () => {
+  it("prefers the persisted approved artifact over a stale ready draft", () => {
+    const action = buildOfferNextAction({
+      product: "offer",
+      caseStatus: "open",
+      hasSource: true,
+      currentDraftId: "offer-draft-1",
+      selectedVariantId: "variant-1",
+      approvedOfferId: "approved-1",
+      draft: {
+        draftId: "offer-draft-1",
+        revision: 4,
+        eventSummary: "Business Lunch",
+        variantSet: [{ variantId: "variant-1", label: "Ausgewogen" }],
+        openQuestions: [],
+        proposedEventSpec: {},
+        reviewStatus: {
+          priceReviewStatus: "verified",
+          taxReviewStatus: "verified",
+          allergenReviewStatus: "verified",
+          hygieneTemperatureReviewStatus: "verified",
+          sourceSecured: true,
+          publishApproved: true
+        }
+      } as never
+    });
+
+    expect(action).toEqual({
+      kind: "send_handoff",
+      label: "An Produktion übergeben",
+      approvedOfferId: "approved-1"
+    });
+  });
+
   it("renders and records the selected offer variant through the app adapter", async () => {
     const setSelectedVariantId = vi.fn();
     const decideOfferDraft = vi.fn(async () => ({ approvedOffer: { approvedOfferId: "approved-1" } }));
@@ -171,6 +207,7 @@ describe("global action integration contracts", () => {
     const binding: OfferApprovalBinding = buildOfferApprovalBinding(approvedOffer, handoff)!;
     const boundary = buildAppOfferRouteAppBoundary(boundaryInput({ approvalBinding: binding }) as never);
     const openProductionEntry = vi.fn();
+    const resolveProductionCaseFromHandoff = vi.fn(async () => ({ caseId: "production-case-1" }));
 
     await runProductWorkspaceNextAction({
       route: "offer",
@@ -178,11 +215,73 @@ describe("global action integration contracts", () => {
       offerWorkbenchState: boundary.offerWorkbenchState,
       offerApprovalBinding: binding,
       openProductionEntry,
+      resolveProductionCaseFromHandoff,
       setNotice: vi.fn(),
       focus: vi.fn()
     });
 
-    expect(openProductionEntry).toHaveBeenCalledWith(`production-draft-handoff-${handoff.handoffId}`);
+    expect(resolveProductionCaseFromHandoff).toHaveBeenCalledWith(handoff.handoffId);
+    expect(openProductionEntry).toHaveBeenCalledWith(`production-draft-handoff-${handoff.handoffId}`, "production-case-1");
+    expect(productionDraftEntryUrl(`production-draft-handoff-${handoff.handoffId}`, "production-case-1"))
+      .toContain("productionCaseId=production-case-1");
+  });
+
+  it("reloads the resolved production case and exposes its handoff draft", async () => {
+    const { approvedOffer, handoff } = persistedApproval();
+    const binding: OfferApprovalBinding = buildOfferApprovalBinding(approvedOffer, handoff)!;
+    const productionDraftId = `production-draft-handoff-${handoff.handoffId}`;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/production/v1/production/cases")) {
+        return Response.json({ items: [{ caseId: "production-case-1", product: "production", displayName: "Fall", status: "open", createdAt: "", updatedAt: "" }] });
+      }
+      if (url.endsWith("/api/production/v1/production/cases/production-case-1")) {
+        return Response.json({
+          case: {
+            caseId: "production-case-1",
+            product: "production",
+            displayName: "Fall",
+            status: "open",
+            schemaVersion: "1.0",
+            businessId: "local",
+            version: 1,
+            createdAt: "",
+            updatedAt: "",
+            productionHandoffId: handoff.handoffId,
+            sourceSpecId: "spec-1"
+          },
+          events: [],
+          currentDraft: { draftId: productionDraftId, revision: 1, status: "pending_review", reviewCards: [] }
+        });
+      }
+      throw new Error(`unerwarteter Reload-Aufruf: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { getItem: () => null, setItem: () => undefined }
+    });
+
+    const openProductionEntry = vi.fn();
+    await runProductWorkspaceNextAction({
+      route: "offer",
+      action: { kind: "inspect_handoff", label: "Übergabe öffnen", handoffId: handoff.handoffId },
+      offerWorkbenchState: boundaryInput() as never,
+      offerApprovalBinding: binding,
+      resolveProductionCaseFromHandoff: vi.fn(async () => ({ caseId: "production-case-1" })),
+      openProductionEntry,
+      setNotice: vi.fn(),
+      focus: vi.fn()
+    });
+
+    const productionCaseId = new URL(productionDraftEntryUrl(productionDraftId, "production-case-1"), "http://localhost")
+      .searchParams.get("productionCaseId");
+    const reloaded = await loadProductionWorkspaceState(productionCaseId ?? undefined);
+    expect(productionCaseId).toBe("production-case-1");
+    expect(reloaded.activeCase?.caseId).toBe("production-case-1");
+    expect(reloaded.currentDraft?.draftId).toBe(productionDraftId);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/production/cases/production-case-1"), expect.anything());
+    vi.unstubAllGlobals();
   });
 
   it("creates a handoff from the persisted approval without browser-only binding state", async () => {
@@ -209,6 +308,43 @@ describe("global action integration contracts", () => {
       ...handoff,
       source: { ...handoff.source, draftId: "different-draft" }
     })).toBeUndefined();
+    expect(buildOfferApprovalBinding(approvedOffer, {
+      ...handoff,
+      source: undefined as never
+    })).toBeUndefined();
+  });
+
+  it("does not expose a mutating action when raw approval IDs contradict the validated binding", () => {
+    const action = buildOfferNextAction({
+      product: "offer",
+      caseStatus: "open",
+      hasSource: true,
+      currentDraftId: "offer-draft-1",
+      selectedVariantId: "variant-1",
+      approvedOfferId: "raw-untrusted-approved-id",
+      handoffId: "raw-untrusted-handoff-id",
+      approvalBindingState: "invalid",
+      draft: {
+        draftId: "offer-draft-1",
+        revision: 4,
+        eventSummary: "Business Lunch",
+        variantSet: [{ variantId: "variant-1", label: "Ausgewogen" }],
+        openQuestions: [],
+        proposedEventSpec: {},
+        reviewStatus: {
+          priceReviewStatus: "verified",
+          taxReviewStatus: "verified",
+          allergenReviewStatus: "verified",
+          hygieneTemperatureReviewStatus: "verified",
+          sourceSecured: true,
+          publishApproved: true
+        }
+      } as never
+    });
+
+    expect(action.kind).toBe("review_draft");
+    expect(action).not.toMatchObject({ kind: "approve_offer" });
+    expect(action).not.toMatchObject({ kind: "send_handoff" });
   });
 
   it.each(["recipe", "timeline"] as const)("does not expose unsupported %s revisions as the global action", (kind) => {
