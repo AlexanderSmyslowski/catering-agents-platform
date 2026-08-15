@@ -9,6 +9,7 @@ import { buildOfferApp } from "../offer-service/src/app.js";
 import { buildProductionApp } from "../production-service/src/app.js";
 import { buildPrintExportApp } from "../print-export/src/index.js";
 import { createBusinessScopedPersistentCollection, createPersistentCollection } from "../shared-core/src/persistence.js";
+import { hostedMultiBusinessReady } from "../shared-core/src/business-context.js";
 import { runLocalBusinessScopeMigration } from "../scripts/migrate-local-business-scope.js";
 
 const roots: string[] = [];
@@ -57,8 +58,9 @@ function collection(mode: "file" | "postgres", validate?: (record: Record<string
 }
 
 describe("Task 1 review fixes", () => {
-  it.each([buildIntakeApp, buildOfferApp, buildProductionApp, buildPrintExportApp])("keeps every service hard-disabled for hosted construction", (build) => {
-    expect(() => build({ env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: "secret" } } as never)).toThrow("Hosted Multi-Business-Betrieb ist noch nicht bereit");
+  it.each([buildIntakeApp, buildOfferApp, buildProductionApp, buildPrintExportApp])("opens hosted construction only behind the code-owned readiness gate", (build) => {
+    expect(hostedMultiBusinessReady).toBe(true);
+    expect(() => build({ env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: "secret" } } as never)).not.toThrow();
   });
 
   it("binds an intake audit to the builder business context instead of process env", async () => {

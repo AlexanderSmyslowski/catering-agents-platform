@@ -158,6 +158,13 @@ export function registerSourceDocumentRoutes(
       : undefined;
   };
 
+  const trustedProductionSourceContentActor = (
+    request: { headers: Record<string, string | string[] | undefined> }
+  ): TrustedActor | undefined => {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    return actor.trusted && actor.name === "Production-Service" ? actor : undefined;
+  };
+
   app.get<{ Params: { documentId: string } }>(
     "/v1/intake/internal/source-documents/:documentId",
     async (request, reply) => {
@@ -179,8 +186,8 @@ export function registerSourceDocumentRoutes(
   app.get<{ Params: { documentId: string } }>(
     "/v1/intake/internal/source-documents/:documentId/content",
     async (request, reply) => {
-      const actor = trustedSourceServiceActor(request);
-      if (!actor) return reply.code(403).send({ message: "Interner Quelldokument-Dienst erforderlich." });
+      const actor = trustedProductionSourceContentActor(request);
+      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
       const [metadata, content] = await Promise.all([
         sourceDocumentStore.getMetadata(actor, request.params.documentId),
         sourceDocumentStore.getContent(actor, request.params.documentId)

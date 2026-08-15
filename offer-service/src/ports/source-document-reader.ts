@@ -1,4 +1,4 @@
-import type { BusinessContext, ByoLlmDataClass } from "@catering/shared-core";
+import type { BusinessContext, ByoLlmDataClass, EventRequest } from "@catering/shared-core";
 
 /** Server-authored metadata for an already registered source document. */
 export interface StoredSourceDocument {
@@ -17,4 +17,10 @@ export interface SourceDocumentMetadataReader {
     context: BusinessContext,
     documentId: string
   ): Promise<StoredSourceDocument | undefined>;
+
+  /** Reads the server-owned Intake request that carries a registered source. */
+  getRequest?(
+    context: BusinessContext,
+    requestId: string
+  ): Promise<EventRequest | undefined>;
 }

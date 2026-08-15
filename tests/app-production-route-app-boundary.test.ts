@@ -137,16 +137,6 @@ function input(
     editingComponentStates: {},
     hasFocusedSpecEditChanges: true,
     recipes,
-    isInitialProductionLoading: false,
-    productionPlanCount: 2,
-    purchaseListCount: 1,
-    recipeCount: 5,
-    approvedRecipeCount: 4,
-    reviewRequiredRecipeCount: 1,
-    productionServiceStatus: "ok",
-    productionServiceCounts: { productionPlans: 2, purchaseLists: 1 },
-    search: "Lunch",
-    setSearch: vi.fn(),
     manualInput,
     manualInputActions,
     openSpecForQuestions: vi.fn(),
@@ -176,7 +166,7 @@ function input(
 }
 
 describe("app production route app boundary", () => {
-  it("builds source input, editor, filter and main layout from one production route boundary", () => {
+  it("builds source input, editor and main layout without compatibility filter state", () => {
     const boundaryInput = input();
     const boundary = buildAppProductionRouteAppBoundary(boundaryInput);
 
@@ -190,12 +180,7 @@ describe("app production route app boundary", () => {
       hasFocusedSpecEditChanges: true
     });
     expect(boundary.productionQuestionEditorState.recipes).toBe(boundaryInput.recipes);
-    expect(boundary.productionRouteFilterState).toMatchObject({
-      productionPlanCount: 2,
-      purchaseListCount: 1,
-      productionServiceStatusLabel: "bereit",
-      productionServiceCountsLabel: "Produktionspläne: 2 · Einkaufslisten: 1"
-    });
+    expect(boundary).not.toHaveProperty("productionRouteFilterState");
     expect(boundary.productionRouteMainLayoutState.sourceInput).toBe(boundary.productionSourceInput);
     expect(boundary.productionRouteMainLayoutState.sourceInputActions).toBe(boundary.productionSourceInputActions);
     expect(boundary.productionRouteMainLayoutState.editorState).toBe(boundary.productionQuestionEditorState);

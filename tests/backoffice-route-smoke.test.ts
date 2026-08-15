@@ -328,7 +328,7 @@ async function renderRouteWithFirstHistorySelection(
   pathname: "/angebot" | "/produktion"
 ): Promise<{ text: string; html: string }> {
   const { root, container } = await renderRouteLive(pathname);
-  const historySelector = pathname === "/angebot" ? ".offer-history-details" : ".production-filter-details";
+  const historySelector = pathname === "/angebot" ? ".offer-history-details" : ".production-history-details";
   const history = container.querySelector(historySelector) as HTMLDetailsElement | null;
   if (history) {
     history.open = true;

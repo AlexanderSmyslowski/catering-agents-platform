@@ -242,6 +242,17 @@ describe("Hetzner deployment script", () => {
     expect(productionService).toMatch(/depends_on:[\s\S]*intake:[\s\S]*condition: service_started/);
   });
 
+  test("connects Offer to Intake before document-backed drafts can be served", () => {
+    const compose = readFileSync(composePath, "utf8");
+    const offerService = compose.slice(
+      compose.indexOf("  offer:"),
+      compose.indexOf("  production:")
+    );
+
+    expect(offerService).toContain("CATERING_INTAKE_SERVICE_URL: http://intake:3101");
+    expect(offerService).toMatch(/depends_on:[\s\S]*intake:[\s\S]*condition: service_started/);
+  });
+
   test("uses the fixed server-owned Caddy directory protected by deployment sync", () => {
     const caddyfile = readFileSync(caddyfilePath, "utf8");
     const compose = readFileSync(composePath, "utf8");

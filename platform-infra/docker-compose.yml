@@ -43,11 +43,14 @@ services:
       CATERING_DATABASE_URL: postgresql://${POSTGRES_USER:-catering}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-catering_agents}
       CATERING_DEFAULT_BUSINESS_ID: ${CATERING_DEFAULT_BUSINESS_ID:-local}
       CATERING_TRUSTED_ACTOR_SECRET: ${CATERING_TRUSTED_ACTOR_SECRET:?Set CATERING_TRUSTED_ACTOR_SECRET}
+      CATERING_INTAKE_SERVICE_URL: http://intake:3101
       OFFER_PORT: 3102
       OFFER_HOST: 0.0.0.0
     depends_on:
       postgres:
         condition: service_healthy
+      intake:
+        condition: service_started
     command: ["npm", "run", "dev:offer"]
 
   production:

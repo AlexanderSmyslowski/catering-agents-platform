@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
+  areJsonValuesEqual,
   createEventRequestFromText,
   createCuratedOfferDraft,
   createOfferDraft,
@@ -105,6 +106,54 @@ export function registerOfferDraftRoutes(
     return refs;
   }
 
+  async function serverAuthoritativeEventRequest(
+    actor: TrustedActor,
+    submitted: EventRequest
+  ): Promise<EventRequest> {
+    const submittedInputs = submitted.rawInputs
+      .filter((input) => Boolean(input.documentId?.trim()))
+      .map((input) => ({
+        kind: input.kind,
+        content: input.content,
+        documentId: input.documentId?.trim()
+      }));
+    if (submittedInputs.length === 0) return submitted;
+    if (!sourceDocumentReader?.getRequest) {
+      throw new SourceDocumentReaderUnavailableError(
+        "Serverseitige Intake-Anfragen können im Angebotsdienst derzeit nicht verifiziert werden."
+      );
+    }
+    let canonical: EventRequest | undefined;
+    try {
+      canonical = await sourceDocumentReader.getRequest(
+        { businessId: actor.businessId },
+        submitted.requestId
+      );
+    } catch {
+      throw new SourceDocumentReaderUnavailableError(
+        "Serverseitige Intake-Anfragen können im Angebotsdienst derzeit nicht verifiziert werden."
+      );
+    }
+    if (!canonical) {
+      throw new SourceDocumentVerificationError(
+        "Serverseitige Intake-Anfrage konnte nicht verifiziert werden."
+      );
+    }
+    const canonicalInputs = canonical.rawInputs
+      .filter((input) => Boolean(input.documentId?.trim()))
+      .map((input) => ({
+        kind: input.kind,
+        content: input.content,
+        documentId: input.documentId?.trim()
+      }));
+    if (!areJsonValuesEqual(submittedInputs, canonicalInputs)) {
+      throw new SourceDocumentVerificationError(
+        "Quelldokument-Inhalt passt nicht zur serverseitigen Intake-Anfrage."
+      );
+    }
+    return canonical;
+  }
+
   function createPortfolioAwareOfferDraft(eventRequest: EventRequest) {
     const spec = normalizeEventRequestToSpec(eventRequest, {
       sourceType: "offer_service",
@@ -138,9 +187,11 @@ export function registerOfferDraftRoutes(
         errors: [error instanceof Error ? error.message : "Unbekannter Validierungsfehler."]
       });
     }
+    let verifiedEventRequest: EventRequest;
     let sourceRefs: CaseSourceRef[];
     try {
-      sourceRefs = await verifiedSourceRefs(actor, eventRequest);
+      verifiedEventRequest = await serverAuthoritativeEventRequest(actor, eventRequest);
+      sourceRefs = await verifiedSourceRefs(actor, verifiedEventRequest);
     } catch (error) {
       const statusCode = error instanceof SourceDocumentVerificationError || error instanceof SourceDocumentReaderUnavailableError
         ? error.statusCode
@@ -151,7 +202,7 @@ export function registerOfferDraftRoutes(
           : "Quelldokument konnte nicht verifiziert werden."
       });
     }
-    const draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(eventRequest), businessId: actor.businessId, revision: 1 });
+    const draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(verifiedEventRequest), businessId: actor.businessId, revision: 1 });
     if (await store.saveDraftForCase(actor, caseId, draft, sourceRefs) === "case_conflict") {
       return reply.code(409).send({ message: "Dieser Angebotsentwurf gehört bereits zu einem anderen Auftrag." });
     }
@@ -163,7 +214,7 @@ export function registerOfferDraftRoutes(
       idempotencyKey: `draft-created:${draft.draftId}`,
       summary: "Angebotsentwurf aus strukturierter Event-Anfrage erstellt.",
       details: {
-        requestId: eventRequest.requestId,
+        requestId: verifiedEventRequest.requestId,
         readiness: draft.proposedEventSpec.readiness.status,
         variants: draft.variantSet.length
       }

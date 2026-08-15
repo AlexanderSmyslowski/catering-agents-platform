@@ -222,7 +222,7 @@ describe("backoffice intake request detail", () => {
     });
 
     const historyJob = container.querySelector<HTMLButtonElement>(
-      ".production-filter-details .quiet-list__button"
+      ".production-history-details .quiet-list__button"
     );
     expect(historyJob).not.toBeNull();
     await act(async () => {

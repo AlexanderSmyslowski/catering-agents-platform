@@ -14,6 +14,8 @@ import type {
 import {
   formatDocumentIngestionStatusLabel,
   formatDocumentIngestionWarningLabel,
+  assertBusinessId,
+  assertTrustedActorConfiguration,
   createTrustedActorResolver,
   formatMetroGroupLabel,
   isDevAuthEnabled,
@@ -303,8 +305,10 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
   }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  assertTrustedActorConfiguration({ requireTrustedBusinessId: hosted, trustedActorSecret });
   const allowDevActorHeader = isDevAuthEnabled(env);
   const defaultBusinessId = env.CATERING_DEFAULT_BUSINESS_ID ?? "local";
+  if (hosted) assertBusinessId(defaultBusinessId);
   const defaultBusinessContext = { businessId: defaultBusinessId };
   type PrintExportRequest = { headers: Record<string, string | string[] | undefined>; url?: string };
   const resolveActor = createTrustedActorResolver<PrintExportRequest>((request) => ({

@@ -30,3 +30,8 @@ Damit neue Sessions den konsolidierten Stand ohne Umwege finden. Die fuehrende R
 
 ## Hinweis fuer neue Agenten
 Beginne mit dem Central-Agent-Data-Hub-Startbefehl und danach mit `memory.md`.
+
+## Aktueller Stage-A-Handoff – 2026-08-15
+- PR #612 auf `loop/stage-a-complete-chain` enthält den ungemergten Task-12-Kandidaten: Migration, unveränderliche Angebots-/Produktionskette, Business-Isolationsmatrix, UI-Reload-/Search-/Revision-/Copy-Fluss und die geprüften Boundary-Entfernungen.
+- `hostedMultiBusinessReady` ist im Kandidaten codefest `true`, weil die vollständige Route-/Store-/Audit-/Export-Matrix geprüft wurde; Umgebungsflags können das Gate nicht umgehen.
+- Der Kandidat steht vor dem Merge auf Basis `66f354c7715e766b59d9f6407638c05da5ad3394`; der Folgefix für den sandboxierten macOS-Fingerprint ist uncommittet und braucht eine neue unabhängige Prüfung. Die alten Aussagen „Aufgabe 8 nicht begonnen“ und „Aufgaben 8 bis 12 offen“ sind historische Stände, keine aktuelle Freigabe.

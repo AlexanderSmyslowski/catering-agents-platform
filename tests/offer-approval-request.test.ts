@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { newDb } from "pg-mem";
@@ -92,8 +92,8 @@ describe("offer approval request", () => {
       .toBe(draft.variantSet[1]?.variantId);
   });
 
-  it("recovers an old incomplete file target lock before deciding", async () => {
-    const { app, rootDir } = buildTestHarness();
+  it("fails closed on an old malformed file target lock without creating approval or removing the lock", async () => {
+    const { app, store, rootDir } = buildTestHarness();
     const draft = await createDraft(app);
     const targetIdentity = JSON.stringify({
       businessId: "local",
@@ -121,8 +121,12 @@ describe("offer approval request", () => {
       payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
 
-    expect(response.statusCode, response.body).toBe(201);
-    expect(existsSync(lockPath)).toBe(false);
+    expect(response.statusCode, response.body).toBe(500);
+    expect(response.json<{ message: string }>().message).toContain("nicht rechtzeitig entsperrt");
+    expect(existsSync(lockPath)).toBe(true);
+    expect(readFileSync(lockPath, "utf8")).toBe("");
+    expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual([]);
+    expect(await store.listApprovedOffers({ businessId: "local" })).toEqual([]);
   });
 
   it("does not let a later file target ticket overtake an active earlier ticket", async () => {

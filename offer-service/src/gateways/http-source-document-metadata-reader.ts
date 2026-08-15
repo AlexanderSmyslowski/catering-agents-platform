@@ -1,7 +1,9 @@
 import {
   byoLlmDataClasses,
+  validateEventRequest,
   type BusinessContext,
-  type ByoLlmDataClass
+  type ByoLlmDataClass,
+  type EventRequest
 } from "@catering/shared-core";
 import type {
   SourceDocumentMetadataReader,
@@ -88,6 +90,31 @@ export class HttpSourceDocumentMetadataReader implements SourceDocumentMetadataR
       throw new Error("Quelldokument passt nicht zur angeforderten Identität.");
     }
     return metadata;
+  }
+
+  async getRequest(
+    context: BusinessContext,
+    requestId: string
+  ): Promise<EventRequest | undefined> {
+    const response = await this.request(
+      context,
+      `/v1/intake/internal/requests/${encodeURIComponent(requestId)}`
+    );
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new Error("Intake-Request konnte nicht geladen werden.");
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error("Intake-Request ist kein gültiges JSON.");
+    }
+    try {
+      return validateEventRequest(
+        (payload as { eventRequest?: unknown } | undefined)?.eventRequest as EventRequest
+      );
+    } catch {
+      throw new Error("Intake-Request ist nicht schema-valide.");
+    }
   }
 
   private async request(context: BusinessContext, path: string): Promise<Response> {

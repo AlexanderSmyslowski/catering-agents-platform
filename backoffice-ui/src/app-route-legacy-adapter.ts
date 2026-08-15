@@ -28,3 +28,8 @@ export function toLegacyRecords<T extends object>(values: T[]): Record<string, u
 export function toLegacyRecordMap<T extends object>(values: Map<string, T>): Map<string, Record<string, unknown>> {
   return new Map(Array.from(values, ([id, value]) => [id, toLegacyRecord(value)] as const));
 }
+
+/** Final view-boundary names used by the product route composition. */
+export const buildRecordView = toLegacyRecord;
+export const buildRecordViewProjection = toLegacyRecords;
+export const buildRecordViewMap = toLegacyRecordMap;

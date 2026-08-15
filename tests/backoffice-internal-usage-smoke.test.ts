@@ -723,7 +723,7 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Entwurf freigeben");
 
     expect(document.body.textContent ?? "").not.toContain("Produktionsplan wurde erzeugt.");
-    expect(document.body.textContent ?? "").toContain("Status: vollständig");
+    expect(document.body.textContent ?? "").toContain("manueller Import | wartet auf Prüfung");
     expect(document.body.textContent ?? "").toContain("noch kein Produktionsplan");
     expect(document.body.textContent ?? "").not.toContain("Produktionsblatt exportieren");
     expect(document.body.textContent ?? "").not.toContain("Einkaufsliste exportieren");

@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc --noEmit && npm --workspace @catering/backoffice-ui run build",
     "test": "vitest run",
+    "stage-a:task12:contracts": "vitest run tests/local-business-scope-migration.test.ts tests/stage-a-contract-chain.test.ts tests/stage-a-business-isolation.test.ts tests/stage-a-product-flow.test.tsx tests/unscoped-persistence-import-boundary.test.ts tests/data-safety-audit-gates.test.ts tests/mutating-route-auth-matrix.test.ts tests/backoffice-route-smoke.test.ts tests/app-production-route-app-boundary.test.ts --maxWorkers=1",
     "migrate:business-scope": "tsx scripts/migrate-local-business-scope.ts",
     "checkpoint": "bash ./scripts/create-checkpoint.sh",
     "import:recipes:caterings": "tsx scripts/import-catering-recipes.ts",

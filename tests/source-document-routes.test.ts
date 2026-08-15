@@ -408,4 +408,50 @@ describe("source document routes", () => {
     expect(missing.json()).toEqual({ message: "Quelldokument nicht gefunden." });
     await app.close();
   });
+
+  it("keeps confidential source bytes outside the Offer-Service internal boundary", async () => {
+    const { app, sourceDocumentStore } = await buildHarness();
+    const metadata: StoredSourceDocument = {
+      businessId: "alpha",
+      documentId: "internal-document",
+      filename: "angebot.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 4,
+      sha256: "315d429b7714cedb6ad04ac31240145257692630457f3c88253c5beceac76027",
+      dataClass: "personal_confidential",
+      createdAt: "2026-08-14T10:00:00.000Z"
+    };
+    await sourceDocumentStore.insert({ businessId: "alpha" }, metadata, Buffer.from("%PDF"));
+    const offerHeaders = {
+      ...trustedHeaders("alpha"),
+      "x-catering-actor-name": "Offer-Service"
+    };
+    const productionHeaders = {
+      ...trustedHeaders("alpha"),
+      "x-catering-actor-name": "Production-Service"
+    };
+
+    const offerMetadata = await app.inject({
+      method: "GET",
+      url: `/v1/intake/internal/source-documents/${metadata.documentId}`,
+      headers: offerHeaders
+    });
+    expect(offerMetadata.statusCode).toBe(200);
+
+    const offerContent = await app.inject({
+      method: "GET",
+      url: `/v1/intake/internal/source-documents/${metadata.documentId}/content`,
+      headers: offerHeaders
+    });
+    expect(offerContent.statusCode).toBe(403);
+
+    const productionContent = await app.inject({
+      method: "GET",
+      url: `/v1/intake/internal/source-documents/${metadata.documentId}/content`,
+      headers: productionHeaders
+    });
+    expect(productionContent.statusCode).toBe(200);
+    expect(productionContent.rawPayload).toEqual(Buffer.from("%PDF"));
+    await app.close();
+  });
 });

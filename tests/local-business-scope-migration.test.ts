@@ -24,11 +24,16 @@ import {
   type EventRequest,
   type OfferCase,
   type OfferDraft,
+  type ProductionClarificationAnswer,
   type ProductionCase,
   type ProductionDraft,
-  type Queryable
+  type ProductionPlan,
+  type PurchaseList,
+  type Queryable,
+  type Recipe
 } from "../shared-core/src/index.js";
 import type { IntakeShadowRun } from "../intake-service/src/store.js";
+import type { ClarificationDraft, ProductionFeedbackDraft } from "../production-service/src/repositories/production-store.js";
 import { runLocalBusinessScopeMigration } from "../scripts/migrate-local-business-scope.js";
 import { createBusinessScopedPersistentCollection, createPersistentCollection } from "../shared-core/src/persistence.js";
 
@@ -213,6 +218,148 @@ async function seedLegacyIntakeAndDrafts(options: { rootDir?: string; pgPool?: Q
   return { request, spec, shadowRun, offer, productionDraft };
 }
 
+async function seedAllLegacyCollections(options: { rootDir?: string; pgPool?: Queryable }): Promise<void> {
+  const seeded = await seedLegacyIntakeAndDrafts(options);
+  const storage = options;
+  const specId = seeded.productionDraft.draftArtifacts.eventSpec?.specId;
+  if (!specId) throw new Error("Legacy fixture requires an event spec.");
+
+  const audit = createPersistentCollection<Omit<AuditEntry, "businessId">>({
+    collectionName: "audit/events",
+    getId: (entry) => entry.auditId,
+    ...storage
+  });
+  await audit.set({
+    auditId: "legacy-audit-all-collections",
+    at: "2026-08-10T00:00:00.000Z",
+    action: "legacy.inventory.seeded",
+    entityType: "LegacyInventory",
+    entityId: "legacy-all-collections",
+    actor: { name: "Migration Test", source: "test" },
+    summary: "Complete legacy collection inventory fixture."
+  });
+
+  const offers = createPersistentCollection<OfferDraft>({
+    collectionName: "offers/drafts",
+    getId: (draft) => draft.draftId,
+    ...storage
+  });
+  await offers.set({
+    ...createOfferDraft(createEventRequestFromText({
+      requestId: "legacy-offer-all-collections-2",
+      channel: "text",
+      rawText: "Dinner fuer 30 Personen."
+    })),
+    draftId: "legacy-offer-all-collections-2"
+  });
+
+  const recipe: Recipe = {
+    schemaVersion: SCHEMA_VERSION,
+    recipeId: "legacy-recipe-all-collections",
+    name: "Legacy Kartoffelsalat",
+    source: {
+      tier: "internal_approved",
+      originType: "approved_import",
+      reference: "Legacy Rezeptarchiv",
+      retrievedAt: "2026-08-10T00:00:00.000Z",
+      approvalState: "review_required",
+      qualityScore: 0.9,
+      fitScore: 0.9,
+      extractionCompleteness: 1
+    },
+    baseYield: { servings: 30, unit: "Portionen" },
+    ingredients: [{
+      ingredientId: "legacy-potato",
+      name: "Kartoffeln",
+      quantity: { amount: 3, unit: "kg" },
+      group: "obst_gemuese"
+    }],
+    steps: [{ index: 1, instruction: "Kartoffeln garen." }],
+    scalingRules: { defaultLossFactor: 1 },
+    allergens: [],
+    dietTags: []
+  };
+  const plan: ProductionPlan = {
+    schemaVersion: SCHEMA_VERSION,
+    planId: "legacy-plan-all-collections",
+    eventSpecId: specId,
+    readiness: { status: "complete", reasons: [] },
+    productionBatches: [],
+    timeline: [],
+    kitchenSheets: [],
+    recipeSelections: [],
+    unresolvedItems: []
+  };
+  const purchaseList: PurchaseList = {
+    schemaVersion: SCHEMA_VERSION,
+    purchaseListId: "legacy-purchase-list-all-collections",
+    eventSpecId: specId,
+    groupingMode: "group",
+    items: [],
+    totals: { itemCount: 0, groups: [] }
+  };
+  const clarificationAnswer: ProductionClarificationAnswer = {
+    answerId: "legacy-clarification-answer-all-collections",
+    context: { specId, productionSessionId: `production-session-${specId}` },
+    questionId: "legacy-question-all-collections",
+    questionKey: { reason: "readiness.reasons", reasonCode: "legacy" },
+    answerType: "shortText",
+    status: "submitted",
+    answerText: { kind: "shortText", value: "Legacy answer." }
+  };
+  const clarificationDraft: ClarificationDraft = {
+    draftId: "legacy-clarification-draft-all-collections",
+    specId,
+    questions: [{ text: "Welche Uhrzeit gilt?", reason: "Readiness", reasonCode: "legacy" }],
+    status: "pending_review",
+    createdAt: "2026-08-10T00:00:00.000Z",
+    updatedAt: "2026-08-10T00:00:00.000Z",
+    createdBy: { name: "Migration Test", source: "dev-default" },
+    modelMetadata: { adapterId: "fixture", adapterMode: "fixture_only", inputId: "legacy-input" }
+  };
+  const feedback: ProductionFeedbackDraft = {
+    feedbackId: "legacy-feedback-all-collections",
+    status: "pending_review",
+    createdAt: "2026-08-10T00:00:00.000Z",
+    updatedAt: "2026-08-10T00:00:00.000Z",
+    createdBy: { name: "Migration Test", source: "dev-default" },
+    feedback: {
+      summary: "Legacy feedback.",
+      observations: ["Observed."],
+      changeRequests: ["Review."]
+    },
+    guardrails: {
+      draftOnly: true,
+      humanApprovalRequired: true,
+      rawProviderPayloadStored: false,
+      knowledgeWritePolicy: "reviewed_only"
+    }
+  };
+  const productionRecords: Array<{ collectionName: string; id: string; value: Record<string, unknown> }> = [
+    { collectionName: "production/plans", id: plan.planId, value: plan as unknown as Record<string, unknown> },
+    { collectionName: "production/purchase-lists", id: purchaseList.purchaseListId, value: purchaseList as unknown as Record<string, unknown> },
+    { collectionName: "production/clarification-answers", id: clarificationAnswer.answerId, value: clarificationAnswer as unknown as Record<string, unknown> },
+    { collectionName: "production/clarification-drafts", id: clarificationDraft.draftId, value: clarificationDraft as unknown as Record<string, unknown> },
+    { collectionName: "production/feedback-drafts", id: feedback.feedbackId, value: feedback as unknown as Record<string, unknown> },
+    { collectionName: "production/recipes", id: recipe.recipeId, value: recipe as unknown as Record<string, unknown> }
+  ];
+  for (const record of productionRecords) {
+    const collection = createPersistentCollection<Record<string, unknown>>({
+      collectionName: record.collectionName,
+      getId: () => record.id,
+      ...storage
+    });
+    await collection.set(record.value);
+  }
+}
+
+function readMigrationManifest(rootDir: string): Record<string, { sourceCount: number; targetCount: number; hash: string }> {
+  return JSON.parse(readFileSync(
+    path.join(rootDir, "businesses/commcats-local/migrations/business-scope-manifest.json"),
+    "utf8"
+  )).completed;
+}
+
 afterEach(async () => {
   await Promise.all(dataRoots.splice(0).map((rootDir) => {
     makeFixtureWritable(rootDir);
@@ -221,6 +368,80 @@ afterEach(async () => {
 });
 
 describe("local business scope migration", () => {
+  it.each(["file", "postgres"] as const)("copies every exposed legacy collection into one business exactly once in %s mode", async (mode) => {
+    const rootDir = mode === "file"
+      ? mkdtempSync(path.join(tmpdir(), "catering-business-migration-complete-inventory-"))
+      : undefined;
+    if (rootDir) dataRoots.push(rootDir);
+    const { Pool } = newDb({ noAstCoverageCheck: true }).adapters.createPg();
+    const pgPool: Queryable | undefined = mode === "postgres" ? new Pool() : undefined;
+    const storage = { rootDir, pgPool };
+    await seedAllLegacyCollections(storage);
+
+    const first = await runLocalBusinessScopeMigration({
+      businessId: "commcats-local",
+      ...storage,
+      ...(mode === "file" ? confirmedLegacyFileWriters : testOnlyPgMemFence)
+    });
+    const retry = await runLocalBusinessScopeMigration({
+      businessId: "commcats-local",
+      ...storage,
+      ...(mode === "file" ? confirmedLegacyFileWriters : testOnlyPgMemFence)
+    });
+
+    expect(first.units).toEqual([
+      { name: "stage-a-001-audit", status: "migrated" },
+      { name: "stage-a-002-offers", status: "migrated" },
+      { name: "stage-a-003-production-drafts", status: "migrated" },
+      { name: "stage-a-004-production-v2", status: "migrated" },
+      { name: "stage-a-005-intake-cases", status: "migrated" }
+    ]);
+    expect(retry.units).toEqual(first.units.map((unit) => ({ ...unit, status: "already_migrated" })));
+
+    const context = { businessId: "commcats-local" };
+    const count = async (collectionName: string, getId: (value: Record<string, unknown>) => string) =>
+      (await createBusinessScopedPersistentCollection<Record<string, unknown>>({
+        collectionName,
+        getId,
+        ...storage
+      }).list(context)).length;
+    await expect(count("audit/events", (value) => String(value.auditId))).resolves.toBe(1);
+    await expect(count("offers/drafts", (value) => String(value.draftId))).resolves.toBe(2);
+    await expect(count("production/drafts", (value) => String(value.draftId))).resolves.toBe(1);
+    await expect(count("production/plans", (value) => String(value.planId))).resolves.toBe(1);
+    await expect(count("production/purchase-lists", (value) => String(value.purchaseListId))).resolves.toBe(1);
+    await expect(count("production/clarification-answers", (value) => String(value.answerId))).resolves.toBe(1);
+    await expect(count("production/clarification-drafts", (value) => String(value.draftId))).resolves.toBe(1);
+    await expect(count("production/feedback-drafts", (value) => String(value.feedbackId))).resolves.toBe(1);
+    await expect(count("production/recipes", (value) => String(value.recipeId))).resolves.toBe(1);
+    await expect(count("intake/requests", (value) => String(value.requestId))).resolves.toBe(1);
+    await expect(count("intake/specs", (value) => String(value.specId))).resolves.toBe(1);
+    await expect(count("intake/shadow-runs", (value) => String(value.shadowRunId))).resolves.toBe(1);
+    if (mode === "file") {
+      expect(existsSync(path.join(rootDir!, "businesses/commcats-local/intake/source-documents"))).toBe(false);
+      expect(readMigrationManifest(rootDir!)).toMatchObject({
+        "stage-a-001-audit": { sourceCount: 1, targetCount: 1, hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        "stage-a-002-offers": { sourceCount: 2, targetCount: 2, hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        "stage-a-003-production-drafts": { sourceCount: 1, targetCount: 1, hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        "stage-a-004-production-v2": { sourceCount: 7, targetCount: 7, hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        "stage-a-005-intake-cases": { sourceCount: 6, targetCount: 22, hash: expect.stringMatching(/^[a-f0-9]{64}$/) }
+      });
+      return;
+    }
+
+    const completions = await pgPool!.query(
+      "SELECT unit_name, source_count, target_count, hash FROM catering_business_migrations WHERE business_id = $1 ORDER BY unit_name",
+      ["commcats-local"]
+    );
+    expect(completions.rows).toEqual([
+      { unit_name: "stage-a-001-audit", source_count: 1, target_count: 1, hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { unit_name: "stage-a-002-offers", source_count: 2, target_count: 2, hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { unit_name: "stage-a-003-production-drafts", source_count: 1, target_count: 1, hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { unit_name: "stage-a-004-production-v2", source_count: 7, target_count: 7, hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { unit_name: "stage-a-005-intake-cases", source_count: 6, target_count: 22, hash: expect.stringMatching(/^[a-f0-9]{64}$/) }
+    ]);
+  });
+
   it("fails closed in file mode without explicit legacy-writer quiescence confirmation", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-business-migration-quiescence-"));
     dataRoots.push(rootDir);
