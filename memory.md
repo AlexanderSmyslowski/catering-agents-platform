@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.360
+version: 5.361
 date: 2026-08-15
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -16,7 +16,7 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
 - PR 597 redigiert zusätzlich Provider- und Request-Kennungen sowie Fixture-IDs aus fehlerhaften externen Antworten. Es entsteht keine zweite fachliche Freigabewahrheit: `ApprovalRequestRecord` bleibt die Produktwahrheit; die Providerfreigabe ist nur die technische Betriebsgrenze.
 - Der Stage-A-Kontrollpunkt ist fachlich bestanden: Datei- und PostgreSQL-Speicherung bleiben getrennt und geschäftsbezogen, Angebote und Produktionsartefakte sind unveränderlich, Fälle/Quellen/Verläufe persistent, Produktgrenzen über Ports explizit und direkte Freigabe-/Handoff-Umgehungen ausgeschlossen.
 - Verifiziert: `npm test -- --maxWorkers=1` mit 305 bestandenen und 1 übersprungenen Testdateien sowie 1.744 bestandenen und 14 übersprungenen Tests; `npx tsc --noEmit`, `npm run build`, `npm audit --omit=dev`, `npm audit`, interne Beta-Gates und die GitHub-CI von PR 596 und PR 597 sind grün. Die 11 PostgreSQL-Schema-/Konkurrenztests bleiben ohne lokale PostgreSQL-Instanz übersprungen. Es gab keine echte externe KI-Ausführung und keine Verarbeitung realer Unternehmens- oder Kundendaten.
-- Aufgabe 8 ist nicht begonnen. Nach diesem Kontrollpunkt wartet jede weitere Stage-A-Arbeit auf einen ausdrücklichen Supervisor-Auftrag.
+- PR #612 ist mit Merge-Commit `5393363fd5a0d7453461eca9bc141655c232b21a` in `main` aufgenommen; sein Tree `c9fbab19a70426c9c461356b75953304b41e5761` entspricht dem historischen PR-Head `bf255be310aadca56bc0b5cfbff2c7cd1da46097`. Task 12 und die acht unabhängig geprüften Reviewbefunde sind damit im Main-Stand enthalten. Der nächste Stage-A-Schritt braucht weiterhin einen ausdrücklichen Supervisor-Auftrag.
 - PA65 ist als kleiner Runtime-/Contract-Anker umgesetzt: `docs/architecture/PA65_SYNTHETIC_LIVE_MINI_PILOT_SUMMARY_SIGNAL.md` gibt dem vorhandenen Mini-Pilot-Check ein lesbares `summary`-Signal mit Status, Grund und naechstem sicheren Schritt. Kein neuer Providerpfad, keine UI, keine Persistenz, kein Deployment und keine Schreibwirkung.
 - PA64 ist als kleiner Runtime-/Contract-Anker umgesetzt: `docs/architecture/PA64_SYNTHETIC_LIVE_MINI_PILOT_CHECK_ENTRY.md` buendelt den vorhandenen Preflight und den PA63-guarded Probe-Lauf zu einem einzigen lokalen Mini-Pilot-Check-Einstieg mit gemeinsamem JSON-Ergebnis. Kein neuer Providerpfad, keine UI, keine Persistenz, keine Deployment-Ausweitung und keine Schreibwirkung.
 - PA63 ist als kleiner Runtime-/Contract-Anker umgesetzt: `docs/architecture/PA63_SYNTHETIC_LIVE_MINI_PILOT_PROBE_GUARD.md` haengt einen dedizierten lokalen Probe-Entry hart an den vorhandenen PA62-Mini-Pilot-Rahmen. Der neue Entry laeuft nur mit bestaetigtem Mini-Pilot-Preflight, bleibt aber weiter lokal, draft-only und ohne neue Runtime-, Deployment- oder Schreibpfade.
@@ -1745,3 +1745,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Der Kandidat ist noch nicht in `main` übernommen: der geprüfte PR-Head vor diesem Folgefix ist `2b2b05d5a57ab216fe31fbe599f4a114983e5c89`, Basis und `main` bleiben `66f354c7715e766b59d9f6407638c05da5ad3394`. Frühere Einträge mit „Aufgabe 8 nicht begonnen“ beziehungsweise „Aufgaben 8 bis 12 offen“ sind historische Übergabestände und werden für den aktuellen Kandidaten ausdrücklich überholt; sie bleiben als Historie erhalten.
 - Der P2-Fix für sandboxiertes macOS behandelt einen verweigerten `ps`-Aufruf jetzt strikt als unverifizierbare Prozessidentität. Eine instanzlokale `Date.now() - process.uptime()`-Schätzung wird nicht mehr als Fingerprint persistiert; dadurch kann eine alte Mtime keinen Live-Lock bei unabhängig geladenen Modulinstanzen freigeben. Der Darwin-Regressionstest simuliert zwei Modulinstanzen mit um eine Millisekunde verschobenen Zeitpunkten und prüft die unveränderte Sperre; Linux- und `ps`-Erfolgspfade bleiben unberührt.
 - Die Dokumentation hält den Stand als Kandidat für eine erneute unabhängige Prüfung fest. Es gibt keine neue API, Persistenzwelt, Migration gegen Produktdaten, externe Providerausführung, Produktionsschreibwirkung, Deployment-, Tag- oder Releaseaktion.
+
+### 5.361 - 2026-08-15
+
+- PR #612 wurde am 2026-08-15 um 17:03:06 UTC als `5393363fd5a0d7453461eca9bc141655c232b21a` nach `main` gemergt. Der Main-Tree ist `c9fbab19a70426c9c461356b75953304b41e5761`; der frühere PR-Head `bf255be310aadca56bc0b5cfbff2c7cd1da46097` bleibt als historischer Vorgänger mit demselben Tree dokumentiert.
+- Task 12 und die acht unabhängig geprüften Reviewbefunde sind mit PR #612 in `main` angekommen: entkoppelter History-/Workspace-Filter, read-only Legacy-Reader, fail-closed Darwin-Fingerprint, nachvollziehbarer Stage-A-Abschluss, unabhängiger Workspace-Filter, Hosted-Secret-Gate, Hosted-Business-ID-Gate und US-037-Nachweis. Die GitHub-Reviewthreads sind historische Prüfspur; dieser Eintrag behauptet keine zusätzliche Threadmutation.
+- Main-CI Run `31897217407` ist für `5393363…` mit `build-and-test` (Job `95042251327`) und `browser-rehearsal` (Job `95042251392`) terminal erfolgreich. Merge und Main-CI sind belegt; daraus folgen weder eine Deploymentfreigabe noch eine produktive Migration.
+- Die früheren Aussagen „PR offen“, „nicht gemergt“ und „wartet auf Merge“ bleiben historische Übergabestände in den älteren Versionen. Für den aktuellen Stand ist PR #612 gemergt; weitere Stage-A-Arbeit bleibt bis zu einem neuen Supervisor-Auftrag out of scope.

@@ -35,7 +35,7 @@ Aktueller Projektkontext
  • Der Stage-A-Kontrollpunkt ist bestanden: geschäftsbezogene Datei-/PostgreSQL-Grenzen, unveränderliche Angebots-/Produktionsartefakte, persistente Fälle/Quellen/Verläufe, explizite Produkt-Ports und ein geschlossenes Provider-Gate sind belegt.
  • OpenAI und Codex CLI unterliegen derselben serverseitigen Freigabegrenze vor Fetch beziehungsweise Subprozess; Fixture-Betrieb bleibt lokal. `ApprovalRequestRecord` bleibt die einzige fachliche Freigabewahrheit.
  • Die vollständige serielle Testsuite, Typprüfung, Build, beide Audits, interne Beta-Gates und die CI-Läufe von PR 596/597 waren grün. PostgreSQL-Konkurrenztests blieben wegen fehlender lokaler PostgreSQL-Instanz übersprungen.
- • Aufgabe 8 ist nicht begonnen. Aufgaben 8 bis 12 sind bis zu einer ausdrücklichen Supervisor-Entscheidung offen.
+ • PR #612 wurde mit Merge-Commit `5393363fd5a0d7453461eca9bc141655c232b21a` in `main` aufgenommen; der Main-Tree `c9fbab19a70426c9c461356b75953304b41e5761` entspricht dem historischen PR-Head `bf255be310aadca56bc0b5cfbff2c7cd1da46097`. Task 12 und die acht unabhängig geprüften Reviewbefunde sind damit im aktuellen Main-Stand enthalten.
 
 Was aktuell gilt
  • ApprovalRequestRecord bleibt die fuehrende Freigabewahrheit.
@@ -47,12 +47,12 @@ Was aktuell gilt
 
 Naechster explizit beauftragter Schritt
 
-Der Stage-A-Kontrollpunkt ist abgeschlossen. Der nächste Schritt ist eine ausdrückliche Supervisor-Entscheidung; insbesondere wird Aufgabe 8 nicht automatisch begonnen.
+Der Stage-A-Task-12-Stand ist in `main` aufgenommen. Der nächste Schritt ist eine ausdrückliche Supervisor-Entscheidung für weitere Arbeit; Deployment und produktive Migration sind durch den Merge nicht freigegeben.
  • Vor jedem Folgeauftrag erneut `memory.md`, `AGENTS.md`, `README.md` und diesen Handoff am realen Repo-Stand lesen.
  • Keine neue Produktfläche, keine neue Roadmap und keine Scope-Ausweitung ohne ausdruecklichen Auftrag.
 
 Weiter out of scope
- • Aufgaben 8 bis 12 bis zum ausdruecklichen Supervisor-Auftrag
+ • weiterer Stage-A-Ausbau über den gemergten Task-12-Stand hinaus bis zum ausdruecklichen Supervisor-Auftrag
  • echte externe KI-Ausführung und reale Unternehmens- oder Kundendaten
  • Bereitstellung, Deployment und Änderungen produktiver Infrastruktur
  • neue Persistenzsysteme / Prisma
@@ -70,6 +70,6 @@ Pflicht fuer fortlaufende Arbeit
  • keine stillen inhaltlichen Verschiebungen
 
 Aktueller Handoff-Override – 2026-08-15
- • PR #612 auf `loop/stage-a-complete-chain` ist der ungemergte Stage-A-Task-12-Kandidat. Er umfasst lokale Business-Scope-Migration, die unveränderliche Angebots-zu-Produktionskette, Business-Isolation, UI-Reload-/Search-/Revision-/Copy-Verträge und die nach Ersatztests entfernten Kompatibilitätspfade.
- • `hostedMultiBusinessReady` ist im Kandidaten codefest `true`, weil Route-, Store-, Audit- und HTML-/CSV-Export-Matrix geprüft wurden. Kein Umgebungsflag kann dieses Gate umgehen.
- • Der geprüfte Basisstand vor dem uncommitteten Folgefix ist `2b2b05d5a57ab216fe31fbe599f4a114983e5c89` gegen `main` `66f354c7715e766b59d9f6407638c05da5ad3394`; der aktuelle Folgefix behandelt verweigertes macOS-`ps` fail-closed und wartet auf unabhängige Prüfung. Frühere Aussagen, dass Aufgaben 8–12 noch offen seien, sind historische Handoff-Stände und nicht der aktuelle Kandidatenstatus.
+ • PR #612 auf `loop/stage-a-complete-chain` wurde als `5393363fd5a0d7453461eca9bc141655c232b21a` in `main` aufgenommen. Er umfasste lokale Business-Scope-Migration, die unveränderliche Angebots-zu-Produktionskette, Business-Isolation, UI-Reload-/Search-/Revision-/Copy-Verträge und die nach Ersatztests entfernten Kompatibilitätspfade.
+ • `hostedMultiBusinessReady` ist im gemergten Stage-A-Stand codefest `true`, weil Route-, Store-, Audit- und HTML-/CSV-Export-Matrix geprüft wurden. Kein Umgebungsflag kann dieses Gate umgehen.
+ • Der historische PR-Head `bf255be310aadca56bc0b5cfbff2c7cd1da46097` wurde mit Tree `c9fbab19a70426c9c461356b75953304b41e5761` gemergt; der alleinige aktuelle Main-Commit ist `5393363fd5a0d7453461eca9bc141655c232b21a`. Main-CI Run `31897217407` ist mit `build-and-test` und `browser-rehearsal` terminal erfolgreich. Frühere Aussagen über einen offenen PR oder ausstehende Mergeentscheidung sind historische Handoff-Stände; Deployment und produktive Migration bleiben nicht freigegeben.
