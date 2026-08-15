@@ -408,7 +408,8 @@ function installProductionAcceptanceMocks(
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
-      if (url.endsWith("/api/production/v1/production/cases") && (!init?.method || init.method === "GET")) {
+      const requestPath = new URL(url, "http://localhost").pathname;
+      if (requestPath.endsWith("/api/production/v1/production/cases") && (!init?.method || init.method === "GET")) {
         const cases =
           options.withoutSpecs
             ? []
@@ -945,7 +946,7 @@ function installProductionAcceptanceMocks(
 }
 
 async function openFirstProductionHistoryItem(container: HTMLDivElement) {
-  const history = container.querySelector(".production-filter-details") as HTMLDetailsElement | null;
+  const history = container.querySelector(".production-history-details") as HTMLDetailsElement | null;
   if (history) {
     history.open = true;
   }
@@ -1142,7 +1143,7 @@ describe("backoffice production acceptance smoke", () => {
       ).map((button) => button.getAttribute("aria-label"));
       expect(unboundActionLabels).toEqual([]);
 
-      const history = container.querySelector(".production-filter-details") as HTMLDetailsElement | null;
+      const history = container.querySelector(".production-history-details") as HTMLDetailsElement | null;
       if (!history) {
         throw new Error("Production history filter not found");
       }
@@ -1433,7 +1434,7 @@ describe("backoffice production acceptance smoke", () => {
 
       expect(document.body.textContent ?? "").toContain("Intake-Anfrage im Fokus");
 
-      const filterDetails = container.querySelector(".production-filter-details") as HTMLDetailsElement | null;
+      const filterDetails = container.querySelector(".production-history-details") as HTMLDetailsElement | null;
       if (filterDetails) {
         filterDetails.open = true;
       }
@@ -1449,7 +1450,7 @@ describe("backoffice production acceptance smoke", () => {
       });
 
       const searchResultButton = Array.from(
-        container.querySelectorAll(".production-filter-details .quiet-list__button")
+        container.querySelectorAll(".production-history-details .quiet-list__button")
       ).find((button) => (button.textContent ?? "").includes("Archivsuche Ziel")) as HTMLButtonElement | undefined;
 
       expect(searchResultButton).toBeTruthy();

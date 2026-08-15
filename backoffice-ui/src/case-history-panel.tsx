@@ -48,7 +48,7 @@ export function CaseHistoryPanel({
   return (
     <details
       id="history"
-      className={`panel secondary-workspace ${product === "offer" ? "offer-history-details" : "production-filter-details"}`}
+      className={`panel secondary-workspace ${product === "offer" ? "offer-history-details" : "production-history-details"}`}
     >
       <summary>
         Frühere {label}aufträge öffnen · {items.length} {items.length === 1 ? "Auftrag" : "Aufträge"}
@@ -62,7 +62,7 @@ export function CaseHistoryPanel({
           type="search"
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Name oder Dateiname"
+          placeholder={product === "production" ? "Kunde, Anlass, Datum oder Speise suchen" : "Name oder Dateiname"}
           autoComplete="off"
         />
         {loading ? <p className="helper-text">Aufträge werden geladen ...</p> : null}

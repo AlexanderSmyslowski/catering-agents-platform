@@ -70,6 +70,20 @@ interface FileTargetLockMetadata {
   processInstanceId?: string;
 }
 
+type FileTargetLockRead =
+  | { kind: "missing" }
+  | { kind: "invalid" }
+  | { kind: "valid"; metadata: FileTargetLockMetadata };
+
+const FILE_TARGET_LOCK_KEYS = new Set([
+  "pid",
+  "token",
+  "lease",
+  "hostname",
+  "processFingerprint",
+  "processInstanceId"
+]);
+
 interface FileTargetLockTicket {
   sequence: number;
   path: string;
@@ -180,12 +194,23 @@ function readProcessFingerprint(pid: number): string | undefined {
       return startTimeTicks ? `linux:${startTimeTicks}` : undefined;
     }
     if (platform() === "darwin") {
-      const startedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
-        encoding: "utf8",
-        env: { ...process.env, LC_ALL: "C" },
-        stdio: ["ignore", "pipe", "ignore"]
-      }).trim();
-      return startedAt ? `darwin:${startedAt}` : undefined;
+      try {
+        const startedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+          encoding: "utf8",
+          env: { ...process.env, LC_ALL: "C" },
+          stdio: ["ignore", "pipe", "ignore"]
+        }).trim();
+        if (startedAt) return `darwin:${startedAt}`;
+      } catch {
+        // Sandboxed macOS runners may deny process inspection. The current PID still has a
+        // stable, process-wide start estimate that worker-module instances can share; other
+        // PIDs remain unverifiable and therefore fail closed below.
+        if (pid !== process.pid) return undefined;
+        const startedAtMilliseconds = Math.round(Date.now() - process.uptime() * 1_000);
+        return Number.isFinite(startedAtMilliseconds)
+          ? `darwin:${pid}:${startedAtMilliseconds}`
+          : undefined;
+      }
     }
   } catch {
     return undefined;
@@ -214,25 +239,46 @@ function currentFileTargetLockMetadata(token: string): FileTargetLockMetadata {
   };
 }
 
-function readFileTargetLock(lockPath: string): FileTargetLockMetadata | undefined {
+function readFileTargetLock(lockPath: string): FileTargetLockRead {
   try {
-    const metadata = JSON.parse(readFileSync(lockPath, "utf8")) as Partial<FileTargetLockMetadata>;
-    return typeof metadata.pid === "number" && typeof metadata.token === "string"
-      ? {
-          pid: metadata.pid,
-          token: metadata.token,
-          ...(metadata.lease === "heartbeat-v1" ? { lease: metadata.lease } : {}),
-          ...(typeof metadata.hostname === "string" ? { hostname: metadata.hostname } : {}),
-          ...(typeof metadata.processFingerprint === "string"
-            ? { processFingerprint: metadata.processFingerprint }
-            : {}),
-          ...(typeof metadata.processInstanceId === "string"
-            ? { processInstanceId: metadata.processInstanceId }
-            : {})
-        }
-      : undefined;
+    const parsed: unknown = JSON.parse(readFileSync(lockPath, "utf8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { kind: "invalid" };
+    }
+    const metadata = parsed as Record<string, unknown>;
+    if (!Object.keys(metadata).every((key) => FILE_TARGET_LOCK_KEYS.has(key))) {
+      return { kind: "invalid" };
+    }
+    if (
+      !Number.isSafeInteger(metadata.pid) ||
+      (metadata.pid as number) <= 0 ||
+      typeof metadata.token !== "string" ||
+      metadata.token.length === 0 ||
+      (Object.prototype.hasOwnProperty.call(metadata, "lease") && metadata.lease !== "heartbeat-v1") ||
+      (["hostname", "processFingerprint", "processInstanceId"] as const).some((key) =>
+        Object.prototype.hasOwnProperty.call(metadata, key) && typeof metadata[key] !== "string"
+      )
+    ) {
+      return { kind: "invalid" };
+    }
+    return {
+      kind: "valid",
+      metadata: {
+        pid: metadata.pid as number,
+        token: metadata.token,
+        ...(metadata.lease === "heartbeat-v1" ? { lease: metadata.lease } : {}),
+        ...(typeof metadata.hostname === "string" ? { hostname: metadata.hostname } : {}),
+        ...(typeof metadata.processFingerprint === "string"
+          ? { processFingerprint: metadata.processFingerprint }
+          : {}),
+        ...(typeof metadata.processInstanceId === "string"
+          ? { processInstanceId: metadata.processInstanceId }
+          : {})
+      }
+    };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof SyntaxError) return undefined;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "missing" };
+    if (error instanceof SyntaxError) return { kind: "invalid" };
     throw error;
   }
 }
@@ -375,7 +421,18 @@ function allocateFileTargetTicket(
 function fileTargetTicketIsActive(queuePath: string, sequence: number): boolean {
   if (existsSync(path.join(queuePath, targetTicketReleaseName(sequence)))) return false;
   const ticketPath = path.join(queuePath, targetTicketName(sequence));
-  const owner = readFileTargetLock(ticketPath);
+  try {
+    statSync(ticketPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+  const ownerRead = readFileTargetLock(ticketPath);
+  // A present ticket that cannot be fully decoded is still an active fence. Age cannot prove
+  // ownership ended when the ticket identity itself is unavailable.
+  if (ownerRead.kind === "invalid") return true;
+  if (ownerRead.kind === "missing") return false;
+  const owner = ownerRead.metadata;
   // Lease age only permits cleanup after the OS fingerprint proves this PID belongs to a different
   // process. It never proves owner death by itself.
   const leaseExpired = invalidFileTargetLockIsStale(ticketPath);
@@ -386,10 +443,6 @@ function fileTargetTicketIsActive(queuePath: string, sequence: number): boolean 
     if (currentIncarnation !== false || !leaseExpired) return true;
   }
   if (leaseExpired) {
-    markFileTargetTicketReleased(queuePath, sequence);
-    return false;
-  }
-  if (owner) {
     markFileTargetTicketReleased(queuePath, sequence);
     return false;
   }
@@ -422,14 +475,20 @@ async function waitForLegacyFileTargetLock(
   legacyTimeoutMessage: string
 ): Promise<void> {
   while (existsSync(lockPath)) {
-    const owner = readFileTargetLock(lockPath);
+    const ownerRead = readFileTargetLock(lockPath);
+    if (ownerRead.kind === "missing") continue;
+    // A present lock with an unknown schema remains an active fence. Its age cannot prove that
+    // an owner ended, so stale cleanup must never unlink it automatically.
+    if (ownerRead.kind === "invalid") {
+      if (Date.now() >= deadline) throw new Error(legacyTimeoutMessage);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      continue;
+    }
+    const owner = ownerRead.metadata;
     const expiredHeartbeatLease = owner?.lease === "heartbeat-v1" &&
       invalidFileTargetLockIsStale(lockPath) &&
       fileTargetOwnerIsCurrentIncarnation(owner) === false;
-    if (
-      (owner && expiredHeartbeatLease) ||
-      (!owner && invalidFileTargetLockIsStale(lockPath))
-    ) {
+    if (owner && expiredHeartbeatLease) {
       unlinkIfPresent(lockPath);
       continue;
     }
@@ -461,8 +520,14 @@ async function acquireLegacyFileTargetLock(
         return {
           path: lockPath,
           release: () => {
-            const owner = readFileTargetLock(lockPath);
-            if (owner?.pid === process.pid && owner.token === token) unlinkIfPresent(lockPath);
+            const ownerRead = readFileTargetLock(lockPath);
+            if (
+              ownerRead.kind === "valid" &&
+              ownerRead.metadata.pid === process.pid &&
+              ownerRead.metadata.token === token
+            ) {
+              unlinkIfPresent(lockPath);
+            }
           }
         };
       } catch (error) {

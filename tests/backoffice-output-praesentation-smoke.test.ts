@@ -495,7 +495,7 @@ async function renderRoute(pathname: "/angebot" | "/produktion"): Promise<string
 
   const historySelector = pathname === "/angebot"
     ? ".offer-history-details .quiet-list__button"
-    : ".production-filter-details .quiet-list__button";
+    : ".production-history-details .quiet-list__button";
   const firstJob = container.querySelector<HTMLButtonElement>(historySelector);
   if (firstJob) {
     await act(async () => {

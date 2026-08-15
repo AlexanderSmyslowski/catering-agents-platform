@@ -40,7 +40,18 @@ export * from "./llm-readiness-synthetic-live-slice.js";
 export * from "./llm-readiness-synthetic-live-preflight.js";
 export * from "./llm-readiness.js";
 
-export * from "./persistence.js";
+export {
+  createBusinessScopedPersistentCollection,
+  resolveCollectionQueryable,
+  resolveDataRoot,
+  resolveDatabaseUrl
+} from "./persistence.js";
+export type {
+  BusinessScopedPersistentCollection,
+  CollectionStorageOptions,
+  PersistentCollectionOptions,
+  Queryable
+} from "./persistence.js";
 export * from "./json-equality.js";
 export * from "./production-clarification.js";
 export * from "./production-reference-quality.js";

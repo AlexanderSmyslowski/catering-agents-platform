@@ -31,7 +31,7 @@ import {
 } from "../shared-core/src/index.js";
 import {
   createBusinessScopedPersistentCollection,
-  createPersistentCollection,
+  createLegacyMigrationReader,
   establishLegacyCollectionWriteFence,
   resolveCollectionQueryable,
   resolveDataRoot,
@@ -49,6 +49,24 @@ import {
   validateIntakeShadowRunForStorage,
   type IntakeShadowRun
 } from "../intake-service/src/store.js";
+
+// These are the only collections that existed before records were business-scoped.
+// Source documents are intentionally absent: their file and PostgreSQL stores were
+// introduced with a required business context, so no unscoped source payload exists to copy.
+const legacyCollectionNames = [
+  "audit/events",
+  "intake/requests",
+  "intake/specs",
+  "intake/shadow-runs",
+  "offers/drafts",
+  "production/plans",
+  "production/purchase-lists",
+  "production/clarification-answers",
+  "production/clarification-drafts",
+  "production/drafts",
+  "production/feedback-drafts",
+  "production/recipes"
+] as const;
 
 interface MigrationManifest {
   completed: Record<string, { completedAt: string; sourceCount: number; targetCount: number; hash: string; legacyHandoffDiscarded?: boolean; discardedHandoffCount?: number; strippedHandoffHash?: string; legacyProductionStates?: Array<{ draftId: string; formerStatus: string; sourceHash: string }> }>;
@@ -248,7 +266,7 @@ async function migrateProductionDrafts(
     return { name, status: "already_migrated" };
   }
 
-  const legacy = createPersistentCollection<Record<string, unknown>>({
+  const legacy = createLegacyMigrationReader<Record<string, unknown>>({
     collectionName: "production/drafts",
     getId: (draft) => String(draft.draftId),
     rootDir: queryable ? undefined : options.rootDir,
@@ -364,7 +382,7 @@ async function migrateProductionV2(
   const legacyProductionStates: Array<{ draftId: string; formerStatus: string; sourceHash: string }> = [];
 
   for (const definition of definitions) {
-    const legacy = createPersistentCollection<Record<string, unknown>>({
+    const legacy = createLegacyMigrationReader<Record<string, unknown>>({
       collectionName: definition.collectionName,
       getId: (value) => String(value[definition.idKey]),
       rootDir: queryable ? undefined : options.rootDir,
@@ -546,7 +564,7 @@ async function migrateIntakeAndCases(
   options.faultInjector?.("before_intake_record_publish");
   for (const definition of intakeDefinitions) {
     type Item = Parameters<typeof definition.validate>[0];
-    const legacy = createPersistentCollection<Item>({
+    const legacy = createLegacyMigrationReader<Item>({
       collectionName: definition.collectionName,
       getId: definition.id as (item: Item) => string,
       validate: definition.validate as (item: Item) => Item,
@@ -586,12 +604,12 @@ async function migrateIntakeAndCases(
     validate: validateProductionDraft,
     ...storage
   });
-  const legacyOffers = createPersistentCollection<Record<string, unknown>>({
+  const legacyOffers = createLegacyMigrationReader<Record<string, unknown>>({
     collectionName: "offers/drafts",
     getId: (item) => String(item.draftId),
     ...storage
   });
-  const legacyProductionDrafts = createPersistentCollection<Record<string, unknown>>({
+  const legacyProductionDrafts = createLegacyMigrationReader<Record<string, unknown>>({
     collectionName: "production/drafts",
     getId: (item) => String(item.draftId),
     ...storage
@@ -828,20 +846,7 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
   if (!queryable && options.legacyFileWritersQuiesced !== true) {
     throw new Error("Legacy file writers must be confirmed quiescent before migration.");
   }
-  for (const collectionName of [
-    "audit/events",
-    "intake/requests",
-    "intake/specs",
-    "intake/shadow-runs",
-    "offers/drafts",
-    "production/plans",
-    "production/purchase-lists",
-    "production/clarification-answers",
-    "production/clarification-drafts",
-    "production/drafts",
-    "production/feedback-drafts",
-    "production/recipes"
-  ] as const) {
+  for (const collectionName of legacyCollectionNames) {
     await establishLegacyCollectionWriteFence({
       collectionName,
       rootDir: queryable ? undefined : options.rootDir,
@@ -854,7 +859,7 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
   const units: MigrationUnitResult[] = [];
 
   if (!(queryable ? await pgCompletion(queryable, businessId, name) : manifest?.completed[name])) {
-  const legacy = createPersistentCollection<AuditEntry>({
+  const legacy = createLegacyMigrationReader<AuditEntry>({
     collectionName: "audit/events",
     getId: (entry) => entry.auditId,
     rootDir: queryable ? undefined : options.rootDir,
@@ -895,7 +900,7 @@ export async function runLocalBusinessScopeMigration(options: LocalBusinessScope
     units.push({ name, status: "already_migrated" });
   }
 
-  const legacyOffers = createPersistentCollection<Record<string, unknown>>({ collectionName: "offers/drafts", getId: (draft) => String(draft.draftId), rootDir: queryable ? undefined : options.rootDir, pgPool: queryable });
+  const legacyOffers = createLegacyMigrationReader<Record<string, unknown>>({ collectionName: "offers/drafts", getId: (draft) => String(draft.draftId), rootDir: queryable ? undefined : options.rootDir, pgPool: queryable });
   const sourceOffers = await legacyOffers.list();
   const strippedHandoffs = sourceOffers.map((draft) => draft.productionHandoff).filter((handoff) => handoff !== undefined);
   const strippedHandoffHash = hashRecords(strippedHandoffs);

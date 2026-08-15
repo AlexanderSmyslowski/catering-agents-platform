@@ -60,6 +60,11 @@ describe("app feedback shell", () => {
 
     expect(appSource.indexOf("<RouteMasthead")).toBeGreaterThan(-1);
     expect(appSource.indexOf("<AppFeedbackShell")).toBeGreaterThan(appSource.indexOf("<RouteMasthead"));
-    expect(appSource.indexOf("<AppFeedbackShell")).toBeLessThan(appSource.indexOf("<AppRouteContent"));
+    const routeContentIndex = Math.min(
+      appSource.indexOf("<OfferConversationalWorkbench"),
+      appSource.indexOf("<ProductionRouteMainLayout")
+    );
+    expect(routeContentIndex).toBeGreaterThan(-1);
+    expect(appSource.indexOf("<AppFeedbackShell")).toBeLessThan(routeContentIndex);
   });
 });

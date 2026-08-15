@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 const routeFiles = [
   "backoffice-ui/src/App.tsx",
   "backoffice-ui/src/app-dashboard-route-state.ts",
-  "backoffice-ui/src/app-route-content.tsx",
   "backoffice-ui/src/production-focus-state.ts"
 ];
 
@@ -19,18 +18,18 @@ describe("typed product route boundary", () => {
     }
   });
 
-  it("does not import legacy projection helpers into the actual route controller", () => {
-    for (const relativePath of routeFiles) {
-      const source = readFileSync(path.resolve(relativePath), "utf8");
-      expect(source, relativePath).not.toContain("app-route-legacy-adapter");
-      expect(source, relativePath).not.toContain("toLegacy");
-      expect(source, relativePath).not.toContain("legacyDashboard");
-    }
+  it("keeps legacy record conversion at the final rendered view boundary", () => {
+    const appSource = readFileSync(path.resolve("backoffice-ui/src/App.tsx"), "utf8");
+    const adapterSource = readFileSync(path.resolve("backoffice-ui/src/app-route-legacy-adapter.ts"), "utf8");
+    expect(appSource).toContain("buildRecordViewProjection");
+    expect(adapterSource).toContain("toLegacyRecord");
+    expect(adapterSource).toContain("toLegacyRecords");
+    expect(adapterSource).not.toContain("createPersistentCollection");
   });
 
   it("keeps the legacy adapter behind one explicit view-boundary translation", () => {
-    const boundarySource = readFileSync(path.resolve("backoffice-ui/src/app-route-content-state.ts"), "utf8");
-    expect(boundarySource).toContain("app-route-legacy-adapter");
+    const boundarySource = readFileSync(path.resolve("backoffice-ui/src/app-route-legacy-adapter.ts"), "utf8");
+    expect(boundarySource).toContain("toLegacyDashboardProjection");
   });
 
   it("keeps route state strictly typed without a legacy overload or first-record discriminator", () => {

@@ -57,6 +57,15 @@ export interface PersistentCollection<T> {
   insert(item: T): Promise<"created" | "exists">;
 }
 
+/**
+ * Migration code can inspect pre-business-scope records, but cannot reopen
+ * the retired global write path once scoped storage is active.
+ */
+export interface LegacyMigrationReader<T> {
+  list(): Promise<T[]>;
+  get(id: string): Promise<T | undefined>;
+}
+
 function sanitizeKey(key: string): string {
   return encodeURIComponent(key);
 }
@@ -758,6 +767,16 @@ export function createPersistentCollection<T>(
   }
 
   return new FileBackedCollection(options);
+}
+
+export function createLegacyMigrationReader<T>(
+  options: PersistentCollectionOptions<T>
+): LegacyMigrationReader<T> {
+  const collection = createPersistentCollection(options);
+  return {
+    list: () => collection.list(),
+    get: (id) => collection.get(id)
+  };
 }
 
 export interface BusinessScopedPersistentCollection<T> {

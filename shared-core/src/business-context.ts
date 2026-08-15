@@ -14,4 +14,6 @@ export function assertBusinessId(value: string): BusinessId {
   return value;
 }
 
-export const hostedMultiBusinessReady = false;
+// The route/store isolation matrix is covered by the Stage A contract suite;
+// hosted startup is code-gated and never controlled by an environment flag.
+export const hostedMultiBusinessReady = true;

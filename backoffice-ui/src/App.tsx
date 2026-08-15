@@ -13,17 +13,16 @@ import {
 import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
-import { AppRouteContent } from "./app-route-content.js";
 import { HomePortalApp } from "./home-portal-app.js";
 import { OfferProductApp } from "./offer-product-app.js";
 import { ProductionProductApp } from "./production-product-app.js";
 import {
-  buildAppRouteContentState,
-  buildDashboardViewProjection,
   buildRecordView,
   buildRecordViewMap,
   buildRecordViewProjection
-} from "./app-route-content-state.js";
+} from "./app-route-legacy-adapter.js";
+import { OfferConversationalWorkbench } from "./offer-workbench.js";
+import { ProductionRouteMainLayout } from "./production-route-main-layout.js";
 import {
   archiveIntakeRequest,
   createAcceptedSpecFromDocument,
@@ -121,7 +120,7 @@ import type { OfferWorkbenchProps } from "./offer-workbench.js";
 // Product shells render the masthead before this shared feedback and route content.
 // <RouteMasthead />
 // <AppFeedbackShell />
-// <AppRouteContent />
+// Product route content is composed directly from the typed route boundaries.
 
 const PROMOTED_PRODUCTION_SPEC_FOCUS_KEY = "catering.promotedProductionSpecFocus";
 
@@ -444,7 +443,6 @@ function ProductWorkspaceView({
     setRecipeFile,
     clearRecipeUploadDraft
   } = useRecipeUploadDraft();
-  const [search, setSearch] = useState("");
   const [historySearch, setHistorySearch] = useState("");
   const [historyItems, setHistoryItems] = useState(availableCases);
   const [historyServerFiltered, setHistoryServerFiltered] = useState(false);
@@ -612,8 +610,7 @@ function ProductWorkspaceView({
     failPlanProgress
   } = useProductionPlanProgress();
   const manualSpecForm = useProductionManualSpecForm();
-  const deferredSearch = useDeferredValue(search);
-  const viewDashboard = useMemo(() => buildDashboardViewProjection(dashboard), [dashboard]);
+  const deferredSearch = useDeferredValue(historySearch);
   const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
   const stagedProductionDocumentRef = useRef<StagedProductionDocument | undefined>(undefined);
@@ -633,7 +630,6 @@ function ProductWorkspaceView({
     recipeCount,
     offerHandoffCounts,
     latestIntakeRequestSummary,
-    isInitialHomeLoading,
     isInitialProductionLoading,
     selectedDraft,
     activeOfferDraft,
@@ -1024,7 +1020,6 @@ function ProductWorkspaceView({
   };
 
   const {
-    productionRouteFilterState,
     productionRouteMainLayoutState
   } = buildAppProductionRouteAppBoundary({
     activeProductionCaseId,
@@ -1066,18 +1061,7 @@ function ProductWorkspaceView({
     editingMenuItems,
     editingComponentStates,
     hasFocusedSpecEditChanges,
-      recipes: buildRecordViewProjection(dashboard.recipes),
-    isInitialProductionLoading,
-    productionPlanCount: dashboard.productionPlans.length,
-    purchaseListCount: dashboard.purchaseLists.length,
-    recipeCount,
-    approvedRecipeCount: recipeReviewCounts.approved,
-    reviewRequiredRecipeCount: recipeReviewCounts.reviewRequired,
-    productionServiceStatus: serviceHealth.production.status,
-    productionServiceCounts: serviceHealth.production.counts,
-     filteredSpecs: buildRecordViewProjection(filteredSpecs),
-    search,
-    setSearch,
+    recipes: buildRecordViewProjection(dashboard.recipes),
     manualInput: manualSpecInput,
     manualInputActions: manualSpecActions,
     openSpecForQuestions,
@@ -1174,22 +1158,6 @@ function ProductWorkspaceView({
     saveSpecEdit: handleSaveSpecEdit,
     resetSpecEdit
   });
-  const appRouteContentState = buildAppRouteContentState({
-    route,
-    home: {
-      isInitialHomeLoading,
-      dashboard: viewDashboard,
-      serviceHealth,
-      offerHandoffCounts,
-      recipeReviewCounts,
-      latestIntakeRequestSummary,
-      filteredAuditEvents: buildRecordViewProjection(filteredAuditEvents)
-    },
-    offerWorkbench: offerWorkbenchState,
-    productionFilter: productionRouteFilterState,
-    productionMain: productionRouteMainLayoutState
-  });
-
   const activeCaseStatus = availableCases.find((candidate) =>
     candidate.caseId === (route === "offer" ? activeOfferCaseId : activeProductionCaseId)
   )?.status ?? "open";
@@ -1292,7 +1260,7 @@ function ProductWorkspaceView({
           }
         }}
         onCopy={handleHistoryCopy}
-        loading={historyLoading}
+        loading={historyLoading || loading}
         error={historyError}
       />
 
@@ -1303,7 +1271,8 @@ function ProductWorkspaceView({
         error={error}
       />
 
-      <AppRouteContent {...appRouteContentState} />
+      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} /> : null}
+      {route === "production" ? <ProductionRouteMainLayout {...productionRouteMainLayoutState} /> : null}
     </>
   );
 
