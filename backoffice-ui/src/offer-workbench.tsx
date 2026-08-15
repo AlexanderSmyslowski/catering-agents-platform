@@ -72,6 +72,8 @@ export type OfferWorkbenchProps = {
   activeDraft?: Record<string, unknown>;
   selectedDraft?: Record<string, unknown>;
   setSelectedDraftId: (draftId: string) => void;
+  selectedVariantId?: string;
+  setSelectedVariantId?: (variantId: string | undefined) => void;
   approveDraft: (draftId: string, revision: number, variantId: string) => Promise<void>;
   approvalBinding?: OfferApprovalBinding;
   createHandoff?: (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => Promise<void>;
@@ -193,6 +195,8 @@ export function OfferConversationalWorkbench({
   activeDraft,
   selectedDraft,
   setSelectedDraftId,
+  selectedVariantId,
+  setSelectedVariantId = () => undefined,
   approveDraft,
   approvalBinding,
   createHandoff,
@@ -452,18 +456,25 @@ export function OfferConversationalWorkbench({
                 </div>
               ) : null}
               <div className="quiet-action-row">
-                {focusedVariants.map((variant) => (
-                  <button
-                    key={String(variant.variantId)}
-                    className="secondary-button"
-                    disabled={submitting || focusedDraftRevision === undefined}
-                    onClick={() => focusedDraftRevision === undefined
-                      ? undefined
-                      : void approveDraft(focusedDraftId, focusedDraftRevision, String(variant.variantId))}
-                  >
-                    {`Variante freigeben: ${String(variant.label ?? variant.variantId)}`}
-                  </button>
-                ))}
+                {focusedVariants.map((variant) => {
+                  const variantId = String(variant.variantId);
+                  return (
+                    <button
+                      key={variantId}
+                      className="secondary-button"
+                      aria-pressed={selectedVariantId === variantId}
+                      disabled={submitting || focusedDraftRevision === undefined}
+                      onClick={() => {
+                        setSelectedVariantId(variantId);
+                        if (focusedDraftRevision !== undefined) {
+                          void approveDraft(focusedDraftId, focusedDraftRevision, variantId);
+                        }
+                      }}
+                    >
+                      {`Variante freigeben: ${String(variant.label ?? variantId)}`}
+                    </button>
+                  );
+                })}
                 <a className="ghost-link" href={offerExportUrl(focusedDraftId)} target="_blank" rel="noreferrer">
                   Angebot exportieren
                 </a>

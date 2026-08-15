@@ -13,10 +13,16 @@ import {
 import { productionDraftEntryId } from "./production-entry-focus.js";
 
 const productionDraftReviewEvent = "catering:production-draft-review";
+const productionDraftRefreshEvent = "catering:production-draft-refresh";
 
 export function announceProductionDraftReview(draftId: string): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(productionDraftReviewEvent, { detail: { draftId } }));
+}
+
+export function announceProductionDraftRefresh(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(productionDraftRefreshEvent));
 }
 
 type ProductionDraftReviewPanelProps = {
@@ -148,7 +154,7 @@ export function formatProductionDraftArtifactSummary(draft: ProductionDraft): st
   return parts.length > 0 ? parts.join(", ") : "keine Fachartefakte";
 }
 
-function hasCompleteProductionSnapshot(draft: ProductionDraft): boolean {
+export function hasCompleteProductionSnapshot(draft: ProductionDraft): boolean {
   const artifacts = draft.draftArtifacts;
   if (!artifacts?.eventSpec || !artifacts.productionPlan || !artifacts.purchaseList || !Array.isArray(artifacts.recipes)) {
     return false;
@@ -166,7 +172,7 @@ function hasCompleteProductionSnapshot(draft: ProductionDraft): boolean {
   });
 }
 
-function canApproveProductionDraft(draft: ProductionDraft): boolean {
+export function canApproveProductionDraft(draft: ProductionDraft): boolean {
   return draft.status === "pending_review" &&
     hasCompleteProductionSnapshot(draft) &&
     draft.reviewCards
@@ -190,7 +196,7 @@ function approvedSpecIdsFromProjection(
   );
 }
 
-function canReviseProductionDraft(draft: ProductionDraft): boolean {
+export function canRequestProductionRevision(draft: ProductionDraft): boolean {
   const requestedChanges = draft.reviewCards.filter((card) => card.decision === "change_requested");
   return requestedChanges.length > 0 && requestedChanges.every((card) =>
     productionDraftExtractionRevisionCardKinds.has(card.kind) && Boolean(card.operatorComment?.trim())
@@ -373,8 +379,15 @@ export function ProductionDraftReviewPanel({
       setFocusedDraftId(draftId);
       void reloadDrafts({ clearMessage: false });
     };
+    const handleRefresh = () => {
+      void reloadDrafts({ clearMessage: false });
+    };
     window.addEventListener(productionDraftReviewEvent, handlePreparedDraft);
-    return () => window.removeEventListener(productionDraftReviewEvent, handlePreparedDraft);
+    window.addEventListener(productionDraftRefreshEvent, handleRefresh);
+    return () => {
+      window.removeEventListener(productionDraftReviewEvent, handlePreparedDraft);
+      window.removeEventListener(productionDraftRefreshEvent, handleRefresh);
+    };
   }, [caseId]);
 
   useEffect(() => {
@@ -638,7 +651,7 @@ export function ProductionDraftReviewPanel({
                   Rezept- und Planänderungen bleiben als Prüfnotiz gespeichert. Der aktuelle KI-Revisionsweg verändert diese Artefakte noch nicht.
                 </p>
               ) : null}
-              {draft.status === "pending_review" && canReviseProductionDraft(draft) ? (
+              {draft.status === "pending_review" && canRequestProductionRevision(draft) ? (
                 <div className="production-draft-revision-action">
                   <div>
                     <strong>Änderungen sind vorgemerkt.</strong>
