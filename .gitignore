@@ -9,4 +9,5 @@ data
 .playwright-cli
 output
 tmp
+production-reference-reports/
 platform-infra/sites/

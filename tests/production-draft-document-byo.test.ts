@@ -19,6 +19,7 @@ import {
   type LlmReadinessProviderAdapterRequest,
   type ProductionDraft
 } from "@catering/shared-core";
+import { assessProductionDraftReference } from "../shared-core/src/production-reference-quality.js";
 
 const TRUSTED_SECRET = "production-draft-document-byo-secret";
 const localBusiness = { businessId: "local" };
@@ -310,6 +311,22 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(promptArtifact?.userPromptTemplate).toContain("Glaeser");
       expect(promptArtifact?.userPromptTemplate).toContain("keine Menuekomponenten");
       expect(draft.draftArtifacts.recipes).toBeUndefined();
+      const referenceAssessment = assessProductionDraftReference(
+        {
+          caseId: payload.caseId,
+          sourceSha256: draft.source.inputHash!,
+          requiredComponentLabels: draft.draftArtifacts.eventSpec!.menuPlan.map((component) => component.label),
+          allowedOpenQuestionFields: ["service.welcome-drink", "recipe.vitello-tonnato"],
+          forbiddenComponentLabels: ["Weingläser", "8 Menüschilder | Bilderrahmen"]
+        },
+        extractionResponse(requests[0]!).outputCandidate!
+      );
+      expect(referenceAssessment).toMatchObject({
+        passed: true,
+        missingComponentLabels: [],
+        duplicateComponentLabels: [],
+        forbiddenComponentLabels: []
+      });
       expect(await store.listEvents(localBusiness, payload.caseId)).toEqual([
         expect.objectContaining({ kind: "case_created" }),
         expect.objectContaining({

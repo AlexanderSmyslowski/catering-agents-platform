@@ -1,0 +1,19 @@
+{
+  "caseId": "koepff-flying-buffet-45p",
+  "sourceSha256": "sha256:199dc0867611e3b688dc2a3d676fa80fd69986896f788ad0cfce1076620ba024",
+  "requiredComponentLabels": [
+    "Herzhaftes Gebäck zum Wein | Käsegebäck - kleine Brezel",
+    "Vitello Tonnato | Riesenkapern | weisser Thunfisch",
+    "Rotgarnelen | Avokado-Wasabi-Creme",
+    "Roastbeef | Meersalzdrillinge | Tomaten-Rauke-Salsa | Gribiche",
+    "Kokos-Cheesecake | Brombeere"
+  ],
+  "allowedOpenQuestionFields": [
+    "service.welcome-drink",
+    "recipe.vitello-tonnato"
+  ],
+  "forbiddenComponentLabels": [
+    "Weingläser",
+    "8 Menüschilder | Bilderrahmen"
+  ]
+}
