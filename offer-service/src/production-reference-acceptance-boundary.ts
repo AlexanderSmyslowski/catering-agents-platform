@@ -1,7 +1,11 @@
+// Resolve through this checkout's public index so the concrete AuditLogStore
+// and its business-scoped getFor method cannot drift to a stale workspace
+// package during source-level service tests or local TypeScript execution.
 import {
+  areJsonValuesEqual,
   AuditLogStore,
   type BusinessContext
-} from "@catering/shared-core";
+} from "../../shared-core/src/index.js";
 import {
   createTrustedProductionReferencePersistenceCapability
 } from "../../shared-core/src/production-reference-acceptance-internal.js";
@@ -45,17 +49,34 @@ export function createOfferProductionReferencePersistenceCapability(
       const approval = await options.store.getApproval(options.context, input.approvalRequestId);
       const approvedOffer = await options.store.getApprovedOffer(options.context, input.offerId);
       const handoff = await options.store.getHandoff(options.context, input.handoffId);
-      const audits = await options.auditLog.listRecentFor(options.context, 500);
-      const sourceAudit = audits.find((entry) => entry.auditId === sourceAuditId);
-      const approvalAudit = audits.find((entry) => entry.auditId === input.approvalAuditId);
-      const handoffAudit = audits.find((entry) => entry.auditId === input.handoffAuditId);
-      const kitchenAcceptanceAudit = audits.find((entry) => entry.auditId === input.kitchenAcceptanceAuditId);
+      const [sourceAudit, approvalAudit, handoffAudit, kitchenAcceptanceAudit] = await Promise.all([
+        options.auditLog.getFor(options.context, sourceAuditId),
+        options.auditLog.getFor(options.context, input.approvalAuditId),
+        options.auditLog.getFor(options.context, input.handoffAuditId),
+        options.auditLog.getFor(options.context, input.kitchenAcceptanceAuditId)
+      ]);
 
       const sourceDetails = sourceAudit?.details;
       const kitchenDetails = kitchenAcceptanceAudit?.details;
+      const persistedDraft = approvedOffer
+        ? await options.store.getDraft(options.context, approvedOffer.sourceDraft.draftId)
+        : undefined;
+      const persistedSelectedVariant = persistedDraft?.variantSet.find(
+        (variant) => variant.variantId === approvedOffer?.selectedVariantId
+      );
+      const persistedReviewStatus = persistedDraft?.reviewStatus;
+      const reviewFullyApproved = persistedReviewStatus?.priceReviewStatus === "verified"
+        && persistedReviewStatus.taxReviewStatus === "verified"
+        && persistedReviewStatus.allergenReviewStatus === "verified"
+        && persistedReviewStatus.hygieneTemperatureReviewStatus === "verified"
+        && persistedReviewStatus.sourceSecured === true
+        && persistedReviewStatus.publishApproved === true;
+      const selectedPricing = persistedSelectedVariant?.proposedEventSpec.budgetContext?.pricingSummary;
       if (
         !sourceCase
         || sourceCase.businessId !== options.context.businessId
+        || sourceCase.approvedOfferId !== input.offerId
+        || sourceCase.productionHandoffId !== input.handoffId
         || !approval
         || approval.decision !== "approved"
         || !approvedOffer
@@ -64,6 +85,16 @@ export function createOfferProductionReferencePersistenceCapability(
         || approvedOffer.approvalRequestId !== approval.approvalRequestId
         || approval.target.artifactId !== approvedOffer.sourceDraft.draftId
         || approval.target.revision !== approvedOffer.sourceDraft.revision
+        || !persistedDraft
+        || persistedDraft.businessId !== options.context.businessId
+        || persistedDraft.draftId !== approvedOffer.sourceDraft.draftId
+        || persistedDraft.revision !== approvedOffer.sourceDraft.revision
+        || !reviewFullyApproved
+        || !persistedSelectedVariant
+        || !areJsonValuesEqual(persistedSelectedVariant, approvedOffer.selectedVariant)
+        || !selectedPricing
+        || !areJsonValuesEqual(selectedPricing, approvedOffer.pricingSummary)
+        || !areJsonValuesEqual(input.pricingSummary, approvedOffer.pricingSummary)
         || !handoff
         || handoff.handoffId !== input.handoffId
         || handoff.approvedOfferId !== approvedOffer.approvedOfferId
@@ -102,7 +133,8 @@ export function createOfferProductionReferencePersistenceCapability(
         approvalAuditId: approvalAudit.auditId,
         handoffAuditId: handoffAudit.auditId,
         kitchenAcceptanceAuditId: kitchenAcceptanceAudit.auditId,
-        pricingBasis: input.pricingBasis,
+        pricingSummary: approvedOffer.pricingSummary,
+        pricingBasis: "module_catalog_estimate",
         rescueChatUsed: false
       };
     } catch {

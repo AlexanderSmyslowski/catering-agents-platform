@@ -3,7 +3,6 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
-  AuditLogStore,
   createCuratedOfferDraft,
   createEventRequestFromManualForm,
   internalRecipes,
@@ -12,6 +11,7 @@ import {
   type OfferDraft,
   type Recipe
 } from "@catering/shared-core";
+import { AuditLogStore } from "../shared-core/src/index.js";
 import {
   buildProductionArtifacts,
   InMemoryRecipeRepository,
@@ -143,6 +143,7 @@ function syntheticEvidenceInput() {
     approvalAuditId: "audit-approval-reference-acceptance-synthetic",
     handoffAuditId: "audit-handoff-reference-acceptance-synthetic",
     kitchenAcceptanceAuditId: "audit-kitchen-reference-acceptance-synthetic",
+    pricingSummary: syntheticOffer().pricingSummary,
     pricingBasis: "module_catalog_estimate",
     rescueChatUsed: false
   } as const;
@@ -176,11 +177,26 @@ async function createPersistedFullCostEvidence() {
   });
   expect(draftResponse.statusCode).toBe(201);
   const draft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
+  const persistedDraft = await store.getDraft({ businessId: "local" }, draft.draftId);
+  if (!persistedDraft) throw new Error("OfferDraft wurde nicht persistiert.");
+  const reviewedDraft = {
+    ...persistedDraft,
+    revision: persistedDraft.revision + 1,
+    reviewStatus: {
+      priceReviewStatus: "verified" as const,
+      taxReviewStatus: "verified" as const,
+      allergenReviewStatus: "verified" as const,
+      hygieneTemperatureReviewStatus: "verified" as const,
+      sourceSecured: true,
+      publishApproved: true
+    }
+  };
+  await store.saveDraft({ businessId: "local" }, reviewedDraft);
   const decisionResponse = await app.inject({
     method: "POST",
     url: `/v1/offers/drafts/${draft.draftId}/decision`,
     headers,
-    payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    payload: { decision: "approved", revision: reviewedDraft.revision, variantId: draft.variantSet[0]!.variantId }
   });
   expect(decisionResponse.statusCode).toBe(201);
   const approvedOfferId = decisionResponse.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
@@ -234,6 +250,7 @@ async function createPersistedFullCostEvidence() {
     approvalAuditId: approvalAudit.auditId,
     handoffAuditId: handoffAudit.auditId,
     kitchenAcceptanceAuditId: kitchenAudit.auditId,
+    pricingSummary: approvedOffer.pricingSummary,
     pricingBasis: "full_cost_model" as const,
     rescueChatUsed: false as const
   };
@@ -257,6 +274,7 @@ function validatedSyntheticEvidence() {
     approvalAuditId: input.approvalAuditId,
     handoffAuditId: input.handoffAuditId,
     kitchenAcceptanceAuditId: input.kitchenAcceptanceAuditId,
+    pricingSummary: input.pricingSummary,
     pricingBasis: input.pricingBasis,
     rescueChatUsed: input.rescueChatUsed
   })))!;
@@ -289,6 +307,7 @@ describe("production reference acceptance contract", () => {
       approvalAuditId: input.approvalAuditId,
       handoffAuditId: input.handoffAuditId,
       kitchenAcceptanceAuditId: input.kitchenAcceptanceAuditId,
+      pricingSummary: input.pricingSummary,
       pricingBasis: input.pricingBasis,
       rescueChatUsed: input.rescueChatUsed
     };
@@ -431,6 +450,7 @@ describe("production reference acceptance contract", () => {
         approvalAuditId: "caller-fake-approval-audit",
         handoffAuditId: "caller-fake-handoff-audit",
         kitchenAcceptanceAuditId: "caller-fake-kitchen-audit",
+        pricingSummary: syntheticOffer().pricingSummary,
         pricingBasis: "module_catalog_estimate" as const,
         rescueChatUsed: false as const
       };
@@ -462,6 +482,67 @@ describe("production reference acceptance contract", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("binds the evaluated pricing summary to the resolver-issued evidence", async () => {
+    const { root, artifacts } = await syntheticProductionArtifacts();
+    try {
+      const baseline = acceptanceInput(artifacts);
+      const result = evaluateProductionReferenceAcceptance({
+        ...baseline,
+        validatedEvidence: validatedSyntheticEvidence(),
+        offer: {
+          ...baseline.offer,
+          pricingSummary: {
+            ...baseline.offer.pricingSummary!,
+            subtotal: {
+              ...baseline.offer.pricingSummary!.subtotal,
+              amount: baseline.offer.pricingSummary!.subtotal.amount + 1
+            }
+          }
+        }
+      });
+
+      expect(result.status).toBe("blocked");
+      expect(result.blockers.map((blocker) => blocker.code)).toContain("persisted_offer_evidence_mismatch");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the resolver-issued pricing evidence immutable after caller mutation", async () => {
+    const input = {
+      ...syntheticEvidenceInput(),
+      pricingSummary: {
+        ...syntheticEvidenceInput().pricingSummary,
+        subtotal: { ...syntheticEvidenceInput().pricingSummary.subtotal }
+      }
+    };
+    const originalAmount = input.pricingSummary.subtotal.amount;
+    const token = resolveProductionReferenceValidatedEvidence(
+      input,
+      createTrustedProductionReferencePersistenceCapability(() => ({
+        sourceCaseId: input.sourceCaseId,
+        sourceSha256: input.sourceSha256,
+        sourceLineageId: input.sourceLineageId,
+        eventSpecId: input.eventSpecId,
+        approvalRequestId: input.approvalRequestId,
+        approvedOfferId: input.offerId,
+        handoffId: input.handoffId,
+        approvalAuditId: input.approvalAuditId,
+        handoffAuditId: input.handoffAuditId,
+        kitchenAcceptanceAuditId: input.kitchenAcceptanceAuditId,
+        pricingSummary: input.pricingSummary,
+        pricingBasis: input.pricingBasis,
+        rescueChatUsed: input.rescueChatUsed
+      }))
+    );
+
+    expect(token).toBeDefined();
+    input.pricingSummary.subtotal.amount = originalAmount + 99;
+    expect(token?.pricingSummary.subtotal.amount).toBe(originalAmount);
+    expect(Object.isFrozen(token?.pricingSummary)).toBe(true);
+    expect(Object.isFrozen(token?.pricingSummary.subtotal)).toBe(true);
   });
 
   it("does not treat an unsupported full-cost claim as a complete cost basis", async () => {
@@ -532,6 +613,38 @@ describe("production reference acceptance contract", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("requires exactly one approved recipe selection for every recipe-bound batch", async () => {
+    const { root, artifacts } = await syntheticProductionArtifacts();
+    try {
+      const recipeBoundBatch = artifacts.productionPlan.productionBatches[0]!;
+      const cases = [
+        [],
+        [{ ...artifacts.productionPlan.recipeSelections[0]!, componentId: recipeBoundBatch.componentId }, { ...artifacts.productionPlan.recipeSelections[0]!, componentId: recipeBoundBatch.componentId }],
+        [{ ...artifacts.productionPlan.recipeSelections[0]!, componentId: recipeBoundBatch.componentId, recipeId: "foreign-recipe" }]
+      ];
+      for (const recipeSelections of cases) {
+        const result = evaluateProductionReferenceAcceptance(acceptanceInput(artifacts, {
+          validatedEvidence: validatedSyntheticEvidence(),
+          production: {
+            ...acceptanceInput(artifacts).production,
+            plan: { ...artifacts.productionPlan, recipeSelections }
+          }
+        }));
+        expect(result.status).toBe("blocked");
+        expect(result.blockers.map((blocker) => blocker.code)).toContain("production_recipe_selection_mismatch");
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("requires the versioned 5.362 reference-acceptance handoff entry", () => {
+    const memory = readFileSync(path.join(process.cwd(), "memory.md"), "utf8");
+    expect(memory).toContain("### 5.362");
+    expect(memory).toContain("PR-#616");
+    expect(memory).toContain("Cross-Case");
   });
 
   it("rejects non-positive or non-finite ingredient quantities", async () => {

@@ -5,6 +5,7 @@ import type {
   PurchaseList,
   Recipe
 } from "./types.js";
+import { areJsonValuesEqual } from "./json-equality.js";
 import {
   isRegisteredProductionReferencePersistenceCapability,
   isTrustedProductionReferenceValidatedEvidence,
@@ -60,6 +61,7 @@ export interface ProductionReferenceValidatedEvidenceInput {
   approvalAuditId: string;
   handoffAuditId: string;
   kitchenAcceptanceAuditId: string;
+  pricingSummary: PricingSummary;
   pricingBasis: "module_catalog_estimate" | "full_cost_model";
   rescueChatUsed: false;
 }
@@ -77,6 +79,7 @@ export interface ProductionReferencePersistedEvidenceSnapshot {
   approvalAuditId: string;
   handoffAuditId: string;
   kitchenAcceptanceAuditId: string;
+  pricingSummary: PricingSummary;
   pricingBasis: "module_catalog_estimate" | "full_cost_model";
   rescueChatUsed: false;
 }
@@ -159,6 +162,25 @@ const positiveFiniteQuantity = (quantity: unknown): quantity is { amount: number
     && nonEmpty(candidate.unit);
 };
 
+const validMoney = (value: unknown): boolean => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return Object.keys(candidate).every((key) => key === "amount" || key === "currency")
+    && typeof candidate.amount === "number"
+    && Number.isFinite(candidate.amount)
+    && candidate.amount >= 0
+    && nonEmpty(candidate.currency);
+};
+
+const validPricingSummary = (value: unknown): value is PricingSummary => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return Object.keys(candidate).every((key) => key === "subtotal" || key === "perPerson" || key === "notes")
+    && validMoney(candidate.subtotal)
+    && (candidate.perPerson === undefined || validMoney(candidate.perPerson))
+    && (candidate.notes === undefined || (Array.isArray(candidate.notes) && candidate.notes.every((note) => nonEmpty(note))));
+};
+
 const evidenceInputKeys = new Set([
   "sourceCaseId",
   "sourceSha256",
@@ -170,6 +192,7 @@ const evidenceInputKeys = new Set([
   "approvalAuditId",
   "handoffAuditId",
   "kitchenAcceptanceAuditId",
+  "pricingSummary",
   "pricingBasis",
   "rescueChatUsed"
 ]);
@@ -185,6 +208,7 @@ const persistedEvidenceKeys = new Set([
   "approvalAuditId",
   "handoffAuditId",
   "kitchenAcceptanceAuditId",
+  "pricingSummary",
   "pricingBasis",
   "rescueChatUsed"
 ]);
@@ -210,6 +234,7 @@ function validEvidenceInput(value: unknown): value is ProductionReferenceValidat
   ];
   return requiredStringKeys.every((key) => nonEmpty(candidate[key]))
     && validSha256(candidate.sourceSha256)
+    && validPricingSummary(candidate.pricingSummary)
     && (candidate.pricingBasis === "module_catalog_estimate" || candidate.pricingBasis === "full_cost_model")
     && candidate.rescueChatUsed === false;
 }
@@ -228,6 +253,7 @@ function validPersistedSnapshot(value: unknown): value is ProductionReferencePer
     && nonEmpty(candidate.approvalAuditId)
     && nonEmpty(candidate.handoffAuditId)
     && nonEmpty(candidate.kitchenAcceptanceAuditId)
+    && validPricingSummary(candidate.pricingSummary)
     && (candidate.pricingBasis === "module_catalog_estimate" || candidate.pricingBasis === "full_cost_model")
     && candidate.rescueChatUsed === false;
 }
@@ -239,9 +265,24 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
 }
 
 function issueValidatedEvidenceToken(
-  input: ProductionReferenceValidatedEvidenceInput
+  input: ProductionReferenceValidatedEvidenceInput,
+  pricingBasis: ProductionReferenceValidatedEvidenceInput["pricingBasis"],
+  pricingSummary: PricingSummary
 ): ProductionReferenceValidatedEvidence {
-  return issueTrustedProductionReferenceValidatedEvidence(input);
+  const immutablePricingSummary = Object.freeze({
+    subtotal: Object.freeze({ ...pricingSummary.subtotal }),
+    ...(pricingSummary.perPerson
+      ? { perPerson: Object.freeze({ ...pricingSummary.perPerson }) }
+      : {}),
+    ...(pricingSummary.notes
+      ? { notes: Object.freeze([...pricingSummary.notes]) }
+      : {})
+  }) as unknown as PricingSummary;
+  return issueTrustedProductionReferenceValidatedEvidence({
+    ...input,
+    pricingSummary: immutablePricingSummary,
+    pricingBasis
+  });
 }
 
 /**
@@ -293,9 +334,11 @@ export function resolveProductionReferenceValidatedEvidence(
         && persisted.approvalAuditId === input.approvalAuditId
         && persisted.handoffAuditId === input.handoffAuditId
         && persisted.kitchenAcceptanceAuditId === input.kitchenAcceptanceAuditId
-        && persisted.pricingBasis === input.pricingBasis
+        && areJsonValuesEqual(persisted.pricingSummary, input.pricingSummary)
         && persisted.rescueChatUsed === input.rescueChatUsed;
-      return matches ? issueValidatedEvidenceToken(input) : undefined;
+      return matches
+        ? issueValidatedEvidenceToken(input, persisted.pricingBasis, persisted.pricingSummary)
+        : undefined;
     } catch {
       return undefined;
     }
@@ -441,7 +484,11 @@ function checkEvidenceBinding(
       message: "Persistierte Quell- und Provenienz-IDs stimmen nicht mit dem geprüften Inhalt überein."
     });
   }
-  if (evidence.offerId !== input.offer.offerId || evidence.pricingBasis !== input.offer.pricingBasis) {
+  if (
+    evidence.offerId !== input.offer.offerId
+    || !areJsonValuesEqual(evidence.pricingSummary, input.offer.pricingSummary)
+    || evidence.pricingBasis !== "module_catalog_estimate"
+  ) {
     addIssue(checklist, "offer_pricing", "blocked", {
       code: "persisted_offer_evidence_mismatch",
       message: "Persistierte Angebots- und Kostenbasis-IDs stimmen nicht mit dem geprüften Angebot überein."
@@ -599,6 +646,34 @@ function checkRecipes(
   checklist: ProductionReferenceChecklistItem[]
 ): void {
   const recipesById = new Map(recipes.map((recipe) => [recipe.recipeId, recipe]));
+  const recipeBoundBatches = plan.productionBatches.filter((batch) => nonEmpty(batch.recipeId));
+  const selectionsByComponent = new Map<string, typeof plan.recipeSelections>();
+  for (const selection of plan.recipeSelections) {
+    const entries = selectionsByComponent.get(selection.componentId) ?? [];
+    entries.push(selection);
+    selectionsByComponent.set(selection.componentId, entries);
+  }
+  for (const batch of recipeBoundBatches) {
+    const matchingSelections = (selectionsByComponent.get(batch.componentId) ?? [])
+      .filter((selection) => selection.recipeId === batch.recipeId);
+    if (matchingSelections.length !== 1) {
+      addIssue(checklist, "recipe_allergen_status", "blocked", {
+        code: "production_recipe_selection_mismatch",
+        message: `Produktionsbatch ${batch.batchId} benötigt genau eine passende geprüfte Rezeptauswahl.`
+      });
+    }
+  }
+  for (const selection of plan.recipeSelections) {
+    const matchingBatch = recipeBoundBatches.find((batch) =>
+      batch.componentId === selection.componentId && batch.recipeId === selection.recipeId
+    );
+    if (!matchingBatch) {
+      addIssue(checklist, "recipe_allergen_status", "blocked", {
+        code: "production_recipe_selection_mismatch",
+        message: `Rezeptauswahl für Komponente ${selection.componentId} ist keinem eindeutigen Produktionsbatch zugeordnet.`
+      });
+    }
+  }
   for (const selection of plan.recipeSelections) {
     if (!selection.recipeId || selection.autoUsedInternetRecipe) {
       addIssue(checklist, "recipe_allergen_status", "blocked", {

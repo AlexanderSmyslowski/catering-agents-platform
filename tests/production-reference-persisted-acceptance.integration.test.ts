@@ -2,9 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import {
-  AuditLogStore
-} from "@catering/shared-core";
+import { AuditLogStore } from "../shared-core/src/index.js";
 import {
   resolveProductionReferenceValidatedEvidence,
   evaluateProductionReferenceAcceptance
@@ -21,7 +19,11 @@ const headers = {
 };
 const sourceSha256 = "sha256:" + "b".repeat(64);
 
-async function persistApprovedHandoff(app: ReturnType<typeof buildOfferApp>) {
+async function persistApprovedHandoff(
+  app: ReturnType<typeof buildOfferApp>,
+  store: OfferStore,
+  options: { reviewed?: boolean } = {}
+) {
   const caseResponse = await app.inject({
     method: "POST",
     url: "/v1/offers/cases",
@@ -36,11 +38,28 @@ async function persistApprovedHandoff(app: ReturnType<typeof buildOfferApp>) {
     payload: { caseId, text: "Synthetische Probe für zwölf Personen." }
   });
   const draft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
+  const persistedDraft = await store.getDraft({ businessId: "local" }, draft.draftId);
+  if (!persistedDraft) throw new Error("OfferDraft wurde nicht persistiert.");
+  const reviewedDraft = options.reviewed === false
+    ? persistedDraft
+    : {
+      ...persistedDraft,
+      revision: persistedDraft.revision + 1,
+      reviewStatus: {
+        priceReviewStatus: "verified" as const,
+        taxReviewStatus: "verified" as const,
+        allergenReviewStatus: "verified" as const,
+        hygieneTemperatureReviewStatus: "verified" as const,
+        sourceSecured: true,
+        publishApproved: true
+      }
+    };
+  if (reviewedDraft !== persistedDraft) await store.saveDraft({ businessId: "local" }, reviewedDraft);
   const decisionResponse = await app.inject({
     method: "POST",
     url: `/v1/offers/drafts/${draft.draftId}/decision`,
     headers,
-    payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    payload: { decision: "approved", revision: reviewedDraft.revision, variantId: draft.variantSet[0]!.variantId }
   });
   const approvedOfferId = decisionResponse.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
   const handoffResponse = await app.inject({
@@ -53,6 +72,62 @@ async function persistApprovedHandoff(app: ReturnType<typeof buildOfferApp>) {
     caseId,
     approvedOfferId,
     handoff: handoffResponse.json<{ handoff: { handoffId: string; approvalRequestId: string; approvedOfferId: string } }>().handoff
+  };
+}
+
+async function buildBoundaryInput(
+  store: OfferStore,
+  auditLog: AuditLogStore,
+  persisted: Awaited<ReturnType<typeof persistApprovedHandoff>>,
+  options: { sourceCaseId?: string; pricingBasis?: "module_catalog_estimate" | "full_cost_model" } = {}
+) {
+  const context = { businessId: "local" };
+  const approval = await store.getApproval(context, persisted.handoff.approvalRequestId);
+  const approvedOffer = await store.getApprovedOffer(context, persisted.approvedOfferId);
+  const handoff = await store.getHandoff(context, persisted.handoff.handoffId);
+  if (!approval || !approvedOffer || !handoff) throw new Error("Persistierte Angebotskette fehlt.");
+  const sourceCaseId = options.sourceCaseId ?? persisted.caseId;
+  const sourceAudit = await auditLog.logFor(context, {
+    action: "reference.source_verified",
+    entityType: "OfferCase",
+    entityId: sourceCaseId,
+    actor: { name: "Boundary-Test", source: "synthetic" },
+    summary: "Synthetische Quelle geprüft.",
+    details: { sourceCaseId, sourceSha256 }
+  });
+  const kitchenAudit = await auditLog.logFor(context, {
+    action: "production.kitchen_acceptance",
+    entityType: "ProductionHandoff",
+    entityId: handoff.handoffId,
+    actor: { name: "Boundary-Küche", source: "synthetic" },
+    summary: "Synthetische Küchenabnahme ohne Rettungschat.",
+    details: { rescueChatUsed: false }
+  });
+  const audits = await auditLog.listRecentFor(context, 5000);
+  const approvalAudit = audits.find((entry) => entry.action === "offer.approved" && entry.entityId === approvedOffer.approvedOfferId);
+  const handoffAudit = audits.find((entry) => entry.action === "offer.production_handoff_created" && entry.entityId === handoff.handoffId);
+  if (!approvalAudit || !handoffAudit) throw new Error("Persistierte Approval-/Handoff-Audits fehlen.");
+  return {
+    input: {
+      sourceCaseId,
+      sourceSha256,
+      sourceLineageId: `audit:${sourceAudit.auditId}`,
+      eventSpecId: handoff.eventSpecSnapshot.specId,
+      offerId: approvedOffer.approvedOfferId,
+      approvalRequestId: approval.approvalRequestId,
+      handoffId: handoff.handoffId,
+      approvalAuditId: approvalAudit.auditId,
+      handoffAuditId: handoffAudit.auditId,
+      kitchenAcceptanceAuditId: kitchenAudit.auditId,
+      pricingSummary: approvedOffer.pricingSummary,
+      pricingBasis: options.pricingBasis ?? "module_catalog_estimate",
+      rescueChatUsed: false as const
+    },
+    approval,
+    approvedOffer,
+    handoff,
+    sourceAudit,
+    kitchenAudit
   };
 }
 
@@ -71,7 +146,7 @@ describe("persisted production reference acceptance boundary", () => {
     const auditLog = new AuditLogStore({ rootDir });
     const app = buildOfferApp({ rootDir, store, auditLog, trustedActorSecret: trustedSecret });
     try {
-      const persisted = await persistApprovedHandoff(app);
+      const persisted = await persistApprovedHandoff(app, store);
       const approval = await store.getApproval({ businessId: "local" }, persisted.handoff.approvalRequestId);
       const approvedOffer = await store.getApprovedOffer({ businessId: "local" }, persisted.approvedOfferId);
       const handoff = await store.getHandoff({ businessId: "local" }, persisted.handoff.handoffId);
@@ -117,6 +192,7 @@ describe("persisted production reference acceptance boundary", () => {
             approvalAuditId: approvalAudit.auditId,
             handoffAuditId: handoffAudit.auditId,
             kitchenAcceptanceAuditId: kitchenAudit.auditId,
+            pricingSummary: approvedOffer.pricingSummary,
             pricingBasis: "module_catalog_estimate",
             rescueChatUsed: false
           }, createOfferProductionReferencePersistenceCapability({
@@ -182,6 +258,116 @@ describe("persisted production reference acceptance boundary", () => {
       expect(result.blockers.map((blocker) => blocker.code)).not.toContain("persisted_evidence_unverified");
       expect(result.status).toBe("blocked");
       expect(result.blockers.map((blocker) => blocker.code)).toContain("production_basis_incomplete");
+    } finally {
+      await app.close();
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a cross-case splice even when every individual record is persisted", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-reference-cross-case-"));
+    const store = new OfferStore({ rootDir });
+    const auditLog = new AuditLogStore({ rootDir });
+    const app = buildOfferApp({ rootDir, store, auditLog, trustedActorSecret: trustedSecret });
+    try {
+      const first = await persistApprovedHandoff(app, store);
+      const second = await persistApprovedHandoff(app, store);
+      const source = await buildBoundaryInput(store, auditLog, first);
+      const spliced = await buildBoundaryInput(store, auditLog, second, { sourceCaseId: first.caseId });
+      const evidence = await resolveProductionReferenceValidatedEvidence(
+        spliced.input,
+        createOfferProductionReferencePersistenceCapability({ store, auditLog, context: { businessId: "local" } })
+      );
+
+      expect(source.input.sourceCaseId).toBe(first.caseId);
+      expect(spliced.input.sourceCaseId).toBe(first.caseId);
+      expect(spliced.input.offerId).toBe(second.approvedOfferId);
+      expect(evidence).toBeUndefined();
+    } finally {
+      await app.close();
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("requires the persisted draft review and pricing snapshot before issuing evidence", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-reference-pricing-binding-"));
+    const store = new OfferStore({ rootDir });
+    const auditLog = new AuditLogStore({ rootDir });
+    const app = buildOfferApp({ rootDir, store, auditLog, trustedActorSecret: trustedSecret });
+    try {
+      const persisted = await persistApprovedHandoff(app, store, { reviewed: false });
+      const boundary = await buildBoundaryInput(store, auditLog, persisted, { pricingBasis: "full_cost_model" });
+      const draft = await store.getDraft({ businessId: "local" }, boundary.approvedOffer.sourceDraft.draftId);
+      expect(draft?.revision).toBe(boundary.approvedOffer.sourceDraft.revision);
+      expect(draft?.reviewStatus?.publishApproved).not.toBe(true);
+      const evidence = await resolveProductionReferenceValidatedEvidence(
+        boundary.input,
+        createOfferProductionReferencePersistenceCapability({ store, auditLog, context: { businessId: "local" } })
+      );
+
+      expect(evidence).toBeUndefined();
+    } finally {
+      await app.close();
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an evaluated pricing summary that differs from the persisted offer", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-reference-pricing-summary-binding-"));
+    const store = new OfferStore({ rootDir });
+    const auditLog = new AuditLogStore({ rootDir });
+    const app = buildOfferApp({ rootDir, store, auditLog, trustedActorSecret: trustedSecret });
+    try {
+      const persisted = await persistApprovedHandoff(app, store);
+      const boundary = await buildBoundaryInput(store, auditLog, persisted);
+      const tampered = {
+        ...boundary.input,
+        pricingSummary: {
+          ...boundary.approvedOffer.pricingSummary,
+          subtotal: {
+            ...boundary.approvedOffer.pricingSummary.subtotal,
+            amount: boundary.approvedOffer.pricingSummary.subtotal.amount + 1
+          }
+        }
+      };
+      const evidence = await resolveProductionReferenceValidatedEvidence(
+        tampered,
+        createOfferProductionReferencePersistenceCapability({ store, auditLog, context: { businessId: "local" } })
+      );
+
+      expect(evidence).toBeUndefined();
+    } finally {
+      await app.close();
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves required audit IDs directly instead of a recent-event window", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-reference-audit-window-"));
+    const store = new OfferStore({ rootDir });
+    const auditLog = new AuditLogStore({ rootDir });
+    const app = buildOfferApp({ rootDir, store, auditLog, trustedActorSecret: trustedSecret });
+    try {
+      const persisted = await persistApprovedHandoff(app, store);
+      const boundary = await buildBoundaryInput(store, auditLog, persisted);
+      for (let index = 0; index < 501; index += 1) {
+        await auditLog.logFor({ businessId: "local" }, {
+          action: "reference.noise",
+          entityType: "OfferCase",
+          entityId: persisted.caseId,
+          actor: { name: "Audit-Noise", source: "synthetic" },
+          summary: `Neuere Auditspur ${index}`,
+          at: `2100-01-01T00:00:${String(index % 60).padStart(2, "0")}.${String(index).padStart(3, "0")}Z`,
+          idempotencyKey: `audit-noise-${index}`,
+          details: { index }
+        });
+      }
+      const evidence = await resolveProductionReferenceValidatedEvidence(
+        boundary.input,
+        createOfferProductionReferencePersistenceCapability({ store, auditLog, context: { businessId: "local" } })
+      );
+
+      expect(evidence).toBeDefined();
     } finally {
       await app.close();
       rmSync(rootDir, { recursive: true, force: true });
