@@ -172,6 +172,14 @@ const positiveFiniteQuantity = (quantity: unknown): quantity is { amount: number
     && nonEmpty(candidate.unit);
 };
 
+const sameStringSet = (left: unknown, right: unknown): boolean => {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (!left.every((value) => nonEmpty(value)) || !right.every((value) => nonEmpty(value))) return false;
+  const leftSet = new Set(left as string[]);
+  const rightSet = new Set(right as string[]);
+  return leftSet.size === rightSet.size && [...leftSet].every((value) => rightSet.has(value));
+};
+
 const validMoney = (value: unknown): boolean => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
@@ -610,12 +618,21 @@ function checkProduction(
       });
     }
     const sheet = plan.kitchenSheets.find((candidate) => candidate.componentId === batch.componentId);
-    const validQuantity = Boolean(
-      sheet?.productionQty &&
-      Number.isFinite(sheet.productionQty.amount) &&
-      sheet.productionQty.amount > 0 &&
-      nonEmpty(sheet.productionQty.unit)
-    );
+    const validBatchQuantity = positiveFiniteQuantity(batch.scaledYield);
+    const validQuantity = Boolean(sheet?.productionQty && positiveFiniteQuantity(sheet.productionQty));
+    if (
+      validBatchQuantity
+      && validQuantity
+      && (
+        sheet!.productionQty.unit !== batch.scaledYield.unit
+        || sheet!.productionQty.amount !== batch.scaledYield.amount
+      )
+    ) {
+      addIssue(checklist, "production_completeness", "blocked", {
+        code: "kitchen_sheet_quantity_mismatch",
+        message: `Küchenkarte für Komponente ${batch.componentId} stimmt mengenmäßig nicht mit dem Produktionsbatch überein.`
+      });
+    }
     const validRecipeWork = Boolean(
       nonEmpty(batch.recipeId) &&
       sheet?.recipeId === batch.recipeId &&
@@ -630,7 +647,7 @@ function checkProduction(
       procurementNotes.length > 0 &&
       procurementNotes.every((note) => nonEmpty(note))
     );
-    if (!sheet || !nonEmpty(sheet.title) || !nonEmpty(sheet.station) || !nonEmpty(sheet.prepWindow) || !validQuantity || (!validRecipeWork && !validProcurementWork) || (sheet.blockingNotes?.length ?? 0) > 0) {
+    if (!sheet || !nonEmpty(sheet.title) || !nonEmpty(sheet.station) || !nonEmpty(sheet.prepWindow) || !validBatchQuantity || !validQuantity || (!validRecipeWork && !validProcurementWork) || (sheet.blockingNotes?.length ?? 0) > 0) {
       addIssue(checklist, "production_completeness", "blocked", {
         code: "kitchen_sheet_incomplete",
         message: `Küchenkarte für Komponente ${batch.componentId} enthält keine vollständige Menge und Arbeitsanweisung.`
@@ -638,12 +655,33 @@ function checkProduction(
     }
   }
 
+  const requiredPurchaseQuantities = new Map<string, {
+    displayName: string;
+    unit: string;
+    amount: number;
+    recipeIds: Set<string>;
+  }>();
+
   for (const batch of plan.productionBatches) {
     for (const ingredient of batch.ingredients) {
       if (!positiveFiniteQuantity(ingredient.quantity)) {
         addIssue(checklist, "production_completeness", "blocked", {
           code: "ingredient_quantity_invalid",
           message: `Zutat ${ingredient.name} hat keine positive, endliche und einheitenbezogene Menge.`
+        });
+        continue;
+      }
+      const key = JSON.stringify([normalizeName(ingredient.name), ingredient.quantity.unit]);
+      const existing = requiredPurchaseQuantities.get(key);
+      if (existing) {
+        existing.amount = Number((existing.amount + ingredient.quantity.amount).toFixed(2));
+        existing.recipeIds.add(batch.recipeId);
+      } else {
+        requiredPurchaseQuantities.set(key, {
+          displayName: ingredient.name,
+          unit: ingredient.quantity.unit,
+          amount: Number(ingredient.quantity.amount.toFixed(2)),
+          recipeIds: new Set([batch.recipeId])
         });
       }
       const covered = purchaseList.items.some((item) =>
@@ -661,6 +699,27 @@ function checkProduction(
       }
     }
   }
+
+  for (const required of requiredPurchaseQuantities.values()) {
+    const matchingItems = purchaseList.items.filter((item) =>
+      normalizeName(item.displayName) === normalizeName(required.displayName)
+      && item.normalizedUnit === required.unit
+      && Number.isFinite(item.normalizedQty)
+      && item.normalizedQty > 0
+    );
+    const coveredAmount = Number(matchingItems.reduce((sum, item) => sum + item.normalizedQty, 0).toFixed(2));
+    const coveredRecipeIds = new Set(matchingItems.flatMap((item) => item.sourceRecipes ?? []));
+    if (
+      coveredAmount < required.amount
+      || [...required.recipeIds].some((recipeId) => !coveredRecipeIds.has(recipeId))
+    ) {
+      addIssue(checklist, "purchase_coverage", "blocked", {
+        code: "purchase_quantity_insufficient",
+        message: `Einkaufsmenge für ${required.displayName} deckt die skalierte Produktionsmenge nicht vollständig ab.`
+      });
+    }
+  }
+
   for (const sheet of plan.kitchenSheets) {
     for (const ingredient of sheet.ingredients) {
       if (!positiveFiniteQuantity(ingredient.quantity)) {
@@ -749,6 +808,23 @@ function checkRecipes(
       addIssue(checklist, "recipe_allergen_status", "blocked", {
         code: "recipe_allergen_status_missing",
         message: `Allergen- oder Ernährungsstatus fehlt für Rezept ${recipe.recipeId}.`
+      });
+    }
+  }
+  for (const batch of recipeBoundBatches) {
+    const recipe = recipesById.get(batch.recipeId);
+    const sheet = plan.kitchenSheets.find((candidate) => candidate.componentId === batch.componentId);
+    if (
+      recipe
+      && sheet?.recipeId === batch.recipeId
+      && (
+        !sameStringSet(sheet.allergens, recipe.allergens)
+        || !sameStringSet(sheet.dietTags, recipe.dietTags)
+      )
+    ) {
+      addIssue(checklist, "recipe_allergen_status", "blocked", {
+        code: "kitchen_sheet_recipe_metadata_mismatch",
+        message: `Allergen- oder Ernährungsstatus der Küchenkarte ${batch.componentId} stimmt nicht mit dem freigegebenen Rezept überein.`
       });
     }
   }
