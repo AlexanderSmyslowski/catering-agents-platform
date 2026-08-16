@@ -1760,3 +1760,19 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Die resolver-ausgestellte Evidenz übernimmt die persistierte `pricingSummary` nur als tiefe, unveränderliche Kopie; nachträgliche Caller-Mutationen können die Preisbindung nicht verändern. Der zustandsgebundene `AuditLogStore` wird über den lokalen öffentlichen Shared-Core-Index mit direkter business-scope-gebundener ID-Leseoperation verwendet.
 - Rezeptgebundene Produktionsbatches benötigen genau eine passende geprüfte `RecipeSelection`; fehlende, doppelte oder fremde Auswahl sowie nicht im freigegebenen Snapshot vorhandene Rezept-IDs blockieren. Auditbelege werden über business-scope-gebundene ID-Leseoperationen statt über ein begrenztes Recent-Event-Fenster aufgelöst.
 - Der Nachtrag ist ein ungemergter Kandidat und behauptet weder Merge noch Deployment, Migration, externe Providerausführung oder produktive Freigabe. Die verpflichtenden fokussierten Regressionen und der vorhandene Offer→Approval→Handoff→Audit-Persistenzpfad bleiben die maßgeblichen lokalen Nachweise.
+
+### 5.363 - 2026-08-16
+
+- Der PR-#616-Folgefix bindet die Operatorabnahme an `actor.name` und `at` des persistierten `production.kitchen_acceptance`-Audits. Diese Werte gelangen ausschließlich aus dem serverseitig gelesenen Snapshot in das opaque Evidence-Token; der Caller-Input kann sie nicht vorgeben, und der Evaluator blockiert abweichende öffentliche `operatorAcceptance`-Werte.
+- Rezeptgebundene Küchenkarten müssen jetzt exakt dieselbe nichtleere `recipeId` wie ihr Produktionsbatch tragen; zwei fehlende IDs gelten nicht als gültige Gleichheit. Rezeptstatus sowie Allergen-/DietTag-Verträge werden nur für die tatsächlich validierten `recipeSelections` geprüft; ungenutzte Snapshot-Rezepte blockieren nicht. Rezeptlose Beschaffung bleibt ausschließlich mit vollständigen `procurementNotes` gültig.
+- Der Stand bleibt ein ungemergter PR-#616-Kandidat ohne Commit-, Deployment-, Migrations- oder Provideraktion. Fokussierte Produktionsreferenz- und Persistenztests sind grün; bestehende workspacebedingte `/private/tmp`-TypeScript-Aliasfehler bleiben als externe Baseline klassifiziert.
+
+### 5.364 - 2026-08-16
+
+- Der PR-#616-Folgefix schließt zwei Acceptance-Grenzen: `procurementNotes` können die Rezeptkartenbindung eines Batches mit gesetzter `recipeId` nicht mehr umgehen, und rezeptlose Beschaffung benötigt mindestens einen getrimmten, inhaltlich nichtleeren Beschaffungshinweis. Die adversarialen Regressionen sowie die gültigen Rezept- und Beschaffungspfade sind fokussiert grün geprüft.
+- Der Stand bleibt ein ungemergter Kandidat ohne Commit-, Deployment-, Migrations- oder Provideraktion. Die bekannten `/private/tmp`-TypeScript-/Build-Aliasfehler bleiben als externe Workspace-Baseline klassifiziert.
+
+### 5.365 - 2026-08-16
+
+- Die Beschaffungsgrenze verlangt zusätzlich eine leere `KitchenSheet.recipeId`, wenn ein Batch rezeptlos über nichtleere `procurementNotes` abgewickelt wird. Eine fremde oder gesetzte Rezeptidentität auf der Küchenkarte kann den rezeptlosen Beschaffungspfad nicht mehr passieren; der zugehörige Acceptance-Vertrag ist fokussiert grün geprüft.
+- Der PR-#616-Kandidat bleibt ungemergt und ohne Commit-, Deployment-, Migrations- oder Provideraktion. Bestehende `/private/tmp`-TypeScript-/Build-Aliasfehler bleiben externe Workspace-Baseline.

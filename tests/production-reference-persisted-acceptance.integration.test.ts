@@ -289,6 +289,110 @@ describe("persisted production reference acceptance boundary", () => {
     }
   });
 
+  it("binds operator sign-off to the persisted kitchen-acceptance audit", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-reference-kitchen-signoff-"));
+    const store = new OfferStore({ rootDir });
+    const auditLog = new AuditLogStore({ rootDir });
+    const app = buildOfferApp({ rootDir, store, auditLog, trustedActorSecret: trustedSecret });
+    try {
+      const persisted = await persistApprovedHandoff(app, store);
+      const boundary = await buildBoundaryInput(store, auditLog, persisted);
+      const capability = createOfferProductionReferencePersistenceCapability({
+        store,
+        auditLog,
+        context: { businessId: "local" }
+      });
+      const issued = await resolveProductionReferenceValidatedEvidence(boundary.input, capability);
+      expect(issued).toBeDefined();
+      expect(issued?.acceptedBy).toBe(boundary.kitchenAudit.actor.name);
+      expect(issued?.acceptedAt).toBe(boundary.kitchenAudit.at);
+      expect(await resolveProductionReferenceValidatedEvidence({
+        ...boundary.input,
+        acceptedBy: "Caller-Fake",
+        acceptedAt: "2099-10-15T12:00:00.000Z"
+      } as never, capability)).toBeUndefined();
+
+      const malformedKitchenAudit = await auditLog.logFor({ businessId: "local" }, {
+        action: "production.kitchen_acceptance",
+        entityType: "ProductionHandoff",
+        entityId: persisted.handoff.handoffId,
+        actor: { name: "", source: "synthetic" },
+        summary: "Ungültiger synthetischer Abnahmebeleg.",
+        at: "not-a-timestamp",
+        details: { rescueChatUsed: false }
+      });
+      expect(await resolveProductionReferenceValidatedEvidence({
+        ...boundary.input,
+        kitchenAcceptanceAuditId: malformedKitchenAudit.auditId
+      }, capability)).toBeUndefined();
+
+      const evaluateWith = (operatorAcceptance: { accepted: true; acceptedBy: string; acceptedAt: string; rescueChatUsed: false }) =>
+        evaluateProductionReferenceAcceptance({
+          caseId: persisted.caseId,
+          source: {
+            expectedCaseId: persisted.caseId,
+            expectedSha256: sourceSha256,
+            observedSha256: sourceSha256,
+            lineageReferences: [boundary.input.sourceLineageId]
+          },
+          offer: {
+            offerId: boundary.approvedOffer.approvedOfferId,
+            pricingSummary: boundary.approvedOffer.pricingSummary,
+            pricingBasis: "module_catalog_estimate",
+            approved: true,
+            reviewStatus: {
+              priceReviewStatus: "verified",
+              taxReviewStatus: "verified",
+              allergenReviewStatus: "verified",
+              hygieneTemperatureReviewStatus: "verified",
+              sourceSecured: true,
+              publishApproved: true
+            }
+          },
+          production: {
+            plan: {
+              schemaVersion: "1.0.0",
+              planId: "operator-signoff-test-plan",
+              eventSpecId: boundary.handoff.eventSpecSnapshot.specId,
+              readiness: { status: "insufficient", reasons: ["Sign-off binding is isolated here."] },
+              productionBatches: [],
+              timeline: [],
+              kitchenSheets: [],
+              recipeSelections: [],
+              unresolvedItems: ["Sign-off binding is isolated here."]
+            },
+            purchaseList: {
+              schemaVersion: "1.0.0",
+              purchaseListId: "operator-signoff-test-purchase",
+              eventSpecId: boundary.handoff.eventSpecSnapshot.specId,
+              items: [],
+              groupingMode: "group",
+              totals: { itemCount: 0, groups: [] }
+            },
+            recipes: []
+          },
+          operatorAcceptance,
+          validatedEvidence: issued
+        });
+
+      expect(evaluateWith({
+        accepted: true,
+        acceptedBy: "Unbelegter Fremdoperator",
+        acceptedAt: boundary.kitchenAudit.at,
+        rescueChatUsed: false
+      }).blockers.map((blocker) => blocker.code)).toContain("persisted_operator_acceptance_mismatch");
+      expect(evaluateWith({
+        accepted: true,
+        acceptedBy: boundary.kitchenAudit.actor.name,
+        acceptedAt: "2099-10-15T12:00:00.000Z",
+        rescueChatUsed: false
+      }).blockers.map((blocker) => blocker.code)).toContain("persisted_operator_acceptance_mismatch");
+    } finally {
+      await app.close();
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("requires the persisted draft review and pricing snapshot before issuing evidence", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-reference-pricing-binding-"));
     const store = new OfferStore({ rootDir });

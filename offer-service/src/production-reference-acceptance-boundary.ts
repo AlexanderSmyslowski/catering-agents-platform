@@ -27,6 +27,12 @@ function auditIdFromLineage(sourceLineageId: string): string | undefined {
     : undefined;
 }
 
+function validAuditTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || value.trim().length === 0) return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
+}
+
 /**
  * The only production-side capability boundary. It accepts concrete stores,
  * reads every authoritative record itself, and never accepts a caller reader
@@ -58,6 +64,8 @@ export function createOfferProductionReferencePersistenceCapability(
 
       const sourceDetails = sourceAudit?.details;
       const kitchenDetails = kitchenAcceptanceAudit?.details;
+      const kitchenAcceptedBy = kitchenAcceptanceAudit?.actor.name;
+      const kitchenAcceptedAt = kitchenAcceptanceAudit?.at;
       const persistedDraft = approvedOffer
         ? await options.store.getDraft(options.context, approvedOffer.sourceDraft.draftId)
         : undefined;
@@ -118,6 +126,9 @@ export function createOfferProductionReferencePersistenceCapability(
         || kitchenAcceptanceAudit.entityType !== "ProductionHandoff"
         || kitchenAcceptanceAudit.entityId !== handoff.handoffId
         || kitchenDetails?.rescueChatUsed !== false
+        || typeof kitchenAcceptedBy !== "string"
+        || kitchenAcceptedBy.trim().length === 0
+        || !validAuditTimestamp(kitchenAcceptedAt)
       ) {
         return undefined;
       }
@@ -133,6 +144,8 @@ export function createOfferProductionReferencePersistenceCapability(
         approvalAuditId: approvalAudit.auditId,
         handoffAuditId: handoffAudit.auditId,
         kitchenAcceptanceAuditId: kitchenAcceptanceAudit.auditId,
+        acceptedBy: kitchenAcceptedBy,
+        acceptedAt: kitchenAcceptedAt,
         pricingSummary: approvedOffer.pricingSummary,
         pricingBasis: "module_catalog_estimate",
         rescueChatUsed: false

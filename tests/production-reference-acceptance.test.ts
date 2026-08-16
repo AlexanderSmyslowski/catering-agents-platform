@@ -274,6 +274,8 @@ function validatedSyntheticEvidence() {
     approvalAuditId: input.approvalAuditId,
     handoffAuditId: input.handoffAuditId,
     kitchenAcceptanceAuditId: input.kitchenAcceptanceAuditId,
+    acceptedBy: "synthetic-kitchen-reviewer",
+    acceptedAt: "2099-10-15T12:00:00.000Z",
     pricingSummary: input.pricingSummary,
     pricingBasis: input.pricingBasis,
     rescueChatUsed: input.rescueChatUsed
@@ -356,7 +358,7 @@ describe("production reference acceptance contract", () => {
       expect(result.blockers.map((blocker) => blocker.code)).toEqual(expect.arrayContaining([
         "source_provenance_missing",
         "offer_review_incomplete",
-        "recipe_review_required",
+        "recipe_missing",
         "operator_kitchen_acceptance_missing"
       ]));
     } finally {
@@ -532,6 +534,8 @@ describe("production reference acceptance contract", () => {
         approvalAuditId: input.approvalAuditId,
         handoffAuditId: input.handoffAuditId,
         kitchenAcceptanceAuditId: input.kitchenAcceptanceAuditId,
+        acceptedBy: "synthetic-kitchen-reviewer",
+        acceptedAt: "2099-10-15T12:00:00.000Z",
         pricingSummary: input.pricingSummary,
         pricingBasis: input.pricingBasis,
         rescueChatUsed: input.rescueChatUsed
@@ -640,11 +644,196 @@ describe("production reference acceptance contract", () => {
     }
   });
 
+  it("requires each kitchen sheet to use the recipe selected by its batch", async () => {
+    const { root, artifacts } = await syntheticProductionArtifacts();
+    try {
+      const recipeBoundBatch = artifacts.productionPlan.productionBatches.find((batch) => batch.recipeId)!;
+      const alternateRecipe = internalRecipes.find((recipe) => recipe.recipeId !== recipeBoundBatch.recipeId)!;
+      const plan = {
+        ...artifacts.productionPlan,
+        kitchenSheets: artifacts.productionPlan.kitchenSheets.map((sheet) =>
+          sheet.componentId === recipeBoundBatch.componentId
+            ? { ...sheet, recipeId: alternateRecipe.recipeId }
+            : sheet
+        )
+      };
+
+      const result = evaluateProductionReferenceAcceptance(acceptanceInput(artifacts, {
+        validatedEvidence: validatedSyntheticEvidence(),
+        production: {
+          ...acceptanceInput(artifacts).production,
+          plan
+        }
+      }));
+
+      expect(result.status).toBe("blocked");
+      expect(result.blockers.map((blocker) => blocker.code)).toContain("kitchen_sheet_incomplete");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not let procurement notes bypass a recipe-bound kitchen-sheet binding", async () => {
+    const { root, artifacts } = await syntheticProductionArtifacts();
+    try {
+      const recipeBoundBatch = artifacts.productionPlan.productionBatches.find((batch) => batch.recipeId);
+      expect(recipeBoundBatch?.recipeId).toBeTruthy();
+      const plan = {
+        ...artifacts.productionPlan,
+        kitchenSheets: artifacts.productionPlan.kitchenSheets.map((sheet) =>
+          sheet.componentId === recipeBoundBatch?.componentId
+            ? {
+              ...sheet,
+              recipeId: undefined,
+              ingredients: [],
+              steps: [],
+              procurementNotes: ["Extern beziehen und bei Wareneingang prüfen."]
+            }
+            : sheet
+        )
+      };
+
+      const result = evaluateProductionReferenceAcceptance(acceptanceInput(artifacts, {
+        validatedEvidence: validatedSyntheticEvidence(),
+        production: {
+          ...acceptanceInput(artifacts).production,
+          plan
+        }
+      }));
+
+      expect(result.status).toBe("blocked");
+      expect(result.blockers.map((blocker) => blocker.code)).toContain("kitchen_sheet_incomplete");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("checks allergen and approval status only for selected recipes", async () => {
+    const { root, artifacts } = await syntheticProductionArtifacts();
+    try {
+      const selectedRecipeIds = new Set(artifacts.productionPlan.recipeSelections.map((selection) => selection.recipeId));
+      const unusedRecipe = internalRecipes.find((recipe) => !selectedRecipeIds.has(recipe.recipeId));
+      expect(unusedRecipe).toBeDefined();
+      const recipes = internalRecipes.map((recipe) => recipe.recipeId === unusedRecipe?.recipeId
+        ? {
+          ...recipe,
+          source: { ...recipe.source, approvalState: "rejected" as const },
+          allergens: undefined as never,
+          dietTags: undefined as never
+        }
+        : recipe);
+
+      const result = evaluateProductionReferenceAcceptance(acceptanceInput(artifacts, {
+        validatedEvidence: validatedSyntheticEvidence(),
+        production: {
+          ...acceptanceInput(artifacts).production,
+          recipes
+        }
+      }));
+
+      expect(result.status).toBe("ready");
+      expect(result.blockers).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("requires procurement notes when a component has no recipe", async () => {
+    const { root, artifacts } = await syntheticProductionArtifacts();
+    try {
+      const procurementPlan = (procurementNotes: string[]) => ({
+        ...artifacts.productionPlan,
+        productionBatches: artifacts.productionPlan.productionBatches.map((batch) => ({
+          ...batch,
+          recipeId: "",
+          ingredients: []
+        })),
+        recipeSelections: [],
+        kitchenSheets: artifacts.productionPlan.kitchenSheets.map((sheet) => ({
+          ...sheet,
+          recipeId: undefined,
+          ingredients: [],
+          steps: [],
+          procurementNotes
+        }))
+      });
+
+      for (const procurementNotes of [[], [""], ["   "]]) {
+        const incomplete = evaluateProductionReferenceAcceptance(acceptanceInput(artifacts, {
+          validatedEvidence: validatedSyntheticEvidence(),
+          production: {
+            ...acceptanceInput(artifacts).production,
+            plan: procurementPlan(procurementNotes),
+            recipes: []
+          }
+        }));
+        expect(incomplete.status).toBe("blocked");
+        expect(incomplete.blockers.map((blocker) => blocker.code)).toContain("kitchen_sheet_incomplete");
+      }
+
+      const complete = evaluateProductionReferenceAcceptance(acceptanceInput(artifacts, {
+        validatedEvidence: validatedSyntheticEvidence(),
+        production: {
+          ...acceptanceInput(artifacts).production,
+          plan: procurementPlan(["Extern beziehen und bei Wareneingang prüfen."]),
+          recipes: []
+        }
+      }));
+      expect(complete.status).toBe("ready");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("requires a recipe-less procurement sheet to omit recipe identity", async () => {
+    const { root, artifacts } = await syntheticProductionArtifacts();
+    try {
+      const plan = {
+        ...artifacts.productionPlan,
+        productionBatches: artifacts.productionPlan.productionBatches.map((batch) => ({
+          ...batch,
+          recipeId: "",
+          ingredients: []
+        })),
+        recipeSelections: [],
+        kitchenSheets: artifacts.productionPlan.kitchenSheets.map((sheet) => ({
+          ...sheet,
+          recipeId: "foreign-recipe",
+          ingredients: [],
+          steps: [],
+          allergens: [],
+          dietTags: [],
+          procurementNotes: ["Extern beziehen und bei Wareneingang prüfen."]
+        }))
+      };
+
+      const result = evaluateProductionReferenceAcceptance(acceptanceInput(artifacts, {
+        validatedEvidence: validatedSyntheticEvidence(),
+        production: {
+          ...acceptanceInput(artifacts).production,
+          plan,
+          recipes: []
+        }
+      }));
+
+      expect(result.status).toBe("blocked");
+      expect(result.blockers.map((blocker) => blocker.code)).toContain("kitchen_sheet_incomplete");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("requires the versioned 5.362 reference-acceptance handoff entry", () => {
     const memory = readFileSync(path.join(process.cwd(), "memory.md"), "utf8");
     expect(memory).toContain("### 5.362");
     expect(memory).toContain("PR-#616");
     expect(memory).toContain("Cross-Case");
+    expect(memory).toContain("### 5.363");
+    expect(memory).toContain("production.kitchen_acceptance");
+    expect(memory).toContain("### 5.364");
+    expect(memory).toContain("procurementNotes");
+    expect(memory).toContain("### 5.365");
+    expect(memory).toContain("KitchenSheet.recipeId");
   });
 
   it("rejects non-positive or non-finite ingredient quantities", async () => {

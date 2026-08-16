@@ -66,7 +66,9 @@ export interface ProductionReferenceValidatedEvidenceInput {
   rescueChatUsed: false;
 }
 
-export type ProductionReferenceValidatedEvidence = Readonly<ProductionReferenceValidatedEvidenceInput>;
+export type ProductionReferenceValidatedEvidence = Readonly<
+  ProductionReferenceValidatedEvidenceInput & Pick<ProductionReferencePersistedEvidenceSnapshot, "acceptedBy" | "acceptedAt">
+>;
 
 export interface ProductionReferencePersistedEvidenceSnapshot {
   sourceCaseId: string;
@@ -79,6 +81,8 @@ export interface ProductionReferencePersistedEvidenceSnapshot {
   approvalAuditId: string;
   handoffAuditId: string;
   kitchenAcceptanceAuditId: string;
+  acceptedBy: string;
+  acceptedAt: string;
   pricingSummary: PricingSummary;
   pricingBasis: "module_catalog_estimate" | "full_cost_model";
   rescueChatUsed: false;
@@ -150,6 +154,12 @@ const validSha256 = (value: unknown): value is string =>
 const nonEmpty = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
+const validIsoTimestamp = (value: unknown): value is string => {
+  if (!nonEmpty(value)) return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
+};
+
 const normalizeName = (value: string): string =>
   value.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase("de-DE");
 
@@ -208,6 +218,8 @@ const persistedEvidenceKeys = new Set([
   "approvalAuditId",
   "handoffAuditId",
   "kitchenAcceptanceAuditId",
+  "acceptedBy",
+  "acceptedAt",
   "pricingSummary",
   "pricingBasis",
   "rescueChatUsed"
@@ -253,6 +265,8 @@ function validPersistedSnapshot(value: unknown): value is ProductionReferencePer
     && nonEmpty(candidate.approvalAuditId)
     && nonEmpty(candidate.handoffAuditId)
     && nonEmpty(candidate.kitchenAcceptanceAuditId)
+    && nonEmpty(candidate.acceptedBy)
+    && validIsoTimestamp(candidate.acceptedAt)
     && validPricingSummary(candidate.pricingSummary)
     && (candidate.pricingBasis === "module_catalog_estimate" || candidate.pricingBasis === "full_cost_model")
     && candidate.rescueChatUsed === false;
@@ -267,7 +281,9 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
 function issueValidatedEvidenceToken(
   input: ProductionReferenceValidatedEvidenceInput,
   pricingBasis: ProductionReferenceValidatedEvidenceInput["pricingBasis"],
-  pricingSummary: PricingSummary
+  pricingSummary: PricingSummary,
+  acceptedBy: string,
+  acceptedAt: string
 ): ProductionReferenceValidatedEvidence {
   const immutablePricingSummary = Object.freeze({
     subtotal: Object.freeze({ ...pricingSummary.subtotal }),
@@ -280,6 +296,8 @@ function issueValidatedEvidenceToken(
   }) as unknown as PricingSummary;
   return issueTrustedProductionReferenceValidatedEvidence({
     ...input,
+    acceptedBy,
+    acceptedAt,
     pricingSummary: immutablePricingSummary,
     pricingBasis
   });
@@ -337,7 +355,7 @@ export function resolveProductionReferenceValidatedEvidence(
         && areJsonValuesEqual(persisted.pricingSummary, input.pricingSummary)
         && persisted.rescueChatUsed === input.rescueChatUsed;
       return matches
-        ? issueValidatedEvidenceToken(input, persisted.pricingBasis, persisted.pricingSummary)
+        ? issueValidatedEvidenceToken(input, persisted.pricingBasis, persisted.pricingSummary, persisted.acceptedBy, persisted.acceptedAt)
         : undefined;
     } catch {
       return undefined;
@@ -494,6 +512,16 @@ function checkEvidenceBinding(
       message: "Persistierte Angebots- und Kostenbasis-IDs stimmen nicht mit dem geprüften Angebot überein."
     });
   }
+  if (
+    !input.operatorAcceptance
+    || evidence.acceptedBy !== input.operatorAcceptance.acceptedBy
+    || evidence.acceptedAt !== input.operatorAcceptance.acceptedAt
+  ) {
+    addIssue(checklist, "kitchen_acceptance", "blocked", {
+      code: "persisted_operator_acceptance_mismatch",
+      message: "Operator und Zeitpunkt der Küchenabnahme stimmen nicht mit dem persistierten Auditnachweis überein."
+    });
+  }
   if ([
     evidence.approvalRequestId,
     evidence.handoffId,
@@ -589,13 +617,18 @@ function checkProduction(
       nonEmpty(sheet.productionQty.unit)
     );
     const validRecipeWork = Boolean(
-      sheet?.recipeId &&
+      nonEmpty(batch.recipeId) &&
+      sheet?.recipeId === batch.recipeId &&
       (sheet.ingredients.length ?? 0) > 0 &&
       (sheet.steps.length ?? 0) > 0
     );
+    const procurementNotes = sheet?.procurementNotes;
     const validProcurementWork = Boolean(
-      !sheet?.recipeId &&
-      (sheet?.procurementNotes?.length ?? 0) > 0
+      !nonEmpty(batch.recipeId) &&
+      !nonEmpty(sheet?.recipeId) &&
+      Array.isArray(procurementNotes) &&
+      procurementNotes.length > 0 &&
+      procurementNotes.every((note) => nonEmpty(note))
     );
     if (!sheet || !nonEmpty(sheet.title) || !nonEmpty(sheet.station) || !nonEmpty(sheet.prepWindow) || !validQuantity || (!validRecipeWork && !validProcurementWork) || (sheet.blockingNotes?.length ?? 0) > 0) {
       addIssue(checklist, "production_completeness", "blocked", {
@@ -690,7 +723,22 @@ function checkRecipes(
       });
     }
   }
+  const selectedRecipeIds = new Set<string>();
+  for (const selection of plan.recipeSelections) {
+    const matchingBatch = recipeBoundBatches.find((batch) =>
+      batch.componentId === selection.componentId && batch.recipeId === selection.recipeId
+    );
+    if (
+      matchingBatch
+      && selection.recipeId
+      && !selection.autoUsedInternetRecipe
+      && recipesById.has(selection.recipeId)
+    ) {
+      selectedRecipeIds.add(selection.recipeId);
+    }
+  }
   for (const recipe of recipes) {
+    if (!selectedRecipeIds.has(recipe.recipeId)) continue;
     if (recipe.source.approvalState !== "approved_internal" && recipe.source.approvalState !== "auto_usable") {
       addIssue(checklist, "recipe_allergen_status", "blocked", {
         code: "recipe_review_required",
@@ -737,7 +785,7 @@ function checkKitchenAcceptance(
       message: "rescueChatUsed muss ausdrücklich false sein; fehlende Angaben blockieren."
     });
   }
-  if (!acceptance.accepted || !nonEmpty(acceptance.acceptedBy) || !nonEmpty(acceptance.acceptedAt)) {
+  if (!acceptance.accepted || !nonEmpty(acceptance.acceptedBy) || !validIsoTimestamp(acceptance.acceptedAt)) {
     addIssue(checklist, "kitchen_acceptance", "blocked", {
       code: "operator_kitchen_acceptance_incomplete",
       message: "Küchenabnahme muss mit Status, Operator und Zeitpunkt belegt sein."
