@@ -3,6 +3,7 @@ import {
   SCHEMA_VERSION,
   type AcceptedEventSpec,
   type MenuComponent,
+  type QuantityRecipeProductionBridgeResult,
   type Recipe
 } from "../shared-core/src/index.js";
 import type { RecipeDiscoveryService } from "../production-service/src/recipe-discovery/service.js";
@@ -81,6 +82,25 @@ function buildRecipe(overrides: Partial<Recipe> = {}): Recipe {
   } as Recipe;
 }
 
+function readyBridge({
+  recipeId = "recipe-tomato-soup",
+  targetServings = 40
+}: {
+  recipeId?: string;
+  targetServings?: number;
+} = {}): QuantityRecipeProductionBridgeResult {
+  return {
+    status: "ready_for_scaling",
+    eventSpecId: "spec-lunch",
+    componentId: "component-soup",
+    recipeId,
+    targetOutput: { amount: targetServings, unit: "servings" },
+    targetServings,
+    conversionMethod: "direct_servings",
+    issues: []
+  };
+}
+
 function discoveryReturning(value: unknown): RecipeDiscoveryService {
   return {
     async resolveRecipe() {
@@ -117,6 +137,7 @@ describe("planning recipe component artifacts", () => {
       component: buildComponent(),
       eventSpec: buildSpec(),
       servings: 40,
+      bridgeResult: readyBridge(),
       context: { businessId: "local" },
       discoveryService: discoveryReturning({
         recipe,
@@ -235,6 +256,7 @@ describe("planning recipe component artifacts", () => {
       component: buildComponent({ recipeOverrideId: "recipe-manual" }),
       eventSpec: buildSpec(),
       servings: 20,
+      bridgeResult: readyBridge({ recipeId: "recipe-manual", targetServings: 20 }),
       context: { businessId: "local" },
       discoveryService: discovery
     });

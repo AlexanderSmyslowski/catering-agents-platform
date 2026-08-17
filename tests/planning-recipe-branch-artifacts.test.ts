@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AcceptedEventSpec,
   MenuComponent,
+  QuantityRecipeProductionBridgeResult,
   Recipe
 } from "../shared-core/src/index.js";
 import { SCHEMA_VERSION } from "../shared-core/src/index.js";
@@ -59,6 +60,19 @@ function recipe(): Recipe {
   };
 }
 
+function readyBridge(targetServings: number): QuantityRecipeProductionBridgeResult {
+  return {
+    status: "ready_for_scaling",
+    eventSpecId: "spec-recipe-branch-test",
+    componentId: "component-focaccia",
+    recipeId: "recipe-focaccia",
+    targetOutput: { amount: targetServings, unit: "servings" },
+    targetServings,
+    conversionMethod: "direct_servings",
+    issues: []
+  };
+}
+
 function discoveryService(resolution: Awaited<ReturnType<RecipeDiscoveryService["resolveRecipe"]>>): RecipeDiscoveryService {
   return {
     async resolveRecipe() {
@@ -99,6 +113,7 @@ describe("planning recipe branch artifacts", () => {
         }
       }),
       servings: 30,
+      bridgeResult: readyBridge(30),
       context: { businessId: "local" },
       discoveryService: discoveryService({
         recipe: recipe(),

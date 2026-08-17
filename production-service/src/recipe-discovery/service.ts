@@ -3,6 +3,7 @@ import {
   type AcceptedEventSpec,
   type BusinessContext,
   type MenuComponent,
+  type QuantityRecipeProductionBridgeResult,
   type RecipeSelection,
   type Recipe
 } from "@catering/shared-core";
@@ -22,11 +23,45 @@ export interface RecipeResolution {
   unresolvedItems: string[];
 }
 
+export interface QuantityRecipeBridgeResolverInput {
+  eventSpec: AcceptedEventSpec;
+  component: MenuComponent;
+  recipe: Recipe;
+  servings: number;
+  context: BusinessContext;
+}
+
+export type QuantityRecipeBridgeResolver = (
+  input: QuantityRecipeBridgeResolverInput
+) =>
+  | QuantityRecipeProductionBridgeResult
+  | undefined
+  | Promise<QuantityRecipeProductionBridgeResult | undefined>;
+
 export class RecipeDiscoveryService {
+  private quantityRecipeBridgeResolver?: QuantityRecipeBridgeResolver;
+
   constructor(
     private readonly repository: InMemoryRecipeRepository,
-    private readonly webProvider: WebRecipeSearchProvider
-  ) {}
+    private readonly webProvider: WebRecipeSearchProvider,
+    quantityRecipeBridgeResolver?: QuantityRecipeBridgeResolver
+  ) {
+    this.quantityRecipeBridgeResolver = quantityRecipeBridgeResolver;
+  }
+
+  setQuantityRecipeBridgeResolver(resolver: QuantityRecipeBridgeResolver | undefined): void {
+    this.quantityRecipeBridgeResolver = resolver;
+  }
+
+  async resolveQuantityRecipeBridge(
+    input: QuantityRecipeBridgeResolverInput
+  ): Promise<QuantityRecipeProductionBridgeResult | undefined> {
+    if (!this.quantityRecipeBridgeResolver) return undefined;
+    return this.quantityRecipeBridgeResolver({
+      ...input,
+      context: requireBusinessContext(input.context)
+    });
+  }
 
   async resolveRecipeOverride(
     recipeId: string,

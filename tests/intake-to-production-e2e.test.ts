@@ -7,6 +7,8 @@ import {
   createEventRequestFromManualForm,
   createEventRequestFromText,
   normalizeEventRequestToSpec,
+  type AcceptedEventSpec,
+  type QuantityRecipeProductionBridgeResult,
   type Recipe
 } from "@catering/shared-core";
 import {
@@ -112,6 +114,26 @@ function createDiscoveryService(repository: InMemoryRecipeRepository): RecipeDis
   return new RecipeDiscoveryService(repository, new EmptyWebProvider());
 }
 
+function readyBridgeFor(
+  spec: AcceptedEventSpec,
+  componentId: string,
+  recipeId: string
+): QuantityRecipeProductionBridgeResult {
+  const component = spec.menuPlan.find((item) => item.componentId === componentId);
+  const targetServings = component?.servings ?? spec.attendees.expected ?? 0;
+  if (targetServings <= 0) throw new Error(`Test bridge requires positive servings for ${componentId}.`);
+  return {
+    status: "ready_for_scaling",
+    eventSpecId: spec.specId,
+    componentId,
+    recipeId,
+    targetOutput: { amount: targetServings, unit: "servings" },
+    targetServings,
+    conversionMethod: "direct_servings",
+    issues: []
+  };
+}
+
 async function runParityFlow(
   request:
     | ReturnType<typeof createEventRequestFromText>
@@ -135,7 +157,15 @@ async function runParityFlow(
         }
       }))
     };
-    const artifacts = await buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
+    const artifacts = await buildProductionArtifacts(plannedSpec, discovery, {
+      context: { businessId: "local" },
+      quantityRecipeBridges: Object.fromEntries(
+        plannedSpec.menuPlan.map((item) => [
+          item.componentId,
+          readyBridgeFor(plannedSpec, item.componentId, recipe.recipeId)
+        ])
+      )
+    });
 
     return {
       intakeReadiness: spec.readiness.status,
@@ -203,7 +233,16 @@ describe("manual form intake to production e2e", () => {
         }))
       };
       const discovery = createDiscoveryService(repository);
-      const artifacts = await buildProductionArtifacts(plannedSpec, discovery, { context: { businessId: "local" } });
+      const artifacts = await buildProductionArtifacts(plannedSpec, discovery, {
+        context: { businessId: "local" },
+        quantityRecipeBridges: {
+          [plannedSpec.menuPlan[0].componentId]: readyBridgeFor(
+            plannedSpec,
+            plannedSpec.menuPlan[0].componentId,
+            "tomatensuppe-manual"
+          )
+        }
+      });
 
       expect(artifacts.productionPlan.readiness.status).toBe("complete");
       expect(artifacts.productionPlan.isFallback).not.toBe(true);

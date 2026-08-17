@@ -2,7 +2,8 @@ import {
   assertBusinessId,
   type AcceptedEventSpec,
   type BusinessContext,
-  type PurchaseItem
+  type PurchaseItem,
+  type QuantityRecipeProductionBridgeResult
 } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import { procurementItemsForComponent } from "./procurement-rules.js";
@@ -22,6 +23,7 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
   eventSpec: AcceptedEventSpec;
   component: MenuPlanComponent;
   servings: number;
+  bridgeResult?: QuantityRecipeProductionBridgeResult;
   discoveryService: RecipeDiscoveryService;
   context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
@@ -30,6 +32,7 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
     eventSpec,
     component,
     servings,
+    bridgeResult,
     discoveryService,
     context,
     persistDiscoveredRecipes = true
@@ -43,6 +46,7 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
       eventSpec,
       component,
       servings,
+      bridgeResult,
       discoveryService,
       context,
       persistDiscoveredRecipes

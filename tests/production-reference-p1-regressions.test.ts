@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import pdf from "pdf-parse";
+import * as documentText from "../shared-core/src/document-text.js";
 import { runProductionReferenceQualityCommand } from "../scripts/check-production-reference-case.js";
 import type { LlmReadinessProviderAdapter } from "../shared-core/src/llm-readiness-provider-adapter.js";
 
@@ -96,6 +97,7 @@ describe("post-merge production reference P1 regressions", () => {
 
   afterEach(() => {
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    vi.restoreAllMocks();
     vi.mocked(pdf).mockReset();
   });
 
@@ -198,10 +200,10 @@ describe("post-merge production reference P1 regressions", () => {
     writeFileSync(expectationPath, JSON.stringify({ ...expectation, sourceSha256: sourceHash }));
 
     let extractionCalls = 0;
-    vi.mocked(pdf).mockImplementation(async (received) => {
+    vi.spyOn(documentText, "extractTextFromDocument").mockImplementation(async (received) => {
       extractionCalls += 1;
-      expect(Buffer.from(received).subarray(0, 8).toString("latin1")).toBe("%PDF-1.7");
-      return { text: "Kaffee und Kuchen · extrahierter Angebotstext" } as Awaited<ReturnType<typeof pdf>>;
+      expect(received.content.subarray(0, 8).toString("latin1")).toBe("%PDF-1.7");
+      return "Kaffee und Kuchen · extrahierter Angebotstext";
     });
 
     const capture: { promptContext?: string; providerCalls?: number } = {};

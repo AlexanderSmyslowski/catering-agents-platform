@@ -1,7 +1,8 @@
 import {
   assertBusinessId,
   type AcceptedEventSpec,
-  type BusinessContext
+  type BusinessContext,
+  type QuantityRecipeProductionBridgeResult
 } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import {
@@ -21,6 +22,7 @@ export async function appendPlanningComponentBranchArtifacts(input: {
   eventSpec: AcceptedEventSpec;
   component: MenuPlanComponent;
   servings: number;
+  bridgeResult?: QuantityRecipeProductionBridgeResult;
   discoveryService: RecipeDiscoveryService;
   context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
@@ -30,6 +32,7 @@ export async function appendPlanningComponentBranchArtifacts(input: {
     eventSpec,
     component,
     servings,
+    bridgeResult,
     discoveryService,
     context,
     persistDiscoveredRecipes = true,
@@ -75,10 +78,11 @@ export async function appendPlanningComponentBranchArtifacts(input: {
   const recipeBranchArtifacts = await buildRecipeBranchPlanningArtifacts({
     eventSpec,
     component,
-      servings,
-      discoveryService,
-      context,
-      persistDiscoveredRecipes
+    servings,
+    bridgeResult,
+    discoveryService,
+    context,
+    persistDiscoveredRecipes
   });
   appendRecipeBranchPlanningArtifacts(artifactAppender, recipeBranchArtifacts);
 }

@@ -104,8 +104,24 @@ async function buildWithCurrentPlanning() {
       return this.resolveRecipe();
     }
   };
+  const component = spec.menuPlan[0];
+  const servings = component.servings ?? spec.attendees.expected ?? 0;
 
-  return buildProductionArtifacts(spec, discovery as any, { context: { businessId: "local" } });
+  return buildProductionArtifacts(spec, discovery as any, {
+    context: { businessId: "local" },
+    quantityRecipeBridges: {
+      [component.componentId]: {
+        status: "ready_for_scaling",
+        eventSpecId: spec.specId,
+        componentId: component.componentId,
+        recipeId: "recipe-tomato-soup",
+        targetOutput: { amount: servings, unit: "servings" },
+        targetServings: servings,
+        conversionMethod: "direct_servings",
+        issues: []
+      }
+    }
+  });
 }
 
 describe("production planning purchase coverage integration", () => {

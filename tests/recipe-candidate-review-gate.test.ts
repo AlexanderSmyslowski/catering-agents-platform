@@ -123,6 +123,16 @@ async function buildArtifactsFor(selectedRecipe: Recipe) {
     eventSpec: eventSpec(menuComponent),
     component: menuComponent,
     servings: 40,
+    bridgeResult: {
+      status: "ready_for_scaling",
+      eventSpecId: "spec-review-gate",
+      componentId: menuComponent.componentId,
+      recipeId: selectedRecipe.recipeId,
+      targetOutput: { amount: 40, unit: "servings" },
+      targetServings: 40,
+      conversionMethod: "direct_servings",
+      issues: []
+    },
     context: { businessId: "local" },
     discoveryService: discoveryReturning(selectedRecipe)
   });
