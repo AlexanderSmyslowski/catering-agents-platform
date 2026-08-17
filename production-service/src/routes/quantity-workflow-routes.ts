@@ -211,7 +211,7 @@ export function registerProductionQuantityWorkflowRoutes(
           newTargetAmount: confirmation.override.newAuthority.targetAmount,
           targetUnit: confirmation.override.newAuthority.targetUnit,
           bridgeStatus: recalculation.bridge.status,
-          appliedProductionScalingRuleIds: recalculation.appliedProductionScalingRuleIds ?? []
+          appliedProductionScalingRuleIds: (recalculation.appliedProductionScalingRuleIds ?? []).join(",")
         },
         idempotencyKey: confirmation.override.overrideId
       });
