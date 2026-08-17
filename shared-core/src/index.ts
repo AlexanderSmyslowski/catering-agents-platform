@@ -76,6 +76,7 @@ export type {
   ProductionReferenceAcceptanceResult
 } from "./production-reference-acceptance.js";
 export * from "./production-apply-manifest.js";
+export * from "./recipe-knowledge-foundation.js";
 export * from "./recipe-research-calculation-boundary.js";
 export * from "./recipe-library.js";
 export * from "./request-factory.js";
