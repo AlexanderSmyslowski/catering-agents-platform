@@ -39,6 +39,7 @@ export * from "./llm-readiness-run-result.js";
 export * from "./llm-readiness-synthetic-live-slice.js";
 export * from "./llm-readiness-synthetic-live-preflight.js";
 export * from "./llm-readiness.js";
+export * from "./nonlinear-production-scaling.js";
 
 export {
   createBusinessScopedPersistentCollection,
