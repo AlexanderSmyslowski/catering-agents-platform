@@ -1,5 +1,7 @@
+import { applyNonlinearProductionScaling, type ProductionScalingRule } from "./nonlinear-production-scaling.js";
 import { evaluateQuantityDecision, type QuantityDecisionInput, type QuantityDecisionResult } from "./quantity-decision.js";
 import { evaluateQuantityRecipeProductionBridge, type QuantityRecipeProductionBridgeResult, type RecipeOutputMapping } from "./quantity-recipe-production-bridge.js";
+import type { RecipeEventUseReview } from "./recipe-knowledge-foundation.js";
 import { scaleRecipe, type ScaledRecipeResult } from "./rules/scaling.js";
 import type { IngredientLine, Recipe } from "./types.js";
 
@@ -85,13 +87,21 @@ export interface RecalculateQuantityLineageInput {
   confirmedOverride: ConfirmedQuantityOverride;
   recipe: Recipe;
   outputMapping: RecipeOutputMapping;
+  reviewedQuantityDecision?: QuantityDecisionInput;
+  recipeEventUseReview?: RecipeEventUseReview;
+  productionScalingRules?: ProductionScalingRule[];
+  productionContext?: string[];
 }
 
 export interface QuantityLineageRecalculationResult {
   quantityDecision: QuantityDecisionResult;
   bridge: QuantityRecipeProductionBridgeResult;
   currentRecipe?: ScaledRecipeResult;
+  proportionalBaseline?: ScaledRecipeResult;
+  effectiveRecipeQuantity?: ScaledRecipeResult;
   purchaseQuantities?: IngredientLine[];
+  appliedProductionScalingRuleIds?: string[];
+  productionScalingIssues?: string[];
   staleArtifacts: QuantityOverrideStaleArtifact[];
 }
 
@@ -220,20 +230,39 @@ export function confirmQuantityOverride(input: ConfirmQuantityOverrideInput): Co
   };
 }
 
+function reviewedDecisionMatchesOverride(reviewed: QuantityDecisionInput, override: ConfirmedQuantityOverride): boolean {
+  const proposed = override.newAuthority;
+  return reviewed.reviewStatus === "approved" &&
+    reviewed.eventSpecId === override.eventSpecId &&
+    reviewed.componentId === override.componentId &&
+    reviewed.guestCount === proposed.guestCount &&
+    reviewed.basis === proposed.basis &&
+    reviewed.targetAmount === proposed.targetAmount &&
+    reviewed.targetUnit === proposed.targetUnit &&
+    reviewed.perUnitAmount === proposed.perUnitAmount &&
+    reviewed.perUnitUnit === proposed.perUnitUnit;
+}
+
 export function recalculateQuantityLineage(input: RecalculateQuantityLineageInput): QuantityLineageRecalculationResult {
-  const quantityInput: QuantityDecisionInput = {
+  const pendingQuantityInput: QuantityDecisionInput = {
     ...input.confirmedOverride.newAuthority,
     decisionId: input.confirmedOverride.overrideId,
     evidence: { kind: "operator_instruction", reference: input.confirmedOverride.overrideId },
     reviewStatus: "kitchen_review_required",
     rationale: "Bestätigte Nutzer-Mengenänderung; Küchenfreigabe für die neue Eventmenge erforderlich."
   };
+
+  const quantityInput = input.reviewedQuantityDecision && reviewedDecisionMatchesOverride(input.reviewedQuantityDecision, input.confirmedOverride)
+    ? input.reviewedQuantityDecision
+    : pendingQuantityInput;
+
   const quantityDecision = evaluateQuantityDecision(quantityInput);
   const bridge = evaluateQuantityRecipeProductionBridge({
     eventSpecId: input.confirmedOverride.eventSpecId,
     componentId: input.confirmedOverride.componentId,
     quantityDecision: quantityInput,
     recipe: input.recipe,
+    recipeEventUseReview: input.recipeEventUseReview,
     outputMapping: input.outputMapping
   });
 
@@ -241,12 +270,22 @@ export function recalculateQuantityLineage(input: RecalculateQuantityLineageInpu
     return { quantityDecision, bridge, staleArtifacts: [...input.confirmedOverride.staleArtifacts] };
   }
 
-  const currentRecipe = scaleRecipe(input.recipe, bridge.targetServings);
+  const scaling = applyNonlinearProductionScaling({
+    recipe: input.recipe,
+    targetServings: bridge.targetServings,
+    rules: input.productionScalingRules ?? [],
+    context: input.productionContext
+  });
+
   return {
     quantityDecision,
     bridge,
-    currentRecipe,
-    purchaseQuantities: currentRecipe.ingredients,
+    currentRecipe: scaling.effectiveRecipe,
+    proportionalBaseline: scaling.proportionalBaseline,
+    effectiveRecipeQuantity: scaling.effectiveRecipe,
+    purchaseQuantities: scaling.effectiveRecipe.ingredients,
+    appliedProductionScalingRuleIds: scaling.appliedRuleIds,
+    productionScalingIssues: scaling.issues,
     staleArtifacts: [...input.confirmedOverride.staleArtifacts]
   };
 }
