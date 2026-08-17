@@ -1,1 +1,1 @@
-RED target: the shared-core package does not yet export `previewQuantityOverride`, `confirmQuantityOverride`, or `recalculateQuantityLineage`. The committed contract tests must therefore fail until the implementation is added.
+RED target for PR #623: the shared-core package does not yet export `previewQuantityOverride`, `confirmQuantityOverride`, or `recalculateQuantityLineage`. The committed contract tests must therefore fail until the implementation is added.
