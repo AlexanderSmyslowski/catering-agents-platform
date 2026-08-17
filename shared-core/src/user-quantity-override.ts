@@ -150,15 +150,16 @@ export function previewQuantityOverride(input: QuantityOverridePreviewInput): Qu
     proposedTarget = normalize(input.edit.targetAmount);
     if (input.currentAuthority.basis !== "fixed_total") proposedPerUnit = normalize(proposedTarget / input.currentAuthority.guestCount);
   } else {
-    if (!positive(input.edit.amount)) return blocked("proposed_quantity_invalid");
-    const matches = currentScaled.ingredients.filter((line) => line.ingredientId === input.edit.ingredientId);
+    const purchaseEdit = input.edit;
+    if (!positive(purchaseEdit.amount)) return blocked("proposed_quantity_invalid");
+    const matches = currentScaled.ingredients.filter((line) => line.ingredientId === purchaseEdit.ingredientId);
     if (matches.length !== 1) return blocked("purchase_ingredient_untraceable");
     const line = matches[0]!;
-    if (line.quantity.unit !== input.edit.unit) return blocked("unit_mismatch");
-    const factor = input.edit.amount / line.quantity.amount;
+    if (line.quantity.unit !== purchaseEdit.unit) return blocked("unit_mismatch");
+    const factor = purchaseEdit.amount / line.quantity.amount;
     proposedTarget = normalize(input.currentAuthority.targetAmount * factor);
     if (input.currentAuthority.basis !== "fixed_total") proposedPerUnit = normalize((input.currentAuthority.perUnitAmount ?? 0) * factor);
-    purchaseIngredientId = input.edit.ingredientId;
+    purchaseIngredientId = purchaseEdit.ingredientId;
   }
 
   const scaleFactor = normalize(proposedTarget / input.currentAuthority.targetAmount);
