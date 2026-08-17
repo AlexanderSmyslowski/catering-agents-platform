@@ -161,13 +161,16 @@ function previousAndRequestedValue(
     };
   }
 
-  const newLine = corePreview.proportionalBaseline.ingredients.find((line) => line.ingredientId === input.edit.ingredientId);
+  const purchaseEdit = input.edit;
+  const newLine = corePreview.proportionalBaseline.ingredients.find(
+    (line) => line.ingredientId === purchaseEdit.ingredientId
+  );
   return {
     previousValue: {
-      amount: newLine ? Number((newLine.quantity.amount / corePreview.scaleFactor).toFixed(2)) : input.edit.amount,
-      unit: input.edit.unit
+      amount: newLine ? Number((newLine.quantity.amount / corePreview.scaleFactor).toFixed(2)) : purchaseEdit.amount,
+      unit: purchaseEdit.unit
     },
-    requestedValue: { amount: input.edit.amount, unit: input.edit.unit }
+    requestedValue: { amount: purchaseEdit.amount, unit: purchaseEdit.unit }
   };
 }
 
