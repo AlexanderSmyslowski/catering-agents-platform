@@ -79,6 +79,7 @@ export type {
 } from "./production-reference-acceptance.js";
 export * from "./production-apply-manifest.js";
 export * from "./quantity-decision.js";
+export * from "./quantity-recommendation.js";
 export * from "./quantity-recipe-production-bridge.js";
 export * from "./recipe-knowledge-foundation.js";
 export * from "./recipe-research-calculation-boundary.js";
