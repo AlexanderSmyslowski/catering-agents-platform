@@ -1,8 +1,9 @@
 import {
-  toProductionBatch,
+  materializeProductionBatchFromBridge,
   type AcceptedEventSpec,
   type MenuComponent,
   type ProductionPlan,
+  type QuantityRecipeProductionBridgeResult,
   type Recipe
 } from "@catering/shared-core";
 import {
@@ -22,23 +23,28 @@ export type ResolvedRecipePlanningArtifactsInput = {
   eventSpec: AcceptedEventSpec;
   component: MenuComponent;
   recipe: Recipe;
-  servings: number;
+  bridgeResult: QuantityRecipeProductionBridgeResult;
 };
 
 export function buildResolvedRecipePlanningArtifacts({
   eventSpec,
   component,
   recipe,
-  servings
+  bridgeResult
 }: ResolvedRecipePlanningArtifactsInput): ResolvedRecipePlanningArtifacts {
-  const draftBatch = toProductionBatch(recipe, component.componentId, servings);
+  const draftBatch = materializeProductionBatchFromBridge({
+    eventSpecId: eventSpec.specId,
+    componentId: component.componentId,
+    recipe,
+    bridgeResult
+  });
   const batchId = `batch-${eventSpec.specId}-${component.componentId}`;
   const batch = {
     batchId,
     ...draftBatch,
     station: stationFor(component.label),
     prepWindow: prepWindowFor(eventSpec),
-    gnPlan: gnPlanFor(servings)
+    gnPlan: gnPlanFor(draftBatch.scaledYield.amount)
   };
   const procurementNotes = component.productionDecision?.mode === "hybrid"
     ? [`Zukaufteil separat disponieren: ${purchasedElementsSummary(component)}.`]

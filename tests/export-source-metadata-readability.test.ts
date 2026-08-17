@@ -10,6 +10,7 @@ import {
   type ProductionBatch,
   type ProductionPlan,
   type PurchaseList,
+  type QuantityRecipeProductionBridgeResult,
   type Recipe
 } from "@catering/shared-core";
 import {
@@ -108,6 +109,19 @@ function recipe(sourceOverrides: Partial<Recipe["source"]> = {}): Recipe {
   };
 }
 
+function bridge(targetServings = 20): QuantityRecipeProductionBridgeResult {
+  return {
+    status: "ready_for_scaling",
+    eventSpecId: "spec-export-source",
+    componentId: "component-soup",
+    recipeId: "recipe-tomato-soup",
+    targetOutput: { amount: targetServings, unit: "servings" },
+    targetServings,
+    conversionMethod: "direct_servings",
+    issues: []
+  };
+}
+
 function discoveryReturning(selectedRecipe: Recipe): RecipeDiscoveryService {
   return {
     resolveRecipe: vi.fn(async (menuComponent: MenuComponent) => ({
@@ -142,28 +156,17 @@ describe("export source metadata readability", () => {
         reference: "internal:tomato-soup",
         approvalState: "approved_internal"
       }),
-      servings: 20
+      bridgeResult: bridge()
     });
-    const purchaseList = aggregatePurchaseList("spec-export-source", [
-      artifacts.batch
-    ]);
+    const purchaseList = aggregatePurchaseList("spec-export-source", [artifacts.batch]);
     const csv = renderPurchaseListCsv(purchaseList);
     const [header, row] = csv.split("\n");
 
-    expect(header).toBe(
-      [
-        "\"group\"",
-        "\"item\"",
-        "\"normalizedQty\"",
-        "\"normalizedUnit\"",
-        "\"purchaseQty\"",
-        "\"purchaseUnit\"",
-        "\"supplierHint\"",
-        "\"source_recipes\"",
-        "\"source_recipe_origins\"",
-        "\"source_recipe_references\""
-      ].join(",")
-    );
+    expect(header).toBe([
+      "\"group\"", "\"item\"", "\"normalizedQty\"", "\"normalizedUnit\"", "\"purchaseQty\"",
+      "\"purchaseUnit\"", "\"supplierHint\"", "\"source_recipes\"", "\"source_recipe_origins\"",
+      "\"source_recipe_references\""
+    ].join(","));
     expect(row).toContain("\"4\"");
     expect(row).toContain("\"kg\"");
     expect(row).toContain("\"recipe-tomato-soup\"");
@@ -174,82 +177,37 @@ describe("export source metadata readability", () => {
   it("does not use source metadata to alter batch or purchase calculations", () => {
     const menuComponent = component();
     const internalArtifacts = buildResolvedRecipePlanningArtifacts({
-      eventSpec: eventSpec(menuComponent),
-      component: menuComponent,
-      recipe: recipe({
-        tier: "internal_verified",
-        originType: "internal_db",
-        reference: "internal:tomato-soup",
-        approvalState: "approved_internal"
-      }),
-      servings: 20
+      eventSpec: eventSpec(menuComponent), component: menuComponent,
+      recipe: recipe({ tier: "internal_verified", originType: "internal_db", reference: "internal:tomato-soup", approvalState: "approved_internal" }),
+      bridgeResult: bridge()
     });
     const reviewedWebArtifacts = buildResolvedRecipePlanningArtifacts({
-      eventSpec: eventSpec(menuComponent),
-      component: menuComponent,
-      recipe: recipe({
-        tier: "internal_approved",
-        originType: "web",
-        reference: "web:tomato-soup",
-        url: "https://example.test/tomato-soup",
-        publisher: "Example Recipes",
-        approvalState: "approved_internal"
-      }),
-      servings: 20
+      eventSpec: eventSpec(menuComponent), component: menuComponent,
+      recipe: recipe({ tier: "internal_approved", originType: "web", reference: "web:tomato-soup", url: "https://example.test/tomato-soup", publisher: "Example Recipes", approvalState: "approved_internal" }),
+      bridgeResult: bridge()
     });
-    const internalPurchase = aggregatePurchaseList("spec-export-source", [
-      internalArtifacts.batch
-    ]);
-    const reviewedWebPurchase = aggregatePurchaseList("spec-export-source", [
-      reviewedWebArtifacts.batch
-    ]);
+    const internalPurchase = aggregatePurchaseList("spec-export-source", [internalArtifacts.batch]);
+    const reviewedWebPurchase = aggregatePurchaseList("spec-export-source", [reviewedWebArtifacts.batch]);
 
-    expect(withoutRecipeSource(reviewedWebArtifacts.batch)).toEqual(
-      withoutRecipeSource(internalArtifacts.batch)
-    );
+    expect(withoutRecipeSource(reviewedWebArtifacts.batch)).toEqual(withoutRecipeSource(internalArtifacts.batch));
     expect(reviewedWebPurchase.items).toHaveLength(internalPurchase.items.length);
-    expect(reviewedWebPurchase.items[0]?.normalizedQty).toBe(
-      internalPurchase.items[0]?.normalizedQty
-    );
-    expect(reviewedWebPurchase.items[0]?.purchaseQty).toBe(
-      internalPurchase.items[0]?.purchaseQty
-    );
+    expect(reviewedWebPurchase.items[0]?.normalizedQty).toBe(internalPurchase.items[0]?.normalizedQty);
+    expect(reviewedWebPurchase.items[0]?.purchaseQty).toBe(internalPurchase.items[0]?.purchaseQty);
     expect(reviewedWebPurchase.items[0]?.normalizedUnit).toBe("kg");
     expect(reviewedWebPurchase.items[0]?.purchaseUnit).toBe("kg");
   });
 
   it("keeps reviewed web source metadata visible in production HTML and purchase CSV", () => {
     const menuComponent = component();
-    const reviewedWebRecipe = recipe({
-      tier: "internal_approved",
-      originType: "web",
-      reference: "web:tomato-soup",
-      url: "https://example.test/tomato-soup",
-      publisher: "Example Recipes",
-      approvalState: "approved_internal"
-    });
+    const reviewedWebRecipe = recipe({ tier: "internal_approved", originType: "web", reference: "web:tomato-soup", url: "https://example.test/tomato-soup", publisher: "Example Recipes", approvalState: "approved_internal" });
     const artifacts = buildResolvedRecipePlanningArtifacts({
-      eventSpec: eventSpec(menuComponent),
-      component: menuComponent,
-      recipe: reviewedWebRecipe,
-      servings: 20
+      eventSpec: eventSpec(menuComponent), component: menuComponent, recipe: reviewedWebRecipe, bridgeResult: bridge()
     });
-    const purchaseList = aggregatePurchaseList("spec-export-source", [
-      artifacts.batch
-    ]);
+    const purchaseList = aggregatePurchaseList("spec-export-source", [artifacts.batch]);
     const plan: ProductionPlan = {
-      schemaVersion: SCHEMA_VERSION,
-      planId: "plan-export-source",
-      eventSpecId: "spec-export-source",
-      readiness: {
-        status: "complete",
-        reasons: []
-      },
-      productionBatches: [artifacts.batch],
-      timeline: [artifacts.timelineItem],
-      kitchenSheets: [artifacts.kitchenSheet],
-      recipeSelections: [],
-      unresolvedItems: []
+      schemaVersion: SCHEMA_VERSION, planId: "plan-export-source", eventSpecId: "spec-export-source",
+      readiness: { status: "complete", reasons: [] }, productionBatches: [artifacts.batch],
+      timeline: [artifacts.timelineItem], kitchenSheets: [artifacts.kitchenSheet], recipeSelections: [], unresolvedItems: []
     };
     const html = renderProductionPlanHtml(plan, eventSpec(menuComponent));
     const csv = renderPurchaseListCsv(purchaseList);
@@ -265,164 +223,68 @@ describe("export source metadata readability", () => {
     expect(html).not.toContain("recipe-tomato-soup");
     expect(csv).toContain("\"Web-Rezept geprüft\"");
     expect(csv).toContain("\"recipe-tomato-soup\"");
-    expect(csv).toContain(
-      "\"Example Recipes | https://example.test/tomato-soup | web:tomato-soup\""
-    );
+    expect(csv).toContain("\"Example Recipes | https://example.test/tomato-soup | web:tomato-soup\"");
   });
 
   it("renders explicit fallback text for legacy purchase items without source metadata", () => {
     const purchaseList: PurchaseList = {
-      schemaVersion: SCHEMA_VERSION,
-      purchaseListId: "purchase-legacy",
-      eventSpecId: "spec-export-source",
-      groupingMode: "group",
-      items: [
-        {
-          ingredientId: "tomato",
-          displayName: "Tomatoes",
-          normalizedQty: 4.2,
-          normalizedUnit: "kg",
-          purchaseQty: 4.2,
-          purchaseUnit: "kg",
-          group: "produce",
-          supplierHint: "Metro Fresh",
-          sourceRecipes: ["legacy-recipe"],
-          mappingConfidence: 0.95
-        }
-      ],
-      totals: {
-        itemCount: 1,
-        groups: ["produce"]
-      }
+      schemaVersion: SCHEMA_VERSION, purchaseListId: "purchase-legacy", eventSpecId: "spec-export-source", groupingMode: "group",
+      items: [{ ingredientId: "tomato", displayName: "Tomatoes", normalizedQty: 4.2, normalizedUnit: "kg", purchaseQty: 4.2, purchaseUnit: "kg", group: "produce", supplierHint: "Metro Fresh", sourceRecipes: ["legacy-recipe"], mappingConfidence: 0.95 }],
+      totals: { itemCount: 1, groups: ["produce"] }
     };
-
     const csv = renderPurchaseListCsv(purchaseList);
-
     expect(csv).toContain("\"legacy-recipe\"");
     expect(csv).toContain("\"Quelle offen\"");
-    expect(formatRecipeSourceEvidenceLabel(undefined, "legacy-recipe")).toBe(
-      "Quelle offen (legacy-recipe)"
-    );
+    expect(formatRecipeSourceEvidenceLabel(undefined, "legacy-recipe")).toBe("Quelle offen (legacy-recipe)");
   });
 
   it("keeps legacy production and purchase objects valid without optional source metadata", () => {
     const menuComponent = component();
-    const artifacts = buildResolvedRecipePlanningArtifacts({
-      eventSpec: eventSpec(menuComponent),
-      component: menuComponent,
-      recipe: recipe(),
-      servings: 20
-    });
+    const artifacts = buildResolvedRecipePlanningArtifacts({ eventSpec: eventSpec(menuComponent), component: menuComponent, recipe: recipe(), bridgeResult: bridge() });
     const legacyBatch = withoutRecipeSource(artifacts.batch);
-    const { recipeSource: _sheetRecipeSource, ...legacyKitchenSheet } =
-      artifacts.kitchenSheet;
+    const { recipeSource: _sheetRecipeSource, ...legacyKitchenSheet } = artifacts.kitchenSheet;
     const legacyPlan: ProductionPlan = {
-      schemaVersion: SCHEMA_VERSION,
-      planId: "plan-legacy-source",
-      eventSpecId: "spec-export-source",
-      readiness: {
-        status: "complete",
-        reasons: []
-      },
-      productionBatches: [legacyBatch],
-      timeline: [artifacts.timelineItem],
-      kitchenSheets: [legacyKitchenSheet],
-      recipeSelections: [],
-      unresolvedItems: []
+      schemaVersion: SCHEMA_VERSION, planId: "plan-legacy-source", eventSpecId: "spec-export-source",
+      readiness: { status: "complete", reasons: [] }, productionBatches: [legacyBatch], timeline: [artifacts.timelineItem],
+      kitchenSheets: [legacyKitchenSheet], recipeSelections: [], unresolvedItems: []
     };
     const legacyPurchaseList: PurchaseList = {
-      schemaVersion: SCHEMA_VERSION,
-      purchaseListId: "purchase-legacy-source",
-      eventSpecId: "spec-export-source",
-      groupingMode: "group",
-      items: [
-        {
-          ingredientId: "tomato",
-          displayName: "Tomatoes",
-          normalizedQty: 4.2,
-          normalizedUnit: "kg",
-          purchaseQty: 4.2,
-          purchaseUnit: "kg",
-          group: "produce",
-          supplierHint: "Metro Fresh",
-          sourceRecipes: ["recipe-tomato-soup"],
-          mappingConfidence: 0.95
-        }
-      ],
-      totals: {
-        itemCount: 1,
-        groups: ["produce"]
-      }
+      schemaVersion: SCHEMA_VERSION, purchaseListId: "purchase-legacy-source", eventSpecId: "spec-export-source", groupingMode: "group",
+      items: [{ ingredientId: "tomato", displayName: "Tomatoes", normalizedQty: 4.2, normalizedUnit: "kg", purchaseQty: 4.2, purchaseUnit: "kg", group: "produce", supplierHint: "Metro Fresh", sourceRecipes: ["recipe-tomato-soup"], mappingConfidence: 0.95 }],
+      totals: { itemCount: 1, groups: ["produce"] }
     };
-
     expect(validateProductionPlan(legacyPlan)).toBe(legacyPlan);
     expect(validatePurchaseList(legacyPurchaseList)).toBe(legacyPurchaseList);
-    expect(renderProductionPlanHtml(legacyPlan)).toContain(
-      "Quelle offen"
-    );
+    expect(renderProductionPlanHtml(legacyPlan)).toContain("Quelle offen");
     expect(renderProductionPlanHtml(legacyPlan)).not.toContain("recipe-tomato-soup");
-    expect(renderPurchaseListCsv(legacyPurchaseList)).toContain(
-      "\"Quelle offen\""
-    );
+    expect(renderPurchaseListCsv(legacyPurchaseList)).toContain("\"Quelle offen\"");
   });
 
   it("validates new optional source metadata in production and purchase schemas", () => {
     const menuComponent = component();
     const artifacts = buildResolvedRecipePlanningArtifacts({
-      eventSpec: eventSpec(menuComponent),
-      component: menuComponent,
-      recipe: recipe({
-        tier: "internal_approved",
-        originType: "web",
-        reference: "web:tomato-soup",
-        url: "https://example.test/tomato-soup",
-        publisher: "Example Recipes",
-        approvalState: "approved_internal"
-      }),
-      servings: 20
+      eventSpec: eventSpec(menuComponent), component: menuComponent,
+      recipe: recipe({ tier: "internal_approved", originType: "web", reference: "web:tomato-soup", url: "https://example.test/tomato-soup", publisher: "Example Recipes", approvalState: "approved_internal" }),
+      bridgeResult: bridge()
     });
     const plan: ProductionPlan = {
-      schemaVersion: SCHEMA_VERSION,
-      planId: "plan-source-metadata",
-      eventSpecId: "spec-export-source",
-      readiness: {
-        status: "complete",
-        reasons: []
-      },
-      productionBatches: [artifacts.batch],
-      timeline: [artifacts.timelineItem],
-      kitchenSheets: [artifacts.kitchenSheet],
-      recipeSelections: [],
-      unresolvedItems: []
+      schemaVersion: SCHEMA_VERSION, planId: "plan-source-metadata", eventSpecId: "spec-export-source",
+      readiness: { status: "complete", reasons: [] }, productionBatches: [artifacts.batch], timeline: [artifacts.timelineItem],
+      kitchenSheets: [artifacts.kitchenSheet], recipeSelections: [], unresolvedItems: []
     };
-    const purchaseList = aggregatePurchaseList("spec-export-source", [
-      artifacts.batch
-    ]);
-
+    const purchaseList = aggregatePurchaseList("spec-export-source", [artifacts.batch]);
     expect(validateProductionPlan(plan)).toBe(plan);
     expect(validatePurchaseList(purchaseList)).toBe(purchaseList);
-    expect(purchaseList.items[0]?.sourceRecipeMetadata?.[0]?.url).toBe(
-      "https://example.test/tomato-soup"
-    );
+    expect(purchaseList.items[0]?.sourceRecipeMetadata?.[0]?.url).toBe("https://example.test/tomato-soup");
   });
 
   it("keeps unreviewed web candidates blocked before exportable production artifacts", async () => {
     const menuComponent = component();
     const artifacts = await buildRecipeComponentPlanningArtifacts({
-      eventSpec: eventSpec(menuComponent),
-      component: menuComponent,
-      servings: 20,
+      eventSpec: eventSpec(menuComponent), component: menuComponent, servings: 20,
       context: { businessId: "local" },
-      discoveryService: discoveryReturning(
-        recipe({
-          tier: "internet_fallback",
-          originType: "web",
-          reference: "web:tomato-soup",
-          approvalState: "auto_usable"
-        })
-      )
+      discoveryService: discoveryReturning(recipe({ tier: "internet_fallback", originType: "web", reference: "web:tomato-soup", approvalState: "auto_usable" }))
     });
-
     expect(artifacts.kind).toBe("unresolved");
     expect(artifacts.selection.autoUsedInternetRecipe).toBe(false);
   });

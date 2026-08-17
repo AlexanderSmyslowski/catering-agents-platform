@@ -107,11 +107,35 @@ function discoveryFor(selectedRecipe: Recipe) {
   };
 }
 
+function planningOptions(spec: AcceptedEventSpec, selectedRecipe: Recipe) {
+  const component = spec.menuPlan[0];
+  const servings = component.servings ?? spec.attendees.expected ?? 0;
+  return {
+    context: { businessId: "local" },
+    quantityRecipeBridges: {
+      [component.componentId]: {
+        status: "ready_for_scaling" as const,
+        eventSpecId: spec.specId,
+        componentId: component.componentId,
+        recipeId: selectedRecipe.recipeId,
+        targetOutput: { amount: servings, unit: "servings" },
+        targetServings: servings,
+        conversionMethod: "direct_servings" as const,
+        issues: []
+      }
+    }
+  };
+}
+
 describe("ProductionSheet v1 via KitchenSheet", () => {
   it("carries structured production fields from the generated batch", async () => {
-    const artifacts = await buildProductionArtifacts(baseSpec(), discoveryFor(recipe()) as any, {
-      context: { businessId: "local" }
-    });
+    const spec = baseSpec();
+    const selectedRecipe = recipe();
+    const artifacts = await buildProductionArtifacts(
+      spec,
+      discoveryFor(selectedRecipe) as any,
+      planningOptions(spec, selectedRecipe)
+    );
 
     const [batch] = artifacts.productionPlan.productionBatches;
     const [sheet] = artifacts.productionPlan.kitchenSheets;
@@ -163,9 +187,11 @@ describe("ProductionSheet v1 via KitchenSheet", () => {
       dietTags: []
     });
 
-    const artifacts = await buildProductionArtifacts(blockedSpec, discoveryFor(blockedRecipe) as any, {
-      context: { businessId: "local" }
-    });
+    const artifacts = await buildProductionArtifacts(
+      blockedSpec,
+      discoveryFor(blockedRecipe) as any,
+      planningOptions(blockedSpec, blockedRecipe)
+    );
 
     expect(artifacts.productionPlan.isFallback).toBe(true);
     expect(artifacts.productionPlan.productionBatches).toHaveLength(0);

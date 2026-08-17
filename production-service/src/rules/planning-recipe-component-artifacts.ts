@@ -5,6 +5,7 @@ import {
   type BusinessContext,
   type MenuComponent,
   type ProductionPlan,
+  type QuantityRecipeProductionBridgeResult,
   type Recipe
 } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
@@ -54,6 +55,7 @@ export async function buildRecipeComponentPlanningArtifacts({
   component,
   eventSpec,
   servings,
+  bridgeResult,
   discoveryService,
   context,
   persistDiscoveredRecipes = true
@@ -61,6 +63,7 @@ export async function buildRecipeComponentPlanningArtifacts({
   component: MenuComponent;
   eventSpec: AcceptedEventSpec;
   servings: number;
+  bridgeResult?: QuantityRecipeProductionBridgeResult;
   discoveryService: RecipeDiscoveryService;
   context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
@@ -160,11 +163,39 @@ export async function buildRecipeComponentPlanningArtifacts({
     };
   }
 
+  const effectiveBridgeResult = bridgeResult ?? await discoveryService.resolveQuantityRecipeBridge?.({
+    eventSpec,
+    component,
+    recipe: resolvedRecipe,
+    servings,
+    context
+  });
+
+  if (!effectiveBridgeResult || effectiveBridgeResult.status !== "ready_for_scaling") {
+    const reason = "Freigegebener Mengen-Rezept-Nachweis für die Produktionsskalierung fehlt.";
+    const artifacts = buildUnresolvedComponentArtifacts({
+      component,
+      eventSpec,
+      servings,
+      reason,
+      blocking: true,
+      timelineLabel: `${component.label} Mengenfreigabe`
+    });
+    return {
+      kind: "unresolved",
+      recipe: resolvedRecipe,
+      selection,
+      kitchenSheet: artifacts.kitchenSheet,
+      timelineItem: artifacts.timelineItem,
+      issues: [...issues, { issue: artifacts.issue, blocking: true }]
+    };
+  }
+
   const artifacts = buildResolvedRecipePlanningArtifacts({
     eventSpec,
     component,
     recipe: resolvedRecipe,
-    servings
+    bridgeResult: effectiveBridgeResult
   });
   return {
     kind: "resolved",

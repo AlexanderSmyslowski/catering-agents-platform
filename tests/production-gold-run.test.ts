@@ -219,9 +219,22 @@ describe("production gold run", () => {
       await repository.save({ businessId: "local" }, createClassicCaesarRecipe());
       const webProvider = new NoopWebRecipeProvider();
       const discovery = new RecipeDiscoveryService(repository, webProvider);
+      const soupServings = productionSpec.menuPlan[0].servings ?? productionSpec.attendees.expected ?? 0;
 
       const artifacts = await buildProductionArtifacts(productionSpec, discovery, {
-        context: { businessId: "local" }
+        context: { businessId: "local" },
+        quantityRecipeBridges: {
+          "goldrun-tomato-soup": {
+            status: "ready_for_scaling",
+            eventSpecId: productionSpec.specId,
+            componentId: "goldrun-tomato-soup",
+            recipeId: "goldrun-vegetarische-tomatensuppe",
+            targetOutput: { amount: soupServings, unit: "servings" },
+            targetServings: soupServings,
+            conversionMethod: "direct_servings",
+            issues: []
+          }
+        }
       });
       const { productionPlan, purchaseList } = artifacts;
 

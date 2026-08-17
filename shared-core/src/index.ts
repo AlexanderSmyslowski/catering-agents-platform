@@ -53,6 +53,7 @@ export type {
   Queryable
 } from "./persistence.js";
 export * from "./json-equality.js";
+export * from "./production-batch-materialization.js";
 export * from "./production-clarification.js";
 export * from "./production-intake-readiness.js";
 export * from "./production-reference-quality.js";

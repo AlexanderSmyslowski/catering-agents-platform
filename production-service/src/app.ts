@@ -21,7 +21,10 @@ import {
 } from "@catering/shared-core";
 import { DuckDuckGoRecipeSearchProvider } from "./recipe-discovery/duckduckgo-provider.js";
 import type { WebRecipeSearchProvider } from "./recipe-discovery/provider.js";
-import { RecipeDiscoveryService } from "./recipe-discovery/service.js";
+import {
+  RecipeDiscoveryService,
+  type QuantityRecipeBridgeResolver
+} from "./recipe-discovery/service.js";
 import { InMemoryRecipeRepository } from "./repositories/in-memory-recipe-repository.js";
 import { ProductionStore } from "./repositories/production-store.js";
 import { buildProductionArtifacts } from "./rules/planning.js";
@@ -186,6 +189,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   const app = Fastify({
     logger: false
   });
+  const appWithBridgeResolver = app as typeof app & {
+    setQuantityRecipeBridgeResolver: (resolver: QuantityRecipeBridgeResolver | undefined) => void;
+  };
+  appWithBridgeResolver.setQuantityRecipeBridgeResolver = (resolver) => {
+    discoveryService.setQuantityRecipeBridgeResolver(resolver);
+  };
 
   app.addHook("onRequest", async (request, reply) => {
     if (request.url.split("?", 1)[0] === "/health") return;
@@ -336,5 +345,5 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     actorForRequest
   });
 
-  return app;
+  return appWithBridgeResolver;
 }

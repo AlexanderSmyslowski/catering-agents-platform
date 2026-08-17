@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AcceptedEventSpec,
   MenuComponent,
+  QuantityRecipeProductionBridgeResult,
   Recipe
 } from "../shared-core/src/index.js";
 import { SCHEMA_VERSION } from "../shared-core/src/index.js";
@@ -69,13 +70,26 @@ function buildRecipe(): Recipe {
   };
 }
 
+function bridge(targetServings: number): QuantityRecipeProductionBridgeResult {
+  return {
+    status: "ready_for_scaling",
+    eventSpecId: "spec-resolved-artifacts",
+    componentId: "component-tomato-soup",
+    recipeId: "recipe-tomato-soup",
+    targetOutput: { amount: targetServings, unit: "servings" },
+    targetServings,
+    conversionMethod: "direct_servings",
+    issues: []
+  };
+}
+
 describe("planning resolved recipe artifacts", () => {
   it("builds the production batch, kitchen sheet and timeline item for a resolved recipe", () => {
     const artifacts = buildResolvedRecipePlanningArtifacts({
       eventSpec: buildSpec(),
       component: buildComponent(),
       recipe: buildRecipe(),
-      servings: 40
+      bridgeResult: bridge(40)
     });
 
     expect(artifacts.batch).toMatchObject({
@@ -112,7 +126,7 @@ describe("planning resolved recipe artifacts", () => {
         }
       }),
       recipe: buildRecipe(),
-      servings: 20
+      bridgeResult: bridge(20)
     });
 
     expect(artifacts.batch.batchId).toBe("batch-spec-resolved-artifacts-component-tomato-soup");
