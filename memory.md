@@ -1752,3 +1752,27 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Task 12 und die acht unabhängig geprüften Reviewbefunde sind mit PR #612 in `main` angekommen: entkoppelter History-/Workspace-Filter, read-only Legacy-Reader, fail-closed Darwin-Fingerprint, nachvollziehbarer Stage-A-Abschluss, unabhängiger Workspace-Filter, Hosted-Secret-Gate, Hosted-Business-ID-Gate und US-037-Nachweis. Die GitHub-Reviewthreads sind historische Prüfspur; dieser Eintrag behauptet keine zusätzliche Threadmutation.
 - Main-CI Run `31897217407` ist für `5393363…` mit `build-and-test` (Job `95042251327`) und `browser-rehearsal` (Job `95042251392`) terminal erfolgreich. Merge und Main-CI sind belegt; daraus folgen weder eine Deploymentfreigabe noch eine produktive Migration.
 - Die früheren Aussagen „PR offen“, „nicht gemergt“ und „wartet auf Merge“ bleiben historische Übergabestände in den älteren Versionen. Für den aktuellen Stand ist PR #612 gemergt; weitere Stage-A-Arbeit bleibt bis zu einem neuen Supervisor-Auftrag out of scope.
+
+### 5.362 - 2026-08-16
+
+- Der ungemergte PR-#616-Kandidat auf `codex/reference-order-acceptance-contract` bindet die Produktionsreferenz-Abnahme enger an die persistierte OfferCase-Kette: `approvedOfferId` und `productionHandoffId` müssen im geladenen Fall exakt zur bewerteten Freigabe und Übergabe gehören; Cross-Case-Splicing bleibt fail-closed.
+- Die Vertrauensgrenze liest die exakt freigegebene OfferDraft-Revision selbst aus dem bestehenden OfferStore, verlangt einen vollständig verifizierten Reviewstatus und gleicht die persistierte ausgewählte Variante sowie ihre `pricingSummary` mit dem freigegebenen Angebot ab. Die aktuelle Domäne trägt keine vollständige Kostenaufschlüsselung; `full_cost_model` bleibt deshalb ein expliziter Evaluator-Blocker.
+- Die resolver-ausgestellte Evidenz übernimmt die persistierte `pricingSummary` nur als tiefe, unveränderliche Kopie; nachträgliche Caller-Mutationen können die Preisbindung nicht verändern. Der zustandsgebundene `AuditLogStore` wird über den lokalen öffentlichen Shared-Core-Index mit direkter business-scope-gebundener ID-Leseoperation verwendet.
+- Rezeptgebundene Produktionsbatches benötigen genau eine passende geprüfte `RecipeSelection`; fehlende, doppelte oder fremde Auswahl sowie nicht im freigegebenen Snapshot vorhandene Rezept-IDs blockieren. Auditbelege werden über business-scope-gebundene ID-Leseoperationen statt über ein begrenztes Recent-Event-Fenster aufgelöst.
+- Der Nachtrag ist ein ungemergter Kandidat und behauptet weder Merge noch Deployment, Migration, externe Providerausführung oder produktive Freigabe. Die verpflichtenden fokussierten Regressionen und der vorhandene Offer→Approval→Handoff→Audit-Persistenzpfad bleiben die maßgeblichen lokalen Nachweise.
+
+### 5.363 - 2026-08-16
+
+- Der PR-#616-Folgefix bindet die Operatorabnahme an `actor.name` und `at` des persistierten `production.kitchen_acceptance`-Audits. Diese Werte gelangen ausschließlich aus dem serverseitig gelesenen Snapshot in das opaque Evidence-Token; der Caller-Input kann sie nicht vorgeben, und der Evaluator blockiert abweichende öffentliche `operatorAcceptance`-Werte.
+- Rezeptgebundene Küchenkarten müssen jetzt exakt dieselbe nichtleere `recipeId` wie ihr Produktionsbatch tragen; zwei fehlende IDs gelten nicht als gültige Gleichheit. Rezeptstatus sowie Allergen-/DietTag-Verträge werden nur für die tatsächlich validierten `recipeSelections` geprüft; ungenutzte Snapshot-Rezepte blockieren nicht. Rezeptlose Beschaffung bleibt ausschließlich mit vollständigen `procurementNotes` gültig.
+- Der Stand bleibt ein ungemergter PR-#616-Kandidat ohne Commit-, Deployment-, Migrations- oder Provideraktion. Fokussierte Produktionsreferenz- und Persistenztests sind grün; bestehende workspacebedingte `/private/tmp`-TypeScript-Aliasfehler bleiben als externe Baseline klassifiziert.
+
+### 5.364 - 2026-08-16
+
+- Der PR-#616-Folgefix schließt zwei Acceptance-Grenzen: `procurementNotes` können die Rezeptkartenbindung eines Batches mit gesetzter `recipeId` nicht mehr umgehen, und rezeptlose Beschaffung benötigt mindestens einen getrimmten, inhaltlich nichtleeren Beschaffungshinweis. Die adversarialen Regressionen sowie die gültigen Rezept- und Beschaffungspfade sind fokussiert grün geprüft.
+- Der Stand bleibt ein ungemergter Kandidat ohne Commit-, Deployment-, Migrations- oder Provideraktion. Die bekannten `/private/tmp`-TypeScript-/Build-Aliasfehler bleiben als externe Workspace-Baseline klassifiziert.
+
+### 5.365 - 2026-08-16
+
+- Die Beschaffungsgrenze verlangt zusätzlich eine leere `KitchenSheet.recipeId`, wenn ein Batch rezeptlos über nichtleere `procurementNotes` abgewickelt wird. Eine fremde oder gesetzte Rezeptidentität auf der Küchenkarte kann den rezeptlosen Beschaffungspfad nicht mehr passieren; der zugehörige Acceptance-Vertrag ist fokussiert grün geprüft.
+- Der PR-#616-Kandidat bleibt ungemergt und ohne Commit-, Deployment-, Migrations- oder Provideraktion. Bestehende `/private/tmp`-TypeScript-/Build-Aliasfehler bleiben externe Workspace-Baseline.

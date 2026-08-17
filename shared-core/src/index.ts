@@ -55,6 +55,26 @@ export type {
 export * from "./json-equality.js";
 export * from "./production-clarification.js";
 export * from "./production-reference-quality.js";
+// Keep persistence readers and capability construction behind the server
+// boundary; the public package exposes only the business acceptance contract.
+export {
+  evaluateProductionReferenceAcceptance,
+  resolveProductionReferenceValidatedEvidence
+} from "./production-reference-acceptance.js";
+export type {
+  ProductionReferenceAcceptanceStatus,
+  ProductionReferenceChecklistStatus,
+  ProductionReferenceChecklistKey,
+  ProductionReferenceSourceEvidence,
+  ProductionReferenceOfferEvidence,
+  ProductionReferenceOperatorAcceptance,
+  ProductionReferenceValidatedEvidenceInput,
+  ProductionReferenceValidatedEvidence,
+  ProductionReferenceAcceptanceInput,
+  ProductionReferenceAcceptanceIssue,
+  ProductionReferenceChecklistItem,
+  ProductionReferenceAcceptanceResult
+} from "./production-reference-acceptance.js";
 export * from "./production-apply-manifest.js";
 export * from "./recipe-research-calculation-boundary.js";
 export * from "./recipe-library.js";

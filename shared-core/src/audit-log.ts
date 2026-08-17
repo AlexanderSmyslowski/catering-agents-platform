@@ -82,6 +82,10 @@ export class AuditLogStore {
       .slice(0, limit);
   }
 
+  async getFor(context: BusinessContext, auditId: string): Promise<AuditEntry | undefined> {
+    return this.entries.get(context, auditId);
+  }
+
   async countFor(context: BusinessContext): Promise<number> {
     const items = await this.entries.list(context);
     return items.length;
