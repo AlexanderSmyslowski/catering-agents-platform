@@ -1,0 +1,1 @@
+RED target: `applyNonlinearProductionScaling` and `ProductionScalingRule` are intentionally absent from the shared-core public surface. The committed contract tests must fail until the Task 1 implementation is added.
