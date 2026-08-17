@@ -24,6 +24,7 @@ export * from "./data-classification.js";
 export * from "./data-safety-audit-gates.js";
 export * from "./document-ingestion.js";
 export * from "./document-text.js";
+export * from "./experience-learning.js";
 export * from "./export-source-metadata.js";
 export * from "./fixtures/sample-data.js";
 export * from "./fixtures/demo-scenarios.js";
