@@ -84,6 +84,7 @@ export * from "./request-factory.js";
 export * from "./rules/normalization.js";
 export * from "./rules/curated-offer-selection.js";
 export * from "./rules/offer.js";
+export * from "./rules/offer-package-classification-pilot.js";
 export * from "./rules/purchasing.js";
 export * from "./rules/readiness.js";
 export * from "./rules/scaling.js";
