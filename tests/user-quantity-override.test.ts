@@ -6,6 +6,7 @@ import {
   type ProductionScalingRule,
   type QuantityDecisionInput,
   type Recipe,
+  type RecipeEventUseReview,
   type RecipeOutputMapping
 } from "@catering/shared-core";
 
@@ -57,6 +58,22 @@ function authority(): QuantityDecisionInput {
 
 function mapping(): RecipeOutputMapping {
   return { recipeId: "recipe-roastbeef", outputAmount: 550, outputUnit: "g", recipeServings: 10, reviewedBy: "chef", reviewedAt: "2026-08-17T10:00:00.000Z" };
+}
+
+function recipeEventReview(): RecipeEventUseReview {
+  return {
+    eventSpecId: "event-1",
+    recipeId: "recipe-roastbeef",
+    reviewedBy: "chef",
+    reviewedAt: "2026-08-17T21:05:00.000Z",
+    decision: "accepted_for_event",
+    confirmations: {
+      quantitiesAndYield: true,
+      methodAndEquipment: true,
+      allergensAndDiet: true,
+      holdingAndRegeneration: true
+    }
+  };
 }
 
 const stale = ["effective_event_recipe", "kitchen_sheet", "production_batch", "production_summary", "purchase_requirements", "quantity_cost_calculation", "quantity_recipe_bridge"];
@@ -163,11 +180,12 @@ describe("user quantity override and bidirectional recalculation", () => {
     expect(result.purchaseQuantities).toBeUndefined();
   });
 
-  it("applies approved nonlinear rules only after the new quantity authority is separately approved", () => {
+  it("applies approved nonlinear rules only after quantity and recipe event use are separately approved", () => {
     const result = recalculateQuantityLineage({
       confirmedOverride: confirmedOverride(),
       reviewedQuantityDecision: approvedOverrideAuthority(),
       recipe: recipe(),
+      recipeEventUseReview: recipeEventReview(),
       outputMapping: mapping(),
       productionScalingRules: [saltRule()],
       productionContext: []
@@ -184,6 +202,7 @@ describe("user quantity override and bidirectional recalculation", () => {
       confirmedOverride: confirmedOverride(),
       reviewedQuantityDecision: approvedOverrideAuthority(),
       recipe: recipe(),
+      recipeEventUseReview: recipeEventReview(),
       outputMapping: mapping(),
       productionScalingRules: [saltRule("candidate")]
     });
