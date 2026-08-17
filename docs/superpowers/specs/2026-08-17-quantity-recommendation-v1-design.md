@@ -11,6 +11,8 @@ The primary operator-facing result is one concrete recommended value. A professi
 
 A second core requirement is that **every operational quantity remains user-adjustable without allowing recipe, target quantity and purchasing to drift apart**.
 
+A third core requirement is that recipe scaling must not assume that catering recipes are perfectly linear. Proportional scaling is the reproducible baseline, not necessarily the final production truth.
+
 ## Core decision
 
 Quantity Recommendation v1 produces a **candidate**, never an approval.
@@ -20,6 +22,8 @@ A recommendation may use professional-reference evidence and later AI-assisted r
 No recommendation may silently become planning-authoritative.
 
 Once an operator deliberately changes an operational quantity, that edit becomes a new explicit quantity authority for the event. All dependent recipe and purchasing quantities must be recalculated from that authority rather than patched independently.
+
+Recipe scaling uses proportional scaling as a transparent baseline. Approved production-scaling rules may then adjust individual ingredients or process parameters nonlinearly. Any deviation from the proportional baseline must be explicit, attributable and reviewable.
 
 ## Inputs
 
@@ -116,14 +120,15 @@ The system must:
 - create a new operator-backed QuantityDecision candidate/override;
 - calculate target output `3,000 g`;
 - recompute the Quantity→Recipe bridge;
-- rescale the entire recipe proportionally;
-- regenerate all derived purchasing quantities;
+- calculate the proportional recipe baseline;
+- apply any approved nonlinear production-scaling rules for the resulting production size;
+- regenerate all derived purchasing quantities from the effective scaled recipe;
 - mark dependent artifacts stale until regenerated;
 - retain `55 g` plus its evidence as the original recommendation.
 
 ### Editing total recipe quantity
 
-If the operator changes the desired total recipe/output quantity, the system derives the corresponding event quantity authority, then follows the same bridge → recipe scale → purchasing regeneration path.
+If the operator changes the desired total recipe/output quantity, the system derives the corresponding event quantity authority, then follows the same bridge → proportional baseline → approved production-scaling rules → purchasing regeneration path.
 
 It must not mutate only the recipe display while leaving the QuantityDecision unchanged.
 
@@ -131,43 +136,150 @@ It must not mutate only the recipe display while leaving the QuantityDecision un
 
 A purchasing row that represents an ingredient from a recipe is editable, but it is **not an independent truth**.
 
-By default, changing one derived ingredient purchasing amount means: **scale the complete recipe proportionally so that this ingredient reaches the entered amount**.
+By default, changing one derived ingredient purchasing amount means: use that change to derive a new event recipe scale. The system first computes the proportional scale implied by the edit, then recalculates the complete recipe and applies any approved nonlinear production-scaling rules for the new production size.
 
-Example: a scaled recipe requires `2.75 kg` of a reference ingredient and the operator enters `3.00 kg`. The system derives scale factor `3.00 / 2.75`, applies that factor to the complete event recipe, updates total recipe/output quantity, creates the corresponding operator quantity override, and regenerates every other recipe ingredient and purchasing row.
+Example: a scaled recipe requires `2.75 kg` of a reference ingredient and the operator enters `3.00 kg`. The system derives scale factor `3.00 / 2.75`, updates the event recipe/output scale, recalculates the proportional baseline for every ingredient, applies applicable approved nonlinear scaling rules, and regenerates every purchasing row.
 
 The system must show the resulting total/output change before or with confirmation; it may not silently change only one shopping row.
 
 ### Editing recipe composition is different
 
-If the operator intends to change one ingredient **without proportional recipe scaling** — e.g. less salt, more cream, different spice ratio — that is a recipe-composition edit, not a quantity edit.
+If the operator intends to change one ingredient **without treating the edit as a recipe-scale change** — e.g. less salt, more cream, different spice ratio — that is a recipe-composition / production-scaling correction, not merely a quantity edit.
 
-It must use a separate explicit recipe-edit action/version. Such a change creates a new event recipe variant/version and then regenerates purchasing from the changed recipe.
+The operator must be able to classify the change as one of:
+
+- `event_only_recipe_adjustment` — valid only for this production/event;
+- `experience_rule_candidate` — observation believed to generalize to a production-size/context range;
+- later, after review, `approved_experience_rule` / approved production-scaling rule.
 
 A purchasing-row quantity edit must never silently mutate recipe ratios.
 
+## Nonlinear catering recipe scaling
+
+### Principle
+
+`scaleRecipe()`-style proportional multiplication remains the mathematical baseline because it is simple, reproducible and auditable. It must not be treated as universally correct for large catering production.
+
+The effective production recipe may differ from that baseline for specific ingredients and process parameters.
+
+Examples include:
+
+- salt, strong spices and acids that do not always scale linearly;
+- thickening/binding agents;
+- cream, stock or other liquids where evaporation/reduction behavior changes with vessel geometry;
+- sauces and reductions;
+- leavening or setting agents;
+- cooking time, temperature, batch depth and holding time;
+- equipment transitions such as saucepan → tilting pan or tray → combi oven;
+- maximum sensible batch size requiring multiple production batches.
+
+### Production-scaling rule
+
+A production-scaling rule is explicit data, not hidden code magic. At minimum it identifies:
+
+- recipe / recipe family or component scope;
+- ingredient or process parameter affected;
+- applicable production-size range;
+- optional equipment / vessel / method context;
+- baseline proportional value;
+- effective rule or correction;
+- rationale;
+- provenance;
+- review state.
+
+Rules may represent, for example:
+
+- a factor relative to proportional baseline;
+- a piecewise factor by production range;
+- a capped/floored amount;
+- an explicit amount curve / anchor points;
+- a process-parameter substitution;
+- a maximum batch size and required batch count.
+
+The data model must not force every nonlinear behavior into one universal multiplier.
+
+### Rule precedence
+
+For an event recipe:
+
+1. establish approved quantity/output authority;
+2. calculate proportional recipe baseline;
+3. find applicable **approved** production-scaling rules;
+4. apply them deterministically and record before/after values;
+5. expose the effective recipe to kitchen review;
+6. derive purchasing from the effective recipe, not from the untouched proportional baseline.
+
+A candidate/observation may be displayed as guidance but cannot silently change production quantities until accepted for the event or promoted to an approved rule.
+
+## Experience learning loop
+
+The system is designed to turn kitchen experience into structured internal knowledge.
+
+For each meaningful production correction, preserve:
+
+- recipe and version;
+- event/component;
+- production size / target output;
+- proportional baseline value;
+- planned effective value;
+- actual operator correction;
+- ingredient/process affected;
+- equipment/method context when relevant;
+- operator rationale / observation;
+- production outcome or later assessment when available.
+
+A cook may classify a correction as:
+
+### Event-only adjustment
+
+Example: `Heute weniger Sahne, weil die Sauce länger reduziert wird.`
+
+This changes the event recipe but does not teach a general rule.
+
+### Experience Rule Candidate
+
+Example: `Ab etwa 100 Portionen ist die proportional berechnete Sahnemenge bei diesem Verfahren regelmäßig zu hoch.`
+
+This creates a structured candidate such as:
+
+`base recipe → 120 portions → proportional cream 6.0 l → effective/actual 5.4 l → equipment/method/context → kitchen observation`.
+
+The candidate is not automatically reused as truth.
+
+### Approved Experience Rule
+
+After sufficient human review — potentially supported by repeated observations — a candidate can become an approved internal production-scaling rule.
+
+Only then may future event recipes apply it automatically within its defined applicability range.
+
+The system must retain the observations that justified the rule.
+
 ## Quantity lineage and audit
 
-Every operator quantity edit records:
+Every operator quantity or recipe-scaling edit records:
 
 - previous authoritative value;
 - new value and unit;
-- edit origin (`target_output | recipe_total | purchase_ingredient`);
+- edit origin (`target_output | recipe_total | purchase_ingredient | recipe_composition | production_scaling`);
 - affected event/component/recipe;
 - operator identity when available;
 - timestamp when persisted by the application layer;
+- proportional baseline and effective value where relevant;
 - derived scale factor where applicable;
+- applied production-scaling rule ids;
 - original recommendation/evidence reference;
 - list or version identifiers of invalidated/regenerated downstream artifacts.
 
-This makes recommendation → operator adjustment → recipe scale → purchasing traceable in both directions.
+This makes recommendation → operator adjustment → proportional baseline → nonlinear production adjustment → purchasing traceable in both directions.
 
 ## Regeneration and stale-artifact rule
 
-A quantity edit invalidates all downstream artifacts derived from the old quantity authority, including at minimum:
+A quantity or effective-recipe edit invalidates all downstream artifacts derived from the old authority, including at minimum:
 
 - Quantity→Recipe bridge result;
+- effective event recipe / recipe scale;
 - ProductionBatch;
-- KitchenSheet quantities;
+- KitchenSheet quantities and process parameters;
 - purchase requirements / purchase list rows;
 - quantity-dependent cost calculations;
 - quantity-dependent production summaries.
@@ -193,14 +305,18 @@ AI is not required for this slice. Later AI may:
 
 - select relevant professional evidence;
 - propose explicit contextual adjustments;
+- identify repeated production corrections as possible Experience Rule Candidates;
+- suggest a nonlinear curve/range from reviewed observations;
 - explain why one point inside the professional corridor is preferable.
 
 AI may not:
 
-- fabricate professional evidence;
+- fabricate professional evidence or production observations;
 - silently widen a professional corridor;
 - bypass `kitchen_review_required`;
-- add safety/yield/procurement multipliers;
+- invent or auto-approve an Experience Rule;
+- apply unapproved nonlinear rules as production truth;
+- add safety/yield/procurement multipliers without an explicit approved rule;
 - convert incompatible units without an explicit conversion contract;
 - override an explicit operator quantity edit without a new explicit user action.
 
@@ -220,7 +336,7 @@ Supporting detail:
 - contextual adjustment trace;
 - status: `kitchen_review_required`.
 
-If the operator changes the target to `60 g`, the event target becomes `3,000 g`; after approval the recipe and all recipe-derived purchasing quantities are recalculated proportionally from that new target.
+If the operator changes the target to `60 g`, the event target becomes `3,000 g`. The system first recalculates the proportional recipe baseline and then applies any approved production-size rules before generating the effective recipe and purchasing quantities.
 
 The recommendation remains visible as the original evidence-backed baseline.
 
@@ -242,13 +358,23 @@ Reject a quantity-edit recalculation when:
 - the recipe/output mapping required to propagate the edit is missing;
 - proportional scaling would rely on an unapproved or ambiguous recipe binding.
 
+Reject automatic nonlinear adjustment when:
+
+- no approved rule applies;
+- multiple approved rules conflict without deterministic precedence;
+- production size or required equipment/method context falls outside the rule applicability range.
+
+In those cases retain the proportional baseline and surface the review need; do not invent a correction.
+
 ## Compatibility and slice boundary
 
 - Existing `evaluateQuantityDecision()` remains authoritative for validation and review status.
 - Existing Quantity→Recipe Bridge remains authoritative for recipe scaling input.
 - Existing ProductionBatch gate remains authoritative for batch materialization.
 - Quantity Recommendation v1 implements the recommendation contract first.
-- The user-editable quantity lineage defined above is a mandatory follow-on slice and must be implemented before the application can claim end-to-end replacement of the current manual production workflow.
+- User-editable quantity lineage is a mandatory follow-on slice.
+- Nonlinear Production Scaling / Experience Learning is a subsequent mandatory slice and must be implemented before the application can claim mature catering-recipe scaling.
+- Existing proportional `scaleRecipe()` remains unchanged as the baseline calculator; nonlinear effective scaling is layered after it.
 - No persistence migration in the recommendation slice.
 - No provider/LLM call.
 - No UI redesign.
@@ -273,11 +399,15 @@ Reject a quantity-edit recalculation when:
 
 ### Mandatory quantity-edit lineage
 
-13. Editing target per-person quantity recalculates total output, recipe scale and all recipe-derived purchase quantities.
+13. Editing target per-person quantity recalculates total output, proportional recipe baseline, effective recipe and all recipe-derived purchase quantities.
 14. Editing total recipe/output quantity creates the corresponding event quantity override and regenerates purchasing.
-15. Editing one recipe-derived purchasing quantity proportionally rescales the complete recipe by default.
+15. Editing one recipe-derived purchasing quantity derives a new recipe scale and recalculates the complete recipe by default.
 16. A purchasing quantity edit cannot leave other recipe ingredients at their old scale.
-17. A non-proportional single-ingredient change requires an explicit recipe-composition edit/version.
+17. A non-proportional single-ingredient change requires an explicit event recipe adjustment or Experience Rule Candidate classification.
 18. Original recommendation and professional corridor remain visible after operator override.
 19. Downstream artifacts derived from the old quantity are marked stale and cannot be treated as current.
 20. Untraceable or unit-incompatible purchasing edits fail closed rather than partially updating the chain.
+
+### Mandatory nonlinear scaling / learning
+
+21. Proportional scaling remains visible as baseline even when an effective nonlinear
