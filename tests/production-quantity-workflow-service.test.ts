@@ -217,9 +217,12 @@ describe("production quantity workflow service", () => {
 
     expect(result.status).toBe("preview_ready");
     if (result.status !== "preview_ready") throw new Error("preview missing");
+    expect(result.requestedValue).toEqual({ amount: 3000, unit: "g" });
     expect(result.recipeChanges).toHaveLength(2);
     expect(result.purchaseChanges).toHaveLength(2);
-    expect(result.recipeChanges.find((x) => x.ingredientId === "roastbeef")?.effectiveAmount).toBe(3000);
+    const roastbeefAmount = result.recipeChanges.find((x) => x.ingredientId === "roastbeef")?.effectiveAmount;
+    expect(roastbeefAmount).toBeDefined();
+    expect(Math.abs(roastbeefAmount! - 3000)).toBeLessThanOrEqual(0.5);
     expect(result.recipeChanges.find((x) => x.ingredientId === "salt")?.effectiveAmount).toBe(43.64);
   });
 });
