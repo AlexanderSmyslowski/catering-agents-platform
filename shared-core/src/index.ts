@@ -54,6 +54,7 @@ export type {
 } from "./persistence.js";
 export * from "./json-equality.js";
 export * from "./production-clarification.js";
+export * from "./production-intake-readiness.js";
 export * from "./production-reference-quality.js";
 // Keep persistence readers and capability construction behind the server
 // boundary; the public package exposes only the business acceptance contract.
@@ -83,7 +84,6 @@ export * from "./request-factory.js";
 export * from "./rules/normalization.js";
 export * from "./rules/curated-offer-selection.js";
 export * from "./rules/offer.js";
-export * from "./rules/offer-package-classification-pilot.js";
 export * from "./rules/purchasing.js";
 export * from "./rules/readiness.js";
 export * from "./rules/scaling.js";
