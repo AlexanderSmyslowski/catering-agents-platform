@@ -14,8 +14,7 @@ import type { QuantityWorkflowRuntimeComponent } from "../production-service/src
 
 const actor: TrustedActor = {
   businessId: "business-the-one",
-  name: "Alexander",
-  role: "operator"
+  name: "Alexander"
 };
 
 function recipe(): Recipe {
