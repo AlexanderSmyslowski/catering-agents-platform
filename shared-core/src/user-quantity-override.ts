@@ -1,6 +1,7 @@
 import { applyNonlinearProductionScaling, type ProductionScalingRule } from "./nonlinear-production-scaling.js";
 import { evaluateQuantityDecision, type QuantityDecisionInput, type QuantityDecisionResult } from "./quantity-decision.js";
 import { evaluateQuantityRecipeProductionBridge, type QuantityRecipeProductionBridgeResult, type RecipeOutputMapping } from "./quantity-recipe-production-bridge.js";
+import type { RecipeEventUseReview } from "./recipe-knowledge-foundation.js";
 import { scaleRecipe, type ScaledRecipeResult } from "./rules/scaling.js";
 import type { IngredientLine, Recipe } from "./types.js";
 
@@ -87,6 +88,7 @@ export interface RecalculateQuantityLineageInput {
   recipe: Recipe;
   outputMapping: RecipeOutputMapping;
   reviewedQuantityDecision?: QuantityDecisionInput;
+  recipeEventUseReview?: RecipeEventUseReview;
   productionScalingRules?: ProductionScalingRule[];
   productionContext?: string[];
 }
@@ -260,6 +262,7 @@ export function recalculateQuantityLineage(input: RecalculateQuantityLineageInpu
     componentId: input.confirmedOverride.componentId,
     quantityDecision: quantityInput,
     recipe: input.recipe,
+    recipeEventUseReview: input.recipeEventUseReview,
     outputMapping: input.outputMapping
   });
 
