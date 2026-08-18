@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.361
+version: 5.362
 date: 2026-08-15
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1776,3 +1776,9 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 - Die Beschaffungsgrenze verlangt zusätzlich eine leere `KitchenSheet.recipeId`, wenn ein Batch rezeptlos über nichtleere `procurementNotes` abgewickelt wird. Eine fremde oder gesetzte Rezeptidentität auf der Küchenkarte kann den rezeptlosen Beschaffungspfad nicht mehr passieren; der zugehörige Acceptance-Vertrag ist fokussiert grün geprüft.
 - Der PR-#616-Kandidat bleibt ungemergt und ohne Commit-, Deployment-, Migrations- oder Provideraktion. Bestehende `/private/tmp`-TypeScript-/Build-Aliasfehler bleiben externe Workspace-Baseline.
+
+### 5.362 - 2026-08-18
+- Wiederholter Infrastrukturvorfall bestaetigt: Ein Production-Deploy der Catering Agents Platform recreatete den von ihr mitverwalteten Shared-Caddy `platform-infra-web-1` ohne dauerhafte Netzverbindung zur Zeiterfassung. Die Zeiterfassungs-App blieb intern gesund, die oeffentliche Route fiel wegen fehlender Docker-DNS-Erreichbarkeit des Upstreams aus.
+- Uebergangsinvariante festgelegt: `platform-infra/docker-compose.yml` bleibt fuer lokale und saubere Starts self-contained; nur der Produktionspfad kombiniert sie mit `platform-infra/docker-compose.production.yml`, das ausschliesslich `web` zusaetzlich an das externe `zeiterfassung_default` anbindet.
+- Zielarchitektur freigegeben: Der oeffentliche Edge-Proxy wird aus dem Lebenszyklus einzelner Anwendungen herausgeloest. Zeiterfassung, EventOS und Catering erhalten getrennte private und Ingress-Netze, eigene Deploy-/Rollback-Verantwortung und duerfen bei Deployments keine fremden Container, Netze, Volumes oder Ingress-Ressourcen recreaten oder entfernen.
+- Kanonischer Architekturrahmen: `docs/superpowers/specs/2026-08-18-server-app-isolation-design.md`; Phase-1-Plan: `docs/superpowers/plans/2026-08-18-server-app-isolation-phase1.md`.
