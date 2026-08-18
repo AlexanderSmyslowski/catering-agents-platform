@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const deploy = readFileSync(new URL('../edge-infra/scripts/deploy-hetzner.sh', import.meta.url), 'utf8');
 const smoke = readFileSync(new URL('../edge-infra/scripts/smoke-all.sh', import.meta.url), 'utf8');
+const validate = readFileSync(new URL('../edge-infra/scripts/validate.sh', import.meta.url), 'utf8');
 const rehearsal = readFileSync(new URL('../edge-infra/docker-compose.rehearsal.yml', import.meta.url), 'utf8');
 
 describe('edge deploy safety contract', () => {
@@ -40,6 +41,13 @@ describe('edge deploy safety contract', () => {
   it('validates Caddy through the whitelisted edge service environment only', () => {
     expect(deploy).toContain('run --rm --no-deps --entrypoint caddy edge validate');
     expect(deploy).not.toMatch(/docker run --rm\s+\\?\s*--env-file \.env(?!\.example)/);
+    expect(validate).toContain('run --rm --no-deps --entrypoint caddy edge validate');
+    expect(validate).not.toMatch(/docker run --rm[\s\\]+--env-file/);
+  });
+
+  it('treats an env-only bootstrap directory as no previous edge deployment', () => {
+    expect(deploy).toContain('if [[ ! -f "${edge_path}/docker-compose.yml" ]]');
+    expect(deploy).toContain("printf 'NONE\\trehearsal\\n'");
   });
 
   it('restores only the previous shared-edge candidate after post-start failure', () => {
