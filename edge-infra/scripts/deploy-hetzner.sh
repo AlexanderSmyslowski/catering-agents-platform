@@ -7,10 +7,16 @@ DEPLOY_USER="${DEPLOY_USER:-root}"
 EDGE_DEPLOY_PATH="${EDGE_DEPLOY_PATH:?Set EDGE_DEPLOY_PATH}"
 EDGE_ROLLBACK_ROOT="${EDGE_ROLLBACK_ROOT:-${EDGE_DEPLOY_PATH}-rollbacks}"
 EDGE_DEPLOY_COMMIT_SHA="${EDGE_DEPLOY_COMMIT_SHA:?Set EDGE_DEPLOY_COMMIT_SHA}"
+EDGE_MODE="${EDGE_MODE:-rehearsal}"
 CATERING_SMOKE_URL="${CATERING_SMOKE_URL:?Set CATERING_SMOKE_URL}"
 ZEITERFASSUNG_SMOKE_URL="${ZEITERFASSUNG_SMOKE_URL:?Set ZEITERFASSUNG_SMOKE_URL}"
 EVENTOS_SMOKE_URL="${EVENTOS_SMOKE_URL:?Set EVENTOS_SMOKE_URL}"
 DEPLOY_RSYNC_PATH="${DEPLOY_RSYNC_PATH:-rsync}"
+
+if [[ "${EDGE_MODE}" != "rehearsal" && "${EDGE_MODE}" != "cutover" ]]; then
+  echo "EDGE_MODE must be rehearsal or cutover." >&2
+  exit 1
+fi
 
 if [[ ! "${EDGE_DEPLOY_COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "EDGE_DEPLOY_COMMIT_SHA must be an exact 40-character Git commit SHA." >&2
@@ -28,10 +34,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EDGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
 
+LOCAL_COMPOSE_ARGS=(-p shared-edge -f docker-compose.yml)
+if [[ "${EDGE_MODE}" == "rehearsal" ]]; then
+  LOCAL_COMPOSE_ARGS+=(-f docker-compose.rehearsal.yml)
+fi
+
 # Validate repository source before any remote write. The example environment is
 # intentionally non-secret; the protected production environment is validated
 # again on the host before the edge container is started.
-EDGE_ENV_FILE="${EDGE_DIR}/.env.example" bash "${SCRIPT_DIR}/validate.sh"
+(
+  cd "${EDGE_DIR}"
+  docker compose "${LOCAL_COMPOSE_ARGS[@]}" --env-file .env.example config >/dev/null
+  docker run --rm \
+    --env-file .env.example \
+    -v "${EDGE_DIR}/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+)
 
 # Fail closed before touching remote files.
 ssh "${REMOTE}" "
@@ -72,16 +90,22 @@ rsync -az --delete \
   --exclude ".deploy-manifest" \
   "${EDGE_DIR}/" "${REMOTE}:${EDGE_DEPLOY_PATH}/"
 
+if [[ "${EDGE_MODE}" == "rehearsal" ]]; then
+  REMOTE_COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rehearsal.yml"
+else
+  REMOTE_COMPOSE_FILES="-f docker-compose.yml"
+fi
+
 # Validate the protected production environment before runtime mutation.
 ssh "${REMOTE}" "
   set -euo pipefail
   cd '${EDGE_DEPLOY_PATH}'
-  docker compose -p shared-edge --env-file .env config >/dev/null
+  docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env config >/dev/null
   docker run --rm \
     --env-file .env \
     -v '${EDGE_DEPLOY_PATH}/Caddyfile:/etc/caddy/Caddyfile:ro' \
     caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
-  docker compose -p shared-edge --env-file .env up -d
+  docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env up -d
 "
 
 CATERING_SMOKE_URL="${CATERING_SMOKE_URL}" \
@@ -98,10 +122,11 @@ ssh "${REMOTE}" "
   temporary=\"\${manifest}.tmp.\$$\"
   printf '%s\n' \
     'commit=${EDGE_DEPLOY_COMMIT_SHA}' \
+    'mode=${EDGE_MODE}' \
     \"deployed_at=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \
     'rollback_root=${EDGE_ROLLBACK_ROOT}' \
     | sudo tee \"\${temporary}\" >/dev/null
   sudo mv \"\${temporary}\" \"\${manifest}\"
 "
 
-echo "Edge deployment completed."
+echo "Edge deployment completed in ${EDGE_MODE} mode."
