@@ -34,9 +34,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EDGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
 
+url_host() {
+  local value="${1#*://}"
+  printf '%s' "${value%%/*}"
+}
+
+CATERING_SMOKE_HOST="$(url_host "${CATERING_SMOKE_URL}")"
+ZEITERFASSUNG_SMOKE_HOST="$(url_host "${ZEITERFASSUNG_SMOKE_URL}")"
+EVENTOS_SMOKE_HOST="$(url_host "${EVENTOS_SMOKE_URL}")"
+
 LOCAL_COMPOSE_ARGS=(-p shared-edge -f docker-compose.yml)
+CADDY_CONFIG_FILE="Caddyfile"
 if [[ "${EDGE_MODE}" == "rehearsal" ]]; then
   LOCAL_COMPOSE_ARGS+=(-f docker-compose.rehearsal.yml)
+  CADDY_CONFIG_FILE="Caddyfile.rehearsal"
 fi
 
 # Validate repository source before any remote write. The example environment is
@@ -47,13 +58,17 @@ fi
   docker compose "${LOCAL_COMPOSE_ARGS[@]}" --env-file .env.example config >/dev/null
   docker run --rm \
     --env-file .env.example \
-    -v "${EDGE_DIR}/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    -v "${EDGE_DIR}/${CADDY_CONFIG_FILE}:/etc/caddy/Caddyfile:ro" \
     caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 )
 
 # Fail closed before touching remote files.
 ssh "${REMOTE}" "
   set -euo pipefail
+  command -v curl >/dev/null 2>&1 || {
+    echo 'curl is required for local edge rehearsal probes.' >&2
+    exit 1
+  }
   docker network inspect platform-infra_default >/dev/null 2>&1 || {
     echo 'Missing required external Docker network: platform-infra_default' >&2
     exit 1
@@ -103,10 +118,52 @@ ssh "${REMOTE}" "
   docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env config >/dev/null
   docker run --rm \
     --env-file .env \
-    -v '${EDGE_DEPLOY_PATH}/Caddyfile:/etc/caddy/Caddyfile:ro' \
+    -v '${EDGE_DEPLOY_PATH}/${CADDY_CONFIG_FILE}:/etc/caddy/Caddyfile:ro' \
     caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
   docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env up -d
 "
+
+probe_rehearsal_listener() {
+  ssh "${REMOTE}" bash -s -- \
+    "${ZEITERFASSUNG_SMOKE_HOST}" \
+    "${EVENTOS_SMOKE_HOST}" \
+    "${CATERING_SMOKE_HOST}" <<'REMOTE_SCRIPT'
+set -euo pipefail
+ZEITERFASSUNG_SMOKE_HOST="$1"
+EVENTOS_SMOKE_HOST="$2"
+CATERING_SMOKE_HOST="$3"
+
+probe() {
+  local label="$1"
+  local host="$2"
+  local path="$3"
+  local expected_status="$4"
+  local status=""
+  local attempt
+  for attempt in $(seq 1 15); do
+    status="$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' \
+      --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    if [[ "${status}" == "${expected_status}" ]]; then
+      echo "${label}: ok (${status})"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "${label}: expected ${expected_status}, got ${status:-no response}" >&2
+  return 1
+}
+
+probe "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz" "200"
+probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}" "/" "200"
+# Catering's application-owned Caddy keeps Basic Auth. Receiving its 401 without
+# credentials proves that the candidate edge reached the Catering upstream.
+probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/" "401"
+REMOTE_SCRIPT
+}
+
+if [[ "${EDGE_MODE}" == "rehearsal" ]]; then
+  probe_rehearsal_listener
+fi
 
 CATERING_SMOKE_URL="${CATERING_SMOKE_URL}" \
 ZEITERFASSUNG_SMOKE_URL="${ZEITERFASSUNG_SMOKE_URL}" \
