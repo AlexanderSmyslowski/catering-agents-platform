@@ -104,8 +104,8 @@ ssh "${REMOTE}" "
     'commit=${DEPLOY_COMMIT_SHA}' \\
     \"deployed_at=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \\
     'rollback_root=${DEPLOY_ROLLBACK_ROOT}' \\
-    > \"\${temporary}\"
-  mv \"\${temporary}\" \"\${manifest}\"
+    | sudo tee \"\${temporary}\" >/dev/null
+  sudo mv \"\${temporary}\" \"\${manifest}\"
 "
 
 echo "Deployment completed."
