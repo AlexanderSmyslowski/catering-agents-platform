@@ -1,0 +1,15 @@
+{
+  email {$CADDY_EMAIL}
+}
+
+{$CATERING_PUBLIC_HOST} {
+  reverse_proxy {$CATERING_UPSTREAM}
+}
+
+{$ZEITERFASSUNG_PUBLIC_HOST} {
+  reverse_proxy {$ZEITERFASSUNG_UPSTREAM}
+}
+
+{$EVENTOS_PUBLIC_HOST} {
+  reverse_proxy {$EVENTOS_UPSTREAM}
+}
