@@ -2,15 +2,6 @@ name: Deploy edge production
 
 on:
   workflow_dispatch:
-    inputs:
-      edge_mode:
-        description: Edge deployment mode
-        required: true
-        default: rehearsal
-        type: choice
-        options:
-          - rehearsal
-          - cutover
 
 permissions:
   contents: read
@@ -50,7 +41,7 @@ jobs:
           CATERING_SMOKE_URL: ${{ secrets.HETZNER_DEPLOY_BASE_URL }}
           CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
           CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
-          EDGE_MODE: ${{ inputs.edge_mode }}
+          EDGE_MODE: rehearsal
         run: |
           set -euo pipefail
           test -n "$DEPLOY_HOST"
@@ -58,7 +49,7 @@ jobs:
           test -n "$CATERING_SMOKE_URL"
           test -n "$CATERING_SMOKE_BASIC_AUTH_USER"
           test -n "$CATERING_SMOKE_BASIC_AUTH_PASSWORD"
-          test "$EDGE_MODE" = rehearsal -o "$EDGE_MODE" = cutover
+          test "$EDGE_MODE" = rehearsal
 
       - name: Deploy exact edge commit
         env:
@@ -68,7 +59,7 @@ jobs:
           EDGE_DEPLOY_PATH: /opt/shared-edge
           EDGE_ROLLBACK_ROOT: /opt/shared-edge-rollbacks
           EDGE_DEPLOY_COMMIT_SHA: ${{ github.sha }}
-          EDGE_MODE: ${{ inputs.edge_mode }}
+          EDGE_MODE: rehearsal
           CATERING_SMOKE_URL: ${{ secrets.HETZNER_DEPLOY_BASE_URL }}
           CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
           CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
