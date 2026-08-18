@@ -113,8 +113,16 @@ services:
       - caddy_data:/data
       - caddy_config:/config
       - "./sites:/etc/caddy/sites:ro"
+    networks:
+      - default
+      - zeiterfassung_default
 
 volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+
+networks:
+  zeiterfassung_default:
+    external: true
+    name: zeiterfassung_default
