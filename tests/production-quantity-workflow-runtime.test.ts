@@ -26,7 +26,7 @@ function snapshot(): ApprovedProductionSpec {
         schemaVersion: "1.0.0",
         specId: "event-1",
         lifecycle: { commercialState: "accepted" },
-        readiness: { status: "complete", issues: [] },
+        readiness: { status: "complete", reasons: [] },
         sourceLineage: [{ sourceType: "manual_input", reference: "fixture" }],
         event: { type: "Sommerfest", serviceForm: "buffet" },
         attendees: { expected: 50 },
@@ -37,7 +37,7 @@ function snapshot(): ApprovedProductionSpec {
         schemaVersion: "1.0.0",
         planId: "plan-1",
         eventSpecId: "event-1",
-        readiness: { status: "complete", issues: [] },
+        readiness: { status: "complete", reasons: [] },
         productionBatches: [{
           batchId: "batch-1",
           componentId: "roastbeef",
