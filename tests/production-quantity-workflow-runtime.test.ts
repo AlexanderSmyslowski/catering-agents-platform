@@ -25,8 +25,8 @@ function snapshot(): ApprovedProductionSpec {
       eventSpec: {
         schemaVersion: "1.0.0",
         specId: "event-1",
-        lifecycle: { commercialState: "approved" },
-        readiness: { status: "ready", issues: [] },
+        lifecycle: { commercialState: "accepted" },
+        readiness: { status: "complete", issues: [] },
         sourceLineage: [{ sourceType: "manual_input", reference: "fixture" }],
         event: { type: "Sommerfest", serviceForm: "buffet" },
         attendees: { expected: 50 },
@@ -37,7 +37,7 @@ function snapshot(): ApprovedProductionSpec {
         schemaVersion: "1.0.0",
         planId: "plan-1",
         eventSpecId: "event-1",
-        readiness: { status: "ready", issues: [] },
+        readiness: { status: "complete", issues: [] },
         productionBatches: [{
           batchId: "batch-1",
           componentId: "roastbeef",
@@ -115,7 +115,7 @@ function snapshot(): ApprovedProductionSpec {
         dietTags: []
       }]
     }
-  } as ApprovedProductionSpec;
+  };
 }
 
 describe("approved snapshot quantity runtime", () => {
