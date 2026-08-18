@@ -15,4 +15,11 @@ describe('edge workflow contract', () => {
     expect(rehearsal).toContain('18080:80');
     expect(rehearsal).toContain('18443:443');
   });
+
+  it('cannot expose cutover from GitHub Actions before the cutover task is armed', () => {
+    expect(workflow).toContain('EDGE_MODE: rehearsal');
+    expect(workflow).not.toContain('edge_mode:');
+    expect(workflow).not.toContain('- cutover');
+    expect(workflow).not.toContain('inputs.edge_mode');
+  });
 });
