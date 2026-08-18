@@ -151,6 +151,71 @@ describe("Hetzner deployment hardening", () => {
     expect(snapshotIndex).toBeLessThan(rsyncIndex);
   });
 
+  test("codex deployment user requires sudo for atomic manifest publication", () => {
+    const root = createTempDir();
+    const binDir = path.join(root, "bin");
+    const callLog = path.join(root, "calls.log");
+    mkdirSync(binDir);
+    writeFileSync(callLog, "", "utf8");
+
+    writeExecutable(
+      path.join(binDir, "ssh"),
+      [
+        "#!/usr/bin/env bash",
+        "command=\"$*\"",
+        "printf 'ssh %s\\n' \"$command\" >> \"$CALL_LOG\"",
+        "if [[ \"$command\" == *\"manifest=\"* && \"$command\" == *\"temporary=\"* ]]; then",
+        "  [[ \"$command\" == *\"sudo tee\"* ]] || exit 13",
+        "  [[ \"$command\" == *\"sudo mv\"* ]] || exit 13",
+        "  [[ \"$command\" == *\".tmp.\"* ]] || exit 13",
+        "  [[ \"$command\" != *\"sudo sh -c\"* ]] || exit 13",
+        "  [[ \"$command\" != *\"sudo bash -c\"* ]] || exit 13",
+        "fi",
+        "exit 0"
+      ].join("\n") + "\n"
+    );
+    writeExecutable(
+      path.join(binDir, "rsync"),
+      "#!/usr/bin/env bash\nprintf 'rsync %s\\n' \"$*\" >> \"$CALL_LOG\"\nexit 0\n"
+    );
+    writeExecutable(
+      path.join(binDir, "curl"),
+      "#!/usr/bin/env bash\nprintf 'curl\\n' >> \"$CALL_LOG\"\nprintf '{\"status\":\"ok\"}'\nexit 0\n"
+    );
+
+    const result = spawnSync("bash", [deployScript], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        CALL_LOG: callLog,
+        DEPLOY_HOST: "deployment.test",
+        DEPLOY_BASE_URL: "http://deployment.test",
+        DEPLOY_COMMIT_SHA: "0123456789abcdef0123456789abcdef01234567"
+      }
+    });
+
+    expect(result.status).toBe(0);
+    const calls = readFileSync(callLog, "utf8");
+    const manifestStart = calls.indexOf("manifest='");
+    const manifestCommand = calls.slice(manifestStart);
+    const rsyncIndex = calls.indexOf("rsync ");
+    const smokeIndex = calls.indexOf("curl\n");
+    const manifestIndex = calls.indexOf("manifest='");
+    const teeIndex = manifestCommand.indexOf("sudo tee");
+    const moveIndex = manifestCommand.indexOf("sudo mv");
+
+    expect(manifestStart).toBeGreaterThan(-1);
+    expect(manifestCommand).toContain(".tmp.");
+    expect(teeIndex).toBeGreaterThan(-1);
+    expect(moveIndex).toBeGreaterThan(teeIndex);
+    expect(manifestCommand).not.toMatch(/sudo\s+(?:sh|bash)\s+-c/);
+    expect(rsyncIndex).toBeGreaterThan(-1);
+    expect(smokeIndex).toBeGreaterThan(rsyncIndex);
+    expect(manifestIndex).toBeGreaterThan(smokeIndex);
+  });
+
   test("ships a manual production workflow with a protected environment and pinned deployment identity", () => {
     expect(existsSync(deployWorkflow)).toBe(true);
     if (!existsSync(deployWorkflow)) return;
