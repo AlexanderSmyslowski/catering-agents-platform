@@ -36,4 +36,16 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}"');
     expect(deploy).toContain('probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}"');
   });
+
+  it('validates Caddy through the whitelisted edge service environment only', () => {
+    expect(deploy).toContain('run --rm --no-deps --entrypoint caddy edge validate');
+    expect(deploy).not.toMatch(/docker run --rm\s+\\?\s*--env-file \.env/);
+  });
+
+  it('restores only the previous shared-edge candidate after post-start failure', () => {
+    expect(deploy).toContain('rollback_edge_candidate');
+    expect(deploy).toContain("trap 'rollback_edge_candidate' ERR");
+    expect(deploy).toContain('shared-edge');
+    expect(deploy).not.toMatch(/platform-infra.*up|zeiterfassung.*up|eventos.*up/);
+  });
 });
