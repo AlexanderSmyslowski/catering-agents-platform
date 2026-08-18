@@ -19,6 +19,13 @@ describe('edge deploy safety contract', () => {
     expect(smoke).toContain('CATERING_SMOKE_URL');
   });
 
+  it('validates Zeiterfassung response identity and reuses the established Catering smoke suite', () => {
+    expect(smoke).toContain('assert_ok_json');
+    expect(smoke).toContain('"ok"[[:space:]]*:[[:space:]]*true');
+    expect(smoke).toContain('platform-infra/scripts/smoke-check.sh');
+    expect(smoke).not.toContain('--location');
+  });
+
   it('probes the new rehearsal listener locally instead of mistaking the old public proxy for the candidate', () => {
     expect(rehearsal).toContain('127.0.0.1:18080:80');
     expect(rehearsal).not.toContain('18443:443');
