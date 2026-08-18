@@ -7,8 +7,10 @@ const deploy = readFileSync(
 );
 
 describe('Hetzner deploy manifest write permissions', () => {
-  it('writes the server-owned deploy manifest through sudo instead of redirecting as the deploy user', () => {
-    expect(deploy).toMatch(/printf '%s\\n'[\s\S]*\| sudo tee \\\"\\\$\{manifest\}\\\" >\/dev\/null/);
+  it('keeps the atomic manifest replace while performing target-directory writes through sudo', () => {
+    expect(deploy).toContain('| sudo tee \\\"\\${temporary}\\\" >/dev/null');
+    expect(deploy).toContain('sudo mv \\\"\\${temporary}\\\" \\\"\\${manifest}\\\"');
     expect(deploy).not.toContain('> \\\"\\${temporary}\\\"');
+    expect(deploy).not.toContain('\n  mv \\\"\\${temporary}\\\" \\\"\\${manifest}\\\"');
   });
 });
