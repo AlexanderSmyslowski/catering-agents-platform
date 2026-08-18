@@ -1,0 +1,10 @@
+services:
+  web:
+    networks:
+      - default
+      - zeiterfassung_default
+
+networks:
+  zeiterfassung_default:
+    external: true
+    name: zeiterfassung_default

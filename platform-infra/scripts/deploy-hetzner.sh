@@ -35,6 +35,11 @@ if ! ssh "${REMOTE}" "test -f '${DEPLOY_PATH}/platform-infra/.env'"; then
   exit 1
 fi
 
+if ! ssh "${REMOTE}" "docker network inspect zeiterfassung_default >/dev/null 2>&1"; then
+  echo "Missing required external Docker network: zeiterfassung_default"
+  exit 1
+fi
+
 echo "Creating rollback snapshot on ${REMOTE}..."
 ssh "${REMOTE}" "
   set -euo pipefail
@@ -72,7 +77,19 @@ ssh "${REMOTE}" "
   set -euo pipefail
   cd '${DEPLOY_PATH}/platform-infra'
   test -f .env || { echo 'Missing platform-infra/.env on server.'; exit 1; }
-  docker compose up --build -d
+  test -f docker-compose.production.yml || { echo 'Missing platform-infra/docker-compose.production.yml on server.'; exit 1; }
+  docker network inspect zeiterfassung_default >/dev/null 2>&1 || {
+    echo 'Missing required external Docker network: zeiterfassung_default'
+    exit 1
+  }
+  docker compose \
+    -f docker-compose.yml \
+    -f docker-compose.production.yml \
+    config >/dev/null
+  docker compose \
+    -f docker-compose.yml \
+    -f docker-compose.production.yml \
+    up --build -d
 "
 
 echo "Running smoke checks against ${DEPLOY_BASE_URL}..."
