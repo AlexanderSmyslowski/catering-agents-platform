@@ -109,7 +109,7 @@ describe("production app quantity workflow registration", () => {
 
     const app = buildProductionApp({
       store,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_ENABLE_DEV_AUTH: "true" }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_DEV_AUTH: "true" }
     });
     const response = await app.inject({
       method: "GET",
