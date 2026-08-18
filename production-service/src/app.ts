@@ -38,6 +38,8 @@ import {
 import type { ProductionHandoffReader } from "./ports/production-handoff-reader.js";
 import { HttpProductionHandoffReader } from "./gateways/http-production-handoff-reader.js";
 import { registerProductionCaseRoutes } from "./routes/case-routes.js";
+import { registerProductionQuantityWorkflowRoutes } from "./routes/quantity-workflow-routes.js";
+import { buildApprovedSnapshotQuantityRuntime } from "./quantity-workflow/default-runtime.js";
 import type { IntakeRecordsPort } from "./ports/intake-records-port.js";
 import type { SourceDocumentReader } from "./ports/source-document-reader.js";
 import { HttpIntakeRecordsPort } from "./gateways/http-intake-records-port.js";
@@ -215,6 +217,21 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     allowDevActorHeader,
     requireProductionOperator,
     actorForRequest
+  });
+
+  registerProductionQuantityWorkflowRoutes(app, {
+    auditLog,
+    trustedActorSecret,
+    allowDevActorHeader,
+    requireProductionOperator,
+    actorForRequest,
+    resolveRuntime: async (actor, caseId) => {
+      const productionCase = await store.getCase(actor, caseId);
+      if (!productionCase?.approvedProductionSpecId) return [];
+      const approvedSpec = await store.getApprovedProductionSpec(actor, productionCase.approvedProductionSpecId);
+      if (!approvedSpec) return [];
+      return buildApprovedSnapshotQuantityRuntime({ actor, caseId, approvedSpec });
+    }
   });
 
   app.get("/health", async (_request, reply) => {
