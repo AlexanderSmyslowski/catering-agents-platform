@@ -72,7 +72,10 @@ ssh "${REMOTE}" "
   set -euo pipefail
   cd '${DEPLOY_PATH}/platform-infra'
   test -f .env || { echo 'Missing platform-infra/.env on server.'; exit 1; }
-  docker compose up --build -d
+  test -f docker-compose.production.yml || { echo 'Missing platform-infra/docker-compose.production.yml on server.'; exit 1; }
+  compose_files=(-f docker-compose.yml -f docker-compose.production.yml)
+  docker compose \"\${compose_files[@]}\" config >/dev/null
+  docker compose \"\${compose_files[@]}\" up --build -d
 "
 
 echo "Running smoke checks against ${DEPLOY_BASE_URL}..."
