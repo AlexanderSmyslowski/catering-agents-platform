@@ -88,6 +88,69 @@ describe("Hetzner deployment hardening", () => {
     expect(calls).toContain("0123456789abcdef0123456789abcdef01234567");
   });
 
+  test("codex deployment user requires sudo for rollback writes", () => {
+    const root = createTempDir();
+    const binDir = path.join(root, "bin");
+    const callLog = path.join(root, "calls.log");
+    mkdirSync(binDir);
+    writeFileSync(callLog, "", "utf8");
+
+    writeExecutable(
+      path.join(binDir, "ssh"),
+      [
+        "#!/usr/bin/env bash",
+        "command=\"$*\"",
+        "printf 'ssh %s\\n' \"$command\" >> \"$CALL_LOG\"",
+        "if [[ \"$command\" == *\"tar -czf\"* ]]; then",
+        "  [[ \"$command\" == *\"sudo mkdir -p\"* ]] || exit 13",
+        "  [[ \"$command\" == *\"sudo tar -czf\"* ]] || exit 13",
+        "  [[ \"$command\" == *\"sudo tee\"* ]] || exit 13",
+        "fi",
+        "exit 0"
+      ].join("\n") + "\n"
+    );
+    writeExecutable(
+      path.join(binDir, "rsync"),
+      "#!/usr/bin/env bash\nprintf 'rsync %s\\n' \"$*\" >> \"$CALL_LOG\"\nexit 0\n"
+    );
+    writeExecutable(
+      path.join(binDir, "curl"),
+      "#!/usr/bin/env bash\nprintf '{\"status\":\"ok\"}'\nexit 0\n"
+    );
+
+    const result = spawnSync("bash", [deployScript], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        CALL_LOG: callLog,
+        DEPLOY_HOST: "deployment.test",
+        DEPLOY_BASE_URL: "http://deployment.test",
+        DEPLOY_COMMIT_SHA: "0123456789abcdef0123456789abcdef01234567"
+      }
+    });
+
+    expect(result.status).toBe(0);
+    const calls = readFileSync(callLog, "utf8");
+    const snapshotStart = calls.indexOf("rollback_root='");
+    const snapshotEnd = calls.indexOf("Rollback snapshot", snapshotStart);
+    const snapshotCommand = calls.slice(snapshotStart, snapshotEnd);
+    const snapshotIndex = calls.indexOf("tar -czf");
+    const rsyncIndex = calls.indexOf("rsync ");
+
+    expect(snapshotStart).toBeGreaterThan(-1);
+    expect(snapshotEnd).toBeGreaterThan(snapshotStart);
+    expect(snapshotCommand).toContain("sudo mkdir -p");
+    expect(snapshotCommand).toContain("sudo tar -czf");
+    expect(snapshotCommand).toContain("sudo tee");
+    expect(snapshotCommand).not.toMatch(/sudo\s+(?:sh|bash)\s+-c/);
+    expect(snapshotCommand).toContain("--exclude=./data");
+    expect(snapshotCommand).toContain("--exclude=./platform-infra/.env");
+    expect(snapshotCommand).toContain("--exclude=./platform-infra/sites");
+    expect(snapshotIndex).toBeLessThan(rsyncIndex);
+  });
+
   test("ships a manual production workflow with a protected environment and pinned deployment identity", () => {
     expect(existsSync(deployWorkflow)).toBe(true);
     if (!existsSync(deployWorkflow)) return;
