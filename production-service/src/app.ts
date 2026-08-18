@@ -38,6 +38,9 @@ import {
 import type { ProductionHandoffReader } from "./ports/production-handoff-reader.js";
 import { HttpProductionHandoffReader } from "./gateways/http-production-handoff-reader.js";
 import { registerProductionCaseRoutes } from "./routes/case-routes.js";
+import { registerProductionQuantityWorkflowRoutes } from "./routes/quantity-workflow-routes.js";
+import { buildApprovedSnapshotQuantityRuntime } from "./quantity-workflow/default-runtime.js";
+import { QuantityOverrideStore } from "./quantity-workflow/override-store.js";
 import type { IntakeRecordsPort } from "./ports/intake-records-port.js";
 import type { SourceDocumentReader } from "./ports/source-document-reader.js";
 import { HttpIntakeRecordsPort } from "./gateways/http-intake-records-port.js";
@@ -49,6 +52,7 @@ export interface ProductionAppOptions {
   repository?: InMemoryRecipeRepository;
   discoveryService?: RecipeDiscoveryService;
   store?: ProductionStore;
+  quantityOverrideStore?: QuantityOverrideStore;
   intakeRecords?: IntakeRecordsPort;
   sourceDocumentReader?: SourceDocumentReader;
   auditLog?: AuditLogStore;
@@ -151,6 +155,11 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
+  const quantityOverrideStore = options.quantityOverrideStore ?? new QuantityOverrideStore({
+    rootDir: options.dataRoot,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
   const intakeRecords = options.intakeRecords ?? (env.CATERING_INTAKE_SERVICE_URL
     ? new HttpIntakeRecordsPort({
         intakeServiceUrl: env.CATERING_INTAKE_SERVICE_URL,
@@ -186,9 +195,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     ? new HttpProductionHandoffReader({ offerServiceUrl: env.CATERING_OFFER_SERVICE_URL, trustedServiceSecret: trustedActorSecret })
     : undefined);
 
-  const app = Fastify({
-    logger: false
-  });
+  const app = Fastify({ logger: false });
   const appWithBridgeResolver = app as typeof app & {
     setQuantityRecipeBridgeResolver: (resolver: QuantityRecipeBridgeResolver | undefined) => void;
   };
@@ -200,21 +207,52 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     if (request.url.split("?", 1)[0] === "/health") return;
     const actor = actorForRequest(request);
     if (!hosted && actor.businessId !== defaultBusinessContext.businessId) {
-      return reply.code(403).send({
-        message: "Der vertrauenswürdige Betriebskontext passt nicht zum konfigurierten Betrieb dieses lokalen Dienstes."
-      });
+      return reply.code(403).send({ message: "Der vertrauenswürdige Betriebskontext passt nicht zum konfigurierten Betrieb dieses lokalen Dienstes." });
     }
   });
 
   app.register(multipart);
 
-  registerProductionCaseRoutes(app, {
-    store,
-    handoffReader,
+  registerProductionCaseRoutes(app, { store, handoffReader, trustedActorSecret, allowDevActorHeader, requireProductionOperator, actorForRequest });
+
+  registerProductionQuantityWorkflowRoutes(app, {
+    auditLog,
     trustedActorSecret,
     allowDevActorHeader,
     requireProductionOperator,
-    actorForRequest
+    actorForRequest,
+    persistConfirmedOverride: (actor, override) => quantityOverrideStore.save(actor, override),
+    resolveRuntime: async (actor, caseId) => {
+      const productionCase = await store.getCase(actor, caseId);
+      if (!productionCase?.approvedProductionSpecId) return [];
+      const approvedSpec = await store.getApprovedProductionSpec(actor, productionCase.approvedProductionSpecId);
+      if (!approvedSpec) return [];
+      const runtimes = await buildApprovedSnapshotQuantityRuntime({ actor, caseId, approvedSpec });
+      return Promise.all(runtimes.map(async (runtime) => {
+        const latest = await quantityOverrideStore.latestFor(actor, runtime.previewInput.eventSpecId, runtime.componentId);
+        if (!latest) return runtime;
+        const currentAuthority = {
+          ...latest.newAuthority,
+          decisionId: latest.overrideId,
+          evidence: { kind: "operator_instruction" as const, reference: latest.overrideId },
+          reviewStatus: "kitchen_review_required" as const,
+          rationale: "Bestätigte Mengenänderung; Küchenfreigabe ausstehend."
+        };
+        return {
+          ...runtime,
+          revision: `${runtime.revision}:override:${latest.overrideId}`,
+          projectionInput: {
+            ...runtime.projectionInput,
+            currentAuthority,
+            purchaseRows: runtime.projectionInput.purchaseRows.map((row) => ({
+              ...row,
+              lineage: undefined
+            }))
+          },
+          previewInput: { ...runtime.previewInput, currentAuthority }
+        };
+      }));
+    }
   });
 
   app.get("/health", async (_request, reply) => {
@@ -280,9 +318,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   app.post("/v1/production/seed-demo", async (request, reply) => {
     if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {
-      return reply.code(403).send({
-        message: "Betriebs-/Audit-Operator erforderlich."
-      });
+      return reply.code(403).send({ message: "Betriebs-/Audit-Operator erforderlich." });
     }
 
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
@@ -293,11 +329,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       await intakeRecords.insertSpec(actor, spec);
       await store.savePlan(actor, artifacts.productionPlan);
       await store.savePurchaseList(actor, artifacts.purchaseList);
-      seeded.push({
-        specId: spec.specId,
-        planId: artifacts.productionPlan.planId,
-        purchaseListId: artifacts.purchaseList.purchaseListId
-      });
+      seeded.push({ specId: spec.specId, planId: artifacts.productionPlan.planId, purchaseListId: artifacts.purchaseList.purchaseListId });
     }
     await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
       action: "production.seed_demo",
@@ -305,9 +337,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       entityId: `production-demo-${Date.now()}`,
       actor: actorForRequest(request, trustedActorSecret, allowDevActorHeader),
       summary: `${seeded.length} Produktions-Demoplaene angelegt.`,
-      details: {
-        seededCount: seeded.length
-      }
+      details: { seededCount: seeded.length }
     });
 
     return reply.code(201).send({
@@ -321,18 +351,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   app.get<{ Querystring: { limit?: string } }>("/v1/production/audit/events", async (request, reply) => {
     if (!isOperationsAuditOperator(request, trustedActorSecret, allowDevActorHeader)) {
-      return reply.code(403).send({
-        message: "Betriebs-/Audit-Operator erforderlich."
-      });
+      return reply.code(403).send({ message: "Betriebs-/Audit-Operator erforderlich." });
     }
 
     const limit = Number(request.query.limit ?? "50");
-    const safeLimit = Number.isFinite(limit)
-      ? Math.max(1, Math.min(200, Math.trunc(limit)))
-      : 50;
-    return reply.send({
-      items: await auditLog.listRecentFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), safeLimit)
-    });
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.trunc(limit))) : 50;
+    return reply.send({ items: await auditLog.listRecentFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), safeLimit) });
   });
 
   registerProductionRecipeRoutes(app, {

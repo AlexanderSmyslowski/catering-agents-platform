@@ -1,6 +1,7 @@
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
+import { ProductionQuantityWorkflowPanel } from "./production-quantity-workflow-panel.js";
 import {
   ProductionHandoffPanel,
   type ProductionHandoffState
@@ -166,6 +167,7 @@ export function ProductionRouteMainLayout({
         ),
         purchaseListSlot: (
           <div className="production-column production-column--purchase">
+            <ProductionQuantityWorkflowPanel caseId={activeProductionCaseId} />
             <ProductionPurchaseListPanel purchaseListState={purchaseListState} />
           </div>
         ),
