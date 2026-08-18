@@ -6,7 +6,7 @@ import {
   type ProductionQuantityWorkflowEdit,
   type ProductionQuantityWorkflowItem,
   type ProductionQuantityWorkflowPreviewResponse
-} from "./production-quantity-api.js";
+} from "./api.js";
 
 type Props = { caseId?: string };
 
@@ -24,6 +24,7 @@ export function ProductionQuantityWorkflowPanel({ caseId }: Props) {
   const [items, setItems] = useState<ProductionQuantityWorkflowItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const [pending, setPending] = useState<PendingPreview>();
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
 
@@ -50,10 +51,19 @@ export function ProductionQuantityWorkflowPanel({ caseId }: Props) {
     if (!caseId || !item.currentAuthority) return;
     const raw = draftValues[`target:${item.componentId}`];
     const amount = Number(raw);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const edit: ProductionQuantityWorkflowEdit = { origin: "target_output", perUnitAmount: amount, unit: item.currentAuthority.unit };
-    const response = await previewProductionQuantityOverride(caseId, item.componentId, edit);
-    setPending({ component: item, edit, response });
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Bitte eine positive Menge eingeben.");
+      return;
+    }
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const edit: ProductionQuantityWorkflowEdit = { origin: "target_output", perUnitAmount: amount, unit: item.currentAuthority.unit };
+      const response = await previewProductionQuantityOverride(caseId, item.componentId, edit);
+      setPending({ component: item, edit, response });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Mengenvorschau konnte nicht erstellt werden.");
+    }
   };
 
   const previewPurchase = async (item: ProductionQuantityWorkflowItem, rowId: string) => {
@@ -61,22 +71,41 @@ export function ProductionQuantityWorkflowPanel({ caseId }: Props) {
     const row = item.purchaseRows.find((candidate) => candidate.rowId === rowId);
     if (!row?.editable || !row.lineage) return;
     const amount = Number(draftValues[`purchase:${rowId}`]);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const edit: ProductionQuantityWorkflowEdit = {
-      origin: "purchase_ingredient",
-      ingredientId: row.lineage.ingredientId,
-      amount,
-      unit: row.unit
-    };
-    const response = await previewProductionQuantityOverride(caseId, item.componentId, edit);
-    setPending({ component: item, edit, response });
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Bitte eine positive Einkaufsmenge eingeben.");
+      return;
+    }
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const edit: ProductionQuantityWorkflowEdit = {
+        origin: "purchase_ingredient",
+        ingredientId: row.lineage.ingredientId,
+        amount,
+        unit: row.unit
+      };
+      const response = await previewProductionQuantityOverride(caseId, item.componentId, edit);
+      setPending({ component: item, edit, response });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Einkaufsmengen-Vorschau konnte nicht erstellt werden.");
+    }
   };
 
   const confirm = async () => {
     if (!caseId || !pending || pending.response.preview.status !== "preview_ready") return;
-    await confirmProductionQuantityOverride(caseId, pending.component.componentId, pending.response.previewId, pending.edit);
-    setPending(undefined);
-    await reload();
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const result = await confirmProductionQuantityOverride(caseId, pending.component.componentId, pending.response.previewId, pending.edit);
+      setPending(undefined);
+      setDraftValues({});
+      setNotice(result.status === "review_required"
+        ? "Mengenänderung gespeichert. Die neue Menge benötigt noch die Küchenfreigabe."
+        : "Mengenänderung übernommen und abhängige Produktionsmengen neu berechnet.");
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Mengenänderung konnte nicht übernommen werden.");
+    }
   };
 
   if (!caseId) return null;
@@ -89,12 +118,16 @@ export function ProductionQuantityWorkflowPanel({ caseId }: Props) {
       </header>
       <p className="helper-text">Änderungen werden zuerst vollständig vorgerechnet. Rezept und Einkauf bleiben bis zur Bestätigung unverändert.</p>
       {loading ? <p className="helper-text">Mengen werden geladen …</p> : null}
-      {error ? <p className="helper-text">{error}</p> : null}
+      {notice ? <p className="helper-text" role="status">{notice}</p> : null}
+      {error ? <p className="helper-text" role="alert">{error}</p> : null}
       <ul className="item-list compact">
         {items.map((item) => (
           <li key={item.componentId}>
             <strong>{item.label}</strong>
             <p>Aktuell: {numberLabel(item.currentAuthority?.perUnitAmount, item.currentAuthority?.unit)} pro Person · Gesamt {numberLabel(item.currentAuthority?.targetAmount, item.currentAuthority?.unit)}</p>
+            {item.currentAuthority?.reviewStatus === "kitchen_review_required" ? (
+              <p className="helper-text">Bestätigte Mengenänderung · Küchenfreigabe noch erforderlich.</p>
+            ) : null}
             {item.status === "recommended" ? (
               <p className="helper-text">Empfehlung: {numberLabel(item.recommendedAmount, item.unit)}{item.professionalRange ? ` · professioneller Korridor ${item.professionalRange.min}–${item.professionalRange.max} ${item.professionalRange.unit}` : ""}</p>
             ) : (
@@ -152,7 +185,7 @@ export function ProductionQuantityWorkflowPanel({ caseId }: Props) {
                 ))}
               </ul>
               {(pending.response.preview.appliedRuleIds ?? []).length > 0 ? <p className="helper-text">Freigegebene nichtlineare Regeln berücksichtigt: {pending.response.preview.appliedRuleIds?.join(", ")}</p> : null}
-              <button type="button" onClick={() => void confirm()}>Änderung bestätigen</button>
+              <button type="button" disabled={!pending.response.preview.confirmable} onClick={() => void confirm()}>Änderung übernehmen</button>
             </>
           ) : <p className="helper-text">Änderung kann nicht bestätigt werden: {(pending.response.preview.issues ?? []).join(", ")}</p>}
           <button type="button" onClick={() => setPending(undefined)}>Abbrechen</button>
