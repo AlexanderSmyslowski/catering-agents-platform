@@ -51,8 +51,8 @@ if [[ "${EDGE_MODE}" == "rehearsal" ]]; then
 fi
 
 # Validate repository source before any remote write. The example environment is
-# intentionally non-secret; the protected production environment is validated
-# again on the host before the edge container is started.
+# intentionally non-secret. Protected production values are never wholesale
+# injected into the validator below.
 (
   cd "${EDGE_DIR}"
   docker compose "${LOCAL_COMPOSE_ARGS[@]}" --env-file .env.example config >/dev/null
@@ -84,19 +84,79 @@ ssh "${REMOTE}" "
 "
 
 echo "Creating edge rollback snapshot..."
-ssh "${REMOTE}" "
-  set -euo pipefail
-  sudo mkdir -p '${EDGE_ROLLBACK_ROOT}'
-  if test -d '${EDGE_DEPLOY_PATH}'; then
-    timestamp=\$(date -u +%Y%m%dT%H%M%SZ)
-    archive='${EDGE_ROLLBACK_ROOT}/shared-edge-'\"\${timestamp}\"'.tar.gz'
-    sudo tar -czf \"\${archive}\" \
-      --exclude=./.env \
-      --exclude=./.deploy-manifest \
-      -C '${EDGE_DEPLOY_PATH}' .
-    printf '%s\n' \"\${archive}\" | sudo tee '${EDGE_ROLLBACK_ROOT}/latest' >/dev/null
+ROLLBACK_INFO="$(ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" "${EDGE_ROLLBACK_ROOT}" <<'REMOTE_SCRIPT'
+set -euo pipefail
+edge_path="$1"
+rollback_root="$2"
+sudo mkdir -p "${rollback_root}"
+if [[ ! -d "${edge_path}" ]]; then
+  printf 'NONE\trehearsal\n'
+  exit 0
+fi
+
+previous_mode="rehearsal"
+if [[ -f "${edge_path}/.deploy-manifest" ]]; then
+  manifest_mode="$(sed -n 's/^mode=//p' "${edge_path}/.deploy-manifest" | tail -n 1)"
+  if [[ "${manifest_mode}" == "rehearsal" || "${manifest_mode}" == "cutover" ]]; then
+    previous_mode="${manifest_mode}"
   fi
-"
+fi
+
+timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+archive="${rollback_root}/shared-edge-${timestamp}.tar.gz"
+sudo tar -czf "${archive}" \
+  --exclude=./.env \
+  --exclude=./.deploy-manifest \
+  -C "${edge_path}" .
+printf '%s\n' "${archive}" | sudo tee "${rollback_root}/latest" >/dev/null
+printf '%s\t%s\n' "${archive}" "${previous_mode}"
+REMOTE_SCRIPT
+)"
+IFS=$'\t' read -r ROLLBACK_ARCHIVE ROLLBACK_MODE <<<"${ROLLBACK_INFO}"
+
+rollback_edge_candidate() {
+  local failure_status=$?
+  trap - ERR
+  set +e
+  echo "Edge candidate failed; restoring only shared-edge." >&2
+
+  if [[ "${ROLLBACK_ARCHIVE}" == "NONE" ]]; then
+    ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" "${EDGE_MODE}" <<'REMOTE_SCRIPT'
+set -euo pipefail
+edge_path="$1"
+mode="$2"
+cd "${edge_path}"
+compose_files=(-f docker-compose.yml)
+if [[ "${mode}" == "rehearsal" ]]; then
+  compose_files+=(-f docker-compose.rehearsal.yml)
+fi
+docker compose -p shared-edge "${compose_files[@]}" --env-file .env stop edge
+REMOTE_SCRIPT
+  else
+    ssh "${REMOTE}" bash -s -- \
+      "${EDGE_DEPLOY_PATH}" "${ROLLBACK_ARCHIVE}" "${ROLLBACK_MODE}" <<'REMOTE_SCRIPT'
+set -euo pipefail
+edge_path="$1"
+archive="$2"
+mode="$3"
+
+sudo find "${edge_path}" -mindepth 1 -maxdepth 1 \
+  ! -name .env ! -name .deploy-manifest -exec rm -rf -- {} +
+sudo tar -xzf "${archive}" -C "${edge_path}"
+cd "${edge_path}"
+compose_files=(-f docker-compose.yml)
+if [[ "${mode}" == "rehearsal" ]]; then
+  compose_files+=(-f docker-compose.rehearsal.yml)
+fi
+docker compose -p shared-edge "${compose_files[@]}" --env-file .env config >/dev/null
+docker compose -p shared-edge "${compose_files[@]}" --env-file .env up -d
+REMOTE_SCRIPT
+  fi
+
+  exit "${failure_status}"
+}
+
+trap 'rollback_edge_candidate' ERR
 
 echo "Syncing edge source..."
 rsync -az --delete \
@@ -111,15 +171,15 @@ else
   REMOTE_COMPOSE_FILES="-f docker-compose.yml"
 fi
 
-# Validate the protected production environment before runtime mutation.
+# Compose config interpolates the protected file, but the Caddy validator is run
+# as the edge service itself. Only the service's explicit environment whitelist
+# reaches that container; unrelated entries in .env cannot leak into it.
 ssh "${REMOTE}" "
   set -euo pipefail
   cd '${EDGE_DEPLOY_PATH}'
   docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env config >/dev/null
-  docker run --rm \
-    --env-file .env \
-    -v '${EDGE_DEPLOY_PATH}/${CADDY_CONFIG_FILE}:/etc/caddy/Caddyfile:ro' \
-    caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+  docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env \
+    run --rm --no-deps --entrypoint caddy edge validate --config /etc/caddy/Caddyfile
   docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env up -d
 "
 
@@ -186,4 +246,5 @@ ssh "${REMOTE}" "
   sudo mv \"\${temporary}\" \"\${manifest}\"
 "
 
+trap - ERR
 echo "Edge deployment completed in ${EDGE_MODE} mode."
