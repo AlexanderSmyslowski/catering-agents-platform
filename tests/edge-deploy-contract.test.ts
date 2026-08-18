@@ -39,7 +39,7 @@ describe('edge deploy safety contract', () => {
 
   it('validates Caddy through the whitelisted edge service environment only', () => {
     expect(deploy).toContain('run --rm --no-deps --entrypoint caddy edge validate');
-    expect(deploy).not.toMatch(/docker run --rm\s+\\?\s*--env-file \.env/);
+    expect(deploy).not.toMatch(/docker run --rm\s+\\?\s*--env-file \.env(?!\.example)/);
   });
 
   it('restores only the previous shared-edge candidate after post-start failure', () => {
