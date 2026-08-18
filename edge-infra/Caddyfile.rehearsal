@@ -1,0 +1,15 @@
+{
+  auto_https off
+}
+
+http://{$CATERING_PUBLIC_HOST} {
+  reverse_proxy {$CATERING_UPSTREAM}
+}
+
+http://{$ZEITERFASSUNG_PUBLIC_HOST} {
+  reverse_proxy {$ZEITERFASSUNG_UPSTREAM}
+}
+
+http://{$EVENTOS_PUBLIC_HOST} {
+  reverse_proxy {$EVENTOS_UPSTREAM}
+}
