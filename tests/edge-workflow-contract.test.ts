@@ -12,8 +12,8 @@ describe('edge workflow contract', () => {
   });
 
   it('supports a no-cutover rehearsal binding', () => {
-    expect(rehearsal).toContain('18080:80');
-    expect(rehearsal).toContain('18443:443');
+    expect(rehearsal).toContain('127.0.0.1:18080:80');
+    expect(rehearsal).not.toContain('18443:443');
   });
 
   it('cannot expose cutover from GitHub Actions before the cutover task is armed', () => {
