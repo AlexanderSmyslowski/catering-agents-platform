@@ -90,35 +90,69 @@ function approvedSpec(): ApprovedProductionSpec {
   };
 }
 
+function buildApp() {
+  const store = new ProductionStore();
+  vi.spyOn(store, "getCase").mockResolvedValue({
+    schemaVersion: "1.0",
+    businessId: "local",
+    caseId: "case-quantity-app",
+    product: "production",
+    displayName: "Test",
+    status: "open",
+    version: 1,
+    createdAt: "2026-08-18T07:00:00.000Z",
+    updatedAt: "2026-08-18T07:00:00.000Z",
+    approvedProductionSpecId: "approved-spec-quantity-app"
+  });
+  vi.spyOn(store, "getApprovedProductionSpec").mockResolvedValue(approvedSpec());
+  return buildProductionApp({
+    store,
+    env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_DEV_AUTH: "true" }
+  });
+}
+
 describe("production app quantity workflow registration", () => {
   it("resolves the linked approved snapshot server-side", async () => {
-    const store = new ProductionStore();
-    vi.spyOn(store, "getCase").mockResolvedValue({
-      schemaVersion: "1.0",
-      businessId: "local",
-      caseId: "case-quantity-app",
-      product: "production",
-      displayName: "Test",
-      status: "open",
-      version: 1,
-      createdAt: "2026-08-18T07:00:00.000Z",
-      updatedAt: "2026-08-18T07:00:00.000Z",
-      approvedProductionSpecId: "approved-spec-quantity-app"
-    });
-    vi.spyOn(store, "getApprovedProductionSpec").mockResolvedValue(approvedSpec());
-
-    const app = buildProductionApp({
-      store,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_DEV_AUTH: "true" }
-    });
-    const response = await app.inject({
-      method: "GET",
-      url: "/v1/production/cases/case-quantity-app/quantity-workflow",
-      headers
-    });
-
+    const app = buildApp();
+    const response = await app.inject({ method: "GET", url: "/v1/production/cases/case-quantity-app/quantity-workflow", headers });
     expect(response.statusCode).toBe(200);
     expect(response.json().items).toHaveLength(1);
     expect(response.json().items[0]).toMatchObject({ componentId: "component-1", status: "evidence_insufficient" });
+  });
+
+  it("persists a confirmed quantity change and exposes it after reload as review-required authority", async () => {
+    const app = buildApp();
+    const preview = await app.inject({
+      method: "POST",
+      url: "/v1/production/cases/case-quantity-app/quantity-workflow/component-1/preview",
+      headers,
+      payload: { edit: { origin: "target_output", perUnitAmount: 1.2, unit: "servings" } }
+    });
+    expect(preview.statusCode).toBe(200);
+    const previewPayload = preview.json();
+
+    const confirm = await app.inject({
+      method: "POST",
+      url: "/v1/production/cases/case-quantity-app/quantity-workflow/component-1/confirm",
+      headers,
+      payload: {
+        previewId: previewPayload.previewId,
+        edit: { origin: "target_output", perUnitAmount: 1.2, unit: "servings" }
+      }
+    });
+    expect(confirm.statusCode).toBe(200);
+    expect(confirm.json().status).toBe("review_required");
+
+    const reload = await app.inject({ method: "GET", url: "/v1/production/cases/case-quantity-app/quantity-workflow", headers });
+    expect(reload.statusCode).toBe(200);
+    expect(reload.json().items[0]).toMatchObject({
+      currentAuthority: {
+        perUnitAmount: 1.2,
+        targetAmount: 24,
+        unit: "servings",
+        reviewStatus: "kitchen_review_required"
+      }
+    });
+    expect(reload.json().items[0].purchaseRows[0].editable).toBe(false);
   });
 });
