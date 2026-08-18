@@ -3,7 +3,7 @@ import {
   confirmProductionQuantityOverride,
   fetchProductionQuantityWorkflow,
   previewProductionQuantityOverride
-} from "../backoffice-ui/src/api.js";
+} from "../backoffice-ui/src/production-quantity-api.js";
 
 afterEach(() => vi.restoreAllMocks());
 
