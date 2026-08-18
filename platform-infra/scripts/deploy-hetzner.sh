@@ -40,14 +40,14 @@ ssh "${REMOTE}" "
   set -euo pipefail
   rollback_root='${DEPLOY_ROLLBACK_ROOT}'
   timestamp=\$(date -u +%Y%m%dT%H%M%SZ)
-  mkdir -p \"\${rollback_root}\"
+  sudo mkdir -p \"\${rollback_root}\"
   archive=\"\${rollback_root}/catering-agents-platform-\${timestamp}.tar.gz\"
-  tar -czf \"\${archive}\" \\
+  sudo tar -czf \"\${archive}\" \\
     --exclude=./data \\
     --exclude=./platform-infra/.env \\
     --exclude=./platform-infra/sites \\
     -C '${DEPLOY_PATH}' .
-  printf '%s\n' \"\${archive}\" > \"\${rollback_root}/latest\"
+  printf '%s\n' \"\${archive}\" | sudo tee \"\${rollback_root}/latest\" >/dev/null
   echo \"Rollback snapshot: \${archive}\"
 "
 
