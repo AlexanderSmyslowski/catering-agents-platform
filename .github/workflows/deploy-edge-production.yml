@@ -51,6 +51,21 @@ jobs:
           test -n "$CATERING_SMOKE_BASIC_AUTH_PASSWORD"
           test "$EDGE_MODE" = rehearsal
 
+      - name: Bootstrap protected edge env if missing
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          if ssh "$remote" "sudo test -f /opt/shared-edge/.env"; then
+            echo "Protected edge .env already present; leaving it unchanged."
+          else
+            ssh "$remote" "sudo install -d -m 0755 /opt/shared-edge && sudo tee /opt/shared-edge/.env >/dev/null && sudo chmod 0600 /opt/shared-edge/.env" < edge-infra/.env.example
+            ssh "$remote" "sudo test \"$(sudo stat -c '%a' /opt/shared-edge/.env)\" = 600"
+            echo "Protected edge .env bootstrapped from edge-only rehearsal defaults."
+          fi
+
       - name: Deploy exact edge commit
         env:
           DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
