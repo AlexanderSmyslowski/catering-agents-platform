@@ -7,14 +7,19 @@ const productionCaddy = readFileSync(new URL('../edge-infra/Caddyfile', import.m
 const edgeEnv = readFileSync(new URL('../edge-infra/.env.example', import.meta.url), 'utf8');
 const edgeCompose = readFileSync(new URL('../edge-infra/docker-compose.yml', import.meta.url), 'utf8');
 const platformCompose = readFileSync(new URL('../platform-infra/docker-compose.yml', import.meta.url), 'utf8');
+const platformCaddy = readFileSync(new URL('../platform-infra/Caddyfile', import.meta.url), 'utf8');
 
 describe('edge Catering rehearsal contract', () => {
-  it('uses the app-owned Caddy on its canonical internal HTTP listener', () => {
+  it('uses a dedicated app-owned internal HTTP listener that cannot redirect through the public site', () => {
     expect(platformCompose).toContain('CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}');
-    expect(edgeEnv).toContain('CATERING_APP_UPSTREAM=http://web:80');
+    expect(platformCaddy).toContain('{$CATERING_SITE_ADDRESS::80}, :8081 {');
+
+    expect(edgeEnv).toContain('CATERING_APP_UPSTREAM=http://web:8081');
+    expect(edgeEnv).not.toContain('CATERING_APP_UPSTREAM=http://web:80');
     expect(edgeEnv).not.toContain('CATERING_UPSTREAM=https://web:443');
 
-    expect(edgeCompose).toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:80}');
+    expect(edgeCompose).toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:8081}');
+    expect(edgeCompose).not.toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:80}');
     expect(edgeCompose).not.toContain('CATERING_UPSTREAM: ${CATERING_UPSTREAM:-https://web:443}');
 
     expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
