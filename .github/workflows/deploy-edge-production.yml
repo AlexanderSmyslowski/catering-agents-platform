@@ -87,9 +87,17 @@ jobs:
           sudo install -o "$deploy_uid" -g "$deploy_gid" -m 0600 "$tmp" "$pending"
           cmp -s "$tmp" "$pending"
           test "$(stat -c '%a %u %g' "$pending")" = "600 ${deploy_uid} ${deploy_gid}"
-          sudo mv -f "$pending" "${edge_path}/.env"
-          pending=""
-          test "$(stat -c '%a %u %g' "${edge_path}/.env")" = "600 ${deploy_uid} ${deploy_gid}"
+          if sudo ln "$pending" "${edge_path}/.env" 2>/dev/null; then
+            sudo rm -f "$pending"
+            pending=""
+            test "$(stat -c '%a %u %g' "${edge_path}/.env")" = "600 ${deploy_uid} ${deploy_gid}"
+          elif sudo test -e "${edge_path}/.env" || sudo test -L "${edge_path}/.env"; then
+            echo "Protected edge .env appeared concurrently; leaving it unchanged."
+            exit 0
+          else
+            echo "Failed to publish protected edge .env without overwriting an existing path." >&2
+            exit 1
+          fi
           REMOTE_SCRIPT
             echo "Protected edge .env bootstrapped atomically from edge-only rehearsal defaults."
           fi
