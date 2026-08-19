@@ -106,6 +106,9 @@ edge_path="$1"
 rollback_root="$2"
 sudo mkdir -p "${rollback_root}"
 if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]; then
+  # Bootstrap/non-trusted state: revoke any orphaned manifest before candidate
+  # mutation so newly synced files can never inherit stale trust.
+  sudo rm -f "${edge_path}/.deploy-manifest"
   printf 'NONE\trehearsal\n'
   exit 0
 fi
