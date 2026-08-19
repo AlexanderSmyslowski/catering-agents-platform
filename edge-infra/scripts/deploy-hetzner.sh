@@ -89,7 +89,7 @@ set -euo pipefail
 edge_path="$1"
 rollback_root="$2"
 sudo mkdir -p "${rollback_root}"
-if [[ ! -d "${edge_path}" ]]; then
+if [[ ! -f "${edge_path}/docker-compose.yml" ]]; then
   printf 'NONE\trehearsal\n'
   exit 0
 fi
