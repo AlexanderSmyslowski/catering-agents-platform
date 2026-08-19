@@ -4,6 +4,11 @@ import { describe, expect, it } from 'vitest';
 const compose = readFileSync(new URL('../edge-infra/docker-compose.yml', import.meta.url), 'utf8');
 const caddy = readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url), 'utf8');
 const rehearsalCaddy = readFileSync(new URL('../edge-infra/Caddyfile.rehearsal', import.meta.url), 'utf8');
+const envExample = readFileSync(new URL('../edge-infra/.env.example', import.meta.url), 'utf8');
+const deployWorkflow = readFileSync(
+  new URL('../.github/workflows/deploy-edge-production.yml', import.meta.url),
+  'utf8',
+);
 
 describe('independent edge infrastructure contract', () => {
   it('owns only edge resources and the two temporary compatibility networks', () => {
@@ -30,5 +35,15 @@ describe('independent edge infrastructure contract', () => {
     for (const config of [caddy, rehearsalCaddy]) {
       expect(config).toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
     }
+  });
+
+  it('uses the canonical production Zeiterfassung container and migrates only the known legacy upstream', () => {
+    expect(envExample).toContain('ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040');
+    expect(envExample).not.toContain('ZEITERFASSUNG_UPSTREAM=app:3040');
+    expect(deployWorkflow).toContain('legacy_zt="ZEITERFASSUNG_UPSTREAM=app:3040"');
+    expect(deployWorkflow).toContain('canonical_zt="ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040"');
+    expect(deployWorkflow).toContain('grep -Fxq "$legacy_zt"');
+    expect(deployWorkflow).toContain('mv -f "$pending" "${edge_path}/.env"');
+    expect(deployWorkflow).toContain('Protected edge .env Zeiterfassung upstream migrated atomically.');
   });
 });
