@@ -6,6 +6,7 @@ DEPLOY_HOST="${DEPLOY_HOST:?Set DEPLOY_HOST}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
 EDGE_DEPLOY_PATH="${EDGE_DEPLOY_PATH:?Set EDGE_DEPLOY_PATH}"
 EDGE_ROLLBACK_ROOT="${EDGE_ROLLBACK_ROOT:-${EDGE_DEPLOY_PATH}-rollbacks}"
+EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"
 EDGE_DEPLOY_COMMIT_SHA="${EDGE_DEPLOY_COMMIT_SHA:?Set EDGE_DEPLOY_COMMIT_SHA}"
 EDGE_MODE="${EDGE_MODE:-rehearsal}"
 CATERING_SMOKE_URL="${CATERING_SMOKE_URL:?Set CATERING_SMOKE_URL}"
@@ -33,6 +34,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EDGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
+EDGE_LOCK_HELD=false
 
 url_host() {
   local value="${1#*://}"
@@ -82,6 +84,44 @@ ssh "${REMOTE}" "
     exit 1
   }
 "
+
+acquire_edge_lock() {
+  ssh "${REMOTE}" bash -s -- "${EDGE_LOCK_PATH}" "${EDGE_DEPLOY_COMMIT_SHA}" "${EDGE_MODE}" <<'REMOTE_SCRIPT'
+set -euo pipefail
+lock_path="$1"
+commit_sha="$2"
+mode="$3"
+if ! mkdir "${lock_path}" 2>/dev/null; then
+  echo "Another shared-edge deployment holds ${lock_path}. Inspect and clear it only after confirming no deploy is running." >&2
+  if [[ -f "${lock_path}/owner" ]]; then
+    cat "${lock_path}/owner" >&2 || true
+  fi
+  exit 1
+fi
+printf '%s\n' \
+  "commit=${commit_sha}" \
+  "mode=${mode}" \
+  "acquired_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  >"${lock_path}/owner"
+REMOTE_SCRIPT
+  EDGE_LOCK_HELD=true
+}
+
+release_edge_lock() {
+  if [[ "${EDGE_LOCK_HELD}" != "true" ]]; then
+    return 0
+  fi
+  ssh "${REMOTE}" bash -s -- "${EDGE_LOCK_PATH}" <<'REMOTE_SCRIPT'
+set -euo pipefail
+lock_path="$1"
+rm -f "${lock_path}/owner"
+rmdir "${lock_path}"
+REMOTE_SCRIPT
+  EDGE_LOCK_HELD=false
+}
+
+trap 'release_edge_lock' EXIT
+acquire_edge_lock
 
 echo "Creating edge rollback snapshot..."
 ROLLBACK_INFO="$(ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" "${EDGE_ROLLBACK_ROOT}" <<'REMOTE_SCRIPT'
@@ -271,4 +311,6 @@ ssh "${REMOTE}" "
 "
 
 trap - ERR
+release_edge_lock
+trap - EXIT
 echo "Edge deployment completed in ${EDGE_MODE} mode."
