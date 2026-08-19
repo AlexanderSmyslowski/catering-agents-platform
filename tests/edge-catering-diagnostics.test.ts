@@ -54,7 +54,8 @@ describe('edge Catering identity diagnostics', () => {
     expect(diagnostic).toContain(
       'BODY_PREVIEW_LIMIT="${CATERING_DIAGNOSTIC_BODY_PREVIEW_LIMIT:-800}"',
     );
-    expect(diagnostic).toContain('http://web:80/api/intake/health');
+    expect(diagnostic).toContain('http://web:8081/api/intake/health');
+    expect(diagnostic).not.toContain('http://web:80/api/intake/health');
     expect(diagnostic).toContain('http://intake:3101/health');
     expect(diagnostic).toContain('network inspect "${NETWORK_NAME}"');
     expect(diagnostic).toContain('com.docker.compose.project=shared-edge');
