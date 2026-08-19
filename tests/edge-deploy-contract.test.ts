@@ -139,9 +139,12 @@ describe('edge deploy safety contract', () => {
   });
 
   it('restores only the previous shared-edge candidate after post-start failure', () => {
-    expect(deploy).toContain('rollback_edge_candidate');
-    expect(deploy).toContain("trap 'rollback_edge_candidate' ERR");
-    expect(deploy).toContain('shared-edge');
-    expect(deploy).not.toMatch(/platform-infra.*up|zeiterfassung.*up|eventos.*up/);
+    const rollbackStart = deploy.indexOf('rollback_edge_candidate() {');
+    const rollbackEnd = deploy.indexOf('\n}\n\ntrap \'rollback_edge_candidate\' ERR', rollbackStart);
+    const rollbackBody = deploy.slice(rollbackStart, rollbackEnd);
+    expect(rollbackStart).toBeGreaterThanOrEqual(0);
+    expect(rollbackEnd).toBeGreaterThan(rollbackStart);
+    expect(rollbackBody).toContain('shared-edge');
+    expect(rollbackBody).not.toMatch(/platform-infra.*up|zeiterfassung.*up|eventos.*up/);
   });
 });
