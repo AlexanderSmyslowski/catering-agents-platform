@@ -61,8 +61,8 @@ describe('edge Catering identity diagnostics', () => {
     expect(diagnostic).toContain('com.docker.compose.service=edge');
     expect(diagnostic).toContain('Catering diagnostic effective edge upstream:');
     expect(diagnostic).toContain('CATERING_UPSTREAM');
-    expect(diagnostic).toContain('Catering diagnostic alias web owners:');
-    expect(diagnostic).toContain('Catering diagnostic alias intake owners:');
+    expect(diagnostic).toContain('for alias in ("web", "intake"):');
+    expect(diagnostic).toContain('Catering diagnostic alias {alias} owners:');
     expect(diagnostic).not.toContain('.Config.Env');
     expect(diagnostic).not.toContain('printenv');
     expect(diagnostic).not.toMatch(/\bset\s+-x\b/);
