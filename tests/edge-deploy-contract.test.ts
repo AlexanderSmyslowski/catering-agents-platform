@@ -52,7 +52,7 @@ describe('edge deploy safety contract', () => {
   });
 
   it('treats an env-only bootstrap directory as no previous edge deployment', () => {
-    expect(deploy).toContain('if [[ ! -f "${edge_path}/docker-compose.yml" ]]');
+    expect(deploy).toContain('if [[ ! -f "${edge_path}/docker-compose.yml"');
     expect(deploy).toContain("printf 'NONE\\trehearsal\\n'");
   });
 
