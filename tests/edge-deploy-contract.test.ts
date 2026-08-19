@@ -33,7 +33,7 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('probe_rehearsal_listener');
     expect(deploy).toContain('http://127.0.0.1:18080');
     expect(deploy).toContain('--header "Host: ${host}"');
-    expect(deploy).toContain('probe "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}"');
+    expect(deploy).toContain('probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}"');
     expect(deploy).toContain('probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}"');
     expect(deploy).toContain('probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}"');
   });
