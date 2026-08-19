@@ -45,8 +45,7 @@ except OSError:
     print(f"{label} body-preview (max {limit} bytes): <unavailable>")
     raise SystemExit(0)
 
-truncated = len(data) > limit
-text = data[:limit].decode("utf-8", errors="replace")
+text = data.decode("utf-8", errors="replace")
 user = os.environ.get("CATERING_SMOKE_BASIC_AUTH_USER", "")
 password = os.environ.get("CATERING_SMOKE_BASIC_AUTH_PASSWORD", "")
 secrets = [secret for secret in (user, password) if secret]
@@ -62,6 +61,10 @@ text = "".join(
 text = " ".join(text.split())
 if not text:
     text = "<empty>"
+encoded = text.encode("utf-8")
+truncated = len(encoded) > limit
+if truncated:
+    text = encoded[:limit].decode("utf-8", errors="ignore")
 suffix = " …[truncated]" if truncated else ""
 print(f"{label} body-preview (max {limit} bytes): {text}{suffix}")
 PYTHON
@@ -264,7 +267,7 @@ probe_from_edge() {
 }
 
 collect_direct_evidence() {
-  local edge_container edge_count auth_b64
+  local edge_container edge_count effective_upstream auth_b64
   edge_container="$(
     "${DOCKER_BIN}" ps \
       --filter 'label=com.docker.compose.project=shared-edge' \
@@ -292,6 +295,13 @@ collect_direct_evidence() {
   else
     printf 'Catering diagnostic edge-container: id=%s\n' "$(safe_scalar "${edge_container}")"
   fi
+
+  effective_upstream="$(
+    "${DOCKER_BIN}" exec "${edge_container}" sh -c \
+      'printf "%s" "${CATERING_UPSTREAM:-<unset>}"' 2>/dev/null || true
+  )"
+  printf 'Catering diagnostic effective edge upstream: CATERING_UPSTREAM=%s\n' \
+    "$(safe_scalar "${effective_upstream:-<unavailable>}")"
 
   if [[ -z "${CATERING_SMOKE_BASIC_AUTH_USER:-}" || -z "${CATERING_SMOKE_BASIC_AUTH_PASSWORD:-}" ]]; then
     printf 'Catering diagnostic direct-web: unavailable (Basic Auth credentials absent)\n'
