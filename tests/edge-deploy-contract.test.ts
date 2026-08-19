@@ -60,11 +60,12 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]');
   });
 
-  it('invalidates the deployment manifest if restoring the previous edge fails', () => {
-    expect(deploy).toContain('invalidate_failed_rollback');
-    expect(deploy).toContain('if [[ "${rollback_status}" -ne 0 ]]');
-    expect(deploy).toContain('invalidate_failed_rollback || true');
+  it('invalidates manifest trust before candidate mutation and restores it only after verified rollback', () => {
+    expect(deploy).toContain('manifest_archive="${archive}.manifest"');
+    expect(deploy).toContain('sudo cp "${edge_path}/.deploy-manifest" "${manifest_archive}"');
     expect(deploy).toContain('sudo rm -f "${edge_path}/.deploy-manifest"');
+    expect(deploy.indexOf('sudo rm -f "${edge_path}/.deploy-manifest"')).toBeLessThan(deploy.indexOf('Syncing edge source'));
+    expect(deploy).toContain('sudo cp "${manifest_archive}" "${edge_path}/.deploy-manifest"');
   });
 
   it('serializes every edge deployment on the host for the full mutation window', () => {
