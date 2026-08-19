@@ -35,6 +35,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EDGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
 EDGE_LOCK_HELD=false
+EDGE_RECOVERY_REQUIRED=false
 
 url_host() {
   local value="${1#*://}"
@@ -87,6 +88,10 @@ REMOTE_SCRIPT
 
 release_edge_lock() {
   if [[ "${EDGE_LOCK_HELD}" != "true" ]]; then return 0; fi
+  if [[ "${EDGE_RECOVERY_REQUIRED}" == "true" ]]; then
+    echo "Recovery is still required; retaining edge deploy lock ${EDGE_LOCK_PATH}." >&2
+    return 0
+  fi
   ssh "${REMOTE}" bash -s -- "${EDGE_LOCK_PATH}" <<'REMOTE_SCRIPT'
 set -euo pipefail
 lock_path="$1"
@@ -133,8 +138,9 @@ REMOTE_SCRIPT
 
 rollback_edge_candidate() {
   local failure_status=$?
+  if [[ $# -gt 0 ]]; then failure_status="$1"; fi
   local rollback_status=0
-  trap - ERR
+  trap - ERR TERM INT HUP
   set +e
   echo "Edge candidate failed; restoring only shared-edge." >&2
 
@@ -172,12 +178,16 @@ REMOTE_SCRIPT
   fi
 
   if [[ "${rollback_status}" -ne 0 ]]; then
+    EDGE_RECOVERY_REQUIRED=true
     echo "Edge rollback failed; live deployment remains untrusted because no manifest is present." >&2
   fi
   exit "${failure_status}"
 }
 
 trap 'rollback_edge_candidate' ERR
+trap 'rollback_edge_candidate 143' TERM
+trap 'rollback_edge_candidate 130' INT
+trap 'rollback_edge_candidate 129' HUP
 revoke_live_manifest
 
 echo "Syncing edge source..."
@@ -241,7 +251,7 @@ ssh "${REMOTE}" "
   sudo mv \"\${temporary}\" \"\${manifest}\"
 "
 
-trap - ERR
+trap - ERR TERM INT HUP
 release_edge_lock
 trap - EXIT
 echo "Edge deployment completed in ${EDGE_MODE} mode."
