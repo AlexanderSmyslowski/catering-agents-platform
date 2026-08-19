@@ -129,7 +129,7 @@ set -euo pipefail
 edge_path="$1"
 rollback_root="$2"
 sudo mkdir -p "${rollback_root}"
-if [[ ! -f "${edge_path}/docker-compose.yml" ]]; then
+if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]; then
   printf 'NONE\trehearsal\n'
   exit 0
 fi
