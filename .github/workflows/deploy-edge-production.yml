@@ -62,7 +62,7 @@ jobs:
             echo "Protected edge .env already present; leaving it unchanged."
           else
             ssh "$remote" "sudo install -d -m 0755 /opt/shared-edge && sudo tee /opt/shared-edge/.env >/dev/null && sudo chmod 0600 /opt/shared-edge/.env" < edge-infra/.env.example
-            ssh "$remote" "sudo test \"$(sudo stat -c '%a' /opt/shared-edge/.env)\" = 600"
+            ssh "$remote" "sudo stat -c '%a' /opt/shared-edge/.env" | grep -qx '600'
             echo "Protected edge .env bootstrapped from edge-only rehearsal defaults."
           fi
 
