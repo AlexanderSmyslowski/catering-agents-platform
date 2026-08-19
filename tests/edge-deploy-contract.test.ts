@@ -35,7 +35,7 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('--header "Host: ${host}"');
     expect(deploy).toContain('probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}"');
     expect(deploy).toContain('probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}"');
-    expect(deploy).toContain('probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}"');
+    expect(deploy).toContain('probe_status_ok_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"');
   });
 
   it('requires semantic Zeiterfassung identity from the local rehearsal candidate', () => {
