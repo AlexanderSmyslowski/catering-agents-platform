@@ -106,9 +106,6 @@ edge_path="$1"
 rollback_root="$2"
 sudo mkdir -p "${rollback_root}"
 if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]; then
-  # Bootstrap/non-trusted state: revoke any orphaned manifest before candidate
-  # mutation so newly synced files can never inherit stale trust.
-  sudo rm -f "${edge_path}/.deploy-manifest"
   printf 'NONE\trehearsal\n'
   exit 0
 fi
@@ -121,14 +118,18 @@ manifest_archive="${archive}.manifest"
 sudo tar -czf "${archive}" --exclude=./.env --exclude=./.deploy-manifest -C "${edge_path}" .
 sudo cp "${edge_path}/.deploy-manifest" "${manifest_archive}"
 printf '%s\n' "${archive}" | sudo tee "${rollback_root}/latest" >/dev/null
-# Revoke trust before any candidate files or containers can be mutated. A new
-# manifest is published only after a successful candidate; a verified rollback
-# restores this archived manifest as its final step.
-sudo rm -f "${edge_path}/.deploy-manifest"
 printf '%s\t%s\n' "${archive}" "${previous_mode}"
 REMOTE_SCRIPT
 )"
 IFS=$'\t' read -r ROLLBACK_ARCHIVE ROLLBACK_MODE <<<"${ROLLBACK_INFO}"
+
+revoke_live_manifest() {
+  ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" <<'REMOTE_SCRIPT'
+set -euo pipefail
+edge_path="$1"
+sudo rm -f "${edge_path}/.deploy-manifest"
+REMOTE_SCRIPT
+}
 
 rollback_edge_candidate() {
   local failure_status=$?
@@ -142,6 +143,9 @@ rollback_edge_candidate() {
 set -euo pipefail
 edge_path="$1"
 mode="$2"
+if [[ ! -f "${edge_path}/docker-compose.yml" ]]; then
+  exit 0
+fi
 cd "${edge_path}"
 compose_files=(-f docker-compose.yml)
 if [[ "${mode}" == "rehearsal" ]]; then compose_files+=(-f docker-compose.rehearsal.yml); fi
@@ -174,6 +178,7 @@ REMOTE_SCRIPT
 }
 
 trap 'rollback_edge_candidate' ERR
+revoke_live_manifest
 
 echo "Syncing edge source..."
 rsync -az --delete --rsync-path="${DEPLOY_RSYNC_PATH}" --exclude ".env" --exclude ".deploy-manifest" "${EDGE_DIR}/" "${REMOTE}:${EDGE_DEPLOY_PATH}/"
