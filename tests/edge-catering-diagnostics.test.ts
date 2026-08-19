@@ -59,6 +59,8 @@ describe('edge Catering identity diagnostics', () => {
     expect(diagnostic).toContain('network inspect "${NETWORK_NAME}"');
     expect(diagnostic).toContain('com.docker.compose.project=shared-edge');
     expect(diagnostic).toContain('com.docker.compose.service=edge');
+    expect(diagnostic).toContain('Catering diagnostic effective edge upstream:');
+    expect(diagnostic).toContain('CATERING_UPSTREAM');
     expect(diagnostic).toContain('Catering diagnostic alias web owners:');
     expect(diagnostic).toContain('Catering diagnostic alias intake owners:');
     expect(diagnostic).not.toContain('.Config.Env');
@@ -69,7 +71,7 @@ describe('edge Catering identity diagnostics', () => {
     );
   });
 
-  it('caps the candidate body preview and redacts the Basic-Auth credentials from diagnostic output', () => {
+  it('redacts credentials before applying the bounded candidate body preview', () => {
     readDiagnostic();
     const sandbox = mkdtempSync(join(tmpdir(), 'edge-catering-diagnostic-'));
     sandboxes.push(sandbox);
@@ -78,7 +80,7 @@ describe('edge Catering identity diagnostics', () => {
     const password = 'super-secret-password';
     writeFileSync(
       bodyPath,
-      `prefix user=${user} password=${password} ${'x'.repeat(900)} TAIL-SHOULD-NOT-APPEAR`,
+      `prefix user=${user} ${'x'.repeat(763)} password=${password} TAIL-SHOULD-NOT-APPEAR`,
     );
 
     const result = spawnSync(
@@ -114,6 +116,7 @@ describe('edge Catering identity diagnostics', () => {
     expect(output).toContain('[REDACTED]');
     expect(output).not.toContain(user);
     expect(output).not.toContain(password);
+    expect(output).not.toContain(password.slice(0, 4));
     expect(output).not.toContain('TAIL-SHOULD-NOT-APPEAR');
   });
 });
