@@ -114,20 +114,18 @@ manifest_mode="$(sed -n 's/^mode=//p' "${edge_path}/.deploy-manifest" | tail -n 
 if [[ "${manifest_mode}" == "rehearsal" || "${manifest_mode}" == "cutover" ]]; then previous_mode="${manifest_mode}"; fi
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 archive="${rollback_root}/shared-edge-${timestamp}.tar.gz"
+manifest_archive="${archive}.manifest"
 sudo tar -czf "${archive}" --exclude=./.env --exclude=./.deploy-manifest -C "${edge_path}" .
+sudo cp "${edge_path}/.deploy-manifest" "${manifest_archive}"
 printf '%s\n' "${archive}" | sudo tee "${rollback_root}/latest" >/dev/null
+# Revoke trust before any candidate files or containers can be mutated. A new
+# manifest is published only after a successful candidate; a verified rollback
+# restores this archived manifest as its final step.
+sudo rm -f "${edge_path}/.deploy-manifest"
 printf '%s\t%s\n' "${archive}" "${previous_mode}"
 REMOTE_SCRIPT
 )"
 IFS=$'\t' read -r ROLLBACK_ARCHIVE ROLLBACK_MODE <<<"${ROLLBACK_INFO}"
-
-invalidate_failed_rollback() {
-  ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" <<'REMOTE_SCRIPT'
-set +e
-edge_path="$1"
-sudo rm -f "${edge_path}/.deploy-manifest"
-REMOTE_SCRIPT
-}
 
 rollback_edge_candidate() {
   local failure_status=$?
@@ -153,6 +151,7 @@ set -euo pipefail
 edge_path="$1"
 archive="$2"
 mode="$3"
+manifest_archive="${archive}.manifest"
 sudo find "${edge_path}" -mindepth 1 -maxdepth 1 ! -name .env ! -name .deploy-manifest -exec rm -rf -- {} +
 sudo tar -xzf "${archive}" -C "${edge_path}"
 cd "${edge_path}"
@@ -160,13 +159,13 @@ compose_files=(-f docker-compose.yml)
 if [[ "${mode}" == "rehearsal" ]]; then compose_files+=(-f docker-compose.rehearsal.yml); fi
 docker compose -p shared-edge "${compose_files[@]}" --env-file .env config >/dev/null
 docker compose -p shared-edge "${compose_files[@]}" --env-file .env up -d
+sudo cp "${manifest_archive}" "${edge_path}/.deploy-manifest"
 REMOTE_SCRIPT
     rollback_status=$?
   fi
 
   if [[ "${rollback_status}" -ne 0 ]]; then
-    echo "Edge rollback failed; invalidating deployment manifest." >&2
-    invalidate_failed_rollback || true
+    echo "Edge rollback failed; live deployment remains untrusted because no manifest is present." >&2
   fi
   exit "${failure_status}"
 }
