@@ -38,6 +38,9 @@ describe('independent edge infrastructure contract', () => {
   });
 
   it('uses the canonical production Zeiterfassung container and migrates only the known legacy upstream', () => {
+    expect(compose).toContain(
+      'ZEITERFASSUNG_UPSTREAM: ${ZEITERFASSUNG_UPSTREAM:-zeiterfassung-app-1:3040}',
+    );
     expect(envExample).toContain('ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040');
     expect(envExample).not.toContain('ZEITERFASSUNG_UPSTREAM=app:3040');
     expect(deployWorkflow).toContain('legacy_zt="ZEITERFASSUNG_UPSTREAM=app:3040"');
