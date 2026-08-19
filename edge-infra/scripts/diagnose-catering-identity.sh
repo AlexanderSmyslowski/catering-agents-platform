@@ -318,7 +318,7 @@ PYTHON
     probe_from_edge \
       "Catering diagnostic direct-web" \
       "${edge_container}" \
-      'http://web:80/api/intake/health' \
+      'http://web:8081/api/intake/health' \
       true \
       "${auth_b64}"
   fi

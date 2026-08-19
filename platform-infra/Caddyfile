@@ -11,7 +11,7 @@
 	header_up X-Catering-Business-Id {$CATERING_DEFAULT_BUSINESS_ID}
 }
 
-{$CATERING_SITE_ADDRESS::80} {
+{$CATERING_SITE_ADDRESS::80}, :8081 {
 	root * /srv
 	encode zstd gzip
 
