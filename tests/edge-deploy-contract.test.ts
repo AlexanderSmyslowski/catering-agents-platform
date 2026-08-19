@@ -129,6 +129,19 @@ describe('edge deploy safety contract', () => {
     expect(successBranch).toBeGreaterThan(signalsIgnored);
   });
 
+  it('allows an omitted Zeiterfassung upstream while rejecting duplicate definitions', () => {
+    const migrationStart = deploy.indexOf('migrate_legacy_zeiterfassung_upstream() {');
+    const migrationEnd = deploy.indexOf('\n}\n\nrelease_edge_lock() {', migrationStart);
+    const migrationBody = deploy.slice(migrationStart, migrationEnd);
+    expect(migrationStart).toBeGreaterThanOrEqual(0);
+    expect(migrationEnd).toBeGreaterThan(migrationStart);
+    expect(migrationBody).toContain('if [[ "$zt_count" -gt 1 ]]');
+    expect(migrationBody).toContain('duplicate Zeiterfassung upstream definitions; refusing migration');
+    expect(migrationBody).toContain('if [[ "$zt_count" = "0" ]]');
+    expect(migrationBody).toContain('Compose default remains canonical');
+    expect(migrationBody).not.toContain('test "$zt_count" = "1"');
+  });
+
   it('serializes every edge deployment on the host for the full mutation window', () => {
     expect(deploy).toContain('EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"');
     expect(deploy).toContain('acquire_edge_lock');
