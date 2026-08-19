@@ -3,7 +3,11 @@
 }
 
 http://{$CATERING_PUBLIC_HOST} {
-  reverse_proxy {$CATERING_UPSTREAM}
+  reverse_proxy {$CATERING_UPSTREAM} {
+    transport http {
+      tls_server_name {$CATERING_PUBLIC_HOST}
+    }
+  }
 }
 
 http://{$ZEITERFASSUNG_PUBLIC_HOST} {
