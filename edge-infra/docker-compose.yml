@@ -10,7 +10,7 @@ services:
     environment:
       CADDY_EMAIL: ${CADDY_EMAIL:?set CADDY_EMAIL}
       CATERING_PUBLIC_HOST: ${CATERING_PUBLIC_HOST:-catering.the-one.catering}
-      CATERING_UPSTREAM: ${CATERING_UPSTREAM:-https://web:443}
+      CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:80}
       ZEITERFASSUNG_PUBLIC_HOST: ${ZEITERFASSUNG_PUBLIC_HOST:-zeit.the-one.catering}
       ZEITERFASSUNG_UPSTREAM: ${ZEITERFASSUNG_UPSTREAM:-zeiterfassung-app-1:3040}
       EVENTOS_PUBLIC_HOST: ${EVENTOS_PUBLIC_HOST:-eventos.commcats.de}
