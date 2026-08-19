@@ -91,10 +91,10 @@ set -euo pipefail
 lock_path="$1"
 commit_sha="$2"
 mode="$3"
-if ! mkdir "${lock_path}" 2>/dev/null; then
+if ! sudo mkdir "${lock_path}" 2>/dev/null; then
   echo "Another shared-edge deployment holds ${lock_path}. Inspect and clear it only after confirming no deploy is running." >&2
-  if [[ -f "${lock_path}/owner" ]]; then
-    cat "${lock_path}/owner" >&2 || true
+  if sudo test -f "${lock_path}/owner"; then
+    sudo cat "${lock_path}/owner" >&2 || true
   fi
   exit 1
 fi
@@ -102,7 +102,7 @@ printf '%s\n' \
   "commit=${commit_sha}" \
   "mode=${mode}" \
   "acquired_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  >"${lock_path}/owner"
+  | sudo tee "${lock_path}/owner" >/dev/null
 REMOTE_SCRIPT
   EDGE_LOCK_HELD=true
 }
@@ -114,8 +114,8 @@ release_edge_lock() {
   ssh "${REMOTE}" bash -s -- "${EDGE_LOCK_PATH}" <<'REMOTE_SCRIPT'
 set -euo pipefail
 lock_path="$1"
-rm -f "${lock_path}/owner"
-rmdir "${lock_path}"
+sudo rm -f "${lock_path}/owner"
+sudo rmdir "${lock_path}"
 REMOTE_SCRIPT
   EDGE_LOCK_HELD=false
 }
