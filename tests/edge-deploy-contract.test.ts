@@ -69,6 +69,16 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]');
   });
 
+  it('arms rollback recovery before revoking live manifest trust', () => {
+    expect(deploy).toContain('revoke_live_manifest');
+    const rollbackTrap = deploy.indexOf("trap 'rollback_edge_candidate' ERR");
+    const revokeCall = deploy.indexOf('revoke_live_manifest', deploy.indexOf("trap 'rollback_edge_candidate' ERR"));
+    const sync = deploy.indexOf('Syncing edge source');
+    expect(rollbackTrap).toBeGreaterThanOrEqual(0);
+    expect(revokeCall).toBeGreaterThan(rollbackTrap);
+    expect(revokeCall).toBeLessThan(sync);
+  });
+
   it('invalidates manifest trust before candidate mutation and restores it only after verified rollback', () => {
     expect(deploy).toContain('manifest_archive="${archive}.manifest"');
     expect(deploy).toContain('sudo cp "${edge_path}/.deploy-manifest" "${manifest_archive}"');
