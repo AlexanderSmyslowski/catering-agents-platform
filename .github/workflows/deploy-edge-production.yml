@@ -61,9 +61,37 @@ jobs:
           if ssh "$remote" "sudo test -f /opt/shared-edge/.env"; then
             echo "Protected edge .env already present; leaving it unchanged."
           else
-            ssh "$remote" "sudo install -d -m 0755 /opt/shared-edge && sudo tee /opt/shared-edge/.env >/dev/null && sudo chmod 0600 /opt/shared-edge/.env" < edge-infra/.env.example
-            ssh "$remote" "sudo stat -c '%a' /opt/shared-edge/.env" | grep -qx '600'
-            echo "Protected edge .env bootstrapped from edge-only rehearsal defaults."
+            remote_tmp="/tmp/shared-edge.env.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+            scp edge-infra/.env.example "$remote:$remote_tmp"
+            ssh "$remote" bash -s -- "$remote_tmp" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          tmp="$1"
+          edge_path="/opt/shared-edge"
+          pending="${edge_path}/.env.pending.$$"
+          cleanup() {
+            rm -f "$tmp"
+            if [[ -n "${pending:-}" ]]; then
+              sudo rm -f "$pending"
+            fi
+          }
+          trap cleanup EXIT
+
+          if sudo test -f "${edge_path}/.env"; then
+            echo "Protected edge .env appeared concurrently; leaving it unchanged."
+            exit 0
+          fi
+
+          deploy_uid="$(id -u)"
+          deploy_gid="$(id -g)"
+          sudo install -d -m 0755 "$edge_path"
+          sudo install -o "$deploy_uid" -g "$deploy_gid" -m 0600 "$tmp" "$pending"
+          cmp -s "$tmp" "$pending"
+          test "$(stat -c '%a %u %g' "$pending")" = "600 ${deploy_uid} ${deploy_gid}"
+          sudo mv -f "$pending" "${edge_path}/.env"
+          pending=""
+          test "$(stat -c '%a %u %g' "${edge_path}/.env")" = "600 ${deploy_uid} ${deploy_gid}"
+          REMOTE_SCRIPT
+            echo "Protected edge .env bootstrapped atomically from edge-only rehearsal defaults."
           fi
 
       - name: Deploy exact edge commit
