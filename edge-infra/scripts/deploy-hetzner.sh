@@ -140,7 +140,9 @@ rollback_edge_candidate() {
   local failure_status=$?
   if [[ $# -gt 0 ]]; then failure_status="$1"; fi
   local rollback_status=0
-  trap - ERR TERM INT HUP
+  EDGE_RECOVERY_REQUIRED=true
+  trap - ERR
+  trap '' TERM INT HUP
   set +e
   echo "Edge candidate failed; restoring only shared-edge." >&2
 
@@ -178,8 +180,9 @@ REMOTE_SCRIPT
   fi
 
   if [[ "${rollback_status}" -ne 0 ]]; then
-    EDGE_RECOVERY_REQUIRED=true
     echo "Edge rollback failed; live deployment remains untrusted because no manifest is present." >&2
+  else
+    EDGE_RECOVERY_REQUIRED=false
   fi
   exit "${failure_status}"
 }
