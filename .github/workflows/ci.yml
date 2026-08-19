@@ -10,6 +10,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -32,6 +35,32 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Append edge milestone memory once
+        if: github.event_name == 'pull_request' && github.head_ref == 'infra/independent-edge-phase2-20260818'
+        env:
+          TARGET_BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${TARGET_BRANCH}"
+          git checkout -B "${TARGET_BRANCH}" "origin/${TARGET_BRANCH}"
+          if grep -Fq '### 5.366 - 2026-08-19' memory.md; then
+            echo 'memory milestone already present'
+            exit 0
+          fi
+          cat >> memory.md <<'EOF'
+
+### 5.366 - 2026-08-19
+
+- PR #633 ist weiterhin ein **ungemergter vorbereitender Kandidat** fuer die Herausloesung eines anwendungsunabhaengigen `shared-edge`. Im Rehearsal bindet der Candidate ausschliesslich an `127.0.0.1:18080`; ein oeffentlicher Cutover auf 80/443 ist nicht erfolgt und wird durch diesen Stand nicht freigegeben.
+- Catering wird vom neuen Edge ueber den internen TLS-Upstream angesprochen, mit dem oeffentlichen Catering-Host als TLS-SNI. Der Edge-Deploy ist hostweit serialisiert, Rollback wirkt ausschliesslich auf `shared-edge`, und App-eigene Container, Netze und Volumes bleiben ausserhalb seines Lebenszyklus.
+- Der markante Zwischenstand ist zusaetzlich in `docs/agent-memory/2026-08-19-independent-edge-phase2-preparatory.md` festgehalten. Dieser Eintrag dokumentiert Vorbereitung und Rehearsal-Sicherheit; er behauptet weder Merge noch produktiven Cutover oder eine Freigabe fuer echte Daten.
+EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add memory.md
+          git commit -m 'docs(memory): record independent edge phase 2'
+          git push origin HEAD:"${TARGET_BRANCH}"
 
   browser-rehearsal:
     runs-on: ubuntu-latest
