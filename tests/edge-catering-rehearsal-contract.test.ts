@@ -23,6 +23,16 @@ describe('edge Catering rehearsal contract', () => {
     expect(productionCaddy).not.toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
   });
 
+  it('uses the actual shared-edge Catering route host for candidate probes, not the public smoke URL host', () => {
+    expect(deploy).toContain('resolve_catering_rehearsal_host()');
+    expect(deploy).toContain("grep -c '^CATERING_PUBLIC_HOST='");
+    expect(deploy).toContain('Protected edge .env contains duplicate Catering public-host definitions; refusing rehearsal.');
+    expect(deploy).toContain('catering.the-one.catering');
+    expect(deploy).toContain('CATERING_REHEARSAL_HOST="$(resolve_catering_rehearsal_host)"');
+    expect(deploy).toContain('probe_catering_json "Rehearsal Catering" "${CATERING_REHEARSAL_HOST}" "/api/intake/health"');
+    expect(deploy).not.toContain('probe_catering_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"');
+  });
+
   it('authenticates and verifies the exact Intake service identity on the candidate listener', () => {
     expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
     expect(rehearsalCaddy).not.toMatch(/basic_auth|basicauth/);
@@ -34,7 +44,7 @@ describe('edge Catering rehearsal contract', () => {
     expect(deploy).toContain('json.load');
     expect(deploy).toContain('payload.get("status") != "ok"');
     expect(deploy).toContain('payload.get("service") != "intake-service"');
-    expect(deploy).toContain('probe_catering_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"');
+    expect(deploy).toContain('probe_catering_json "Rehearsal Catering" "${CATERING_REHEARSAL_HOST}" "/api/intake/health"');
 
     expect(deploy).not.toContain('probe_status_ok_json "Rehearsal Catering"');
     expect(deploy).not.toContain('probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/" "200"');
