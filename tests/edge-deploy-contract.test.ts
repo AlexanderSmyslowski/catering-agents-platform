@@ -56,6 +56,15 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain("printf 'NONE\\trehearsal\\n'");
   });
 
+  it('revokes an orphaned manifest before entering bootstrap mode', () => {
+    const bootstrapGuard = deploy.indexOf('if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]');
+    const bootstrapEnd = deploy.indexOf("printf 'NONE\\trehearsal\\n'", bootstrapGuard);
+    const revoke = deploy.indexOf('sudo rm -f "${edge_path}/.deploy-manifest"', bootstrapGuard);
+    expect(bootstrapGuard).toBeGreaterThanOrEqual(0);
+    expect(revoke).toBeGreaterThan(bootstrapGuard);
+    expect(revoke).toBeLessThan(bootstrapEnd);
+  });
+
   it('never promotes a failed first-bootstrap candidate into a rollback point', () => {
     expect(deploy).toContain('if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]');
   });
