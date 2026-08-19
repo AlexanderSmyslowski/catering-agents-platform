@@ -117,6 +117,18 @@ describe('edge deploy safety contract', () => {
     expect(clearSignals).toBeGreaterThan(recordManifest);
   });
 
+  it('keeps recovery armed and ignores follow-up termination signals until rollback succeeds', () => {
+    const rollbackStart = deploy.indexOf('rollback_edge_candidate() {');
+    const rollbackEnd = deploy.indexOf('\n}\n\ntrap \'rollback_edge_candidate\' ERR', rollbackStart);
+    const rollbackBody = deploy.slice(rollbackStart, rollbackEnd);
+    const recoveryArmed = rollbackBody.indexOf('EDGE_RECOVERY_REQUIRED=true');
+    const signalsIgnored = rollbackBody.indexOf("trap '' TERM INT HUP");
+    const successBranch = rollbackBody.indexOf('EDGE_RECOVERY_REQUIRED=false', recoveryArmed + 1);
+    expect(recoveryArmed).toBeGreaterThanOrEqual(0);
+    expect(signalsIgnored).toBeGreaterThan(recoveryArmed);
+    expect(successBranch).toBeGreaterThan(signalsIgnored);
+  });
+
   it('serializes every edge deployment on the host for the full mutation window', () => {
     expect(deploy).toContain('EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"');
     expect(deploy).toContain('acquire_edge_lock');
