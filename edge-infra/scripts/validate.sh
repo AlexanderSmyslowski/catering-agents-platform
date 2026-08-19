@@ -14,7 +14,5 @@ test -f "${EDGE_ENV_FILE}" || {
 
 docker compose -p shared-edge --env-file "${EDGE_ENV_FILE}" config >/dev/null
 
-docker run --rm \
-  --env-file "${EDGE_ENV_FILE}" \
-  -v "${EDGE_DIR}/Caddyfile:/etc/caddy/Caddyfile:ro" \
-  caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+docker compose -p shared-edge --env-file "${EDGE_ENV_FILE}" \
+  run --rm --no-deps --entrypoint caddy edge validate --config /etc/caddy/Caddyfile
