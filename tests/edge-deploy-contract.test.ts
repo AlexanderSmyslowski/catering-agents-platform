@@ -129,6 +129,19 @@ describe('edge deploy safety contract', () => {
     expect(successBranch).toBeGreaterThan(signalsIgnored);
   });
 
+  it('allows an omitted Zeiterfassung upstream while rejecting duplicate definitions', () => {
+    const migrationStart = deploy.indexOf('migrate_legacy_zeiterfassung_upstream() {');
+    const migrationEnd = deploy.indexOf('\n}\n\nrelease_edge_lock() {', migrationStart);
+    const migrationBody = deploy.slice(migrationStart, migrationEnd);
+    expect(migrationStart).toBeGreaterThanOrEqual(0);
+    expect(migrationEnd).toBeGreaterThan(migrationStart);
+    expect(migrationBody).toContain('if [[ "$zt_count" -gt 1 ]]');
+    expect(migrationBody).toContain('duplicate Zeiterfassung upstream definitions; refusing migration');
+    expect(migrationBody).toContain('if [[ "$zt_count" = "0" ]]');
+    expect(migrationBody).toContain('Compose default remains canonical');
+    expect(migrationBody).not.toContain('test "$zt_count" = "1"');
+  });
+
   it('serializes every edge deployment on the host for the full mutation window', () => {
     expect(deploy).toContain('EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"');
     expect(deploy).toContain('acquire_edge_lock');
@@ -139,9 +152,12 @@ describe('edge deploy safety contract', () => {
   });
 
   it('restores only the previous shared-edge candidate after post-start failure', () => {
-    expect(deploy).toContain('rollback_edge_candidate');
-    expect(deploy).toContain("trap 'rollback_edge_candidate' ERR");
-    expect(deploy).toContain('shared-edge');
-    expect(deploy).not.toMatch(/platform-infra.*up|zeiterfassung.*up|eventos.*up/);
+    const rollbackStart = deploy.indexOf('rollback_edge_candidate() {');
+    const rollbackEnd = deploy.indexOf('\n}\n\ntrap \'rollback_edge_candidate\' ERR', rollbackStart);
+    const rollbackBody = deploy.slice(rollbackStart, rollbackEnd);
+    expect(rollbackStart).toBeGreaterThanOrEqual(0);
+    expect(rollbackEnd).toBeGreaterThan(rollbackStart);
+    expect(rollbackBody).toContain('shared-edge');
+    expect(rollbackBody).not.toMatch(/platform-infra.*up|zeiterfassung.*up|eventos.*up/);
   });
 });

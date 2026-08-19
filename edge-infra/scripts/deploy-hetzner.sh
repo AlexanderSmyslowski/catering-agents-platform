@@ -86,6 +86,61 @@ REMOTE_SCRIPT
   EDGE_LOCK_HELD=true
 }
 
+migrate_legacy_zeiterfassung_upstream() {
+  ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" <<'REMOTE_SCRIPT'
+set -euo pipefail
+edge_path="$1"
+env_file="${edge_path}/.env"
+legacy_zt="ZEITERFASSUNG_UPSTREAM=app:3040"
+canonical_zt="ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040"
+pending="${edge_path}/.env.pending.$$"
+local_tmp="$(mktemp)"
+cleanup() {
+  rm -f "$local_tmp"
+  sudo rm -f "$pending"
+}
+trap cleanup EXIT
+
+test -f "$env_file"
+zt_count="$(grep -c '^ZEITERFASSUNG_UPSTREAM=' "$env_file" || true)"
+if [[ "$zt_count" -gt 1 ]]; then
+  echo "Protected edge .env contains duplicate Zeiterfassung upstream definitions; refusing migration." >&2
+  exit 1
+fi
+if [[ "$zt_count" = "0" ]]; then
+  echo "Protected edge .env omits Zeiterfassung upstream; Compose default remains canonical."
+  exit 0
+fi
+
+if grep -Fxq "$canonical_zt" "$env_file"; then
+  echo "Protected edge .env already uses canonical Zeiterfassung upstream."
+  exit 0
+fi
+
+if ! grep -Fxq "$legacy_zt" "$env_file"; then
+  echo "Protected edge .env contains an operator-defined Zeiterfassung upstream; leaving it unchanged."
+  exit 0
+fi
+
+awk -v legacy="$legacy_zt" -v canonical="$canonical_zt" '
+  $0 == legacy { print canonical; next }
+  { print }
+' "$env_file" > "$local_tmp"
+
+deploy_uid="$(id -u)"
+deploy_gid="$(id -g)"
+sudo install -o "$deploy_uid" -g "$deploy_gid" -m 0600 "$local_tmp" "$pending"
+grep -Fxq "$canonical_zt" "$pending"
+! grep -Fxq "$legacy_zt" "$pending"
+test "$(stat -c '%a %u %g' "$pending")" = "600 ${deploy_uid} ${deploy_gid}"
+sudo mv -f "$pending" "${edge_path}/.env"
+pending=""
+test "$(stat -c '%a %u %g' "$env_file")" = "600 ${deploy_uid} ${deploy_gid}"
+grep -Fxq "$canonical_zt" "$env_file"
+echo "Protected edge .env Zeiterfassung upstream migrated atomically."
+REMOTE_SCRIPT
+}
+
 release_edge_lock() {
   if [[ "${EDGE_LOCK_HELD}" != "true" ]]; then return 0; fi
   if [[ "${EDGE_RECOVERY_REQUIRED}" == "true" ]]; then
@@ -103,6 +158,7 @@ REMOTE_SCRIPT
 
 trap 'release_edge_lock' EXIT
 acquire_edge_lock
+migrate_legacy_zeiterfassung_upstream
 
 echo "Creating edge rollback snapshot..."
 ROLLBACK_INFO="$(ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" "${EDGE_ROLLBACK_ROOT}" <<'REMOTE_SCRIPT'

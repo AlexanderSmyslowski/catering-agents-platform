@@ -4,6 +4,11 @@ import { describe, expect, it } from 'vitest';
 const compose = readFileSync(new URL('../edge-infra/docker-compose.yml', import.meta.url), 'utf8');
 const caddy = readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url), 'utf8');
 const rehearsalCaddy = readFileSync(new URL('../edge-infra/Caddyfile.rehearsal', import.meta.url), 'utf8');
+const envExample = readFileSync(new URL('../edge-infra/.env.example', import.meta.url), 'utf8');
+const deployScript = readFileSync(
+  new URL('../edge-infra/scripts/deploy-hetzner.sh', import.meta.url),
+  'utf8',
+);
 
 describe('independent edge infrastructure contract', () => {
   it('owns only edge resources and the two temporary compatibility networks', () => {
@@ -30,5 +35,31 @@ describe('independent edge infrastructure contract', () => {
     for (const config of [caddy, rehearsalCaddy]) {
       expect(config).toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
     }
+  });
+
+  it('uses the canonical production Zeiterfassung container and migrates only the known legacy upstream under the host lock', () => {
+    expect(compose).toContain(
+      'ZEITERFASSUNG_UPSTREAM: ${ZEITERFASSUNG_UPSTREAM:-zeiterfassung-app-1:3040}',
+    );
+    expect(envExample).toContain('ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040');
+    expect(envExample).not.toContain('ZEITERFASSUNG_UPSTREAM=app:3040');
+
+    const acquireIndex = deployScript.indexOf('acquire_edge_lock\n');
+    const migrateCallIndex = deployScript.indexOf('migrate_legacy_zeiterfassung_upstream\n');
+    const snapshotIndex = deployScript.indexOf('echo "Creating edge rollback snapshot..."');
+    expect(acquireIndex).toBeGreaterThan(-1);
+    expect(migrateCallIndex).toBeGreaterThan(acquireIndex);
+    expect(snapshotIndex).toBeGreaterThan(migrateCallIndex);
+
+    const migrationStart = deployScript.indexOf('migrate_legacy_zeiterfassung_upstream() {');
+    const migrationEnd = deployScript.indexOf('\n}\n\nrelease_edge_lock() {', migrationStart);
+    const migration = deployScript.slice(migrationStart, migrationEnd + 3);
+    expect(migrationStart).toBeGreaterThan(-1);
+    expect(migrationEnd).toBeGreaterThan(migrationStart);
+    expect(migration).toContain('legacy_zt="ZEITERFASSUNG_UPSTREAM=app:3040"');
+    expect(migration).toContain('canonical_zt="ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040"');
+    expect(migration).toContain('grep -Fxq "$legacy_zt"');
+    expect(migration).toContain('sudo mv -f "$pending" "${edge_path}/.env"');
+    expect(migration).toContain('Protected edge .env Zeiterfassung upstream migrated atomically.');
   });
 });

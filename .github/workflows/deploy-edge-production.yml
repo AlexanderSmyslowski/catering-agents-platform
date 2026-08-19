@@ -59,7 +59,7 @@ jobs:
           set -euo pipefail
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           if ssh "$remote" "sudo test -f /opt/shared-edge/.env"; then
-            echo "Protected edge .env already present; leaving it unchanged."
+            echo "Protected edge .env already present; leaving bootstrap state unchanged."
           else
             remote_tmp="/tmp/shared-edge.env.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
             scp edge-infra/.env.example "$remote:$remote_tmp"
