@@ -56,6 +56,15 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain("printf 'NONE\\trehearsal\\n'");
   });
 
+  it('serializes every edge deployment on the host for the full mutation window', () => {
+    expect(deploy).toContain('EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"');
+    expect(deploy).toContain('acquire_edge_lock');
+    expect(deploy).toContain('release_edge_lock');
+    expect(deploy).toContain("trap 'release_edge_lock' EXIT");
+    expect(deploy.indexOf('acquire_edge_lock')).toBeLessThan(deploy.indexOf('Creating edge rollback snapshot'));
+    expect(deploy.indexOf('Recording edge deployment manifest')).toBeLessThan(deploy.lastIndexOf('release_edge_lock'));
+  });
+
   it('restores only the previous shared-edge candidate after post-start failure', () => {
     expect(deploy).toContain('rollback_edge_candidate');
     expect(deploy).toContain("trap 'rollback_edge_candidate' ERR");
