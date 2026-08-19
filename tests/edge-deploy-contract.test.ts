@@ -56,13 +56,15 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain("printf 'NONE\\trehearsal\\n'");
   });
 
-  it('revokes an orphaned manifest before entering bootstrap mode', () => {
+  it('keeps bootstrap snapshot read-only and revokes orphaned trust only after recovery is armed', () => {
     const bootstrapGuard = deploy.indexOf('if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]');
     const bootstrapEnd = deploy.indexOf("printf 'NONE\\trehearsal\\n'", bootstrapGuard);
-    const revoke = deploy.indexOf('sudo rm -f "${edge_path}/.deploy-manifest"', bootstrapGuard);
+    const rollbackTrap = deploy.indexOf("trap 'rollback_edge_candidate' ERR");
+    const revokeCall = deploy.indexOf('\nrevoke_live_manifest\n', rollbackTrap);
     expect(bootstrapGuard).toBeGreaterThanOrEqual(0);
-    expect(revoke).toBeGreaterThan(bootstrapGuard);
-    expect(revoke).toBeLessThan(bootstrapEnd);
+    expect(bootstrapEnd).toBeGreaterThan(bootstrapGuard);
+    expect(deploy.slice(bootstrapGuard, bootstrapEnd)).not.toContain('sudo rm -f "${edge_path}/.deploy-manifest"');
+    expect(revokeCall).toBeGreaterThan(rollbackTrap);
   });
 
   it('never promotes a failed first-bootstrap candidate into a rollback point', () => {
@@ -72,7 +74,7 @@ describe('edge deploy safety contract', () => {
   it('arms rollback recovery before revoking live manifest trust', () => {
     expect(deploy).toContain('revoke_live_manifest');
     const rollbackTrap = deploy.indexOf("trap 'rollback_edge_candidate' ERR");
-    const revokeCall = deploy.indexOf('revoke_live_manifest', deploy.indexOf("trap 'rollback_edge_candidate' ERR"));
+    const revokeCall = deploy.indexOf('\nrevoke_live_manifest\n', rollbackTrap);
     const sync = deploy.indexOf('Syncing edge source');
     expect(rollbackTrap).toBeGreaterThanOrEqual(0);
     expect(revokeCall).toBeGreaterThan(rollbackTrap);
@@ -83,7 +85,8 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('manifest_archive="${archive}.manifest"');
     expect(deploy).toContain('sudo cp "${edge_path}/.deploy-manifest" "${manifest_archive}"');
     expect(deploy).toContain('sudo rm -f "${edge_path}/.deploy-manifest"');
-    expect(deploy.indexOf('sudo rm -f "${edge_path}/.deploy-manifest"')).toBeLessThan(deploy.indexOf('Syncing edge source'));
+    const revokeCall = deploy.indexOf('\nrevoke_live_manifest\n');
+    expect(revokeCall).toBeLessThan(deploy.indexOf('Syncing edge source'));
     expect(deploy).toContain('sudo cp "${manifest_archive}" "${edge_path}/.deploy-manifest"');
   });
 
