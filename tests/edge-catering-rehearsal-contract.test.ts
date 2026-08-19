@@ -6,25 +6,24 @@ const rehearsalCaddy = readFileSync(new URL('../edge-infra/Caddyfile.rehearsal',
 const productionCaddy = readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url), 'utf8');
 const edgeEnv = readFileSync(new URL('../edge-infra/.env.example', import.meta.url), 'utf8');
 const edgeCompose = readFileSync(new URL('../edge-infra/docker-compose.yml', import.meta.url), 'utf8');
+const rehearsalCompose = readFileSync(new URL('../edge-infra/docker-compose.rehearsal.yml', import.meta.url), 'utf8');
 const platformCompose = readFileSync(new URL('../platform-infra/docker-compose.yml', import.meta.url), 'utf8');
 const platformCaddy = readFileSync(new URL('../platform-infra/Caddyfile', import.meta.url), 'utf8');
 
 describe('edge Catering rehearsal contract', () => {
-  it('uses a dedicated app-owned internal HTTP listener that cannot redirect through the public site', () => {
+  it('uses the existing app TLS listener until the dedicated internal HTTP listener is deployed', () => {
     expect(platformCompose).toContain('CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}');
     expect(platformCaddy).toContain('{$CATERING_SITE_ADDRESS::80}, :8081 {');
 
     expect(edgeEnv).toContain('CATERING_APP_UPSTREAM=http://web:8081');
-    expect(edgeEnv).not.toMatch(/^CATERING_APP_UPSTREAM=http:\/\/web:80$/m);
-    expect(edgeEnv).not.toContain('CATERING_UPSTREAM=https://web:443');
-
     expect(edgeCompose).toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:8081}');
-    expect(edgeCompose).not.toMatch(/^\s*CATERING_UPSTREAM: \$\{CATERING_APP_UPSTREAM:-http:\/\/web:80\}$/m);
-    expect(edgeCompose).not.toContain('CATERING_UPSTREAM: ${CATERING_UPSTREAM:-https://web:443}');
 
+    expect(rehearsalCompose).toContain('CATERING_UPSTREAM: https://web:443');
     expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
+    expect(rehearsalCaddy).toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
+    expect(rehearsalCaddy).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
+
     expect(productionCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
-    expect(rehearsalCaddy).not.toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
     expect(productionCaddy).not.toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
   });
 
