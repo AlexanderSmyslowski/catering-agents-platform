@@ -33,8 +33,8 @@ describe('independent edge infrastructure contract', () => {
 
   it('uses the canonical Catering internal HTTP listener without an unnecessary TLS hop', () => {
     expect(platformCompose).toContain('CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}');
-    expect(compose).toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:80}');
-    expect(envExample).toContain('CATERING_APP_UPSTREAM=http://web:80');
+    expect(compose).toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:8081}');
+    expect(envExample).toContain('CATERING_APP_UPSTREAM=http://web:8081');
     expect(envExample).not.toContain('CATERING_UPSTREAM=https://web:443');
     for (const config of [caddy, rehearsalCaddy]) {
       expect(config).not.toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
