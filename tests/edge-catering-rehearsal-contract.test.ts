@@ -15,11 +15,11 @@ describe('edge Catering rehearsal contract', () => {
     expect(platformCaddy).toContain('{$CATERING_SITE_ADDRESS::80}, :8081 {');
 
     expect(edgeEnv).toContain('CATERING_APP_UPSTREAM=http://web:8081');
-    expect(edgeEnv).not.toContain('CATERING_APP_UPSTREAM=http://web:80');
+    expect(edgeEnv).not.toMatch(/^CATERING_APP_UPSTREAM=http:\/\/web:80$/m);
     expect(edgeEnv).not.toContain('CATERING_UPSTREAM=https://web:443');
 
     expect(edgeCompose).toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:8081}');
-    expect(edgeCompose).not.toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:80}');
+    expect(edgeCompose).not.toMatch(/^\s*CATERING_UPSTREAM: \$\{CATERING_APP_UPSTREAM:-http:\/\/web:80\}$/m);
     expect(edgeCompose).not.toContain('CATERING_UPSTREAM: ${CATERING_UPSTREAM:-https://web:443}');
 
     expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
