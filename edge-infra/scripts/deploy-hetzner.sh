@@ -52,9 +52,6 @@ if [[ "${EDGE_MODE}" == "rehearsal" ]]; then
   CADDY_CONFIG_FILE="Caddyfile.rehearsal"
 fi
 
-# Validate repository source before any remote write. The example environment is
-# intentionally non-secret. Protected production values are never wholesale
-# injected into the validator below.
 (
   cd "${EDGE_DIR}"
   docker compose "${LOCAL_COMPOSE_ARGS[@]}" --env-file .env.example config >/dev/null
@@ -64,25 +61,12 @@ fi
     caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 )
 
-# Fail closed before touching remote files.
 ssh "${REMOTE}" "
   set -euo pipefail
-  command -v curl >/dev/null 2>&1 || {
-    echo 'curl is required for local edge rehearsal probes.' >&2
-    exit 1
-  }
-  docker network inspect platform-infra_default >/dev/null 2>&1 || {
-    echo 'Missing required external Docker network: platform-infra_default' >&2
-    exit 1
-  }
-  docker network inspect zeiterfassung_default >/dev/null 2>&1 || {
-    echo 'Missing required external Docker network: zeiterfassung_default' >&2
-    exit 1
-  }
-  test -f '${EDGE_DEPLOY_PATH}/.env' || {
-    echo 'Missing protected edge .env on server.' >&2
-    exit 1
-  }
+  command -v curl >/dev/null 2>&1 || { echo 'curl is required for local edge rehearsal probes.' >&2; exit 1; }
+  docker network inspect platform-infra_default >/dev/null 2>&1 || { echo 'Missing required external Docker network: platform-infra_default' >&2; exit 1; }
+  docker network inspect zeiterfassung_default >/dev/null 2>&1 || { echo 'Missing required external Docker network: zeiterfassung_default' >&2; exit 1; }
+  test -f '${EDGE_DEPLOY_PATH}/.env' || { echo 'Missing protected edge .env on server.' >&2; exit 1; }
 "
 
 acquire_edge_lock() {
@@ -93,24 +77,16 @@ commit_sha="$2"
 mode="$3"
 if ! sudo mkdir "${lock_path}" 2>/dev/null; then
   echo "Another shared-edge deployment holds ${lock_path}. Inspect and clear it only after confirming no deploy is running." >&2
-  if sudo test -f "${lock_path}/owner"; then
-    sudo cat "${lock_path}/owner" >&2 || true
-  fi
+  if sudo test -f "${lock_path}/owner"; then sudo cat "${lock_path}/owner" >&2 || true; fi
   exit 1
 fi
-printf '%s\n' \
-  "commit=${commit_sha}" \
-  "mode=${mode}" \
-  "acquired_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  | sudo tee "${lock_path}/owner" >/dev/null
+printf '%s\n' "commit=${commit_sha}" "mode=${mode}" "acquired_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | sudo tee "${lock_path}/owner" >/dev/null
 REMOTE_SCRIPT
   EDGE_LOCK_HELD=true
 }
 
 release_edge_lock() {
-  if [[ "${EDGE_LOCK_HELD}" != "true" ]]; then
-    return 0
-  fi
+  if [[ "${EDGE_LOCK_HELD}" != "true" ]]; then return 0; fi
   ssh "${REMOTE}" bash -s -- "${EDGE_LOCK_PATH}" <<'REMOTE_SCRIPT'
 set -euo pipefail
 lock_path="$1"
@@ -133,29 +109,29 @@ if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manif
   printf 'NONE\trehearsal\n'
   exit 0
 fi
-
 previous_mode="rehearsal"
-if [[ -f "${edge_path}/.deploy-manifest" ]]; then
-  manifest_mode="$(sed -n 's/^mode=//p' "${edge_path}/.deploy-manifest" | tail -n 1)"
-  if [[ "${manifest_mode}" == "rehearsal" || "${manifest_mode}" == "cutover" ]]; then
-    previous_mode="${manifest_mode}"
-  fi
-fi
-
+manifest_mode="$(sed -n 's/^mode=//p' "${edge_path}/.deploy-manifest" | tail -n 1)"
+if [[ "${manifest_mode}" == "rehearsal" || "${manifest_mode}" == "cutover" ]]; then previous_mode="${manifest_mode}"; fi
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 archive="${rollback_root}/shared-edge-${timestamp}.tar.gz"
-sudo tar -czf "${archive}" \
-  --exclude=./.env \
-  --exclude=./.deploy-manifest \
-  -C "${edge_path}" .
+sudo tar -czf "${archive}" --exclude=./.env --exclude=./.deploy-manifest -C "${edge_path}" .
 printf '%s\n' "${archive}" | sudo tee "${rollback_root}/latest" >/dev/null
 printf '%s\t%s\n' "${archive}" "${previous_mode}"
 REMOTE_SCRIPT
 )"
 IFS=$'\t' read -r ROLLBACK_ARCHIVE ROLLBACK_MODE <<<"${ROLLBACK_INFO}"
 
+invalidate_failed_rollback() {
+  ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" <<'REMOTE_SCRIPT'
+set +e
+edge_path="$1"
+sudo rm -f "${edge_path}/.deploy-manifest"
+REMOTE_SCRIPT
+}
+
 rollback_edge_candidate() {
   local failure_status=$?
+  local rollback_status=0
   trap - ERR
   set +e
   echo "Edge candidate failed; restoring only shared-edge." >&2
@@ -167,146 +143,94 @@ edge_path="$1"
 mode="$2"
 cd "${edge_path}"
 compose_files=(-f docker-compose.yml)
-if [[ "${mode}" == "rehearsal" ]]; then
-  compose_files+=(-f docker-compose.rehearsal.yml)
-fi
+if [[ "${mode}" == "rehearsal" ]]; then compose_files+=(-f docker-compose.rehearsal.yml); fi
 docker compose -p shared-edge "${compose_files[@]}" --env-file .env stop edge
 REMOTE_SCRIPT
+    rollback_status=$?
   else
-    ssh "${REMOTE}" bash -s -- \
-      "${EDGE_DEPLOY_PATH}" "${ROLLBACK_ARCHIVE}" "${ROLLBACK_MODE}" <<'REMOTE_SCRIPT'
+    ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" "${ROLLBACK_ARCHIVE}" "${ROLLBACK_MODE}" <<'REMOTE_SCRIPT'
 set -euo pipefail
 edge_path="$1"
 archive="$2"
 mode="$3"
-
-sudo find "${edge_path}" -mindepth 1 -maxdepth 1 \
-  ! -name .env ! -name .deploy-manifest -exec rm -rf -- {} +
+sudo find "${edge_path}" -mindepth 1 -maxdepth 1 ! -name .env ! -name .deploy-manifest -exec rm -rf -- {} +
 sudo tar -xzf "${archive}" -C "${edge_path}"
 cd "${edge_path}"
 compose_files=(-f docker-compose.yml)
-if [[ "${mode}" == "rehearsal" ]]; then
-  compose_files+=(-f docker-compose.rehearsal.yml)
-fi
+if [[ "${mode}" == "rehearsal" ]]; then compose_files+=(-f docker-compose.rehearsal.yml); fi
 docker compose -p shared-edge "${compose_files[@]}" --env-file .env config >/dev/null
 docker compose -p shared-edge "${compose_files[@]}" --env-file .env up -d
 REMOTE_SCRIPT
+    rollback_status=$?
   fi
 
+  if [[ "${rollback_status}" -ne 0 ]]; then
+    echo "Edge rollback failed; invalidating deployment manifest." >&2
+    invalidate_failed_rollback || true
+  fi
   exit "${failure_status}"
 }
 
 trap 'rollback_edge_candidate' ERR
 
 echo "Syncing edge source..."
-rsync -az --delete \
-  --rsync-path="${DEPLOY_RSYNC_PATH}" \
-  --exclude ".env" \
-  --exclude ".deploy-manifest" \
-  "${EDGE_DIR}/" "${REMOTE}:${EDGE_DEPLOY_PATH}/"
+rsync -az --delete --rsync-path="${DEPLOY_RSYNC_PATH}" --exclude ".env" --exclude ".deploy-manifest" "${EDGE_DIR}/" "${REMOTE}:${EDGE_DEPLOY_PATH}/"
 
-if [[ "${EDGE_MODE}" == "rehearsal" ]]; then
-  REMOTE_COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rehearsal.yml"
-else
-  REMOTE_COMPOSE_FILES="-f docker-compose.yml"
-fi
+if [[ "${EDGE_MODE}" == "rehearsal" ]]; then REMOTE_COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rehearsal.yml"; else REMOTE_COMPOSE_FILES="-f docker-compose.yml"; fi
 
-# Compose config interpolates the protected file, but the Caddy validator is run
-# as the edge service itself. Only the service's explicit environment whitelist
-# reaches that container; unrelated entries in .env cannot leak into it.
 ssh "${REMOTE}" "
   set -euo pipefail
   cd '${EDGE_DEPLOY_PATH}'
   docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env config >/dev/null
-  docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env \
-    run --rm --no-deps --entrypoint caddy edge validate --config /etc/caddy/Caddyfile
+  docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env run --rm --no-deps --entrypoint caddy edge validate --config /etc/caddy/Caddyfile
   docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env up -d
 "
 
 probe_rehearsal_listener() {
-  ssh "${REMOTE}" bash -s -- \
-    "${ZEITERFASSUNG_SMOKE_HOST}" \
-    "${EVENTOS_SMOKE_HOST}" \
-    "${CATERING_SMOKE_HOST}" <<'REMOTE_SCRIPT'
+  ssh "${REMOTE}" bash -s -- "${ZEITERFASSUNG_SMOKE_HOST}" "${EVENTOS_SMOKE_HOST}" "${CATERING_SMOKE_HOST}" <<'REMOTE_SCRIPT'
 set -euo pipefail
 ZEITERFASSUNG_SMOKE_HOST="$1"
 EVENTOS_SMOKE_HOST="$2"
 CATERING_SMOKE_HOST="$3"
-
 probe() {
-  local label="$1"
-  local host="$2"
-  local path="$3"
-  local expected_status="$4"
-  local status=""
-  local attempt
+  local label="$1" host="$2" path="$3" expected_status="$4" status="" attempt
   for attempt in $(seq 1 15); do
-    status="$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' \
-      --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
-    if [[ "${status}" == "${expected_status}" ]]; then
-      echo "${label}: ok (${status})"
-      return 0
-    fi
+    status="$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    if [[ "${status}" == "${expected_status}" ]]; then echo "${label}: ok (${status})"; return 0; fi
     sleep 1
   done
   echo "${label}: expected ${expected_status}, got ${status:-no response}" >&2
   return 1
 }
-
 probe_ok_json() {
-  local label="$1"
-  local host="$2"
-  local path="$3"
-  local status=""
-  local body_file
-  local attempt
+  local label="$1" host="$2" path="$3" status="" body_file attempt
   body_file="$(mktemp)"
   for attempt in $(seq 1 15); do
     : >"${body_file}"
-    status="$(curl --silent --show-error --max-time 5 --output "${body_file}" --write-out '%{http_code}' \
-      --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
-    if [[ "${status}" == "200" ]] && grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "${body_file}"; then
-      rm -f "${body_file}"
-      echo "${label}: ok (${status}, semantic identity confirmed)"
-      return 0
-    fi
+    status="$(curl --silent --show-error --max-time 5 --output "${body_file}" --write-out '%{http_code}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    if [[ "${status}" == "200" ]] && grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "${body_file}"; then rm -f "${body_file}"; echo "${label}: ok (${status}, semantic identity confirmed)"; return 0; fi
     sleep 1
   done
   rm -f "${body_file}"
   echo "${label}: expected 200 with ok=true, got ${status:-no response}" >&2
   return 1
 }
-
 probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz"
 probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}" "/" "200"
-# Catering's application-owned Caddy keeps Basic Auth. Receiving its 401 without
-# credentials proves that the candidate edge reached the Catering upstream.
 probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/" "401"
 REMOTE_SCRIPT
 }
 
-if [[ "${EDGE_MODE}" == "rehearsal" ]]; then
-  probe_rehearsal_listener
-fi
+if [[ "${EDGE_MODE}" == "rehearsal" ]]; then probe_rehearsal_listener; fi
 
-CATERING_SMOKE_URL="${CATERING_SMOKE_URL}" \
-ZEITERFASSUNG_SMOKE_URL="${ZEITERFASSUNG_SMOKE_URL}" \
-EVENTOS_SMOKE_URL="${EVENTOS_SMOKE_URL}" \
-CATERING_SMOKE_BASIC_AUTH_USER="${CATERING_SMOKE_BASIC_AUTH_USER:-}" \
-CATERING_SMOKE_BASIC_AUTH_PASSWORD="${CATERING_SMOKE_BASIC_AUTH_PASSWORD:-}" \
-bash "${SCRIPT_DIR}/smoke-all.sh"
+CATERING_SMOKE_URL="${CATERING_SMOKE_URL}" ZEITERFASSUNG_SMOKE_URL="${ZEITERFASSUNG_SMOKE_URL}" EVENTOS_SMOKE_URL="${EVENTOS_SMOKE_URL}" CATERING_SMOKE_BASIC_AUTH_USER="${CATERING_SMOKE_BASIC_AUTH_USER:-}" CATERING_SMOKE_BASIC_AUTH_PASSWORD="${CATERING_SMOKE_BASIC_AUTH_PASSWORD:-}" bash "${SCRIPT_DIR}/smoke-all.sh"
 
 echo "Recording edge deployment manifest..."
 ssh "${REMOTE}" "
   set -euo pipefail
   manifest='${EDGE_DEPLOY_PATH}/.deploy-manifest'
   temporary=\"\${manifest}.tmp.\$$\"
-  printf '%s\n' \
-    'commit=${EDGE_DEPLOY_COMMIT_SHA}' \
-    'mode=${EDGE_MODE}' \
-    \"deployed_at=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \
-    'rollback_root=${EDGE_ROLLBACK_ROOT}' \
-    | sudo tee \"\${temporary}\" >/dev/null
+  printf '%s\n' 'commit=${EDGE_DEPLOY_COMMIT_SHA}' 'mode=${EDGE_MODE}' \"deployed_at=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" 'rollback_root=${EDGE_ROLLBACK_ROOT}' | sudo tee \"\${temporary}\" >/dev/null
   sudo mv \"\${temporary}\" \"\${manifest}\"
 "
 
