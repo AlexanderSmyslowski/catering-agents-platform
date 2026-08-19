@@ -60,6 +60,12 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('if [[ ! -f "${edge_path}/docker-compose.yml" || ! -f "${edge_path}/.deploy-manifest" ]]');
   });
 
+  it('invalidates the deployment manifest if restoring the previous edge fails', () => {
+    expect(deploy).toContain('invalidate_failed_rollback');
+    expect(deploy).toContain("trap 'invalidate_failed_rollback' ERR");
+    expect(deploy).toContain('sudo rm -f "${edge_path}/.deploy-manifest"');
+  });
+
   it('serializes every edge deployment on the host for the full mutation window', () => {
     expect(deploy).toContain('EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"');
     expect(deploy).toContain('acquire_edge_lock');
