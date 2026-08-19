@@ -62,7 +62,8 @@ describe('edge deploy safety contract', () => {
 
   it('invalidates the deployment manifest if restoring the previous edge fails', () => {
     expect(deploy).toContain('invalidate_failed_rollback');
-    expect(deploy).toContain("trap 'invalidate_failed_rollback' ERR");
+    expect(deploy).toContain('if [[ "${rollback_status}" -ne 0 ]]');
+    expect(deploy).toContain('invalidate_failed_rollback || true');
     expect(deploy).toContain('sudo rm -f "${edge_path}/.deploy-manifest"');
   });
 
