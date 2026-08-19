@@ -3,8 +3,16 @@ import { describe, expect, it } from 'vitest';
 
 const deploy = readFileSync(new URL('../edge-infra/scripts/deploy-hetzner.sh', import.meta.url), 'utf8');
 const rehearsalCaddy = readFileSync(new URL('../edge-infra/Caddyfile.rehearsal', import.meta.url), 'utf8');
+const productionCaddy = readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url), 'utf8');
 
 describe('edge Catering rehearsal contract', () => {
+  it('preserves the public Catering Host header when proxying to the HTTPS app-owned Caddy', () => {
+    expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
+    expect(rehearsalCaddy).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
+    expect(productionCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
+    expect(productionCaddy).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
+  });
+
   it('authenticates and verifies the exact Intake service identity on the candidate listener', () => {
     expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
     expect(rehearsalCaddy).not.toMatch(/basic_auth|basicauth/);
