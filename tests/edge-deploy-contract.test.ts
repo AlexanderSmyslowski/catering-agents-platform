@@ -38,6 +38,12 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}"');
   });
 
+  it('requires semantic Zeiterfassung identity from the local rehearsal candidate', () => {
+    expect(deploy).toContain('probe_ok_json');
+    expect(deploy).toContain('"ok"[[:space:]]*:[[:space:]]*true');
+    expect(deploy).toContain('probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz"');
+  });
+
   it('validates Caddy through the whitelisted edge service environment only', () => {
     expect(deploy).toContain('run --rm --no-deps --entrypoint caddy edge validate');
     expect(deploy).not.toMatch(/docker run --rm\s+\\?\s*--env-file \.env(?!\.example)/);
