@@ -13,6 +13,8 @@ CATERING_SMOKE_URL="${CATERING_SMOKE_URL:?Set CATERING_SMOKE_URL}"
 ZEITERFASSUNG_SMOKE_URL="${ZEITERFASSUNG_SMOKE_URL:?Set ZEITERFASSUNG_SMOKE_URL}"
 EVENTOS_SMOKE_URL="${EVENTOS_SMOKE_URL:?Set EVENTOS_SMOKE_URL}"
 DEPLOY_RSYNC_PATH="${DEPLOY_RSYNC_PATH:-rsync}"
+CATERING_SMOKE_BASIC_AUTH_USER="${CATERING_SMOKE_BASIC_AUTH_USER:-}"
+CATERING_SMOKE_BASIC_AUTH_PASSWORD="${CATERING_SMOKE_BASIC_AUTH_PASSWORD:-}"
 
 if [[ "${EDGE_MODE}" != "rehearsal" && "${EDGE_MODE}" != "cutover" ]]; then
   echo "EDGE_MODE must be rehearsal or cutover." >&2
@@ -21,6 +23,11 @@ fi
 
 if [[ ! "${EDGE_DEPLOY_COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "EDGE_DEPLOY_COMMIT_SHA must be an exact 40-character Git commit SHA." >&2
+  exit 1
+fi
+
+if [[ "${EDGE_MODE}" == "rehearsal" && ( -z "${CATERING_SMOKE_BASIC_AUTH_USER}" || -z "${CATERING_SMOKE_BASIC_AUTH_PASSWORD}" ) ]]; then
+  echo "CATERING_SMOKE_BASIC_AUTH_USER and CATERING_SMOKE_BASIC_AUTH_PASSWORD are required for rehearsal." >&2
   exit 1
 fi
 
@@ -65,6 +72,7 @@ fi
 ssh "${REMOTE}" "
   set -euo pipefail
   command -v curl >/dev/null 2>&1 || { echo 'curl is required for local edge rehearsal probes.' >&2; exit 1; }
+  command -v python3 >/dev/null 2>&1 || { echo 'python3 is required for semantic edge rehearsal probes.' >&2; exit 1; }
   docker network inspect platform-infra_default >/dev/null 2>&1 || { echo 'Missing required external Docker network: platform-infra_default' >&2; exit 1; }
   docker network inspect zeiterfassung_default >/dev/null 2>&1 || { echo 'Missing required external Docker network: zeiterfassung_default' >&2; exit 1; }
   test -f '${EDGE_DEPLOY_PATH}/.env' || { echo 'Missing protected edge .env on server.' >&2; exit 1; }
@@ -263,7 +271,10 @@ ssh "${REMOTE}" "
 "
 
 probe_rehearsal_listener() {
-  ssh "${REMOTE}" bash -s -- "${ZEITERFASSUNG_SMOKE_HOST}" "${EVENTOS_SMOKE_HOST}" "${CATERING_SMOKE_HOST}" <<'REMOTE_SCRIPT'
+  {
+    printf 'CATERING_SMOKE_BASIC_AUTH_USER=%q\n' "${CATERING_SMOKE_BASIC_AUTH_USER}"
+    printf 'CATERING_SMOKE_BASIC_AUTH_PASSWORD=%q\n' "${CATERING_SMOKE_BASIC_AUTH_PASSWORD}"
+    cat <<'REMOTE_SCRIPT'
 set -euo pipefail
 ZEITERFASSUNG_SMOKE_HOST="$1"
 EVENTOS_SMOKE_HOST="$2"
@@ -291,23 +302,47 @@ probe_ok_json() {
   echo "${label}: expected 200 with ok=true, got ${status:-no response}" >&2
   return 1
 }
-probe_status_ok_json() {
+probe_catering_json() {
   local label="$1" host="$2" path="$3" status="" body_file attempt
   body_file="$(mktemp)"
   for attempt in $(seq 1 15); do
     : >"${body_file}"
-    status="$(curl --silent --show-error --max-time 5 --output "${body_file}" --write-out '%{http_code}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
-    if [[ "${status}" == "200" ]] && grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${body_file}"; then rm -f "${body_file}"; echo "${label}: ok (${status}, semantic identity confirmed)"; return 0; fi
+    status="$(curl --silent --show-error --max-time 5 --basic --user "${CATERING_SMOKE_BASIC_AUTH_USER}:${CATERING_SMOKE_BASIC_AUTH_PASSWORD}" --output "${body_file}" --write-out '%{http_code}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    if [[ "${status}" == "200" ]]; then
+      if python3 - "${body_file}" <<'PYTHON'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as response:
+        payload = json.load(response)
+except (OSError, UnicodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+if payload.get("status") != "ok":
+    raise SystemExit(1)
+if payload.get("service") != "intake-service":
+    raise SystemExit(1)
+PYTHON
+      then
+        rm -f "${body_file}"
+        echo "${label}: ok (${status}, exact service identity confirmed)"
+        return 0
+      fi
+    fi
     sleep 1
   done
   rm -f "${body_file}"
-  echo "${label}: expected 200 with status=ok, got ${status:-no response}" >&2
+  echo "${label}: expected authenticated 200 from intake-service with status=ok, got ${status:-no response}" >&2
   return 1
 }
 probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz"
 probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}" "/" "200"
-probe_status_ok_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"
+probe_catering_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"
 REMOTE_SCRIPT
+  } | ssh "${REMOTE}" bash -s -- "${ZEITERFASSUNG_SMOKE_HOST}" "${EVENTOS_SMOKE_HOST}" "${CATERING_SMOKE_HOST}"
 }
 
 if [[ "${EDGE_MODE}" == "rehearsal" ]]; then probe_rehearsal_listener; fi
