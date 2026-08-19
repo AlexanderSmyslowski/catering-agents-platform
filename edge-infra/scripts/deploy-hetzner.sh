@@ -291,9 +291,22 @@ probe_ok_json() {
   echo "${label}: expected 200 with ok=true, got ${status:-no response}" >&2
   return 1
 }
+probe_status_ok_json() {
+  local label="$1" host="$2" path="$3" status="" body_file attempt
+  body_file="$(mktemp)"
+  for attempt in $(seq 1 15); do
+    : >"${body_file}"
+    status="$(curl --silent --show-error --max-time 5 --output "${body_file}" --write-out '%{http_code}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    if [[ "${status}" == "200" ]] && grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${body_file}"; then rm -f "${body_file}"; echo "${label}: ok (${status}, semantic identity confirmed)"; return 0; fi
+    sleep 1
+  done
+  rm -f "${body_file}"
+  echo "${label}: expected 200 with status=ok, got ${status:-no response}" >&2
+  return 1
+}
 probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz"
 probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}" "/" "200"
-probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/" "200"
+probe_status_ok_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"
 REMOTE_SCRIPT
 }
 
