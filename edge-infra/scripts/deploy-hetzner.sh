@@ -103,7 +103,14 @@ trap cleanup EXIT
 
 test -f "$env_file"
 zt_count="$(grep -c '^ZEITERFASSUNG_UPSTREAM=' "$env_file" || true)"
-test "$zt_count" = "1"
+if [[ "$zt_count" -gt 1 ]]; then
+  echo "Protected edge .env contains duplicate Zeiterfassung upstream definitions; refusing migration." >&2
+  exit 1
+fi
+if [[ "$zt_count" = "0" ]]; then
+  echo "Protected edge .env omits Zeiterfassung upstream; Compose default remains canonical."
+  exit 0
+fi
 
 if grep -Fxq "$canonical_zt" "$env_file"; then
   echo "Protected edge .env already uses canonical Zeiterfassung upstream."
