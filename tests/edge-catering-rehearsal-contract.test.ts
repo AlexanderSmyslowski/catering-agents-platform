@@ -34,7 +34,12 @@ describe('edge Catering rehearsal contract', () => {
     expect(deploy).toContain('json.load');
     expect(deploy).toContain('payload.get("status") != "ok"');
     expect(deploy).toContain('payload.get("service") != "intake-service"');
-    expect(deploy).toContain('probe_catering_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"');
+    expect(deploy).toContain('CATERING_RUNTIME_HOST=');
+    expect(deploy).toContain('docker inspect "${edge_container}"');
+    expect(deploy).toContain('CATERING_PUBLIC_HOST=');
+    expect(deploy).toContain('probe_catering_json "Rehearsal Catering" "${CATERING_RUNTIME_HOST}" "/api/intake/health"');
+    expect(deploy).not.toContain('probe_catering_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"');
+    expect(deploy).toContain('Catering candidate response preview:');
 
     expect(deploy).not.toContain('probe_status_ok_json "Rehearsal Catering"');
     expect(deploy).not.toContain('probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/" "200"');
