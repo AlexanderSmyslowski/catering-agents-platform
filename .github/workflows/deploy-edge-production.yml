@@ -38,7 +38,7 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
-          CATERING_SMOKE_URL: ${{ secrets.HETZNER_DEPLOY_BASE_URL }}
+          CATERING_SMOKE_URL: https://catering.the-one.catering
           CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
           CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
           EDGE_MODE: rehearsal
@@ -46,7 +46,7 @@ jobs:
           set -euo pipefail
           test -n "$DEPLOY_HOST"
           test -n "$DEPLOY_USER"
-          test -n "$CATERING_SMOKE_URL"
+          test "$CATERING_SMOKE_URL" = "https://catering.the-one.catering"
           test -n "$CATERING_SMOKE_BASIC_AUTH_USER"
           test -n "$CATERING_SMOKE_BASIC_AUTH_PASSWORD"
           test "$EDGE_MODE" = rehearsal
@@ -103,7 +103,7 @@ jobs:
           EDGE_ROLLBACK_ROOT: /opt/shared-edge-rollbacks
           EDGE_DEPLOY_COMMIT_SHA: ${{ github.sha }}
           EDGE_MODE: rehearsal
-          CATERING_SMOKE_URL: ${{ secrets.HETZNER_DEPLOY_BASE_URL }}
+          CATERING_SMOKE_URL: https://catering.the-one.catering
           CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
           CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
           ZEITERFASSUNG_SMOKE_URL: https://zeit.the-one.catering
