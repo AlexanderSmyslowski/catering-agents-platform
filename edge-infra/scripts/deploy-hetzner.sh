@@ -279,6 +279,7 @@ set -euo pipefail
 ZEITERFASSUNG_SMOKE_HOST="$1"
 EVENTOS_SMOKE_HOST="$2"
 CATERING_SMOKE_HOST="$3"
+EDGE_DEPLOY_PATH="$4"
 probe() {
   local label="$1" host="$2" path="$3" expected_status="$4" status="" attempt
   for attempt in $(seq 1 15); do
@@ -303,11 +304,12 @@ probe_ok_json() {
   return 1
 }
 probe_catering_json() {
-  local label="$1" host="$2" path="$3" status="" body_file attempt
+  local label="$1" host="$2" path="$3" status="" content_type="" response_meta="" body_file attempt
   body_file="$(mktemp)"
   for attempt in $(seq 1 15); do
     : >"${body_file}"
-    status="$(curl --silent --show-error --max-time 5 --basic --user "${CATERING_SMOKE_BASIC_AUTH_USER}:${CATERING_SMOKE_BASIC_AUTH_PASSWORD}" --output "${body_file}" --write-out '%{http_code}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    response_meta="$(curl --silent --show-error --max-time 5 --basic --user "${CATERING_SMOKE_BASIC_AUTH_USER}:${CATERING_SMOKE_BASIC_AUTH_PASSWORD}" --output "${body_file}" --write-out $'%{http_code}\t%{content_type}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    IFS=$'\t' read -r status content_type <<<"${response_meta}"
     if [[ "${status}" == "200" ]]; then
       if python3 - "${body_file}" <<'PYTHON'
 import json
@@ -334,15 +336,25 @@ PYTHON
     fi
     sleep 1
   done
+  echo "${label}: expected authenticated 200 from intake-service with status=ok, got ${status:-no response}; collecting safe diagnostics" >&2
+  if ! CATERING_SMOKE_BASIC_AUTH_USER="${CATERING_SMOKE_BASIC_AUTH_USER}" \
+    CATERING_SMOKE_BASIC_AUTH_PASSWORD="${CATERING_SMOKE_BASIC_AUTH_PASSWORD}" \
+    bash "${EDGE_DEPLOY_PATH}/scripts/diagnose-catering-identity.sh" \
+      "${host}" \
+      "${status:-no response}" \
+      "${content_type:-unknown}" \
+      "${body_file}"
+  then
+    echo "${label}: diagnostic collector failed; identity gate remains failed" >&2
+  fi
   rm -f "${body_file}"
-  echo "${label}: expected authenticated 200 from intake-service with status=ok, got ${status:-no response}" >&2
   return 1
 }
 probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz"
 probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}" "/" "200"
 probe_catering_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"
 REMOTE_SCRIPT
-  } | ssh "${REMOTE}" bash -s -- "${ZEITERFASSUNG_SMOKE_HOST}" "${EVENTOS_SMOKE_HOST}" "${CATERING_SMOKE_HOST}"
+  } | ssh "${REMOTE}" bash -s -- "${ZEITERFASSUNG_SMOKE_HOST}" "${EVENTOS_SMOKE_HOST}" "${CATERING_SMOKE_HOST}" "${EDGE_DEPLOY_PATH}"
 }
 
 if [[ "${EDGE_MODE}" == "rehearsal" ]]; then probe_rehearsal_listener; fi
