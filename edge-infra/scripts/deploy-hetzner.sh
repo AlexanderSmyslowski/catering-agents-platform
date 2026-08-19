@@ -213,7 +213,31 @@ probe() {
   return 1
 }
 
-probe "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz" "200"
+probe_ok_json() {
+  local label="$1"
+  local host="$2"
+  local path="$3"
+  local status=""
+  local body_file
+  local attempt
+  body_file="$(mktemp)"
+  for attempt in $(seq 1 15); do
+    : >"${body_file}"
+    status="$(curl --silent --show-error --max-time 5 --output "${body_file}" --write-out '%{http_code}' \
+      --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    if [[ "${status}" == "200" ]] && grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "${body_file}"; then
+      rm -f "${body_file}"
+      echo "${label}: ok (${status}, semantic identity confirmed)"
+      return 0
+    fi
+    sleep 1
+  done
+  rm -f "${body_file}"
+  echo "${label}: expected 200 with ok=true, got ${status:-no response}" >&2
+  return 1
+}
+
+probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz"
 probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}" "/" "200"
 # Catering's application-owned Caddy keeps Basic Auth. Receiving its 401 without
 # credentials proves that the candidate edge reached the Catering upstream.
