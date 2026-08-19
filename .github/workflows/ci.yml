@@ -58,8 +58,8 @@ jobs:
               -o Acquire::https::Timeout=30
             )
             sudo env DEBIAN_FRONTEND=noninteractive timeout 180s apt-get "${apt_options[@]}" update
-            sudo env DEBIAN_FRONTEND=noninteractive timeout 180s apt-get \
-              "${apt_options[@]}" install --no-install-recommends -y screen
+            timeout 180s sudo apt-get install --no-install-recommends -y screen \
+              "${apt_options[@]}"
           fi
           screen --version
 
