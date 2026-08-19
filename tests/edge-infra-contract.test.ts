@@ -46,14 +46,16 @@ describe('independent edge infrastructure contract', () => {
 
     const acquireIndex = deployScript.indexOf('acquire_edge_lock\n');
     const migrateCallIndex = deployScript.indexOf('migrate_legacy_zeiterfassung_upstream\n');
-    const syncIndex = deployScript.indexOf('echo "Creating edge rollback snapshot..."');
+    const snapshotIndex = deployScript.indexOf('echo "Creating edge rollback snapshot..."');
     expect(acquireIndex).toBeGreaterThan(-1);
     expect(migrateCallIndex).toBeGreaterThan(acquireIndex);
-    expect(syncIndex).toBeGreaterThan(migrateCallIndex);
+    expect(snapshotIndex).toBeGreaterThan(migrateCallIndex);
 
     const migrationStart = deployScript.indexOf('migrate_legacy_zeiterfassung_upstream() {');
-    const migrationEnd = deployScript.indexOf('\n}\n', migrationStart);
+    const migrationEnd = deployScript.indexOf('\n}\n\nrelease_edge_lock() {', migrationStart);
     const migration = deployScript.slice(migrationStart, migrationEnd + 3);
+    expect(migrationStart).toBeGreaterThan(-1);
+    expect(migrationEnd).toBeGreaterThan(migrationStart);
     expect(migration).toContain('legacy_zt="ZEITERFASSUNG_UPSTREAM=app:3040"');
     expect(migration).toContain('canonical_zt="ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040"');
     expect(migration).toContain('grep -Fxq "$legacy_zt"');
