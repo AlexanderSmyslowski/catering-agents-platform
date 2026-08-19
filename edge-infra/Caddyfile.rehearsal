@@ -5,9 +5,6 @@
 http://{$CATERING_PUBLIC_HOST} {
   reverse_proxy {$CATERING_UPSTREAM} {
     header_up Host {$CATERING_PUBLIC_HOST}
-    transport http {
-      tls_server_name {$CATERING_PUBLIC_HOST}
-    }
   }
 }
 

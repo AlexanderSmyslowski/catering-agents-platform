@@ -5,6 +5,7 @@ const compose = readFileSync(new URL('../edge-infra/docker-compose.yml', import.
 const caddy = readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url), 'utf8');
 const rehearsalCaddy = readFileSync(new URL('../edge-infra/Caddyfile.rehearsal', import.meta.url), 'utf8');
 const envExample = readFileSync(new URL('../edge-infra/.env.example', import.meta.url), 'utf8');
+const platformCompose = readFileSync(new URL('../platform-infra/docker-compose.yml', import.meta.url), 'utf8');
 const deployScript = readFileSync(
   new URL('../edge-infra/scripts/deploy-hetzner.sh', import.meta.url),
   'utf8',
@@ -30,10 +31,14 @@ describe('independent edge infrastructure contract', () => {
     expect(caddy).toContain('reverse_proxy {$EVENTOS_UPSTREAM}');
   });
 
-  it('uses the Catering internal HTTPS listener with the public hostname as TLS SNI', () => {
-    expect(compose).toContain('CATERING_UPSTREAM: ${CATERING_UPSTREAM:-https://web:443}');
+  it('uses the canonical Catering internal HTTP listener without an unnecessary TLS hop', () => {
+    expect(platformCompose).toContain('CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}');
+    expect(compose).toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:80}');
+    expect(envExample).toContain('CATERING_APP_UPSTREAM=http://web:80');
+    expect(envExample).not.toContain('CATERING_UPSTREAM=https://web:443');
     for (const config of [caddy, rehearsalCaddy]) {
-      expect(config).toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
+      expect(config).not.toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
+      expect(config).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
     }
   });
 
