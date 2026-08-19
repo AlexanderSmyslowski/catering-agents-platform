@@ -43,8 +43,24 @@ jobs:
 
       - name: Install GNU screen
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y screen
+          set -euo pipefail
+          if ! command -v screen >/dev/null 2>&1; then
+            ubuntu_sources=/etc/apt/sources.list.d/ubuntu.sources
+            if [[ -f "$ubuntu_sources" ]] &&
+               grep -q 'mirror+file:/etc/apt/apt-mirrors.txt' "$ubuntu_sources"; then
+              sudo sed -i \
+                's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' \
+                "$ubuntu_sources"
+            fi
+            apt_options=(
+              -o Acquire::Retries=3
+              -o Acquire::http::Timeout=30
+              -o Acquire::https::Timeout=30
+            )
+            sudo env DEBIAN_FRONTEND=noninteractive timeout 180s apt-get "${apt_options[@]}" update
+            sudo env DEBIAN_FRONTEND=noninteractive timeout 180s apt-get \
+              "${apt_options[@]}" install --no-install-recommends -y screen
+          fi
           screen --version
 
       - name: Setup Node
