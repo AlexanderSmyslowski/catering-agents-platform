@@ -90,6 +90,33 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('sudo cp "${manifest_archive}" "${edge_path}/.deploy-manifest"');
   });
 
+  it('retains the host deploy lock when rollback itself fails', () => {
+    expect(deploy).toContain('EDGE_RECOVERY_REQUIRED=false');
+    expect(deploy).toContain('EDGE_RECOVERY_REQUIRED=true');
+    expect(deploy).toContain('Recovery is still required; retaining edge deploy lock');
+    const recoveryGuard = deploy.indexOf('if [[ "${EDGE_RECOVERY_REQUIRED}" == "true" ]]');
+    const remoteLockRemoval = deploy.indexOf('sudo rm -f "${lock_path}/owner"');
+    expect(recoveryGuard).toBeGreaterThanOrEqual(0);
+    expect(recoveryGuard).toBeLessThan(remoteLockRemoval);
+  });
+
+  it('rolls back on termination signals during the armed mutation window', () => {
+    const errTrap = deploy.indexOf("trap 'rollback_edge_candidate' ERR");
+    const termTrap = deploy.indexOf("trap 'rollback_edge_candidate 143' TERM", errTrap);
+    const intTrap = deploy.indexOf("trap 'rollback_edge_candidate 130' INT", errTrap);
+    const hupTrap = deploy.indexOf("trap 'rollback_edge_candidate 129' HUP", errTrap);
+    const revokeCall = deploy.indexOf('\nrevoke_live_manifest\n', errTrap);
+    const clearSignals = deploy.lastIndexOf('trap - ERR TERM INT HUP');
+    const recordManifest = deploy.indexOf('Recording edge deployment manifest');
+    expect(termTrap).toBeGreaterThan(errTrap);
+    expect(intTrap).toBeGreaterThan(errTrap);
+    expect(hupTrap).toBeGreaterThan(errTrap);
+    expect(termTrap).toBeLessThan(revokeCall);
+    expect(intTrap).toBeLessThan(revokeCall);
+    expect(hupTrap).toBeLessThan(revokeCall);
+    expect(clearSignals).toBeGreaterThan(recordManifest);
+  });
+
   it('serializes every edge deployment on the host for the full mutation window', () => {
     expect(deploy).toContain('EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"');
     expect(deploy).toContain('acquire_edge_lock');
