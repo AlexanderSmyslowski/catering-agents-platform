@@ -293,7 +293,7 @@ probe_ok_json() {
 }
 probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz"
 probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}" "/" "200"
-probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/" "401"
+probe "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/" "200"
 REMOTE_SCRIPT
 }
 
