@@ -39,6 +39,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.HETZNER_DEPLOY_PATH }}
+          DEPLOY_BASE_URL: ${{ secrets.HETZNER_DEPLOY_BASE_URL }}
           SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
           SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
         run: |
@@ -46,6 +47,7 @@ jobs:
           test -n "$DEPLOY_HOST"
           test -n "$DEPLOY_USER"
           test -n "$DEPLOY_PATH"
+          test -n "$DEPLOY_BASE_URL"
           test -n "$SMOKE_BASIC_AUTH_USER"
           test -n "$SMOKE_BASIC_AUTH_PASSWORD"
 
@@ -54,6 +56,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.HETZNER_DEPLOY_PATH }}
+          DEPLOY_BASE_URL: ${{ secrets.HETZNER_DEPLOY_BASE_URL }}
           DEPLOY_RSYNC_PATH: sudo rsync
           DEPLOY_COMMIT_SHA: ${{ github.sha }}
           SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
