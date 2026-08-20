@@ -9,6 +9,7 @@ EDGE_DEPLOY_PATH="${EDGE_DEPLOY_PATH:?Set EDGE_DEPLOY_PATH}"
 EDGE_ROLLBACK_ROOT="${EDGE_ROLLBACK_ROOT:-${EDGE_DEPLOY_PATH}-rollbacks}"
 EDGE_DEPLOY_COMMIT_SHA="${EDGE_DEPLOY_COMMIT_SHA:?Set EDGE_DEPLOY_COMMIT_SHA}"
 DEPLOY_RSYNC_PATH="${DEPLOY_RSYNC_PATH:-rsync}"
+CADDY_EMAIL="${CADDY_EMAIL:?Set CADDY_EMAIL}"
 CATERING_SMOKE_URL="${CATERING_SMOKE_URL:?Set CATERING_SMOKE_URL}"
 ZEITERFASSUNG_SMOKE_URL="${ZEITERFASSUNG_SMOKE_URL:?Set ZEITERFASSUNG_SMOKE_URL}"
 EVENTOS_SMOKE_URL="${EVENTOS_SMOKE_URL:?Set EVENTOS_SMOKE_URL}"
@@ -19,6 +20,9 @@ if [[ ! "${EDGE_DEPLOY_COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "EDGE_DEPLOY_COMMIT_SHA must be an exact 40-character Git commit SHA." >&2
   exit 1
 fi
+case "${CADDY_EMAIL}" in
+  *@example.com|*@example.org|*@example.net) echo "CADDY_EMAIL must be a real production contact." >&2; exit 1 ;;
+esac
 
 for command_name in ssh scp curl; do
   command -v "${command_name}" >/dev/null 2>&1 || {
@@ -32,6 +36,51 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
 WEB_PORTS_RELEASED=false
 CUTOVER_COMPLETE=false
+
+ensure_production_caddy_email() {
+  {
+    printf 'CADDY_EMAIL=%q\n' "${CADDY_EMAIL}"
+    cat <<'REMOTE_SCRIPT'
+set -euo pipefail
+edge_path="$1"
+env_file="${edge_path}/.env"
+test -f "$env_file"
+current_count="$(grep -c '^CADDY_EMAIL=' "$env_file" || true)"
+if [[ "$current_count" -gt 1 ]]; then
+  echo "Protected edge .env contains duplicate CADDY_EMAIL definitions; refusing migration." >&2
+  exit 1
+fi
+current="$(sed -n 's/^CADDY_EMAIL=//p' "$env_file" | tail -n 1)"
+if [[ "$current" == "$CADDY_EMAIL" ]]; then
+  echo "Protected edge .env already uses the approved production Caddy contact."
+  exit 0
+fi
+if [[ -n "$current" && "$current" != "ops@example.com" ]]; then
+  echo "Protected edge .env contains an operator-defined CADDY_EMAIL; refusing to overwrite it." >&2
+  exit 1
+fi
+pending="${edge_path}/.env.pending.$$"
+local_tmp="$(mktemp)"
+cleanup() { rm -f "$local_tmp"; sudo rm -f "$pending"; }
+trap cleanup EXIT
+if [[ "$current_count" == "0" ]]; then
+  cat "$env_file" >"$local_tmp"
+  printf 'CADDY_EMAIL=%s\n' "$CADDY_EMAIL" >>"$local_tmp"
+else
+  awk -v replacement="CADDY_EMAIL=${CADDY_EMAIL}" '$0 == "CADDY_EMAIL=ops@example.com" { print replacement; next } { print }' "$env_file" >"$local_tmp"
+fi
+deploy_uid="$(id -u)"
+deploy_gid="$(id -g)"
+sudo install -o "$deploy_uid" -g "$deploy_gid" -m 0600 "$local_tmp" "$pending"
+grep -Fxq "CADDY_EMAIL=${CADDY_EMAIL}" "$pending"
+! grep -Fxq 'CADDY_EMAIL=ops@example.com' "$pending"
+sudo mv -f "$pending" "$env_file"
+pending=""
+test "$(stat -c '%a %u %g' "$env_file")" = "600 ${deploy_uid} ${deploy_gid}"
+echo "Protected edge .env Caddy contact migrated atomically from bootstrap placeholder."
+REMOTE_SCRIPT
+  } | ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}"
+}
 
 capture_container_identities() {
   ssh "${REMOTE}" bash -s -- "${DEPLOY_PATH}" <<'REMOTE_SCRIPT'
@@ -86,6 +135,7 @@ docker network inspect platform-infra_default >/dev/null
 docker network inspect zeiterfassung_default >/dev/null
 REMOTE_SCRIPT
 
+ensure_production_caddy_email
 IDENTITIES_BEFORE="$(capture_container_identities)"
 echo "Captured pre-cutover application container identities."
 
@@ -113,11 +163,7 @@ remote_override="$2"
 sudo install -m 0644 "$remote_override" "${deploy_path}/platform-infra/docker-compose.edge-cutover.yml"
 rm -f "$remote_override"
 cd "${deploy_path}/platform-infra"
-docker compose -p platform-infra \
-  -f docker-compose.yml \
-  -f docker-compose.production.yml \
-  -f docker-compose.edge-cutover.yml \
-  config >/dev/null
+docker compose -p platform-infra -f docker-compose.yml -f docker-compose.production.yml -f docker-compose.edge-cutover.yml config >/dev/null
 REMOTE_SCRIPT
 
 echo "Releasing public 80/443 only from Catering web..."
@@ -125,11 +171,7 @@ ssh "${REMOTE}" bash -s -- "${DEPLOY_PATH}" <<'REMOTE_SCRIPT'
 set -euo pipefail
 deploy_path="$1"
 cd "${deploy_path}/platform-infra"
-docker compose -p platform-infra \
-  -f docker-compose.yml \
-  -f docker-compose.production.yml \
-  -f docker-compose.edge-cutover.yml \
-  up -d --no-deps --force-recreate --no-build web
+docker compose -p platform-infra -f docker-compose.yml -f docker-compose.production.yml -f docker-compose.edge-cutover.yml up -d --no-deps --force-recreate --no-build web
 REMOTE_SCRIPT
 WEB_PORTS_RELEASED=true
 
@@ -166,14 +208,8 @@ test -n "$web_id"
 test -n "$edge_id"
 web_ports="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$web_id")"
 edge_ports="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$edge_id")"
-if [[ "$web_ports" == *'80/tcp'* || "$web_ports" == *'443/tcp'* ]]; then
-  echo "Catering web still owns a public edge port after cutover." >&2
-  exit 1
-fi
-if [[ "$edge_ports" != *'80/tcp'* || "$edge_ports" != *'443/tcp'* ]]; then
-  echo "Shared edge does not own both public ports after cutover." >&2
-  exit 1
-fi
+if [[ "$web_ports" == *'80/tcp'* || "$web_ports" == *'443/tcp'* ]]; then echo "Catering web still owns a public edge port after cutover." >&2; exit 1; fi
+if [[ "$edge_ports" != *'80/tcp'* || "$edge_ports" != *'443/tcp'* ]]; then echo "Shared edge does not own both public ports after cutover." >&2; exit 1; fi
 REMOTE_SCRIPT
 
 CUTOVER_COMPLETE=true
