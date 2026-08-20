@@ -14,26 +14,44 @@ ZEITERFASSUNG_SMOKE_URL="${ZEITERFASSUNG_SMOKE_URL%/}"
 EVENTOS_SMOKE_URL="${EVENTOS_SMOKE_URL%/}"
 
 COMMON_CURL_ARGS=(--fail --silent --show-error --max-time 15)
+PUBLIC_SMOKE_ATTEMPTS="${PUBLIC_SMOKE_ATTEMPTS:-15}"
 
 assert_ok_json() {
   local label="$1"
   local url="$2"
-  local body
+  local body="" attempt
   echo "Checking ${label}"
-  body="$(curl "${COMMON_CURL_ARGS[@]}" "${url}")"
-  if ! printf '%s' "${body}" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'; then
-    echo "${label}: response did not identify a healthy Zeiterfassung endpoint." >&2
-    return 1
-  fi
-  echo "${label}: ok"
+  for attempt in $(seq 1 "${PUBLIC_SMOKE_ATTEMPTS}"); do
+    if body="$(curl "${COMMON_CURL_ARGS[@]}" "${url}")"; then
+      if printf '%s' "${body}" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'; then
+        echo "${label}: ok"
+        return 0
+      fi
+      echo "${label}: response did not identify a healthy Zeiterfassung endpoint (attempt ${attempt}/${PUBLIC_SMOKE_ATTEMPTS})." >&2
+    else
+      echo "${label}: public endpoint not ready (attempt ${attempt}/${PUBLIC_SMOKE_ATTEMPTS})." >&2
+    fi
+    sleep 2
+  done
+  echo "${label}: response did not identify a healthy Zeiterfassung endpoint after ${PUBLIC_SMOKE_ATTEMPTS} attempts." >&2
+  return 1
 }
 
 check_http() {
   local label="$1"
   local url="$2"
+  local attempt
   echo "Checking ${label}"
-  curl "${COMMON_CURL_ARGS[@]}" --output /dev/null "${url}"
-  echo "${label}: ok"
+  for attempt in $(seq 1 "${PUBLIC_SMOKE_ATTEMPTS}"); do
+    if curl "${COMMON_CURL_ARGS[@]}" --output /dev/null "${url}"; then
+      echo "${label}: ok"
+      return 0
+    fi
+    echo "${label}: public endpoint not ready (attempt ${attempt}/${PUBLIC_SMOKE_ATTEMPTS})." >&2
+    sleep 2
+  done
+  echo "${label}: public endpoint did not become ready after ${PUBLIC_SMOKE_ATTEMPTS} attempts." >&2
+  return 1
 }
 
 assert_ok_json "Zeiterfassung healthz" "${ZEITERFASSUNG_SMOKE_URL}/healthz"
