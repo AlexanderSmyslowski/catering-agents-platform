@@ -1,0 +1,65 @@
+name: Cut over shared edge production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-edge-production-cutover
+  cancel-in-progress: false
+
+jobs:
+  cutover-edge:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@v5
+
+      - name: Configure SSH
+        env:
+          HETZNER_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          HETZNER_SSH_KNOWN_HOSTS: ${{ secrets.HETZNER_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$HETZNER_SSH_PRIVATE_KEY"
+          test -n "$HETZNER_SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$HETZNER_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$HETZNER_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Validate cutover inputs
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
+          CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$CATERING_SMOKE_BASIC_AUTH_USER"
+          test -n "$CATERING_SMOKE_BASIC_AUTH_PASSWORD"
+          test "${GITHUB_REF_NAME}" = main
+
+      - name: Cut over exact shared-edge commit
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          DEPLOY_RSYNC_PATH: sudo rsync
+          DEPLOY_PATH: /opt/catering-agents-platform
+          EDGE_DEPLOY_PATH: /opt/shared-edge
+          EDGE_ROLLBACK_ROOT: /opt/shared-edge-rollbacks
+          EDGE_DEPLOY_COMMIT_SHA: ${{ github.sha }}
+          CATERING_SMOKE_URL: https://catering.the-one.catering
+          CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
+          CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
+          ZEITERFASSUNG_SMOKE_URL: https://zeit.the-one.catering
+          EVENTOS_SMOKE_URL: https://eventos.commcats.de
+        run: bash edge-infra/scripts/cutover-hetzner.sh
