@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const compose = readFileSync(new URL('../edge-infra/docker-compose.yml', import.meta.url), 'utf8');
-const rehearsalCompose = readFileSync(new URL('../edge-infra/docker-compose.rehearsal.yml', import.meta.url), 'utf8');
 const caddy = readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url), 'utf8');
 const rehearsalCaddy = readFileSync(new URL('../edge-infra/Caddyfile.rehearsal', import.meta.url), 'utf8');
 const envExample = readFileSync(new URL('../edge-infra/.env.example', import.meta.url), 'utf8');
@@ -32,19 +31,15 @@ describe('independent edge infrastructure contract', () => {
     expect(caddy).toContain('reverse_proxy {$EVENTOS_UPSTREAM}');
   });
 
-  it('uses the canonical Catering internal HTTP listener while rehearsal may use internal TLS only', () => {
+  it('uses the canonical Catering internal HTTP listener without an unnecessary TLS hop', () => {
     expect(platformCompose).toContain('CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}');
     expect(compose).toContain('CATERING_UPSTREAM: ${CATERING_APP_UPSTREAM:-http://web:8081}');
     expect(envExample).toContain('CATERING_APP_UPSTREAM=http://web:8081');
     expect(envExample).not.toContain('CATERING_UPSTREAM=https://web:443');
-
-    expect(caddy).not.toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
-    expect(caddy).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
-
-    expect(rehearsalCompose).toContain('CATERING_UPSTREAM: https://web:443');
-    expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
-    expect(rehearsalCaddy).toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
-    expect(rehearsalCaddy).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
+    for (const config of [caddy, rehearsalCaddy]) {
+      expect(config).not.toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
+      expect(config).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
+    }
   });
 
   it('uses the canonical production Zeiterfassung container and migrates only the known legacy upstream under the host lock', () => {
