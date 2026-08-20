@@ -2,7 +2,8 @@ import {
   assertBusinessId,
   type AcceptedEventSpec,
   type BusinessContext,
-  type QuantityRecipeProductionBridgeResult
+  type QuantityRecipeProductionBridgeResult,
+  type RecipeEventUseReview
 } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import {
@@ -23,6 +24,7 @@ export async function appendPlanningComponentBranchArtifacts(input: {
   component: MenuPlanComponent;
   servings: number;
   bridgeResult?: QuantityRecipeProductionBridgeResult;
+  recipeEventUseReview?: RecipeEventUseReview;
   discoveryService: RecipeDiscoveryService;
   context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
@@ -33,6 +35,7 @@ export async function appendPlanningComponentBranchArtifacts(input: {
     component,
     servings,
     bridgeResult,
+    recipeEventUseReview,
     discoveryService,
     context,
     persistDiscoveredRecipes = true,
@@ -80,6 +83,7 @@ export async function appendPlanningComponentBranchArtifacts(input: {
     component,
     servings,
     bridgeResult,
+    recipeEventUseReview,
     discoveryService,
     context,
     persistDiscoveredRecipes

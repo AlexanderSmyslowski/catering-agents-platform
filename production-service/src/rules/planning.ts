@@ -6,7 +6,8 @@ import {
   type ProductionPlan,
   type PurchaseList,
   type QuantityRecipeProductionBridgeResult,
-  type Recipe
+  type Recipe,
+  type RecipeEventUseReview
 } from "@catering/shared-core";
 import { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import { buildFinalProductionArtifacts } from "./planning-artifact-finalization.js";
@@ -25,6 +26,7 @@ export async function buildProductionArtifacts(
     context: BusinessContext;
     persistDiscoveredRecipes?: boolean;
     quantityRecipeBridges?: Record<string, QuantityRecipeProductionBridgeResult>;
+    recipeEventUseReviews?: Record<string, RecipeEventUseReview>;
   }
 ): Promise<{ productionPlan: ProductionPlan; purchaseList: PurchaseList; recipes: Recipe[] }> {
   if (!options?.context) throw new Error("Ein Betriebskontext ist erforderlich.");
@@ -56,6 +58,7 @@ export async function buildProductionArtifacts(
         component,
         servings,
         bridgeResult: options.quantityRecipeBridges?.[component.componentId],
+        recipeEventUseReview: options.recipeEventUseReviews?.[component.componentId],
         discoveryService,
         context: options.context,
         persistDiscoveredRecipes: options.persistDiscoveredRecipes !== false,
