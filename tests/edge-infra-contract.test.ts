@@ -42,6 +42,19 @@ describe('independent edge infrastructure contract', () => {
     }
   });
 
+  it('uses candidate identities as the rehearsal gate and reserves public-host smoke checks for cutover', () => {
+    expect(deployScript).toContain(
+      'if [[ "${EDGE_MODE}" == "rehearsal" ]]; then probe_rehearsal_listener; fi',
+    );
+    expect(deployScript).toContain('if [[ "${EDGE_MODE}" == "cutover" ]]; then');
+    expect(deployScript).toContain(
+      'bash "${SCRIPT_DIR}/smoke-all.sh"',
+    );
+    expect(deployScript).toContain(
+      'Skipping managed public-host smoke checks in rehearsal mode; candidate identities are authoritative.',
+    );
+  });
+
   it('uses the canonical production Zeiterfassung container and migrates only the known legacy upstream under the host lock', () => {
     expect(compose).toContain(
       'ZEITERFASSUNG_UPSTREAM: ${ZEITERFASSUNG_UPSTREAM:-zeiterfassung-app-1:3040}',
