@@ -1,5 +1,13 @@
 {
   email {$CADDY_EMAIL}
+  log default {
+    output file /data/cutover-runtime.log {
+      mode 0600
+      roll_size 5MiB
+      roll_keep 2
+    }
+    level INFO
+  }
 }
 
 {$CATERING_PUBLIC_HOST} {
