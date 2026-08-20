@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: catering-web-listener-deploy
+  group: catering-production-deploy
   cancel-in-progress: false
 
 jobs:
