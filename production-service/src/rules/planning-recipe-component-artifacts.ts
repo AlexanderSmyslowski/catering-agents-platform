@@ -1,12 +1,14 @@
 import {
   assertBusinessId,
   classifyRecipeProductionTrust,
+  evaluateRecipeEventUse,
   type AcceptedEventSpec,
   type BusinessContext,
   type MenuComponent,
   type ProductionPlan,
   type QuantityRecipeProductionBridgeResult,
-  type Recipe
+  type Recipe,
+  type RecipeEventUseReview
 } from "@catering/shared-core";
 import type { RecipeDiscoveryService } from "../recipe-discovery/service.js";
 import { recipeMenuCategoryConflictReason } from "../recipe-discovery/menu-category-compatibility.js";
@@ -56,6 +58,7 @@ export async function buildRecipeComponentPlanningArtifacts({
   eventSpec,
   servings,
   bridgeResult,
+  recipeEventUseReview,
   discoveryService,
   context,
   persistDiscoveredRecipes = true
@@ -64,6 +67,7 @@ export async function buildRecipeComponentPlanningArtifacts({
   eventSpec: AcceptedEventSpec;
   servings: number;
   bridgeResult?: QuantityRecipeProductionBridgeResult;
+  recipeEventUseReview?: RecipeEventUseReview;
   discoveryService: RecipeDiscoveryService;
   context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
@@ -114,33 +118,45 @@ export async function buildRecipeComponentPlanningArtifacts({
   if (resolvedRecipe) {
     const trust = classifyRecipeProductionTrust(resolvedRecipe);
     if (!trust.trustedProductionInput) {
-      const reason = `Rezept ${resolvedRecipe.name} erfordert Operator-Review vor operativer Produktionsplanung.`;
-      const artifacts = buildUnresolvedComponentArtifacts({
-        component,
-        eventSpec,
-        servings,
-        reason,
-        blocking: true,
-        timelineLabel: `${component.label} Rezeptprüfung`
-      });
-      return {
-        kind: "unresolved",
+      const eventUse = evaluateRecipeEventUse({
         recipe: resolvedRecipe,
-        selection: {
-          ...selection,
-          selectionReason: reason,
-          autoUsedInternetRecipe: false
-        },
-        kitchenSheet: artifacts.kitchenSheet,
-        timelineItem: artifacts.timelineItem,
-        issues: [
-          ...issues,
-          {
-            issue: artifacts.issue,
-            blocking: artifacts.blocking
-          }
-        ]
-      };
+        eventSpecId: eventSpec.specId,
+        review: recipeEventUseReview
+      });
+      if (eventUse.status === "event_usable") {
+        // A complete review for this exact event is the only bootstrap path
+        // for a candidate that is not durable internal production knowledge.
+      } else {
+        const reason = eventUse.status === "blocked"
+          ? `Rezept ${resolvedRecipe.name} ist für dieses Event nicht freigegeben.`
+          : `Rezept ${resolvedRecipe.name} erfordert Operator-Review vor operativer Produktionsplanung.`;
+        const artifacts = buildUnresolvedComponentArtifacts({
+          component,
+          eventSpec,
+          servings,
+          reason,
+          blocking: true,
+          timelineLabel: `${component.label} Rezeptprüfung`
+        });
+        return {
+          kind: "unresolved",
+          recipe: resolvedRecipe,
+          selection: {
+            ...selection,
+            selectionReason: reason,
+            autoUsedInternetRecipe: false
+          },
+          kitchenSheet: artifacts.kitchenSheet,
+          timelineItem: artifacts.timelineItem,
+          issues: [
+            ...issues,
+            {
+              issue: artifacts.issue,
+              blocking: artifacts.blocking
+            }
+          ]
+        };
+      }
     }
   }
 
