@@ -1,0 +1,45 @@
+name: Diagnose shared edge TLS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-edge-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  diagnose-edge-tls:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@v5
+
+      - name: Configure SSH
+        env:
+          HETZNER_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          HETZNER_SSH_KNOWN_HOSTS: ${{ secrets.HETZNER_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$HETZNER_SSH_PRIVATE_KEY"
+          test -n "$HETZNER_SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$HETZNER_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$HETZNER_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Diagnose persisted shared-edge TLS state
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          EDGE_DEPLOY_PATH: /opt/shared-edge
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = main
+          bash edge-infra/scripts/diagnose-edge-tls-storage.sh
