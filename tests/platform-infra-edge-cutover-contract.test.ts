@@ -20,7 +20,7 @@ describe('Catering edge cutover compatibility', () => {
     expect(deploy).toContain('EDGE_EXTERNAL');
     expect(deploy).toContain('docker-compose.edge-cutover.yml');
     expect(deploy).toContain('EDGE_EXTERNAL must be true or false.');
-    expect(deploy).toContain('if [[ "${EDGE_EXTERNAL}" == "true" ]]');
+    expect(deploy).toMatch(/if \[\[ ['"]\$\{EDGE_EXTERNAL\}['"] == ['"]true['"] \]\]/);
   });
 
   it('keeps the current production compose path unchanged by default', () => {
