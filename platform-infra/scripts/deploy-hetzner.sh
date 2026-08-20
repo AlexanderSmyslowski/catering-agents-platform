@@ -8,6 +8,7 @@ DEPLOY_PATH="${DEPLOY_PATH:-/opt/catering-agents-platform}"
 DEPLOY_BASE_URL="${DEPLOY_BASE_URL:-http://${DEPLOY_HOST}}"
 DEPLOY_RSYNC_PATH="${DEPLOY_RSYNC_PATH:-rsync}"
 DEPLOY_ROLLBACK_ROOT="${DEPLOY_ROLLBACK_ROOT:-${DEPLOY_PATH}-rollbacks}"
+EDGE_EXTERNAL="${EDGE_EXTERNAL:-false}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -18,6 +19,17 @@ if [[ ! "${DEPLOY_COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "DEPLOY_COMMIT_SHA must be an exact 40-character Git commit SHA."
   exit 1
 fi
+
+if [[ "${EDGE_EXTERNAL}" != "true" && "${EDGE_EXTERNAL}" != "false" ]]; then
+  echo "EDGE_EXTERNAL must be true or false."
+  exit 1
+fi
+
+COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.production.yml)
+if [[ "${EDGE_EXTERNAL}" == "true" ]]; then
+  COMPOSE_FILES+=(-f docker-compose.edge-cutover.yml)
+fi
+REMOTE_COMPOSE_FILES="$(printf ' %q' "${COMPOSE_FILES[@]}")"
 
 if ! command -v rsync >/dev/null 2>&1; then
   echo "rsync is required for deployment."
@@ -78,18 +90,15 @@ ssh "${REMOTE}" "
   cd '${DEPLOY_PATH}/platform-infra'
   test -f .env || { echo 'Missing platform-infra/.env on server.'; exit 1; }
   test -f docker-compose.production.yml || { echo 'Missing platform-infra/docker-compose.production.yml on server.'; exit 1; }
+  if [[ '${EDGE_EXTERNAL}' == 'true' ]]; then
+    test -f docker-compose.edge-cutover.yml || { echo 'Missing platform-infra/docker-compose.edge-cutover.yml on server.'; exit 1; }
+  fi
   docker network inspect zeiterfassung_default >/dev/null 2>&1 || {
     echo 'Missing required external Docker network: zeiterfassung_default'
     exit 1
   }
-  docker compose \
-    -f docker-compose.yml \
-    -f docker-compose.production.yml \
-    config >/dev/null
-  docker compose \
-    -f docker-compose.yml \
-    -f docker-compose.production.yml \
-    up --build -d
+  docker compose${REMOTE_COMPOSE_FILES} config >/dev/null
+  docker compose${REMOTE_COMPOSE_FILES} up --build -d
 "
 
 echo "Running smoke checks against ${DEPLOY_BASE_URL}..."
