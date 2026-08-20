@@ -5,6 +5,7 @@ set -euo pipefail
 DEPLOY_HOST="${DEPLOY_HOST:?Set DEPLOY_HOST}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
 DEPLOY_PATH="${DEPLOY_PATH:?Set DEPLOY_PATH}"
+DEPLOY_BASE_URL="${DEPLOY_BASE_URL:?Set DEPLOY_BASE_URL}"
 DEPLOY_RSYNC_PATH="${DEPLOY_RSYNC_PATH:-rsync}"
 DEPLOY_COMMIT_SHA="${DEPLOY_COMMIT_SHA:?Set DEPLOY_COMMIT_SHA}"
 SMOKE_BASIC_AUTH_USER="${SMOKE_BASIC_AUTH_USER:?Set SMOKE_BASIC_AUTH_USER}"
@@ -16,7 +17,7 @@ if [[ ! "${DEPLOY_COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
   exit 1
 fi
 
-for command_name in ssh rsync; do
+for command_name in ssh rsync curl python3; do
   command -v "${command_name}" >/dev/null 2>&1 || {
     echo "${command_name} is required for the web-listener deployment." >&2
     exit 1
@@ -26,7 +27,6 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
-COMPOSE_FILES="-f docker-compose.yml -f docker-compose.production.yml"
 previous_web_image_id=""
 previous_web_image_ref="platform-infra-web:latest"
 WEB_CHANGED=false
@@ -181,6 +181,47 @@ fi
 
 echo "Catering internal listener: ok (web:8081 -> intake-service, exact identity confirmed)"
 REMOTE_SCRIPT
+
+public_body="$(mktemp)"
+cleanup_public() { rm -f "${public_body}"; }
+trap cleanup_public EXIT
+public_ok=false
+for attempt in $(seq 1 10); do
+  : >"${public_body}"
+  if curl --silent --show-error --fail --max-time 8 \
+    --basic --user "${SMOKE_BASIC_AUTH_USER}:${SMOKE_BASIC_AUTH_PASSWORD}" \
+    --output "${public_body}" \
+    "${DEPLOY_BASE_URL%/}/api/intake/health"; then
+    if python3 - "${public_body}" <<'PYTHON'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as response:
+        payload = json.load(response)
+except (OSError, UnicodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+if payload.get("status") != "ok":
+    raise SystemExit(1)
+if payload.get("service") != "intake-service":
+    raise SystemExit(1)
+PYTHON
+    then
+      public_ok=true
+      break
+    fi
+  fi
+  sleep 1
+done
+if [[ "${public_ok}" != "true" ]]; then
+  echo "Existing public Catering path failed exact intake-service identity probe after web recreate." >&2
+  exit 1
+fi
+echo "Public Catering path: ok (exact intake-service identity confirmed)"
+rm -f "${public_body}"
+trap - EXIT
 
 ssh "${REMOTE}" bash -s -- "${DEPLOY_PATH}" "${DEPLOY_COMMIT_SHA}" <<'REMOTE_SCRIPT'
 set -euo pipefail
