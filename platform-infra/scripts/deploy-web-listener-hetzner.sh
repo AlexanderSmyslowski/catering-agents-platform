@@ -217,7 +217,7 @@ PYTHON
 done
 if [[ "${public_ok}" != "true" ]]; then
   echo "Existing public Catering path failed exact intake-service identity probe after web recreate." >&2
-  exit 1
+  false
 fi
 echo "Public Catering path: ok (exact intake-service identity confirmed)"
 rm -f "${public_body}"
