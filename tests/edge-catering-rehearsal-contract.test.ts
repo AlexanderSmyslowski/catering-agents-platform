@@ -10,9 +10,12 @@ const platformCompose = readFileSync(new URL('../platform-infra/docker-compose.y
 const platformCaddy = readFileSync(new URL('../platform-infra/Caddyfile', import.meta.url), 'utf8');
 
 describe('edge Catering rehearsal contract', () => {
-  it('uses a dedicated app-owned internal HTTP listener that cannot redirect through the public site', () => {
+  it('uses a dedicated app-owned internal HTTP listener without coupling it to the public TLS site', () => {
     expect(platformCompose).toContain('CATERING_SITE_ADDRESS: ${CATERING_SITE_ADDRESS:-:80}');
-    expect(platformCaddy).toContain('{$CATERING_SITE_ADDRESS::80}, :8081 {');
+    expect(platformCaddy).toContain('{$CATERING_SITE_ADDRESS::80} {');
+    expect(platformCaddy).toContain('http://:8081 {');
+    expect(platformCaddy).toContain('import catering_app_routes');
+    expect(platformCaddy).not.toContain('{$CATERING_SITE_ADDRESS::80}, :8081 {');
 
     expect(edgeEnv).toContain('CATERING_APP_UPSTREAM=http://web:8081');
     expect(edgeEnv).not.toMatch(/^CATERING_APP_UPSTREAM=http:\/\/web:80$/m);
