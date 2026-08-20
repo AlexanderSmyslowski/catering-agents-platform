@@ -1,7 +1,5 @@
 services:
   edge:
-    environment:
-      CATERING_UPSTREAM: https://web:443
     ports: !override
       - "127.0.0.1:18080:80"
     volumes: !override
