@@ -36,9 +36,11 @@ describe('isolated Catering web listener deployment', () => {
     expect(deploy).toMatch(/up -d --no-deps --force-recreate --no-build web/);
   });
 
-  it('is an explicit manual exact-commit workflow using the production environment', () => {
+  it('is an explicit manual exact-commit workflow serialized with full production deploys', () => {
     expect(workflow).toContain('workflow_dispatch:');
     expect(workflow).toContain('environment: production');
+    expect(workflow).toContain('group: catering-production-deploy');
+    expect(workflow).toContain('cancel-in-progress: false');
     expect(workflow).toContain('uses: actions/checkout@v5');
     expect(workflow).toContain('DEPLOY_COMMIT_SHA: ${{ github.sha }}');
     expect(workflow).toContain('bash platform-infra/scripts/deploy-web-listener-hetzner.sh');
