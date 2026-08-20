@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const compose = readFileSync(new URL('../edge-infra/docker-compose.yml', import.meta.url), 'utf8');
+const rehearsalCompose = readFileSync(new URL('../edge-infra/docker-compose.rehearsal.yml', import.meta.url), 'utf8');
 const caddy = readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url), 'utf8');
 const rehearsalCaddy = readFileSync(new URL('../edge-infra/Caddyfile.rehearsal', import.meta.url), 'utf8');
 const envExample = readFileSync(new URL('../edge-infra/.env.example', import.meta.url), 'utf8');
@@ -40,7 +41,8 @@ describe('independent edge infrastructure contract', () => {
     expect(caddy).not.toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
     expect(caddy).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
 
-    expect(rehearsalCaddy).toContain('reverse_proxy https://web:443');
+    expect(rehearsalCompose).toContain('CATERING_UPSTREAM: https://web:443');
+    expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
     expect(rehearsalCaddy).toContain('tls_server_name {$CATERING_PUBLIC_HOST}');
     expect(rehearsalCaddy).toContain('header_up Host {$CATERING_PUBLIC_HOST}');
   });
