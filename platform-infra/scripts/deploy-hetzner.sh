@@ -25,12 +25,6 @@ if [[ "${EDGE_EXTERNAL}" != "true" && "${EDGE_EXTERNAL}" != "false" ]]; then
   exit 1
 fi
 
-COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.production.yml)
-if [[ "${EDGE_EXTERNAL}" == "true" ]]; then
-  COMPOSE_FILES+=(-f docker-compose.edge-cutover.yml)
-fi
-REMOTE_COMPOSE_FILES="$(printf ' %q' "${COMPOSE_FILES[@]}")"
-
 if ! command -v rsync >/dev/null 2>&1; then
   echo "rsync is required for deployment."
   exit 1
@@ -90,15 +84,32 @@ ssh "${REMOTE}" "
   cd '${DEPLOY_PATH}/platform-infra'
   test -f .env || { echo 'Missing platform-infra/.env on server.'; exit 1; }
   test -f docker-compose.production.yml || { echo 'Missing platform-infra/docker-compose.production.yml on server.'; exit 1; }
-  if [[ '${EDGE_EXTERNAL}' == 'true' ]]; then
-    test -f docker-compose.edge-cutover.yml || { echo 'Missing platform-infra/docker-compose.edge-cutover.yml on server.'; exit 1; }
-  fi
   docker network inspect zeiterfassung_default >/dev/null 2>&1 || {
     echo 'Missing required external Docker network: zeiterfassung_default'
     exit 1
   }
-  docker compose${REMOTE_COMPOSE_FILES} config >/dev/null
-  docker compose${REMOTE_COMPOSE_FILES} up --build -d
+  if [[ '${EDGE_EXTERNAL}' == 'true' ]]; then
+    test -f docker-compose.edge-cutover.yml || { echo 'Missing platform-infra/docker-compose.edge-cutover.yml on server.'; exit 1; }
+    docker compose \
+      -f docker-compose.yml \
+      -f docker-compose.production.yml \
+      -f docker-compose.edge-cutover.yml \
+      config >/dev/null
+    docker compose \
+      -f docker-compose.yml \
+      -f docker-compose.production.yml \
+      -f docker-compose.edge-cutover.yml \
+      up --build -d
+  else
+    docker compose \
+      -f docker-compose.yml \
+      -f docker-compose.production.yml \
+      config >/dev/null
+    docker compose \
+      -f docker-compose.yml \
+      -f docker-compose.production.yml \
+      up --build -d
+  fi
 "
 
 echo "Running smoke checks against ${DEPLOY_BASE_URL}..."
