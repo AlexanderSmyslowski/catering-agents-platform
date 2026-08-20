@@ -25,6 +25,13 @@ describe('isolated Catering web listener deployment', () => {
     expect(deploy).toContain('payload.get("service") != "intake-service"');
   });
 
+  it('keeps the existing public Catering path healthy after the web-only recreate', () => {
+    expect(deploy).toContain('DEPLOY_BASE_URL');
+    expect(deploy).toContain('${DEPLOY_BASE_URL%/}/api/intake/health');
+    expect(deploy).toContain('Public Catering path: ok');
+    expect(workflow).toContain('DEPLOY_BASE_URL: ${{ secrets.HETZNER_DEPLOY_BASE_URL }}');
+  });
+
   it('preserves protected state and restores the previous web image on a failed listener probe', () => {
     expect(deploy).toContain('--exclude "platform-infra/.env"');
     expect(deploy).toContain('--exclude "platform-infra/sites"');
