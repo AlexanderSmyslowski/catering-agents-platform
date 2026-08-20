@@ -11,7 +11,7 @@
 	header_up X-Catering-Business-Id {$CATERING_DEFAULT_BUSINESS_ID}
 }
 
-{$CATERING_SITE_ADDRESS::80}, :8081 {
+(catering_app_routes) {
 	root * /srv
 	encode zstd gzip
 
@@ -84,6 +84,14 @@
 			file_server
 		}
 	}
+}
+
+{$CATERING_SITE_ADDRESS::80} {
+	import catering_app_routes
+}
+
+http://:8081 {
+	import catering_app_routes
 }
 
 import /etc/caddy/sites/*.caddy
