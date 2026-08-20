@@ -34,10 +34,22 @@ echo "== Certificate inventory (paths and sizes only; no key contents) =="
 docker run --rm -v "${volume_name}:/data:ro" alpine:3.21 sh -c '
   if [ ! -d /data/caddy/certificates ]; then
     echo "certificate_store=absent"
+  else
+    find /data/caddy/certificates -type f \( -name "*.crt" -o -name "*.key" -o -name "*.json" \) \
+      -printf "%p\t%s bytes\n" 2>/dev/null | sort
+  fi
+'
+
+echo "== Persisted cutover TLS runtime evidence (bounded, filtered) =="
+docker run --rm -v "${volume_name}:/data:ro" alpine:3.21 sh -c '
+  if [ ! -f /data/cutover-runtime.log ]; then
+    echo "cutover_runtime_log=absent"
     exit 0
   fi
-  find /data/caddy/certificates -type f \( -name "*.crt" -o -name "*.key" -o -name "*.json" \) \
-    -printf "%p\t%s bytes\n" 2>/dev/null | sort
+  tail -n 250 /data/cutover-runtime.log \
+    | grep -Ei "tls|acme|certificate|challenge|issuer|obtain|renew|error|warn" \
+    | tail -n 120 \
+    || true
 '
 
 echo "== ACME/account directory inventory (names only) =="
