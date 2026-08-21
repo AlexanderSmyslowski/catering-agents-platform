@@ -397,6 +397,10 @@ console.log('LISTEN 0 128 0.0.0.0:443 0.0.0.0:* users:((' + '"caddy"' + ',pid=' 
 const fs = require('fs');
 const args = process.argv.slice(2);
 if (args[0] === '-e') args.shift();
+if (process.env.HARNESS_CASE === 'unreadable-zeiterfassung-root' && args[0].startsWith(process.env.HARNESS_ZEIT_ROOT)) {
+  process.stderr.write('realpath: Permission denied\\n');
+  process.exit(13);
+}
 try { process.stdout.write(fs.realpathSync(args[0]) + '\n'); } catch (_error) { process.exit(1); }
 `;
   const shaScript = String.raw`#!/usr/bin/env node
@@ -591,9 +595,9 @@ describe('post-cutover evidence workflow contract', () => {
     expect(helper).toContain('/api/offers/health');
     expect(helper).toContain('/api/production/health');
     expect(helper).toContain('/api/exports/health');
-    expect(helper).toContain('/root/zeiterfassung-deploy/current');
-    expect(helper).toContain('read_zeiterfassung_provenance');
-    expect(helper).toContain('assert_zeiterfassung_container_provenance');
+    expect(helper).not.toContain('/root/zeiterfassung-deploy');
+    expect(helper).toContain('read_zeiterfassung_container_metadata');
+    expect(helper).toContain('assert_zeiterfassung_container_metadata');
     expect(helper).toContain('EXPECTED_CADDYFILE_SHA256');
     expect(helper).toContain('validate_effective_caddy_config');
     expect(helper).toContain('/etc/caddy/Caddyfile');
@@ -757,39 +761,62 @@ read_effective_upstreams shared-edge-id`], {
     }
   });
 
-  it('executes a valid Zeiterfassung release provenance fixture', () => {
-    const provenance = extractFunction(helper, 'read_zeiterfassung_provenance');
-    const fixture = createZeiterfassungProvenanceFixture();
+  it('executes safe Zeiterfassung container metadata without resolving its working directory', () => {
+    const metadata = extractFunction(helper, 'read_zeiterfassung_container_metadata');
+    const assertion = extractFunction(helper, 'assert_zeiterfassung_container_metadata');
+    const root = mkdtempSync(join(tmpdir(), 'zeiterfassung-container-metadata-'));
+    writeFileSync(
+      join(root, 'docker'),
+      `#!/usr/bin/env bash
+case "$*" in
+  *Config.Image*) printf '%s\\n' 'zeiterfassung-app:1.2.3-0123456789ab' ;;
+  *com.docker.compose.project.working_dir*) printf '%s\\n' '/root/zeiterfassung-deploy' ;;
+  *) exit 1 ;;
+esac
+`,
+      { mode: 0o700 },
+    );
     const result = runExtractedFunction(
-      provenance,
-      'read_zeiterfassung_provenance "$ROOT"; printf "%s\\n" "$ZEITERFASSUNG_RELEASE_VERSION|$ZEITERFASSUNG_RELEASE_GIT_SHA|$ZEITERFASSUNG_RELEASE_SHA12|$ZEITERFASSUNG_RELEASE_PATH";',
-      { ROOT: fixture.root },
+      `${assertion}\n${metadata}`,
+      'read_zeiterfassung_container_metadata fixture; printf "%s\\n" "$ZEITERFASSUNG_CONTAINER_IMAGE|$ZEITERFASSUNG_COMPOSE_WORKING_DIR"',
+      { PATH: `${root}:${process.env.PATH ?? ''}` },
     );
     expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
-    expect(result.stdout).toMatch(
-      /1\.2\.3\|0123456789abcdef0123456789abcdef01234567\|0123456789ab\|.*\/0123456789ab-20260821T120000Z/,
+    expect(result.stdout).toBe('zeiterfassung-app:1.2.3-0123456789ab|/root/zeiterfassung-deploy\n');
+  });
+
+  it('rejects malformed Zeiterfassung container metadata', () => {
+    const assertion = extractFunction(helper, 'assert_zeiterfassung_container_metadata');
+    const loader = extractFunction(helper, 'load_zeiterfassung_container_metadata');
+    const containerLine = extractFunction(helper, 'zeiterfassung_container_line');
+    const stateField = extractFunction(helper, 'state_field');
+    const invalidWorkingDir = runExtractedFunction(
+      assertion,
+      'assert_zeiterfassung_container_metadata "relative/path" "zeiterfassung-app:1.2.3-0123456789ab"',
     );
-  });
+    expect(invalidWorkingDir.status).not.toBe(0);
+    expect(`${invalidWorkingDir.stdout}${invalidWorkingDir.stderr}`).toContain('working-dir label is malformed');
 
-  it('rejects a Zeiterfassung provenance symlink escape fixture', () => {
-    const provenance = extractFunction(helper, 'read_zeiterfassung_provenance');
-    const outside = mkdtempSync(join(tmpdir(), 'zeiterfassung-outside-'));
-    const fixture = createZeiterfassungProvenanceFixture({ currentTarget: outside });
-    const result = runExtractedFunction(provenance, 'read_zeiterfassung_provenance "$ROOT"', { ROOT: fixture.root });
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}${result.stderr}`).toContain('Zeiterfassung current release escapes');
-  });
+    const tabWorkingDir = runExtractedFunction(
+      assertion,
+      `assert_zeiterfassung_container_metadata $'/root/zeiterfassung-deploy\\twith-tab' "zeiterfassung-app:1.2.3-0123456789ab"`,
+    );
+    expect(tabWorkingDir.status).not.toBe(0);
+    expect(`${tabWorkingDir.stdout}${tabWorkingDir.stderr}`).toContain('working-dir label is malformed');
 
-  it.each([
-    ['malformed version', { version: '1.2' }, 'release version is not valid SemVer'],
-    ['SemVer leading-zero prerelease', { version: '1.2.3-01' }, 'release version is not valid SemVer'],
-    ['malformed SHA', { gitSha: '0123456789ABCDEF0123456789ABCDEF01234567' }, 'release git SHA is not exactly 40 lowercase hexadecimal characters'],
-  ])('rejects the %s provenance fixture', (_name, overrides, expected) => {
-    const provenance = extractFunction(helper, 'read_zeiterfassung_provenance');
-    const fixture = createZeiterfassungProvenanceFixture(overrides);
-    const result = runExtractedFunction(provenance, 'read_zeiterfassung_provenance "$ROOT"', { ROOT: fixture.root });
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}${result.stderr}`).toContain(expected);
+    const tabSnapshot = runExtractedFunction(
+      `${stateField}\n${containerLine}\n${loader}`,
+      `load_zeiterfassung_container_metadata $'ZEITERFASSUNG_CONTAINER\\tzeiterfassung-app:1.2.3-0123456789ab\\t/root/zeiterfassung-deploy\\twith-tab'`,
+    );
+    expect(tabSnapshot.status).not.toBe(0);
+    expect(`${tabSnapshot.stdout}${tabSnapshot.stderr}`).toContain('working-dir label is invalid');
+
+    const invalidImage = runExtractedFunction(
+      assertion,
+      'assert_zeiterfassung_container_metadata "/root/zeiterfassung-deploy" "zeiterfassung-app:latest"',
+    );
+    expect(invalidImage.status).not.toBe(0);
+    expect(`${invalidImage.stdout}${invalidImage.stderr}`).toContain('image identity is not allowlisted');
   });
 
   it('validates the canonical EventOS release marker as a regular lowercase SHA file', () => {
@@ -1151,38 +1178,47 @@ esac
     }
   }, 120000);
 
-  it('executes the allowlisted working-dir/image provenance comparison', () => {
-    const comparison = extractFunction(helper, 'assert_zeiterfassung_container_provenance');
-    const fixture = createZeiterfassungProvenanceFixture();
-    const canonicalReleasePath = realpathSync(fixture.releasePath);
-    const containerOnlyPath = mkdtempSync(join(tmpdir(), 'container-only-working-dir-'));
-    const notAllowlistedPath = mkdtempSync(join(tmpdir(), 'not-allowlisted-working-dir-'));
-    const validScript = [
-      `ZEITERFASSUNG_RELEASE_PATH='${canonicalReleasePath}'`,
-      'ZEITERFASSUNG_RELEASE_VERSION=1.2.3',
-      'ZEITERFASSUNG_RELEASE_SHA12=0123456789ab',
-      `assert_zeiterfassung_container_provenance "${fixture.currentPath}" "zeiterfassung-app:1.2.3-0123456789ab"`,
-    ].join('\n');
-    expect(runExtractedFunction(comparison, validScript).status).toBe(0);
+  it('uses container and public evidence when the Zeiterfassung deployment root is unreadable', () => {
+    const remoteSnapshot = extractRemoteSnapshot(helper);
+    const fixture = createFakeRemoteFixture('unreadable-zeiterfassung-root');
+    const result = runExtractedFunction(
+      remoteSnapshot,
+      [
+        'SSH_ARGS=(--batch-mode)',
+        'REMOTE=fixture',
+        'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+        'remote_snapshot',
+      ].join('\n'),
+      fixture.environment,
+      70000,
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('STATE\tzeiterfassung-app');
+    expect(result.stdout).toContain('ZEITERFASSUNG_CONTAINER');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('Permission denied');
 
-    const imageOnly = runExtractedFunction(comparison, [
-      `ZEITERFASSUNG_RELEASE_PATH='${canonicalReleasePath}'`,
-      'ZEITERFASSUNG_RELEASE_VERSION=1.2.3',
-      'ZEITERFASSUNG_RELEASE_SHA12=0123456789ab',
-      `assert_zeiterfassung_container_provenance "${containerOnlyPath}" "zeiterfassung-app:1.2.3-0123456789ab"`,
+    const lowercase = extractFunction(helper, 'lowercase');
+    const releaseIdentity = extractFunction(helper, 'assert_zeiterfassung_release_identity');
+    const readyIdentity = extractFunction(helper, 'assert_zeiterfassung_identity');
+    const configIdentity = extractFunction(helper, 'assert_zeiterfassung_config_identity');
+    const gitSha = '0123456789abcdef0123456789abcdef01234567';
+    const publicIdentity = runExtractedFunction('', [
+      'ZEITERFASSUNG_RELEASE_VERSION="9.9.9"',
+      'ZEITERFASSUNG_RELEASE_GIT_SHA="fedcba9876543210fedcba9876543210fedcba98"',
+      'HTTP_CONTENT_TYPE=application/json',
+      `HTTP_BODY='{"ok":true,"version":"1.2.3","gitSha":"${gitSha}"}'`,
+      lowercase,
+      releaseIdentity,
+      'assert_zeiterfassung_release_identity',
+      `HTTP_BODY='{"ok":true,"version":"1.2.3","gitSha":"${gitSha}"}'`,
+      readyIdentity,
+      'assert_zeiterfassung_identity',
+      `HTTP_BODY='{"ok":true,"environmentLabel":"Produktiv","version":"1.2.3","gitSha":"${gitSha}","appUrl":"https://zeit.the-one.catering","platformCustomersEnabled":false}'`,
+      configIdentity,
+      'assert_zeiterfassung_config_identity',
     ].join('\n'));
-    expect(imageOnly.status).not.toBe(0);
-    expect(`${imageOnly.stdout}${imageOnly.stderr}`).toContain('does not match the read-only release provenance');
-
-    const mismatched = runExtractedFunction(comparison, [
-      `ZEITERFASSUNG_RELEASE_PATH='${canonicalReleasePath}'`,
-      'ZEITERFASSUNG_RELEASE_VERSION=1.2.3',
-      'ZEITERFASSUNG_RELEASE_SHA12=0123456789ab',
-      `assert_zeiterfassung_container_provenance "${notAllowlistedPath}" "foreign-image:latest"`,
-    ].join('\n'));
-    expect(mismatched.status).not.toBe(0);
-    expect(`${mismatched.stdout}${mismatched.stderr}`).toContain('does not match the read-only release provenance');
-  });
+    expect(publicIdentity.status, `${publicIdentity.stdout}${publicIdentity.stderr}`).toBe(0);
+  }, 120000);
 
   it('requires release version and SHA on Zeiterfassung ready and public-config responses', () => {
     const lowercase = extractFunction(helper, 'lowercase');
@@ -1215,6 +1251,44 @@ esac
     const missingResult = runExtractedFunction('', missingIdentity);
     expect(missingResult.status).not.toBe(0);
     expect(`${missingResult.stdout}${missingResult.stderr}`).toContain('Zeiterfassung semantic identity failed');
+  });
+
+  it('fails closed when public Zeiterfassung identity proofs disagree', () => {
+    const lowercase = extractFunction(helper, 'lowercase');
+    const releaseIdentity = extractFunction(helper, 'assert_zeiterfassung_release_identity');
+    const readyIdentity = extractFunction(helper, 'assert_zeiterfassung_identity');
+    const configIdentity = extractFunction(helper, 'assert_zeiterfassung_config_identity');
+    const gitSha = '0123456789abcdef0123456789abcdef01234567';
+    const mismatchedGitSha = 'fedcba9876543210fedcba9876543210fedcba98';
+    const readyMismatch = runExtractedFunction('', [
+      'ZEITERFASSUNG_RELEASE_VERSION="9.9.9"',
+      'ZEITERFASSUNG_RELEASE_GIT_SHA="fedcba9876543210fedcba9876543210fedcba98"',
+      'HTTP_CONTENT_TYPE=application/json',
+      `HTTP_BODY='{"ok":true,"version":"1.2.3","gitSha":"${gitSha}"}'`,
+      lowercase,
+      releaseIdentity,
+      'assert_zeiterfassung_release_identity',
+      `HTTP_BODY='{"ok":true,"version":"1.2.4","gitSha":"${gitSha}"}'`,
+      readyIdentity,
+      'assert_zeiterfassung_identity',
+    ].join('\n'));
+    expect(readyMismatch.status).not.toBe(0);
+    expect(`${readyMismatch.stdout}${readyMismatch.stderr}`).toContain('Zeiterfassung semantic identity failed');
+
+    const configMismatch = runExtractedFunction('', [
+      'ZEITERFASSUNG_RELEASE_VERSION="9.9.9"',
+      'ZEITERFASSUNG_RELEASE_GIT_SHA="fedcba9876543210fedcba9876543210fedcba98"',
+      'HTTP_CONTENT_TYPE=application/json',
+      `HTTP_BODY='{"ok":true,"version":"1.2.3","gitSha":"${gitSha}"}'`,
+      lowercase,
+      releaseIdentity,
+      'assert_zeiterfassung_release_identity',
+      `HTTP_BODY='{"ok":true,"version":"1.2.3","gitSha":"${mismatchedGitSha}","environmentLabel":"Produktiv","appUrl":"https://zeit.the-one.catering","platformCustomersEnabled":false}'`,
+      configIdentity,
+      'assert_zeiterfassung_config_identity',
+    ].join('\n'));
+    expect(configMismatch.status).not.toBe(0);
+    expect(`${configMismatch.stdout}${configMismatch.stderr}`).toContain('Zeiterfassung public config identity failed');
   });
 
   it('never prints a sensitive label or secret-like extra state field', () => {

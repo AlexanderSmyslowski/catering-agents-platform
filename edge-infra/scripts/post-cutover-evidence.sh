@@ -248,98 +248,37 @@ snapshot_generation_before="$(read_edge_generation "${edge_path}")"
 EVENTOS_RELEASE_SHA=""
 read_eventos_release_marker
 
-ZEITERFASSUNG_RELEASE_PATH=""
-ZEITERFASSUNG_RELEASE_VERSION=""
-ZEITERFASSUNG_RELEASE_GIT_SHA=""
-ZEITERFASSUNG_RELEASE_SHA12=""
+ZEITERFASSUNG_CONTAINER_IMAGE=""
+ZEITERFASSUNG_COMPOSE_WORKING_DIR=""
 EVENTOS_IMAGE=""
 EVENTOS_COMPOSE_RELEASE_SHA=""
 EVENTOS_WORKING_DIR=""
 
-read_zeiterfassung_provenance() {
-  local default_current_path="/root/zeiterfassung-deploy/current"
-  local default_deploy_root="${default_current_path%/current}"
-  local deploy_root="${1:-${default_deploy_root}}"
-  local current_path="${deploy_root}/current"
-  local release_path release_name release_sha12 release_timestamp package_json release_version sha_file sha_line_count release_git_sha
-
-  if [[ "${deploy_root}" == "${default_deploy_root}" ]]; then
-    [[ "$(realpath "${deploy_root}")" == "${default_deploy_root}" ]] || remote_fail "Zeiterfassung deployment root escapes /root/zeiterfassung-deploy/."
-  else
-    deploy_root="$(realpath "${deploy_root}")" || remote_fail "Zeiterfassung deployment root cannot be resolved."
-    current_path="${deploy_root}/current"
-  fi
-  [[ -L "${current_path}" ]] || remote_fail "Zeiterfassung current release is not a symlink."
-  release_path="$(realpath "${current_path}")" || remote_fail "Zeiterfassung current release cannot be resolved."
-  [[ -d "${release_path}" ]] || remote_fail "Zeiterfassung current release cannot be resolved."
-  case "${release_path}" in
-    "${deploy_root}"/*) ;;
-    *) remote_fail "Zeiterfassung current release escapes /root/zeiterfassung-deploy/." ;;
-  esac
-  [[ "$(dirname "${release_path}")" == "${deploy_root}" ]] || remote_fail "Zeiterfassung current release layout is not a direct deployment directory."
-
-  release_name="${release_path##*/}"
-  [[ "${release_name}" =~ ^([0-9a-f]{12})-([0-9]{8}T[0-9]{6}Z)$ ]] || remote_fail "Zeiterfassung current release directory name is not a sha12-UTC-timestamp layout."
-  release_sha12="${BASH_REMATCH[1]}"
-  release_timestamp="${BASH_REMATCH[2]}"
-  python3 -c 'from datetime import datetime; import sys; datetime.strptime(sys.argv[1], "%Y%m%dT%H%M%SZ")' \
-    "${release_timestamp}" || remote_fail "Zeiterfassung release directory timestamp is not a valid UTC timestamp."
-
-  package_json="${release_path}/package.json"
-  sha_file="${release_path}/.release-git-sha"
-  [[ -f "${package_json}" && ! -L "${package_json}" ]] || remote_fail "Zeiterfassung package.json is not a regular non-symlink file."
-  [[ -f "${sha_file}" && ! -L "${sha_file}" ]] || remote_fail "Zeiterfassung .release-git-sha is not a regular non-symlink file."
-
-  release_version="$(python3 -c 'import json, sys
-try:
-    with open(sys.argv[1], encoding="utf-8") as package_file:
-        package = json.load(package_file)
-    version = package.get("version")
-except (OSError, TypeError, ValueError, AttributeError):
-    raise SystemExit(1)
-if not isinstance(version, str) or not version:
-    raise SystemExit(1)
-print(version)' "${package_json}")" || remote_fail "Zeiterfassung package.json version is unavailable."
-  python3 -c 'import re, sys
-value = sys.argv[1]
-match = re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?", value)
-if not match:
-    raise SystemExit(1)
-prerelease = match.group(4)
-if prerelease and any(part.isdigit() and len(part) != 1 and part.startswith("0") for part in prerelease.split(".")):
-    raise SystemExit(1)' "${release_version}" || remote_fail "Zeiterfassung release version is not valid SemVer."
-
-  sha_line_count="$(awk 'END { print NR + 0 }' "${sha_file}")"
-  [[ "${sha_line_count}" == 1 ]] || remote_fail "Zeiterfassung .release-git-sha must contain exactly one line."
-  release_git_sha="$(sed -n '1p' "${sha_file}")"
-  [[ "${release_git_sha}" =~ ^[0-9a-f]{40}$ ]] || remote_fail "Zeiterfassung release git SHA is not exactly 40 lowercase hexadecimal characters."
-  [[ "${release_git_sha:0:12}" == "${release_sha12}" ]] || remote_fail "Zeiterfassung release directory SHA prefix does not match .release-git-sha."
-
-  ZEITERFASSUNG_RELEASE_PATH="${release_path}"
-  ZEITERFASSUNG_RELEASE_VERSION="${release_version}"
-  ZEITERFASSUNG_RELEASE_GIT_SHA="${release_git_sha}"
-  ZEITERFASSUNG_RELEASE_SHA12="${release_sha12}"
-}
-
-assert_zeiterfassung_container_provenance() {
+assert_zeiterfassung_container_metadata() {
   local working_dir="$1"
   local image="$2"
-  local expected_image="zeiterfassung-app:${ZEITERFASSUNG_RELEASE_VERSION}-${ZEITERFASSUNG_RELEASE_SHA12}"
-  local compose_missing resolved_working_dir
+  local compose_missing
   compose_missing="$(printf '\074no value\076')"
 
   [[ -n "${working_dir}" && "${working_dir}" != "${compose_missing}" ]] || \
     remote_fail "Zeiterfassung Compose working-dir label is missing."
-  resolved_working_dir="$(realpath "${working_dir}")" || \
-    remote_fail "Zeiterfassung Compose working-dir label cannot be resolved."
-  [[ "${resolved_working_dir}" == "${ZEITERFASSUNG_RELEASE_PATH}" ]] || \
-    remote_fail "Zeiterfassung Compose working-dir label does not match the read-only release provenance."
-
-  [[ -n "${image}" && "${image}" != "${compose_missing}" && "${image}" == "${expected_image}" ]] || \
-    remote_fail "Zeiterfassung image tag does not match the read-only release provenance."
+  [[ "${working_dir}" == /* && "${working_dir}" != *$'\n'* && "${working_dir}" != *$'\r'* && "${working_dir}" != *$'\t'* ]] || \
+    remote_fail "Zeiterfassung Compose working-dir label is malformed."
+  [[ -n "${image}" && "${image}" != "${compose_missing}" ]] || \
+    remote_fail "Zeiterfassung container image identity is missing."
+  [[ "${image}" =~ ^zeiterfassung-app:(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ || "${image}" =~ ^zeiterfassung-app@sha256:[0-9a-f]{64}$ ]] || \
+    remote_fail "Zeiterfassung container image identity is not allowlisted."
 }
 
-read_zeiterfassung_provenance
+read_zeiterfassung_container_metadata() {
+  local container_id="$1"
+  local image working_dir
+  image="$(docker inspect --format '{{.Config.Image}}' "${container_id}")" || remote_fail "Zeiterfassung container image inspection failed."
+  working_dir="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "${container_id}")" || remote_fail "Zeiterfassung Compose working-dir label inspection failed."
+  assert_zeiterfassung_container_metadata "${working_dir}" "${image}"
+  ZEITERFASSUNG_CONTAINER_IMAGE="${image}"
+  ZEITERFASSUNG_COMPOSE_WORKING_DIR="${working_dir}"
+}
 
 network_listing="$(docker network ls --no-trunc --format '{{.Name}}\t{{.ID}}\t{{.Driver}}\t{{.Scope}}')"
 
@@ -430,10 +369,7 @@ exports_state="$(container_record catering-exports "${exports_id}")"
 zeiterfassung_state="$(container_record zeiterfassung-app "${zeiterfassung_id}")"
 eventos_state="$(container_record eventos-app "${eventos_id}")"
 eventos_postgres_state="$(container_record eventos-postgres "${eventos_postgres_id}")"
-
-zeiterfassung_image="$(docker inspect --format '{{.Config.Image}}' "${zeiterfassung_id}")"
-zeiterfassung_working_dir="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "${zeiterfassung_id}")"
-assert_zeiterfassung_container_provenance "${zeiterfassung_working_dir}" "${zeiterfassung_image}"
+read_zeiterfassung_container_metadata "${zeiterfassung_id}"
 
 read_effective_upstreams() {
   local container_id="$1"
@@ -645,8 +581,8 @@ snapshot_generation_after="$(read_edge_generation "${edge_path}")"
 [[ "${snapshot_generation_before}" == "${snapshot_generation_after}" ]] || remote_fail "snapshot generation changed during evidence collection."
 printf '%s\n' "${snapshot_lock_before}" "${snapshot_generation_before}"
 
-printf 'PROVENANCE\tzeiterfassung\t%s\t%s\t%s\n' \
-  "${ZEITERFASSUNG_RELEASE_VERSION}" "${ZEITERFASSUNG_RELEASE_GIT_SHA}" "${ZEITERFASSUNG_RELEASE_SHA12}"
+printf 'ZEITERFASSUNG_CONTAINER\t%s\t%s\n' \
+  "${ZEITERFASSUNG_CONTAINER_IMAGE}" "${ZEITERFASSUNG_COMPOSE_WORKING_DIR}"
 printf 'EVENTOS_RELEASE\t%s\n' "${EVENTOS_RELEASE_SHA}"
 printf 'METADATA\tshared-edge-commit\t%s\n' "${manifest_commit}"
 printf 'METADATA\tshared-edge-mode\t%s\n' "${manifest_mode}"
@@ -671,11 +607,11 @@ state_field() {
   printf '%s\n' "${line}" | awk -F '\t' -v field_number="${field_number}" '{ print $field_number }'
 }
 
-provenance_line() {
+zeiterfassung_container_line() {
   local snapshot="$1"
   local line
-  if ! line="$(printf '%s\n' "${snapshot}" | awk -F '\t' '$1 == "PROVENANCE" && $2 == "zeiterfassung" { print; count += 1 } END { if (count != 1) exit 1 }')"; then
-    fail "missing or ambiguous Zeiterfassung release provenance."
+  if ! line="$(printf '%s\n' "${snapshot}" | awk -F '\t' '$1 == "ZEITERFASSUNG_CONTAINER" { print; count += 1 } END { if (count != 1) exit 1 }')"; then
+    fail "missing or ambiguous Zeiterfassung container metadata."
   fi
   printf '%s' "${line}"
 }
@@ -755,18 +691,15 @@ load_eventos_release_marker() {
   EVENTOS_RELEASE_SHA="${release_sha}"
 }
 
-load_zeiterfassung_provenance() {
+load_zeiterfassung_container_metadata() {
   local snapshot="$1"
-  local line version git_sha sha12
-  line="$(provenance_line "${snapshot}")"
-  version="$(state_field "${line}" 3)"
-  git_sha="$(state_field "${line}" 4)"
-  sha12="$(state_field "${line}" 5)"
-  [[ "${version}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || fail "Zeiterfassung release provenance version is invalid."
-  [[ "${git_sha}" =~ ^[0-9a-f]{40}$ ]] || fail "Zeiterfassung release provenance SHA is invalid."
-  [[ "${sha12}" == "${git_sha:0:12}" ]] || fail "Zeiterfassung release provenance SHA prefix is inconsistent."
-  ZEITERFASSUNG_RELEASE_VERSION="${version}"
-  ZEITERFASSUNG_RELEASE_GIT_SHA="${git_sha}"
+  local line image working_dir
+  line="$(zeiterfassung_container_line "${snapshot}")"
+  [[ "$(printf '%s\n' "${line}" | awk -F '\t' '{ print NF }')" == 3 ]] || fail "Zeiterfassung container metadata working-dir label is invalid."
+  image="$(state_field "${line}" 2)"
+  working_dir="$(state_field "${line}" 3)"
+  [[ "${working_dir}" == /* && "${working_dir}" != *$'\n'* && "${working_dir}" != *$'\r'* && "${working_dir}" != *$'\t'* ]] || fail "Zeiterfassung container metadata working-dir label is invalid."
+  [[ "${image}" =~ ^zeiterfassung-app:(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ || "${image}" =~ ^zeiterfassung-app@sha256:[0-9a-f]{64}$ ]] || fail "Zeiterfassung container metadata image is invalid."
 }
 
 validate_allowlisted_inventory() {
@@ -912,7 +845,7 @@ print_container_summary() {
 }
 
 compare_identity_invariants() {
-  local component before_line after_line before_id after_id before_restart after_restart before_networks after_networks before_provenance after_provenance before_upstreams after_upstreams before_eventos after_eventos before_eventos_identity after_eventos_identity before_lock after_lock
+  local component before_line after_line before_id after_id before_restart after_restart before_networks after_networks before_container_metadata after_container_metadata before_upstreams after_upstreams before_eventos after_eventos before_eventos_identity after_eventos_identity before_lock after_lock
   for component in "${COMPONENTS[@]}"; do
     before_line="$(state_line "${before_snapshot}" "${component}")"
     after_line="$(state_line "${after_snapshot}" "${component}")"
@@ -926,9 +859,9 @@ compare_identity_invariants() {
     [[ "${before_restart}" == "${after_restart}" ]] || fail "RestartCount increased or changed for ${component}."
     [[ "${before_networks}" == "${after_networks}" ]] || fail "network mapping changed for ${component}."
   done
-  before_provenance="$(provenance_line "${before_snapshot}")"
-  after_provenance="$(provenance_line "${after_snapshot}")"
-  [[ "${before_provenance}" == "${after_provenance}" ]] || fail "Zeiterfassung release provenance changed."
+  before_container_metadata="$(zeiterfassung_container_line "${before_snapshot}")"
+  after_container_metadata="$(zeiterfassung_container_line "${after_snapshot}")"
+  [[ "${before_container_metadata}" == "${after_container_metadata}" ]] || fail "Zeiterfassung container metadata changed."
   before_upstreams="$(upstream_evidence "${before_snapshot}")"
   after_upstreams="$(upstream_evidence "${after_snapshot}")"
   [[ "${before_upstreams}" == "${after_upstreams}" ]] || fail "effective shared-edge upstream changed."
@@ -1016,14 +949,19 @@ except (ValueError, TypeError):
     raise SystemExit(1)
 if not isinstance(payload, dict) or payload.get("ok") is not True:
     raise SystemExit(1)
-if payload.get("version") != sys.argv[1] or payload.get("gitSha") != sys.argv[2]:
+version = payload.get("version")
+git_sha = payload.get("gitSha")
+if not isinstance(version, str) or not isinstance(git_sha, str):
+    raise SystemExit(1)
+if version != sys.argv[1] or git_sha != sys.argv[2]:
     raise SystemExit(1)
 ' "${ZEITERFASSUNG_RELEASE_VERSION}" "${ZEITERFASSUNG_RELEASE_GIT_SHA}" || fail "Zeiterfassung semantic identity failed."
 }
 
 assert_zeiterfassung_release_identity() {
   [[ "$(lowercase "${HTTP_CONTENT_TYPE}")" == application/json* ]] || fail "Zeiterfassung healthz content type is not JSON."
-  printf '%s' "${HTTP_BODY}" | python3 -c 'import json, sys
+  local identity
+  identity="$(printf '%s' "${HTTP_BODY}" | python3 -c 'import json, re, sys
 try:
     payload = json.load(sys.stdin)
 except (ValueError, TypeError):
@@ -1032,11 +970,16 @@ if not isinstance(payload, dict) or payload.get("ok") is not True:
     raise SystemExit(1)
 version = payload.get("version")
 git_sha = payload.get("gitSha")
-if not isinstance(version, str) or version != sys.argv[1] or version == "unknown":
+if not isinstance(version, str) or version == "unknown":
     raise SystemExit(1)
-if not isinstance(git_sha, str) or git_sha != sys.argv[2] or len(git_sha) != 40 or git_sha == "unknown":
+version_pattern = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+if not re.fullmatch(version_pattern, version):
     raise SystemExit(1)
-' "${ZEITERFASSUNG_RELEASE_VERSION}" "${ZEITERFASSUNG_RELEASE_GIT_SHA}" || fail "Zeiterfassung release identity failed."
+if not isinstance(git_sha, str) or git_sha == "unknown" or not re.fullmatch(r"[0-9a-f]{40}", git_sha):
+    raise SystemExit(1)
+print(f"{version}\t{git_sha}")' )" || fail "Zeiterfassung release identity failed."
+  IFS=$'\t' read -r ZEITERFASSUNG_RELEASE_VERSION ZEITERFASSUNG_RELEASE_GIT_SHA <<< "${identity}"
+  [[ -n "${ZEITERFASSUNG_RELEASE_VERSION}" && -n "${ZEITERFASSUNG_RELEASE_GIT_SHA}" ]] || fail "Zeiterfassung release identity is incomplete."
 }
 
 assert_zeiterfassung_config_identity() {
@@ -1050,7 +993,11 @@ if not isinstance(payload, dict):
     raise SystemExit(1)
 if payload.get("ok") is not True or payload.get("environmentLabel") != "Produktiv":
     raise SystemExit(1)
-if payload.get("version") != sys.argv[1] or payload.get("gitSha") != sys.argv[2]:
+version = payload.get("version")
+git_sha = payload.get("gitSha")
+if not isinstance(version, str) or not isinstance(git_sha, str):
+    raise SystemExit(1)
+if version != sys.argv[1] or git_sha != sys.argv[2]:
     raise SystemExit(1)
 if payload.get("appUrl") != "https://zeit.the-one.catering" or payload.get("platformCustomersEnabled") is not False:
     raise SystemExit(1)
@@ -1146,7 +1093,7 @@ validate_curl_args
 echo "Collecting read-only pre-smoke evidence."
 before_snapshot="$(remote_snapshot)"
 validate_allowlisted_inventory "${before_snapshot}"
-load_zeiterfassung_provenance "${before_snapshot}"
+load_zeiterfassung_container_metadata "${before_snapshot}"
 load_eventos_release_marker "${before_snapshot}"
 upstream_evidence "${before_snapshot}" >/dev/null
 lock_line "${before_snapshot}" >/dev/null
@@ -1154,12 +1101,13 @@ for generation_file in .deploy-manifest docker-compose.yml Caddyfile; do
   generation_line "${before_snapshot}" "${generation_file}" >/dev/null
 done
 print_container_summary before "${before_snapshot}"
-printf '%s\n' "${before_snapshot}" | awk -F '\t' '$1 == "NETWORK_LS" || $1 == "NETWORK" || $1 == "UPSTREAM" || $1 == "PROVENANCE" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" || $1 == "LISTENER" { print }'
+printf '%s\n' "${before_snapshot}" | awk -F '\t' '$1 == "NETWORK_LS" || $1 == "NETWORK" || $1 == "UPSTREAM" || $1 == "ZEITERFASSUNG_CONTAINER" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" || $1 == "LISTENER" { print }'
 printf 'METADATA\tcutover-workflow\tCut over shared edge production #6\n'
 printf 'METADATA\tcutover-run-id\t%s\n' "${CUTOVER_RUN_ID}"
 
 retry_https "Zeiterfassung healthz" "${ZEITERFASSUNG_SMOKE_URL%/}/healthz" public
 assert_zeiterfassung_release_identity
+printf 'ZEITERFASSUNG_IDENTITY\t%s\t%s\n' "${ZEITERFASSUNG_RELEASE_VERSION}" "${ZEITERFASSUNG_RELEASE_GIT_SHA}"
 printf 'SMOKE\tZeiterfassung healthz\tHTTP 200\tok=true,version/gitSha exact\tTLS verified\n'
 
 retry_https "Zeiterfassung readyz" "${ZEITERFASSUNG_SMOKE_URL%/}/readyz" public
@@ -1209,7 +1157,7 @@ validate_allowlisted_inventory "${after_snapshot}"
 load_eventos_release_marker "${after_snapshot}"
 compare_identity_invariants
 print_container_summary after "${after_snapshot}"
-printf '%s\n' "${after_snapshot}" | awk -F '\t' '$1 == "LISTENER" || $1 == "PROVENANCE" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" { print }'
+printf '%s\n' "${after_snapshot}" | awk -F '\t' '$1 == "LISTENER" || $1 == "ZEITERFASSUNG_CONTAINER" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" { print }'
 
 echo "All read-only Shared Edge ownership, identity, network, TLS, smoke and restart gates passed."
 echo "public 80/443 ownership verified by Shared Edge bindings and ss process owners."
