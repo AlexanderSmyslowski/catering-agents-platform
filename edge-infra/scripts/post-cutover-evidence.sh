@@ -262,7 +262,7 @@ assert_zeiterfassung_container_metadata() {
 
   [[ -n "${working_dir}" && "${working_dir}" != "${compose_missing}" ]] || \
     remote_fail "Zeiterfassung Compose working-dir label is missing."
-  [[ "${working_dir}" == /* && "${working_dir}" != *$'\n'* && "${working_dir}" != *$'\r'* ]] || \
+  [[ "${working_dir}" == /* && "${working_dir}" != *$'\n'* && "${working_dir}" != *$'\r'* && "${working_dir}" != *$'\t'* ]] || \
     remote_fail "Zeiterfassung Compose working-dir label is malformed."
   [[ -n "${image}" && "${image}" != "${compose_missing}" ]] || \
     remote_fail "Zeiterfassung container image identity is missing."
@@ -695,9 +695,10 @@ load_zeiterfassung_container_metadata() {
   local snapshot="$1"
   local line image working_dir
   line="$(zeiterfassung_container_line "${snapshot}")"
+  [[ "$(printf '%s\n' "${line}" | awk -F '\t' '{ print NF }')" == 3 ]] || fail "Zeiterfassung container metadata working-dir label is invalid."
   image="$(state_field "${line}" 2)"
   working_dir="$(state_field "${line}" 3)"
-  [[ "${working_dir}" == /* && "${working_dir}" != *$'\n'* && "${working_dir}" != *$'\r'* ]] || fail "Zeiterfassung container metadata working-dir label is invalid."
+  [[ "${working_dir}" == /* && "${working_dir}" != *$'\n'* && "${working_dir}" != *$'\r'* && "${working_dir}" != *$'\t'* ]] || fail "Zeiterfassung container metadata working-dir label is invalid."
   [[ "${image}" =~ ^zeiterfassung-app:(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ || "${image}" =~ ^zeiterfassung-app@sha256:[0-9a-f]{64}$ ]] || fail "Zeiterfassung container metadata image is invalid."
 }
 

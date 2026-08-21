@@ -787,12 +787,29 @@ esac
 
   it('rejects malformed Zeiterfassung container metadata', () => {
     const assertion = extractFunction(helper, 'assert_zeiterfassung_container_metadata');
+    const loader = extractFunction(helper, 'load_zeiterfassung_container_metadata');
+    const containerLine = extractFunction(helper, 'zeiterfassung_container_line');
+    const stateField = extractFunction(helper, 'state_field');
     const invalidWorkingDir = runExtractedFunction(
       assertion,
       'assert_zeiterfassung_container_metadata "relative/path" "zeiterfassung-app:1.2.3-0123456789ab"',
     );
     expect(invalidWorkingDir.status).not.toBe(0);
     expect(`${invalidWorkingDir.stdout}${invalidWorkingDir.stderr}`).toContain('working-dir label is malformed');
+
+    const tabWorkingDir = runExtractedFunction(
+      assertion,
+      `assert_zeiterfassung_container_metadata $'/root/zeiterfassung-deploy\\twith-tab' "zeiterfassung-app:1.2.3-0123456789ab"`,
+    );
+    expect(tabWorkingDir.status).not.toBe(0);
+    expect(`${tabWorkingDir.stdout}${tabWorkingDir.stderr}`).toContain('working-dir label is malformed');
+
+    const tabSnapshot = runExtractedFunction(
+      `${stateField}\n${containerLine}\n${loader}`,
+      `load_zeiterfassung_container_metadata $'ZEITERFASSUNG_CONTAINER\\tzeiterfassung-app:1.2.3-0123456789ab\\t/root/zeiterfassung-deploy\\twith-tab'`,
+    );
+    expect(tabSnapshot.status).not.toBe(0);
+    expect(`${tabSnapshot.stdout}${tabSnapshot.stderr}`).toContain('working-dir label is invalid');
 
     const invalidImage = runExtractedFunction(
       assertion,
