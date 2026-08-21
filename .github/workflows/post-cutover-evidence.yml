@@ -74,5 +74,12 @@ jobs:
           CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
           CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
           EVIDENCE_CONTEXT: github-production
-          EXPECTED_CADDYFILE_SHA256: ${{ hashFiles('edge-infra/Caddyfile') }}
-        run: bash edge-infra/scripts/post-cutover-evidence.sh
+        run: |
+          set -euo pipefail
+          EXPECTED_CADDYFILE_SHA256="$(sha256sum edge-infra/Caddyfile | awk '{print $1}')"
+          [[ "${EXPECTED_CADDYFILE_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+            printf '%s\n' 'checked-out Caddyfile SHA-256 is invalid.' >&2
+            exit 1
+          }
+          export EXPECTED_CADDYFILE_SHA256
+          bash edge-infra/scripts/post-cutover-evidence.sh

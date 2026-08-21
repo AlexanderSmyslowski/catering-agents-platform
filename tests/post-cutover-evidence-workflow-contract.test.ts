@@ -519,7 +519,7 @@ describe('post-cutover evidence workflow contract', () => {
     expect(workflow).toContain('EXPECTED_CUTOVER_COMMIT: 6703d2aa9bb426c7f44d6601306dc623219741be');
     expect(workflow).toContain('CUTOVER_RUN_ID: 32417734936');
     expect(workflow).toContain('EVIDENCE_CONTEXT: github-production');
-    expect(workflow).toContain("EXPECTED_CADDYFILE_SHA256: ${{ hashFiles('edge-infra/Caddyfile') }}");
+    expect(workflow).not.toContain('hashFiles(');
     expect(workflow).not.toContain('ZEITERFASSUNG_OWNER_CONTRACT_STATUS');
     expect(workflow).not.toContain('EVENTOS_OWNER_CONTRACT_STATUS');
     expect(workflow).not.toContain('ZEITERFASSUNG_EXPECTED_VERSION');
@@ -529,6 +529,26 @@ describe('post-cutover evidence workflow contract', () => {
     expect(workflow).not.toContain('Authorization');
     expect(workflow).not.toMatch(/(?:^|[\s"'])-k([\s"']|$)/);
     expect(workflow).not.toContain('--insecure');
+  });
+
+  it('computes and validates the raw checked-out Caddyfile SHA before invoking the helper', () => {
+    const runStart = workflow.indexOf('      - name: Run read-only post-cutover evidence\n');
+    const runStep = workflow.slice(runStart);
+    const shaCommand = "EXPECTED_CADDYFILE_SHA256=\"$(sha256sum edge-infra/Caddyfile | awk '{print $1}')\"";
+    const validation = '[[ "${EXPECTED_CADDYFILE_SHA256}" =~ ^[0-9a-f]{64}$ ]]';
+    const exportCommand = 'export EXPECTED_CADDYFILE_SHA256';
+    const helperCommand = 'bash edge-infra/scripts/post-cutover-evidence.sh';
+
+    expect(runStart).toBeGreaterThanOrEqual(0);
+    expect(runStep).not.toContain('hashFiles(');
+    expect(runStep).not.toContain('GITHUB_ENV');
+    expect(runStep).toContain(shaCommand);
+    expect(runStep).toContain(validation);
+    expect(runStep).toContain(exportCommand);
+    expect(runStep).toContain(helperCommand);
+    expect(runStep.indexOf(shaCommand)).toBeLessThan(runStep.indexOf(validation));
+    expect(runStep.indexOf(validation)).toBeLessThan(runStep.indexOf(exportCommand));
+    expect(runStep.indexOf(exportCommand)).toBeLessThan(runStep.indexOf(helperCommand));
   });
 
   it('dominates every production-secret step with the main-branch job guard', () => {
