@@ -221,7 +221,7 @@ read_eventos_container_identity() {
   local image compose_release compose_release_count working_dir compose_missing
   compose_missing="$(printf '\074no value\076')"
   image="$(docker inspect --format '{{.Config.Image}}' "${container_id}")"
-  compose_release="$(docker inspect --format '{{range .Config.Env}}{{if contains . "EVENTOS_RELEASE_SHA="}}{{println .}}{{end}}{{end}}' "${container_id}")" || remote_fail "EventOS release identity inspection failed."
+  compose_release="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${container_id}" | awk 'index($0, "EVENTOS_RELEASE_SHA=")')" || remote_fail "EventOS release identity inspection failed."
   compose_release_count="$(printf '%s\n' "${compose_release}" | awk 'NF { count += 1 } END { print count + 0 }')"
   [[ "${compose_release_count}" == 1 ]] || remote_fail "EventOS Compose release identity is missing or duplicated."
   compose_release="${compose_release#EVENTOS_RELEASE_SHA=}"
@@ -380,7 +380,7 @@ read_effective_upstreams() {
     'EVENTOS_UPSTREAM=commcats-eventos-app:3045'
   )
 
-  env_lines="$(docker inspect --format '{{range .Config.Env}}{{if contains . "_UPSTREAM="}}{{println .}}{{end}}{{end}}' "${container_id}")" || remote_fail "shared-edge effective upstream inspection failed."
+  env_lines="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${container_id}" | awk 'index($0, "_UPSTREAM=")')" || remote_fail "shared-edge effective upstream inspection failed."
   actual_count="$(printf '%s\n' "${env_lines}" | awk 'NF { count += 1 } END { print count + 0 }')"
   [[ "${actual_count}" == 3 ]] || remote_fail "shared-edge effective upstream set is missing, duplicated or unexpected."
   while IFS= read -r line; do
@@ -405,7 +405,7 @@ read_effective_edge_value() {
   local container_id="$1"
   local key="$2"
   local values count value
-  values="$(docker inspect --format "{{range .Config.Env}}{{if contains . \"${key}=\"}}{{println .}}{{end}}{{end}}" "${container_id}")" || remote_fail "shared-edge effective ${key} inspection failed."
+  values="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${container_id}" | awk -v needle="${key}=" 'index($0, needle)')" || remote_fail "shared-edge effective ${key} inspection failed."
   count="$(printf '%s\n' "${values}" | awk 'NF { count += 1 } END { print count + 0 }')"
   [[ "${count}" == 1 ]] || remote_fail "shared-edge effective ${key} is missing or duplicated."
   value="${values#${key}=}"
