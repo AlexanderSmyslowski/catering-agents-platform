@@ -1,7 +1,7 @@
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
@@ -15,6 +15,23 @@ const helperFile = fileURLToPath(helperPath);
 const caddyfileSha256 = createHash('sha256')
   .update(readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url)))
   .digest('hex');
+const originalProcessPath = process.env.PATH ?? '';
+
+function resolveExecutableFromPath(executable: string, pathValue: string): string {
+  for (const directory of pathValue.split(delimiter)) {
+    if (!directory) continue;
+    const candidate = join(directory, executable);
+    try {
+      if (statSync(candidate).isFile()) {
+        accessSync(candidate, constants.X_OK);
+        return candidate;
+      }
+    } catch (_error) {
+      // Keep searching so a missing or inaccessible PATH entry cannot run a fixture.
+    }
+  }
+  throw new Error(`Unable to resolve ${executable} from original PATH: ${pathValue}`);
+}
 
 function createRunnerFixture() {
   const root = mkdtempSync(join(tmpdir(), 'post-cutover-evidence-runner-'));
@@ -169,7 +186,8 @@ function inventoryFixture(overrides: {
   return lines.join('\n');
 }
 
-function createFakeRemoteFixture(kind: string) {
+function createFakeRemoteFixture(kind: string, originalPath = originalProcessPath) {
+  const realSha256sum = resolveExecutableFromPath('sha256sum', originalPath);
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'post-cutover-evidence-remote-')));
   const edgePath = join(root, 'shared-edge');
   const rollbackRoot = join(root, 'shared-edge-rollbacks');
@@ -454,7 +472,7 @@ process.exit(result.status === null ? 1 : result.status);
     zeiterfassungRoot,
     environment: {
       ...process.env,
-      PATH: `${root}:${process.env.PATH ?? ''}`,
+      PATH: `${root}${delimiter}${originalPath}`,
       HARNESS_ROOT: root,
       HARNESS_EDGE_PATH: edgePath,
       HARNESS_ROLLBACK_ROOT: rollbackRoot,
@@ -465,7 +483,7 @@ process.exit(result.status === null ? 1 : result.status);
       HARNESS_EXPECTED_CADDY_SHA: kind === 'wrong-caddy-hash' ? 'd'.repeat(64) : caddyfileSha256,
       HARNESS_CASE: kind,
       HARNESS_SCRIPT_LOG: join(root, 'remote-script.log'),
-      REAL_SHA256SUM: '/sbin/sha256sum',
+      REAL_SHA256SUM: realSha256sum,
     },
   };
 }
@@ -1052,6 +1070,22 @@ esac
     expect(helper).toContain('snapshot_generation_after');
     expect(helper).toContain('snapshot lock state changed');
     expect(helper).toContain('snapshot manifest changed');
+  });
+
+  it('resolves the fake remote sha256sum from the original PATH and fails closed when missing', () => {
+    const root = mkdtempSync(join(tmpdir(), 'post-cutover-sha256sum-resolution-'));
+    const originalBin = join(root, 'original-bin');
+    mkdirSync(originalBin);
+    const expectedBinary = join(originalBin, 'sha256sum');
+    writeFileSync(expectedBinary, '#!/usr/bin/env bash\nexit 0\n', { mode: 0o700 });
+    chmodSync(expectedBinary, 0o700);
+    const originalPath = `${originalBin}${delimiter}${join(root, 'missing-bin')}`;
+
+    const fixture = createFakeRemoteFixture('valid', originalPath);
+    expect(fixture.environment.REAL_SHA256SUM).toBe(expectedBinary);
+    expect(() => createFakeRemoteFixture('valid', join(root, 'missing-bin'))).toThrow(
+      /Unable to resolve sha256sum from original PATH/,
+    );
   });
 
   it('executes the complete SSH heredoc through a fake remote and rejects adversarial runtime fixtures', () => {
