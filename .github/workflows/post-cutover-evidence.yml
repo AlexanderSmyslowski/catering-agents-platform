@@ -1,0 +1,78 @@
+name: Post-cutover shared-edge evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-edge-production-deploy
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  post-cutover-evidence:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Configure production SSH without exposing secrets
+        env:
+          HETZNER_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          HETZNER_SSH_KNOWN_HOSTS: ${{ secrets.HETZNER_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$HETZNER_SSH_PRIVATE_KEY"
+          test -n "$HETZNER_SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$HETZNER_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$HETZNER_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Validate production evidence inputs
+        env:
+          HETZNER_DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          HETZNER_DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
+          CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$HETZNER_DEPLOY_HOST"
+          test -n "$HETZNER_DEPLOY_USER"
+          test -n "$CATERING_SMOKE_BASIC_AUTH_USER"
+          test -n "$CATERING_SMOKE_BASIC_AUTH_PASSWORD"
+          printf '::add-mask::%s\n' "$HETZNER_DEPLOY_HOST"
+          printf '::add-mask::%s\n' "$HETZNER_DEPLOY_USER"
+          printf '::add-mask::%s\n' "$CATERING_SMOKE_BASIC_AUTH_USER"
+          printf '::add-mask::%s\n' "$CATERING_SMOKE_BASIC_AUTH_PASSWORD"
+          test "$GITHUB_REF_NAME" = main
+
+      - name: Run read-only post-cutover evidence
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          EDGE_DEPLOY_PATH: /opt/shared-edge
+          EDGE_ROLLBACK_ROOT: /opt/shared-edge-rollbacks
+          EXPECTED_CUTOVER_COMMIT: 6703d2aa9bb426c7f44d6601306dc623219741be
+          CUTOVER_RUN_ID: 32417734936
+          CATERING_SMOKE_URL: https://catering.the-one.catering
+          ZEITERFASSUNG_SMOKE_URL: https://zeit.the-one.catering
+          EVENTOS_SMOKE_URL: https://eventos.commcats.de
+          CATERING_SMOKE_BASIC_AUTH_USER: ${{ secrets.SMOKE_BASIC_AUTH_USER }}
+          CATERING_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.SMOKE_BASIC_AUTH_PASSWORD }}
+          EVIDENCE_CONTEXT: github-production
+          EXPECTED_CADDYFILE_SHA256: ${{ hashFiles('edge-infra/Caddyfile') }}
+        run: bash edge-infra/scripts/post-cutover-evidence.sh
