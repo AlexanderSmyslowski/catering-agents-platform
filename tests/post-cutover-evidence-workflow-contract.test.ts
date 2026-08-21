@@ -379,7 +379,7 @@ if (args[0] === 'inspect') {
     ].join('\n') + '\n');
     else if (component === 'eventos-app') emit('EVENTOS_RELEASE_SHA=' + (env.HARNESS_CASE === 'eventos-arbitrary-sha' ? 'b'.repeat(40) : env.HARNESS_EVENTOS_SHA) + '\n');
   } else if (format.includes('.Mounts')) {
-    if (component === 'shared-edge') emit(env.HARNESS_EDGE_PATH + '/Caddyfile\t/etc/caddy/Caddyfile\tro\tfalse\n');
+    if (component === 'shared-edge') emit(env.HARNESS_EDGE_PATH + '/Caddyfile\t/etc/caddy/Caddyfile\tfalse\n');
   } else if (format.includes('IPAddress')) {
     if (component === 'shared-edge') emit('172.31.0.2\n');
   } else if (format.includes('join $network.Aliases')) {
@@ -1202,6 +1202,108 @@ esac
     );
     expect(wrongHash.status).not.toBe(0);
     expect(`${wrongHash.stdout}${wrongHash.stderr}`).toContain('Caddyfile hash differs');
+  });
+
+  it('accepts optional Docker mount modes while enforcing exact destination, source and RW=false', () => {
+    expect(helper).toContain('{{printf "%s\\t%s\\t%t\\n" .Source .Destination .RW}}');
+    expect(helper).not.toContain('.Mode');
+    const caddyValidation = extractFunction(helper, 'validate_effective_caddy_config');
+    const root = mkdtempSync(join(tmpdir(), 'caddy-mount-fixture-'));
+    const caddyPath = join(root, 'Caddyfile');
+    const wrongSource = join(root, 'not-the-caddyfile');
+    const dockerStub = join(root, 'docker');
+    const realpathStub = join(root, 'realpath');
+    writeFileSync(caddyPath, readFileSync(new URL('../edge-infra/Caddyfile', import.meta.url)));
+    writeFileSync(wrongSource, 'different source\n');
+    writeFileSync(
+      dockerStub,
+      String.raw`#!/usr/bin/env bash
+if [[ "$*" == *".Mounts"* ]]; then
+  printf '%s\n' "$MOUNT_LINE" | awk -F '\t' 'NF == 4 { printf "%s\t%s\t%s\n", $1, $2, $4; next } { print }'
+  exit 0
+fi
+exit 1
+`,
+      { mode: 0o700 },
+    );
+    chmodSync(dockerStub, 0o700);
+    writeFileSync(
+      realpathStub,
+      '#!/usr/bin/env node\n' +
+        "const fs = require('node:fs');\n" +
+        "const args = process.argv.slice(2);\n" +
+        "if (args[0] === '-e') args.shift();\n" +
+        "try { process.stdout.write(fs.realpathSync(args[0]) + '\\n'); } catch (_error) { process.exit(1); }\n",
+      { mode: 0o700 },
+    );
+    chmodSync(realpathStub, 0o700);
+
+    const mountScript = [
+      'read_effective_edge_value() {',
+      '  case "$2" in',
+      '    CATERING_PUBLIC_HOST) printf "%s" catering.the-one.catering ;;',
+      '    ZEITERFASSUNG_PUBLIC_HOST) printf "%s" zeit.the-one.catering ;;',
+      '    EVENTOS_PUBLIC_HOST) printf "%s" eventos.commcats.de ;;',
+      '    *) return 1 ;;',
+      '  esac',
+      '}',
+      'edge_path="$ROOT"',
+      'edge_id=fixture',
+      'expected_caddyfile_sha256="' + caddyfileSha256 + '"',
+      'validate_effective_caddy_config',
+    ].join('\n');
+    const runMountCase = (mountLine: string) => runExtractedFunction(
+      caddyValidation,
+      mountScript,
+      {
+        ROOT: root,
+        PATH: root + delimiter + originalProcessPath,
+        MOUNT_LINE: mountLine,
+        SECRET_FIXTURE: 'fixture-secret-must-not-leak',
+      },
+    );
+
+    const modeEmpty = runMountCase(caddyPath + '\t/etc/caddy/Caddyfile\tfalse');
+    expect(modeEmpty.status, modeEmpty.stdout + modeEmpty.stderr).toBe(0);
+
+    const modeWithExtraOption = runMountCase(caddyPath + '\t/etc/caddy/Caddyfile\tro,Z\tfalse');
+    expect(modeWithExtraOption.status, modeWithExtraOption.stdout + modeWithExtraOption.stderr).toBe(0);
+
+    const writable = runMountCase(caddyPath + '\t/etc/caddy/Caddyfile\ttrue');
+    expect(writable.status).not.toBe(0);
+    expect(writable.stdout + writable.stderr).toContain('destination=/etc/caddy/Caddyfile');
+    expect(writable.stdout + writable.stderr).toContain('rw=true');
+
+    const wrongDestination = runMountCase(caddyPath + '\t/etc/caddy/other\tfalse');
+    expect(wrongDestination.status).not.toBe(0);
+    expect(wrongDestination.stdout + wrongDestination.stderr).toContain('destination=/etc/caddy/other');
+    expect(wrongDestination.stdout + wrongDestination.stderr).toContain('rw=false');
+
+    const missingMount = runMountCase('');
+    expect(missingMount.status).not.toBe(0);
+    expect(missingMount.stdout + missingMount.stderr).toContain('destination=/etc/caddy/Caddyfile');
+    expect(missingMount.stdout + missingMount.stderr).toContain('rw=missing-or-ambiguous');
+
+    const ambiguousMount = runMountCase([
+      caddyPath + '\t/etc/caddy/Caddyfile\tfalse',
+      caddyPath + '\t/etc/caddy/Caddyfile\tfalse',
+    ].join('\n'));
+    expect(ambiguousMount.status).not.toBe(0);
+    expect(ambiguousMount.stdout + ambiguousMount.stderr).toContain('rw=missing-or-ambiguous');
+
+    const emptySource = runMountCase('\t/etc/caddy/Caddyfile\tfalse');
+    expect(emptySource.status).not.toBe(0);
+
+    const emptyDestination = runMountCase(caddyPath + '\t\tfalse');
+    expect(emptyDestination.status).not.toBe(0);
+
+    const wrongSourceResult = runMountCase(wrongSource + '\t/etc/caddy/Caddyfile\tfalse');
+    expect(wrongSourceResult.status).not.toBe(0);
+    expect(wrongSourceResult.stdout + wrongSourceResult.stderr).toContain('source-realpath=mismatch');
+
+    for (const result of [modeEmpty, modeWithExtraOption, writable, wrongDestination, missingMount, ambiguousMount, emptySource, emptyDestination, wrongSourceResult]) {
+      expect(result.stdout + result.stderr).not.toContain('fixture-secret-must-not-leak');
+    }
   });
 
   it('rejects EventOS marker-only identity and requires image/Compose provenance', () => {

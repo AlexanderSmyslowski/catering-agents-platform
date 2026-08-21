@@ -427,19 +427,22 @@ read_effective_edge_value() {
 
 validate_effective_caddy_config() {
   local caddy_path="${edge_path}/Caddyfile"
-  local caddy_hash caddy_mount mount_count mount_source mount_destination mount_mode mount_rw
+  local caddy_hash caddy_mount mount_count mount_source mount_destination mount_rw
   local catering_host zeiterfassung_host eventos_host
 
   [[ -f "${caddy_path}" && ! -L "${caddy_path}" ]] || remote_fail "shared-edge Caddyfile is not a regular non-symlink file."
   caddy_hash="$(sha256sum "${caddy_path}" | awk '{ print $1 }')"
   [[ "${caddy_hash}" == "${expected_caddyfile_sha256}" ]] || remote_fail "shared-edge Caddyfile hash differs from the checked-out evidence hash."
 
-  caddy_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}\t{{.Destination}}\t{{.Mode}}\t{{.RW}}{{end}}{{end}}' "${edge_id}")" || remote_fail "shared-edge Caddyfile mount inspection failed."
+  caddy_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{printf "%s\t%s\t%t\n" .Source .Destination .RW}}{{end}}{{end}}' "${edge_id}")" || remote_fail "shared-edge Caddyfile mount inspection failed."
   mount_count="$(printf '%s\n' "${caddy_mount}" | awk 'NF { count += 1 } END { print count + 0 }')"
-  [[ "${mount_count}" == 1 ]] || remote_fail "shared-edge Caddyfile mount is missing or ambiguous."
-  IFS=$'\t' read -r mount_source mount_destination mount_mode mount_rw <<< "${caddy_mount}"
-  [[ "${mount_destination}" == /etc/caddy/Caddyfile && "${mount_mode}" == ro && "${mount_rw}" == false ]] || remote_fail "shared-edge Caddyfile mount is not read-only."
-  [[ "$(realpath -e "${mount_source}")" == "$(realpath -e "${caddy_path}")" ]] || remote_fail "shared-edge Caddyfile mount source is not the checked-out edge file."
+  [[ "${mount_count}" == 1 ]] || remote_fail "shared-edge Caddyfile mount invariant failed: destination=/etc/caddy/Caddyfile rw=missing-or-ambiguous."
+  mount_source=''
+  mount_destination=''
+  mount_rw=''
+  IFS=$'\t' read -r mount_source mount_destination mount_rw <<< "${caddy_mount}"
+  [[ "${mount_destination}" == /etc/caddy/Caddyfile && "${mount_rw}" == false ]] || remote_fail "shared-edge Caddyfile mount invariant failed: destination=${mount_destination} rw=${mount_rw}."
+  [[ "$(realpath -e "${mount_source}")" == "$(realpath -e "${caddy_path}")" ]] || remote_fail "shared-edge Caddyfile mount invariant failed: destination=/etc/caddy/Caddyfile rw=false source-realpath=mismatch."
 
   catering_host="$(read_effective_edge_value "${edge_id}" CATERING_PUBLIC_HOST)"
   zeiterfassung_host="$(read_effective_edge_value "${edge_id}" ZEITERFASSUNG_PUBLIC_HOST)"
