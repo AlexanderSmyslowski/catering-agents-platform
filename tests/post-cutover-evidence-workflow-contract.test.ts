@@ -350,8 +350,10 @@ if (args[0] === 'inspect') {
   if (format === '{{.Id}}') emit(idFor(component) + '\n');
   else if (format === '{{.Name}}') emit('/' + row[3] + '\n');
   else if (format.includes('.State.Pid')) emit(env.HARNESS_REMOTE_PID + '\n');
-  else if (format.includes('.Config.Image')) {
-    if (component === 'eventos-app') emit(env.HARNESS_CASE === 'eventos-arbitrary-sha' || env.HARNESS_CASE === 'eventos-unbound' ? 'commcats-eventos-app:latest\n' : 'commcats-eventos-app@sha256:' + 'e'.repeat(64) + '\n');
+  else if (format === '{{.Image}}') {
+    emit(component === 'eventos-app' ? 'sha256:' + 'e'.repeat(64) + '\n' : 'sha256:' + '0'.repeat(64) + '\n');
+  } else if (format.includes('.Config.Image')) {
+    if (component === 'eventos-app') emit(env.HARNESS_CASE === 'eventos-unbound' ? 'commcats-eventos-app:latest\n' : 'commcats-eventos-app\n');
     else if (component === 'zeiterfassung-app') emit('zeiterfassung-app:1.2.3-0123456789ab\n');
     else emit('fixture:image\n');
   } else if (format.includes('.State.Status')) emit('running\n');
@@ -581,6 +583,7 @@ describe('post-cutover evidence workflow contract', () => {
     expect(helper).toContain('ss -ltnp');
     expect(helper).toContain('docker ps');
     expect(helper).toContain('docker inspect');
+    expect(helper).toContain("docker inspect --format '{{.Image}}'");
     expect(helper).toContain('docker network ls');
     expect(helper).toContain('docker network inspect');
     expect(helper).toContain('HostConfig.PortBindings');
@@ -683,6 +686,7 @@ remote_fail 'sanitized fixture failure'`], { encoding: 'utf8' });
     expect(helper).toContain('network mapping');
     expect(helper).toContain('public 80/443 ownership');
     expect(helper).toContain('EventOS release marker');
+    expect(helper).toContain('compare_eventos_content_id_invariant');
     expect(helper).not.toContain('ZEITERFASSUNG_OWNER_CONTRACT_STATUS');
     expect(helper).toContain('validate_curl_args');
     expect(helper).toContain('assert_eventos_ready_identity');
@@ -864,7 +868,8 @@ esac
     expect(symlinkResult.status).not.toBe(0);
   });
 
-  it('rejects an EventOS release SHA without an immutable image/Compose owner binding', () => {
+  it('rejects an EventOS identity without the exact image name and immutable local content ID', () => {
+    const normalizeImage = extractFunction(helper, 'normalize_eventos_image_name');
     const identity = extractFunction(helper, 'read_eventos_container_identity');
     const root = mkdtempSync(join(tmpdir(), 'eventos-container-identity-'));
     const docker = join(root, 'docker');
@@ -874,8 +879,9 @@ esac
       `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
-  *Config.Image*) printf '%s\\n' "\${EVENTOS_IMAGE:-commcats-eventos-app@sha256:${'e'.repeat(64)}}" ;;
-  *EVENTOS_RELEASE_SHA=*|*.Config.Env*) printf 'EVENTOS_RELEASE_SHA=%s\\n' "$EVENTOS_RELEASE_SHA" ;;
+  *Config.Image*) printf '%s\\n' "\${EVENTOS_IMAGE:-commcats-eventos-app}" ;;
+  *.Image*) printf '%s\\n' "\${EVENTOS_CONTENT_ID:-sha256:${'e'.repeat(64)}}" ;;
+  *EVENTOS_RELEASE_SHA=*|*.Config.Env*) printf 'EVENTOS_RELEASE_SHA=%s\\n' "\${EVENTOS_CONTAINER_RELEASE:-$EVENTOS_RELEASE_SHA}" ;;
   *com.docker.compose.project.working_dir*) printf '%s\\n' "$EVENTOS_WORKING_DIR" ;;
   *) exit 1 ;;
 esac
@@ -883,7 +889,7 @@ esac
       { mode: 0o700 },
     );
     const valid = runExtractedFunction(
-      identity,
+      `${normalizeImage}\n${identity}`,
       'export EVENTOS_RELEASE_SHA="$EXPECTED_SHA"; read_eventos_container_identity fixture',
       {
         PATH: `${root}:${process.env.PATH ?? ''}`,
@@ -893,8 +899,8 @@ esac
     );
     expect(valid.status, `${valid.stdout}${valid.stderr}`).toBe(0);
 
-    const unbound = runExtractedFunction(
-      identity,
+    const wrongImage = runExtractedFunction(
+      `${normalizeImage}\n${identity}`,
       'export EVENTOS_RELEASE_SHA="$EXPECTED_SHA"; export EVENTOS_IMAGE=commcats-eventos-app:latest; read_eventos_container_identity fixture',
       {
         PATH: `${root}:${process.env.PATH ?? ''}`,
@@ -903,8 +909,82 @@ esac
         EVENTOS_IMAGE: 'commcats-eventos-app:latest',
       },
     );
-    expect(unbound.status).not.toBe(0);
-    expect(`${unbound.stdout}${unbound.stderr}`).toContain('immutable digest');
+    expect(wrongImage.status).not.toBe(0);
+    expect(`${wrongImage.stdout}${wrongImage.stderr}`).toContain('documented owner image');
+
+    const missingContentId = runExtractedFunction(
+      `${normalizeImage}\n${identity}`,
+      'export EVENTOS_RELEASE_SHA="$EXPECTED_SHA"; export EVENTOS_CONTENT_ID="<no value>"; read_eventos_container_identity fixture',
+      {
+        PATH: `${root}:${process.env.PATH ?? ''}`,
+        EXPECTED_SHA: releaseSha,
+        EVENTOS_WORKING_DIR: '/opt/commcats-eventos/current',
+        EVENTOS_CONTENT_ID: '<no value>',
+      },
+    );
+    expect(missingContentId.status).not.toBe(0);
+    expect(`${missingContentId.stdout}${missingContentId.stderr}`).toContain('local content ID');
+
+    const invalidContentId = runExtractedFunction(
+      `${normalizeImage}\n${identity}`,
+      'export EVENTOS_RELEASE_SHA="$EXPECTED_SHA"; export EVENTOS_CONTENT_ID="sha256:E"; read_eventos_container_identity fixture',
+      {
+        PATH: `${root}:${process.env.PATH ?? ''}`,
+        EXPECTED_SHA: releaseSha,
+        EVENTOS_WORKING_DIR: '/opt/commcats-eventos/current',
+        EVENTOS_CONTENT_ID: 'sha256:E',
+      },
+    );
+    expect(invalidContentId.status).not.toBe(0);
+    expect(`${invalidContentId.stdout}${invalidContentId.stderr}`).toContain('local content ID');
+
+    const releaseMismatch = runExtractedFunction(
+      `${normalizeImage}\n${identity}`,
+      'export EVENTOS_RELEASE_SHA="$EXPECTED_SHA"; export EVENTOS_CONTAINER_RELEASE="$MISMATCHED_SHA"; read_eventos_container_identity fixture',
+      {
+        PATH: `${root}:${process.env.PATH ?? ''}`,
+        EXPECTED_SHA: releaseSha,
+        MISMATCHED_SHA: 'b'.repeat(40),
+        EVENTOS_WORKING_DIR: '/opt/commcats-eventos/current',
+        EVENTOS_CONTAINER_RELEASE: 'b'.repeat(40),
+      },
+    );
+    expect(releaseMismatch.status).not.toBe(0);
+    expect(`${releaseMismatch.stdout}${releaseMismatch.stderr}`).toContain('does not match the immutable release marker');
+  });
+
+  it('accepts the documented local EventOS image name only with a separate immutable content ID', () => {
+    const normalizeImage = extractFunction(helper, 'normalize_eventos_image_name');
+    const identity = extractFunction(helper, 'read_eventos_container_identity');
+    const root = mkdtempSync(join(tmpdir(), 'eventos-local-image-identity-'));
+    const docker = join(root, 'docker');
+    const releaseSha = 'a'.repeat(40);
+    const contentId = `sha256:${'f'.repeat(64)}`;
+    writeFileSync(
+      docker,
+      `#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  *Config.Image*) printf '%s\\n' 'commcats-eventos-app' ;;
+  *.Image*) printf '%s\\n' '${contentId}' ;;
+  *EVENTOS_RELEASE_SHA=*|*.Config.Env*) printf 'EVENTOS_RELEASE_SHA=%s\\n' "$EVENTOS_RELEASE_SHA" ;;
+  *com.docker.compose.project.working_dir*) printf '%s\\n' "$EVENTOS_WORKING_DIR" ;;
+  *) exit 1 ;;
+esac
+`,
+      { mode: 0o700 },
+    );
+    const result = runExtractedFunction(
+      `${normalizeImage}\n${identity}`,
+      'export EVENTOS_RELEASE_SHA="$EXPECTED_SHA"; read_eventos_container_identity fixture',
+      {
+        PATH: `${root}:${process.env.PATH ?? ''}`,
+        EXPECTED_SHA: releaseSha,
+        EVENTOS_WORKING_DIR: '/opt/commcats-eventos/current',
+      },
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain(`EVENTOS_IDENTITY\tcommcats-eventos-app\t${contentId}\t${releaseSha}\t/opt/commcats-eventos/current`);
   });
 
   it('requires the documented EventOS health and ready identity fields and exact marker revision', () => {
@@ -1128,7 +1208,9 @@ esac
     expect(helper).toContain('EVENTOS_IMAGE');
     expect(helper).toContain('commcats-eventos');
     expect(helper).toContain('compose.project.working_dir');
-    expect(helper).toContain('EventOS image identity');
+    expect(helper).toContain('EventOS image name');
+    expect(helper).toContain('EventOS local content ID');
+    expect(helper).not.toContain('commcats-eventos-app@sha256:');
   });
 
   it('closes TOCTOU inside one remote snapshot, not only between before and after snapshots', () => {
@@ -1351,6 +1433,27 @@ esac
     expect(`${result.stdout}${result.stderr}`).not.toContain('SECRET_VALUE');
     expect(`${result.stdout}${result.stderr}`).not.toContain('Authorization');
     expect(readFileSync(argsLog, 'utf8')).not.toContain('fixture-password');
+  });
+
+  it('compares EventOS local content IDs as a separate before/after smoke invariant', () => {
+    const stateField = extractFunction(helper, 'state_field');
+    const identityLine = extractFunction(helper, 'eventos_identity_line');
+    const contentId = extractFunction(helper, 'eventos_content_id');
+    const compareContentId = extractFunction(helper, 'compare_eventos_content_id_invariant');
+    const beforeId = `sha256:${'e'.repeat(64)}`;
+    const afterId = `sha256:${'d'.repeat(64)}`;
+    const valid = runExtractedFunction(
+      `${stateField}\n${identityLine}\n${contentId}\n${compareContentId}`,
+      `before_snapshot=$'EVENTOS_IDENTITY\\tcommcats-eventos-app\\t${beforeId}\\t${'a'.repeat(40)}\\t/opt/commcats-eventos/current'\nafter_snapshot="$before_snapshot"\ncompare_eventos_content_id_invariant`,
+    );
+    expect(valid.status, `${valid.stdout}${valid.stderr}`).toBe(0);
+
+    const drift = runExtractedFunction(
+      `${stateField}\n${identityLine}\n${contentId}\n${compareContentId}`,
+      `before_snapshot=$'EVENTOS_IDENTITY\\tcommcats-eventos-app\\t${beforeId}\\t${'a'.repeat(40)}\\t/opt/commcats-eventos/current'\nafter_snapshot=$'EVENTOS_IDENTITY\\tcommcats-eventos-app\\t${afterId}\\t${'a'.repeat(40)}\\t/opt/commcats-eventos/current'\ncompare_eventos_content_id_invariant`,
+    );
+    expect(drift.status).not.toBe(0);
+    expect(`${drift.stdout}${drift.stderr}`).toContain('local content ID changed after smoke');
   });
 
   it('executes the helper ID/restart invariant function against changed fixture records', () => {

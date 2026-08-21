@@ -216,11 +216,22 @@ read_eventos_release_marker() {
   EVENTOS_RELEASE_SHA="${marker_sha}"
 }
 
+normalize_eventos_image_name() {
+  local image="$1"
+  if [[ "${image}" != commcats-eventos-app ]]; then
+    remote_fail "EventOS image name is not the documented owner image." >&2
+  fi
+  printf '%s' "${image}"
+}
+
 read_eventos_container_identity() {
   local container_id="$1"
-  local image compose_release compose_release_count working_dir compose_missing
+  local image content_id compose_release compose_release_count working_dir compose_missing
   compose_missing="$(printf '\074no value\076')"
-  image="$(docker inspect --format '{{.Config.Image}}' "${container_id}")"
+  image="$(docker inspect --format '{{.Config.Image}}' "${container_id}")" || remote_fail "EventOS image name inspection failed."
+  image="$(normalize_eventos_image_name "${image}")"
+  content_id="$(docker inspect --format '{{.Image}}' "${container_id}")" || remote_fail "EventOS local content ID inspection failed."
+  [[ "${content_id}" =~ ^sha256:[0-9a-f]{64}$ ]] || remote_fail "EventOS local content ID is not an immutable lowercase sha256 digest."
   compose_release="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${container_id}" | awk 'index($0, "EVENTOS_RELEASE_SHA=")')" || remote_fail "EventOS release identity inspection failed."
   compose_release_count="$(printf '%s\n' "${compose_release}" | awk 'NF { count += 1 } END { print count + 0 }')"
   [[ "${compose_release_count}" == 1 ]] || remote_fail "EventOS Compose release identity is missing or duplicated."
@@ -228,11 +239,11 @@ read_eventos_container_identity() {
   working_dir="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "${container_id}")"
   [[ -n "${working_dir}" && "${working_dir}" != "${compose_missing}" ]] || remote_fail "EventOS Compose working-dir identity is missing."
   [[ "${compose_release}" == "${EVENTOS_RELEASE_SHA}" ]] || remote_fail "EventOS Compose release identity does not match the immutable release marker."
-  [[ "${image}" =~ ^commcats-eventos-app@sha256:[0-9a-f]{64}$ ]] || remote_fail "EventOS image identity is not an immutable digest for the documented owner contract."
   EVENTOS_IMAGE="${image}"
+  EVENTOS_CONTENT_ID="${content_id}"
   EVENTOS_COMPOSE_RELEASE_SHA="${compose_release}"
   EVENTOS_WORKING_DIR="${working_dir}"
-  printf 'EVENTOS_IDENTITY\t%s\t%s\t%s\n' "${EVENTOS_IMAGE}" "${EVENTOS_COMPOSE_RELEASE_SHA}" "${EVENTOS_WORKING_DIR}"
+  printf 'EVENTOS_IDENTITY\t%s\t%s\t%s\t%s\n' "${EVENTOS_IMAGE}" "${EVENTOS_CONTENT_ID}" "${EVENTOS_COMPOSE_RELEASE_SHA}" "${EVENTOS_WORKING_DIR}"
 }
 
 test -d "${edge_path}" || remote_fail "shared-edge path is unavailable."
@@ -251,6 +262,7 @@ read_eventos_release_marker
 ZEITERFASSUNG_CONTAINER_IMAGE=""
 ZEITERFASSUNG_COMPOSE_WORKING_DIR=""
 EVENTOS_IMAGE=""
+EVENTOS_CONTENT_ID=""
 EVENTOS_COMPOSE_RELEASE_SHA=""
 EVENTOS_WORKING_DIR=""
 
@@ -634,6 +646,22 @@ eventos_identity_line() {
   printf '%s' "${line}"
 }
 
+eventos_content_id() {
+  local snapshot="$1"
+  local identity_line content_id
+  identity_line="$(eventos_identity_line "${snapshot}")"
+  content_id="$(state_field "${identity_line}" 3)"
+  [[ "${content_id}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "EventOS local content ID evidence is invalid."
+  printf '%s' "${content_id}"
+}
+
+compare_eventos_content_id_invariant() {
+  local before_content_id after_content_id
+  before_content_id="$(eventos_content_id "${before_snapshot}")"
+  after_content_id="$(eventos_content_id "${after_snapshot}")"
+  [[ "${before_content_id}" == "${after_content_id}" ]] || fail "EventOS local content ID changed after smoke."
+}
+
 upstream_evidence() {
   local snapshot="$1"
   local actual expected
@@ -870,6 +898,7 @@ compare_identity_invariants() {
   [[ "${before_eventos}" == "${after_eventos}" ]] || fail "EventOS release marker changed."
   before_eventos_identity="$(eventos_identity_line "${before_snapshot}")"
   after_eventos_identity="$(eventos_identity_line "${after_snapshot}")"
+  compare_eventos_content_id_invariant
   [[ "${before_eventos_identity}" == "${after_eventos_identity}" ]] || fail "EventOS immutable container identity changed."
   before_lock="$(lock_line "${before_snapshot}")"
   after_lock="$(lock_line "${after_snapshot}")"
@@ -1101,7 +1130,7 @@ for generation_file in .deploy-manifest docker-compose.yml Caddyfile; do
   generation_line "${before_snapshot}" "${generation_file}" >/dev/null
 done
 print_container_summary before "${before_snapshot}"
-printf '%s\n' "${before_snapshot}" | awk -F '\t' '$1 == "NETWORK_LS" || $1 == "NETWORK" || $1 == "UPSTREAM" || $1 == "ZEITERFASSUNG_CONTAINER" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" || $1 == "LISTENER" { print }'
+printf '%s\n' "${before_snapshot}" | awk -F '\t' '$1 == "NETWORK_LS" || $1 == "NETWORK" || $1 == "UPSTREAM" || $1 == "ZEITERFASSUNG_CONTAINER" || $1 == "EVENTOS_IDENTITY" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" || $1 == "LISTENER" { print }'
 printf 'METADATA\tcutover-workflow\tCut over shared edge production #6\n'
 printf 'METADATA\tcutover-run-id\t%s\n' "${CUTOVER_RUN_ID}"
 
@@ -1157,7 +1186,7 @@ validate_allowlisted_inventory "${after_snapshot}"
 load_eventos_release_marker "${after_snapshot}"
 compare_identity_invariants
 print_container_summary after "${after_snapshot}"
-printf '%s\n' "${after_snapshot}" | awk -F '\t' '$1 == "LISTENER" || $1 == "ZEITERFASSUNG_CONTAINER" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" { print }'
+printf '%s\n' "${after_snapshot}" | awk -F '\t' '$1 == "LISTENER" || $1 == "ZEITERFASSUNG_CONTAINER" || $1 == "EVENTOS_IDENTITY" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" { print }'
 
 echo "All read-only Shared Edge ownership, identity, network, TLS, smoke and restart gates passed."
 echo "public 80/443 ownership verified by Shared Edge bindings and ss process owners."
