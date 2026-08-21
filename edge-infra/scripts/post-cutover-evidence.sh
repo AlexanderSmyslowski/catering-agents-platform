@@ -318,6 +318,71 @@ resolve_compose_container() {
   printf '%s' "${id}"
 }
 
+read_host_port_bindings() {
+  local container_id="$1"
+  local raw line container_port host_port
+
+  raw="$(docker inspect --format '{{range $container_port, $bindings := .HostConfig.PortBindings}}{{range $bindings}}{{printf "%s\t%s\n" $container_port .HostPort}}{{end}}{{end}}' "${container_id}")" || \
+    remote_fail "Docker HostConfig.PortBindings inspection failed."
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    [[ "${line}" != *$'\r'* && "${line}" == *$'\t'* ]] || \
+      remote_fail "Docker HostConfig.PortBindings output is malformed."
+    container_port="${line%%$'\t'*}"
+    host_port="${line#*$'\t'}"
+    [[ "${host_port}" != *$'\t'* ]] || remote_fail "Docker HostConfig.PortBindings output is ambiguous."
+    [[ "${container_port}" =~ ^[0-9]+/(tcp|udp|sctp)$ ]] || \
+      remote_fail "Docker HostConfig.PortBindings container port is malformed."
+    [[ "${host_port}" =~ ^[0-9]+$ ]] || remote_fail "Docker HostConfig.PortBindings host port is malformed."
+    printf '%s=%s;' "${container_port}" "${host_port}"
+  done <<< "${raw}"
+}
+
+host_port_binding_count() {
+  local bindings="$1"
+  local expected_host_port="$2"
+  local required_protocol="${3:-any}"
+  local binding container_port host_port count=0
+
+  [[ "${expected_host_port}" =~ ^[0-9]+$ ]] || remote_fail "requested host port is malformed."
+  [[ "${required_protocol}" == any || "${required_protocol}" =~ ^(tcp|udp|sctp)$ ]] || \
+    remote_fail "requested host port protocol is malformed."
+  [[ "${bindings}" != *$'\n'* && "${bindings}" != *$'\r'* ]] || remote_fail "normalized Docker HostConfig.PortBindings output is malformed."
+  while IFS= read -r binding; do
+    [[ -n "${binding}" ]] || continue
+    [[ "${binding}" == *=* ]] || remote_fail "normalized Docker HostConfig.PortBindings entry is malformed."
+    container_port="${binding%%=*}"
+    host_port="${binding#*=}"
+    [[ "${host_port}" != *=* ]] || remote_fail "normalized Docker HostConfig.PortBindings entry is ambiguous."
+    [[ "${container_port}" =~ ^[0-9]+/(tcp|udp|sctp)$ && "${host_port}" =~ ^[0-9]+$ ]] || \
+      remote_fail "normalized Docker HostConfig.PortBindings entry is malformed."
+    if [[ "${host_port}" == "${expected_host_port}" && ( "${required_protocol}" == any || "${container_port##*/}" == "${required_protocol}" ) ]]; then
+      count=$((count + 1))
+    fi
+  done < <(printf '%s' "${bindings}" | tr ';' '\n')
+  printf '%s' "${count}"
+}
+
+container_port_binding_count() {
+  local bindings="$1"
+  local expected_container_port="$2"
+  local binding container_port host_port count=0
+
+  [[ "${expected_container_port}" =~ ^[0-9]+/(tcp|udp|sctp)$ ]] || remote_fail "requested container port is malformed."
+  [[ "${bindings}" != *$'\n'* && "${bindings}" != *$'\r'* ]] || remote_fail "normalized Docker HostConfig.PortBindings output is malformed."
+  while IFS= read -r binding; do
+    [[ -n "${binding}" ]] || continue
+    [[ "${binding}" == *=* ]] || remote_fail "normalized Docker HostConfig.PortBindings entry is malformed."
+    container_port="${binding%%=*}"
+    host_port="${binding#*=}"
+    [[ "${host_port}" != *=* ]] || remote_fail "normalized Docker HostConfig.PortBindings entry is ambiguous."
+    [[ "${container_port}" =~ ^[0-9]+/(tcp|udp|sctp)$ && "${host_port}" =~ ^[0-9]+$ ]] || \
+      remote_fail "normalized Docker HostConfig.PortBindings entry is malformed."
+    [[ "${container_port}" == "${expected_container_port}" ]] && count=$((count + 1))
+  done < <(printf '%s' "${bindings}" | tr ';' '\n')
+  printf '%s' "${count}"
+}
+
 container_record() {
   local component="$1"
   local container_id="$2"
@@ -330,7 +395,7 @@ container_record() {
   status="$(docker inspect --format '{{.State.Status}}' "${container_id}")"
   started="$(docker inspect --format '{{.State.StartedAt}}' "${container_id}")"
   restart="$(docker inspect --format '{{.RestartCount}}' "${container_id}")"
-  ports="$(docker inspect --format '{{range $port, $bindings := .HostConfig.PortBindings}}{{$port}}={{range $bindings}}{{.HostPort}},{{end}};{{end}}' "${container_id}")"
+  ports="$(read_host_port_bindings "${container_id}")"
   networks="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}={{join $network.Aliases ","}};{{end}}' "${container_id}" | tr ';' '\n' | LC_ALL=C sort | tr '\n' ';')"
   project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_id}")"
   service="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_id}")"
@@ -478,22 +543,27 @@ PYTHON
 validate_effective_caddy_config
 
 edge_ports="$(printf '%s\n' "${edge_state}" | awk -F '\t' '{ print $9 }')"
-[[ "${edge_ports}" == *80/tcp=80,* ]] || remote_fail "shared edge does not own host port 80."
-[[ "${edge_ports}" == *443/tcp=443,* ]] || remote_fail "shared edge does not own host port 443."
+edge_host_80_count="$(host_port_binding_count "${edge_ports}" 80)"
+edge_tcp_80_count="$(host_port_binding_count "${edge_ports}" 80 tcp)"
+[[ "${edge_host_80_count}" == 1 && "${edge_tcp_80_count}" == 1 ]] || remote_fail "shared edge does not own TCP host port 80 exactly once."
+edge_host_443_count="$(host_port_binding_count "${edge_ports}" 443)"
+edge_tcp_443_count="$(host_port_binding_count "${edge_ports}" 443 tcp)"
+[[ "${edge_host_443_count}" == 1 && "${edge_tcp_443_count}" == 1 ]] || remote_fail "shared edge does not own TCP host port 443 exactly once."
 
 for app_state in "${web_state}" "${postgres_state}" "${intake_state}" "${offer_state}" "${production_state}" "${exports_state}" "${zeiterfassung_state}" "${eventos_state}" "${eventos_postgres_state}"; do
   app_ports="$(printf '%s\n' "${app_state}" | awk -F '\t' '{ print $9 }')"
-  [[ "${app_ports}" != *80/tcp=* ]] || remote_fail "an application container still publishes port 80."
-  [[ "${app_ports}" != *443/tcp=* ]] || remote_fail "an application container still publishes port 443."
+  [[ "$(host_port_binding_count "${app_ports}" 80)" == 0 ]] || remote_fail "an application container still publishes host port 80."
+  [[ "$(host_port_binding_count "${app_ports}" 443)" == 0 ]] || remote_fail "an application container still publishes host port 443."
 done
 eventos_ports="$(printf '%s\n' "${eventos_state}" | awk -F '\t' '{ print $9 }')"
 eventos_postgres_ports="$(printf '%s\n' "${eventos_postgres_state}" | awk -F '\t' '{ print $9 }')"
-[[ "${eventos_ports}" != *3000/tcp=* && "${eventos_ports}" != *5432/tcp=* ]] || remote_fail "EventOS publishes a forbidden host port."
-[[ -z "${eventos_postgres_ports}" ]] || remote_fail "EventOS Postgres has a host port."
+[[ "$(container_port_binding_count "${eventos_ports}" '3000/tcp')" == 0 ]] || remote_fail "EventOS publishes a forbidden container port."
+[[ "$(container_port_binding_count "${eventos_postgres_ports}" '5432/tcp')" == 0 ]] || remote_fail "EventOS Postgres has a forbidden container port."
 
 validate_public_listener_ownership() {
   local container_id="$1"
-  local edge_pid edge_ips listeners public_port listener_line listener_pid_matches listener_pid_match listener_pid
+  local edge_pid edge_ips listeners public_port listener_line listener_pid_matches listener_pid_count listener_pid_match listener_pid
+  local listener_owner_line listener_owner_id listener_owner_name
   local cgroup cmdline exe correlated container_ip
   local -a listener_lines
 
@@ -505,10 +575,20 @@ validate_public_listener_ownership() {
 
   for public_port in 80 443; do
     mapfile -t listener_lines < <(printf '%s\n' "${listeners}" | awk -v port=":${public_port}" '$1 == "LISTEN" && substr($4, length($4) - length(port) + 1) == port { print }')
-    [[ "${#listener_lines[@]}" -gt 0 ]] || remote_fail "TCP ${public_port} has no listening process."
+    [[ "${#listener_lines[@]}" == 1 ]] || remote_fail "TCP ${public_port} has missing or ambiguous listening processes."
     for listener_line in "${listener_lines[@]}"; do
       listener_pid_matches="$(printf '%s\n' "${listener_line}" | grep -oE 'pid=[0-9]+' || true)"
-      [[ "$(printf '%s\n' "${listener_pid_matches}" | awk 'NF { count += 1 } END { print count + 0 }')" == 1 ]] || remote_fail "TCP ${public_port} listener PID is missing or ambiguous."
+      listener_pid_count="$(printf '%s\n' "${listener_pid_matches}" | awk 'NF { count += 1 } END { print count + 0 }')"
+      if [[ "${listener_pid_count}" == 0 ]]; then
+        listener_owner_line="$(printf '%b' "${port_owner_lines}" | awk -F '\t' -v port="${public_port}" '$1 == "PORT_OWNER" && $2 == port { print }')"
+        listener_owner_id="$(printf '%s\n' "${listener_owner_line}" | awk -F '\t' '{ print $3 }')"
+        listener_owner_name="$(printf '%s\n' "${listener_owner_line}" | awk -F '\t' '{ print $4 }')"
+        [[ "${listener_owner_id}" == "${container_id}" && "${listener_owner_name}" == shared-edge-edge-1 ]] || \
+          remote_fail "TCP ${public_port} listener has no visible PID and Docker ownership is missing, ambiguous or foreign."
+        printf 'LISTENER\t%s\tpid=unavailable\tcontainer=%s\n' "${listener_line}" "${container_id}"
+        continue
+      fi
+      [[ "${listener_pid_count}" == 1 ]] || remote_fail "TCP ${public_port} listener PID is missing or ambiguous."
       listener_pid_match="${listener_pid_matches%%$'\n'*}"
       listener_pid="${listener_pid_match#pid=}"
       [[ -r "/proc/${listener_pid}/cgroup" && -r "/proc/${listener_pid}/cmdline" ]] || remote_fail "TCP ${public_port} listener PID cannot be inspected."
@@ -531,8 +611,6 @@ validate_public_listener_ownership() {
   done
 }
 
-validate_public_listener_ownership "${edge_id}"
-
 all_container_ids="$(docker ps --no-trunc --format '{{.ID}}')"
 for container_id in ${all_container_ids}; do
   inventory_name="$(docker inspect --format '{{.Name}}' "${container_id}")"
@@ -549,9 +627,14 @@ for container_id in ${all_container_ids}; do
   owner_id="$(docker inspect --format '{{.Id}}' "${container_id}")"
   owner_name="$(docker inspect --format '{{.Name}}' "${container_id}")"
   owner_name="${owner_name#/}"
-  owner_ports="$(docker inspect --format '{{range $port, $bindings := .HostConfig.PortBindings}}{{$port}}={{range $bindings}}{{.HostPort}},{{end}};{{end}}' "${container_id}")"
+  owner_ports="$(read_host_port_bindings "${container_id}")"
   for public_port in 80 443; do
-    if [[ "${owner_ports}" == *"${public_port}/tcp="* ]]; then
+    owner_host_port_count="$(host_port_binding_count "${owner_ports}" "${public_port}")"
+    owner_tcp_port_count="$(host_port_binding_count "${owner_ports}" "${public_port}" tcp)"
+    [[ "${owner_host_port_count}" == 0 || "${owner_host_port_count}" == 1 ]] || \
+      remote_fail "Docker exposes host port ${public_port} more than once for one container."
+    if [[ "${owner_host_port_count}" == 1 ]]; then
+      [[ "${owner_tcp_port_count}" == 1 ]] || remote_fail "Docker host port ${public_port} is not backed by exactly one TCP binding."
       port_owner_lines+="PORT_OWNER\t${public_port}\t${owner_id}\t${owner_name}\n"
     fi
   done
@@ -560,8 +643,10 @@ printf '%b' "${port_owner_lines}"
 for public_port in 80 443; do
   owner_count="$(printf '%b' "${port_owner_lines}" | awk -F '\t' -v port="${public_port}" '$1 == "PORT_OWNER" && $2 == port { count += 1 } END { print count + 0 }')"
   [[ "${owner_count}" == 1 ]] || remote_fail "public 80/443 ownership is ambiguous for port ${public_port}."
-  printf '%b' "${port_owner_lines}" | awk -F '\t' -v port="${public_port}" '$1 == "PORT_OWNER" && $2 == port && $4 != "shared-edge-edge-1" { exit 1 }' || remote_fail "foreign public port owner detected for port ${public_port}."
+  printf '%b' "${port_owner_lines}" | awk -F '\t' -v port="${public_port}" -v expected_id="${edge_id}" '$1 == "PORT_OWNER" && $2 == port && ($3 != expected_id || $4 != "shared-edge-edge-1") { exit 1 }' || remote_fail "foreign public port owner detected for port ${public_port}."
 done
+
+validate_public_listener_ownership "${edge_id}"
 
 container_ids=(
   "${edge_id}"

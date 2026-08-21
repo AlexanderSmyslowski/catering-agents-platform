@@ -234,7 +234,7 @@ function createFakeRemoteFixture(kind: string, originalPath = originalProcessPat
   );
   writeFileSync(join(rollbackRoot, 'latest'), `${archive}\n`);
 
-  const dockerScript = String.raw`#!/usr/bin/env node
+const dockerScript = String.raw`#!/usr/bin/env node
 const args = process.argv.slice(2);
 const env = process.env;
 const components = [
@@ -359,7 +359,17 @@ if (args[0] === 'inspect') {
   } else if (format.includes('.State.Status')) emit('running\n');
   else if (format.includes('.State.StartedAt')) emit('2026-08-21T00:00:00Z\n');
   else if (format.includes('.RestartCount')) emit('0\n');
-  else if (format.includes('HostConfig.PortBindings')) emit(component === 'shared-edge' ? '80/tcp=80,;443/tcp=443,;\n' : '\n');
+  else if (format.includes('HostConfig.PortBindings')) {
+    const structuredBindings = format.includes('printf "%s\\t%s\\n"');
+    if (component === 'shared-edge') emit(structuredBindings ? '80/tcp\t80\n443/tcp\t443\n' : '80/tcp=80,;443/tcp=443,;\n');
+    else if (env.HARNESS_CASE === 'foreign-app-host-ports' && component === 'catering-web') {
+      emit(structuredBindings ? '8081/tcp\t80\n3000/tcp\t443\n' : '8081/tcp=80,;3000/tcp=443,;\n');
+    } else if (env.HARNESS_CASE === 'eventos-alternative-host-port' && component === 'eventos-app') {
+      emit(structuredBindings ? '3000/tcp\t3001\n' : '3000/tcp=3001,;\n');
+    } else if (env.HARNESS_CASE === 'eventos-postgres-alternative-host-port' && component === 'eventos-postgres') {
+      emit(structuredBindings ? '5432/tcp\t15432\n' : '5432/tcp=15432,;\n');
+    } else emit('\n');
+  }
   else if (format.includes('com.docker.compose.project.working_dir')) {
     if (component === 'eventos-app') emit(env.HARNESS_EVENTOS_ROOT + '/current\n');
     else if (component === 'zeiterfassung-app') emit(env.HARNESS_ZEIT_ROOT + '/0123456789ab-20260821T120000Z\n');
@@ -395,11 +405,12 @@ if (args[0] === 'inspect') {
 }
 process.exit(1);
 `;
-  const ssScript = String.raw`#!/usr/bin/env node
+const ssScript = String.raw`#!/usr/bin/env node
 const pid = process.env.HARNESS_REMOTE_PID;
 if (process.env.HARNESS_CASE === 'listener-extra') console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"foreign"' + ',pid=1,fd=3))');
-console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=3))');
-console.log('LISTEN 0 128 0.0.0.0:443 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=4))');
+if (process.env.HARNESS_CASE === 'listener-foreign-cgroup' || process.env.HARNESS_CASE === 'listener-wrong-docker-proxy') console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"foreign"' + ',pid=1,fd=3))');
+else console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=3))');
+if (process.env.HARNESS_CASE !== 'listener-missing') console.log('LISTEN 0 128 0.0.0.0:443 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=4))');
 `;
   const realpathScript = String.raw`#!/usr/bin/env node
 const fs = require('fs');
@@ -452,7 +463,7 @@ fs.writeFileSync(remoteProc + '/cmdline', 'caddy\\0');
 fs.writeFileSync(remoteProc + '/exe', 'fixture-executable');
 fs.mkdirSync(process.env.HARNESS_PROC_ROOT + '/1', { recursive: true });
 fs.writeFileSync(process.env.HARNESS_PROC_ROOT + '/1/cgroup', '0::/fixture/foreign\\n');
-fs.writeFileSync(process.env.HARNESS_PROC_ROOT + '/1/cmdline', 'foreign\\0');
+fs.writeFileSync(process.env.HARNESS_PROC_ROOT + '/1/cmdline', process.env.HARNESS_CASE === 'listener-wrong-docker-proxy' ? 'docker-proxy -container-ip 172.31.0.99 -container-port 9999' : 'foreign');
 fs.writeFileSync(process.env.HARNESS_PROC_ROOT + '/1/exe', 'foreign-executable');
 rewritten = 'mapfile() {\n  if [ "\${1:-}" = "-t" ]; then shift; fi\n  local variable="\${1:-}" line\n  local -a values=()\n  while IFS= read -r line; do values+=("$line"); done\n  eval "$variable=(\\"\\\${values[@]}\\")"\n}\n' + rewritten;
 const scriptPath = root + '/remote-rewritten.sh';
@@ -461,7 +472,7 @@ const childEnv = { ...process.env, HARNESS_REMOTE_PID: String(process.pid) };
 const result = childProcess.spawnSync('/bin/bash', [scriptPath, process.env.HARNESS_EXPECTED_CADDY_SHA], {
   encoding: 'utf8',
   env: childEnv,
-  timeout: 60000,
+  timeout: 20000,
   killSignal: 'SIGTERM',
 });
 if (result.error && result.error.code === 'ETIMEDOUT') {
@@ -1186,6 +1197,111 @@ esac
     expect(helper).toContain('container IP');
   });
 
+  it('accepts exactly one Shared Edge Docker owner when ss hides listener PIDs', () => {
+    const validator = extractFunction(helper, 'validate_public_listener_ownership');
+    const root = mkdtempSync(join(tmpdir(), 'post-cutover-listener-no-pid-'));
+    const dockerStub = join(root, 'docker');
+    const ssStub = join(root, 'ss');
+    writeFileSync(
+      dockerStub,
+      [
+        '#!/usr/bin/env bash',
+        'case "$*" in',
+        '  *".State.Pid"*) printf "%s\\n" 4242 ;;',
+        '  *"IPAddress"*) printf "%s\\n" 172.31.0.2 ;;',
+        '  *) exit 1 ;;',
+        'esac',
+      ].join('\n'),
+      { mode: 0o700 },
+    );
+    writeFileSync(
+      ssStub,
+      [
+        '#!/usr/bin/env bash',
+        "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:*'",
+        "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:*'",
+      ].join('\n'),
+      { mode: 0o700 },
+    );
+    chmodSync(dockerStub, 0o700);
+    chmodSync(ssStub, 0o700);
+    const sharedEdgeId = 'a'.repeat(64);
+    const result = runExtractedFunction(
+      validator,
+      [
+        'mapfile() {',
+        '  if [[ "${1:-}" == "-t" ]]; then shift; fi',
+        '  local variable="${1:-}" line',
+        '  local -a values=()',
+        '  while IFS= read -r line; do values+=("$line"); done',
+        '  [[ "$variable" == listener_lines ]] || return 2',
+        '  listener_lines=("${values[@]}")',
+        '}',
+        `port_owner_lines=$'PORT_OWNER\\t80\\t${sharedEdgeId}\\tshared-edge-edge-1\\nPORT_OWNER\\t443\\t${sharedEdgeId}\\tshared-edge-edge-1'`,
+        `validate_public_listener_ownership ${sharedEdgeId}`,
+      ].join('\n'),
+      { PATH: `${root}${delimiter}${originalProcessPath}` },
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('LISTENER\t');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('SECRET');
+  });
+
+  it('rejects PID-less listeners with a wrong, duplicate or foreign-app Docker owner', () => {
+    const validator = extractFunction(helper, 'validate_public_listener_ownership');
+    const sharedEdgeId = 'a'.repeat(64);
+    const foreignId = 'b'.repeat(64);
+    const runValidator = (ownerLines: string) => {
+      const root = mkdtempSync(join(tmpdir(), 'post-cutover-listener-owner-negative-'));
+      writeFileSync(
+        join(root, 'docker'),
+        [
+          '#!/usr/bin/env bash',
+          'case "$*" in',
+          '  *".State.Pid"*) printf "%s\\n" 4242 ;;',
+          '  *"IPAddress"*) printf "%s\\n" 172.31.0.2 ;;',
+          '  *) exit 1 ;;',
+          'esac',
+        ].join('\n'),
+        { mode: 0o700 },
+      );
+      writeFileSync(
+        join(root, 'ss'),
+        [
+          '#!/usr/bin/env bash',
+          "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:*'",
+          "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:*'",
+        ].join('\n'),
+        { mode: 0o700 },
+      );
+      chmodSync(join(root, 'docker'), 0o700);
+      chmodSync(join(root, 'ss'), 0o700);
+      return runExtractedFunction(
+        validator,
+        [
+          'mapfile() {',
+          '  if [[ "${1:-}" == "-t" ]]; then shift; fi',
+          '  local variable="${1:-}" line',
+          '  local -a values=()',
+          '  while IFS= read -r line; do values+=("$line"); done',
+          '  [[ "$variable" == listener_lines ]] || return 2',
+          '  listener_lines=("${values[@]}")',
+          '}',
+          `port_owner_lines=$'${ownerLines.replaceAll('\t', '\\t').replaceAll('\n', '\\n')}'`,
+          `validate_public_listener_ownership ${sharedEdgeId}`,
+        ].join('\n'),
+        { PATH: `${root}${delimiter}${originalProcessPath}` },
+      );
+    };
+    const wrongOwner = runValidator(`PORT_OWNER\t80\t${foreignId}\tcatering-web\nPORT_OWNER\t443\t${sharedEdgeId}\tshared-edge-edge-1`);
+    expect(wrongOwner.status).not.toBe(0);
+    expect(`${wrongOwner.stdout}${wrongOwner.stderr}`).toMatch(/Docker ownership|foreign/);
+    const duplicateOwner = runValidator(`PORT_OWNER\t80\t${sharedEdgeId}\tshared-edge-edge-1\nPORT_OWNER\t80\t${foreignId}\tcatering-web\nPORT_OWNER\t443\t${sharedEdgeId}\tshared-edge-edge-1`);
+    expect(duplicateOwner.status).not.toBe(0);
+    expect(`${duplicateOwner.stdout}${duplicateOwner.stderr}`).toMatch(/Docker ownership|foreign/);
+    expect(`${wrongOwner.stdout}${wrongOwner.stderr}${duplicateOwner.stdout}${duplicateOwner.stderr}`).not.toContain('SECRET');
+  });
+
   it('binds effective Caddy host mappings to the hashed read-only mount and runtime values', () => {
     expect(helper).toContain('CADDYFILE_SHA256');
     expect(helper).toContain('Caddyfile import is not allowlisted');
@@ -1338,12 +1454,13 @@ exit 1
     );
   });
 
-  it('executes the complete SSH heredoc through a fake remote and rejects adversarial runtime fixtures', () => {
+  it('executes the valid SSH heredoc through a fake remote with a bounded local process timeout', () => {
     const remoteSnapshot = extractRemoteSnapshot(helper);
     const stateLine = extractFunction(helper, 'state_line');
     const stateField = extractFunction(helper, 'state_field');
     const validator = extractFunction(helper, 'validate_allowlisted_inventory');
-    const runRemote = (fixture: ReturnType<typeof createFakeRemoteFixture>) => runExtractedFunction(
+    const validFixture = createFakeRemoteFixture('valid');
+    const validRemote = runExtractedFunction(
       remoteSnapshot,
       [
         'SSH_ARGS=(--batch-mode)',
@@ -1351,11 +1468,9 @@ exit 1
         'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
         'remote_snapshot',
       ].join('\n'),
-      fixture.environment,
-      70000,
+      validFixture.environment,
+      25000,
     );
-    const validFixture = createFakeRemoteFixture('valid');
-    const validRemote = runRemote(validFixture);
     expect(validRemote.status, `${validRemote.stdout}${validRemote.stderr}`).toBe(0);
     expect(validRemote.stdout).toContain('STATE\tshared-edge');
     expect(readFileSync(join(validFixture.root, 'remote-script.log'), 'utf8')).toContain('validate_effective_caddy_config');
@@ -1367,19 +1482,92 @@ exit 1
       { SNAPSHOT: validRemote.stdout },
     );
     expect(validInventory.status, `${validInventory.stdout}${validInventory.stderr}`).toBe(0);
+  }, 30000);
 
-    for (const kind of [
+  it.each([
       'listener-extra',
+      'listener-missing',
+      'listener-foreign-cgroup',
+      'listener-wrong-docker-proxy',
       'invalid-tar',
       'manifest-drift',
-    ]) {
-      const fixture = createFakeRemoteFixture(kind);
-      const remoteResult = runRemote(fixture);
-      expect(remoteResult.status, `${kind}: ${remoteResult.stdout}${remoteResult.stderr}`).not.toBe(0);
-      expect(remoteResult.stdout, kind).not.toContain('Authorization');
-      expect(remoteResult.stdout, kind).not.toContain('SECRET');
-    }
-  }, 120000);
+  ])('rejects adversarial SSH fixture %s with a bounded local process timeout', (kind) => {
+    const remoteSnapshot = extractRemoteSnapshot(helper);
+    const fixture = createFakeRemoteFixture(kind);
+    const result = runExtractedFunction(
+      remoteSnapshot,
+      [
+        'SSH_ARGS=(--batch-mode)',
+        'REMOTE=fixture',
+        'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+        'remote_snapshot',
+      ].join('\n'),
+      fixture.environment,
+      25000,
+    );
+    expect(result.status, `${kind}: ${result.stdout}${result.stderr}`).not.toBe(0);
+    expect(result.stdout, kind).not.toContain('Authorization');
+    expect(result.stdout, kind).not.toContain('SECRET');
+  }, 30000);
+
+  it('rejects app containers publishing host 80/443 through nonstandard container ports', () => {
+    const remoteSnapshot = extractRemoteSnapshot(helper);
+    const fixture = createFakeRemoteFixture('foreign-app-host-ports');
+    const result = runExtractedFunction(
+      remoteSnapshot,
+      [
+        'SSH_ARGS=(--batch-mode)',
+        'REMOTE=fixture',
+        'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+        'remote_snapshot',
+      ].join('\n'),
+      fixture.environment,
+      20000,
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toMatch(/application container still publishes host port|public 80\/443 ownership/);
+    expect(result.stdout).not.toContain('SECRET');
+  }, 30000);
+
+  it('rejects EventOS 3000/tcp published on an alternate host port', () => {
+    const remoteSnapshot = extractRemoteSnapshot(helper);
+    const fixture = createFakeRemoteFixture('eventos-alternative-host-port');
+    const result = runExtractedFunction(
+      remoteSnapshot,
+      [
+        'SSH_ARGS=(--batch-mode)',
+        'REMOTE=fixture',
+        'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+        'remote_snapshot',
+      ].join('\n'),
+      fixture.environment,
+      25000,
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain('EventOS publishes a forbidden container port.');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('Authorization');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('SECRET');
+  }, 30000);
+
+  it('rejects EventOS Postgres 5432/tcp published on an alternate host port', () => {
+    const remoteSnapshot = extractRemoteSnapshot(helper);
+    const fixture = createFakeRemoteFixture('eventos-postgres-alternative-host-port');
+    const result = runExtractedFunction(
+      remoteSnapshot,
+      [
+        'SSH_ARGS=(--batch-mode)',
+        'REMOTE=fixture',
+        'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+        'remote_snapshot',
+      ].join('\n'),
+      fixture.environment,
+      25000,
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain('EventOS Postgres has a forbidden container port.');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('Authorization');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('SECRET');
+  }, 30000);
 
   it('uses container and public evidence when the Zeiterfassung deployment root is unreadable', () => {
     const remoteSnapshot = extractRemoteSnapshot(helper);
