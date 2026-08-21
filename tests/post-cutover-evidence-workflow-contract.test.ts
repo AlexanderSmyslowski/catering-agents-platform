@@ -342,6 +342,10 @@ if (args[0] === 'inspect') {
   const target = args[args.length - 1];
   const row = rowFor(target);
   if (!row) process.exit(1);
+  if (format.includes('contains')) {
+    process.stderr.write('docker inspect template function "contains" not defined\\n');
+    process.exit(125);
+  }
   const component = row[0];
   if (format === '{{.Id}}') emit(idFor(component) + '\n');
   else if (format === '{{.Name}}') emit('/' + row[3] + '\n');
@@ -363,13 +367,15 @@ if (args[0] === 'inspect') {
   else if (format.includes('com.docker.compose.oneoff')) emit('False\n');
   else if (format.includes('com.docker.compose.container-number')) emit('1\n');
   else if (format.includes('.Config.Env')) {
-    if (component === 'shared-edge' && format.includes('_UPSTREAM=')) emit('CATERING_UPSTREAM=http://web:8081\nZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040\nEVENTOS_UPSTREAM=commcats-eventos-app:3045\n');
-    else if (component === 'eventos-app' && format.includes('EVENTOS_RELEASE_SHA=')) emit('EVENTOS_RELEASE_SHA=' + (env.HARNESS_CASE === 'eventos-arbitrary-sha' ? 'b'.repeat(40) : env.HARNESS_EVENTOS_SHA) + '\n');
-    else if (component === 'shared-edge') {
-      const hostKeys = ['CATERING_PUBLIC_HOST', 'ZEITERFASSUNG_PUBLIC_HOST', 'EVENTOS_PUBLIC_HOST'];
-      const key = hostKeys.find((value) => format.includes(value + '='));
-      if (key) emit((env.HARNESS_CASE === 'wrong-caddy-mapping' && key === 'CATERING_PUBLIC_HOST' ? 'evil.example' : { CATERING_PUBLIC_HOST: 'catering.the-one.catering', ZEITERFASSUNG_PUBLIC_HOST: 'zeit.the-one.catering', EVENTOS_PUBLIC_HOST: 'eventos.commcats.de' }[key]) + '\n');
-    }
+    if (component === 'shared-edge') emit([
+      'CATERING_UPSTREAM=http://web:8081',
+      'ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040',
+      'EVENTOS_UPSTREAM=commcats-eventos-app:3045',
+      'CATERING_PUBLIC_HOST=' + (env.HARNESS_CASE === 'wrong-caddy-mapping' ? 'evil.example' : 'catering.the-one.catering'),
+      'ZEITERFASSUNG_PUBLIC_HOST=zeit.the-one.catering',
+      'EVENTOS_PUBLIC_HOST=eventos.commcats.de',
+    ].join('\n') + '\n');
+    else if (component === 'eventos-app') emit('EVENTOS_RELEASE_SHA=' + (env.HARNESS_CASE === 'eventos-arbitrary-sha' ? 'b'.repeat(40) : env.HARNESS_EVENTOS_SHA) + '\n');
   } else if (format.includes('.Mounts')) {
     if (component === 'shared-edge') emit(env.HARNESS_EDGE_PATH + '/Caddyfile\t/etc/caddy/Caddyfile\tro\tfalse\n');
   } else if (format.includes('IPAddress')) {
@@ -499,6 +505,12 @@ function extractRemoteSnapshot(source: string) {
   return source.slice(start, end + 2);
 }
 
+function extractDockerInspectEnvLines(source: string) {
+  return source
+    .split('\n')
+    .filter((line) => line.includes('docker inspect --format') && line.includes('.Config.Env'));
+}
+
 describe('post-cutover evidence workflow contract', () => {
   it('is manually dispatched, read-only, production-bound and uses the proven SSH roles', () => {
     expect(workflow).toMatch(/^name: Post-cutover shared-edge evidence$/m);
@@ -612,6 +624,13 @@ describe('post-cutover evidence workflow contract', () => {
   it('uses the Compose working-dir label for Zeiterfassung provenance, never the container working directory', () => {
     expect(helper).toContain('com.docker.compose.project.working_dir');
     expect(helper).not.toContain('.Config.WorkingDir');
+  });
+
+  it('uses only Docker-compatible templates for environment inspection', () => {
+    const envInspectLines = extractDockerInspectEnvLines(helper);
+    expect(envInspectLines).toHaveLength(3);
+    expect(envInspectLines.every((line) => line.includes('{{range .Config.Env}}{{println .}}{{end}}'))).toBe(true);
+    expect(envInspectLines.join('\n')).not.toContain('contains');
   });
 
   it('contains no server mutation, secret disclosure or insecure TLS path', () => {
@@ -856,7 +875,7 @@ esac
 set -euo pipefail
 case "$*" in
   *Config.Image*) printf '%s\\n' "\${EVENTOS_IMAGE:-commcats-eventos-app@sha256:${'e'.repeat(64)}}" ;;
-  *EVENTOS_RELEASE_SHA=*) printf 'EVENTOS_RELEASE_SHA=%s\\n' "$EVENTOS_RELEASE_SHA" ;;
+  *EVENTOS_RELEASE_SHA=*|*.Config.Env*) printf 'EVENTOS_RELEASE_SHA=%s\\n' "$EVENTOS_RELEASE_SHA" ;;
   *com.docker.compose.project.working_dir*) printf '%s\\n' "$EVENTOS_WORKING_DIR" ;;
   *) exit 1 ;;
 esac
