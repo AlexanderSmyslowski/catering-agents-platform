@@ -2528,6 +2528,52 @@ exit 1
     expect(readFileSync(argsLog, 'utf8')).not.toContain('fixture-password');
   });
 
+  it('uses runner-compatible curl write-out syntax for Cache-Control headers', () => {
+    const fetchHttps = extractFunction(helper, 'fetch_https');
+    const root = mkdtempSync(join(tmpdir(), 'post-cutover-curl-write-out-'));
+    const curlStub = join(root, 'curl');
+    writeFileSync(
+      curlStub,
+      `#!/usr/bin/env bash
+set -euo pipefail
+for argument in "$@"; do
+  case "$argument" in
+    *'%{header.cache-control}'*)
+      printf "curl: unknown --write-out variable: 'header.cache-control'\\n" >&2
+      exit 2
+      ;;
+    *'%header{cache-control}'*)
+      printf '{"ok":true}\\n200\\tapplication/json\\tno-store'
+      exit 0
+      ;;
+  esac
+done
+printf 'unsupported write-out format\\n' >&2
+exit 2
+`,
+      { mode: 0o700 },
+    );
+    chmodSync(curlStub, 0o700);
+
+    for (const mode of ['basic', 'public', 'json']) {
+      const result = runExtractedFunction(
+        fetchHttps,
+        [
+          'CURL_ARGS=(--fail --silent --show-error --max-time 15 --proto "=https" --tlsv1.2)',
+          'HTTP_STATUS="" HTTP_CONTENT_TYPE="" HTTP_CACHE_CONTROL="" HTTP_BODY=""',
+          'CATERING_SMOKE_BASIC_AUTH_USER=fixture-user',
+          'CATERING_SMOKE_BASIC_AUTH_PASSWORD=fixture-password',
+          `fetch_https https://zeit.the-one.catering/healthz ${mode}`,
+          'printf "%s|%s|%s|%s\\n" "$HTTP_STATUS" "$HTTP_CONTENT_TYPE" "$HTTP_CACHE_CONTROL" "$HTTP_BODY"',
+        ].join('\n'),
+        { PATH: `${root}:${process.env.PATH ?? ''}` },
+      );
+      expect(result.status, `${mode}: ${result.stdout}${result.stderr}`).toBe(0);
+      expect(result.stdout).toBe('200|application/json|no-store|{"ok":true}\n');
+      expect(result.stderr).toBe('');
+    }
+  });
+
   it('compares EventOS local content IDs as a separate before/after smoke invariant', () => {
     const stateField = extractFunction(helper, 'state_field');
     const identityLine = extractFunction(helper, 'eventos_identity_line');
