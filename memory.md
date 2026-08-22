@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.362
-date: 2026-08-15
+version: 5.368
+date: 2026-08-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -32,6 +32,12 @@ Sie ist wieder die fuehrende Root-Memory-Datei des Repos.
   - `shared-core`
   - `print-export`
   - `backoffice-ui`
+
+## Aktueller Phase-3-Catering-Pilotstand (2026-08-22)
+
+- Phase 2 ist durch Evidence Run `32596742623` mit `PHASE 2: GO` abgeschlossen. Der aktuelle verbindliche Phase-3-Vertrag steht in [`docs/superpowers/plans/2026-08-20-server-app-isolation-phase3.md`](docs/superpowers/plans/2026-08-20-server-app-isolation-phase3.md); die verdichtete Übergabe liegt in [`docs/agent-memory/2026-08-22-server-app-isolation-phase3-catering-pilot.md`](docs/agent-memory/2026-08-22-server-app-isolation-phase3-catering-pilot.md).
+- Der erste und einzige Pilotumfang ist Catering: `catering_ingress` und `catering_private`, mit marker-/lock-/manifestgebundenem, fail-closed Rollback und unveränderten Fremd-App-Invarianten für Zeiterfassung, EventOS und Iranmonitor.
+- Phase 3.2 für Zeiterfassung/EventOS sowie jede Iranmonitor-Mutation bleibt gesperrt; diese Dokumentationsfortschreibung ist weder Runtime-, Deployment- noch Produktionsfreigabe.
 
 ## Projektkontext der aktuellen Arbeit
 - PA60 ist als naechster 10/10-Gate-Rahmen docs-/contract-only umgesetzt: `docs/architecture/PA60_LLM_RUNTIME_CONVERSATION_SESSION_DECISION_FRAME.md` zieht oberhalb von `synthetic_live` die Schwesterfrage zu PA54-PA59 nach, naemlich ob ein spaeterer providerfaehiger Draft-Pfad ueberhaupt eine echte Runtime-`ConversationSession` brauchen darf oder fuer den ersten freigegebenen Korridor bewusst projektionsbasiert bleiben muss. Empfehlung: keine neue Runtime-`ConversationSession`, bestehende Projektionen und vorhandene Objekte bleiben fuehrend, Session-Runtime bleibt ein eigener spaeterer Gate-Schritt.
@@ -1794,3 +1800,9 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Auf dem aktuellen `origin/main` ist der naechste produktseitige Engpass nach den Produktionsvertraegen #616 bis #626 nicht ein weiterer Infrastruktur- oder Exportpfad: Die vorhandene `RecipeEventUseReview`-Grundlage wurde im Mengen-Bridge bereits ausgewertet, aber der eigentliche Produktionsplaner blockierte jeden nicht dauerhaft internen Rezeptkandidaten weiterhin vor dieser Eventpruefung.
 - Der Produktionsplaner nimmt nun optional eine explizit typisierte, komponentengebundene `RecipeEventUseReview`-Evidenz entgegen und laesst einen nicht dauerhaft reifen Kandidaten nur nach erfolgreicher exakter `eventSpecId`-/`recipeId`-Pruefung in den bestehenden Batch-/KitchenSheet-Pfad. Ohne Review, mit unvollstaendiger oder fremder Review bleibt der Kandidat fail-closed blockiert; dauerhaft vertrauenswuerdige interne Rezepte behalten ihren bisherigen Pfad.
 - Der neue Fokusvertrag `tests/production-event-recipe-review-planning.test.ts` prueft die reale `buildProductionArtifacts`-Kette mit professionell referenziertem, noch nicht dauerhaft freigegebenem Rezeptkandidaten, vorhandener Mengenbruecke und vollstaendiger Event-Kuechenabnahme sowie die Cross-Event-Gegenprobe. Es gibt keine neue Persistenz, keine Provideraufrufe, keine UI-/Exportaenderung und keine Shared-Edge-/Deploymentaktion.
+
+### 5.368 - 2026-08-22
+
+- Phase 2 ist mit Evidence Run `32596742623` und `PHASE 2: GO` abgeschlossen. Der aktuelle Phase-3.0/3.1-Vertrag ist der Plan [`docs/superpowers/plans/2026-08-20-server-app-isolation-phase3.md`](docs/superpowers/plans/2026-08-20-server-app-isolation-phase3.md); der markante Zwischenstand ist zusätzlich im Snapshot [`docs/agent-memory/2026-08-22-server-app-isolation-phase3-catering-pilot.md`](docs/agent-memory/2026-08-22-server-app-isolation-phase3-catering-pilot.md) verdichtet.
+- Der freigegebene Pilot bleibt auf Catering und die additive Shared-Edge-Mitgliedschaft von `catering_ingress` begrenzt. `catering_private` ist eine exakte Mitgliedschaftsgrenze ohne Shared-Edge-Mitgliedschaft der internen Dienste; bestehende Kompatibilitätsnetze bleiben bis zum belegten, owner-scoped Detach erhalten. Marker, die beiden Host-Locks, geschützte Source-Artefakte und das nicht-sensitive Evidence-Manifest binden Aktivierung und Rollback fail-closed.
+- Unverändert geschützt bleiben Zeiterfassung, EventOS und Iranmonitor einschließlich ihrer Container-/Restart-/Status-/StartedAt-/Image-/Compose-/Netzwerk-/Alias-/Port-Invarianten. Phase 3.2/3.3 und jede Zeiterfassungs-, EventOS- oder Iranmonitor-Netzmutation bleiben harte Folgegates. Dieser Dokumentationsstand ist keine Runtime-, Deployment- oder Produktionsfreigabe.
