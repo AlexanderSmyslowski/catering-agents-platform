@@ -767,7 +767,7 @@ validate_public_listener_ownership() {
   local container_id="$1"
   local edge_pid edge_ips listeners public_port listener_line listener_pid_matches listener_pid_count listener_pid_match listener_pid
   local listener_owner_line listener_owner_id listener_owner_name
-  local cgroup cmdline exe correlated container_ip
+  local cgroup cmdline exe correlated container_ip listener_count listener_state listener_local_address listener_process_name listener_output_pid
   local -a listener_lines
 
   edge_pid="$(docker inspect --format '{{.State.Pid}}' "${container_id}")"
@@ -778,21 +778,41 @@ validate_public_listener_ownership() {
 
   for public_port in 80 443; do
     mapfile -t listener_lines < <(printf '%s\n' "${listeners}" | awk -v port=":${public_port}" '$1 == "LISTEN" && substr($4, length($4) - length(port) + 1) == port { print }')
-    [[ "${#listener_lines[@]}" == 1 ]] || remote_fail "TCP ${public_port} has missing or ambiguous listening processes."
+    listener_count="${#listener_lines[@]}"
+    if [[ "${listener_count}" == 0 ]]; then
+      printf 'LISTENER_DIAGNOSTIC\tport=%s\tcount=0\tlocal_address_port=unavailable\tstate=unavailable\tprocess=unavailable\tpid=unavailable\n' "${public_port}" >&2
+      remote_fail "TCP ${public_port} has missing or ambiguous listening processes."
+    fi
     for listener_line in "${listener_lines[@]}"; do
+      listener_state="$(printf '%s\n' "${listener_line}" | awk '{ print $1 }')"
+      listener_local_address="$(printf '%s\n' "${listener_line}" | awk '{ print $4 }')"
+      listener_process_name="$(printf '%s\n' "${listener_line}" | sed -nE 's/.*users:\(\("([^"]*)".*/\1/p')"
+      listener_state="$(printf '%s' "${listener_state:-unavailable}" | LC_ALL=C tr -c '[:print:]' '?')"
+      listener_local_address="$(printf '%s' "${listener_local_address:-unavailable}" | LC_ALL=C tr -c '[:print:]' '?')"
+      listener_process_name="$(printf '%s' "${listener_process_name:-unavailable}" | LC_ALL=C tr -c '[:print:]' '?')"
       listener_pid_matches="$(printf '%s\n' "${listener_line}" | grep -oE 'pid=[0-9]+' || true)"
       listener_pid_count="$(printf '%s\n' "${listener_pid_matches}" | awk 'NF { count += 1 } END { print count + 0 }')"
+      listener_output_pid=unavailable
+      if [[ "${listener_pid_count}" == 1 ]]; then
+        listener_pid_match="${listener_pid_matches%%$'\n'*}"
+        listener_output_pid="${listener_pid_match#pid=}"
+      fi
+      if [[ "${listener_count}" != 1 ]]; then
+        printf 'LISTENER_DIAGNOSTIC\tport=%s\tcount=%s\tlocal_address_port=%s\tstate=%s\tprocess=%s\tpid=%s\n' \
+          "${public_port}" "${listener_count}" "${listener_local_address}" "${listener_state}" "${listener_process_name}" "${listener_output_pid}" >&2
+        continue
+      fi
       if [[ "${listener_pid_count}" == 0 ]]; then
         listener_owner_line="$(printf '%b' "${port_owner_lines}" | awk -F '\t' -v port="${public_port}" '$1 == "PORT_OWNER" && $2 == port { print }')"
         listener_owner_id="$(printf '%s\n' "${listener_owner_line}" | awk -F '\t' '{ print $3 }')"
         listener_owner_name="$(printf '%s\n' "${listener_owner_line}" | awk -F '\t' '{ print $4 }')"
         [[ "${listener_owner_id}" == "${container_id}" && "${listener_owner_name}" == shared-edge-edge-1 ]] || \
           remote_fail "TCP ${public_port} listener has no visible PID and Docker ownership is missing, ambiguous or foreign."
-        printf 'LISTENER\t%s\tpid=unavailable\tcontainer=%s\n' "${listener_line}" "${container_id}"
+        printf 'LISTENER\tport=%s\tcount=1\tlocal_address_port=%s\tstate=%s\tprocess=%s\tpid=unavailable\tcontainer=%s\n' \
+          "${public_port}" "${listener_local_address}" "${listener_state}" "${listener_process_name}" "${container_id}"
         continue
       fi
       [[ "${listener_pid_count}" == 1 ]] || remote_fail "TCP ${public_port} listener PID is missing or ambiguous."
-      listener_pid_match="${listener_pid_matches%%$'\n'*}"
       listener_pid="${listener_pid_match#pid=}"
       [[ -r "/proc/${listener_pid}/cgroup" && -r "/proc/${listener_pid}/cmdline" ]] || remote_fail "TCP ${public_port} listener PID cannot be inspected."
       cgroup="$(tr '\n' ' ' < "/proc/${listener_pid}/cgroup")"
@@ -809,8 +829,10 @@ validate_public_listener_ownership() {
         done
       fi
       [[ "${correlated}" == true ]] || remote_fail "TCP ${public_port} listener PID is not correlated to the exact Shared Edge container."
-      printf 'LISTENER\t%s\tpid=%s\tcontainer=%s\n' "${listener_line}" "${listener_pid}" "${container_id}"
+      printf 'LISTENER\tport=%s\tcount=1\tlocal_address_port=%s\tstate=%s\tprocess=%s\tpid=%s\tcontainer=%s\n' \
+        "${public_port}" "${listener_local_address}" "${listener_state}" "${listener_process_name}" "${listener_pid}" "${container_id}"
     done
+    [[ "${listener_count}" == 1 ]] || remote_fail "TCP ${public_port} has missing or ambiguous listening processes."
   done
 }
 
@@ -890,7 +912,7 @@ run_remote_snapshot_or_fail() {
   local remote_output
 
   if ! remote_output="$(remote_snapshot 2> >(while IFS= read -r line; do
-    if [[ "${line}" == $'UNKNOWN_RUNTIME_CONTAINER\t'* || "${line}" == 'remote evidence gate failed: '* ]]; then
+    if [[ "${line}" == $'UNKNOWN_RUNTIME_CONTAINER\t'* || "${line}" == $'LISTENER_DIAGNOSTIC\t'* || "${line}" == 'remote evidence gate failed: '* ]]; then
       printf '%s\n' "${line}" >&2
     fi
   done))"; then

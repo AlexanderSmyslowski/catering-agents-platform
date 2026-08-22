@@ -118,6 +118,56 @@ function runExtractedFunction(
   });
 }
 
+function runListenerValidatorFixture({
+  ssLines,
+  ownerLines = `PORT_OWNER\t80\t${'a'.repeat(64)}\tshared-edge-edge-1\nPORT_OWNER\t443\t${'a'.repeat(64)}\tshared-edge-edge-1`,
+}: {
+  ssLines: string[];
+  ownerLines?: string;
+}) {
+  const validator = extractFunction(helper, 'validate_public_listener_ownership');
+  const root = mkdtempSync(join(tmpdir(), 'post-cutover-listener-diagnostic-'));
+  const dockerStub = join(root, 'docker');
+  const ssStub = join(root, 'ss');
+  writeFileSync(
+    dockerStub,
+    [
+      '#!/usr/bin/env bash',
+      'case "$*" in',
+      '  *".State.Pid"*) printf "%s\\n" 4242 ;;',
+      '  *"IPAddress"*) printf "%s\\n" 172.31.0.2 ;;',
+      '  *) exit 1 ;;',
+      'esac',
+    ].join('\n'),
+    { mode: 0o700 },
+  );
+  writeFileSync(
+    ssStub,
+    ['#!/usr/bin/env node', ...ssLines.map((line) => `console.log(${JSON.stringify(line)});`)].join('\n'),
+    { mode: 0o700 },
+  );
+  chmodSync(dockerStub, 0o700);
+  chmodSync(ssStub, 0o700);
+  const sharedEdgeId = 'a'.repeat(64);
+  const escapedOwnerLines = ownerLines.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\t', '\\t').replaceAll('\n', '\\n');
+  return runExtractedFunction(
+    validator,
+    [
+      'mapfile() {',
+      '  if [[ "${1:-}" == "-t" ]]; then shift; fi',
+      '  local variable="${1:-}" line',
+      '  local -a values=()',
+      '  while IFS= read -r line; do values+=("$line"); done',
+      '  [[ "$variable" == listener_lines ]] || return 2',
+      '  if ((${#values[@]})); then listener_lines=("${values[@]}"); else listener_lines=(); fi',
+      '}',
+      `port_owner_lines=$'${escapedOwnerLines}'`,
+      `validate_public_listener_ownership ${sharedEdgeId}`,
+    ].join('\n'),
+    { PATH: `${root}${delimiter}${originalProcessPath}` },
+  );
+}
+
 function inventoryFixture(overrides: {
   labels?: Record<string, string>;
   networks?: Record<string, string>;
@@ -1403,8 +1453,8 @@ esac
       ssStub,
       [
         '#!/usr/bin/env bash',
-        "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:*'",
-        "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:*'",
+        "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:((\"caddy\",fd=3))'",
+        "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:((\"caddy\",fd=4))'",
       ].join('\n'),
       { mode: 0o700 },
     );
@@ -1428,8 +1478,82 @@ esac
       { PATH: `${root}${delimiter}${originalProcessPath}` },
     );
     expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
-    expect(result.stdout).toContain('LISTENER\t');
+    expect(result.stdout).toContain('LISTENER\tport=80\tcount=1\tlocal_address_port=0.0.0.0:80\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
+    expect(result.stdout).toContain('LISTENER\tport=443\tcount=1\tlocal_address_port=0.0.0.0:443\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
+    expect(result.stdout).not.toContain('0.0.0.0:*');
+    expect(result.stdout).not.toContain('users:');
     expect(`${result.stdout}${result.stderr}`).not.toContain('SECRET');
+  });
+
+  it('diagnoses zero listeners with count and safe placeholders before the fail-closed abort', () => {
+    const missing80 = runListenerValidatorFixture({
+      ssLines: ['LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:(("caddy",fd=4))'],
+    });
+    expect(missing80.status).not.toBe(0);
+    expect(`${missing80.stdout}${missing80.stderr}`).toContain('LISTENER_DIAGNOSTIC\tport=80\tcount=0\tlocal_address_port=unavailable\tstate=unavailable\tprocess=unavailable\tpid=unavailable');
+    expect(`${missing80.stdout}${missing80.stderr}`).toContain('TCP 80 has missing or ambiguous listening processes.');
+
+    const missing443 = runListenerValidatorFixture({
+      ssLines: ['LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",fd=3))'],
+    });
+    expect(missing443.status).not.toBe(0);
+    expect(`${missing443.stdout}${missing443.stderr}`).toContain('LISTENER_DIAGNOSTIC\tport=443\tcount=0\tlocal_address_port=unavailable\tstate=unavailable\tprocess=unavailable\tpid=unavailable');
+    expect(`${missing443.stdout}${missing443.stderr}`).toContain('TCP 443 has missing or ambiguous listening processes.');
+    expect(`${missing80.stdout}${missing80.stderr}${missing443.stdout}${missing443.stderr}`).not.toContain('0.0.0.0:*');
+  });
+
+  it('diagnoses both dual-stack listeners when TCP 80 is ambiguous and then fails closed', () => {
+    const result = runListenerValidatorFixture({
+      ssLines: [
+        'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",fd=3))',
+        'LISTEN 0 4096 [::]:80 [::]:* users:(("caddy",fd=4))',
+      ],
+    });
+    expect(result.status).not.toBe(0);
+    const diagnostic = `${result.stdout}${result.stderr}`;
+    expect(diagnostic).toContain('LISTENER_DIAGNOSTIC\tport=80\tcount=2\tlocal_address_port=0.0.0.0:80\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
+    expect(diagnostic).toContain('LISTENER_DIAGNOSTIC\tport=80\tcount=2\tlocal_address_port=[::]:80\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
+    expect(`${result.stdout}${result.stderr}`).toContain('TCP 80 has missing or ambiguous listening processes.');
+    expect(diagnostic).not.toContain('0.0.0.0:*');
+    expect(diagnostic).not.toContain('[::]:*');
+    expect(diagnostic).not.toContain('users:');
+  });
+
+  it('fully diagnoses repeated and unexpected TCP 443 listeners before the fail-closed abort', () => {
+    const result = runListenerValidatorFixture({
+      ssLines: [
+        'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",fd=3))',
+        'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:(("caddy",fd=4))',
+        'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:(("foreign",fd=5))',
+        'LISTEN 0 4096 [::]:443 [::]:* users:(("caddy",fd=6))',
+      ],
+    });
+    expect(result.status).not.toBe(0);
+    const diagnostic = `${result.stdout}${result.stderr}`;
+    expect(diagnostic.match(/LISTENER_DIAGNOSTIC\tport=443\tcount=3\t/g)).toHaveLength(3);
+    expect(diagnostic).toContain('local_address_port=0.0.0.0:443\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
+    expect(diagnostic).toContain('local_address_port=0.0.0.0:443\tstate=LISTEN\tprocess=foreign\tpid=unavailable');
+    expect(diagnostic).toContain('local_address_port=[::]:443\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
+    expect(`${result.stdout}${result.stderr}`).toContain('TCP 443 has missing or ambiguous listening processes.');
+    expect(diagnostic).not.toContain('0.0.0.0:*');
+    expect(diagnostic).not.toContain('[::]:*');
+    expect(diagnostic).not.toContain('users:');
+    expect(diagnostic).not.toContain('/proc/');
+  });
+
+  it('sanitizes visible listener process metadata before writing diagnostic fields', () => {
+    const result = runListenerValidatorFixture({
+      ssLines: [
+        'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy\t\u001b[31m",fd=3))',
+        'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:(("caddy",fd=4))',
+      ],
+    });
+    expect(result.status).toBe(0);
+    const firstLine = result.stdout.split('\n')[0] ?? '';
+    expect(firstLine).toContain('process=caddy??[31m');
+    expect(firstLine).not.toContain('caddy\t');
+    expect(firstLine).not.toContain('\u001b');
+    expect(result.stdout).not.toContain('users:');
   });
 
   it('rejects PID-less listeners with a wrong, duplicate or foreign-app Docker owner', () => {
@@ -1953,6 +2077,8 @@ exit 1
       [
         'remote_snapshot() {',
         "  printf 'UNKNOWN_RUNTIME_CONTAINER\\tname=safe\\n' >&2",
+        "  printf 'LISTENER_DIAGNOSTIC\\tport=80\\tcount=2\\tlocal_address_port=[::]:80\\tstate=LISTEN\\tprocess=caddy\\tpid=unavailable\\n' >&2",
+        "  printf 'LISTENER\\tsecret=fixture-secret\\n' >&2",
         "  printf '%s\\n' 'remote evidence gate failed: shared-edge deploy lock is active or ambiguous.' >&2",
         "  printf '%s\\n' 'remote evidence gate failed: unknown runtime container or network consumer is outside the allowlist.' >&2",
         "  printf '%s\\n' 'docker-daemon-secret-error-marker' >&2",
@@ -1968,6 +2094,8 @@ exit 1
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain('PHASE 2: NO-GO');
     expect(output).toContain('UNKNOWN_RUNTIME_CONTAINER\tname=safe');
+    expect(output).toContain('LISTENER_DIAGNOSTIC\tport=80\tcount=2\tlocal_address_port=[::]:80\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
+    expect(output).not.toContain('LISTENER\tsecret=fixture-secret');
     expect(output).toContain('remote evidence gate failed: shared-edge deploy lock is active or ambiguous.');
     expect(output).toContain('remote evidence gate failed: unknown runtime container or network consumer is outside the allowlist.');
     expect(output).not.toContain('docker-daemon-secret-error-marker');
