@@ -222,7 +222,7 @@ function createFakeRemoteFixture(kind: string, originalPath = originalProcessPat
   symlinkSync(zeiterfassungRelease, join(zeiterfassungRoot, 'current'));
 
   const archive = join(rollbackRoot, 'shared-edge-20260821T120000Z.tar.gz');
-  if (kind === 'invalid-tar') {
+  if (kind === 'invalid-tar' || kind === 'unknown-runtime-before-gate') {
     writeFileSync(archive, 'this is not a tar archive\n');
   } else {
     const tarResult = spawnSync('tar', ['-czf', archive, '-C', archiveContent, '.'], { encoding: 'utf8' });
@@ -235,6 +235,7 @@ function createFakeRemoteFixture(kind: string, originalPath = originalProcessPat
   writeFileSync(join(rollbackRoot, 'latest'), `${archive}\n`);
 
 const dockerScript = String.raw`#!/usr/bin/env node
+const fs = require('fs');
 const args = process.argv.slice(2);
 const env = process.env;
 const components = [
@@ -249,12 +250,37 @@ const components = [
   ['eventos-app', 'commcats-eventos', 'app', 'commcats-eventos-app'],
   ['eventos-postgres', 'commcats-eventos', 'postgres', 'commcats-eventos-postgres'],
 ];
-const byName = Object.fromEntries(components.map((row) => [row[3], row]));
-const byId = Object.fromEntries(components.map((row, index) => [(index + 1).toString(16).repeat(64), row]));
-function idFor(component) { return (components.findIndex((row) => row[0] === component) + 1).toString(16).repeat(64); }
+const unknownComponents = ['unknown-runtime', 'unknown-runtime-before-gate', 'unknown-runtime-inspect-failure', 'unknown-runtime-empty', 'unknown-runtime-unsorted'].includes(env.HARNESS_CASE)
+  ? [['unknown-runtime-1', 'rogue-project', 'rogue-service', 'rogue-runtime-1']]
+  : ['unknown-runtime-multiple', 'unknown-runtime-multiple-inspect-failure'].includes(env.HARNESS_CASE)
+    ? [
+        ['unknown-runtime-1', 'rogue-project', 'rogue-service', 'rogue-runtime-1'],
+        ['unknown-runtime-2', 'rogue-project-2', 'rogue-service-2', 'rogue-runtime-2'],
+      ]
+    : env.HARNESS_CASE === 'unknown-runtime-control'
+      ? [['unknown-runtime-control', 'rogue-project-control', 'rogue-service-control\nencoded', 'rogue-runtime-control']]
+      : [];
+const runtimeComponents = components.concat(unknownComponents);
+const unknownMetadata = {
+  'unknown-runtime-1': { image: 'rogue/image:1.0', status: 'running', started: '2026-08-21T00:00:01Z', restart: '2', networks: ['rogue-net'], ports: '8080/tcp\t18080\n8443/tcp\t18443\n' },
+  'unknown-runtime-2': { image: 'rogue/image:2.0', status: 'running', started: '2026-08-21T00:00:02Z', restart: '3', networks: ['rogue-net-2'], ports: '9090/tcp\t19090\n' },
+  'unknown-runtime-control': { image: 'rogue/image:control', status: 'running', started: '2026-08-21T00:00:03Z', restart: '4', networks: ['rogue-net-control'], ports: '7070/tcp\t17070\n' },
+};
+const byName = Object.fromEntries(runtimeComponents.map((row) => [row[3], row]));
+const byId = Object.fromEntries(runtimeComponents.map((row, index) => [(index + 1).toString(16).repeat(64), row]));
+function idFor(component) { return (runtimeComponents.findIndex((row) => row[0] === component) + 1).toString(16).repeat(64); }
+function isUnknown(component) { return component.startsWith('unknown-runtime'); }
+function metadataFor(component) { return unknownMetadata[component]; }
 function rowFor(value) { return byId[value] || byName[value] || components.find((row) => row[0] === value); }
 function emit(value) { process.stdout.write(String(value)); }
 function networksFor(component) {
+  if (env.HARNESS_CASE === 'unknown-runtime-unsorted' && component === 'unknown-runtime-1') {
+    return [
+      ['zeta-net', ['rogue-runtime-1']],
+      ['alpha-net', ['rogue-runtime-1']],
+      ['middle-net', ['rogue-runtime-1']],
+    ];
+  }
   switch (component) {
     case 'shared-edge': return [['platform-infra_default', ['edge', 'shared-edge-edge-1']], ['zeiterfassung_default', ['edge', 'shared-edge-edge-1']]];
     case 'catering-web': return [['platform-infra_default', ['web', 'platform-infra-web-1']], ['zeiterfassung_default', ['web', 'platform-infra-web-1']]];
@@ -266,6 +292,9 @@ function networksFor(component) {
     case 'zeiterfassung-app': return [['zeiterfassung_default', ['app', 'zeiterfassung-app-1']]];
     case 'eventos-app': return [['commcats-eventos_default', ['app', 'commcats-eventos-app']], ['platform-infra_default', ['app', 'commcats-eventos-app']]];
     case 'eventos-postgres': return [['commcats-eventos_default', ['postgres', 'commcats-eventos-postgres']]];
+    case 'unknown-runtime-1': return metadataFor(component).networks.map((network) => [network, ['rogue-runtime-1']]);
+    case 'unknown-runtime-2': return metadataFor(component).networks.map((network) => [network, ['rogue-runtime-2']]);
+    case 'unknown-runtime-control': return metadataFor(component).networks.map((network) => [network, ['rogue-runtime-control']]);
     default: return [];
   }
 }
@@ -333,6 +362,7 @@ if (args[0] === 'ps') {
     const expected = nameFilter.slice('name=^/'.length, -1);
     selected = selected.filter((row) => row[3] === expected);
   }
+  if (!projectFilter && !serviceFilter && !nameFilter) selected = runtimeComponents;
   emit(selected.map((row) => idFor(row[0])).join('\n') + (selected.length ? '\n' : ''));
   process.exit(0);
 }
@@ -347,6 +377,16 @@ if (args[0] === 'inspect') {
     process.exit(125);
   }
   const component = row[0];
+  const unknown = isUnknown(component);
+  const metadata = unknown ? metadataFor(component) : undefined;
+  if (unknown && env.HARNESS_CASE === 'unknown-runtime-inspect-failure' && component === 'unknown-runtime-1') {
+    process.stderr.write('docker-daemon-secret-error-marker\n');
+    process.exit(23);
+  }
+  if (unknown && env.HARNESS_CASE === 'unknown-runtime-multiple-inspect-failure' && component === 'unknown-runtime-1') {
+    process.stderr.write('docker-daemon-secret-error-marker\n');
+    process.exit(23);
+  }
   if (format === '{{.Id}}') emit(idFor(component) + '\n');
   else if (format === '{{.Name}}') emit('/' + row[3] + '\n');
   else if (format.includes('.State.Pid')) emit(env.HARNESS_REMOTE_PID + '\n');
@@ -355,10 +395,12 @@ if (args[0] === 'inspect') {
   } else if (format.includes('.Config.Image')) {
     if (component === 'eventos-app') emit(env.HARNESS_CASE === 'eventos-unbound' ? 'commcats-eventos-app:latest\n' : 'commcats-eventos-app\n');
     else if (component === 'zeiterfassung-app') emit('zeiterfassung-app:1.2.3-0123456789ab\n');
+    else if (env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) emit('\n');
+    else if (unknown) emit(metadata.image + '\n');
     else emit('fixture:image\n');
-  } else if (format.includes('.State.Status')) emit('running\n');
-  else if (format.includes('.State.StartedAt')) emit('2026-08-21T00:00:00Z\n');
-  else if (format.includes('.RestartCount')) emit('0\n');
+  } else if (format.includes('.State.Status')) emit((env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) ? '\n' : (unknown ? metadata.status : 'running') + '\n');
+  else if (format.includes('.State.StartedAt')) emit((env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) ? '\n' : (unknown ? metadata.started : '2026-08-21T00:00:00Z') + '\n');
+  else if (format.includes('.RestartCount')) emit((env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) ? '\n' : (unknown ? metadata.restart : '0') + '\n');
   else if (format.includes('HostConfig.PortBindings')) {
     const structuredBindings = format.includes('printf "%s\\t%s\\n"');
     if (component === 'shared-edge') emit(structuredBindings ? '80/tcp\t80\n443/tcp\t443\n' : '80/tcp=80,;443/tcp=443,;\n');
@@ -368,17 +410,27 @@ if (args[0] === 'inspect') {
       emit(structuredBindings ? '3000/tcp\t3001\n' : '3000/tcp=3001,;\n');
     } else if (env.HARNESS_CASE === 'eventos-postgres-alternative-host-port' && component === 'eventos-postgres') {
       emit(structuredBindings ? '5432/tcp\t15432\n' : '5432/tcp=15432,;\n');
+    } else if (env.HARNESS_CASE === 'unknown-runtime-unsorted' && component === 'unknown-runtime-1') {
+      emit(structuredBindings ? '8443/tcp\t18443\n8080/tcp\t18080\n' : '8443/tcp=18443,;8080/tcp=18080,;\n');
+    } else if (env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) {
+      emit('\n');
+    } else if (unknown) {
+      emit(structuredBindings ? metadata.ports : metadata.ports.replace(/\\t/g, '=').replace(/\\n/g, ';'));
     } else emit('\n');
   }
   else if (format.includes('com.docker.compose.project.working_dir')) {
     if (component === 'eventos-app') emit(env.HARNESS_EVENTOS_ROOT + '/current\n');
     else if (component === 'zeiterfassung-app') emit(env.HARNESS_ZEIT_ROOT + '/0123456789ab-20260821T120000Z\n');
     else emit('<no value>\n');
-  } else if (format.includes('com.docker.compose.project')) emit(row[1] + '\n');
-  else if (format.includes('com.docker.compose.service')) emit(row[2] + '\n');
+  } else if (format.includes('com.docker.compose.project')) emit(env.HARNESS_CASE === 'unknown-runtime-empty' && unknown ? '\n' : row[1] + '\n');
+  else if (format.includes('com.docker.compose.service')) emit(env.HARNESS_CASE === 'unknown-runtime-empty' && unknown ? '\n' : row[2] + '\n');
   else if (format.includes('com.docker.compose.oneoff')) emit('False\n');
   else if (format.includes('com.docker.compose.container-number')) emit('1\n');
   else if (format.includes('.Config.Env')) {
+    if (unknown) {
+      fs.appendFileSync(env.HARNESS_UNKNOWN_READ_LOG, 'env\\n');
+      emit('AUTHORIZATION=Bearer fixture-token\\nSECRET=fixture-secret\\n');
+    }
     if (component === 'shared-edge') emit([
       'CATERING_UPSTREAM=http://web:8081',
       'ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040',
@@ -389,14 +441,22 @@ if (args[0] === 'inspect') {
     ].join('\n') + '\n');
     else if (component === 'eventos-app') emit('EVENTOS_RELEASE_SHA=' + (env.HARNESS_CASE === 'eventos-arbitrary-sha' ? 'b'.repeat(40) : env.HARNESS_EVENTOS_SHA) + '\n');
   } else if (format.includes('.Mounts')) {
+    if (unknown) {
+      fs.appendFileSync(env.HARNESS_UNKNOWN_READ_LOG, 'mounts\\n');
+      emit('/sensitive/fixture\t/app\tfalse\n');
+    }
     if (component === 'shared-edge') emit(env.HARNESS_EDGE_PATH + '/Caddyfile\t/etc/caddy/Caddyfile\tfalse\n');
   } else if (format.includes('IPAddress')) {
     if (component === 'shared-edge') emit('172.31.0.2\n');
   } else if (format.includes('join $network.Aliases')) {
     emit(networksFor(component).map((row) => row[0] + '=' + row[1].join(',') + ';').join('') + '\n');
   } else if (format.includes('$network_name')) {
-    emit(networksFor(component).map((row) => row[0] + '\n').join(''));
+    emit(env.HARNESS_CASE === 'unknown-runtime-empty' && unknown ? '\n' : networksFor(component).map((row) => row[0] + '\n').join(''));
   } else {
+    if (unknown && format.includes('.Config.Labels')) {
+      fs.appendFileSync(env.HARNESS_UNKNOWN_READ_LOG, 'labels\\n');
+      emit('com.example.foreign=fixture-label\\n');
+    }
     const hostKeys = ['CATERING_PUBLIC_HOST', 'ZEITERFASSUNG_PUBLIC_HOST', 'EVENTOS_PUBLIC_HOST'];
     const key = hostKeys.find((value) => format.includes(value + '='));
     if (component === 'shared-edge' && key) emit((env.HARNESS_CASE === 'wrong-caddy-mapping' && key === 'CATERING_PUBLIC_HOST' ? 'evil.example' : { CATERING_PUBLIC_HOST: 'catering.the-one.catering', ZEITERFASSUNG_PUBLIC_HOST: 'zeit.the-one.catering', EVENTOS_PUBLIC_HOST: 'eventos.commcats.de' }[key]) + '\n');
@@ -506,6 +566,7 @@ process.exit(result.status === null ? 1 : result.status);
       HARNESS_EXPECTED_CADDY_SHA: kind === 'wrong-caddy-hash' ? 'd'.repeat(64) : caddyfileSha256,
       HARNESS_CASE: kind,
       HARNESS_SCRIPT_LOG: join(root, 'remote-script.log'),
+      HARNESS_UNKNOWN_READ_LOG: join(root, 'unknown-read.log'),
       REAL_SHA256SUM: realSha256sum,
     },
   };
@@ -516,6 +577,22 @@ function extractRemoteSnapshot(source: string) {
   const end = source.indexOf('\n}\n\nstate_line()', start);
   if (start < 0 || end < 0) throw new Error('Missing remote_snapshot function');
   return source.slice(start, end + 2);
+}
+
+function runFakeRemoteSnapshot(kind: string, timeoutMs = 25000) {
+  const fixture = createFakeRemoteFixture(kind);
+  const result = runExtractedFunction(
+    extractRemoteSnapshot(helper),
+    [
+      'SSH_ARGS=(--batch-mode)',
+      'REMOTE=fixture',
+      'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+      'remote_snapshot',
+    ].join('\n'),
+    fixture.environment,
+    timeoutMs,
+  );
+  return { fixture, result };
 }
 
 function extractDockerInspectEnvLines(source: string) {
@@ -659,7 +736,7 @@ describe('post-cutover evidence workflow contract', () => {
     expect(helper).not.toMatch(/\bdocker\s+(?:network\s+(?:connect|disconnect|create|rm)|rm|prune|system\s+prune)\b/);
     expect(helper).not.toMatch(/\b(?:sudo|rsync|scp|docker\s+exec|docker\s+cp)\b/);
     expect(helper).not.toMatch(/\b(?:tee|mv|install|mkdir|rm)\b/);
-    expect(remoteScripts).not.toMatch(/(^|[^-])>{1,2}(?!&2)/m);
+    expect(remoteScripts).not.toMatch(/(^|[^-])>{1,2}(?!&2|\/dev\/null)/m);
     expect(helper).not.toMatch(/\bset\s+-x\b/);
     expect(helper).toContain('range .Config.Env');
     expect(helper).not.toContain('{{json .Config.Env}}');
@@ -1482,6 +1559,159 @@ exit 1
       { SNAPSHOT: validRemote.stdout },
     );
     expect(validInventory.status, `${validInventory.stdout}${validInventory.stderr}`).toBe(0);
+  }, 30000);
+
+  it('emits only safe metadata for one unknown runtime container before one fail-closed abort', () => {
+    const { fixture, result } = runFakeRemoteSnapshot('unknown-runtime');
+    const diagnostic = `${result.stdout}${result.stderr}`;
+    const unknownId = 'b'.repeat(64);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('UNKNOWN_RUNTIME_CONTAINER');
+    expect(result.stderr).toContain('name=rogue-runtime-1');
+    expect(result.stderr).toContain(`container_id=${unknownId}`);
+    expect(result.stderr).toContain('image=rogue/image:1.0');
+    expect(result.stderr).toContain('status=running');
+    expect(result.stderr).toContain('started_at=2026-08-21T00:00:01Z');
+    expect(result.stderr).toContain('restart_count=2');
+    expect(result.stderr).toContain('compose_project=rogue-project');
+    expect(result.stderr).toContain('compose_service=rogue-service');
+    expect(result.stderr).toContain('network_names=rogue-net');
+    expect(result.stderr).toContain('published_host_ports=8080/tcp=18080');
+    expect(result.stderr).toContain('8443/tcp=18443');
+    expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
+    expect(diagnostic).not.toContain('AUTHORIZATION');
+    expect(diagnostic).not.toContain('Bearer fixture-token');
+    expect(diagnostic).not.toContain('SECRET');
+    expect(diagnostic).not.toContain('fixture-secret');
+    expect(diagnostic).not.toContain('com.example.foreign');
+    expect(diagnostic).not.toContain('fixture-label');
+    expect(existsSync(join(fixture.root, 'unknown-read.log'))).toBe(false);
+  }, 30000);
+
+  it('diagnoses every unknown runtime container before exactly one fail-closed abort', () => {
+    const { result } = runFakeRemoteSnapshot('unknown-runtime-multiple');
+    const diagnostic = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr.match(/^UNKNOWN_RUNTIME_CONTAINER\b/gm)).toHaveLength(2);
+    expect(result.stderr).toContain('name=rogue-runtime-1');
+    expect(result.stderr).toContain(`container_id=${'b'.repeat(64)}`);
+    expect(result.stderr).toContain('name=rogue-runtime-2');
+    expect(result.stderr).toContain(`container_id=${'c'.repeat(64)}`);
+    expect(result.stderr).toContain('image=rogue/image:1.0');
+    expect(result.stderr).toContain('image=rogue/image:2.0');
+    expect(result.stderr).toContain('network_names=rogue-net');
+    expect(result.stderr).toContain('network_names=rogue-net-2');
+    expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
+    expect(diagnostic).not.toMatch(/AUTHORIZATION|Bearer fixture-token|SECRET|fixture-secret|com\.example\.foreign|fixture-label/);
+  }, 30000);
+
+  it('quotes control characters in unknown-container metadata without creating injected output lines', () => {
+    const { result } = runFakeRemoteSnapshot('unknown-runtime-control');
+    const diagnostic = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("compose_service=$'rogue-service-control\\nencoded'");
+    expect(diagnostic).not.toMatch(/\nencoded(?:\r)?\n/);
+    expect(diagnostic).not.toMatch(/AUTHORIZATION|SECRET|com\.example\.foreign/);
+  }, 30000);
+
+  it('runs the unknown-container inventory before an unrelated earlier evidence gate can abort', () => {
+    const { result } = runFakeRemoteSnapshot('unknown-runtime-before-gate');
+    const diagnostic = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('UNKNOWN_RUNTIME_CONTAINER');
+    expect(result.stderr).toContain('name=rogue-runtime-1');
+    expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
+    expect(diagnostic).not.toContain('rollback archive is not a readable tar.gz archive');
+  }, 30000);
+
+  it('uses fixed safe placeholders when an unknown-container inspect fails and suppresses daemon stderr', () => {
+    const { fixture, result } = runFakeRemoteSnapshot('unknown-runtime-inspect-failure');
+    const diagnostic = `${result.stdout}${result.stderr}`;
+    const unknownId = 'b'.repeat(64);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('UNKNOWN_RUNTIME_CONTAINER');
+    expect(result.stderr).toContain(`container_id=${unknownId}`);
+    for (const field of ['name', 'image', 'status', 'started_at', 'restart_count', 'compose_project', 'compose_service', 'network_names', 'published_host_ports']) {
+      expect(result.stderr).toContain(`${field}=inspect-error`);
+    }
+    expect(diagnostic).not.toContain('docker-daemon-secret-error-marker');
+    expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
+    expect(existsSync(join(fixture.root, 'unknown-read.log'))).toBe(false);
+  }, 30000);
+
+  it('uses fixed placeholders for empty unknown-container metadata and preserves the single fail-closed abort', () => {
+    const { result } = runFakeRemoteSnapshot('unknown-runtime-empty');
+    const diagnostic = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('UNKNOWN_RUNTIME_CONTAINER');
+    for (const field of ['image', 'status', 'started_at', 'restart_count', 'compose_project', 'compose_service', 'network_names', 'published_host_ports']) {
+      expect(result.stderr).toContain(`${field}=missing`);
+    }
+    expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
+  }, 30000);
+
+  it('continues after a failed first unknown inspect and diagnoses every later unknown container', () => {
+    const { result } = runFakeRemoteSnapshot('unknown-runtime-multiple-inspect-failure');
+    const diagnostic = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr.match(/^UNKNOWN_RUNTIME_CONTAINER\b/gm)).toHaveLength(2);
+    expect(result.stderr).toContain(`container_id=${'b'.repeat(64)}`);
+    expect(result.stderr).toContain(`container_id=${'c'.repeat(64)}`);
+    expect(result.stderr).toContain('name=inspect-error');
+    expect(result.stderr).toContain('name=rogue-runtime-2');
+    expect(result.stderr).toContain('image=rogue/image:2.0');
+    expect(diagnostic).not.toContain('docker-daemon-secret-error-marker');
+    expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
+  }, 30000);
+
+  it('sorts unknown-container networks and published host ports deterministically', () => {
+    const { result } = runFakeRemoteSnapshot('unknown-runtime-unsorted');
+    const diagnostic = `${result.stdout}${result.stderr}`;
+    const line = result.stderr.split('\n').find((entry) => entry.startsWith('UNKNOWN_RUNTIME_CONTAINER')) ?? '';
+
+    expect(result.status).not.toBe(0);
+    expect(line).toContain('network_names=alpha-net\\,middle-net\\,zeta-net');
+    const firstPort = line.indexOf('8080/tcp=18080');
+    const secondPort = line.indexOf('8443/tcp=18443');
+    expect(firstPort).toBeGreaterThan(-1);
+    expect(secondPort).toBeGreaterThan(firstPort);
+    expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
+  }, 30000);
+
+  it('maps remote snapshot failures through the outer PHASE 2 NO-GO path without forwarding remote stderr', () => {
+    const wrapper = extractFunction(helper, 'run_remote_snapshot_or_fail');
+    const result = runExtractedFunction(
+      `${extractFunction(helper, 'fail')}\n${wrapper}`,
+      [
+        'remote_snapshot() {',
+        "  printf 'UNKNOWN_RUNTIME_CONTAINER\\tname=safe\\n' >&2",
+        "  printf '%s\\n' 'remote evidence gate failed: shared-edge deploy lock is active or ambiguous.' >&2",
+        "  printf '%s\\n' 'remote evidence gate failed: unknown runtime container or network consumer is outside the allowlist.' >&2",
+        "  printf '%s\\n' 'docker-daemon-secret-error-marker' >&2",
+        '  return 23',
+        '}',
+        'if ! snapshot="$(run_remote_snapshot_or_fail)"; then',
+        '  fail "remote evidence snapshot failed."',
+        'fi',
+      ].join('\n'),
+    );
+    const output = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain('PHASE 2: NO-GO');
+    expect(output).toContain('UNKNOWN_RUNTIME_CONTAINER\tname=safe');
+    expect(output).toContain('remote evidence gate failed: shared-edge deploy lock is active or ambiguous.');
+    expect(output).toContain('remote evidence gate failed: unknown runtime container or network consumer is outside the allowlist.');
+    expect(output).not.toContain('docker-daemon-secret-error-marker');
+    expect(helper.match(/if ! before_snapshot="\$\(run_remote_snapshot_or_fail\)"; then/g)).toHaveLength(1);
+    expect(helper.match(/if ! after_snapshot="\$\(run_remote_snapshot_or_fail\)"; then/g)).toHaveLength(1);
   }, 30000);
 
   it.each([

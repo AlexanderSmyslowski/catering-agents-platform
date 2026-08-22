@@ -246,6 +246,116 @@ read_eventos_container_identity() {
   printf 'EVENTOS_IDENTITY\t%s\t%s\t%s\t%s\n' "${EVENTOS_IMAGE}" "${EVENTOS_CONTENT_ID}" "${EVENTOS_COMPOSE_RELEASE_SHA}" "${EVENTOS_WORKING_DIR}"
 }
 
+safe_inspect_field() {
+  local format="$1"
+  local container_id="$2"
+  local value
+
+  if value="$(docker inspect --format "${format}" "${container_id}" 2>/dev/null)"; then
+    if [[ -n "${value}" ]]; then
+      printf '%s' "${value}"
+    else
+      printf 'missing'
+    fi
+  else
+    printf 'inspect-error'
+  fi
+}
+
+safe_network_names() {
+  local container_id="$1"
+  local raw names
+
+  if ! raw="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}\n{{end}}' "${container_id}" 2>/dev/null)"; then
+    printf 'inspect-error'
+    return 0
+  fi
+  if [[ -z "${raw}" ]]; then
+    printf 'missing'
+    return 0
+  fi
+  names="$(printf '%s\n' "${raw}" | LC_ALL=C sort -u | awk 'BEGIN { separator = "" } NF { printf "%s%s", separator, $0; separator = "," } END { if (separator == "") printf "missing" }')"
+  printf '%s' "${names}"
+}
+
+safe_published_host_ports() {
+  local container_id="$1"
+  local raw line container_port host_port
+  local -a entries=()
+
+  if ! raw="$(docker inspect --format '{{range $container_port, $bindings := .HostConfig.PortBindings}}{{range $bindings}}{{printf "%s\t%s\n" $container_port .HostPort}}{{end}}{{end}}' "${container_id}" 2>/dev/null)"; then
+    printf 'inspect-error'
+    return 0
+  fi
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    if [[ "${line}" != *$'\t'* ]]; then
+      printf 'invalid'
+      return 0
+    fi
+    container_port="${line%%$'\t'*}"
+    host_port="${line#*$'\t'}"
+    if [[ "${host_port}" == *$'\t'* || ! "${container_port}" =~ ^[0-9]+/(tcp|udp|sctp)$ || ! "${host_port}" =~ ^[0-9]+$ ]]; then
+      printf 'invalid'
+      return 0
+    fi
+    entries+=("${container_port}=${host_port}")
+  done <<< "${raw}"
+  if ((${#entries[@]} == 0)); then
+    printf 'missing'
+    return 0
+  fi
+  printf '%s\n' "${entries[@]}" | LC_ALL=C sort | awk 'BEGIN { separator = "" } { printf "%s%s", separator, $0; separator = ";" }'
+}
+
+unknown_container_diagnostic() {
+  local container_id="$1"
+  local inventory_name="$2"
+  local inventory_project="$3"
+  local inventory_service="$4"
+  local id image status started restart networks published_ports
+
+  id="$(safe_inspect_field '{{.Id}}' "${container_id}")"
+  if [[ ! "${id}" =~ ^[0-9a-fA-F]{64}$ && "${container_id}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    id="${container_id}"
+  fi
+  image="$(safe_inspect_field '{{.Config.Image}}' "${container_id}")"
+  status="$(safe_inspect_field '{{.State.Status}}' "${container_id}")"
+  started="$(safe_inspect_field '{{.State.StartedAt}}' "${container_id}")"
+  restart="$(safe_inspect_field '{{.RestartCount}}' "${container_id}")"
+  networks="$(safe_network_names "${container_id}")"
+  published_ports="$(safe_published_host_ports "${container_id}")"
+
+  inventory_name="${inventory_name#/}"
+  printf 'UNKNOWN_RUNTIME_CONTAINER\tname=%q\tcontainer_id=%q\timage=%q\tstatus=%q\tstarted_at=%q\trestart_count=%q\tcompose_project=%q\tcompose_service=%q\tnetwork_names=%q\tpublished_host_ports=%q\n' \
+    "${inventory_name}" "${id}" "${image}" "${status}" "${started}" "${restart}" "${inventory_project}" "${inventory_service}" "${networks}" "${published_ports}" >&2
+}
+
+validate_unknown_runtime_inventory() {
+  local container_id inventory_name inventory_project inventory_service
+  local unknown_container_found=false
+
+  if ! all_container_ids="$(docker ps --no-trunc --format '{{.ID}}' 2>/dev/null)"; then
+    remote_fail "unknown runtime inventory collection failed."
+  fi
+  while IFS= read -r container_id; do
+    [[ -n "${container_id}" ]] || continue
+    inventory_name="$(safe_inspect_field '{{.Name}}' "${container_id}")"
+    inventory_project="$(safe_inspect_field '{{index .Config.Labels "com.docker.compose.project"}}' "${container_id}")"
+    inventory_service="$(safe_inspect_field '{{index .Config.Labels "com.docker.compose.service"}}' "${container_id}")"
+    case "${inventory_project}/${inventory_service}/${inventory_name#/}" in
+      shared-edge/edge/shared-edge-edge-1|platform-infra/postgres/platform-infra-postgres-1|platform-infra/intake/platform-infra-intake-1|platform-infra/offer/platform-infra-offer-1|platform-infra/production/platform-infra-production-1|platform-infra/exports/platform-infra-exports-1|platform-infra/web/platform-infra-web-1|zeiterfassung/app/zeiterfassung-app-1|commcats-eventos/app/commcats-eventos-app|commcats-eventos/postgres/commcats-eventos-postgres) ;;
+      *)
+        unknown_container_diagnostic "${container_id}" "${inventory_name}" "${inventory_project}" "${inventory_service}"
+        unknown_container_found=true
+        ;;
+    esac
+  done <<< "${all_container_ids}"
+  [[ "${unknown_container_found}" == false ]] || remote_fail "unknown runtime container or network consumer is outside the allowlist."
+}
+
+all_container_ids=""
+validate_unknown_runtime_inventory
 test -d "${edge_path}" || remote_fail "shared-edge path is unavailable."
 snapshot_lock_before="$(validate_deploy_lock_absent "${edge_lock_path}")"
 validate_manifest_file "${edge_path}/.deploy-manifest" "${rollback_root}" "${expected_commit}" cutover
@@ -611,17 +721,6 @@ validate_public_listener_ownership() {
   done
 }
 
-all_container_ids="$(docker ps --no-trunc --format '{{.ID}}')"
-for container_id in ${all_container_ids}; do
-  inventory_name="$(docker inspect --format '{{.Name}}' "${container_id}")"
-  inventory_name="${inventory_name#/}"
-  inventory_project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_id}")"
-  inventory_service="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_id}")"
-  case "${inventory_project}/${inventory_service}/${inventory_name}" in
-    shared-edge/edge/shared-edge-edge-1|platform-infra/postgres/platform-infra-postgres-1|platform-infra/intake/platform-infra-intake-1|platform-infra/offer/platform-infra-offer-1|platform-infra/production/platform-infra-production-1|platform-infra/exports/platform-infra-exports-1|platform-infra/web/platform-infra-web-1|zeiterfassung/app/zeiterfassung-app-1|commcats-eventos/app/commcats-eventos-app|commcats-eventos/postgres/commcats-eventos-postgres) ;;
-    *) remote_fail "unknown runtime container or network consumer is outside the allowlist." ;;
-  esac
-done
 port_owner_lines=""
 for container_id in ${all_container_ids}; do
   owner_id="$(docker inspect --format '{{.Id}}' "${container_id}")"
@@ -689,6 +788,19 @@ printf 'METADATA\tshared-edge-mode\t%s\n' "${manifest_mode}"
 printf 'METADATA\tshared-edge-deployed-at\t%s\n' "${manifest_time}"
 printf '%s\n' "${edge_state}" "${web_state}" "${postgres_state}" "${intake_state}" "${offer_state}" "${production_state}" "${exports_state}" "${zeiterfassung_state}" "${eventos_state}" "${eventos_postgres_state}"
 REMOTE_SCRIPT
+}
+
+run_remote_snapshot_or_fail() {
+  local remote_output
+
+  if ! remote_output="$(remote_snapshot 2> >(while IFS= read -r line; do
+    if [[ "${line}" == $'UNKNOWN_RUNTIME_CONTAINER\t'* || "${line}" == 'remote evidence gate failed: '* ]]; then
+      printf '%s\n' "${line}" >&2
+    fi
+  done))"; then
+    return 1
+  fi
+  printf '%s' "${remote_output}"
 }
 
 state_line() {
@@ -1208,7 +1320,9 @@ COMPONENTS=(
 
 validate_curl_args
 echo "Collecting read-only pre-smoke evidence."
-before_snapshot="$(remote_snapshot)"
+if ! before_snapshot="$(run_remote_snapshot_or_fail)"; then
+  fail "remote evidence snapshot failed."
+fi
 validate_allowlisted_inventory "${before_snapshot}"
 load_zeiterfassung_container_metadata "${before_snapshot}"
 load_eventos_release_marker "${before_snapshot}"
@@ -1269,7 +1383,9 @@ for eventos_path in /api/health /api/ready; do
 done
 
 echo "Collecting read-only post-smoke evidence."
-after_snapshot="$(remote_snapshot)"
+if ! after_snapshot="$(run_remote_snapshot_or_fail)"; then
+  fail "remote evidence snapshot failed."
+fi
 validate_allowlisted_inventory "${after_snapshot}"
 load_eventos_release_marker "${after_snapshot}"
 compare_identity_invariants
