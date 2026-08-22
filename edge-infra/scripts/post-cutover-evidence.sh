@@ -344,7 +344,7 @@ validate_unknown_runtime_inventory() {
     inventory_project="$(safe_inspect_field '{{index .Config.Labels "com.docker.compose.project"}}' "${container_id}")"
     inventory_service="$(safe_inspect_field '{{index .Config.Labels "com.docker.compose.service"}}' "${container_id}")"
     case "${inventory_project}/${inventory_service}/${inventory_name#/}" in
-      shared-edge/edge/shared-edge-edge-1|platform-infra/postgres/platform-infra-postgres-1|platform-infra/intake/platform-infra-intake-1|platform-infra/offer/platform-infra-offer-1|platform-infra/production/platform-infra-production-1|platform-infra/exports/platform-infra-exports-1|platform-infra/web/platform-infra-web-1|zeiterfassung/app/zeiterfassung-app-1|commcats-eventos/app/commcats-eventos-app|commcats-eventos/postgres/commcats-eventos-postgres) ;;
+      shared-edge/edge/shared-edge-edge-1|platform-infra/postgres/platform-infra-postgres-1|platform-infra/intake/platform-infra-intake-1|platform-infra/offer/platform-infra-offer-1|platform-infra/production/platform-infra-production-1|platform-infra/exports/platform-infra-exports-1|platform-infra/web/platform-infra-web-1|zeiterfassung/app/zeiterfassung-app-1|commcats-eventos/app/commcats-eventos-app|commcats-eventos/postgres/commcats-eventos-postgres|deploy/web/deploy-web-1|deploy/ingest/deploy-ingest-1|deploy/db/deploy-db-1) ;;
       *)
         unknown_container_diagnostic "${container_id}" "${inventory_name}" "${inventory_project}" "${inventory_service}"
         unknown_container_found=true
@@ -448,6 +448,31 @@ read_host_port_bindings() {
   done <<< "${raw}"
 }
 
+read_iranmonitor_port_bindings() {
+  local container_id="$1"
+  local raw line host_ip container_port host_port extra
+  local -a entries=()
+
+  raw="$(docker inspect --format '{{range $container_port, $bindings := .HostConfig.PortBindings}}{{range $bindings}}{{printf "%s\t%s\t%s\n" .HostIp $container_port .HostPort}}{{end}}{{end}}' "${container_id}")" || \
+    remote_fail "Iranmonitor Docker HostConfig.PortBindings inspection failed."
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    IFS=$'\t' read -r host_ip container_port host_port extra < <(printf '%s\n' "${line}")
+    [[ -z "${extra}" && -n "${host_ip}" && -n "${container_port}" && -n "${host_port}" ]] || \
+      remote_fail "Iranmonitor Docker HostConfig.PortBindings output is malformed."
+    [[ "${host_ip}" =~ ^[0-9A-Fa-f:.]+$ ]] || remote_fail "Iranmonitor Docker HostConfig.PortBindings HostIP is malformed."
+    [[ "${container_port}" =~ ^[0-9]+/(tcp|udp|sctp)$ ]] || \
+      remote_fail "Iranmonitor Docker HostConfig.PortBindings container port is malformed."
+    [[ "${host_port}" =~ ^[0-9]+$ ]] || remote_fail "Iranmonitor Docker HostConfig.PortBindings HostPort is malformed."
+    entries+=("${host_ip}:${host_port}->${container_port}")
+  done < <(printf '%s\n' "${raw}")
+  if ((${#entries[@]} == 0)); then
+    printf 'none'
+    return 0
+  fi
+  printf '%s\n' "${entries[@]}" | LC_ALL=C sort | awk 'BEGIN { separator = "" } { printf "%s%s", separator, $0; separator = ";" } END { if (separator != "") printf "%s\n", separator }'
+}
+
 host_port_binding_count() {
   local bindings="$1"
   local expected_host_port="$2"
@@ -506,7 +531,7 @@ container_record() {
   started="$(docker inspect --format '{{.State.StartedAt}}' "${container_id}")"
   restart="$(docker inspect --format '{{.RestartCount}}' "${container_id}")"
   ports="$(read_host_port_bindings "${container_id}")"
-  networks="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}={{join $network.Aliases ","}};{{end}}' "${container_id}" | tr ';' '\n' | LC_ALL=C sort | tr '\n' ';')"
+  networks="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}={{join $network.Aliases ","}};{{end}}' "${container_id}" | tr ';' '\n' | awk 'NF' | LC_ALL=C sort | tr '\n' ';')"
   project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_id}")"
   service="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_id}")"
   oneoff="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.oneoff"}}' "${container_id}")"
@@ -534,6 +559,68 @@ container_record() {
     "${project}" "${service}" "${oneoff}" "${number}" "${aliases}"
 }
 
+iranmonitor_container_record() {
+  local component="$1"
+  local container_id="$2"
+  local id name image status started restart ports networks project service oneoff number aliases
+  local expected_name expected_image expected_service expected_ports compose_missing
+  compose_missing="$(printf '\074no value\076')"
+
+  case "${component}" in
+    iranmonitor-web)
+      expected_name='deploy-web-1'
+      expected_image='deploy-web'
+      expected_service='web'
+      expected_ports='0.0.0.0:3000->3000/tcp;'
+      ;;
+    iranmonitor-ingest)
+      expected_name='deploy-ingest-1'
+      expected_image='deploy-ingest'
+      expected_service='ingest'
+      expected_ports='none'
+      ;;
+    iranmonitor-db)
+      expected_name='deploy-db-1'
+      expected_image='postgres:16-alpine'
+      expected_service='db'
+      expected_ports='127.0.0.1:5432->5432/tcp;'
+      ;;
+    *) remote_fail "unknown Iranmonitor component." ;;
+  esac
+
+  id="$(docker inspect --format '{{.Id}}' "${container_id}")"
+  name="$(docker inspect --format '{{.Name}}' "${container_id}")"
+  name="${name#/}"
+  image="$(docker inspect --format '{{.Config.Image}}' "${container_id}")"
+  status="$(docker inspect --format '{{.State.Status}}' "${container_id}")"
+  started="$(docker inspect --format '{{.State.StartedAt}}' "${container_id}")"
+  restart="$(docker inspect --format '{{.RestartCount}}' "${container_id}")"
+  ports="$(read_iranmonitor_port_bindings "${container_id}")"
+  networks="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}={{join $network.Aliases ","}};{{end}}' "${container_id}" | tr ';' '\n' | awk 'NF' | LC_ALL=C sort | tr '\n' ';')"
+  project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_id}")"
+  service="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_id}")"
+  oneoff="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.oneoff"}}' "${container_id}")"
+  number="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.container-number"}}' "${container_id}")"
+  aliases="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}={{join $network.Aliases ","}};{{end}}' "${container_id}")"
+
+  [[ "${id}" =~ ^[0-9a-fA-F]{64}$ ]] || remote_fail "Iranmonitor ${component#iranmonitor-} does not expose a full container ID."
+  [[ "${name}" == "${expected_name}" && "${project}" == deploy && "${service}" == "${expected_service}" ]] || \
+    remote_fail "unexpected Compose identity for Iranmonitor ${component#iranmonitor-}."
+  [[ "${image}" == "${expected_image}" ]] || remote_fail "Iranmonitor ${component#iranmonitor-} image identity is not exact."
+  [[ "${status}" == running ]] || remote_fail "Iranmonitor ${component#iranmonitor-} is not running."
+  [[ -n "${started}" ]] || remote_fail "Iranmonitor ${component#iranmonitor-} StartedAt is missing."
+  [[ "${restart}" =~ ^[0-9]+$ ]] || remote_fail "Iranmonitor ${component#iranmonitor-} RestartCount is invalid."
+  [[ "${oneoff}" == "${compose_missing}" || "${oneoff}" == False || "${oneoff}" == false || -z "${oneoff}" ]] || \
+    remote_fail "Iranmonitor ${component#iranmonitor-} is an unexpected one-off Compose container."
+  [[ "${number}" == 1 ]] || remote_fail "Iranmonitor ${component#iranmonitor-} Compose container number is invalid."
+  [[ "${ports}" == "${expected_ports}" ]] || \
+    remote_fail "Iranmonitor ${component#iranmonitor-} port bindings are not exact (HostIP/HostPort/container protocol)."
+
+  printf 'STATE\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "${component}" "${id}" "${name}" "${image}" "${status}" "${started}" "${restart}" "${ports}" "${networks}" \
+    "${project}" "${service}" "${oneoff}" "${number}" "${aliases}"
+}
+
 edge_id="$(resolve_compose_container shared-edge edge shared-edge-edge-1)"
 web_id="$(resolve_compose_container platform-infra web platform-infra-web-1)"
 postgres_id="$(resolve_compose_container platform-infra postgres platform-infra-postgres-1)"
@@ -544,6 +631,9 @@ exports_id="$(resolve_compose_container platform-infra exports platform-infra-ex
 zeiterfassung_id="$(resolve_compose_container zeiterfassung app zeiterfassung-app-1)"
 eventos_id="$(resolve_compose_container commcats-eventos app commcats-eventos-app)"
 eventos_postgres_id="$(resolve_compose_container commcats-eventos postgres commcats-eventos-postgres)"
+iranmonitor_web_id="$(resolve_compose_container deploy web deploy-web-1)"
+iranmonitor_ingest_id="$(resolve_compose_container deploy ingest deploy-ingest-1)"
+iranmonitor_db_id="$(resolve_compose_container deploy db deploy-db-1)"
 read_eventos_container_identity "${eventos_id}"
 
 edge_state="$(container_record shared-edge "${edge_id}")"
@@ -556,6 +646,9 @@ exports_state="$(container_record catering-exports "${exports_id}")"
 zeiterfassung_state="$(container_record zeiterfassung-app "${zeiterfassung_id}")"
 eventos_state="$(container_record eventos-app "${eventos_id}")"
 eventos_postgres_state="$(container_record eventos-postgres "${eventos_postgres_id}")"
+iranmonitor_web_state="$(iranmonitor_container_record iranmonitor-web "${iranmonitor_web_id}")"
+iranmonitor_ingest_state="$(iranmonitor_container_record iranmonitor-ingest "${iranmonitor_ingest_id}")"
+iranmonitor_db_state="$(iranmonitor_container_record iranmonitor-db "${iranmonitor_db_id}")"
 read_zeiterfassung_container_metadata "${zeiterfassung_id}"
 
 read_effective_upstreams() {
@@ -758,12 +851,15 @@ container_ids=(
   "${zeiterfassung_id}"
   "${eventos_id}"
   "${eventos_postgres_id}"
+  "${iranmonitor_web_id}"
+  "${iranmonitor_ingest_id}"
+  "${iranmonitor_db_id}"
 )
 network_names="$(for container_id in "${container_ids[@]}"; do
   docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}\n{{end}}' "${container_id}"
 done | LC_ALL=C sort -u)"
 
-printf '%s\n' "${network_listing}" | awk -F '\t' '$1 == "platform-infra_default" || $1 == "zeiterfassung_default" || $1 == "commcats-eventos_default" { printf "NETWORK_LS\t%s\n", $0 }'
+printf '%s\n' "${network_listing}" | awk -F '\t' '$1 == "platform-infra_default" || $1 == "zeiterfassung_default" || $1 == "commcats-eventos_default" || $1 == "deploy_default" { printf "NETWORK_LS\t%s\n", $0 }'
 printf '%s\n' "${network_names}" | while IFS= read -r network_name; do
   [[ -n "${network_name}" ]] || continue
   network_details="$(docker network inspect --format '{{.Name}}\t{{.Id}}\t{{.Driver}}\t{{.Scope}}' "${network_name}")"
@@ -786,7 +882,7 @@ printf 'EVENTOS_RELEASE\t%s\n' "${EVENTOS_RELEASE_SHA}"
 printf 'METADATA\tshared-edge-commit\t%s\n' "${manifest_commit}"
 printf 'METADATA\tshared-edge-mode\t%s\n' "${manifest_mode}"
 printf 'METADATA\tshared-edge-deployed-at\t%s\n' "${manifest_time}"
-printf '%s\n' "${edge_state}" "${web_state}" "${postgres_state}" "${intake_state}" "${offer_state}" "${production_state}" "${exports_state}" "${zeiterfassung_state}" "${eventos_state}" "${eventos_postgres_state}"
+printf '%s\n' "${edge_state}" "${web_state}" "${postgres_state}" "${intake_state}" "${offer_state}" "${production_state}" "${exports_state}" "${zeiterfassung_state}" "${eventos_state}" "${eventos_postgres_state}" "${iranmonitor_web_state}" "${iranmonitor_ingest_state}" "${iranmonitor_db_state}"
 REMOTE_SCRIPT
 }
 
@@ -901,12 +997,65 @@ compare_generation_invariants() {
   done
 }
 
+canonicalize_network_mapping() {
+  local mapping="${1:-}" canonical
+  [[ -n "${mapping}" ]] || fail "network mapping is empty."
+  [[ "${mapping}" != *$'\n'* && "${mapping}" != *$'\r'* && "${mapping}" != *$'\t'* ]] || fail "network mapping contains unsupported control characters."
+  if ! canonical="$(
+    printf '%s' "${mapping}" |
+      awk -v RS=';' '
+        {
+          equals = index($0, "=")
+          if (equals == 0 || index(substr($0, equals + 1), "=") != 0) exit 2
+          network = substr($0, 1, equals - 1)
+          aliases = substr($0, equals + 1)
+          if (network == "" || aliases == "") exit 2
+          if (++seen_network[network] != 1) exit 3
+          alias_count = split(aliases, alias_list, ",")
+          if (alias_count < 1) exit 2
+          for (alias_index = 1; alias_index <= alias_count; alias_index++) {
+            if (alias_list[alias_index] == "") exit 2
+            if (++seen_alias[network SUBSEP alias_list[alias_index]] != 1) exit 4
+            print network "\t" alias_list[alias_index]
+          }
+        }
+        END {
+          if (NR == 0) exit 2
+        }' |
+      LC_ALL=C sort |
+      awk -F '\t' '
+        {
+          if (current == "") {
+            current = $1
+            aliases = $2
+          } else if ($1 == current) {
+            aliases = aliases "," $2
+          } else {
+            printf "%s=%s;", current, aliases
+            current = $1
+            aliases = $2
+          }
+        }
+        END {
+          if (current == "") exit 2
+          printf "%s=%s;", current, aliases
+        }'
+  )"; then
+    fail "network mapping is malformed or contains duplicate networks, consumers or aliases."
+  fi
+  [[ -n "${canonical}" ]] || fail "network mapping is empty."
+  printf '%s' "${canonical}"
+}
+
 compare_network_invariants() {
-  local network_name before_line after_line
-  for network_name in platform-infra_default zeiterfassung_default commcats-eventos_default; do
+  local network_name before_line after_line before_members after_members
+  for network_name in platform-infra_default zeiterfassung_default commcats-eventos_default deploy_default; do
     before_line="$(printf '%s\n' "${before_snapshot}" | awk -F '\t' -v name="${network_name}" '$1 == "NETWORK" && $2 == name { print; count += 1 } END { if (count != 1) exit 1 }')" || fail "missing or ambiguous before network evidence for ${network_name}."
     after_line="$(printf '%s\n' "${after_snapshot}" | awk -F '\t' -v name="${network_name}" '$1 == "NETWORK" && $2 == name { print; count += 1 } END { if (count != 1) exit 1 }')" || fail "missing or ambiguous after network evidence for ${network_name}."
-    [[ "${before_line}" == "${after_line}" ]] || fail "network ID, driver, scope, member or alias set changed for ${network_name}."
+    [[ "$(printf '%s\n' "${before_line}" | awk -F '\t' '{ print NF }')" == 6 && "$(printf '%s\n' "${after_line}" | awk -F '\t' '{ print NF }')" == 6 ]] || fail "network evidence shape changed for ${network_name}."
+    before_members="$(canonicalize_network_mapping "$(state_field "${before_line}" 6)")"
+    after_members="$(canonicalize_network_mapping "$(state_field "${after_line}" 6)")"
+    [[ "$(state_field "${before_line}" 1)" == "$(state_field "${after_line}" 1)" && "$(state_field "${before_line}" 2)" == "$(state_field "${after_line}" 2)" && "$(state_field "${before_line}" 3)" == "$(state_field "${after_line}" 3)" && "$(state_field "${before_line}" 4)" == "$(state_field "${after_line}" 4)" && "$(state_field "${before_line}" 5)" == "$(state_field "${after_line}" 5)" && "${before_members}" == "${after_members}" ]] || fail "network ID, driver, scope, member or alias set changed for ${network_name}."
   done
 }
 
@@ -932,10 +1081,11 @@ load_zeiterfassung_container_metadata() {
 
 validate_allowlisted_inventory() {
   local snapshot="${1:-}"
-  local expected_components actual_components component line id name project service oneoff number networks network_name aliases member_count port_line port_count network_line network_id driver scope members member_name compose_missing
+  local expected_components actual_components component line id name image ports project service oneoff number networks network_name aliases member_count port_line port_count network_line network_id driver scope members member_name compose_missing
+  local expected_name expected_project expected_service expected_networks expected_image expected_ports
   local actual_network_count expected_network_count expected_component_aliases normalized_aliases expected_member_aliases normalized_members expected_members_normalized
   compose_missing="$(printf '\074no value\076')"
-  expected_components=$'catering-exports\ncatering-intake\ncatering-offer\ncatering-postgres\ncatering-production\ncatering-web\neventos-app\neventos-postgres\nshared-edge\nzeiterfassung-app'
+  expected_components=$'catering-exports\ncatering-intake\ncatering-offer\ncatering-postgres\ncatering-production\ncatering-web\neventos-app\neventos-postgres\niranmonitor-db\niranmonitor-ingest\niranmonitor-web\nshared-edge\nzeiterfassung-app'
   actual_components="$(printf '%s\n' "${snapshot}" | awk -F '\t' '$1 == "STATE" { print $2 }' | LC_ALL=C sort)"
   [[ "${actual_components}" == "${expected_components}" ]] || fail "unknown network consumer or runtime inventory component allowlist mismatch."
 
@@ -955,6 +1105,9 @@ validate_allowlisted_inventory() {
       zeiterfassung-app) printf '%s' 'app,zeiterfassung-app-1' ;;
       eventos-app) printf '%s' 'app,commcats-eventos-app' ;;
       eventos-postgres) printf '%s' 'postgres,commcats-eventos-postgres' ;;
+      iranmonitor-web) printf '%s' 'web,deploy-web-1' ;;
+      iranmonitor-ingest) printf '%s' 'ingest,deploy-ingest-1' ;;
+      iranmonitor-db) printf '%s' 'db,deploy-db-1' ;;
       *) fail "unknown runtime inventory component." ;;
     esac
   }
@@ -965,6 +1118,8 @@ validate_allowlisted_inventory() {
     name="$(state_field "${line}" 4)"
     project="$(state_field "${line}" 11)"
     service="$(state_field "${line}" 12)"
+    image="$(state_field "${line}" 5)"
+    ports="$(state_field "${line}" 9)"
     oneoff="$(state_field "${line}" 13)"
     number="$(state_field "${line}" 14)"
     networks="$(state_field "${line}" 10)"
@@ -973,6 +1128,8 @@ validate_allowlisted_inventory() {
     [[ "$(state_field "${line}" 8)" =~ ^[0-9]+$ ]] || fail "${component} RestartCount is invalid."
     [[ "${oneoff}" == "${compose_missing}" || "${oneoff}" == False || "${oneoff}" == false || -z "${oneoff}" ]] || fail "unexpected one-off Compose container."
     [[ "${number}" == 1 ]] || fail "unexpected Compose container number."
+    expected_image=''
+    expected_ports=''
     case "${component}" in
       shared-edge) expected_name=shared-edge-edge-1; expected_project=shared-edge; expected_service=edge; expected_networks='platform-infra_default zeiterfassung_default' ;;
       catering-web) expected_name=platform-infra-web-1; expected_project=platform-infra; expected_service=web; expected_networks='platform-infra_default zeiterfassung_default' ;;
@@ -984,9 +1141,16 @@ validate_allowlisted_inventory() {
       zeiterfassung-app) expected_name=zeiterfassung-app-1; expected_project=zeiterfassung; expected_service=app; expected_networks='zeiterfassung_default' ;;
       eventos-app) expected_name=commcats-eventos-app; expected_project=commcats-eventos; expected_service=app; expected_networks='commcats-eventos_default platform-infra_default' ;;
       eventos-postgres) expected_name=commcats-eventos-postgres; expected_project=commcats-eventos; expected_service=postgres; expected_networks='commcats-eventos_default' ;;
+      iranmonitor-web) expected_name=deploy-web-1; expected_project=deploy; expected_service=web; expected_networks='deploy_default'; expected_image='deploy-web'; expected_ports='0.0.0.0:3000->3000/tcp;' ;;
+      iranmonitor-ingest) expected_name=deploy-ingest-1; expected_project=deploy; expected_service=ingest; expected_networks='deploy_default'; expected_image='deploy-ingest'; expected_ports='none' ;;
+      iranmonitor-db) expected_name=deploy-db-1; expected_project=deploy; expected_service=db; expected_networks='deploy_default'; expected_image='postgres:16-alpine'; expected_ports='127.0.0.1:5432->5432/tcp;' ;;
       *) fail "unknown runtime inventory component." ;;
     esac
     [[ "${name}" == "${expected_name}" && "${project}" == "${expected_project}" && "${service}" == "${expected_service}" ]] || fail "unexpected Compose label or container name for ${component}."
+    if [[ "${component}" == iranmonitor-* ]]; then
+      [[ "${image}" == "${expected_image}" ]] || fail "Iranmonitor ${component#iranmonitor-} image identity is not exact."
+      [[ "${ports}" == "${expected_ports}" ]] || fail "Iranmonitor ${component#iranmonitor-} port bindings are not exact (HostIP/HostPort/container protocol)."
+    fi
     actual_network_count="$(printf '%s' "${networks}" | tr ';' '\n' | awk 'NF { count += 1 } END { print count + 0 }')"
     expected_network_count="$(printf '%s\n' "${expected_networks}" | tr ' ' '\n' | awk 'NF { count += 1 } END { print count + 0 }')"
     [[ "${actual_network_count}" == "${expected_network_count}" ]] || fail "${component} has an unknown or duplicate network attachment."
@@ -1002,7 +1166,7 @@ validate_allowlisted_inventory() {
     done < <(printf '%s' "${networks}" | tr ';' '\n')
   done <<< "${expected_components}"
 
-  for network_name in platform-infra_default zeiterfassung_default commcats-eventos_default; do
+  for network_name in platform-infra_default zeiterfassung_default commcats-eventos_default deploy_default; do
     network_ls_line="$(printf '%s\n' "${snapshot}" | awk -F '\t' -v name="${network_name}" '$1 == "NETWORK_LS" && $2 == name { print; count += 1 } END { if (count != 1) exit 1 }')" || fail "missing or ambiguous docker network ls evidence for ${network_name}."
     network_line="$(printf '%s\n' "${snapshot}" | awk -F '\t' -v name="${network_name}" '$1 == "NETWORK" && $2 == name { print; count += 1 } END { if (count != 1) exit 1 }')" || fail "missing or ambiguous network ID for ${network_name}."
     [[ "$(state_field "${network_ls_line}" 3)" == "$(state_field "${network_line}" 3)" && "$(state_field "${network_ls_line}" 4)" == "$(state_field "${network_line}" 4)" && "$(state_field "${network_ls_line}" 5)" == "$(state_field "${network_line}" 5)" ]] || fail "docker network ls and inspect evidence disagree for ${network_name}."
@@ -1016,11 +1180,13 @@ validate_allowlisted_inventory() {
       platform-infra_default) expected_members='commcats-eventos-app platform-infra-exports-1 platform-infra-intake-1 platform-infra-offer-1 platform-infra-postgres-1 platform-infra-production-1 platform-infra-web-1 shared-edge-edge-1' ;;
       zeiterfassung_default) expected_members='platform-infra-web-1 shared-edge-edge-1 zeiterfassung-app-1' ;;
       commcats-eventos_default) expected_members='commcats-eventos-app commcats-eventos-postgres' ;;
+      deploy_default) expected_members='deploy-db-1 deploy-ingest-1 deploy-web-1' ;;
     esac
     case "${network_name}" in
       platform-infra_default) expected_members_normalized='commcats-eventos-app=app,commcats-eventos-app;platform-infra-exports-1=exports,platform-infra-exports-1;platform-infra-intake-1=intake,platform-infra-intake-1;platform-infra-offer-1=offer,platform-infra-offer-1;platform-infra-postgres-1=platform-infra-postgres-1,postgres;platform-infra-production-1=platform-infra-production-1,production;platform-infra-web-1=platform-infra-web-1,web;shared-edge-edge-1=edge,shared-edge-edge-1' ;;
       zeiterfassung_default) expected_members_normalized='platform-infra-web-1=platform-infra-web-1,web;shared-edge-edge-1=edge,shared-edge-edge-1;zeiterfassung-app-1=app,zeiterfassung-app-1' ;;
       commcats-eventos_default) expected_members_normalized='commcats-eventos-app=app,commcats-eventos-app;commcats-eventos-postgres=commcats-eventos-postgres,postgres' ;;
+      deploy_default) expected_members_normalized='deploy-db-1=db,deploy-db-1;deploy-ingest-1=deploy-ingest-1,ingest;deploy-web-1=deploy-web-1,web' ;;
     esac
     while IFS='=' read -r member_name aliases; do
       [[ -n "${member_name}" ]] || continue
@@ -1036,6 +1202,9 @@ validate_allowlisted_inventory() {
         platform-infra_default/shared-edge-edge-1|zeiterfassung_default/shared-edge-edge-1) expected_member_aliases='edge,shared-edge-edge-1' ;;
         zeiterfassung_default/zeiterfassung-app-1) expected_member_aliases='app,zeiterfassung-app-1' ;;
         commcats-eventos_default/commcats-eventos-postgres) expected_member_aliases='postgres,commcats-eventos-postgres' ;;
+        deploy_default/deploy-web-1) expected_member_aliases='web,deploy-web-1' ;;
+        deploy_default/deploy-ingest-1) expected_member_aliases='ingest,deploy-ingest-1' ;;
+        deploy_default/deploy-db-1) expected_member_aliases='db,deploy-db-1' ;;
         *) fail "unknown network consumer or alias contract on ${network_name}." ;;
       esac
       [[ "$(normalize_aliases "${aliases}")" == "$(normalize_aliases "${expected_member_aliases}")" ]] || fail "unexpected network alias set on ${network_name}."
@@ -1072,6 +1241,26 @@ print_container_summary() {
   done
 }
 
+compare_iranmonitor_invariants() {
+  local component before_line after_line before_id after_id before_restart after_restart before_networks after_networks before_ports after_ports
+  for component in iranmonitor-web iranmonitor-ingest iranmonitor-db; do
+    before_line="$(state_line "${before_snapshot}" "${component}")"
+    after_line="$(state_line "${after_snapshot}" "${component}")"
+    before_id="$(state_field "${before_line}" 3)"
+    after_id="$(state_field "${after_line}" 3)"
+    before_restart="$(state_field "${before_line}" 8)"
+    after_restart="$(state_field "${after_line}" 8)"
+    before_ports="$(state_field "${before_line}" 9)"
+    after_ports="$(state_field "${after_line}" 9)"
+    before_networks="$(canonicalize_network_mapping "$(state_field "${before_line}" 10)")"
+    after_networks="$(canonicalize_network_mapping "$(state_field "${after_line}" 10)")"
+    [[ "${before_id}" == "${after_id}" ]] || fail "Iranmonitor Container ID changed for ${component}."
+    [[ "${before_restart}" == "${after_restart}" ]] || fail "Iranmonitor RestartCount changed for ${component}."
+    [[ "${before_networks}" == "${after_networks}" ]] || fail "Iranmonitor network mapping changed for ${component}."
+    [[ "${before_ports}" == "${after_ports}" ]] || fail "Iranmonitor port bindings changed for ${component}."
+  done
+}
+
 compare_identity_invariants() {
   local component before_line after_line before_id after_id before_restart after_restart before_networks after_networks before_container_metadata after_container_metadata before_upstreams after_upstreams before_eventos after_eventos before_eventos_identity after_eventos_identity before_lock after_lock
   for component in "${COMPONENTS[@]}"; do
@@ -1081,8 +1270,8 @@ compare_identity_invariants() {
     after_id="$(state_field "${after_line}" 3)"
     before_restart="$(state_field "${before_line}" 8)"
     after_restart="$(state_field "${after_line}" 8)"
-    before_networks="$(state_field "${before_line}" 10)"
-    after_networks="$(state_field "${after_line}" 10)"
+    before_networks="$(canonicalize_network_mapping "$(state_field "${before_line}" 10)")"
+    after_networks="$(canonicalize_network_mapping "$(state_field "${after_line}" 10)")"
     [[ "${before_id}" == "${after_id}" ]] || fail "Container ID changed for ${component}."
     [[ "${before_restart}" == "${after_restart}" ]] || fail "RestartCount increased or changed for ${component}."
     [[ "${before_networks}" == "${after_networks}" ]] || fail "network mapping changed for ${component}."
@@ -1316,6 +1505,9 @@ COMPONENTS=(
   zeiterfassung-app
   eventos-app
   eventos-postgres
+  iranmonitor-web
+  iranmonitor-ingest
+  iranmonitor-db
 )
 
 validate_curl_args
@@ -1389,6 +1581,7 @@ fi
 validate_allowlisted_inventory "${after_snapshot}"
 load_eventos_release_marker "${after_snapshot}"
 compare_identity_invariants
+compare_iranmonitor_invariants
 print_container_summary after "${after_snapshot}"
 printf '%s\n' "${after_snapshot}" | awk -F '\t' '$1 == "LISTENER" || $1 == "ZEITERFASSUNG_CONTAINER" || $1 == "EVENTOS_IDENTITY" || $1 == "EVENTOS_RELEASE" || $1 == "METADATA" || $1 == "ROLLBACK" || $1 == "GENERATION" || $1 == "LOCK" { print }'
 

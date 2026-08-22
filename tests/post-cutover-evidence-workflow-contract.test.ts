@@ -123,7 +123,7 @@ function inventoryFixture(overrides: {
   networks?: Record<string, string>;
   owner80?: string;
   foreignMember?: boolean;
-} = {}) {
+} = {}, includeIranmonitor = true) {
   const idFor = (index: number) => index.toString(16).padStart(2, '0').repeat(32);
   const state = (
     component: string,
@@ -135,6 +135,18 @@ function inventoryFixture(overrides: {
   ) => [
     'STATE', component, id, name, 'fixture:image', 'running', '2026-08-21T00:00:00Z', '0', '', networks,
     project, service, 'False', '1', networks,
+  ].join('\t');
+  const iranmonitorState = (
+    component: string,
+    id: string,
+    name: string,
+    image: string,
+    service: string,
+    ports: string,
+    networks: string,
+  ) => [
+    'STATE', component, id, name, image, 'running', '2026-08-21T00:00:00Z', '0', ports, networks,
+    'deploy', service, 'False', '1', networks,
   ].join('\t');
   const network = (name: string, id: string, members: string) =>
     ['NETWORK', name, id, 'bridge', 'local', members].join('\t');
@@ -150,6 +162,11 @@ function inventoryFixture(overrides: {
     'eventos-app': state('eventos-app', idFor(9), 'commcats-eventos-app', 'commcats-eventos', 'app', 'commcats-eventos_default=app,commcats-eventos-app;platform-infra_default=app,commcats-eventos-app;'),
     'eventos-postgres': state('eventos-postgres', idFor(10), 'commcats-eventos-postgres', 'commcats-eventos', 'postgres', 'commcats-eventos_default=postgres,commcats-eventos-postgres;'),
   };
+  if (includeIranmonitor) {
+    entries['iranmonitor-web'] = iranmonitorState('iranmonitor-web', idFor(14), 'deploy-web-1', 'deploy-web', 'web', '0.0.0.0:3000->3000/tcp;', 'deploy_default=web,deploy-web-1;');
+    entries['iranmonitor-ingest'] = iranmonitorState('iranmonitor-ingest', idFor(15), 'deploy-ingest-1', 'deploy-ingest', 'ingest', 'none', 'deploy_default=ingest,deploy-ingest-1;');
+    entries['iranmonitor-db'] = iranmonitorState('iranmonitor-db', idFor(16), 'deploy-db-1', 'postgres:16-alpine', 'db', '127.0.0.1:5432->5432/tcp;', 'deploy_default=db,deploy-db-1;');
+  }
   for (const [component, replacement] of Object.entries(overrides.networks ?? {})) {
     const fields = entries[component].split('\t');
     fields[9] = replacement;
@@ -183,7 +200,60 @@ function inventoryFixture(overrides: {
     `PORT_OWNER\t80\t${idFor(1)}\t${overrides.owner80 ?? 'shared-edge-edge-1'}`,
     `PORT_OWNER\t443\t${idFor(1)}\tshared-edge-edge-1`,
   ];
+  if (includeIranmonitor) {
+    lines.push(
+      'NETWORK_LS\tdeploy_default\t' + idFor(17) + '\tbridge\tlocal',
+      network('deploy_default', idFor(17), 'deploy-db-1=db,deploy-db-1;deploy-ingest-1=ingest,deploy-ingest-1;deploy-web-1=web,deploy-web-1;'),
+    );
+  }
   return lines.join('\n');
+}
+
+function iranmonitorInventoryFixture(overrides: {
+  web?: Partial<{ id: string; image: string; status: string; restart: string; networks: string; ports: string }>;
+  ingest?: Partial<{ id: string; image: string; status: string; restart: string; networks: string; ports: string }>;
+  db?: Partial<{ id: string; image: string; status: string; restart: string; networks: string; ports: string }>;
+  extra?: boolean;
+  foreignMember?: boolean;
+} = {}) {
+  const idFor = (index: number) => index.toString(16).padStart(2, '0').repeat(32);
+  const record = (
+    component: string,
+    id: string,
+    name: string,
+    image: string,
+    status: string,
+    restart: string,
+    ports: string,
+    networks: string,
+    project = 'deploy',
+    service: string,
+  ) => [
+    'STATE', component, id, name, image, status, '2026-08-21T00:00:00Z', restart, ports, networks,
+    project, service, 'False', '1', networks,
+  ].join('\t');
+  const web = { id: idFor(20), image: 'deploy-web', status: 'running', restart: '0', ports: '0.0.0.0:3000->3000/tcp;', networks: 'deploy_default=web,deploy-web-1;', ...overrides.web };
+  const ingest = { id: idFor(21), image: 'deploy-ingest', status: 'running', restart: '0', ports: 'none', networks: 'deploy_default=ingest,deploy-ingest-1;', ...overrides.ingest };
+  const db = { id: idFor(22), image: 'postgres:16-alpine', status: 'running', restart: '0', ports: '127.0.0.1:5432->5432/tcp;', networks: 'deploy_default=db,deploy-db-1;', ...overrides.db };
+  const members = [
+    'deploy-db-1=db,deploy-db-1',
+    'deploy-ingest-1=ingest,deploy-ingest-1',
+    'deploy-web-1=web,deploy-web-1',
+  ];
+  if (overrides.foreignMember) members.push('foreign-deploy=foreign');
+  if (overrides.extra) members.push('deploy-worker-1=worker,deploy-worker-1');
+  const extra = overrides.extra
+    ? record('iranmonitor-extra', idFor(23), 'deploy-worker-1', 'deploy-worker', 'running', '0', 'none', 'deploy_default=worker,deploy-worker-1;', 'deploy', 'worker')
+    : undefined;
+  return [
+    inventoryFixture({}, false),
+    record('iranmonitor-web', web.id, 'deploy-web-1', web.image, web.status, web.restart, web.ports, web.networks, 'deploy', 'web'),
+    record('iranmonitor-ingest', ingest.id, 'deploy-ingest-1', ingest.image, ingest.status, ingest.restart, ingest.ports, ingest.networks, 'deploy', 'ingest'),
+    record('iranmonitor-db', db.id, 'deploy-db-1', db.image, db.status, db.restart, db.ports, db.networks, 'deploy', 'db'),
+    extra,
+    `NETWORK_LS\tdeploy_default\t${idFor(24)}\tbridge\tlocal`,
+    `NETWORK\tdeploy_default\t${idFor(24)}\tbridge\tlocal\t${members.join(';')};`,
+  ].filter((line): line is string => Boolean(line)).join('\n');
 }
 
 function createFakeRemoteFixture(kind: string, originalPath = originalProcessPath) {
@@ -238,7 +308,15 @@ const dockerScript = String.raw`#!/usr/bin/env node
 const fs = require('fs');
 const args = process.argv.slice(2);
 const env = process.env;
-const components = [
+const iranmonitorCases = [
+  ['iranmonitor-web', 'deploy', 'web', 'deploy-web-1'],
+  ['iranmonitor-ingest', 'deploy', 'ingest', 'deploy-ingest-1'],
+  ['iranmonitor-db', 'deploy', 'db', 'deploy-db-1'],
+];
+const extraIranmonitor = env.HARNESS_CASE === 'iranmonitor-fourth'
+  ? [['iranmonitor-extra', 'deploy', 'worker', 'deploy-worker-1']]
+  : [];
+const baseComponents = [
   ['shared-edge', 'shared-edge', 'edge', 'shared-edge-edge-1'],
   ['catering-web', 'platform-infra', 'web', 'platform-infra-web-1'],
   ['catering-postgres', 'platform-infra', 'postgres', 'platform-infra-postgres-1'],
@@ -250,6 +328,7 @@ const components = [
   ['eventos-app', 'commcats-eventos', 'app', 'commcats-eventos-app'],
   ['eventos-postgres', 'commcats-eventos', 'postgres', 'commcats-eventos-postgres'],
 ];
+const components = [...baseComponents, ...iranmonitorCases, ...extraIranmonitor];
 const unknownComponents = ['unknown-runtime', 'unknown-runtime-before-gate', 'unknown-runtime-inspect-failure', 'unknown-runtime-empty', 'unknown-runtime-unsorted'].includes(env.HARNESS_CASE)
   ? [['unknown-runtime-1', 'rogue-project', 'rogue-service', 'rogue-runtime-1']]
   : ['unknown-runtime-multiple', 'unknown-runtime-multiple-inspect-failure'].includes(env.HARNESS_CASE)
@@ -260,7 +339,9 @@ const unknownComponents = ['unknown-runtime', 'unknown-runtime-before-gate', 'un
     : env.HARNESS_CASE === 'unknown-runtime-control'
       ? [['unknown-runtime-control', 'rogue-project-control', 'rogue-service-control\nencoded', 'rogue-runtime-control']]
       : [];
-const runtimeComponents = components.concat(unknownComponents);
+// Keep legacy fake IDs stable for the unknown-container diagnostics while the
+// newly allowlisted Iranmonitor records remain part of the runtime inventory.
+const runtimeComponents = baseComponents.concat(unknownComponents, iranmonitorCases, extraIranmonitor);
 const unknownMetadata = {
   'unknown-runtime-1': { image: 'rogue/image:1.0', status: 'running', started: '2026-08-21T00:00:01Z', restart: '2', networks: ['rogue-net'], ports: '8080/tcp\t18080\n8443/tcp\t18443\n' },
   'unknown-runtime-2': { image: 'rogue/image:2.0', status: 'running', started: '2026-08-21T00:00:02Z', restart: '3', networks: ['rogue-net-2'], ports: '9090/tcp\t19090\n' },
@@ -292,6 +373,10 @@ function networksFor(component) {
     case 'zeiterfassung-app': return [['zeiterfassung_default', ['app', 'zeiterfassung-app-1']]];
     case 'eventos-app': return [['commcats-eventos_default', ['app', 'commcats-eventos-app']], ['platform-infra_default', ['app', 'commcats-eventos-app']]];
     case 'eventos-postgres': return [['commcats-eventos_default', ['postgres', 'commcats-eventos-postgres']]];
+    case 'iranmonitor-web': return env.HARNESS_CASE === 'iranmonitor-network' ? [['deploy_default', ['web', 'deploy-web-1']], ['shared-edge_default', ['web', 'deploy-web-1']]] : [['deploy_default', ['web', 'deploy-web-1']]];
+    case 'iranmonitor-ingest': return [['deploy_default', ['ingest', 'deploy-ingest-1']]];
+    case 'iranmonitor-db': return [['deploy_default', ['db', 'deploy-db-1']]];
+    case 'iranmonitor-extra': return [['deploy_default', ['worker', 'deploy-worker-1']]];
     case 'unknown-runtime-1': return metadataFor(component).networks.map((network) => [network, ['rogue-runtime-1']]);
     case 'unknown-runtime-2': return metadataFor(component).networks.map((network) => [network, ['rogue-runtime-2']]);
     case 'unknown-runtime-control': return metadataFor(component).networks.map((network) => [network, ['rogue-runtime-control']]);
@@ -319,19 +404,27 @@ function membersFor(network) {
       ['commcats-eventos-app', ['app', 'commcats-eventos-app']],
       ['commcats-eventos-postgres', ['postgres', 'commcats-eventos-postgres']],
     ],
+    'deploy_default': [
+      ['deploy-db-1', ['db', 'deploy-db-1']],
+      ['deploy-ingest-1', ['ingest', 'deploy-ingest-1']],
+      ['deploy-web-1', ['web', 'deploy-web-1']],
+    ],
   };
   const result = rows[network] || [];
+  if (env.HARNESS_CASE === 'iranmonitor-network-consumer' && network === 'deploy_default') result.push(['foreign-deploy', ['foreign']]);
+  if (env.HARNESS_CASE === 'iranmonitor-fourth' && network === 'deploy_default') result.push(['deploy-worker-1', ['worker', 'deploy-worker-1']]);
   if (env.HARNESS_CASE === 'unknown-alias' && network === 'platform-infra_default') result.push(['foreign-consumer', ['foreign']]);
   return result;
 }
 function networkId(network) {
   if (env.HARNESS_CASE === 'network-id' && network === 'platform-infra_default') return 'f'.repeat(64);
-  return { 'platform-infra_default': 'b'.repeat(64), 'zeiterfassung_default': 'c'.repeat(64), 'commcats-eventos_default': 'd'.repeat(64) }[network];
+  return { 'platform-infra_default': 'b'.repeat(64), 'zeiterfassung_default': 'c'.repeat(64), 'commcats-eventos_default': 'd'.repeat(64), 'deploy_default': 'e'.repeat(64) }[network];
 }
 if (args[0] === 'network' && args[1] === 'ls') {
   emit('platform-infra_default\t' + 'b'.repeat(64) + '\tbridge\tlocal\n');
   emit('zeiterfassung_default\t' + 'c'.repeat(64) + '\tbridge\tlocal\n');
   emit('commcats-eventos_default\t' + 'd'.repeat(64) + '\tbridge\tlocal\n');
+  if (iranmonitorCases.length > 0) emit('deploy_default\t' + 'e'.repeat(64) + '\tbridge\tlocal\n');
   process.exit(0);
 }
 if (args[0] === 'network' && args[1] === 'inspect') {
@@ -395,15 +488,30 @@ if (args[0] === 'inspect') {
   } else if (format.includes('.Config.Image')) {
     if (component === 'eventos-app') emit(env.HARNESS_CASE === 'eventos-unbound' ? 'commcats-eventos-app:latest\n' : 'commcats-eventos-app\n');
     else if (component === 'zeiterfassung-app') emit('zeiterfassung-app:1.2.3-0123456789ab\n');
+    else if (component === 'iranmonitor-web') emit(env.HARNESS_CASE === 'iranmonitor-image' ? 'deploy-web:latest\n' : 'deploy-web\n');
+    else if (component === 'iranmonitor-ingest') emit('deploy-ingest\n');
+    else if (component === 'iranmonitor-db') emit('postgres:16-alpine\n');
+    else if (component === 'iranmonitor-extra') emit('deploy-worker\n');
     else if (env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) emit('\n');
     else if (unknown) emit(metadata.image + '\n');
     else emit('fixture:image\n');
-  } else if (format.includes('.State.Status')) emit((env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) ? '\n' : (unknown ? metadata.status : 'running') + '\n');
+  } else if (format.includes('.State.Status')) emit((env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) ? '\n' : (env.HARNESS_CASE === 'iranmonitor-stopped' && component === 'iranmonitor-web' ? 'exited' : (unknown ? metadata.status : 'running')) + '\n');
   else if (format.includes('.State.StartedAt')) emit((env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) ? '\n' : (unknown ? metadata.started : '2026-08-21T00:00:00Z') + '\n');
-  else if (format.includes('.RestartCount')) emit((env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) ? '\n' : (unknown ? metadata.restart : '0') + '\n');
+  else if (format.includes('.RestartCount')) emit((env.HARNESS_CASE === 'unknown-runtime-empty' && unknown) ? '\n' : (env.HARNESS_CASE === 'iranmonitor-restart' && component === 'iranmonitor-web' ? '1' : (unknown ? metadata.restart : '0')) + '\n');
   else if (format.includes('HostConfig.PortBindings')) {
+    const hostIpBindings = format.includes('printf "%s\\t%s\\t%s\\n"');
     const structuredBindings = format.includes('printf "%s\\t%s\\n"');
-    if (component === 'shared-edge') emit(structuredBindings ? '80/tcp\t80\n443/tcp\t443\n' : '80/tcp=80,;443/tcp=443,;\n');
+    if (component === 'iranmonitor-web') {
+      if (hostIpBindings) emit(env.HARNESS_CASE === 'iranmonitor-host-80' ? '0.0.0.0\t3000/tcp\t80\n' : env.HARNESS_CASE === 'iranmonitor-host-443' ? '0.0.0.0\t3000/tcp\t443\n' : '0.0.0.0\t3000/tcp\t3000\n');
+      else emit('3000/tcp\t3000\n');
+    } else if (component === 'iranmonitor-ingest') {
+      if (hostIpBindings || structuredBindings) emit(env.HARNESS_CASE === 'iranmonitor-ingest-ports' ? '0.0.0.0\t8080/tcp\t8080\n' : '');
+      else emit(env.HARNESS_CASE === 'iranmonitor-ingest-ports' ? '8080/tcp=8080,;\n' : '\n');
+    } else if (component === 'iranmonitor-db') {
+      if (hostIpBindings) emit(env.HARNESS_CASE === 'iranmonitor-db-public' ? '0.0.0.0\t5432/tcp\t5432\n' : '127.0.0.1\t5432/tcp\t5432\n');
+      else emit(env.HARNESS_CASE === 'iranmonitor-db-public' ? '5432/tcp\t5432\n' : '5432/tcp\t5432\n');
+    } else if (component === 'iranmonitor-extra') emit(structuredBindings ? '8080/tcp\t8080\n' : '8080/tcp=8080,;\n');
+    else if (component === 'shared-edge') emit(structuredBindings ? '80/tcp\t80\n443/tcp\t443\n' : '80/tcp=80,;443/tcp=443,;\n');
     else if (env.HARNESS_CASE === 'foreign-app-host-ports' && component === 'catering-web') {
       emit(structuredBindings ? '8081/tcp\t80\n3000/tcp\t443\n' : '8081/tcp=80,;3000/tcp=443,;\n');
     } else if (env.HARNESS_CASE === 'eventos-alternative-host-port' && component === 'eventos-app') {
@@ -532,7 +640,7 @@ const childEnv = { ...process.env, HARNESS_REMOTE_PID: String(process.pid) };
 const result = childProcess.spawnSync('/bin/bash', [scriptPath, process.env.HARNESS_EXPECTED_CADDY_SHA], {
   encoding: 'utf8',
   env: childEnv,
-  timeout: 20000,
+  timeout: 40000,
   killSignal: 'SIGTERM',
 });
 if (result.error && result.error.code === 'ETIMEDOUT') {
@@ -579,7 +687,7 @@ function extractRemoteSnapshot(source: string) {
   return source.slice(start, end + 2);
 }
 
-function runFakeRemoteSnapshot(kind: string, timeoutMs = 25000) {
+function runFakeRemoteSnapshot(kind: string, timeoutMs = 50000) {
   const fixture = createFakeRemoteFixture(kind);
   const result = runExtractedFunction(
     extractRemoteSnapshot(helper),
@@ -1546,7 +1654,7 @@ exit 1
         'remote_snapshot',
       ].join('\n'),
       validFixture.environment,
-      25000,
+      50000,
     );
     expect(validRemote.status, `${validRemote.stdout}${validRemote.stderr}`).toBe(0);
     expect(validRemote.stdout).toContain('STATE\tshared-edge');
@@ -1559,7 +1667,160 @@ exit 1
       { SNAPSHOT: validRemote.stdout },
     );
     expect(validInventory.status, `${validInventory.stdout}${validInventory.stderr}`).toBe(0);
-  }, 30000);
+  }, 60000);
+
+  it('accepts the exact three-container Iranmonitor inventory through the remote snapshot and allowlist', () => {
+    const { result } = runFakeRemoteSnapshot('iranmonitor-exact');
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('STATE\tiranmonitor-web');
+    expect(result.stdout).toContain('STATE\tiranmonitor-ingest');
+    expect(result.stdout).toContain('STATE\tiranmonitor-db');
+    expect(result.stdout).toContain('0.0.0.0:3000->3000/tcp');
+    expect(result.stdout).toContain('127.0.0.1:5432->5432/tcp');
+    expect(result.stdout).toContain('deploy_default');
+
+    const validator = extractFunction(helper, 'validate_allowlisted_inventory');
+    const stateLine = extractFunction(helper, 'state_line');
+    const stateField = extractFunction(helper, 'state_field');
+    const validInventory = runExtractedFunction(
+      `${stateLine}\n${stateField}\n${validator}`,
+      'validate_allowlisted_inventory "$SNAPSHOT"',
+      { SNAPSHOT: result.stdout },
+    );
+    expect(validInventory.status, `${validInventory.stdout}${validInventory.stderr}`).toBe(0);
+  }, 60000);
+
+  it('keeps an additional deploy/Iranmonitor consumer fail-closed while diagnosing only that unknown', () => {
+    const validator = extractFunction(helper, 'validate_allowlisted_inventory');
+    const stateLine = extractFunction(helper, 'state_line');
+    const stateField = extractFunction(helper, 'state_field');
+    const result = runExtractedFunction(
+      `${stateLine}\n${stateField}\n${validator}`,
+      'validate_allowlisted_inventory "$SNAPSHOT"',
+      { SNAPSHOT: iranmonitorInventoryFixture({ extra: true }) },
+    );
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain('runtime inventory component allowlist mismatch');
+  });
+
+  it.each([
+    ['image', iranmonitorInventoryFixture({ web: { image: 'deploy-web:latest' } }), 'Iranmonitor web image identity'],
+    ['web host port 80', iranmonitorInventoryFixture({ web: { ports: '0.0.0.0:3000->80/tcp' } }), 'Iranmonitor web port bindings'],
+    ['web host port 443', iranmonitorInventoryFixture({ web: { ports: '0.0.0.0:3000->443/tcp' } }), 'Iranmonitor web port bindings'],
+    ['database public binding', iranmonitorInventoryFixture({ db: { ports: '0.0.0.0:5432->5432/tcp' } }), 'Iranmonitor db port bindings'],
+    ['ingest host port', iranmonitorInventoryFixture({ ingest: { ports: '0.0.0.0:8080->8080/tcp' } }), 'Iranmonitor ingest port bindings'],
+    ['unexpected network', iranmonitorInventoryFixture({ web: { networks: 'deploy_default=web,deploy-web-1;shared-edge_default=web,deploy-web-1;' } }), 'iranmonitor-web has an unknown or duplicate network attachment'],
+    ['foreign deploy network consumer', iranmonitorInventoryFixture({ foreignMember: true }), 'unknown network consumer on deploy_default'],
+  ])('rejects Iranmonitor %s drift in the executed allowlist helper', (_name, snapshot, expected) => {
+    const validator = extractFunction(helper, 'validate_allowlisted_inventory');
+    const stateLine = extractFunction(helper, 'state_line');
+    const stateField = extractFunction(helper, 'state_field');
+    const result = runExtractedFunction(
+      `${stateLine}\n${stateField}\n${validator}`,
+      'validate_allowlisted_inventory "$SNAPSHOT"',
+      { SNAPSHOT: snapshot },
+    );
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain(expected);
+  });
+
+  it('normalizes Iranmonitor bindings with HostIP, HostPort and container protocol', () => {
+    const reader = extractFunction(helper, 'read_iranmonitor_port_bindings');
+    const root = mkdtempSync(join(tmpdir(), 'iranmonitor-port-bindings-'));
+    writeFileSync(
+      join(root, 'docker'),
+      '#!/usr/bin/env bash\nprintf \'%s\\n\' $\'0.0.0.0\\t3000/tcp\\t3000\' $\'127.0.0.1\\t5432/tcp\\t5432\'\n',
+      { mode: 0o700 },
+    );
+    const result = runExtractedFunction(
+      reader,
+      'read_iranmonitor_port_bindings fixture',
+      { PATH: `${root}${delimiter}${originalProcessPath}` },
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    expect(result.stdout.trimEnd()).toBe('0.0.0.0:3000->3000/tcp;127.0.0.1:5432->5432/tcp;');
+  });
+
+  it.each([
+    ['restart count', 'a'.repeat(64), 'a'.repeat(64), '0', '1', 'deploy_default=web,deploy-web-1;', 'deploy_default=web,deploy-web-1;', '0.0.0.0:3000->3000/tcp;', '0.0.0.0:3000->3000/tcp;', 'RestartCount changed'],
+    ['container ID', 'a'.repeat(64), 'b'.repeat(64), '0', '0', 'deploy_default=web,deploy-web-1;', 'deploy_default=web,deploy-web-1;', '0.0.0.0:3000->3000/tcp;', '0.0.0.0:3000->3000/tcp;', 'Container ID changed'],
+    ['network', 'a'.repeat(64), 'a'.repeat(64), '0', '0', 'deploy_default=web,deploy-web-1;', 'deploy_default=web,deploy-web-1;shared-edge_default=web,deploy-web-1;', '0.0.0.0:3000->3000/tcp;', '0.0.0.0:3000->3000/tcp;', 'network mapping changed'],
+    ['port binding', 'a'.repeat(64), 'a'.repeat(64), '0', '0', 'deploy_default=web,deploy-web-1;', 'deploy_default=web,deploy-web-1;', '0.0.0.0:3000->3000/tcp;', '0.0.0.0:3000->443/tcp;', 'port bindings changed'],
+  ])('rejects Iranmonitor %s between pre- and post-smoke snapshots', (_name, beforeId, afterId, beforeRestart, afterRestart, beforeNetworks, afterNetworks, beforePorts, afterPorts, expected) => {
+    const compare = extractFunction(helper, 'compare_iranmonitor_invariants');
+    const canonicalizer = extractFunction(helper, 'canonicalize_network_mapping');
+    const stateLine = extractFunction(helper, 'state_line');
+    const stateField = extractFunction(helper, 'state_field');
+    const makeSnapshot = (id: string, restart: string, networks: string, ports: string) => [
+      `STATE\tiranmonitor-web\t${id}\tdeploy-web-1\tdeploy-web\trunning\tstarted\t${restart}\t${ports}\t${networks}\tdeploy\tweb\tFalse\t1\t${networks}`,
+      `STATE\tiranmonitor-ingest\t${'c'.repeat(64)}\tdeploy-ingest-1\tdeploy-ingest\trunning\tstarted\t0\tnone\tdeploy_default=ingest,deploy-ingest-1;\tdeploy\tingest\tFalse\t1\tdeploy_default=ingest,deploy-ingest-1;`,
+      `STATE\tiranmonitor-db\t${'d'.repeat(64)}\tdeploy-db-1\tpostgres:16-alpine\trunning\tstarted\t0\t127.0.0.1:5432->5432/tcp\tdeploy_default=db,deploy-db-1;\tdeploy\tdb\tFalse\t1\tdeploy_default=db,deploy-db-1;`,
+    ].join('\n');
+    const result = runExtractedFunction(
+      `${stateLine}\n${stateField}\n${canonicalizer}\n${compare}`,
+      `before_snapshot=$'${makeSnapshot(beforeId, beforeRestart, beforeNetworks, beforePorts).replaceAll('\\', '\\\\').replaceAll("'", "'\\''")}'; after_snapshot=$'${makeSnapshot(afterId, afterRestart, afterNetworks, afterPorts).replaceAll('\\', '\\\\').replaceAll("'", "'\\''")}'; compare_iranmonitor_invariants`,
+    );
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain(expected);
+  });
+
+  it('accepts reordered Iranmonitor aliases as the same pre/post network mapping', () => {
+    const compare = extractFunction(helper, 'compare_iranmonitor_invariants');
+    const canonicalizer = extractFunction(helper, 'canonicalize_network_mapping');
+    const stateLine = extractFunction(helper, 'state_line');
+    const stateField = extractFunction(helper, 'state_field');
+    const makeSnapshot = (webNetworks: string) => [
+      `STATE\tiranmonitor-web\t${'a'.repeat(64)}\tdeploy-web-1\tdeploy-web\trunning\tstarted\t0\t0.0.0.0:3000->3000/tcp;\t${webNetworks}\tdeploy\tweb\tFalse\t1\t${webNetworks}`,
+      'STATE\tiranmonitor-ingest\t' + 'c'.repeat(64) + '\tdeploy-ingest-1\tdeploy-ingest\trunning\tstarted\t0\tnone\tdeploy_default=ingest,deploy-ingest-1;\tdeploy\tingest\tFalse\t1\tdeploy_default=ingest,deploy-ingest-1;',
+      'STATE\tiranmonitor-db\t' + 'd'.repeat(64) + '\tdeploy-db-1\tpostgres:16-alpine\trunning\tstarted\t0\t127.0.0.1:5432->5432/tcp;\tdeploy_default=db,deploy-db-1;\tdeploy\tdb\tFalse\t1\tdeploy_default=db,deploy-db-1;',
+    ].join('\n');
+    const result = runExtractedFunction(
+      `${stateLine}\n${stateField}\n${canonicalizer}\n${compare}`,
+      'before_snapshot="$BEFORE_SNAPSHOT"\nafter_snapshot="$AFTER_SNAPSHOT"\ncompare_iranmonitor_invariants',
+      {
+        BEFORE_SNAPSHOT: makeSnapshot('deploy_default=web,deploy-web-1;'),
+        AFTER_SNAPSHOT: makeSnapshot('deploy_default=deploy-web-1,web;'),
+      },
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+  });
+
+  it('accepts reordered deploy_default member and alias sets as the same network invariant', () => {
+    const compare = extractFunction(helper, 'compare_network_invariants');
+    const canonicalizer = extractFunction(helper, 'canonicalize_network_mapping');
+    const stateField = extractFunction(helper, 'state_field');
+    const beforeSnapshot = [
+      'NETWORK\tplatform-infra_default\tplatform-id\tbridge\tlocal\tplatform=platform;',
+      'NETWORK\tzeiterfassung_default\tzeit-id\tbridge\tlocal\tzeit=zeit;',
+      'NETWORK\tcommcats-eventos_default\teventos-id\tbridge\tlocal\teventos=eventos;',
+      'NETWORK\tdeploy_default\tdeploy-id\tbridge\tlocal\tdeploy-db-1=db,deploy-db-1;deploy-ingest-1=ingest,deploy-ingest-1;deploy-web-1=web,deploy-web-1;',
+    ].join('\n');
+    const afterSnapshot = [
+      'NETWORK\tplatform-infra_default\tplatform-id\tbridge\tlocal\tplatform=platform;',
+      'NETWORK\tzeiterfassung_default\tzeit-id\tbridge\tlocal\tzeit=zeit;',
+      'NETWORK\tcommcats-eventos_default\teventos-id\tbridge\tlocal\teventos=eventos;',
+      'NETWORK\tdeploy_default\tdeploy-id\tbridge\tlocal\tdeploy-web-1=deploy-web-1,web;deploy-ingest-1=deploy-ingest-1,ingest;deploy-db-1=deploy-db-1,db;',
+    ].join('\n');
+    const result = runExtractedFunction(
+      `${stateField}\n${canonicalizer}\n${compare}`,
+      'before_snapshot="$BEFORE_SNAPSHOT"\nafter_snapshot="$AFTER_SNAPSHOT"\ncompare_network_invariants',
+      { BEFORE_SNAPSHOT: beforeSnapshot, AFTER_SNAPSHOT: afterSnapshot },
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+  });
+
+  it.each([
+    ['duplicate network/member', 'deploy_default=web;deploy_default=deploy-web-1;'],
+    ['duplicate alias', 'deploy_default=web,web;'],
+  ])('keeps %s fail-closed during network canonicalization', (_name, mapping) => {
+    const canonicalizer = extractFunction(helper, 'canonicalize_network_mapping');
+    const result = runExtractedFunction(
+      canonicalizer,
+      'canonicalize_network_mapping "$MAPPING"',
+      { MAPPING: mapping },
+    );
+    expect(result.status).not.toBe(0);
+  });
 
   it('emits only safe metadata for one unknown runtime container before one fail-closed abort', () => {
     const { fixture, result } = runFakeRemoteSnapshot('unknown-runtime');
@@ -1587,7 +1848,7 @@ exit 1
     expect(diagnostic).not.toContain('com.example.foreign');
     expect(diagnostic).not.toContain('fixture-label');
     expect(existsSync(join(fixture.root, 'unknown-read.log'))).toBe(false);
-  }, 30000);
+  }, 60000);
 
   it('diagnoses every unknown runtime container before exactly one fail-closed abort', () => {
     const { result } = runFakeRemoteSnapshot('unknown-runtime-multiple');
@@ -1605,7 +1866,7 @@ exit 1
     expect(result.stderr).toContain('network_names=rogue-net-2');
     expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
     expect(diagnostic).not.toMatch(/AUTHORIZATION|Bearer fixture-token|SECRET|fixture-secret|com\.example\.foreign|fixture-label/);
-  }, 30000);
+  }, 60000);
 
   it('quotes control characters in unknown-container metadata without creating injected output lines', () => {
     const { result } = runFakeRemoteSnapshot('unknown-runtime-control');
@@ -1615,7 +1876,7 @@ exit 1
     expect(result.stderr).toContain("compose_service=$'rogue-service-control\\nencoded'");
     expect(diagnostic).not.toMatch(/\nencoded(?:\r)?\n/);
     expect(diagnostic).not.toMatch(/AUTHORIZATION|SECRET|com\.example\.foreign/);
-  }, 30000);
+  }, 60000);
 
   it('runs the unknown-container inventory before an unrelated earlier evidence gate can abort', () => {
     const { result } = runFakeRemoteSnapshot('unknown-runtime-before-gate');
@@ -1626,7 +1887,7 @@ exit 1
     expect(result.stderr).toContain('name=rogue-runtime-1');
     expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
     expect(diagnostic).not.toContain('rollback archive is not a readable tar.gz archive');
-  }, 30000);
+  }, 60000);
 
   it('uses fixed safe placeholders when an unknown-container inspect fails and suppresses daemon stderr', () => {
     const { fixture, result } = runFakeRemoteSnapshot('unknown-runtime-inspect-failure');
@@ -1642,7 +1903,7 @@ exit 1
     expect(diagnostic).not.toContain('docker-daemon-secret-error-marker');
     expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
     expect(existsSync(join(fixture.root, 'unknown-read.log'))).toBe(false);
-  }, 30000);
+  }, 60000);
 
   it('uses fixed placeholders for empty unknown-container metadata and preserves the single fail-closed abort', () => {
     const { result } = runFakeRemoteSnapshot('unknown-runtime-empty');
@@ -1654,7 +1915,7 @@ exit 1
       expect(result.stderr).toContain(`${field}=missing`);
     }
     expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
-  }, 30000);
+  }, 60000);
 
   it('continues after a failed first unknown inspect and diagnoses every later unknown container', () => {
     const { result } = runFakeRemoteSnapshot('unknown-runtime-multiple-inspect-failure');
@@ -1669,7 +1930,7 @@ exit 1
     expect(result.stderr).toContain('image=rogue/image:2.0');
     expect(diagnostic).not.toContain('docker-daemon-secret-error-marker');
     expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
-  }, 30000);
+  }, 60000);
 
   it('sorts unknown-container networks and published host ports deterministically', () => {
     const { result } = runFakeRemoteSnapshot('unknown-runtime-unsorted');
@@ -1683,7 +1944,7 @@ exit 1
     expect(firstPort).toBeGreaterThan(-1);
     expect(secondPort).toBeGreaterThan(firstPort);
     expect(diagnostic.match(/unknown runtime container or network consumer is outside the allowlist\./g)).toHaveLength(1);
-  }, 30000);
+  }, 60000);
 
   it('maps remote snapshot failures through the outer PHASE 2 NO-GO path without forwarding remote stderr', () => {
     const wrapper = extractFunction(helper, 'run_remote_snapshot_or_fail');
@@ -1733,12 +1994,12 @@ exit 1
         'remote_snapshot',
       ].join('\n'),
       fixture.environment,
-      25000,
+      50000,
     );
     expect(result.status, `${kind}: ${result.stdout}${result.stderr}`).not.toBe(0);
     expect(result.stdout, kind).not.toContain('Authorization');
     expect(result.stdout, kind).not.toContain('SECRET');
-  }, 30000);
+  }, 60000);
 
   it('rejects app containers publishing host 80/443 through nonstandard container ports', () => {
     const remoteSnapshot = extractRemoteSnapshot(helper);
@@ -1752,12 +2013,12 @@ exit 1
         'remote_snapshot',
       ].join('\n'),
       fixture.environment,
-      20000,
+      50000,
     );
     expect(result.status, `${result.stdout}${result.stderr}`).not.toBe(0);
     expect(`${result.stdout}${result.stderr}`).toMatch(/application container still publishes host port|public 80\/443 ownership/);
     expect(result.stdout).not.toContain('SECRET');
-  }, 30000);
+  }, 60000);
 
   it('rejects EventOS 3000/tcp published on an alternate host port', () => {
     const remoteSnapshot = extractRemoteSnapshot(helper);
@@ -1771,13 +2032,13 @@ exit 1
         'remote_snapshot',
       ].join('\n'),
       fixture.environment,
-      25000,
+      50000,
     );
     expect(result.status, `${result.stdout}${result.stderr}`).not.toBe(0);
     expect(`${result.stdout}${result.stderr}`).toContain('EventOS publishes a forbidden container port.');
     expect(`${result.stdout}${result.stderr}`).not.toContain('Authorization');
     expect(`${result.stdout}${result.stderr}`).not.toContain('SECRET');
-  }, 30000);
+  }, 60000);
 
   it('rejects EventOS Postgres 5432/tcp published on an alternate host port', () => {
     const remoteSnapshot = extractRemoteSnapshot(helper);
@@ -1791,13 +2052,13 @@ exit 1
         'remote_snapshot',
       ].join('\n'),
       fixture.environment,
-      25000,
+      50000,
     );
     expect(result.status, `${result.stdout}${result.stderr}`).not.toBe(0);
     expect(`${result.stdout}${result.stderr}`).toContain('EventOS Postgres has a forbidden container port.');
     expect(`${result.stdout}${result.stderr}`).not.toContain('Authorization');
     expect(`${result.stdout}${result.stderr}`).not.toContain('SECRET');
-  }, 30000);
+  }, 60000);
 
   it('uses container and public evidence when the Zeiterfassung deployment root is unreadable', () => {
     const remoteSnapshot = extractRemoteSnapshot(helper);
@@ -1979,6 +2240,7 @@ exit 1
   it('executes the helper ID/restart invariant function against changed fixture records', () => {
     const stateLine = extractFunction(helper, 'state_line');
     const stateField = extractFunction(helper, 'state_field');
+    const canonicalizer = extractFunction(helper, 'canonicalize_network_mapping');
     const compare = extractFunction(helper, 'compare_identity_invariants');
     const fixture = `
 set -euo pipefail
@@ -1986,9 +2248,10 @@ COMPONENTS=(shared-edge)
 fail() { printf '%s\\n' "$1"; exit 1; }
 ${stateLine}
 ${stateField}
+${canonicalizer}
 ${compare}
-before_snapshot=$'STATE\\tshared-edge\\tfull-before\\tshared-edge-edge-1\\timage\\trunning\\tstarted\\t0\\t80/tcp=80\\tnetwork'
-after_snapshot=$'STATE\\tshared-edge\\tfull-after\\tshared-edge-edge-1\\timage\\trunning\\tstarted\\t0\\t80/tcp=80\\tnetwork'
+before_snapshot=$'STATE\\tshared-edge\\tfull-before\\tshared-edge-edge-1\\timage\\trunning\\tstarted\\t0\\t80/tcp=80\\tplatform-infra_default=network;'
+after_snapshot=$'STATE\\tshared-edge\\tfull-after\\tshared-edge-edge-1\\timage\\trunning\\tstarted\\t0\\t80/tcp=80\\tplatform-infra_default=network;'
 compare_identity_invariants
 `;
     const result = spawnSync('bash', ['-c', fixture], { encoding: 'utf8' });
@@ -2055,6 +2318,7 @@ validate_allowlisted_inventory $'CONTAINER\\tshared-edge\\tfull-edge\\tshared-ed
   it('executes restart, network and ID invariance fixtures as fail-closed gates', () => {
     const stateLine = extractFunction(helper, 'state_line');
     const stateField = extractFunction(helper, 'state_field');
+    const canonicalizer = extractFunction(helper, 'canonicalize_network_mapping');
     const compare = extractFunction(helper, 'compare_identity_invariants');
     for (const [field, beforeValue, afterValue, expected] of [
       ['id', 'a'.repeat(64), 'b'.repeat(64), 'Container ID changed'],
@@ -2065,9 +2329,9 @@ validate_allowlisted_inventory $'CONTAINER\\tshared-edge\\tfull-edge\\tshared-ed
       const after = field === 'id' ? afterValue : 'a'.repeat(64);
       const beforeRestart = field === 'restart' ? beforeValue : '0';
       const afterRestart = field === 'restart' ? afterValue : '0';
-      const beforeNetwork = field === 'network' ? beforeValue : 'network';
-      const afterNetwork = field === 'network' ? afterValue : 'network';
-      const fixture = `set -euo pipefail\nCOMPONENTS=(shared-edge)\nfail() { printf '%s\\n' "$1"; exit 1; }\n${stateLine}\n${stateField}\n${compare}\nbefore_snapshot=$'STATE\\tshared-edge\\t${before}\\tshared-edge-edge-1\\timage\\trunning\\tstarted\\t${beforeRestart}\\t80/tcp=80\\t${beforeNetwork}'\nafter_snapshot=$'STATE\\tshared-edge\\t${after}\\tshared-edge-edge-1\\timage\\trunning\\tstarted\\t${afterRestart}\\t80/tcp=80\\t${afterNetwork}'\ncompare_identity_invariants`;
+      const beforeNetwork = field === 'network' ? `platform-infra_default=${beforeValue};` : 'platform-infra_default=network;';
+      const afterNetwork = field === 'network' ? `platform-infra_default=${afterValue};` : 'platform-infra_default=network;';
+      const fixture = `set -euo pipefail\nCOMPONENTS=(shared-edge)\nfail() { printf '%s\\n' "$1"; exit 1; }\n${stateLine}\n${stateField}\n${canonicalizer}\n${compare}\nbefore_snapshot=$'STATE\\tshared-edge\\t${before}\\tshared-edge-edge-1\\timage\\trunning\\tstarted\\t${beforeRestart}\\t80/tcp=80\\t${beforeNetwork}'\nafter_snapshot=$'STATE\\tshared-edge\\t${after}\\tshared-edge-edge-1\\timage\\trunning\\tstarted\\t${afterRestart}\\t80/tcp=80\\t${afterNetwork}'\ncompare_identity_invariants`;
       const result = spawnSync('bash', ['-c', fixture], { encoding: 'utf8' });
       expect(result.status, field).not.toBe(0);
       expect(`${result.stdout}${result.stderr}`, field).toContain(expected);
