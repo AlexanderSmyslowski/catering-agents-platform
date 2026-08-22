@@ -1488,7 +1488,7 @@ lowercase() {
 }
 
 assert_zeiterfassung_identity() {
-  [[ "$(lowercase "${HTTP_CONTENT_TYPE}")" == application/json* ]] || fail "Zeiterfassung content type is not JSON."
+  [[ "$(lowercase "${HTTP_CONTENT_TYPE}")" == application/json* ]] || fail "Zeiterfassung readyz content type is not JSON."
   printf '%s' "${HTTP_BODY}" | python3 -c 'import json, sys
 try:
     payload = json.load(sys.stdin)
@@ -1496,13 +1496,7 @@ except (ValueError, TypeError):
     raise SystemExit(1)
 if not isinstance(payload, dict) or payload.get("ok") is not True:
     raise SystemExit(1)
-version = payload.get("version")
-git_sha = payload.get("gitSha")
-if not isinstance(version, str) or not isinstance(git_sha, str):
-    raise SystemExit(1)
-if version != sys.argv[1] or git_sha != sys.argv[2]:
-    raise SystemExit(1)
-' "${ZEITERFASSUNG_RELEASE_VERSION}" "${ZEITERFASSUNG_RELEASE_GIT_SHA}" || fail "Zeiterfassung semantic identity failed."
+' || fail "Zeiterfassung readyz contract failed."
 }
 
 assert_zeiterfassung_release_identity() {
@@ -1540,15 +1534,9 @@ if not isinstance(payload, dict):
     raise SystemExit(1)
 if payload.get("ok") is not True or payload.get("environmentLabel") != "Produktiv":
     raise SystemExit(1)
-version = payload.get("version")
-git_sha = payload.get("gitSha")
-if not isinstance(version, str) or not isinstance(git_sha, str):
-    raise SystemExit(1)
-if version != sys.argv[1] or git_sha != sys.argv[2]:
-    raise SystemExit(1)
 if payload.get("appUrl") != "https://zeit.the-one.catering" or payload.get("platformCustomersEnabled") is not False:
     raise SystemExit(1)
-' "${ZEITERFASSUNG_RELEASE_VERSION}" "${ZEITERFASSUNG_RELEASE_GIT_SHA}" || fail "Zeiterfassung public config identity failed."
+' || fail "Zeiterfassung public config contract failed."
 }
 
 assert_eventos_identity() {

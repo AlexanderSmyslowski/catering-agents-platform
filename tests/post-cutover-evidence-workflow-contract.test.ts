@@ -2414,26 +2414,11 @@ exit 1
     expect(publicIdentity.status, `${publicIdentity.stdout}${publicIdentity.stderr}`).toBe(0);
   }, 120000);
 
-  it('requires release version and SHA on Zeiterfassung ready and public-config responses', () => {
+  it('accepts endpoint-specific Zeiterfassung contracts without cross-endpoint release fields', () => {
     const lowercase = extractFunction(helper, 'lowercase');
     const readyIdentity = extractFunction(helper, 'assert_zeiterfassung_identity');
     const configIdentity = extractFunction(helper, 'assert_zeiterfassung_config_identity');
-    const validScript = [
-      'ZEITERFASSUNG_RELEASE_VERSION=1.2.3',
-      'ZEITERFASSUNG_RELEASE_GIT_SHA=0123456789abcdef0123456789abcdef01234567',
-      'HTTP_CONTENT_TYPE=application/json',
-      'HTTP_BODY=\'{"ok":true,"version":"1.2.3","gitSha":"0123456789abcdef0123456789abcdef01234567"}\'',
-      lowercase,
-      readyIdentity,
-      'assert_zeiterfassung_identity',
-      'HTTP_BODY=\'{"ok":true,"version":"1.2.3","gitSha":"0123456789abcdef0123456789abcdef01234567","environmentLabel":"Produktiv","appUrl":"https://zeit.the-one.catering","platformCustomersEnabled":false}\'',
-      configIdentity,
-      'assert_zeiterfassung_config_identity',
-    ].join('\n');
-    const validResult = runExtractedFunction('', validScript);
-    expect(validResult.status, `${validResult.stdout}${validResult.stderr}`).toBe(0);
-
-    const missingIdentity = [
+    const validReadyScript = [
       'ZEITERFASSUNG_RELEASE_VERSION=1.2.3',
       'ZEITERFASSUNG_RELEASE_GIT_SHA=0123456789abcdef0123456789abcdef01234567',
       'HTTP_CONTENT_TYPE=application/json',
@@ -2442,47 +2427,93 @@ exit 1
       readyIdentity,
       'assert_zeiterfassung_identity',
     ].join('\n');
-    const missingResult = runExtractedFunction('', missingIdentity);
-    expect(missingResult.status).not.toBe(0);
-    expect(`${missingResult.stdout}${missingResult.stderr}`).toContain('Zeiterfassung semantic identity failed');
+    const validReadyResult = runExtractedFunction('', validReadyScript);
+    expect(validReadyResult.status, `${validReadyResult.stdout}${validReadyResult.stderr}`).toBe(0);
+
+    const validConfigScript = [
+      'ZEITERFASSUNG_RELEASE_VERSION=1.2.3',
+      'ZEITERFASSUNG_RELEASE_GIT_SHA=0123456789abcdef0123456789abcdef01234567',
+      'HTTP_CONTENT_TYPE=application/json',
+      'HTTP_BODY=\'{"ok":true,"environmentLabel":"Produktiv","appUrl":"https://zeit.the-one.catering","platformCustomersEnabled":false}\'',
+      lowercase,
+      configIdentity,
+      'assert_zeiterfassung_config_identity',
+    ].join('\n');
+    const validConfigResult = runExtractedFunction('', validConfigScript);
+    expect(validConfigResult.status, `${validConfigResult.stdout}${validConfigResult.stderr}`).toBe(0);
   });
 
-  it('fails closed when public Zeiterfassung identity proofs disagree', () => {
+  it('fails closed on invalid endpoint-specific Zeiterfassung contracts', () => {
     const lowercase = extractFunction(helper, 'lowercase');
     const releaseIdentity = extractFunction(helper, 'assert_zeiterfassung_release_identity');
     const readyIdentity = extractFunction(helper, 'assert_zeiterfassung_identity');
     const configIdentity = extractFunction(helper, 'assert_zeiterfassung_config_identity');
-    const gitSha = '0123456789abcdef0123456789abcdef01234567';
-    const mismatchedGitSha = 'fedcba9876543210fedcba9876543210fedcba98';
-    const readyMismatch = runExtractedFunction('', [
-      'ZEITERFASSUNG_RELEASE_VERSION="9.9.9"',
-      'ZEITERFASSUNG_RELEASE_GIT_SHA="fedcba9876543210fedcba9876543210fedcba98"',
-      'HTTP_CONTENT_TYPE=application/json',
-      `HTTP_BODY='{"ok":true,"version":"1.2.3","gitSha":"${gitSha}"}'`,
+    for (const body of [
+      '{"ok":true}',
+      '{"ok":true,"version":"unknown","gitSha":"0123456789abcdef0123456789abcdef01234567"}',
+      '{"ok":true,"version":"1.2.3","gitSha":"not-a-sha"}',
+    ]) {
+      const invalidHealth = runExtractedFunction('', [
+        'ZEITERFASSUNG_RELEASE_VERSION="9.9.9"',
+        'ZEITERFASSUNG_RELEASE_GIT_SHA="fedcba9876543210fedcba9876543210fedcba98"',
+        'HTTP_CONTENT_TYPE=application/json',
+        `HTTP_BODY='${body}'`,
+        lowercase,
+        releaseIdentity,
+        'assert_zeiterfassung_release_identity',
+      ].join('\n'));
+      expect(invalidHealth.status).not.toBe(0);
+    }
+
+    for (const body of [
+      '{"ok":false}',
+      '{"ok":true',
+    ]) {
+      const invalidReady = runExtractedFunction('', [
+        'ZEITERFASSUNG_RELEASE_VERSION=1.2.3',
+        'ZEITERFASSUNG_RELEASE_GIT_SHA=0123456789abcdef0123456789abcdef01234567',
+        'HTTP_CONTENT_TYPE=application/json',
+        `HTTP_BODY='${body}'`,
+        lowercase,
+        readyIdentity,
+        'assert_zeiterfassung_identity',
+      ].join('\n'));
+      expect(invalidReady.status).not.toBe(0);
+    }
+    const invalidReadyContentType = runExtractedFunction('', [
+      'HTTP_CONTENT_TYPE=text/plain',
+      'HTTP_BODY=\'{"ok":true}\'',
       lowercase,
-      releaseIdentity,
-      'assert_zeiterfassung_release_identity',
-      `HTTP_BODY='{"ok":true,"version":"1.2.4","gitSha":"${gitSha}"}'`,
       readyIdentity,
       'assert_zeiterfassung_identity',
     ].join('\n'));
-    expect(readyMismatch.status).not.toBe(0);
-    expect(`${readyMismatch.stdout}${readyMismatch.stderr}`).toContain('Zeiterfassung semantic identity failed');
+    expect(invalidReadyContentType.status).not.toBe(0);
 
-    const configMismatch = runExtractedFunction('', [
-      'ZEITERFASSUNG_RELEASE_VERSION="9.9.9"',
-      'ZEITERFASSUNG_RELEASE_GIT_SHA="fedcba9876543210fedcba9876543210fedcba98"',
-      'HTTP_CONTENT_TYPE=application/json',
-      `HTTP_BODY='{"ok":true,"version":"1.2.3","gitSha":"${gitSha}"}'`,
+    for (const body of [
+      '{"ok":true,"environmentLabel":"Staging","appUrl":"https://zeit.the-one.catering","platformCustomersEnabled":false}',
+      '{"ok":true,"environmentLabel":"Produktiv","appUrl":"https://wrong.example","platformCustomersEnabled":false}',
+      '{"ok":true,"environmentLabel":"Produktiv","appUrl":"https://zeit.the-one.catering","platformCustomersEnabled":true}',
+    ]) {
+      const invalidConfig = runExtractedFunction('', [
+        'ZEITERFASSUNG_RELEASE_VERSION="9.9.9"',
+        'ZEITERFASSUNG_RELEASE_GIT_SHA="fedcba9876543210fedcba9876543210fedcba98"',
+        'HTTP_CONTENT_TYPE=application/json',
+        `HTTP_BODY='${body}'`,
+        lowercase,
+        configIdentity,
+        'assert_zeiterfassung_config_identity',
+      ].join('\n'));
+      expect(invalidConfig.status).not.toBe(0);
+      expect(`${invalidConfig.stdout}${invalidConfig.stderr}`).toContain('Zeiterfassung public config contract failed.');
+    }
+    const invalidConfigContentType = runExtractedFunction('', [
+      'HTTP_CONTENT_TYPE=text/plain',
+      'HTTP_BODY=\'{"ok":true,"environmentLabel":"Produktiv","appUrl":"https://zeit.the-one.catering","platformCustomersEnabled":false}\'',
       lowercase,
-      releaseIdentity,
-      'assert_zeiterfassung_release_identity',
-      `HTTP_BODY='{"ok":true,"version":"1.2.3","gitSha":"${mismatchedGitSha}","environmentLabel":"Produktiv","appUrl":"https://zeit.the-one.catering","platformCustomersEnabled":false}'`,
       configIdentity,
       'assert_zeiterfassung_config_identity',
     ].join('\n'));
-    expect(configMismatch.status).not.toBe(0);
-    expect(`${configMismatch.stdout}${configMismatch.stderr}`).toContain('Zeiterfassung public config identity failed');
+    expect(invalidConfigContentType.status).not.toBe(0);
   });
 
   it('never prints a sensitive label or secret-like extra state field', () => {
