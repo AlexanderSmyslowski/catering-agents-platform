@@ -625,10 +625,21 @@ process.exit(1);
 `;
 const ssScript = String.raw`#!/usr/bin/env node
 const pid = process.env.HARNESS_REMOTE_PID;
-if (process.env.HARNESS_CASE === 'listener-extra') console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"foreign"' + ',pid=1,fd=3))');
-if (process.env.HARNESS_CASE === 'listener-foreign-cgroup' || process.env.HARNESS_CASE === 'listener-wrong-docker-proxy') console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"foreign"' + ',pid=1,fd=3))');
-else console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=3))');
-if (process.env.HARNESS_CASE !== 'listener-missing') console.log('LISTEN 0 128 0.0.0.0:443 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=4))');
+const dualStack = process.env.HARNESS_CASE === 'listener-dual-stack' || process.env.HARNESS_CASE === 'listener-dual-stack-foreign-owner';
+if (dualStack) {
+  console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=3))');
+  const ipv6Owner = process.env.HARNESS_CASE === 'listener-dual-stack-foreign-owner'
+    ? '"foreign"' + ',pid=1,fd=4'
+    : '"caddy"' + ',pid=' + pid + ',fd=4';
+  console.log('LISTEN 0 128 [::]:80 [::]:* users:((' + ipv6Owner + '))');
+  console.log('LISTEN 0 128 0.0.0.0:443 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=5))');
+  console.log('LISTEN 0 128 [::]:443 [::]:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=6))');
+} else {
+  if (process.env.HARNESS_CASE === 'listener-extra') console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"foreign"' + ',pid=1,fd=3))');
+  if (process.env.HARNESS_CASE === 'listener-foreign-cgroup' || process.env.HARNESS_CASE === 'listener-wrong-docker-proxy') console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"foreign"' + ',pid=1,fd=3))');
+  else console.log('LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=3))');
+  if (process.env.HARNESS_CASE !== 'listener-missing') console.log('LISTEN 0 128 0.0.0.0:443 0.0.0.0:* users:((' + '"caddy"' + ',pid=' + pid + ',fd=4))');
+}
 `;
   const realpathScript = String.raw`#!/usr/bin/env node
 const fs = require('fs');
@@ -1502,22 +1513,75 @@ esac
     expect(`${missing80.stdout}${missing80.stderr}${missing443.stdout}${missing443.stderr}`).not.toContain('0.0.0.0:*');
   });
 
-  it('diagnoses both dual-stack listeners when TCP 80 is ambiguous and then fails closed', () => {
+  it('accepts only canonical PID-less IPv4/IPv6 listener pairs with a unique Shared Edge Docker owner', () => {
     const result = runListenerValidatorFixture({
       ssLines: [
-        'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",fd=3))',
-        'LISTEN 0 4096 [::]:80 [::]:* users:(("caddy",fd=4))',
+        'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:*',
+        'LISTEN 0 4096 [::]:80 [::]:*',
+        'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:*',
+        'LISTEN 0 4096 [::]:443 [::]:*',
       ],
     });
-    expect(result.status).not.toBe(0);
-    const diagnostic = `${result.stdout}${result.stderr}`;
-    expect(diagnostic).toContain('LISTENER_DIAGNOSTIC\tport=80\tcount=2\tlocal_address_port=0.0.0.0:80\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
-    expect(diagnostic).toContain('LISTENER_DIAGNOSTIC\tport=80\tcount=2\tlocal_address_port=[::]:80\tstate=LISTEN\tprocess=caddy\tpid=unavailable');
-    expect(`${result.stdout}${result.stderr}`).toContain('TCP 80 has missing or ambiguous listening processes.');
-    expect(diagnostic).not.toContain('0.0.0.0:*');
-    expect(diagnostic).not.toContain('[::]:*');
-    expect(diagnostic).not.toContain('users:');
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('LISTENER\tport=80\tcount=2\tlocal_address_port=0.0.0.0:80\tstate=LISTEN\tprocess=unavailable\tpid=unavailable');
+    expect(result.stdout).toContain('LISTENER\tport=80\tcount=2\tlocal_address_port=[::]:80\tstate=LISTEN\tprocess=unavailable\tpid=unavailable');
+    expect(result.stdout).toContain('LISTENER\tport=443\tcount=2\tlocal_address_port=0.0.0.0:443\tstate=LISTEN\tprocess=unavailable\tpid=unavailable');
+    expect(result.stdout).toContain('LISTENER\tport=443\tcount=2\tlocal_address_port=[::]:443\tstate=LISTEN\tprocess=unavailable\tpid=unavailable');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('LISTENER_DIAGNOSTIC');
+    expect(result.stdout).not.toContain('0.0.0.0:*');
+    expect(result.stdout).not.toContain('[::]:*');
+    expect(result.stdout).not.toContain('users:');
   });
+
+  it.each([
+    ['two IPv4 listener rows', [
+      'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",fd=3))',
+      'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",fd=4))',
+    ], 2],
+    ['two IPv6 listener rows', [
+      'LISTEN 0 4096 [::]:80 [::]:* users:(("caddy",fd=3))',
+      'LISTEN 0 4096 [::]:80 [::]:* users:(("caddy",fd=4))',
+    ], 2],
+    ['an unexpected IPv6 loopback listener row', [
+      'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",fd=3))',
+      'LISTEN 0 4096 [::1]:80 [::]:* users:(("caddy",fd=4))',
+    ], 2],
+    ['three listener rows', [
+      'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",fd=3))',
+      'LISTEN 0 4096 [::]:80 [::]:* users:(("caddy",fd=4))',
+      'LISTEN 0 4096 127.0.0.1:80 127.0.0.1:* users:(("foreign",fd=5))',
+    ], 3],
+  ])('rejects %s even when TCP 443 is a canonical pair', (name, invalid80Lines, listenerCount) => {
+    const result = runListenerValidatorFixture({
+      ssLines: [
+        ...invalid80Lines,
+        'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:(("caddy",fd=6))',
+        'LISTEN 0 4096 [::]:443 [::]:* users:(("caddy",fd=7))',
+      ],
+    });
+    const diagnostic = `${result.stdout}${result.stderr}`;
+
+    expect(result.status, `${name}: ${diagnostic}`).not.toBe(0);
+    expect(diagnostic).toContain(`LISTENER_DIAGNOSTIC\tport=80\tcount=${listenerCount}\t`);
+    expect(result.stdout).not.toContain('LISTENER\tport=80\t');
+  });
+
+  it('accepts canonical dual-stack pairs only when every visible PID remains correlated to Shared Edge', () => {
+    const { result } = runFakeRemoteSnapshot('listener-dual-stack');
+
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('LISTENER\tport=80\tcount=2\tlocal_address_port=0.0.0.0:80\tstate=LISTEN\tprocess=caddy');
+    expect(result.stdout).toContain('LISTENER\tport=80\tcount=2\tlocal_address_port=[::]:80\tstate=LISTEN\tprocess=caddy');
+    expect(result.stdout).toContain('LISTENER\tport=443\tcount=2\tlocal_address_port=0.0.0.0:443\tstate=LISTEN\tprocess=caddy');
+    expect(result.stdout).toContain('LISTENER\tport=443\tcount=2\tlocal_address_port=[::]:443\tstate=LISTEN\tprocess=caddy');
+  }, 60000);
+
+  it('rejects a canonical dual-stack pair whose visible IPv6 PID and process are foreign', () => {
+    const { result } = runFakeRemoteSnapshot('listener-dual-stack-foreign-owner');
+
+    expect(result.status, `${result.stdout}${result.stderr}`).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain('TCP 80 listener PID is not correlated to the exact Shared Edge container.');
+  }, 60000);
 
   it('fully diagnoses repeated and unexpected TCP 443 listeners before the fail-closed abort', () => {
     const result = runListenerValidatorFixture({
@@ -1579,7 +1643,9 @@ esac
         [
           '#!/usr/bin/env bash',
           "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:*'",
+          "printf '%s\\n' 'LISTEN 0 4096 [::]:80 [::]:*'",
           "printf '%s\\n' 'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:*'",
+          "printf '%s\\n' 'LISTEN 0 4096 [::]:443 [::]:*'",
         ].join('\n'),
         { mode: 0o700 },
       );
