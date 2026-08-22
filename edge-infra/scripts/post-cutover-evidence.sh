@@ -793,13 +793,13 @@ validate_public_listener_ownership() {
   local cgroup cmdline exe correlated container_ip listener_count listener_state listener_local_address listener_process_name listener_output_pid listener_addresses listener_contract_valid
   local -a listener_lines
 
-  if declare -F remote_stage >/dev/null 2>&1; then remote_stage remote_snapshot.listeners.edge_pid; fi
+  if declare -F remote_stage >/dev/null; then remote_stage remote_snapshot.listeners.edge_pid; fi
   edge_pid="$(docker inspect --format '{{.State.Pid}}' "${container_id}")"
   [[ "${edge_pid}" =~ ^[1-9][0-9]*$ ]] || remote_fail "Shared Edge container PID is unavailable."
-  if declare -F remote_stage >/dev/null 2>&1; then remote_stage remote_snapshot.listeners.edge_ips; fi
+  if declare -F remote_stage >/dev/null; then remote_stage remote_snapshot.listeners.edge_ips; fi
   edge_ips="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}' "${container_id}")"
   [[ -n "${edge_ips}" ]] || remote_fail "Shared Edge container IP is unavailable for listener correlation."
-  if declare -F remote_stage >/dev/null 2>&1; then remote_stage remote_snapshot.listeners.ss; fi
+  if declare -F remote_stage >/dev/null; then remote_stage remote_snapshot.listeners.ss; fi
   listeners="$(ss -ltnp)" || remote_fail "TCP listener inspection failed."
 
   for public_port in 80 443; do
