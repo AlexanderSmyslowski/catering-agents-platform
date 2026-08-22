@@ -81,13 +81,30 @@ SSH_ARGS=(
 
 remote_snapshot() {
   ssh "${SSH_ARGS[@]}" -- "${REMOTE}" bash -s -- "${EXPECTED_CADDYFILE_SHA256}" <<'REMOTE_SCRIPT'
-set -euo pipefail
+set -eEuo pipefail
 
 expected_caddyfile_sha256="$1"
 edge_path="/opt/shared-edge"
 rollback_root="/opt/shared-edge-rollbacks"
 expected_commit="6703d2aa9bb426c7f44d6601306dc623219741be"
 edge_lock_path="${edge_path}.deploy-lock"
+remote_stage_id="remote_snapshot.bootstrap"
+
+remote_stage() {
+  case "${1:-}" in
+    remote_snapshot.*) remote_stage_id="$1" ;;
+    *) remote_stage_id="remote_snapshot.unknown" ;;
+  esac
+}
+
+remote_error_trap() {
+  local remote_status="$?"
+  printf 'REMOTE_EVIDENCE_DIAGNOSTIC\tstage=%s\texit_code=%s\n' \
+    "${remote_stage_id}" "${remote_status}" >&2
+  exit "${remote_status}"
+}
+
+trap remote_error_trap ERR
 
 remote_fail() {
   printf 'remote evidence gate failed: %s\n' "$1" >&2
@@ -354,8 +371,10 @@ validate_unknown_runtime_inventory() {
   [[ "${unknown_container_found}" == false ]] || remote_fail "unknown runtime container or network consumer is outside the allowlist."
 }
 
+remote_stage remote_snapshot.inventory
 all_container_ids=""
 validate_unknown_runtime_inventory
+remote_stage remote_snapshot.edge_manifest
 test -d "${edge_path}" || remote_fail "shared-edge path is unavailable."
 snapshot_lock_before="$(validate_deploy_lock_absent "${edge_lock_path}")"
 validate_manifest_file "${edge_path}/.deploy-manifest" "${rollback_root}" "${expected_commit}" cutover
@@ -364,9 +383,11 @@ manifest_mode="$(sed -n 's/^mode=//p' "${edge_path}/.deploy-manifest")"
 manifest_time="$(sed -n 's/^deployed_at=//p' "${edge_path}/.deploy-manifest")"
 snapshot_manifest_before="$(sha256sum "${edge_path}/.deploy-manifest" | awk '{ print $1 }')"
 [[ "${snapshot_manifest_before}" =~ ^[0-9a-f]{64}$ ]] || remote_fail "shared-edge snapshot manifest digest is invalid."
+remote_stage remote_snapshot.rollback
 validate_rollback_evidence "${rollback_root}"
 snapshot_generation_before="$(read_edge_generation "${edge_path}")"
 EVENTOS_RELEASE_SHA=""
+remote_stage remote_snapshot.release_identity
 read_eventos_release_marker
 
 ZEITERFASSUNG_CONTAINER_IMAGE=""
@@ -402,6 +423,7 @@ read_zeiterfassung_container_metadata() {
   ZEITERFASSUNG_COMPOSE_WORKING_DIR="${working_dir}"
 }
 
+remote_stage remote_snapshot.network_inventory
 network_listing="$(docker network ls --no-trunc --format '{{.Name}}\t{{.ID}}\t{{.Driver}}\t{{.Scope}}')"
 
 resolve_compose_container() {
@@ -745,6 +767,7 @@ PYTHON
 
 validate_effective_caddy_config
 
+remote_stage remote_snapshot.port_ownership
 edge_ports="$(printf '%s\n' "${edge_state}" | awk -F '\t' '{ print $9 }')"
 edge_host_80_count="$(host_port_binding_count "${edge_ports}" 80)"
 edge_tcp_80_count="$(host_port_binding_count "${edge_ports}" 80 tcp)"
@@ -770,10 +793,13 @@ validate_public_listener_ownership() {
   local cgroup cmdline exe correlated container_ip listener_count listener_state listener_local_address listener_process_name listener_output_pid listener_addresses listener_contract_valid
   local -a listener_lines
 
+  if declare -F remote_stage >/dev/null 2>&1; then remote_stage remote_snapshot.listeners.edge_pid; fi
   edge_pid="$(docker inspect --format '{{.State.Pid}}' "${container_id}")"
   [[ "${edge_pid}" =~ ^[1-9][0-9]*$ ]] || remote_fail "Shared Edge container PID is unavailable."
+  if declare -F remote_stage >/dev/null 2>&1; then remote_stage remote_snapshot.listeners.edge_ips; fi
   edge_ips="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}' "${container_id}")"
   [[ -n "${edge_ips}" ]] || remote_fail "Shared Edge container IP is unavailable for listener correlation."
+  if declare -F remote_stage >/dev/null 2>&1; then remote_stage remote_snapshot.listeners.ss; fi
   listeners="$(ss -ltnp)" || remote_fail "TCP listener inspection failed."
 
   for public_port in 80 443; do
@@ -869,6 +895,7 @@ for public_port in 80 443; do
   printf '%b' "${port_owner_lines}" | awk -F '\t' -v port="${public_port}" -v expected_id="${edge_id}" '$1 == "PORT_OWNER" && $2 == port && ($3 != expected_id || $4 != "shared-edge-edge-1") { exit 1 }' || remote_fail "foreign public port owner detected for port ${public_port}."
 done
 
+remote_stage remote_snapshot.listeners
 validate_public_listener_ownership "${edge_id}"
 
 container_ids=(
@@ -886,6 +913,7 @@ container_ids=(
   "${iranmonitor_ingest_id}"
   "${iranmonitor_db_id}"
 )
+remote_stage remote_snapshot.network_members
 network_names="$(for container_id in "${container_ids[@]}"; do
   docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}\n{{end}}' "${container_id}"
 done | LC_ALL=C sort -u)"
@@ -898,6 +926,7 @@ printf '%s\n' "${network_names}" | while IFS= read -r network_name; do
   printf 'NETWORK\t%s\t%s\n' "${network_details}" "${network_members}"
 done
 
+remote_stage remote_snapshot.final_invariants
 snapshot_lock_after="$(validate_deploy_lock_absent "${edge_lock_path}")"
 validate_manifest_file "${edge_path}/.deploy-manifest" "${rollback_root}" "${expected_commit}" cutover
 snapshot_manifest_after="$(sha256sum "${edge_path}/.deploy-manifest" | awk '{ print $1 }')"
@@ -918,14 +947,52 @@ REMOTE_SCRIPT
 }
 
 run_remote_snapshot_or_fail() {
-  local remote_output
+  local remote_output remote_status diagnostic_dir diagnostic_file line diagnostic_payload diagnostic_stage diagnostic_exit_code diagnostic_stage_field diagnostic_exit_field
 
-  if ! remote_output="$(remote_snapshot 2> >(while IFS= read -r line; do
+  diagnostic_dir="$(mktemp -d "${TMPDIR:-/tmp}/catering-evidence-diagnostic.XXXXXX")" || {
+    printf 'REMOTE_EVIDENCE_DIAGNOSTIC\tstage=remote_snapshot.transport\texit_code=1\n' >&2
+    return 1
+  }
+  diagnostic_file="${diagnostic_dir}/stderr"
+  if ! : >"${diagnostic_file}"; then
+    rmdir "${diagnostic_dir}" 2>/dev/null || true
+    printf 'REMOTE_EVIDENCE_DIAGNOSTIC\tstage=remote_snapshot.transport\texit_code=1\n' >&2
+    return 1
+  fi
+  if remote_output="$(remote_snapshot 2>"${diagnostic_file}")"; then
+    remote_status=0
+  else
+    remote_status="$?"
+  fi
+  while IFS= read -r line; do
+    if [[ "${line}" == $'REMOTE_EVIDENCE_DIAGNOSTIC\t'* ]]; then
+      diagnostic_payload="${line#*$'\t'}"
+      if [[ "${diagnostic_payload}" == *$'\t'* ]]; then
+        diagnostic_stage_field="${diagnostic_payload%%$'\t'*}"
+        diagnostic_exit_field="${diagnostic_payload#*$'\t'}"
+        diagnostic_stage="${diagnostic_stage_field#stage=}"
+        diagnostic_exit_code="${diagnostic_exit_field#exit_code=}"
+        if [[ "${diagnostic_stage_field}" == stage=* && "${diagnostic_exit_field}" == exit_code=* && "${diagnostic_exit_code}" != *$'\t'* && "${diagnostic_exit_code}" =~ ^[0-9]{1,3}$ ]]; then
+          case "${diagnostic_stage}" in
+            remote_snapshot.bootstrap|remote_snapshot.inventory|remote_snapshot.edge_manifest|remote_snapshot.rollback|remote_snapshot.release_identity|remote_snapshot.network_inventory|remote_snapshot.port_ownership|remote_snapshot.listeners|remote_snapshot.listeners.edge_pid|remote_snapshot.listeners.edge_ips|remote_snapshot.listeners.ss|remote_snapshot.network_members|remote_snapshot.final_invariants|remote_snapshot.transport)
+              if ((10#${diagnostic_exit_code} <= 255)); then
+                printf 'REMOTE_EVIDENCE_DIAGNOSTIC\tstage=%s\texit_code=%s\n' "${diagnostic_stage}" "${diagnostic_exit_code}" >&2
+              fi
+              ;;
+          esac
+        fi
+      fi
+      continue
+    fi
     if [[ "${line}" == $'UNKNOWN_RUNTIME_CONTAINER\t'* || "${line}" == $'LISTENER_DIAGNOSTIC\t'* || "${line}" == 'remote evidence gate failed: '* ]]; then
       printf '%s\n' "${line}" >&2
     fi
-  done))"; then
-    return 1
+  done <"${diagnostic_file}"
+  unlink "${diagnostic_file}" 2>/dev/null || true
+  rmdir "${diagnostic_dir}" 2>/dev/null || true
+  if [[ "${remote_status}" != 0 ]]; then
+    printf 'REMOTE_EVIDENCE_DIAGNOSTIC\tstage=remote_snapshot.transport\texit_code=%s\n' "${remote_status}" >&2
+    return "${remote_status}"
   fi
   printf '%s' "${remote_output}"
 }

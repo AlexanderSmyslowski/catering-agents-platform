@@ -515,6 +515,10 @@ if (args[0] === 'inspect') {
   const target = args[args.length - 1];
   const row = rowFor(target);
   if (!row) process.exit(1);
+  if (env.HARNESS_CASE === 'unhandled-remote-error' && format.includes('.State.Pid')) {
+    process.stderr.write('AUTHORIZATION=Bearer fixture-token SECRET=fixture-secret\n');
+    process.exit(42);
+  }
   if (format.includes('contains')) {
     process.stderr.write('docker inspect template function "contains" not defined\\n');
     process.exit(125);
@@ -2168,6 +2172,60 @@ exit 1
     expect(helper.match(/if ! before_snapshot="\$\(run_remote_snapshot_or_fail\)"; then/g)).toHaveLength(1);
     expect(helper.match(/if ! after_snapshot="\$\(run_remote_snapshot_or_fail\)"; then/g)).toHaveLength(1);
   }, 30000);
+
+  it('surfaces a bounded stage and exit-code diagnostic for an unhandled remote error without forwarding stderr', () => {
+    const wrapper = extractFunction(helper, 'run_remote_snapshot_or_fail');
+    const remoteSnapshot = extractRemoteSnapshot(helper);
+    const fixture = createFakeRemoteFixture('unhandled-remote-error');
+    const result = runExtractedFunction(
+      `${remoteSnapshot}\n${wrapper}`,
+      [
+        'SSH_ARGS=(--batch-mode)',
+        'REMOTE=fixture',
+        'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+        'run_remote_snapshot_or_fail',
+      ].join('\n'),
+      fixture.environment,
+      60000,
+    );
+    const output = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).not.toBe(0);
+    expect(output).toContain('REMOTE_EVIDENCE_DIAGNOSTIC\tstage=remote_snapshot.listeners.edge_pid\texit_code=42');
+    expect(output).not.toMatch(/AUTHORIZATION|Bearer fixture-token|SECRET|fixture-secret/);
+  }, 60000);
+
+  it('forwards only exact internal remote diagnostics and suppresses forged fields', () => {
+    const wrapper = extractFunction(helper, 'run_remote_snapshot_or_fail');
+    const runDiagnostic = (diagnostic: string) => runExtractedFunction(
+      wrapper,
+      [
+        'remote_snapshot() {',
+        `  printf '${diagnostic}' >&2`,
+        '  return 23',
+        '}',
+        'run_remote_snapshot_or_fail',
+      ].join('\n'),
+    );
+    const valid = runDiagnostic('REMOTE_EVIDENCE_DIAGNOSTIC\\tstage=remote_snapshot.listeners.edge_pid\\texit_code=42\\n');
+    const forged = [
+      'REMOTE_EVIDENCE_DIAGNOSTIC\\tstage=remote_snapshot.unknown\\texit_code=42\\tSYNTHETIC_DIAGNOSTIC_PAYLOAD\\n',
+      'REMOTE_EVIDENCE_DIAGNOSTIC\\tstage=remote_snapshot.listeners.edge_pid\\texit_code=forty-two\\n',
+      'REMOTE_EVIDENCE_DIAGNOSTIC\\tstage=remote_snapshot.listeners.edge_pid\\n',
+      'REMOTE_EVIDENCE_DIAGNOSTIC\\tstage=remote_snapshot.listeners.edge_pid\\texit_code=42\\textra=SYNTHETIC_DIAGNOSTIC_PAYLOAD\\n',
+    ].map(runDiagnostic);
+
+    expect(valid.status).toBe(23);
+    const validLines = `${valid.stdout}${valid.stderr}`.split('\n');
+    expect(validLines.filter((line) => line === 'REMOTE_EVIDENCE_DIAGNOSTIC\tstage=remote_snapshot.listeners.edge_pid\texit_code=42')).toHaveLength(1);
+    for (const result of forged) {
+      const output = `${result.stdout}${result.stderr}`;
+      expect(result.status).toBe(23);
+      expect(output).not.toContain('SYNTHETIC_DIAGNOSTIC_PAYLOAD');
+      expect(output).not.toContain('stage=remote_snapshot.unknown');
+      expect(output).not.toContain('exit_code=forty-two');
+    }
+  });
 
   it.each([
       'listener-extra',
