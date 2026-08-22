@@ -1453,9 +1453,9 @@ fetch_https() {
   local auth_mode="$2"
   local raw metadata
   case "${auth_mode}" in
-    basic) raw="$(curl "${CURL_ARGS[@]}" --basic --config <(printf 'user = "%s:%s"\n' "${CATERING_SMOKE_BASIC_AUTH_USER}" "${CATERING_SMOKE_BASIC_AUTH_PASSWORD}") --write-out $'\n%{http_code}\t%{content_type}\t%{header.cache-control}' "${url}")" || return 1 ;;
-    public) raw="$(curl "${CURL_ARGS[@]}" --write-out $'\n%{http_code}\t%{content_type}\t%{header.cache-control}' "${url}")" || return 1 ;;
-    json) raw="$(curl "${CURL_ARGS[@]}" --header 'Accept: application/json' --write-out $'\n%{http_code}\t%{content_type}\t%{header.cache-control}' "${url}")" || return 1 ;;
+    basic) raw="$(curl "${CURL_ARGS[@]}" --basic --config <(printf 'user = "%s:%s"\n' "${CATERING_SMOKE_BASIC_AUTH_USER}" "${CATERING_SMOKE_BASIC_AUTH_PASSWORD}") --write-out $'\n%{http_code}\t%{content_type}\t%header{cache-control}' "${url}")" || return 1 ;;
+    public) raw="$(curl "${CURL_ARGS[@]}" --write-out $'\n%{http_code}\t%{content_type}\t%header{cache-control}' "${url}")" || return 1 ;;
+    json) raw="$(curl "${CURL_ARGS[@]}" --header 'Accept: application/json' --write-out $'\n%{http_code}\t%{content_type}\t%header{cache-control}' "${url}")" || return 1 ;;
     *) fail "unexpected HTTPS smoke mode." ;;
   esac
   metadata="${raw##*$'\n'}"
