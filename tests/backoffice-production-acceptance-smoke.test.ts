@@ -1185,7 +1185,7 @@ describe("backoffice production acceptance smoke", () => {
   it("clears stale production context after a failed replacement upload while keeping the file retryable", async () => {
     installProductionAcceptanceMocks();
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
-    const defaultFetch = fetchMock.getMockImplementation();
+    const defaultFetch = fetchMock.getMockImplementation() as typeof fetch | undefined;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 

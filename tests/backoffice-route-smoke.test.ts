@@ -1035,7 +1035,7 @@ describe("backoffice route smoke", () => {
   it("keeps production upload limit errors visible in the workbench", async () => {
     installBackofficeEnvironmentMocks();
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
-    const defaultFetch = fetchMock.getMockImplementation();
+    const defaultFetch = fetchMock.getMockImplementation() as typeof fetch | undefined;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
