@@ -424,7 +424,7 @@ read_zeiterfassung_container_metadata() {
 }
 
 remote_stage remote_snapshot.network_inventory
-network_listing="$(docker network ls --no-trunc --format '{{.Name}}\t{{.ID}}\t{{.Driver}}\t{{.Scope}}')"
+network_listing="$(docker network ls --no-trunc --format '{{printf "%s\t%s\t%s\t%s" .Name .ID .Driver .Scope}}')"
 
 resolve_compose_container() {
   local project="$1" service="$2" expected_name="$3" ids id actual_name actual_project actual_service oneoff number compose_missing
@@ -929,8 +929,8 @@ network_names="$(printf '%s' "${network_names_raw}" | LC_ALL=C sort -u)"
 printf '%s\n' "${network_listing}" | awk -F '\t' '$1 == "platform-infra_default" || $1 == "zeiterfassung_default" || $1 == "commcats-eventos_default" || $1 == "deploy_default" { printf "NETWORK_LS\t%s\n", $0 }'
 while IFS= read -r network_name; do
   [[ -n "${network_name}" ]] || continue
-  network_details="$(docker network inspect --format '{{.Name}}\t{{.Id}}\t{{.Driver}}\t{{.Scope}}' "${network_name}")"
-  network_member_rows="$(docker network inspect --format '{{range $container_id, $container := .Containers}}{{$container_id}}\t{{$container.Name}}\n{{end}}' "${network_name}")" || remote_fail "Docker network member inspection failed."
+  network_details="$(docker network inspect --format '{{printf "%s\t%s\t%s\t%s" .Name .Id .Driver .Scope}}' "${network_name}")"
+  network_member_rows="$(docker network inspect --format '{{range $container_id, $container := .Containers}}{{printf "%s\t%s\n" $container_id $container.Name}}{{end}}' "${network_name}")" || remote_fail "Docker network member inspection failed."
   network_members="$({
     while IFS=$'\t' read -r member_id member_name; do
       [[ -n "${member_id}" && -n "${member_name}" ]] || continue
