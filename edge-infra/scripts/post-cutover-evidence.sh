@@ -767,7 +767,7 @@ validate_public_listener_ownership() {
   local container_id="$1"
   local edge_pid edge_ips listeners public_port listener_line listener_pid_matches listener_pid_count listener_pid_match listener_pid
   local listener_owner_line listener_owner_id listener_owner_name
-  local cgroup cmdline exe correlated container_ip listener_count listener_state listener_local_address listener_process_name listener_output_pid
+  local cgroup cmdline exe correlated container_ip listener_count listener_state listener_local_address listener_process_name listener_output_pid listener_addresses listener_contract_valid
   local -a listener_lines
 
   edge_pid="$(docker inspect --format '{{.State.Pid}}' "${container_id}")"
@@ -783,6 +783,15 @@ validate_public_listener_ownership() {
       printf 'LISTENER_DIAGNOSTIC\tport=%s\tcount=0\tlocal_address_port=unavailable\tstate=unavailable\tprocess=unavailable\tpid=unavailable\n' "${public_port}" >&2
       remote_fail "TCP ${public_port} has missing or ambiguous listening processes."
     fi
+    listener_contract_valid=false
+    if [[ "${listener_count}" == 1 ]]; then
+      listener_contract_valid=true
+    elif [[ "${listener_count}" == 2 ]]; then
+      listener_addresses="$(printf '%s\n' "${listener_lines[@]}" | awk '{ print $4 }' | LC_ALL=C sort)"
+      if [[ "${listener_addresses}" == $'0.0.0.0:'"${public_port}"$'\n[::]:'"${public_port}" ]]; then
+        listener_contract_valid=true
+      fi
+    fi
     for listener_line in "${listener_lines[@]}"; do
       listener_state="$(printf '%s\n' "${listener_line}" | awk '{ print $1 }')"
       listener_local_address="$(printf '%s\n' "${listener_line}" | awk '{ print $4 }')"
@@ -797,7 +806,7 @@ validate_public_listener_ownership() {
         listener_pid_match="${listener_pid_matches%%$'\n'*}"
         listener_output_pid="${listener_pid_match#pid=}"
       fi
-      if [[ "${listener_count}" != 1 ]]; then
+      if [[ "${listener_contract_valid}" != true ]]; then
         printf 'LISTENER_DIAGNOSTIC\tport=%s\tcount=%s\tlocal_address_port=%s\tstate=%s\tprocess=%s\tpid=%s\n' \
           "${public_port}" "${listener_count}" "${listener_local_address}" "${listener_state}" "${listener_process_name}" "${listener_output_pid}" >&2
         continue
@@ -808,8 +817,8 @@ validate_public_listener_ownership() {
         listener_owner_name="$(printf '%s\n' "${listener_owner_line}" | awk -F '\t' '{ print $4 }')"
         [[ "${listener_owner_id}" == "${container_id}" && "${listener_owner_name}" == shared-edge-edge-1 ]] || \
           remote_fail "TCP ${public_port} listener has no visible PID and Docker ownership is missing, ambiguous or foreign."
-        printf 'LISTENER\tport=%s\tcount=1\tlocal_address_port=%s\tstate=%s\tprocess=%s\tpid=unavailable\tcontainer=%s\n' \
-          "${public_port}" "${listener_local_address}" "${listener_state}" "${listener_process_name}" "${container_id}"
+        printf 'LISTENER\tport=%s\tcount=%s\tlocal_address_port=%s\tstate=%s\tprocess=%s\tpid=unavailable\tcontainer=%s\n' \
+          "${public_port}" "${listener_count}" "${listener_local_address}" "${listener_state}" "${listener_process_name}" "${container_id}"
         continue
       fi
       [[ "${listener_pid_count}" == 1 ]] || remote_fail "TCP ${public_port} listener PID is missing or ambiguous."
@@ -829,10 +838,10 @@ validate_public_listener_ownership() {
         done
       fi
       [[ "${correlated}" == true ]] || remote_fail "TCP ${public_port} listener PID is not correlated to the exact Shared Edge container."
-      printf 'LISTENER\tport=%s\tcount=1\tlocal_address_port=%s\tstate=%s\tprocess=%s\tpid=%s\tcontainer=%s\n' \
-        "${public_port}" "${listener_local_address}" "${listener_state}" "${listener_process_name}" "${listener_pid}" "${container_id}"
+      printf 'LISTENER\tport=%s\tcount=%s\tlocal_address_port=%s\tstate=%s\tprocess=%s\tpid=%s\tcontainer=%s\n' \
+        "${public_port}" "${listener_count}" "${listener_local_address}" "${listener_state}" "${listener_process_name}" "${listener_pid}" "${container_id}"
     done
-    [[ "${listener_count}" == 1 ]] || remote_fail "TCP ${public_port} has missing or ambiguous listening processes."
+    [[ "${listener_contract_valid}" == true ]] || remote_fail "TCP ${public_port} has missing or ambiguous listening processes."
   done
 }
 
