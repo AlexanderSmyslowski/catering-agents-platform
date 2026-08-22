@@ -486,7 +486,8 @@ if (args[0] === 'network' && args[1] === 'inspect') {
     process.exit(125);
   }
   if (format.includes('$container_id') && format.includes('$container.Name')) {
-    emit(membersFor(network).map(([name]) => idFor(rowFor(name)[0]) + '\t' + name + '\n').join(''));
+    const members = membersFor(network).map(([name]) => idFor(rowFor(name)[0]) + '\t' + name + '\n').join('');
+    emit(format.includes('{{printf') ? members : members.replaceAll('\t', '\\t').replaceAll('\n', '\\n'));
     process.exit(0);
   }
   if ((env.HARNESS_CASE === 'network-id' || env.HARNESS_CASE === 'unknown-alias') && network === 'platform-infra_default') {
@@ -494,7 +495,11 @@ if (args[0] === 'network' && args[1] === 'inspect') {
     process.exit(42);
   }
   if (format.includes('.Name') && format.includes('.Id')) {
-    emit(network + '\t' + networkId(network) + '\tbridge\tlocal\n');
+    const details = network + '\t' + networkId(network) + '\tbridge\tlocal';
+    // Docker's table formatter turns \\t separators into tabs; a raw Go template
+    // preserves them as literal backslash-t text. Keep the fixture honest so the
+    // contract catches production templates that depend on table-only behavior.
+    emit((format.includes('{{printf') ? details : details.replaceAll('\t', '\\t')) + '\n');
   } else {
     emit(membersFor(network).map((row) => row[0] + '=' + row[1].join(',') + ';').join('') + '\n');
   }
@@ -1859,6 +1864,33 @@ exit 1
     expect(result.stdout).toContain('NETWORK\tplatform-infra_default');
     expect(result.stdout).toContain('platform-infra-web-1=web,platform-infra-web-1;');
     expect(result.stderr).not.toContain('Aliases is not a field on network inspect containers');
+  }, 60000);
+
+  it('accepts Docker network evidence only when raw-template separators become tabs', () => {
+    const remoteSnapshot = extractRemoteSnapshot(helper);
+    const stateLine = extractFunction(helper, 'state_line');
+    const stateField = extractFunction(helper, 'state_field');
+    const validator = extractFunction(helper, 'validate_allowlisted_inventory');
+    const fixture = createFakeRemoteFixture('valid');
+    const remote = runExtractedFunction(
+      remoteSnapshot,
+      [
+        'SSH_ARGS=(--batch-mode)',
+        'REMOTE=fixture',
+        'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+        'remote_snapshot',
+      ].join('\n'),
+      fixture.environment,
+      50000,
+    );
+    expect(remote.status, `${remote.stdout}${remote.stderr}`).toBe(0);
+
+    const validation = runExtractedFunction(
+      `${stateLine}\n${stateField}\n${validator}`,
+      'validate_allowlisted_inventory "$SNAPSHOT"',
+      { SNAPSHOT: remote.stdout },
+    );
+    expect(validation.status, `${validation.stdout}${validation.stderr}`).toBe(0);
   }, 60000);
 
   it('executes the valid SSH heredoc through a fake remote with a bounded local process timeout', () => {
