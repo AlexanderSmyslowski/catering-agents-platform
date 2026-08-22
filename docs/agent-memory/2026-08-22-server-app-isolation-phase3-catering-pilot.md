@@ -17,7 +17,7 @@ Dieser Snapshot verdichtet den verbindlichen Phase-3.0/3.1-Vertrag aus dem [aktu
 
 ## Geschützte Fremd-App-Invarianten
 
-Vor und nach jeder Mutation gelten für Zeiterfassung, EventOS und Iranmonitor unverändert: voller Container-ID, `RestartCount`, Status, `StartedAt`, Image, Compose-Projekt/Service/Container-Identität, exakte Netzwerk-IDs und Aliase sowie Host-Portbindungen. Jede Abweichung, fehlende Identität, zusätzliche Ressource oder unbekannte Mitgliedschaft ist `NO-GO`.
+Vor und nach jeder Mutation gelten für Zeiterfassung, EventOS, Iranmonitor und Shared Edge unverändert: voller Container-ID, `RestartCount`, Status, `StartedAt`, Image, Compose-Projekt/Service/Container-Identität, exakte fremde Netzwerk-IDs und Aliase sowie Host-Portbindungen. Die Catering-Mitglieder in `platform-infra_default` und `zeiterfassung_default` folgen dagegen ausschließlich der stage-aware Transitionsmatrix im Plan; eine Catering-Detach-Abweichung von der dortigen Sollmenge ist `NO-GO`, eine unveränderte Gesamtmitgliedschaft nach jedem Detach wäre hingegen widersprüchlich.
 
 Iranmonitor bleibt auf der statischen Allowlist `deploy-web-1`, `deploy-ingest-1` und `deploy-db-1` im `deploy`-Projekt auf `deploy_default` mit den im Plan festgelegten Images und Portbindungen. Keine weiteren Iranmonitor-/Deploy-Container werden akzeptiert; Iranmonitor wird nie verbunden, getrennt, neugestartet, recreatet oder umkonfiguriert.
 
@@ -52,3 +52,17 @@ Nach erfolgreichem Catering-Pilot, Evidence-Dokumentation und Abnahme wird hart 
 ## Dokumentationsscope dieser Korrektur
 
 Diese Korrektur ändert genau drei bereits im PR enthaltene Dateien: den [Plan](../superpowers/plans/2026-08-20-server-app-isolation-phase3.md), [`memory.md`](../../memory.md) und diesen Snapshot. Es gibt keine Runtime-, Server-, SSH-, Workflow-, Docker-, Netzwerk-, Deployment- oder Git-Metadatenaktion.
+
+## Exact-Head-Review-Korrektur (P1/P2, 2026-08-23)
+
+### P1 – Post-create marker gap
+
+Root Cause: Nach erfolgreichem `docker network create` konnte der Prozess vor dem geforderten Candidate-Readback ausfallen. Das unveränderliche Manifest meldete weiterhin `absent`, während die Live-Ressource bereits existierte; eine normale ID-Gleichheitsprüfung blockierte dadurch Recovery und Rollback. Die einzige erlaubte Ausnahme ist eine manifestgebundene Adoption: Baseline `absent` und `created_by_run_authorized=true`, exakt ein Zielnetz pro erwarteten Namen, exakte Owner-/Phase-/Kind-/`com.catering.transaction`-Labels und Engine-Parameter, identischer `transaction_id`-/Manifesthash-Kontext sowie exakt stage-konforme Mitglieder/Aliase/Host-Portbindungen (im unmittelbaren Create-Fenster leer). Der Helper schreibt dessen volle ID atomar in den zustandsgebundenen Candidate- oder `rolling_back`-Beweis, liest zurück und setzt erst dann deterministisch fort oder rollt owner-scoped zurück. Name-only-Adoption, fremde Labels, Mehrdeutigkeit, ein zweites Netz für denselben Namen oder zusätzliche Mitglieder bleiben `NO-GO`.
+
+Die Create-Reihenfolge ist `catering_ingress` vor `catering_private`. Zwischen den Creates wird nur ein exakt transaktionsgelabeltes ingress-Netz mit privatem Ziel `absent` adoptiert; ein privates Netz ohne ingress ist out of order. Sind beide Creates vor dem Fortschritts-Readback abgeschlossen, dürfen beide nur als genau ein Treffer pro erwartetem Namen gemeinsam atomar übernommen werden. Pre-existing-exact-Netze werden nie adoptiert oder entfernt.
+
+### P2 – Stage-aware compatibility invariants
+
+Die unveränderlichen Fremd-App-Invarianten bleiben zu jedem Zeitpunkt exakt: IDs, `RestartCount`, Status/`StartedAt`, Images, Compose-Identitäten, Fremd-Netzwerk-IDs/Aliase und Portbindungen für Zeiterfassung, EventOS, Iranmonitor und Shared Edge. Nur die Catering-Mitgliedschaft darf in der expliziten Reihenfolge `postgres → intake → offer → production → exports → web von zeiterfassung_default → web von platform-infra_default` abnehmen. Die Sollmengen `S0` Baseline, `S1` Candidate, `S2` neue leere Netze, `S3` additive Mitglieder, `D1`–`D5` je ein interner Detach, `D6` Web-Detach aus Zeiterfassung und `S4` final active sind im Plan mit vollständigen Container-/Alias-Sets festgelegt. Kein Fremd-App-Detach, kein nicht autorisierter Catering-Detach und kein Zusatzmitglied ist zulässig. Der letzte belegte Catering-Compatibility-Consumer eines Kompatibilitätsnetzes wird erst nach grüner Ersatzroute und vollständigen Smokes getrennt; die Netze bleiben wegen ihrer Fremd-Consumer bestehen. Rollback stellt exakt die `S0`-Mitgliedschaften einschließlich Aliase wieder her.
+
+Die statischen Assertions müssen beide Korrekturen abdecken: Crash-Gap/Label-/Manifestbindung, exact-one adoption, Zwei-Netze- und Between-Create-Zustände, stage-aware Transitionsmatrix, unveränderte Fremd-App-Invarianten, last-consumer-Smoke-Gate und exakte Rollback-Baseline. Diese Ergänzung bleibt dokumentarisch und ist keine Runtime-, Deployment- oder Produktionsfreigabe.

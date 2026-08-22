@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.368
-date: 2026-08-22
+version: 5.369
+date: 2026-08-23
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1806,3 +1806,8 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Phase 2 ist mit Evidence Run `32596742623` und `PHASE 2: GO` abgeschlossen. Der aktuelle Phase-3.0/3.1-Vertrag ist der Plan [`docs/superpowers/plans/2026-08-20-server-app-isolation-phase3.md`](docs/superpowers/plans/2026-08-20-server-app-isolation-phase3.md); der markante Zwischenstand ist zusätzlich im Snapshot [`docs/agent-memory/2026-08-22-server-app-isolation-phase3-catering-pilot.md`](docs/agent-memory/2026-08-22-server-app-isolation-phase3-catering-pilot.md) verdichtet.
 - Der freigegebene Pilot bleibt auf Catering und die additive Shared-Edge-Mitgliedschaft von `catering_ingress` begrenzt. `catering_private` ist eine exakte Mitgliedschaftsgrenze ohne Shared-Edge-Mitgliedschaft der internen Dienste; bestehende Kompatibilitätsnetze bleiben bis zum belegten, owner-scoped Detach erhalten. Der feste kanonische, unveränderliche Baseline-/Transaktionsmanifestpfad ist `/opt/catering-phase3/phase3.transaction-baseline.manifest`; er wird unter beiden Locks vor jeder Source-/Netzmutation atomar installiert, vollständig gelesen und gehasht. Candidate/active/rolling_back binden ihn mit `transaction_manifest_sha256=<64hex>`, inactive bleibt ohne gebundenes Manifest. Marker, die beiden Host-Locks, die vier geschützten Pfade und das separate nicht-sensitive Evidence-/Laufmanifest binden Aktivierung und Rollback fail-closed; das Baseline-Manifest bleibt unverändert und wird nicht mit Fortschritt/Smokes überschrieben.
 - Unverändert geschützt bleiben Zeiterfassung, EventOS und Iranmonitor einschließlich ihrer Container-/Restart-/Status-/StartedAt-/Image-/Compose-/Netzwerk-/Alias-/Port-Invarianten. Phase 3.2/3.3 und jede Zeiterfassungs-, EventOS- oder Iranmonitor-Netzmutation bleiben harte Folgegates. Dieser Dokumentationsstand ist keine Runtime-, Deployment- oder Produktionsfreigabe.
+
+### 5.369 - 2026-08-23
+
+- Exact-Head-Fachkorrektur für den Phase-3-Catering-Pilot: Der Post-create-Marker-Crash-Gap ist jetzt fail-closed und zugleich deterministisch recoverbar. Nur wenn das markergebundene unveränderliche Manifest für den erwarteten Namen `absent` plus `created_by_run_authorized=true` sagt, exakt ein Netz mit exakten Owner-/Phase-/Kind-/`com.catering.transaction`-Labels und identischem Transaktions-/Manifesthash-Kontext existiert, die Engine-Parameter und stage-konformen Mitglieder/Aliase/Portbindungen stimmen und keine Fremdressource vorliegt, darf der Helper die volle ID atomar in den Candidate-/`rolling_back`-Beweis übernehmen. Zwischen den Creates gilt die feste Reihenfolge `catering_ingress` vor `catering_private`; private-only, Doppel-/Fremdnetz, falsche Labels oder jede weitere Abweichung bleiben `NO-GO`, kein pauschales Adoptieren.
+- Die Compatibility-Invarianten sind stage-aware berichtigt: Zeiterfassung, EventOS, Iranmonitor und Shared Edge behalten IDs, RestartCounts, Status-/StartedAt-, Image-, Compose-, Fremd-Netzwerk-/Alias- und Portbindungen exakt; nur Catering-Mitglieder dürfen gemäß der Planmatrix `S0`/`S1`/`S2`/`S3`/`D1`–`D6`/`S4` in fester Reihenfolge abnehmen. Kein Fremd-App-Detach, kein nicht autorisierter Catering-Detach, kein Zusatzmitglied; der letzte Catering-Consumer eines Kompatibilitätsnetzes erst nach grüner Ersatzroute/Smokes. Rollback stellt die exakte Baseline-Mitgliedschaft einschließlich Aliase wieder her. Die Korrektur ändert nur Plan, Memory und Phase-3-Snapshot und bleibt ohne Runtime-, Deployment- oder Git-Metadatenaktion.
