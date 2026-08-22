@@ -914,17 +914,48 @@ container_ids=(
   "${iranmonitor_db_id}"
 )
 remote_stage remote_snapshot.network_members
-network_names="$(for container_id in "${container_ids[@]}"; do
-  docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}\n{{end}}' "${container_id}"
-done | LC_ALL=C sort -u)"
+container_network_alias_cache=''
+network_names_raw=''
+for container_id in "${container_ids[@]}"; do
+  container_networks="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}={{join $network.Aliases ","}};{{end}}' "${container_id}")" || remote_fail "Docker network member alias inspection failed."
+  container_network_alias_cache+="${container_id}"$'\t'"${container_networks}"$'\n'
+  while IFS='=' read -r network_name _; do
+    [[ -n "${network_name}" ]] || continue
+    network_names_raw+="${network_name}"$'\n'
+  done < <(printf '%s' "${container_networks}" | tr ';' '\n')
+done
+network_names="$(printf '%s' "${network_names_raw}" | LC_ALL=C sort -u)"
 
 printf '%s\n' "${network_listing}" | awk -F '\t' '$1 == "platform-infra_default" || $1 == "zeiterfassung_default" || $1 == "commcats-eventos_default" || $1 == "deploy_default" { printf "NETWORK_LS\t%s\n", $0 }'
-printf '%s\n' "${network_names}" | while IFS= read -r network_name; do
+while IFS= read -r network_name; do
   [[ -n "${network_name}" ]] || continue
   network_details="$(docker network inspect --format '{{.Name}}\t{{.Id}}\t{{.Driver}}\t{{.Scope}}' "${network_name}")"
-  network_members="$(docker network inspect --format '{{range $container_id, $container := .Containers}}{{$container.Name}}={{join $container.Aliases ","}};{{end}}' "${network_name}" | tr ';' '\n' | LC_ALL=C sort | tr '\n' ';')"
+  network_member_rows="$(docker network inspect --format '{{range $container_id, $container := .Containers}}{{$container_id}}\t{{$container.Name}}\n{{end}}' "${network_name}")" || remote_fail "Docker network member inspection failed."
+  network_members="$({
+    while IFS=$'\t' read -r member_id member_name; do
+      [[ -n "${member_id}" && -n "${member_name}" ]] || continue
+      [[ "${member_id}" =~ ^[0-9a-fA-F]{64}$ ]] || remote_fail "Docker network member ID is malformed."
+      [[ "${member_name}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || remote_fail "Docker network member name is malformed."
+      member_networks=''
+      member_networks_found=false
+      while IFS=$'\t' read -r cached_id cached_networks; do
+        if [[ "${cached_id}" == "${member_id}" ]]; then
+          member_networks="${cached_networks}"
+          member_networks_found=true
+          break
+        fi
+      done <<< "${container_network_alias_cache}"
+      if [[ "${member_networks_found}" != true ]]; then
+        member_networks="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{$network_name}}={{join $network.Aliases ","}};{{end}}' "${member_id}")" || remote_fail "Docker network member alias inspection failed."
+        container_network_alias_cache+="${member_id}"$'\t'"${member_networks}"$'\n'
+      fi
+      member_aliases="$(printf '%s\n' "${member_networks}" | tr ';' '\n' | awk -F '=' -v expected_network="${network_name}" '$1 == expected_network { print $2; count += 1 } END { if (count != 1) exit 1 }')" || remote_fail "Docker network member aliases are missing or ambiguous."
+      [[ "${member_aliases}" != *$'\n'* && "${member_aliases}" != *$'\r'* && "${member_aliases}" != *$'\t'* ]] || remote_fail "Docker network member aliases contain control characters."
+      printf '%s=%s\n' "${member_name}" "${member_aliases}"
+    done <<< "${network_member_rows}"
+  } | LC_ALL=C sort | tr '\n' ';')"
   printf 'NETWORK\t%s\t%s\n' "${network_details}" "${network_members}"
-done
+done <<< "${network_names}"
 
 remote_stage remote_snapshot.final_invariants
 snapshot_lock_after="$(validate_deploy_lock_absent "${edge_lock_path}")"

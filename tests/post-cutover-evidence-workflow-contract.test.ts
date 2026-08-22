@@ -481,6 +481,14 @@ if (args[0] === 'network' && args[1] === 'inspect') {
   const formatIndex = args.indexOf('--format');
   const format = formatIndex >= 0 ? args[formatIndex + 1] : '';
   const network = args[args.length - 1];
+  if (format.includes('$container.Aliases')) {
+    process.stderr.write('template: Aliases is not a field on network inspect containers\n');
+    process.exit(125);
+  }
+  if (format.includes('$container_id') && format.includes('$container.Name')) {
+    emit(membersFor(network).map(([name]) => idFor(rowFor(name)[0]) + '\t' + name + '\n').join(''));
+    process.exit(0);
+  }
   if ((env.HARNESS_CASE === 'network-id' || env.HARNESS_CASE === 'unknown-alias') && network === 'platform-infra_default') {
     process.stderr.write('fixture network invariant drift\\n');
     process.exit(42);
@@ -1832,6 +1840,26 @@ exit 1
       /Unable to resolve sha256sum from original PATH/,
     );
   });
+
+  it('uses container inspect aliases when network inspect exposes only Docker-supported fields', () => {
+    const remoteSnapshot = extractRemoteSnapshot(helper);
+    const fixture = createFakeRemoteFixture('valid');
+    const result = runExtractedFunction(
+      remoteSnapshot,
+      [
+        'SSH_ARGS=(--batch-mode)',
+        'REMOTE=fixture',
+        'EXPECTED_CADDYFILE_SHA256="$HARNESS_EXPECTED_CADDY_SHA"',
+        'remote_snapshot',
+      ].join('\n'),
+      fixture.environment,
+      50000,
+    );
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('NETWORK\tplatform-infra_default');
+    expect(result.stdout).toContain('platform-infra-web-1=web,platform-infra-web-1;');
+    expect(result.stderr).not.toContain('Aliases is not a field on network inspect containers');
+  }, 60000);
 
   it('executes the valid SSH heredoc through a fake remote with a bounded local process timeout', () => {
     const remoteSnapshot = extractRemoteSnapshot(helper);
