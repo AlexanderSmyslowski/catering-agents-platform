@@ -2499,10 +2499,12 @@ exit 1
         'ZEITERFASSUNG_RELEASE_GIT_SHA="fedcba9876543210fedcba9876543210fedcba98"',
         'HTTP_CONTENT_TYPE=application/json',
         `HTTP_BODY='${body}'`,
+        lowercase,
         configIdentity,
         'assert_zeiterfassung_config_identity',
       ].join('\n'));
       expect(invalidConfig.status).not.toBe(0);
+      expect(`${invalidConfig.stdout}${invalidConfig.stderr}`).toContain('Zeiterfassung public config contract failed.');
     }
     const invalidConfigContentType = runExtractedFunction('', [
       'HTTP_CONTENT_TYPE=text/plain',
