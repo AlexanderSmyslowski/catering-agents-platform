@@ -370,14 +370,25 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
     negative = "! wget" in command or command.startswith("!")
     if state.get("fault") == "semantic-smoke-fail" and host == "web":
         return 1
+    if host == "egress.invalid":
+        try:
+            caller_networks = set(resolve_container(state, caller)[1]["networks"])
+        except (KeyError, ValueError):
+            return 1
+        # The provider proof is valid only from the active internal Catering
+        # service after its legacy compatibility path has been detached.
+        if "catering_private" not in caller_networks or "platform-infra_default" in caller_networks:
+            return 1
+        if state.get("fault") == "egress-fail":
+            return 1
+        print("status=ok http=200")
+        return 0
     is_reachable = reachable(state, caller, host) if host else False
     if negative:
         return 0 if not is_reachable else 1
     if host == "postgres" and ":5432" in target:
         return 1
-    if state.get("fault") == "egress-fail" and host == "egress.invalid":
-        return 1
-    if not is_reachable and host not in {"iranmonitor.invalid", "egress.invalid"}:
+    if not is_reachable and host not in {"iranmonitor.invalid"}:
         return 1
     if state.get("fault") == "crash-after-rollback" and marker_state() == "candidate" and "web:8081" in command:
         # Force the real helper into its compensating rollback; the next
@@ -387,9 +398,7 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
         # Fail the semantic gate normally so the real helper enters its
         # compensating rollback; inject the crash only after its receipt exists.
         return 1
-    if host == "egress.invalid":
-        print("status=ok http=200")
-    elif host == "web":
+    if host == "web":
         print('{"service":"intake-service","status":"ok"}')
     elif host == "zeiterfassung-app-1":
         print('{"status":"ok"}')

@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -98,6 +99,99 @@ function runHarness(scenario: string, root = mkdtempSync(path.join(tmpdir(), "ca
   return { root, sandbox, result };
 }
 
+function remotePilotBody() {
+  const source = readFileSync(helperPath, "utf8");
+  const marker = "<<'REMOTE_PILOT'\n";
+  const markerIndex = source.indexOf(marker);
+  const bodyStart = markerIndex + marker.length;
+  const bodyEnd = source.indexOf("\nREMOTE_PILOT", bodyStart);
+  return markerIndex >= 0 && bodyEnd > bodyStart ? source.slice(bodyStart, bodyEnd) : "";
+}
+
+function runForeignEdgeLockReproducer(failPlatformUnlink = false) {
+  const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-lock-pair-"));
+  const pilotRoot = path.join(root, "pilot");
+  const tmpRoot = path.join(root, "tmp");
+  const locksRoot = path.join(root, "locks");
+  mkdirSync(pilotRoot, { recursive: true });
+  mkdirSync(tmpRoot, { recursive: true });
+  mkdirSync(locksRoot, { recursive: true });
+  const platformLock = path.join(locksRoot, "catering-agents-platform.deploy-lock");
+  const edgeLock = path.join(locksRoot, "shared-edge.deploy-lock");
+  mkdirSync(edgeLock, { mode: 0o700 });
+  const foreignOwner = "owner_token=foreign-owner:foreign-run\nowner=foreign-owner\ntransaction_id=foreign-run\n";
+  const edgeOwner = path.join(edgeLock, "owner");
+  writeFileSync(edgeOwner, foreignOwner);
+  chmodSync(edgeOwner, 0o600);
+  const args = [
+    "phase3-independent-lock",
+    path.join(tmpRoot, "platform-stage"),
+    path.join(tmpRoot, "edge-stage"),
+    "0".repeat(64),
+    "1".repeat(64),
+    pilotRoot,
+    platformLock,
+    edgeLock,
+    path.join(pilotRoot, "platform-compose.phase3.yml"),
+    path.join(pilotRoot, "edge-compose.phase3.yml"),
+    path.join(pilotRoot, "phase3.activation"),
+    path.join(pilotRoot, "phase3.transaction-baseline.manifest"),
+    path.join(pilotRoot, "phase3.rollback-restore-proof.archive"),
+    path.join(pilotRoot, "phase3.rollback-completion.receipt"),
+    path.join(pilotRoot, "phase3.restore-evidence.record"),
+    path.join(pilotRoot, "phase3.network-adoption.journal"),
+    "0",
+    "https://egress.invalid/health",
+    path.join(root, "platform-runtime"),
+    path.join(root, "edge-runtime"),
+  ];
+  const sudoFunction = [
+    "set -euo pipefail",
+    "sudo() {",
+    `  if [[ "${failPlatformUnlink ? 1 : 0}" == 1 && "$1" == unlink && "$2" == *"catering-agents-platform.deploy-lock/owner" ]]; then return 1; fi`,
+    "  command \"$@\"",
+    "}",
+  ].join("\n");
+  const result = spawnSync("/bin/bash", ["-s", "--", ...args], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: { ...process.env, TMPDIR: tmpRoot },
+    input: `${sudoFunction}\n${remotePilotBody()}\n`,
+  });
+  return { result, platformLock, edgeLock, edgeOwner, foreignOwner };
+}
+
+function runSuccessReleaseBlock(failEdge = false) {
+  const helper = readFileSync(helperPath, "utf8");
+  const successComment = helper.indexOf("# A successful transaction may emit GO only");
+  const start = helper.indexOf('[[ -e "${platform_stage}" ]] && unlink "${platform_stage}"', successComment);
+  const end = helper.indexOf("\n# Rollback authority", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const prefix = [
+    "set -euo pipefail",
+    "platform_lock_mode=acquired",
+    "edge_lock_mode=acquired",
+    "platform_lock=/tmp/platform-lock-for-repro",
+    "edge_lock=/tmp/edge-lock-for-repro",
+    "platform_stage=/tmp/platform-stage-for-repro",
+    "edge_stage=/tmp/edge-stage-for-repro",
+    "owner=catering-agents-platform",
+    "transaction_id=phase3-order-repro",
+    "fail() { printf '%s\\n' 'NO-GO'; return 1; }",
+    "temp_cleanup() { :; }",
+    "phase3_lock_release() {",
+    "  printf 'release=%s\\n' \"$1\"",
+    `  if [[ "${failEdge ? 1 : 0}" == 1 && "$1" == "$edge_lock" ]]; then return 1; fi`,
+    "}",
+  ].join("\n");
+  return spawnSync("/bin/bash", ["-s"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: `${prefix}\n${helper.slice(start, end)}\n`,
+  });
+}
+
 describe("latest independent Phase-3 P1 review reproducers", () => {
   test("harness self-integrity survives two runs with the same backend root", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-harness-integrity-"));
@@ -128,6 +222,61 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(helper).toContain("docker network ls --no-trunc");
     expect(helper).not.toMatch(/\^sha256:/);
     expect(helper).toMatch(/canonical_network_id|network_id/);
+  });
+
+  test("RED: a foreign second lock failure releases only this run's first lock", () => {
+    const run = runForeignEdgeLockReproducer();
+    expect(run.result.status).not.toBe(0);
+    expect(existsSync(run.platformLock)).toBe(false);
+    expect(existsSync(run.edgeLock)).toBe(true);
+    expect(readFileSync(run.edgeOwner, "utf8")).toBe(run.foreignOwner);
+  }, 20_000);
+
+  test("RED: partial lock cleanup failure remains recovery-required", () => {
+    const run = runForeignEdgeLockReproducer(true);
+    expect(run.result.status).not.toBe(0);
+    expect(`${run.result.stdout}${run.result.stderr}`).toContain("RECOVERY_REQUIRED");
+    expect(existsSync(run.platformLock)).toBe(true);
+    expect(existsSync(run.edgeLock)).toBe(true);
+    expect(readFileSync(run.edgeOwner, "utf8")).toBe(run.foreignOwner);
+  }, 20_000);
+
+  test("RED: the fake provider is reachable only after compatibility detach", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-egress-topology-red-"));
+    initializeFakeState(root);
+    expect(fakeDocker(root, ["network", "create", "catering_private"]).status).toBe(0);
+    expect(fakeDocker(root, ["network", "connect", "catering_private", "platform-infra-production-1"]).status).toBe(0);
+    const beforeDetach = fakeDocker(root, ["exec", "platform-infra-production-1", "wget", "-qO-", "https://egress.invalid/health"]);
+    expect(beforeDetach.status).toBe(1);
+    expect(fakeDocker(root, ["network", "disconnect", "platform-infra_default", "platform-infra-production-1"]).status).toBe(0);
+    const afterDetach = fakeDocker(root, ["exec", "platform-infra-production-1", "wget", "-qO-", "https://egress.invalid/health"]);
+    expect(afterDetach.status).toBe(0);
+  });
+
+  test("RED: enabled provider egress is proven after compatibility detach", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-egress-order-red-"));
+    const run = runHarness("egress-enabled", root);
+    expect(run.result.status).toBe(0);
+    const log = textAt(path.join(root, "fake-docker.log")).split("\n");
+    const egressIndex = log.findIndex((line) => line.includes("exec platform-infra-production-1") && line.includes("egress.invalid"));
+    const detachIndex = log.findIndex((line) => line.includes("network disconnect platform-infra_default platform-infra-production-1"));
+    expect(egressIndex).toBeGreaterThan(detachIndex);
+  }, 120_000);
+
+  test("RED: successful lock release is edge-first and edge failure keeps platform protected", () => {
+    const success = runSuccessReleaseBlock();
+    expect(success.status).toBe(0);
+    expect(success.stdout.split("\n").filter(Boolean).slice(0, 2)).toEqual([
+      "release=/tmp/edge-lock-for-repro",
+      "release=/tmp/platform-lock-for-repro",
+    ]);
+    expect(success.stdout).toContain("PILOT: GO");
+
+    const failedEdgeRelease = runSuccessReleaseBlock(true);
+    expect(failedEdgeRelease.status).not.toBe(0);
+    expect(failedEdgeRelease.stdout).toContain("release=/tmp/edge-lock-for-repro");
+    expect(failedEdgeRelease.stdout).not.toContain("release=/tmp/platform-lock-for-repro");
+    expect(failedEdgeRelease.stdout).not.toContain("PILOT: GO");
   });
 
   test("RED: crash after ingress create leaves an adoptable durable journal and ordered resume", () => {

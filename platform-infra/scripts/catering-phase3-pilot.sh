@@ -1352,15 +1352,41 @@ phase3_lock_release() {
   sudo unlink "${owner_file}"
   sudo rmdir "${lock}"
 }
+phase3_lock_release_checked() {
+  local lock="$1" expected_token="$2" owner_file lock_real lock_expected_real lock_mode owner_mode
+  owner_file="${lock}/owner"
+  lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")" || return 1
+  lock_expected_real="$(sudo realpath -e -- "$(dirname "${lock}")" 2>/dev/null || sudo realpath "$(dirname "${lock}")")/$(basename "${lock}")" || return 1
+  lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")" || return 1
+  owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")" || return 1
+  [[ -d "${lock}" && ! -L "${lock}" && "${lock_real}" == "${lock_expected_real}" && "${lock_mode}" == 700 ]] || return 1
+  [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || return 1
+  sudo grep -Fxq "owner_token=${expected_token}" "${owner_file}" || return 1
+  sudo unlink "${owner_file}" || return 1
+  sudo rmdir "${lock}" || return 1
+  [[ ! -e "${lock}" && ! -L "${lock}" ]]
+}
 cleanup_temp_files() {
   local status=$?
   local uncertain_recovery=false
+  local recovery_required=false
   trap - ERR
   trap '' TERM INT HUP
   set +e
   case "${status}" in
     129|130|137|143) uncertain_recovery=true ;;
   esac
+  # A second lock that cannot be acquired leaves only this run's first lock
+  # owned. Release that lock only after the same owner proof used by normal
+  # release; any proof or unlink failure requires authenticated recovery.
+  if [[ "${status}" -ne 0 && "${candidate_written}" == false && "${platform_lock_mode}" == acquired && "${edge_lock_mode}" != acquired ]]; then
+    if phase3_lock_release_checked "${platform_lock}" "${owner}:${transaction_id}"; then
+      platform_lock_mode=absent
+      platform_lock_held=false
+    else
+      recovery_required=true
+    fi
+  fi
   # A signal/137 boundary provides no proof that the restore completed. Keep
   # the candidate evidence and owner locks for an exact, run-bound resume;
   # only an ordinary, observable error may enter the compensating rollback.
@@ -1368,7 +1394,9 @@ cleanup_temp_files() {
     rollback_started=true
     rollback_transaction || true
   fi
-  if [[ "${rollback_complete}" == true ]]; then
+  if [[ "${recovery_required}" == true ]]; then
+    printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
+  elif [[ "${rollback_complete}" == true ]]; then
     [[ -e "${platform_stage}" ]] && unlink "${platform_stage}"
     [[ -e "${edge_stage}" ]] && unlink "${edge_stage}"
     if [[ "${edge_lock_mode}" == acquired ]]; then phase3_lock_release "${edge_lock}" "${owner}:${transaction_id}" 2>/dev/null || true; fi
@@ -2295,6 +2323,33 @@ assert_private_reachability() {
   fi
 }
 
+probe_provider_egress() {
+  egress="not_exercised"
+  [[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${PLATFORM_PRODUCTION}")" == platform-infra ]] || fail
+  [[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${PLATFORM_PRODUCTION}")" == production ]] || fail
+  production_networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${PLATFORM_PRODUCTION}")" || fail
+  [[ "${production_networks}" == *'"catering_private"'* && "${production_networks}" != *'"platform-infra_default"'* ]] || fail
+  egress_provider="$(docker exec "${PLATFORM_PRODUCTION}" sh -c 'value="$(printenv CATERING_ENABLE_WEB_RECIPE_SEARCH 2>/dev/null || true)"; if [ -n "${value}" ]; then printf "%s" "${value}"; else printf "%s" "__absent__"; fi')" || fail
+  egress_provider="$(printf '%s' "${egress_provider}" | tr '[:upper:]' '[:lower:]')"
+  case "${egress_provider}" in
+    0|false)
+      egress="not_exercised"
+      ;;
+    1|true)
+      [[ "${egress_exercise}" == 1 && "${egress_url}" == https://* ]] || fail
+      egress_body="$(mktemp)"
+      register_temp "${egress_body}"
+      docker exec "${PLATFORM_PRODUCTION}" wget -qO- --timeout=10 "${egress_url}" >"${egress_body}" || fail
+      [[ -s "${egress_body}" ]] || fail
+      grep -Eiq '(^|[[:space:]])(http|status|ok|success|fl|ip)=' "${egress_body}" || fail
+      egress="exercised"
+      ;;
+    *)
+      fail
+      ;;
+  esac
+}
+
 assert_isolation_gate() {
   negative_edge_probes_all
 }
@@ -2340,9 +2395,11 @@ network_connect_checked() {
 }
 
 network_disconnect_checked() {
-  local network="$1" container="$2"
+  local network="$1" container="$2" members
   before_network_mutation
   docker network disconnect "${network}" "${container}"
+  members="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+  [[ "${members}" != *"${container}"* ]] || fail
   after_network_mutation
 }
 
@@ -2384,31 +2441,9 @@ validate_network_provenance catering_private private "${PLATFORM_POSTGRES},${PLA
 assert_private_reachability
 
 # Semantic smoke: body must contain both exact fields; credentials and headers
-# are never printed. Egress is evaluated from the active internal Catering
-# service, which is the only authoritative runtime for the provider flag.
+# are never printed. Egress is evaluated after the old compatibility path has
+# been detached and read back from the active internal Catering service.
 run_all_host_semantic_smokes
-egress="not_exercised"
-[[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${PLATFORM_PRODUCTION}")" == platform-infra ]] || fail
-[[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${PLATFORM_PRODUCTION}")" == production ]] || fail
-egress_provider="$(docker exec "${PLATFORM_PRODUCTION}" sh -c 'value="$(printenv CATERING_ENABLE_WEB_RECIPE_SEARCH 2>/dev/null || true)"; if [ -n "${value}" ]; then printf "%s" "${value}"; else printf "%s" "__absent__"; fi')" || fail
-egress_provider="$(printf '%s' "${egress_provider}" | tr '[:upper:]' '[:lower:]')"
-case "${egress_provider}" in
-  0|false)
-    egress="not_exercised"
-    ;;
-  1|true)
-    [[ "${egress_exercise}" == 1 && "${egress_url}" == https://* ]] || fail
-    egress_body="$(mktemp)"
-    register_temp "${egress_body}"
-    docker exec "${PLATFORM_PRODUCTION}" wget -qO- --timeout=10 "${egress_url}" >"${egress_body}" || fail
-    [[ -s "${egress_body}" ]] || fail
-    grep -Eiq '(^|[[:space:]])(http|status|ok|success|fl|ip)=' "${egress_body}" || fail
-    egress="exercised"
-    ;;
-  *)
-    fail
-    ;;
-esac
 
 network_disconnect_checked platform-infra_default "${PLATFORM_POSTGRES}"
 negative_edge_probe postgres
@@ -2417,6 +2452,7 @@ negative_edge_probe intake
 network_disconnect_checked platform-infra_default "${PLATFORM_OFFER}"
 negative_edge_probe offer
 network_disconnect_checked platform-infra_default "${PLATFORM_PRODUCTION}"
+probe_provider_egress
 negative_edge_probe production
 network_disconnect_checked platform-infra_default "${PLATFORM_EXPORTS}"
 negative_edge_probe exports
@@ -2449,11 +2485,12 @@ assert_isolation_gate
 # failure keeps the EXIT/ERR recovery gates armed and therefore cannot claim GO.
 [[ -e "${platform_stage}" ]] && unlink "${platform_stage}"
 [[ -e "${edge_stage}" ]] && unlink "${edge_stage}"
-if [[ "${platform_lock_mode}" == acquired ]]; then
-  phase3_lock_release "${platform_lock}" "${owner}:${transaction_id}"
-fi
 if [[ "${edge_lock_mode}" == acquired ]]; then
   phase3_lock_release "${edge_lock}" "${owner}:${transaction_id}"
+  [[ ! -e "${edge_lock}" && ! -L "${edge_lock}" ]] || fail
+fi
+if [[ "${platform_lock_mode}" == acquired ]]; then
+  phase3_lock_release "${platform_lock}" "${owner}:${transaction_id}"
 fi
 [[ "${platform_lock_mode}" != acquired || ! -e "${platform_lock}" ]] || fail
 [[ "${edge_lock_mode}" != acquired || ! -e "${edge_lock}" ]] || fail
