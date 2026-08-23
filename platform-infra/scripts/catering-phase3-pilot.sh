@@ -166,8 +166,9 @@ if [[ "${PILOT_COMMAND}" != run ]]; then
     "${PLATFORM_LOCK}" "${EDGE_LOCK}" "${ACTIVATION_MARKER}" "${BASELINE_MANIFEST}" \
     "${RESTORE_PROOF_ARCHIVE}" "${COMPLETION_RECEIPT}" "${RESTORE_EVIDENCE_RECORD}" \
     "${ADOPTION_JOURNAL}" \
-  "${PLATFORM_SOURCE}" "${EDGE_SOURCE}" \
-    "${EXPECTED_PLATFORM_SOURCE_SHA256}" "${EXPECTED_EDGE_SOURCE_SHA256}" "${PILOT_ROOT}" <<'REMOTE_CONTROL'
+    "${PLATFORM_SOURCE}" "${EDGE_SOURCE}" \
+    "${EXPECTED_PLATFORM_SOURCE_SHA256}" "${EXPECTED_EDGE_SOURCE_SHA256}" "${PILOT_ROOT}" \
+    "${EGRESS_EXERCISE}" <<'REMOTE_CONTROL'
 set -euo pipefail
 
 command_name="$1"
@@ -187,7 +188,9 @@ edge_source="${14}"
 expected_platform_source_sha256="${15}"
 expected_edge_source_sha256="${16}"
 pilot_root="${17}"
+egress_exercise="${18}"
 lock_token="${owner}:${run_id}"
+readonly PLATFORM_PRODUCTION="platform-infra-production-1"
 
 fail() { printf '%s\n' 'PILOT: NO-GO' >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || fail
@@ -260,7 +263,7 @@ validate_marker_file() {
     case " ${seen} " in *" ${key} "*) fail ;; esac
     seen="${seen} ${key}"
     case "${key}" in
-      schema|state|owner|transaction_id|transaction_manifest_path|transaction_manifest_sha256|manifest_sha256|marker_sha256|prior_marker_state|prior_marker_sha256|expected_platform_source_sha256|expected_edge_source_sha256|platform_override_sha256|edge_override_sha256|baseline_network_status|catering_ingress_id|catering_private_id|platform_source_progress|edge_source_progress|archive_sha256|receipt_sha256|egress|stage|foreign_invariants_sha256|smoke_readback_sha256|source_readback_sha256|adoption_count|adoption_proof) ;;
+      schema|state|owner|transaction_id|transaction_manifest_path|transaction_manifest_sha256|manifest_sha256|marker_sha256|prior_marker_state|prior_marker_sha256|expected_platform_source_sha256|expected_edge_source_sha256|platform_override_sha256|edge_override_sha256|baseline_network_status|catering_ingress_id|catering_private_id|platform_source_progress|edge_source_progress|archive_sha256|receipt_sha256|egress|egress_requested|egress_url_b64|stage|foreign_invariants_sha256|smoke_readback_sha256|source_readback_sha256|adoption_count|adoption_proof) ;;
       *) fail ;;
     esac
   done <"${file}"
@@ -268,7 +271,7 @@ validate_marker_file() {
     manifest_sha256 prior_marker_state prior_marker_sha256 expected_platform_source_sha256 \
     expected_edge_source_sha256 platform_override_sha256 edge_override_sha256 baseline_network_status \
     catering_ingress_id catering_private_id platform_source_progress edge_source_progress archive_sha256 \
-    receipt_sha256 egress stage foreign_invariants_sha256 smoke_readback_sha256 source_readback_sha256 \
+    receipt_sha256 egress egress_requested egress_url_b64 stage foreign_invariants_sha256 smoke_readback_sha256 source_readback_sha256 \
     adoption_count adoption_proof; do
     grep -Eq "^${required}=" "${file}" || fail
   done
@@ -376,22 +379,49 @@ acquire_lock() { phase3_lock_acquire "$@"; }
 phase3_lock_release() {
   local lock expected_token owner_file lock_real lock_expected_real lock_mode owner_mode
   lock="$1"; expected_token="$2"; owner_file="${lock}/owner"
-  lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")"
-  lock_expected_real="$(sudo realpath -e -- "$(dirname "${lock}")" 2>/dev/null || sudo realpath "$(dirname "${lock}")")/$(basename "${lock}")"
-  lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")"
-  owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")"
-  [[ -d "${lock}" && ! -L "${lock}" && "${lock_real}" == "${lock_expected_real}" && "${lock_mode}" == 700 ]] || fail
-  [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || fail
-  sudo grep -Fxq "owner_token=${expected_token}" "${owner_file}" || fail
-  sudo unlink "${owner_file}"
-  sudo rmdir "${lock}"
+  lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")" || return 1
+  lock_expected_real="$(sudo realpath -e -- "$(dirname "${lock}")" 2>/dev/null || sudo realpath "$(dirname "${lock}")")/$(basename "${lock}")" || return 1
+  lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")" || return 1
+  owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")" || return 1
+  [[ -d "${lock}" && ! -L "${lock}" && "${lock_real}" == "${lock_expected_real}" && "${lock_mode}" == 700 ]] || return 1
+  [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || return 1
+  sudo grep -Fxq "owner_token=${expected_token}" "${owner_file}" || return 1
+  sudo unlink "${owner_file}" || return 1
+  sudo rmdir "${lock}" || return 1
+  [[ ! -e "${lock}" && ! -L "${lock}" ]]
 }
 held_platform=absent
 held_edge=absent
 release_control_locks() {
+  local terminal="${1:-normal}"
   set +e
-  if [[ "${held_edge}" == acquired ]]; then phase3_lock_release "${edge_lock}" "${lock_token}"; fi
-  if [[ "${held_platform}" == acquired ]]; then phase3_lock_release "${platform_lock}" "${lock_token}"; fi
+  if [[ "${terminal}" == terminal ]]; then
+    if [[ "${held_edge}" == acquired || "${held_edge}" == reentered ]]; then
+      if phase3_lock_release "${edge_lock}" "${lock_token}"; then
+        held_edge=absent
+      else
+        printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
+        trap - EXIT
+        exit 1
+      fi
+    fi
+    if [[ "${held_platform}" == acquired || "${held_platform}" == reentered ]]; then
+      if phase3_lock_release "${platform_lock}" "${lock_token}"; then
+        held_platform=absent
+      else
+        printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
+        trap - EXIT
+        exit 1
+      fi
+    fi
+    return 0
+  fi
+  if [[ "${held_edge}" == acquired ]]; then
+    phase3_lock_release "${edge_lock}" "${lock_token}" || printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
+  fi
+  if [[ "${held_platform}" == acquired ]]; then
+    phase3_lock_release "${platform_lock}" "${lock_token}" || printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
+  fi
 }
 trap release_control_locks EXIT
 phase3_lock_acquire "${platform_lock}" held_platform
@@ -493,6 +523,7 @@ write_control_marker() {
   tmp="$(mktemp)"
   awk -v state="${state}" -v stage="${stage}" -v adoption="${adoption}" \
     -v proof="${proof}" -v smoke="${smoke_value}" -v source="${source_hash}" \
+    -v egress_value="${egress:-}" \
     -v journal_ingress_id="${journal_ingress_id}" -v journal_private_id="${journal_private_id}" \
     'BEGIN { OFS="=" }
      {
@@ -506,6 +537,7 @@ write_control_marker() {
        else if (key == "marker_sha256") value="absent"
        else if (key == "smoke_readback_sha256") value=smoke
        else if (key == "source_readback_sha256") value=source
+       else if (key == "egress" && egress_value != "") value=egress_value
        print key, value
      }' "${activation_marker}" >"${tmp}"
   marker_hash="$(sed -E 's/^marker_sha256=.*/marker_sha256=absent/' "${tmp}" | sha256sum | awk '{print $1}')"
@@ -644,6 +676,61 @@ resume_candidate_networks() {
   disconnect_resume_if_attached platform-infra_default platform-infra-web-1
   validate_final_isolation
   write_control_membership_journal
+}
+
+validate_resume_host_smokes() {
+  local evidence body label target
+  evidence="$(mktemp)"
+  trap '[[ -z "${evidence:-}" ]] || unlink "${evidence}" 2>/dev/null || true' RETURN
+  semantic_smoke
+  printf '%s:%s\n' catering "${smoke_readback_sha256}" >"${evidence}"
+  for label in zeiterfassung eventos; do
+    case "${label}" in
+      zeiterfassung) target=http://zeiterfassung-app-1:3040/healthz ;;
+      eventos) target=http://commcats-eventos-app:3045/health ;;
+      *) fail ;;
+    esac
+    body="$(mktemp)"
+    docker exec shared-edge-edge-1 wget -qO- "${target}" >"${body}" || fail
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${body}" || fail
+    printf '%s:%s\n' "${label}" "$(sha256sum "${body}" | awk '{print $1}')" >>"${evidence}"
+    unlink "${body}"
+  done
+  smoke_readback_sha256="$(sha256sum "${evidence}" | awk '{print $1}')"
+}
+
+validate_resume_egress() {
+  local requested marker_url_b64 provider_value provider_url egress_body production_networks
+  requested="$(field "${activation_marker}" egress_requested)"
+  marker_url_b64="$(field "${activation_marker}" egress_url_b64)"
+  [[ "${requested}" == "${egress_exercise}" ]] || fail
+  [[ "${requested}" == 0 || "${requested}" == 1 ]] || fail
+  [[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${PLATFORM_PRODUCTION}")" == platform-infra ]] || fail
+  [[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${PLATFORM_PRODUCTION}")" == production ]] || fail
+  production_networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${PLATFORM_PRODUCTION}")" || fail
+  [[ "${production_networks}" == *'"catering_private"'* && "${production_networks}" != *'"platform-infra_default"'* ]] || fail
+  provider_value="$(docker exec "${PLATFORM_PRODUCTION}" sh -c 'value="$(printenv CATERING_ENABLE_WEB_RECIPE_SEARCH 2>/dev/null || true)"; if [ -n "${value}" ]; then printf "%s" "${value}"; else printf "%s" "__absent__"; fi')" || fail
+  provider_value="$(printf '%s' "${provider_value}" | tr '[:upper:]' '[:lower:]')"
+  case "${requested}:${provider_value}" in
+    0:0|0:false)
+      [[ "${marker_url_b64}" == absent ]] || fail
+      egress=not_exercised
+      ;;
+    1:1|1:true)
+      [[ "${marker_url_b64}" != absent && "${marker_url_b64}" =~ ^[A-Za-z0-9+/]+={0,2}$ ]] || fail
+      provider_url="$(printf '%s' "${marker_url_b64}" | base64 -d 2>/dev/null)" || fail
+      [[ "${provider_url}" == https://* && "${provider_url}" != *$'\n'* && "${provider_url}" != *$'\r'* ]] || fail
+      egress_body="$(mktemp)"
+      trap '[[ -z "${egress_body:-}" ]] || unlink "${egress_body}" 2>/dev/null || true' RETURN
+      printf '%s\n' "${provider_url}" | docker exec -i "${PLATFORM_PRODUCTION}" sh -c 'IFS= read -r url && wget -qO- --timeout=10 "${url}"' >"${egress_body}" || fail
+      [[ -s "${egress_body}" ]] || fail
+      grep -Eiq '(^|[[:space:]])(http|status|ok|success|fl|ip)=' "${egress_body}" || fail
+      egress=exercised
+      ;;
+    *)
+      fail
+      ;;
+  esac
 }
 
 validate_receipt() {
@@ -832,7 +919,12 @@ validate_final_isolation() {
       production) port=3103 ;;
       exports) port=3104 ;;
     esac
-    docker exec shared-edge-edge-1 sh -c "! wget -qO- --timeout=2 http://${service}:${port}/health" >/dev/null 2>&1 || fail
+    if [[ "${service}" == postgres ]]; then
+      docker exec shared-edge-edge-1 sh -c 'command -v nc >/dev/null 2>&1' >/dev/null 2>&1 || fail
+      docker exec shared-edge-edge-1 sh -c '! nc -z -w 2 postgres 5432' >/dev/null 2>&1 || fail
+    else
+      docker exec shared-edge-edge-1 sh -c "! wget -qO- --timeout=2 http://${service}:${port}/health" >/dev/null 2>&1 || fail
+    fi
   done
 }
 
@@ -873,7 +965,7 @@ validate_resume_evidence() {
     validate_network_provenance catering_private private "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)"
     validate_target_members catering_ingress "platform-infra-web-1,shared-edge-edge-1"
     validate_target_members catering_private "platform-infra-web-1,platform-infra-postgres-1,platform-infra-intake-1,platform-infra-offer-1,platform-infra-production-1,platform-infra-exports-1"
-    validate_final_isolation
+    [[ "${state}" != active ]] || validate_final_isolation
   elif [[ "${state}" == candidate ]]; then
     [[ "$(field "${adoption_journal}" adoption_count)" == 1 || "$(field "${adoption_journal}" adoption_count)" == 2 ]] || fail
   else
@@ -985,24 +1077,28 @@ if [[ "${command_name}" == resume ]]; then
       validate_resume_evidence candidate
       if [[ "$(field "${activation_marker}" catering_ingress_id)" != "$(field "${adoption_journal}" catering_ingress_id)" || "$(field "${activation_marker}" catering_private_id)" != "$(field "${adoption_journal}" catering_private_id)" ]]; then
         adopt_candidate_networks
-        resume_candidate_networks
       fi
-      semantic_smoke
+      resume_candidate_networks
+      validate_resume_host_smokes
+      validate_resume_egress
       adoption_proof="resume:${run_id}:$(field "${activation_marker}" marker_sha256)"
       write_control_marker active 1 "${adoption_proof}"
       ;;
     active)
       validate_resume_evidence active
-      semantic_smoke
+      validate_resume_host_smokes
+      validate_resume_egress
       write_control_marker active 1 "$(field "${activation_marker}" adoption_proof)"
       ;;
     rolling_back)
       finalize_rolling_back_resume
+      release_control_locks terminal
       printf '%s\n' 'PILOT: ROLLED BACK'
       exit 0
       ;;
     *) fail ;;
   esac
+  release_control_locks terminal
   printf '%s\n' 'PILOT: GO'
 elif [[ "${command_name}" == rollback ]]; then
   write_control_marker rolling_back 0 not_adopted
@@ -1974,6 +2070,8 @@ write_marker() {
     "source_readback_sha256=${source_readback_sha256}" \
     "adoption_count=${adoption_count}" \
     "adoption_proof=${adoption_proof}" \
+    "egress_requested=${egress_exercise}" \
+    "egress_url_b64=$(if [[ "${egress_exercise}" == 1 ]]; then printf '%s' "${egress_url}" | base64 | tr -d '\n'; else printf absent; fi)" \
     "archive_sha256=$(if [[ -f "${restore_proof_archive}" ]]; then sudo sha256sum "${restore_proof_archive}" | awk '{print $1}'; else printf pending; fi)" \
     "receipt_sha256=$(if [[ -f "${completion_receipt}" ]]; then sudo sha256sum "${completion_receipt}" | awk '{print $1}'; else printf pending; fi)" \
     "egress=${egress:-not_exercised}" \

@@ -99,6 +99,33 @@ function runHarness(scenario: string, root = mkdtempSync(path.join(tmpdir(), "ca
   return { root, sandbox, result };
 }
 
+function runExistingResume(root: string, sandbox: ReturnType<typeof commandSandbox>) {
+  const result = spawnSync("/bin/bash", [helperPath, "--resume"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${path.join(root, "bin")}:${sandbox.bin}:${process.env.PATH ?? ""}`,
+      CATERING_PHASE3_TEST_MODE: "1",
+      CATERING_PHASE3_FAKE_HOST_ROOT: root,
+      CATERING_PHASE3_SANDBOX_LOG: sandbox.log,
+      CATERING_PHASE3_TRANSACTION_ID: "phase3-harness",
+      CATERING_PHASE3_RUN_ID: "phase3-harness",
+      CATERING_PHASE3_REMOTE_ROOT: root,
+      CATERING_PHASE3_PLATFORM_LOCK: path.join(root, "locks/catering-agents-platform.deploy-lock"),
+      CATERING_PHASE3_EDGE_LOCK: path.join(root, "locks/shared-edge.deploy-lock"),
+      CATERING_PHASE3_PLATFORM_DIR: path.join(root, "platform-infra"),
+      CATERING_PHASE3_EDGE_DIR: path.join(root, "edge-infra"),
+      CATERING_PHASE3_REMOTE_TMP_ROOT: path.join(root, "tmp"),
+      CATERING_PHASE3_EGRESS_EXERCISE: "1",
+      CATERING_PHASE3_EGRESS_URL: "https://egress.invalid/health",
+      DEPLOY_HOST: "phase3.invalid",
+      DEPLOY_USER: "harness",
+    },
+  });
+  return { root, sandbox, result };
+}
+
 function remotePilotBody() {
   const source = readFileSync(helperPath, "utf8");
   const marker = "<<'REMOTE_PILOT'\n";
@@ -106,6 +133,40 @@ function remotePilotBody() {
   const bodyStart = markerIndex + marker.length;
   const bodyEnd = source.indexOf("\nREMOTE_PILOT", bodyStart);
   return markerIndex >= 0 && bodyEnd > bodyStart ? source.slice(bodyStart, bodyEnd) : "";
+}
+
+function remoteControlBody() {
+  const source = readFileSync(helperPath, "utf8");
+  const marker = "<<'REMOTE_CONTROL'\n";
+  const markerIndex = source.indexOf(marker);
+  const bodyStart = markerIndex + marker.length;
+  const bodyEnd = source.indexOf("\nREMOTE_CONTROL", bodyStart);
+  return markerIndex >= 0 && bodyEnd > bodyStart ? source.slice(bodyStart, bodyEnd) : "";
+}
+
+function runReenteredControlRelease(failEdge = false) {
+  const body = remoteControlBody();
+  const start = body.indexOf("release_control_locks()");
+  const end = body.indexOf("\ntrap release_control_locks EXIT", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const prefix = [
+    "set -euo pipefail",
+    "held_edge=reentered",
+    "held_platform=reentered",
+    "edge_lock=/tmp/reentered-edge-lock",
+    "platform_lock=/tmp/reentered-platform-lock",
+    "lock_token=phase3-owner:phase3-run",
+    "phase3_lock_release() {",
+    "  printf 'release=%s\\n' \"$1\"",
+    `  if [[ "${failEdge ? 1 : 0}" == 1 && "$1" == "$edge_lock" ]]; then return 1; fi`,
+    "}",
+  ].join("\n");
+  return spawnSync("/bin/bash", ["-s"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: `${prefix}\n${body.slice(start, end)}\nrelease_control_locks terminal\n`,
+  });
 }
 
 function runForeignEdgeLockReproducer(failPlatformUnlink = false) {
@@ -241,6 +302,53 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(readFileSync(run.edgeOwner, "utf8")).toBe(run.foreignOwner);
   }, 20_000);
 
+  test("RED: terminal recovery releases authenticated reentered locks edge-first", () => {
+    const success = runReenteredControlRelease();
+    expect(success.status).toBe(0);
+    expect(success.stdout.split("\n").filter(Boolean)).toEqual([
+      "release=/tmp/reentered-edge-lock",
+      "release=/tmp/reentered-platform-lock",
+    ]);
+
+    const failedEdge = runReenteredControlRelease(true);
+    expect(failedEdge.status).not.toBe(0);
+    expect(failedEdge.stdout).toContain("release=/tmp/reentered-edge-lock");
+    expect(failedEdge.stdout).not.toContain("release=/tmp/reentered-platform-lock");
+    expect(`${failedEdge.stdout}${failedEdge.stderr}`).toContain("RECOVERY_REQUIRED");
+  });
+
+  test("RED: resume replays bound provider egress and every host smoke after cutover", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-resume-host-gates-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+    const resumed = runHarness("resume-active", root);
+    expect(resumed.result.status).toBe(0);
+    expect(`${resumed.result.stdout}${resumed.result.stderr}`).toContain("PILOT: GO");
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(addedLog).toContain("exec platform-infra-production-1");
+    expect(addedLog).toContain("zeiterfassung-app-1:3040");
+    expect(addedLog).toContain("commcats-eventos-app:3045");
+    expect(addedLog).not.toContain("https://egress.invalid/health");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("egress")).toBe("exercised");
+  }, 120_000);
+
+  test.each(["egress-fail", "foreign-smoke-fail"])("RED: resume fails closed when %s invalidates terminal evidence", (fault) => {
+    const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-resume-${fault}-red-`));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as { fault: string; fault_triggered: boolean };
+    state.fault = fault;
+    state.fault_triggered = false;
+    writeFileSync(statePath, JSON.stringify(state));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    expect(resumed.result.status).not.toBe(0);
+    expect(`${resumed.result.stdout}${resumed.result.stderr}`).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
   test("RED: the fake provider is reachable only after compatibility detach", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-egress-topology-red-"));
     initializeFakeState(root);
@@ -251,6 +359,26 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(fakeDocker(root, ["network", "disconnect", "platform-infra_default", "platform-infra-production-1"]).status).toBe(0);
     const afterDetach = fakeDocker(root, ["exec", "platform-infra-production-1", "wget", "-qO-", "https://egress.invalid/health"]);
     expect(afterDetach.status).toBe(0);
+  });
+
+  test("RED: PostgreSQL isolation uses an available protocol-independent TCP probe", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-postgres-tcp-red-"));
+    initializeFakeState(root);
+    const reachable = fakeDocker(root, ["exec", "shared-edge-edge-1", "sh", "-c", "nc -z -w 2 postgres 5432"]);
+    expect(reachable.status).toBe(0);
+    expect(fakeDocker(root, ["network", "disconnect", "platform-infra_default", "platform-infra-postgres-1"]).status).toBe(0);
+    const blocked = fakeDocker(root, ["exec", "shared-edge-edge-1", "sh", "-c", "nc -z -w 2 postgres 5432"]);
+    expect(blocked.status).toBe(1);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as { fault: string; fault_triggered: boolean };
+    state.fault = "nc-missing";
+    state.fault_triggered = false;
+    writeFileSync(statePath, JSON.stringify(state));
+    const missingTool = fakeDocker(root, ["exec", "shared-edge-edge-1", "sh", "-c", "command -v nc >/dev/null 2>&1"]);
+    expect(missingTool.status).not.toBe(0);
+
+    expect(textAt(helperPath)).toContain("nc -z -w 2 postgres 5432");
   });
 
   test("RED: enabled provider egress is proven after compatibility detach", () => {

@@ -351,10 +351,14 @@ def do_network(state: dict[str, Any], args: list[str]) -> int:
 
 
 def do_exec(state: dict[str, Any], args: list[str]) -> int:
+    interactive = bool(args and args[0] == "-i")
+    if interactive:
+        args = args[1:]
     if len(args) < 2:
         return 1
     caller = args[0]
     command = " ".join(args[1:])
+    stdin_payload = sys.stdin.read() if interactive else ""
     if "CATERING_ENABLE_WEB_RECIPE_SEARCH" in command:
         try:
             _, item = resolve_container(state, caller)
@@ -363,13 +367,23 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
         value = item.get("config", {}).get("env", {}).get("CATERING_ENABLE_WEB_RECIPE_SEARCH")
         print(value if value is not None else "__absent__")
         return 0
+    if re.search(r"\bcommand\s+-v\s+nc\b", command):
+        return 1 if state.get("fault") == "nc-missing" else 0
     urls = re.findall(r"https?://[^\s'\"]+", command)
-    target = urls[-1] if urls else ""
+    target = stdin_payload.strip().splitlines()[0] if stdin_payload.strip() else (urls[-1] if urls else "")
     parsed = urlparse(target)
     host = parsed.hostname or ""
-    negative = "! wget" in command or command.startswith("!")
+    negative = bool(re.search(r"(?:^|[;&|\s])!\s*(?:wget|nc|netcat)", command))
     if state.get("fault") == "semantic-smoke-fail" and host == "web":
         return 1
+    if state.get("fault") == "foreign-smoke-fail" and host in {"zeiterfassung-app-1", "commcats-eventos-app"} and not negative:
+        return 1
+    tcp_tail = re.search(r"\b(?:nc|netcat)\b(?P<rest>.*)$", command)
+    tcp_tokens = tcp_tail.group("rest").strip().split() if tcp_tail else []
+    if len(tcp_tokens) >= 2 and re.fullmatch(r"[A-Za-z0-9._-]+", tcp_tokens[-2]) and re.fullmatch(r"[0-9]{1,5}", tcp_tokens[-1]):
+        tcp_host = tcp_tokens[-2]
+        is_reachable = reachable(state, caller, tcp_host)
+        return 0 if (is_reachable and not negative) or (negative and not is_reachable) else 1
     if host == "egress.invalid":
         try:
             caller_networks = set(resolve_container(state, caller)[1]["networks"])
