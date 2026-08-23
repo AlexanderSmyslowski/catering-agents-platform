@@ -148,11 +148,13 @@ case "${EGRESS_EXERCISE}" in
   0|1) ;;
   *) no_go ;;
 esac
-# Phase 3 is an isolation pilot, so a successful semantic egress probe is part
-# of the activation proof. A caller cannot silently turn the gate into
-# not_exercised; the URL is an explicit, non-secret production input.
-[[ "${EGRESS_EXERCISE}" == 1 ]] || no_go
-[[ "${EGRESS_URL}" == https://* ]] || no_go
+# The enabled provider path must carry an explicit HTTPS probe URL. When the
+# active Catering service reports the provider disabled, the remote transaction
+# records not_exercised instead; an empty URL is therefore valid only for that
+# disabled, read-back-proven state.
+if [[ "${EGRESS_EXERCISE}" == 1 ]]; then
+  [[ "${EGRESS_URL}" == https://* ]] || no_go
+fi
 
 if [[ "${PILOT_COMMAND}" != run ]]; then
   # resume state/lock validation is mandatory before an explicit rollback can
@@ -2382,16 +2384,31 @@ validate_network_provenance catering_private private "${PLATFORM_POSTGRES},${PLA
 assert_private_reachability
 
 # Semantic smoke: body must contain both exact fields; credentials and headers
-# are never printed. Egress is mandatory and must be semantically successful.
+# are never printed. Egress is evaluated from the active internal Catering
+# service, which is the only authoritative runtime for the provider flag.
 run_all_host_semantic_smokes
 egress="not_exercised"
-[[ "${egress_exercise}" == 1 && "${egress_url}" == https://* ]] || fail
-egress_body="$(mktemp)"
-register_temp "${egress_body}"
-docker exec "${SHARED_EDGE}" wget -qO- --timeout=10 "${egress_url}" >"${egress_body}" || fail
-[[ -s "${egress_body}" ]] || fail
-grep -Eiq '(^|[[:space:]])(http|status|ok|success|fl|ip)=' "${egress_body}" || fail
-egress="exercised"
+[[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${PLATFORM_PRODUCTION}")" == platform-infra ]] || fail
+[[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${PLATFORM_PRODUCTION}")" == production ]] || fail
+egress_provider="$(docker exec "${PLATFORM_PRODUCTION}" sh -c 'value="$(printenv CATERING_ENABLE_WEB_RECIPE_SEARCH 2>/dev/null || true)"; if [ -n "${value}" ]; then printf "%s" "${value}"; else printf "%s" "__absent__"; fi')" || fail
+egress_provider="$(printf '%s' "${egress_provider}" | tr '[:upper:]' '[:lower:]')"
+case "${egress_provider}" in
+  0|false)
+    egress="not_exercised"
+    ;;
+  1|true)
+    [[ "${egress_exercise}" == 1 && "${egress_url}" == https://* ]] || fail
+    egress_body="$(mktemp)"
+    register_temp "${egress_body}"
+    docker exec "${PLATFORM_PRODUCTION}" wget -qO- --timeout=10 "${egress_url}" >"${egress_body}" || fail
+    [[ -s "${egress_body}" ]] || fail
+    grep -Eiq '(^|[[:space:]])(http|status|ok|success|fl|ip)=' "${egress_body}" || fail
+    egress="exercised"
+    ;;
+  *)
+    fail
+    ;;
+esac
 
 network_disconnect_checked platform-infra_default "${PLATFORM_POSTGRES}"
 negative_edge_probe postgres

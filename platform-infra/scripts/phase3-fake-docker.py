@@ -54,11 +54,13 @@ def container(
     networks: dict[str, list[str]],
     ports: dict[str, list[dict[str, str]]] | None = None,
     started_at: str = "2026-08-22T10:00:00Z",
+    environment: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": stable_id("container", name),
         "image": image,
         "labels": {"com.docker.compose.project": project, "com.docker.compose.service": service},
+        "config": {"env": environment or {}},
         "mounts": [],
         "networks": {key: {"aliases": aliases} for key, aliases in networks.items()},
         "ports": ports or {},
@@ -90,6 +92,14 @@ def baseline_state() -> dict[str, Any]:
         "com.catering.phase": "baseline",
         "com.catering.transaction": "absent",
     }
+    production_env_value = os.environ.get("CATERING_PHASE3_FAKE_PRODUCTION_ENV", "0")
+    production_environment = (
+        {}
+        if production_env_value == "__absent__"
+        else {"CATERING_ENABLE_WEB_RECIPE_SEARCH": production_env_value}
+    )
+    production_project = os.environ.get("CATERING_PHASE3_FAKE_PRODUCTION_PROJECT", "platform-infra")
+    production_service = os.environ.get("CATERING_PHASE3_FAKE_PRODUCTION_SERVICE", "production")
     containers = {
         "zeiterfassung-app-1": container("zeiterfassung-app-1", "zeiterfassung-app:0.4.141-75d58ec8e817", "zeiterfassung", "app", {"zeiterfassung_default": ["app", "zeiterfassung-app-1"]}),
         "commcats-eventos-app": container("commcats-eventos-app", "commcats-eventos-app", "commcats-eventos", "app", {"commcats-eventos_default": ["app", "commcats-eventos-app"], "platform-infra_default": ["app", "commcats-eventos-app"]}, started_at="2026-08-22T10:00:01Z"),
@@ -101,7 +111,7 @@ def baseline_state() -> dict[str, Any]:
         "platform-infra-postgres-1": container("platform-infra-postgres-1", "catering-pg", "platform-infra", "postgres", {"platform-infra_default": ["postgres"]}, started_at="2026-08-22T10:00:07Z"),
         "platform-infra-intake-1": container("platform-infra-intake-1", "catering-intake", "platform-infra", "intake", {"platform-infra_default": ["intake"]}, started_at="2026-08-22T10:00:08Z"),
         "platform-infra-offer-1": container("platform-infra-offer-1", "catering-offer", "platform-infra", "offer", {"platform-infra_default": ["offer"]}, started_at="2026-08-22T10:00:09Z"),
-        "platform-infra-production-1": container("platform-infra-production-1", "catering-production", "platform-infra", "production", {"platform-infra_default": ["production"]}, started_at="2026-08-22T10:00:10Z"),
+        "platform-infra-production-1": container("platform-infra-production-1", "catering-production", production_project, production_service, {"platform-infra_default": ["production"]}, started_at="2026-08-22T10:00:10Z", environment=production_environment),
         "platform-infra-exports-1": container("platform-infra-exports-1", "catering-exports", "platform-infra", "exports", {"platform-infra_default": ["exports"]}, started_at="2026-08-22T10:00:11Z"),
         "shared-edge-edge-1": container("shared-edge-edge-1", "caddy:2-alpine", "shared-edge", "edge", {"platform-infra_default": ["edge", "shared-edge-edge-1"], "zeiterfassung_default": ["edge", "shared-edge-edge-1"]}, {"443/tcp": [{"HostIp": "0.0.0.0", "HostPort": "443"}], "80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "80"}]}, started_at="2026-08-22T10:00:12Z"),
     }
@@ -242,6 +252,8 @@ def render_container(state: dict[str, Any], value: str, fmt: str) -> str:
         return json_text(item["ports"])
     if fmt == "{{json .Mounts}}":
         return json_text(item["mounts"])
+    if fmt == "{{json .Config.Env}}":
+        return json_text(item.get("config", {}).get("env", {}))
     if fmt == "{{range .Config.Secrets}}{{.Name}};{{end}}":
         return ""
     label_match = re.fullmatch(r'\{\{index \.Config\.Labels "([^"]+)"\}\}', fmt)
@@ -343,6 +355,14 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
         return 1
     caller = args[0]
     command = " ".join(args[1:])
+    if "CATERING_ENABLE_WEB_RECIPE_SEARCH" in command:
+        try:
+            _, item = resolve_container(state, caller)
+        except (KeyError, ValueError):
+            return 1
+        value = item.get("config", {}).get("env", {}).get("CATERING_ENABLE_WEB_RECIPE_SEARCH")
+        print(value if value is not None else "__absent__")
+        return 0
     urls = re.findall(r"https?://[^\s'\"]+", command)
     target = urls[-1] if urls else ""
     parsed = urlparse(target)

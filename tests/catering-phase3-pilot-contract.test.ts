@@ -2,9 +2,11 @@ import {
   chmodSync,
   existsSync,
   lstatSync,
+  linkSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -16,6 +18,7 @@ import { describe, expect, test } from "vitest";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const workflowPath = path.join(repoRoot, ".github/workflows/catering-phase3-isolation-pilot.yml");
+const platformBaseComposePath = path.join(repoRoot, "platform-infra/docker-compose.yml");
 const platformComposePath = path.join(repoRoot, "platform-infra/docker-compose.phase3-catering-pilot.yml");
 const edgeComposePath = path.join(repoRoot, "edge-infra/docker-compose.phase3-catering-pilot.yml");
 const helperPath = path.join(repoRoot, "platform-infra/scripts/catering-phase3-pilot.sh");
@@ -93,6 +96,85 @@ function uncommented(source: string) {
   return source.replace(/^\s*#(?!\!).*$/gm, "");
 }
 
+function workflowHeredoc(source: string, label: string) {
+  const marker = `<<'${label}'`;
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) return "";
+  const bodyStart = source.indexOf("\n", markerIndex) + 1;
+  const terminator = `\n          ${label}`;
+  const bodyEnd = source.indexOf(terminator, bodyStart);
+  if (bodyEnd < 0) return "";
+  const body = source.slice(bodyStart, bodyEnd);
+  const firstCodeLine = body.split("\n").find((line) => line.trim().length > 0) ?? "";
+  const indentation = firstCodeLine.match(/^\s*/)?.[0].length ?? 0;
+  return body
+    .split("\n")
+    .map((line) => line.slice(Math.min(indentation, line.length)))
+    .join("\n");
+}
+
+const localSudoScript = [
+  "#!/bin/sh",
+  "if [ \"$1\" = stat ] && [ \"$2\" = -c ]; then",
+  "  case \"$3\" in",
+  "    '%a') exec stat -f '%Lp' \"$4\" ;;",
+  "    '%a %u %g') exec stat -f '%Lp %u %g' \"$4\" ;;",
+  "    '%a %u %g %i %h') exec stat -f '%Lp %u %g %i %l' \"$4\" ;;",
+  "    *) exit 2 ;;",
+  "  esac",
+  "fi",
+  "exec \"$@\"",
+  "",
+].join("\n");
+
+const localStatScript = [
+  "#!/bin/sh",
+  "if [ \"$1\" = -c ]; then",
+  "  case \"$2\" in",
+  "    '%a %u %g') exec /usr/bin/stat -f '%Lp %u %g' \"$3\" ;;",
+  "    *) exit 2 ;;",
+  "  esac",
+  "fi",
+  "exec /usr/bin/stat \"$@\"",
+  "",
+].join("\n");
+
+function runWorkflowHeredoc(
+  label: string,
+  args: string[],
+  sudoScript = localSudoScript,
+  sharedEdgeRoot?: string,
+) {
+  const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-workflow-shell-"));
+  const bin = path.join(root, "bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(path.join(bin, "sudo"), sudoScript, { mode: 0o700 });
+  chmodSync(path.join(bin, "sudo"), 0o700);
+  writeFileSync(path.join(bin, "stat"), localStatScript, { mode: 0o700 });
+  chmodSync(path.join(bin, "stat"), 0o700);
+  const rawBody = workflowHeredoc(uncommented(sourceAt(callerWorkflowPaths[2]!)), label);
+  const body = sharedEdgeRoot === undefined ? rawBody : rawBody.replaceAll("/opt/shared-edge", sharedEdgeRoot);
+  return {
+    root,
+    result: spawnSync("/bin/bash", ["-s", "--", ...args], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      input: body,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}` },
+    }),
+  };
+}
+
+function runBootstrapHeredoc(
+  label: string,
+  ownerToken: string,
+  sharedEdgeRoot: string,
+  extraArgs: string[] = [],
+  sudoScript?: string,
+) {
+  return runWorkflowHeredoc(label, [ownerToken, ...extraArgs], sudoScript, sharedEdgeRoot);
+}
+
 function requireHelper() {
   expect(existsSync(helperPath)).toBe(true);
   return uncommented(sourceAt(helperPath));
@@ -166,7 +248,7 @@ function runHarness(scenario: string, fakeHostRoot = mkdtempSync(path.join(tmpdi
 }
 
 function runWithBash32(scriptPath: string, env: Record<string, string>) {
-  const childEnv = {
+  const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ...env,
     PATH: env.PATH ?? process.env.PATH ?? "/usr/bin:/bin",
@@ -404,6 +486,368 @@ describe("Phase-3 Catering isolation pilot contract", () => {
       expect(caller).toMatch(/phase3_recheck/);
       expect(caller).toMatch(/owner[^\n]{0,100}(?:token|run|transaction)/i);
     }
+  });
+
+  test("executes pre-deploy lock cleanup only for an untouched, exact owner stage", () => {
+    const workflow = uncommented(sourceAt(callerWorkflowPaths[2]!));
+    const cleanup = workflowHeredoc(workflow, "REMOTE_PHASE3_PREDEPLOY_RELEASE");
+    expect(cleanup).not.toBe("");
+    expect(workflow).toContain("id: phase3_guard");
+    expect(workflow).toContain("id: bootstrap_edge_env");
+    expect(workflow).toContain("id: deploy_edge");
+    expect(workflow).toMatch(/phase3-lock-predeploy-failure-release[\s\S]{0,500}PHASE3_BOOTSTRAP_OUTCOME: \$\{\{ steps\.bootstrap_edge_env\.outcome \}\}/);
+    expect(workflow).toMatch(/failure\(\)[^\n]*steps\.phase3_guard\.outcome == ['\"]success['\"]/);
+    expect(workflow).toMatch(/deploy_edge\.outcome == ['\"]skipped['\"]/);
+    expect(workflow).not.toMatch(/bootstrap_edge_env\.outcome == ['\"]skipped['\"]/);
+
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-predeploy-locks-"));
+    const platformLock = path.join(root, "platform.lock");
+    const edgeLock = path.join(root, "edge.lock");
+    const marker = path.join(root, "phase3.activation");
+    const manifest = path.join(root, "phase3.transaction-baseline.manifest");
+    const archive = path.join(root, "phase3.rollback-restore-proof.archive");
+    const receipt = path.join(root, "phase3.rollback-completion.receipt");
+    const evidence = path.join(root, "phase3.restore-evidence.record");
+    const journal = path.join(root, "phase3.network-adoption.journal");
+    const bootstrapRoot = path.join(root, "shared-edge");
+    mkdirSync(bootstrapRoot, { mode: 0o700 });
+    const token = "phase3-normal-test-run";
+    for (const lock of [platformLock, edgeLock]) {
+      mkdirSync(lock, { mode: 0o700 });
+      writeFileSync(path.join(lock, "owner"), `owner_token=${token}\nowner=normal-caller-phase3-guard\n`, { mode: 0o600 });
+      chmodSync(path.join(lock, "owner"), 0o600);
+    }
+    const released = runWorkflowHeredoc("REMOTE_PHASE3_PREDEPLOY_RELEASE", [
+      token, platformLock, edgeLock, marker, manifest, archive, receipt, evidence, journal,
+      "skipped", bootstrapRoot,
+    ]);
+    expect(released.result.status).toBe(0);
+    expect(existsSync(platformLock)).toBe(false);
+    expect(existsSync(edgeLock)).toBe(false);
+
+    const guardedRoot = mkdtempSync(path.join(tmpdir(), "catering-phase3-predeploy-stage-"));
+    const guardedPlatformLock = path.join(guardedRoot, "platform.lock");
+    const guardedEdgeLock = path.join(guardedRoot, "edge.lock");
+    const guardedMarker = path.join(guardedRoot, "phase3.activation");
+    const guardedBootstrapRoot = path.join(guardedRoot, "shared-edge");
+    mkdirSync(guardedBootstrapRoot, { mode: 0o700 });
+    for (const lock of [guardedPlatformLock, guardedEdgeLock]) {
+      mkdirSync(lock, { mode: 0o700 });
+      writeFileSync(path.join(lock, "owner"), `owner_token=${token}\nowner=normal-caller-phase3-guard\n`, { mode: 0o600 });
+      chmodSync(path.join(lock, "owner"), 0o600);
+    }
+    writeFileSync(guardedMarker, "state=candidate\n");
+    const untouched = runWorkflowHeredoc("REMOTE_PHASE3_PREDEPLOY_RELEASE", [
+      token,
+      guardedPlatformLock,
+      guardedEdgeLock,
+      guardedMarker,
+      path.join(guardedRoot, "manifest"),
+      path.join(guardedRoot, "archive"),
+      path.join(guardedRoot, "receipt"),
+      path.join(guardedRoot, "evidence"),
+      path.join(guardedRoot, "journal"),
+      "skipped", guardedBootstrapRoot,
+    ]);
+    expect(untouched.result.status).not.toBe(0);
+    expect(existsSync(guardedPlatformLock)).toBe(true);
+    expect(existsSync(guardedEdgeLock)).toBe(true);
+
+    for (const failureStage of ["validation", "bootstrap"]) {
+      const stageRoot = mkdtempSync(path.join(tmpdir(), `catering-phase3-predeploy-${failureStage}-`));
+      const stagePlatformLock = path.join(stageRoot, "platform.lock");
+      const stageEdgeLock = path.join(stageRoot, "edge.lock");
+      const stageBootstrapRoot = path.join(stageRoot, "shared-edge");
+      mkdirSync(stageBootstrapRoot, { mode: 0o700 });
+      for (const lock of [stagePlatformLock, stageEdgeLock]) {
+        mkdirSync(lock, { mode: 0o700 });
+        writeFileSync(path.join(lock, "owner"), `owner_token=${token}\nowner=normal-caller-phase3-guard\n`, { mode: 0o600 });
+        chmodSync(path.join(lock, "owner"), 0o600);
+      }
+      if (failureStage === "bootstrap") {
+        writeFileSync(
+          path.join(stageBootstrapRoot, ".env.bootstrap-state"),
+          `schema=1\nowner_token=${token}\nstate=not_started\nstage=bootstrap\n`,
+          { mode: 0o600 },
+        );
+      }
+      const preDeployFailure = runWorkflowHeredoc("REMOTE_PHASE3_PREDEPLOY_RELEASE", [
+        token,
+        stagePlatformLock,
+        stageEdgeLock,
+        path.join(stageRoot, "phase3.activation"),
+        path.join(stageRoot, "manifest"),
+        path.join(stageRoot, "archive"),
+        path.join(stageRoot, "receipt"),
+        path.join(stageRoot, "evidence"),
+        path.join(stageRoot, "journal"),
+        failureStage === "validation" ? "skipped" : "failure",
+        stageBootstrapRoot,
+      ]);
+      expect(preDeployFailure.result.status, failureStage).toBe(0);
+      expect(existsSync(stagePlatformLock), failureStage).toBe(false);
+      expect(existsSync(stageEdgeLock), failureStage).toBe(false);
+    }
+
+    for (const mutation of ["env", "pending"]) {
+      const mutatedRoot = mkdtempSync(path.join(tmpdir(), `catering-phase3-predeploy-mutated-${mutation}-`));
+      const mutatedPlatformLock = path.join(mutatedRoot, "platform.lock");
+      const mutatedEdgeLock = path.join(mutatedRoot, "edge.lock");
+      const mutatedBootstrapRoot = path.join(mutatedRoot, "shared-edge");
+      mkdirSync(mutatedBootstrapRoot, { mode: 0o700 });
+      for (const lock of [mutatedPlatformLock, mutatedEdgeLock]) {
+        mkdirSync(lock, { mode: 0o700 });
+        writeFileSync(path.join(lock, "owner"), `owner_token=${token}\nowner=normal-caller-phase3-guard\n`, { mode: 0o600 });
+        chmodSync(path.join(lock, "owner"), 0o600);
+      }
+      if (mutation === "env") {
+        writeFileSync(path.join(mutatedBootstrapRoot, ".env"), "PARTIAL_BOOTSTRAP=1\n", { mode: 0o600 });
+        writeFileSync(
+          path.join(mutatedBootstrapRoot, ".env.bootstrap-state"),
+          `schema=1\nowner_token=${token}\nstate=mutation_started\nstage=bootstrap\n`,
+          { mode: 0o600 },
+        );
+      } else {
+        writeFileSync(path.join(mutatedBootstrapRoot, ".env.pending.4242"), "PARTIAL_BOOTSTRAP=1\n", { mode: 0o600 });
+      }
+      const partialMutation = runWorkflowHeredoc("REMOTE_PHASE3_PREDEPLOY_RELEASE", [
+        token,
+        mutatedPlatformLock,
+        mutatedEdgeLock,
+        path.join(mutatedRoot, "phase3.activation"),
+        path.join(mutatedRoot, "manifest"),
+        path.join(mutatedRoot, "archive"),
+        path.join(mutatedRoot, "receipt"),
+        path.join(mutatedRoot, "evidence"),
+        path.join(mutatedRoot, "journal"),
+        "failure",
+        mutatedBootstrapRoot,
+      ]);
+      expect(partialMutation.result.status, mutation).not.toBe(0);
+      expect(existsSync(mutatedPlatformLock), mutation).toBe(true);
+      expect(existsSync(mutatedEdgeLock), mutation).toBe(true);
+    }
+  });
+
+  test("keeps cleanup fail-closed for foreign owners, hardlinks, and failed state removal", () => {
+    const token = "phase3-normal-state-proof";
+    const stateContent = [
+      "schema=1",
+      "owner_token=" + token,
+      "state=not_started",
+      "stage=bootstrap",
+      "",
+    ].join("\n");
+    const prepare = (prefix: string) => {
+      const root = mkdtempSync(path.join(tmpdir(), prefix));
+      const platformLock = path.join(root, "platform.lock");
+      const edgeLock = path.join(root, "edge.lock");
+      const bootstrapRoot = path.join(root, "shared-edge");
+      mkdirSync(bootstrapRoot, { mode: 0o700 });
+      for (const lock of [platformLock, edgeLock]) {
+        mkdirSync(lock, { mode: 0o700 });
+        writeFileSync(
+          path.join(lock, "owner"),
+          "owner_token=" + token + "\nowner=normal-caller-phase3-guard\n",
+          { mode: 0o600 },
+        );
+        chmodSync(path.join(lock, "owner"), 0o600);
+      }
+      const state = path.join(bootstrapRoot, ".env.bootstrap-state");
+      writeFileSync(state, stateContent, { mode: 0o600 });
+      return { root, platformLock, edgeLock, bootstrapRoot, state };
+    };
+    const argsFor = (caseState: ReturnType<typeof prepare>) => [
+      token,
+      caseState.platformLock,
+      caseState.edgeLock,
+      path.join(caseState.root, "phase3.activation"),
+      path.join(caseState.root, "manifest"),
+      path.join(caseState.root, "archive"),
+      path.join(caseState.root, "receipt"),
+      path.join(caseState.root, "evidence"),
+      path.join(caseState.root, "journal"),
+      "failure",
+      caseState.bootstrapRoot,
+    ];
+
+    const hardlinkState = prepare("catering-phase3-hardlink-state-");
+    const foreignState = path.join(hardlinkState.root, "foreign-state");
+    linkSync(hardlinkState.state, foreignState);
+    const hardlink = runWorkflowHeredoc("REMOTE_PHASE3_PREDEPLOY_RELEASE", argsFor(hardlinkState));
+    expect(hardlink.result.status, "hardlink").not.toBe(0);
+    expect(existsSync(hardlinkState.platformLock), "hardlink").toBe(true);
+    expect(existsSync(hardlinkState.edgeLock), "hardlink").toBe(true);
+    expect(existsSync(foreignState), "hardlink").toBe(true);
+    expect(existsSync(hardlinkState.state), "hardlink").toBe(true);
+
+    const foreignOwnerState = prepare("catering-phase3-foreign-owner-state-");
+    const foreignStat = [
+      "#!/bin/sh",
+      "if [ \"$1\" = stat ] && [ \"$4\" = \"" + foreignOwnerState.state + "\" ]; then",
+      "  case \"$3\" in",
+      "    %a) printf '%s\\n' 600 ;;",
+      "    *%u*|*%g*|*%i*|*%h*) printf '%s\\n' '600 65534 65534 12345 1' ;;",
+      "    *) exit 1 ;;",
+      "  esac",
+      "  exit 0",
+      "fi",
+      "exec \"$@\"",
+      "",
+    ].join("\n");
+    const foreignOwner = runWorkflowHeredoc(
+      "REMOTE_PHASE3_PREDEPLOY_RELEASE",
+      argsFor(foreignOwnerState),
+      foreignStat,
+    );
+    expect(foreignOwner.result.status, "foreign-owner").not.toBe(0);
+    expect(existsSync(foreignOwnerState.platformLock), "foreign-owner").toBe(true);
+    expect(existsSync(foreignOwnerState.edgeLock), "foreign-owner").toBe(true);
+    expect(existsSync(foreignOwnerState.state), "foreign-owner").toBe(true);
+
+    const failedRemovalState = prepare("catering-phase3-failed-state-removal-");
+    const refusingUnlink = [
+      "#!/bin/sh",
+      "if [ \"$1\" = unlink ] && [ \"$2\" = \"" + failedRemovalState.state + "\" ]; then exit 77; fi",
+      "exec \"$@\"",
+      "",
+    ].join("\n");
+    const failedRemoval = runWorkflowHeredoc(
+      "REMOTE_PHASE3_PREDEPLOY_RELEASE",
+      argsFor(failedRemovalState),
+      refusingUnlink,
+    );
+    expect(failedRemoval.result.status, "failed-removal").not.toBe(0);
+    expect(existsSync(failedRemovalState.platformLock), "failed-removal").toBe(true);
+    expect(existsSync(failedRemovalState.edgeLock), "failed-removal").toBe(true);
+    expect(existsSync(failedRemovalState.state), "failed-removal").toBe(true);
+  });
+
+  test.each(["preexisting", "not_started"])(
+    "rejects %s bootstrap success when the state has a foreign hardlink",
+    (initialState) => {
+      const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-${initialState}-success-hardlink-`));
+      const token = `phase3-normal-${initialState}-success`;
+      const state = path.join(root, ".env.bootstrap-state");
+      mkdirSync(root, { mode: 0o700, recursive: true });
+      if (initialState === "preexisting") {
+        writeFileSync(path.join(root, ".env"), "EDGE_SECRET=fixture\n", { mode: 0o600 });
+      }
+
+      const begin = runBootstrapHeredoc("REMOTE_PHASE3_BOOTSTRAP_BEGIN", token, root);
+      expect(begin.result.status, `${initialState} begin`).toBe(0);
+      expect(begin.result.stdout.trim(), `${initialState} begin state`).toBe(initialState);
+      const foreignState = path.join(root, "foreign-bootstrap-state");
+      linkSync(state, foreignState);
+
+      let success;
+      if (initialState === "preexisting") {
+        success = runWorkflowHeredoc(
+          "REMOTE_PHASE3_BOOTSTRAP_PREEXISTING",
+          [token],
+          undefined,
+          root,
+        );
+      } else {
+        const tmp = path.join(root, "edge.env.example");
+        writeFileSync(tmp, "EDGE_SECRET=fixture\n", { mode: 0o600 });
+        success = runWorkflowHeredoc(
+          "REMOTE_SCRIPT",
+          [tmp, token],
+          undefined,
+          root,
+        );
+      }
+
+      expect(success.result.status, `${initialState} hardlink`).not.toBe(0);
+      expect(existsSync(state), `${initialState} canonical state`).toBe(true);
+      expect(existsSync(foreignState), `${initialState} foreign state`).toBe(true);
+    },
+  );
+
+  test("rejects bootstrap success when the state owner UID/GID is foreign", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-bootstrap-foreign-owner-"));
+    const token = "phase3-normal-foreign-owner";
+    const state = path.join(root, ".env.bootstrap-state");
+    mkdirSync(root, { mode: 0o700, recursive: true });
+    writeFileSync(path.join(root, ".env"), "EDGE_SECRET=fixture\n", { mode: 0o600 });
+    const begin = runBootstrapHeredoc("REMOTE_PHASE3_BOOTSTRAP_BEGIN", token, root);
+    expect(begin.result.status).toBe(0);
+    const foreignStat = [
+      "#!/bin/sh",
+      `if [ \"$1\" = stat ] && [ \"$4\" = \"${state}\" ]; then`,
+      "  case \"$3\" in",
+      "    *%u*|*%g*|*%i*|*%h*) printf '%s\\n' '600 65534 65534 12345 1' ;;",
+      "    *) printf '%s\\n' 600 ;;",
+      "  esac",
+      "  exit 0",
+      "fi",
+      "exec \"$@\"",
+      "",
+    ].join("\n");
+    const result = runWorkflowHeredoc("REMOTE_PHASE3_BOOTSTRAP_PREEXISTING", [token], foreignStat, root);
+    expect(result.result.status).not.toBe(0);
+    expect(existsSync(state)).toBe(true);
+  });
+
+  test.each(["symlink", "directory"])("keeps bootstrap state unchanged for a %s", (kind) => {
+    const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-bootstrap-${kind}-state-`));
+    const token = `phase3-normal-${kind}-state`;
+    const state = path.join(root, ".env.bootstrap-state");
+    mkdirSync(root, { mode: 0o700, recursive: true });
+    writeFileSync(path.join(root, ".env"), "EDGE_SECRET=fixture\n", { mode: 0o600 });
+    const begin = runBootstrapHeredoc("REMOTE_PHASE3_BOOTSTRAP_BEGIN", token, root);
+    expect(begin.result.status).toBe(0);
+    unlinkSync(state);
+    if (kind === "symlink") {
+      const target = path.join(root, "foreign-state");
+      writeFileSync(target, "schema=1\n", { mode: 0o600 });
+      symlinkSync(target, state);
+    } else {
+      mkdirSync(state, { mode: 0o700 });
+    }
+    const result = runWorkflowHeredoc("REMOTE_PHASE3_BOOTSTRAP_PREEXISTING", [token], undefined, root);
+    expect(result.result.status).not.toBe(0);
+    expect(lstatSync(state).isSymbolicLink(), kind).toBe(kind === "symlink");
+  });
+
+  test("rejects bootstrap success when state content contains an unknown field", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-bootstrap-state-content-"));
+    const token = "phase3-normal-state-content";
+    const state = path.join(root, ".env.bootstrap-state");
+    mkdirSync(root, { mode: 0o700, recursive: true });
+    writeFileSync(path.join(root, ".env"), "EDGE_SECRET=fixture\n", { mode: 0o600 });
+    const begin = runBootstrapHeredoc("REMOTE_PHASE3_BOOTSTRAP_BEGIN", token, root);
+    expect(begin.result.status).toBe(0);
+    writeFileSync(state, `${sourceAt(state)}unexpected=1\n`, { mode: 0o600 });
+    const result = runWorkflowHeredoc("REMOTE_PHASE3_BOOTSTRAP_PREEXISTING", [token], undefined, root);
+    expect(result.result.status).not.toBe(0);
+    expect(existsSync(state)).toBe(true);
+  });
+
+  test("rejects bootstrap success when the state inode changes during readback", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-bootstrap-state-inode-"));
+    const token = "phase3-normal-state-inode";
+    const state = path.join(root, ".env.bootstrap-state");
+    const counter = path.join(root, "stat-counter");
+    mkdirSync(root, { mode: 0o700, recursive: true });
+    writeFileSync(path.join(root, ".env"), "EDGE_SECRET=fixture\n", { mode: 0o600 });
+    const begin = runBootstrapHeredoc("REMOTE_PHASE3_BOOTSTRAP_BEGIN", token, root);
+    expect(begin.result.status).toBe(0);
+    const unstableStat = [
+      "#!/bin/sh",
+      `if [ \"$1\" = stat ] && [ \"$4\" = \"${state}\" ] && printf '%s' \"$3\" | grep -q '%i'; then`,
+      `  if [ -e \"${counter}\" ]; then inode=222; else inode=111; fi`,
+      `  : > \"${counter}\"`,
+      `  printf '600 %s %s %s 1\\n' \"$(id -u)\" \"$(id -g)\" \"$inode\"`,
+      "  exit 0",
+      "fi",
+      "exec \"$@\"",
+      "",
+    ].join("\n");
+    const result = runWorkflowHeredoc("REMOTE_PHASE3_BOOTSTRAP_PREEXISTING", [token], unstableStat, root);
+    expect(result.result.status).not.toBe(0);
+    expect(existsSync(state)).toBe(true);
   });
 
   test("executes normal, crash-resume, and forced-error rollback through the real pilot helper", () => {
@@ -700,6 +1144,49 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     expect(helper).toContain("egress=\"exercised\"");
     expect(helper).toMatch(/grep -Eiq[^\n]+egress_body/);
   });
+
+  test("probes enabled egress from the active production service and records disabled egress", () => {
+    const productionCompose = serviceBlock(sourceAt(platformBaseComposePath), "production");
+    expect(productionCompose).toMatch(/CATERING_ENABLE_WEB_RECIPE_SEARCH:\s*\$\{CATERING_ENABLE_WEB_RECIPE_SEARCH:-0\}/);
+
+    const enabledRoot = mkdtempSync(path.join(tmpdir(), "catering-phase3-egress-enabled-"));
+    const enabled = runHarness("full-pilot", enabledRoot);
+    expect(enabled.result.status).toBe(0);
+    const enabledState = JSON.parse(sourceAt(path.join(enabledRoot, "fake-docker-state.json"))) as {
+      containers: Record<string, { config?: { env?: Record<string, string> }; labels?: Record<string, string> }>;
+    };
+    expect(enabledState.containers["platform-infra-production-1"]?.config?.env).toEqual({ CATERING_ENABLE_WEB_RECIPE_SEARCH: "1" });
+    expect(enabledState.containers["platform-infra-production-1"]?.labels).toMatchObject({
+      "com.docker.compose.project": "platform-infra",
+      "com.docker.compose.service": "production",
+    });
+    expect(sourceAt(path.join(enabledRoot, "phase3.activation"))).toMatch(/^egress=exercised$/m);
+    const enabledExec = sourceAt(path.join(enabledRoot, "fake-docker.log"))
+      .split("\n")
+      .filter((line) => line.startsWith("docker exec "));
+    expect(enabledExec.some((line) => line.includes("exec platform-infra-production-1") && line.includes("CATERING_ENABLE_WEB_RECIPE_SEARCH"))).toBe(true);
+    expect(enabledExec.some((line) => line.includes("exec platform-infra-production-1") && line.includes("egress.invalid"))).toBe(true);
+    expect(enabledExec.some((line) => line.includes("exec shared-edge-edge-1") && line.includes("egress.invalid"))).toBe(false);
+
+    const disabledRoot = mkdtempSync(path.join(tmpdir(), "catering-phase3-egress-disabled-"));
+    const disabled = runHarness("egress-disabled", disabledRoot);
+    expect(disabled.result.status).toBe(0);
+    const disabledState = JSON.parse(sourceAt(path.join(disabledRoot, "fake-docker-state.json"))) as {
+      containers: Record<string, { config?: { env?: Record<string, string> } }>;
+    };
+    expect(disabledState.containers["platform-infra-production-1"]?.config?.env).toEqual({ CATERING_ENABLE_WEB_RECIPE_SEARCH: "0" });
+    expect(sourceAt(path.join(disabledRoot, "phase3.activation"))).toMatch(/^egress=not_exercised$/m);
+    const disabledExec = sourceAt(path.join(disabledRoot, "fake-docker.log"))
+      .split("\n")
+      .filter((line) => line.startsWith("docker exec "));
+    expect(disabledExec.some((line) => line.includes("exec platform-infra-production-1") && line.includes("egress.invalid"))).toBe(false);
+
+    for (const scenario of ["egress-fail", "egress-missing", "egress-malformed", "egress-foreign"]) {
+      const invalid = runHarness(scenario);
+      expect(invalid.result.status, scenario).not.toBe(0);
+      expect(`${invalid.result.stdout}${invalid.result.stderr}`, scenario).not.toContain("PILOT: GO\n");
+    }
+  }, 240_000);
 
   test("binds manifest, marker, archive, receipt, and network provenance by hashes without secret values", () => {
     const helper = requireHelper();

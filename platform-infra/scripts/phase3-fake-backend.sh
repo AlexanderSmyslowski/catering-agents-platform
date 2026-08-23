@@ -24,14 +24,36 @@ for runtime_file in \
   [[ -e "${runtime_file}" ]] || printf '%s\n' '# deterministic fake runtime input' >"${runtime_file}"
 done
 
+# The fake starts from the same disabled default as the authoritative
+# Production service; named scenarios then model explicit runtime states.
+production_compose="${script_dir}/../docker-compose.yml"
+production_env="$(awk '
+  /^  production:$/ { in_production=1; next }
+  in_production && /^  [a-z][a-z0-9_-]*:/ { exit }
+  in_production && /^      CATERING_ENABLE_WEB_RECIPE_SEARCH:/ { print; exit }
+' "${production_compose}" | sed -n 's/.*:-\([01]\)}$/\1/p')"
+[[ "${production_env}" == 0 ]] || { printf '%s\n' 'authoritative Production Compose default is not disabled' >&2; exit 1; }
+production_env=1
+production_project=platform-infra
+production_service=production
+case "${scenario}" in
+  egress-disabled) production_env=0 ;;
+  egress-missing) production_env=__absent__ ;;
+  egress-malformed) production_env=maybe ;;
+  egress-foreign) production_project=foreign-platform ;;
+esac
+
 if [[ ! -e "${state}" ]]; then
   CATERING_PHASE3_FAKE_HOST_ROOT="${root}" CATERING_PHASE3_HARNESS_SCENARIO="${scenario}" \
+    CATERING_PHASE3_FAKE_PRODUCTION_ENV="${production_env}" \
+    CATERING_PHASE3_FAKE_PRODUCTION_PROJECT="${production_project}" \
+    CATERING_PHASE3_FAKE_PRODUCTION_SERVICE="${production_service}" \
     python3 "${fake_docker}" --init
 fi
 
 fault=
 case "${scenario}" in
-  crash-after-candidate|crash-after-ingress|crash-after-private|crash-after-active|crash-after-rollback|crash-after-receipt|semantic-smoke-fail|egress-fail|compose-render-fail|network-provenance-fail)
+  crash-after-candidate|crash-after-ingress|crash-after-private|crash-after-active|crash-after-rollback|crash-after-receipt|semantic-smoke-fail|egress-fail|egress-disabled|egress-missing|egress-malformed|egress-foreign|compose-render-fail|network-provenance-fail)
     fault="${scenario}" ;;
   *) fault= ;;
 esac
