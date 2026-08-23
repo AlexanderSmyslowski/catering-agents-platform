@@ -115,25 +115,25 @@ function workflowHeredoc(source: string, label: string) {
 
 const localSudoScript = [
   "#!/bin/sh",
-  "if [ \"$1\" = stat ] && [ \"$2\" = -c ]; then",
-  "  case \"$3\" in",
-  "    '%a') exec stat -f '%Lp' \"$4\" ;;",
-  "    '%a %u %g') exec stat -f '%Lp %u %g' \"$4\" ;;",
-  "    '%a %u %g %i %h') exec stat -f '%Lp %u %g %i %l' \"$4\" ;;",
-  "    *) exit 2 ;;",
-  "  esac",
-  "fi",
   "exec \"$@\"",
   "",
 ].join("\n");
 
 const localStatScript = [
   "#!/bin/sh",
-  "if [ \"$1\" = -c ]; then",
-  "  case \"$2\" in",
-  "    '%a %u %g') exec /usr/bin/stat -f '%Lp %u %g' \"$3\" ;;",
-  "    *) exit 2 ;;",
-  "  esac",
+  "if [ \"$1\" = -c ] || [ \"$1\" = -f ]; then",
+  "  format=\"$2\"",
+  "  target=\"$3\"",
+  "  exec node - \"$format\" \"$target\" <<'NODE'",
+  "const fs = require(\"node:fs\");",
+  "const [format, target] = process.argv.slice(2);",
+  "const stats = fs.lstatSync(target);",
+  "const mode = (stats.mode & 0o7777).toString(8);",
+  "const values = { \"%a\": mode, \"%Lp\": mode, \"%u\": String(stats.uid), \"%g\": String(stats.gid), \"%i\": String(stats.ino), \"%h\": String(stats.nlink), \"%l\": String(stats.nlink) };",
+  "const formats = new Set([\"%a\", \"%a %u %g\", \"%a %u %g %i %h\", \"%Lp\", \"%Lp %u %g\", \"%Lp %u %g %i %l\"]);",
+  "if (!formats.has(format)) process.exit(2);",
+  "process.stdout.write(format.split(\" \").map((field) => values[field]).join(\" \") + \"\\n\");",
+  "NODE",
   "fi",
   "exec /usr/bin/stat \"$@\"",
   "",
@@ -900,7 +900,9 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     };
     expect(rollbackState.networks.catering_ingress).toBeUndefined();
     expect(rollbackState.networks.catering_private).toBeUndefined();
-  }, 120_000);
+  // This multi-process journey is ~74s isolated but reached ~312s under the
+  // full Vitest file-parallel load; keep the bound local without weakening any assertion.
+  }, 360_000);
 
   test("resumes complete active evidence and explicitly restores the Phase-2 baseline", () => {
     const partialRoot = mkdtempSync(path.join(tmpdir(), "catering-phase3-partial-rollback-"));
@@ -938,7 +940,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
       "platform-infra_default",
       "zeiterfassung_default",
     ]);
-  }, 120_000);
+  }, 240_000);
 
   test("preserves the complete active marker across repeated resume and never emits GO after rollback", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-marker-resume-"));
