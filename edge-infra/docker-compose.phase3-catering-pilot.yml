@@ -1,0 +1,17 @@
+services:
+  edge:
+    networks: !override
+      - platform-infra_default
+      - zeiterfassung_default
+      - catering_ingress
+
+networks:
+  platform-infra_default:
+    external: true
+    name: platform-infra_default
+  zeiterfassung_default:
+    external: true
+    name: zeiterfassung_default
+  catering_ingress:
+    external: true
+    name: catering_ingress

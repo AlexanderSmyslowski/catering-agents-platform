@@ -47,6 +47,11 @@ describe("Hetzner deployment hardening", () => {
       [
         "#!/usr/bin/env bash",
         "printf 'ssh %s\\n' \"$*\" >> \"$CALL_LOG\"",
+        "body=$(cat)",
+        "printf '%s\\n' \"$body\" >> \"$CALL_LOG\"",
+        "if [[ \"$body\" == *\"platform_mode=absent\"* ]]; then printf '%s\\n' 'platform_mode=acquired' 'edge_mode=acquired'; fi",
+        "if [[ \"$body\" == *\"docker inspect --format\"* ]]; then printf '%s\\n' '{}'; fi",
+        "if [[ \"$body\" == *'${archive}'* ]]; then printf '%s\\n' '/opt/catering-agents-platform-rollbacks/catering-agents-platform-20260823T000000Z.tar.gz'; fi",
         "exit 0"
       ].join("\n") + "\n"
     );
@@ -100,12 +105,16 @@ describe("Hetzner deployment hardening", () => {
       [
         "#!/usr/bin/env bash",
         "command=\"$*\"",
-        "printf 'ssh %s\\n' \"$command\" >> \"$CALL_LOG\"",
-        "if [[ \"$command\" == *\"tar -czf\"* ]]; then",
-        "  [[ \"$command\" == *\"sudo mkdir -p\"* ]] || exit 13",
-        "  [[ \"$command\" == *\"sudo tar -czf\"* ]] || exit 13",
-        "  [[ \"$command\" == *\"sudo tee\"* ]] || exit 13",
+        "body=$(cat)",
+        "printf 'ssh %s\\n%s\\n' \"$command\" \"$body\" >> \"$CALL_LOG\"",
+        "if [[ \"$body\" == *\"platform_mode=absent\"* ]]; then printf '%s\\n' 'platform_mode=acquired' 'edge_mode=acquired'; fi",
+        "if [[ \"$body\" == *\"tar -czf\"* ]]; then",
+        "  [[ \"$body\" == *\"sudo mkdir -p\"* ]] || exit 13",
+        "  [[ \"$body\" == *\"sudo tar -czf\"* ]] || exit 13",
+        "  [[ \"$body\" == *\"sudo tee\"* ]] || exit 13",
         "fi",
+        "if [[ \"$body\" == *\"docker inspect --format\"* ]]; then printf '%s\\n' '{}'; fi",
+        "if [[ \"$body\" == *'${archive}'* ]]; then printf '%s\\n' '/opt/catering-agents-platform-rollbacks/catering-agents-platform-20260823T000000Z.tar.gz'; fi",
         "exit 0"
       ].join("\n") + "\n"
     );
@@ -133,8 +142,8 @@ describe("Hetzner deployment hardening", () => {
 
     expect(result.status).toBe(0);
     const calls = readFileSync(callLog, "utf8");
-    const snapshotStart = calls.indexOf("rollback_root='");
-    const snapshotEnd = calls.indexOf("Rollback snapshot", snapshotStart);
+    const snapshotStart = calls.indexOf('deploy_path="$1"');
+    const snapshotEnd = calls.indexOf("rsync ", snapshotStart);
     const snapshotCommand = calls.slice(snapshotStart, snapshotEnd);
     const snapshotIndex = calls.indexOf("tar -czf");
     const rsyncIndex = calls.indexOf("rsync ");

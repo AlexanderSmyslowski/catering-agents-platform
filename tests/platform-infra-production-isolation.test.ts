@@ -44,11 +44,14 @@ describe("production proxy isolation contract", () => {
     );
   });
 
-  test("uses base plus production override without destructive cross-project operations", () => {
+  test("renders the stable production pair read-only and mutates only through the full edge chain", () => {
     const deployScript = readFileSync(deployScriptPath, "utf8");
 
     expect(deployScript).toMatch(
-      /docker compose\s+\\?\s*-f docker-compose\.yml\s+\\?\s*-f docker-compose\.production\.yml\s+\\?\s*up --build -d/
+      /docker compose\s+\\?\s*-f docker-compose\.yml\s+\\?\s*-f docker-compose\.production\.yml\s+\\?\s*config\s+>\/dev\/null/
+    );
+    expect(deployScript).toMatch(
+      /docker compose\s+\\?\s*-f docker-compose\.yml\s+\\?\s*-f docker-compose\.production\.yml\s+\\?\s*-f docker-compose\.edge-cutover\.yml\s+\\?\s*up --build -d/
     );
     expect(deployScript).not.toMatch(/docker compose\s+down/);
     expect(deployScript).not.toMatch(/docker (?:system|network|volume) prune/);

@@ -12,9 +12,12 @@ concurrency:
 
 jobs:
   deploy-edge:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 20
+    env:
+      PHASE3_LOCK_OWNER: phase3-normal-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Checkout exact dispatch commit
@@ -33,6 +36,77 @@ jobs:
           chmod 600 "$HOME/.ssh/id_ed25519"
           printf '%s\n' "$HETZNER_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Guard Phase 3 owner state before edge bootstrap
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          PHASE3_LOCK_OWNER: phase3-normal-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh "$remote" bash -s -- "$PHASE3_LOCK_OWNER" <<'REMOTE_PHASE3_GUARD'
+          set -euo pipefail
+          owner_token="$1"
+          platform_lock=/opt/catering-agents-platform.deploy-lock
+          edge_lock=/opt/shared-edge.deploy-lock
+          marker=/opt/catering-phase3/phase3.activation
+          manifest=/opt/catering-phase3/phase3.transaction-baseline.manifest
+          platform_mode=absent
+          edge_mode=absent
+          verify_lock_owned() {
+            local lock="$1" expected_token="$2" owner_file="${lock}/owner"
+            local lock_real expected_real lock_mode owner_mode
+            lock_real="$(sudo realpath -e -- "$lock" 2>/dev/null || sudo realpath "$lock")"
+            expected_real="$(sudo realpath -e -- "$(dirname "$lock")" 2>/dev/null || sudo realpath "$(dirname "$lock")")/$(basename "$lock")"
+            lock_mode="$(sudo stat -c '%a' "$lock" 2>/dev/null || sudo stat -f '%Lp' "$lock")"
+            owner_mode="$(sudo stat -c '%a' "$owner_file" 2>/dev/null || sudo stat -f '%Lp' "$owner_file")"
+            [[ -d "$lock" && ! -L "$lock" && "$lock_real" == "$expected_real" && "$lock_mode" == 700 ]] || return 1
+            [[ -f "$owner_file" && ! -L "$owner_file" && "$owner_mode" == 600 ]] || return 1
+            sudo grep -Fxq "owner_token=$expected_token" "$owner_file" || return 1
+            sudo grep -Fxq 'owner=normal-caller-phase3-guard' "$owner_file"
+          }
+          release_on_guard_failure() {
+            local status=$?
+            set +e
+            if [[ "$edge_mode" == acquired ]] && verify_lock_owned "$edge_lock" "$owner_token"; then sudo unlink "$edge_lock/owner"; sudo rmdir "$edge_lock"; fi
+            if [[ "$platform_mode" == acquired ]] && verify_lock_owned "$platform_lock" "$owner_token"; then sudo unlink "$platform_lock/owner"; sudo rmdir "$platform_lock"; fi
+            exit "$status"
+          }
+          trap release_on_guard_failure EXIT
+          phase3_lock_acquire() {
+            local lock="$1" mode_var="$2"
+            local owner_file owner_tmp lock_real expected_real lock_mode owner_mode
+            if sudo mkdir -m 0700 -- "$lock" 2>/dev/null; then
+              printf -v "$mode_var" '%s' acquired
+              lock_real="$(sudo realpath -e -- "$lock" 2>/dev/null || sudo realpath "$lock")"
+              expected_real="$(sudo realpath -e -- "$(dirname "$lock")" 2>/dev/null || sudo realpath "$(dirname "$lock")")/$(basename "$lock")"
+              lock_mode="$(sudo stat -c '%a' "$lock" 2>/dev/null || sudo stat -f '%Lp' "$lock")"
+              [[ "$lock_real" == "$expected_real" && "$lock_mode" == 700 ]] || return 1
+              owner_file="$lock/owner"
+              owner_tmp="${owner_file}.pending.$$"
+              printf '%s\n' "owner_token=$owner_token" 'owner=normal-caller-phase3-guard' | sudo tee "$owner_tmp" >/dev/null
+              sudo chmod 0600 "$owner_tmp"
+              sudo mv -f "$owner_tmp" "$owner_file"
+              owner_mode="$(sudo stat -c '%a' "$owner_file" 2>/dev/null || sudo stat -f '%Lp' "$owner_file")"
+              [[ -f "$owner_file" && ! -L "$owner_file" && "$owner_mode" == 600 ]] || return 1
+              sudo grep -Fxq "owner_token=$owner_token" "$owner_file" || return 1
+              return 0
+            fi
+            verify_lock_owned "$lock" "$owner_token" || return 1
+            printf -v "$mode_var" '%s' reentrant
+          }
+          phase3_lock_acquire "$platform_lock" platform_mode
+          phase3_lock_acquire "$edge_lock" edge_mode
+          state=absent
+          if [[ -e "$marker" ]]; then
+            [[ -f "$marker" && ! -L "$marker" ]] || exit 1
+            state="$(sed -n 's/^state=//p' "$marker")"
+          fi
+          [[ "$state" == absent || "$state" == inactive ]] || { printf '%s\n' NOT_APPLICABLE_PHASE3 >&2; exit 1; }
+          [[ ! -e "$manifest" ]] || { printf '%s\n' 'phase3 manifest is bound; normal edge bootstrap is frozen.' >&2; exit 1; }
+          trap - EXIT
+          REMOTE_PHASE3_GUARD
 
       - name: Validate edge deployment inputs
         env:
@@ -69,9 +143,9 @@ jobs:
           edge_path="/opt/shared-edge"
           pending="${edge_path}/.env.pending.$$"
           cleanup() {
-            rm -f "$tmp"
+            unlink "$tmp" 2>/dev/null || true
             if [[ -n "${pending:-}" ]]; then
-              sudo rm -f "$pending"
+              sudo unlink "$pending" 2>/dev/null || true
             fi
           }
           trap cleanup EXIT
@@ -109,3 +183,43 @@ jobs:
           ZEITERFASSUNG_SMOKE_URL: https://zeit.the-one.catering
           EVENTOS_SMOKE_URL: https://eventos.commcats.de
         run: bash edge-infra/scripts/deploy-hetzner.sh
+
+      - name: phase3-lock-release
+        # A failed deployment must leave the owner locks for authenticated
+        # recovery; the deploy script releases them itself only after a
+        # verified restore or successful completion.
+        if: success()
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          PHASE3_LOCK_OWNER: phase3-normal-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh "$remote" bash -s -- "$PHASE3_LOCK_OWNER" <<'REMOTE_PHASE3_RELEASE'
+          set -euo pipefail
+          owner_token="$1"
+          platform_lock=/opt/catering-agents-platform.deploy-lock
+          edge_lock=/opt/shared-edge.deploy-lock
+          verify_lock_owned() {
+            local lock="$1" expected_token="$2" owner_file="${lock}/owner"
+            local lock_real expected_real lock_mode owner_mode
+            lock_real="$(sudo realpath -e -- "$lock" 2>/dev/null || sudo realpath "$lock")"
+            expected_real="$(sudo realpath -e -- "$(dirname "$lock")" 2>/dev/null || sudo realpath "$(dirname "$lock")")/$(basename "$lock")"
+            lock_mode="$(sudo stat -c '%a' "$lock" 2>/dev/null || sudo stat -f '%Lp' "$lock")"
+            owner_mode="$(sudo stat -c '%a' "$owner_file" 2>/dev/null || sudo stat -f '%Lp' "$owner_file")"
+            [[ -d "$lock" && ! -L "$lock" && "$lock_real" == "$expected_real" && "$lock_mode" == 700 ]] || return 1
+            [[ -f "$owner_file" && ! -L "$owner_file" && "$owner_mode" == 600 ]] || return 1
+            sudo grep -Fxq "owner_token=$expected_token" "$owner_file" || return 1
+            sudo grep -Fxq 'owner=normal-caller-phase3-guard' "$owner_file"
+          }
+          release() {
+            local lock="$1"
+            if verify_lock_owned "$lock" "$owner_token"; then
+              sudo unlink "$lock/owner"
+              sudo rmdir "$lock" 2>/dev/null || true
+            fi
+          }
+          release "$edge_lock"
+          release "$platform_lock"
+          REMOTE_PHASE3_RELEASE

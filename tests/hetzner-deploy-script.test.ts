@@ -76,7 +76,15 @@ describe("Hetzner deployment script", () => {
     writeFileSync(sshLog, "", "utf8");
     writeExecutable(
       path.join(binDir, "ssh"),
-      "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SSH_LOG\"\nexit 0\n"
+      [
+        "#!/usr/bin/env bash",
+        "body=$(cat)",
+        "printf '%s\\n%s\\n' \"$*\" \"$body\" >> \"$SSH_LOG\"",
+        "if [[ \"$body\" == *\"platform_mode=absent\"* ]]; then printf '%s\\n' 'platform_mode=acquired' 'edge_mode=acquired'; fi",
+        "if [[ \"$body\" == *\"docker inspect --format\"* ]]; then printf '%s\\n' '{}'; fi",
+        "if [[ \"$body\" == *'${archive}'* ]]; then printf '%s\\n' '/opt/catering-agents-platform-rollbacks/catering-agents-platform-20260823T000000Z.tar.gz'; fi",
+        "exit 0"
+      ].join("\n") + "\n"
     );
     writeExecutable(
       path.join(binDir, "rsync"),
@@ -99,7 +107,7 @@ describe("Hetzner deployment script", () => {
     expect(rsyncArguments).toContain("platform-infra/sites");
     expect(rsyncArguments).toContain("--rsync-path=sudo rsync");
     expect(readFileSync(sshLog, "utf8")).toContain(
-      "sudo chmod 755 '/opt/catering-agents-platform'"
+      "bash -s -- /opt/catering-agents-platform"
     );
   });
 
@@ -183,7 +191,9 @@ describe("Hetzner deployment script", () => {
     });
 
     expect(result.status).toBe(0);
-    expect(readFileSync(curlLog, "utf8")).toContain("alexander:test-login-secret");
+    expect(readFileSync(curlLog, "utf8")).toContain("--config");
+    expect(readFileSync(curlLog, "utf8")).not.toContain("alexander:test-login-secret");
+    expect(readFileSync(smokeScript, "utf8")).toContain('user = "%s:%s"');
     expect(`${result.stdout}${result.stderr}`).not.toContain("test-login-secret");
   });
 

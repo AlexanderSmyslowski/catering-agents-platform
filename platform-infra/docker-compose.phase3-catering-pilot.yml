@@ -1,0 +1,35 @@
+services:
+  postgres:
+    networks: !override
+      - catering_private
+
+  intake:
+    networks: !override
+      - catering_private
+
+  offer:
+    networks: !override
+      - catering_private
+
+  production:
+    networks: !override
+      - catering_private
+
+  exports:
+    networks: !override
+      - catering_private
+
+  web:
+    networks: !override
+      - catering_ingress
+      - catering_private
+
+networks:
+  catering_ingress:
+    external: true
+    name: catering_ingress
+    internal: false
+  catering_private:
+    external: true
+    name: catering_private
+    internal: false

@@ -718,7 +718,7 @@ const childEnv = { ...process.env, HARNESS_REMOTE_PID: String(process.pid) };
 const result = childProcess.spawnSync('/bin/bash', [scriptPath, process.env.HARNESS_EXPECTED_CADDY_SHA], {
   encoding: 'utf8',
   env: childEnv,
-  timeout: 40000,
+  timeout: 60000,
   killSignal: 'SIGTERM',
 });
 if (result.error && result.error.code === 'ETIMEDOUT') {

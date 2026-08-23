@@ -15,7 +15,9 @@ if [[ -n "${SMOKE_BASIC_AUTH_USER}" || -n "${SMOKE_BASIC_AUTH_PASSWORD}" ]]; the
     echo "SMOKE_BASIC_AUTH_USER and SMOKE_BASIC_AUTH_PASSWORD must be set together." >&2
     exit 1
   fi
-  CURL_ARGS+=(--user "${SMOKE_BASIC_AUTH_USER}:${SMOKE_BASIC_AUTH_PASSWORD}")
+  # curl reads credentials from a protected process-substitution FD; they do
+  # not appear in argv, container environment, or the retry log.
+  CURL_ARGS+=(--config <(printf 'user = "%s:%s"\n' "${SMOKE_BASIC_AUTH_USER}" "${SMOKE_BASIC_AUTH_PASSWORD}"))
 fi
 
 fetch_with_retry() {

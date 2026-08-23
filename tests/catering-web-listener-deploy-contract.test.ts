@@ -20,7 +20,8 @@ describe('isolated Catering web listener deployment', () => {
     expect(deploy).not.toMatch(/up -d\s*$/m);
 
     expect(deploy).toContain('http://127.0.0.1:8081/api/intake/health');
-    expect(deploy).toContain('Authorization: Basic');
+    expect(deploy).toContain("exec curl --silent --show-error --fail --config -");
+    expect(deploy).not.toContain('Authorization: Basic');
     expect(deploy).toContain('payload.get("status") != "ok"');
     expect(deploy).toContain('payload.get("service") != "intake-service"');
   });
