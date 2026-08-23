@@ -516,9 +516,10 @@ jobs:
 
       - name: phase3-lock-release
         # A failed deployment must leave the owner locks for authenticated
-        # recovery; the deploy script releases them itself only after a
-        # verified restore or successful completion.
-        if: success()
+        # recovery. Cleanup is allowed only for a normal success or a deploy
+        # step that recorded a complete rollback; all other failures retain
+        # both owner locks for recovery.
+        if: ${{ always() && (steps.deploy_edge.outcome == 'success' || steps.deploy_edge.outputs.rollback_outcome == 'successful') }}
         env:
           DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
@@ -546,10 +547,10 @@ jobs:
           }
           release() {
             local lock="$1"
-            if verify_lock_owned "$lock" "$owner_token"; then
-              sudo unlink "$lock/owner"
-              sudo rmdir "$lock" 2>/dev/null || true
-            fi
+            verify_lock_owned "$lock" "$owner_token"
+            sudo unlink "$lock/owner"
+            sudo rmdir "$lock"
+            [[ ! -e "$lock" && ! -L "$lock" ]]
           }
           release "$edge_lock"
           release "$platform_lock"

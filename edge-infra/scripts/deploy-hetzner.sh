@@ -16,6 +16,15 @@ DEPLOY_RSYNC_PATH="${DEPLOY_RSYNC_PATH:-rsync}"
 CATERING_SMOKE_BASIC_AUTH_USER="${CATERING_SMOKE_BASIC_AUTH_USER:-}"
 CATERING_SMOKE_BASIC_AUTH_PASSWORD="${CATERING_SMOKE_BASIC_AUTH_PASSWORD:-}"
 
+write_rollback_outcome() {
+  local outcome="$1"
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    printf 'rollback_outcome=%s\n' "${outcome}" >>"${GITHUB_OUTPUT}"
+  fi
+}
+
+write_rollback_outcome not_attempted
+
 if [[ "${EDGE_MODE}" != "rehearsal" && "${EDGE_MODE}" != "cutover" ]]; then
   echo "EDGE_MODE must be rehearsal or cutover." >&2
   exit 1
@@ -398,9 +407,11 @@ REMOTE_SCRIPT
   fi
 
   if [[ "${rollback_status}" -ne 0 ]]; then
+    write_rollback_outcome recovery_required
     echo "Edge rollback failed; live deployment remains untrusted because no manifest is present." >&2
   else
     EDGE_RECOVERY_REQUIRED=false
+    write_rollback_outcome successful
   fi
   exit "${failure_status}"
 }

@@ -1472,15 +1472,30 @@ cleanup_temp_files() {
   case "${status}" in
     129|130|137|143) uncertain_recovery=true ;;
   esac
-  # A second lock that cannot be acquired leaves only this run's first lock
-  # owned. Release that lock only after the same owner proof used by normal
-  # release; any proof or unlink failure requires authenticated recovery.
-  if [[ "${status}" -ne 0 && "${candidate_written}" == false && "${platform_lock_mode}" == acquired && "${edge_lock_mode}" != acquired ]]; then
-    if phase3_lock_release_checked "${platform_lock}" "${owner}:${transaction_id}"; then
-      platform_lock_mode=absent
-      platform_lock_held=false
-    else
-      recovery_required=true
+  # A pre-candidate failure leaves only locks that this invocation acquired
+  # eligible for cleanup. Prove and release both in reverse acquisition order;
+  # a reentered or foreign lock is never treated as ours.
+  if [[ "${status}" -ne 0 && "${candidate_written}" == false ]]; then
+    if [[ "${platform_lock_mode}" == acquired && "${edge_lock_mode}" == acquired ]]; then
+      if phase3_lock_release_checked "${edge_lock}" "${owner}:${transaction_id}"; then
+        edge_lock_mode=absent
+        edge_lock_held=false
+      else
+        recovery_required=true
+      fi
+      if [[ "${recovery_required}" == false ]] && phase3_lock_release_checked "${platform_lock}" "${owner}:${transaction_id}"; then
+        platform_lock_mode=absent
+        platform_lock_held=false
+      else
+        recovery_required=true
+      fi
+    elif [[ "${platform_lock_mode}" == acquired && "${edge_lock_mode}" == absent ]]; then
+      if phase3_lock_release_checked "${platform_lock}" "${owner}:${transaction_id}"; then
+        platform_lock_mode=absent
+        platform_lock_held=false
+      else
+        recovery_required=true
+      fi
     fi
   fi
   # A signal/137 boundary provides no proof that the restore completed. Keep
@@ -1495,10 +1510,36 @@ cleanup_temp_files() {
   elif [[ "${rollback_complete}" == true ]]; then
     [[ -e "${platform_stage}" ]] && unlink "${platform_stage}"
     [[ -e "${edge_stage}" ]] && unlink "${edge_stage}"
-    if [[ "${edge_lock_mode}" == acquired ]]; then phase3_lock_release "${edge_lock}" "${owner}:${transaction_id}" 2>/dev/null || true; fi
-    if [[ "${platform_lock_mode}" == acquired ]]; then phase3_lock_release "${platform_lock}" "${owner}:${transaction_id}" 2>/dev/null || true; fi
-    [[ -e "${prior_marker_backup}" ]] && unlink "${prior_marker_backup}" 2>/dev/null || true
-    printf '%s\n' 'PILOT: ROLLED BACK' >&2
+    if [[ "${edge_lock_mode}" == reentered || "${platform_lock_mode}" == reentered ]]; then
+      recovery_required=true
+    fi
+    if [[ "${recovery_required}" == false && "${edge_lock_mode}" == acquired ]]; then
+      if phase3_lock_release_checked "${edge_lock}" "${owner}:${transaction_id}"; then
+        edge_lock_mode=absent
+        edge_lock_held=false
+      else
+        recovery_required=true
+      fi
+    fi
+    if [[ "${recovery_required}" == false && "${platform_lock_mode}" == acquired ]]; then
+      if phase3_lock_release_checked "${platform_lock}" "${owner}:${transaction_id}"; then
+        platform_lock_mode=absent
+        platform_lock_held=false
+      else
+        recovery_required=true
+      fi
+    fi
+    if [[ "${recovery_required}" == true ]]; then
+      printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
+    else
+      [[ "${edge_lock_mode}" == absent && "${platform_lock_mode}" == absent ]] || recovery_required=true
+      if [[ "${recovery_required}" == true ]]; then
+        printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
+      else
+        [[ -e "${prior_marker_backup}" ]] && unlink "${prior_marker_backup}" 2>/dev/null || true
+        printf '%s\n' 'PILOT: ROLLED BACK' >&2
+      fi
+    fi
   else
     printf '%s\n' 'PILOT: NO-GO' >&2
   fi

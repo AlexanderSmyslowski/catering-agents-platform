@@ -15,6 +15,8 @@ import { describe, expect, test } from "vitest";
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const helperPath = path.join(repoRoot, "platform-infra/scripts/catering-phase3-pilot.sh");
 const fakeDockerPath = path.join(repoRoot, "platform-infra/scripts/phase3-fake-docker.py");
+const edgeDeployPath = path.join(repoRoot, "edge-infra/scripts/deploy-hetzner.sh");
+const edgeWorkflowPath = path.join(repoRoot, ".github/workflows/deploy-edge-production.yml");
 
 function textAt(filePath: string) {
   return existsSync(filePath) ? readFileSync(filePath, "utf8") : "";
@@ -250,6 +252,81 @@ function runSuccessReleaseBlock(failEdge = false) {
     cwd: repoRoot,
     encoding: "utf8",
     input: `${prefix}\n${helper.slice(start, end)}\n`,
+  });
+}
+
+function runPreCandidateAcquiredCleanup(failLock: "edge" | "platform" | "none" = "none") {
+  const body = remotePilotBody();
+  const start = body.indexOf("cleanup_temp_files() {");
+  const end = body.indexOf("\ntrap cleanup_temp_files EXIT", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const prefix = [
+    "set +e",
+    "platform_lock_mode=acquired",
+    "edge_lock_mode=acquired",
+    "platform_lock_held=true",
+    "edge_lock_held=true",
+    "candidate_written=false",
+    "rollback_started=false",
+    "rollback_complete=false",
+    "platform_lock=/tmp/pre-candidate-platform-lock",
+    "edge_lock=/tmp/pre-candidate-edge-lock",
+    "owner=catering-agents-platform",
+    "transaction_id=phase3-pre-candidate",
+    "prior_marker_backup=/tmp/pre-candidate-marker",
+    "platform_stage=/tmp/pre-candidate-platform-stage",
+    "edge_stage=/tmp/pre-candidate-edge-stage",
+    "temp_cleanup() { :; }",
+    "phase3_lock_release_checked() {",
+    "  printf 'release=%s\\n' \"$1\"",
+    `  if [[ \"${failLock}\" == edge && \"$1\" == /tmp/pre-candidate-edge-lock ]] || [[ \"${failLock}\" == platform && \"$1\" == /tmp/pre-candidate-platform-lock ]]; then return 1; fi`,
+    "  return 0",
+    "}",
+    "false",
+  ].join("\n");
+  return spawnSync("/bin/bash", ["-s"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: `${prefix}\n${body.slice(start, end)}\nfalse\ncleanup_temp_files\n`,
+  });
+}
+
+function runRollbackReleaseCleanup(failLock: "edge" | "platform" | "none" = "none") {
+  const body = remotePilotBody();
+  const start = body.indexOf("cleanup_temp_files() {");
+  const end = body.indexOf("\ntrap cleanup_temp_files EXIT", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const prefix = [
+    "set +e",
+    "platform_lock_mode=acquired",
+    "edge_lock_mode=acquired",
+    "platform_lock_held=true",
+    "edge_lock_held=true",
+    "candidate_written=true",
+    "rollback_started=true",
+    "rollback_complete=true",
+    "platform_lock=/tmp/rollback-platform-lock",
+    "edge_lock=/tmp/rollback-edge-lock",
+    "owner=catering-agents-platform",
+    "transaction_id=phase3-rollback-release",
+    "prior_marker_backup=/tmp/rollback-marker",
+    "platform_stage=/tmp/rollback-platform-stage",
+    "edge_stage=/tmp/rollback-edge-stage",
+    "temp_cleanup() { :; }",
+    "phase3_lock_release_checked() {",
+    "  printf 'checked=%s\\n' \"$1\"",
+    `  if [[ \"${failLock}\" == edge && \"$1\" == /tmp/rollback-edge-lock ]] || [[ \"${failLock}\" == platform && \"$1\" == /tmp/rollback-platform-lock ]]; then return 1; fi`,
+    "  return 0",
+    "}",
+    "phase3_lock_release() { printf 'unsafe-release=%s\\n' \"$1\"; return 0; }",
+    "false",
+  ].join("\n");
+  return spawnSync("/bin/bash", ["-s"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: `${prefix}\n${body.slice(start, end)}\nfalse\ncleanup_temp_files\n`,
   });
 }
 
@@ -519,4 +596,50 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(resumed.result.status).not.toBe(0);
     expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
   }, 120_000);
+
+  test("RED: pre-candidate failure releases both acquired locks edge-first", () => {
+    const success = runPreCandidateAcquiredCleanup();
+    expect(success.status).not.toBe(0);
+    expect(success.stdout.split("\n").filter(Boolean)).toEqual([
+      "release=/tmp/pre-candidate-edge-lock",
+      "release=/tmp/pre-candidate-platform-lock",
+    ]);
+    expect(`${success.stdout}${success.stderr}`).not.toContain("RECOVERY_REQUIRED");
+
+    const failedEdge = runPreCandidateAcquiredCleanup("edge");
+    expect(failedEdge.status).not.toBe(0);
+    expect(failedEdge.stdout).toContain("release=/tmp/pre-candidate-edge-lock");
+    expect(failedEdge.stdout).not.toContain("release=/tmp/pre-candidate-platform-lock");
+    expect(`${failedEdge.stdout}${failedEdge.stderr}`).toContain("RECOVERY_REQUIRED");
+  });
+
+  test("RED: workflow releases reentered locks only after verified rollback", () => {
+    const workflow = textAt(edgeWorkflowPath);
+    const deploy = textAt(edgeDeployPath);
+    expect(workflow).toContain("always()");
+    expect(workflow).toContain("steps.deploy_edge.outputs.rollback_outcome == 'successful'");
+    expect(workflow).not.toMatch(/if:\s*success\(\)/);
+    expect(workflow).toContain('[[ ! -e "$lock" && ! -L "$lock" ]]');
+    expect(workflow.indexOf('release "$edge_lock"')).toBeLessThan(workflow.indexOf('release "$platform_lock"'));
+    expect(deploy).toContain("write_rollback_outcome successful");
+    expect(deploy).toContain("write_rollback_outcome recovery_required");
+  });
+
+  test("RED: rollback release failure cannot claim ROLLED BACK", () => {
+    const success = runRollbackReleaseCleanup();
+    expect(success.status).not.toBe(0);
+    expect(success.stdout.split("\n").filter(Boolean)).toEqual([
+      "checked=/tmp/rollback-edge-lock",
+      "checked=/tmp/rollback-platform-lock",
+    ]);
+    expect(`${success.stdout}${success.stderr}`).toContain("PILOT: ROLLED BACK");
+    expect(success.stdout).not.toContain("unsafe-release=");
+
+    const failedEdge = runRollbackReleaseCleanup("edge");
+    expect(failedEdge.status).not.toBe(0);
+    expect(failedEdge.stdout).toContain("checked=/tmp/rollback-edge-lock");
+    expect(failedEdge.stdout).not.toContain("checked=/tmp/rollback-platform-lock");
+    expect(`${failedEdge.stdout}${failedEdge.stderr}`).toContain("RECOVERY_REQUIRED");
+    expect(`${failedEdge.stdout}${failedEdge.stderr}`).not.toContain("PILOT: ROLLED BACK");
+  });
 });
