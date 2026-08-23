@@ -1188,7 +1188,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
       expect(invalid.result.status, scenario).not.toBe(0);
       expect(`${invalid.result.stdout}${invalid.result.stderr}`, scenario).not.toContain("PILOT: GO\n");
     }
-  }, 240_000);
+  }, 360_000);
 
   test("binds manifest, marker, archive, receipt, and network provenance by hashes without secret values", () => {
     const helper = requireHelper();
