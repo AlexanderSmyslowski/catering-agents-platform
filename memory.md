@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.369
+version: 5.370
 date: 2026-08-23
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1811,3 +1811,9 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 - Exact-Head-Fachkorrektur für den Phase-3-Catering-Pilot: Der Post-create-Marker-Crash-Gap ist jetzt fail-closed und zugleich deterministisch recoverbar. Nur wenn das markergebundene unveränderliche Manifest für den erwarteten Namen `absent` plus `created_by_run_authorized=true` sagt, exakt ein Netz mit exakten Owner-/Phase-/Kind-/`com.catering.transaction`-Labels und identischem Transaktions-/Manifesthash-Kontext existiert, die Engine-Parameter und stage-konformen Mitglieder/Aliase/Portbindungen stimmen und keine Fremdressource vorliegt, darf der Helper die volle ID atomar in den Candidate-/`rolling_back`-Beweis übernehmen. Zwischen den Creates gilt die feste Reihenfolge `catering_ingress` vor `catering_private`; private-only, Doppel-/Fremdnetz, falsche Labels oder jede weitere Abweichung bleiben `NO-GO`, kein pauschales Adoptieren.
 - Die Compatibility-Invarianten sind stage-aware berichtigt: Zeiterfassung, EventOS, Iranmonitor und Shared Edge behalten IDs, RestartCounts, Status-/StartedAt-, Image-, Compose-, Fremd-Netzwerk-/Alias- und Portbindungen exakt; nur Catering-Mitglieder dürfen gemäß der Planmatrix `S0`/`S1`/`S2`/`S3`/`D1`–`D6`/`S4` in fester Reihenfolge abnehmen. Kein Fremd-App-Detach, kein nicht autorisierter Catering-Detach, kein Zusatzmitglied; der letzte Catering-Consumer eines Kompatibilitätsnetzes erst nach grüner Ersatzroute/Smokes. Rollback stellt die exakte Baseline-Mitgliedschaft einschließlich Aliase wieder her. Die Korrektur ändert nur Plan, Memory und Phase-3-Snapshot und bleibt ohne Runtime-, Deployment- oder Git-Metadatenaktion.
+
+### 5.370 - 2026-08-23
+
+- Exact-Head-Fachkorrektur P1 A: Das vollständige immutable Baseline-Manifest wird zuerst atomar installiert, readback-validiert und gehasht. Erst danach wird `candidate` mit `transaction_id`, festem Manifestpfad/-hash, erwarteten Platform-/Edge-Source-Hashes, `baseline_network_status` und `pending`-Fortschritt atomar geschrieben und validiert; anschließend werden die beiden geschützten Source-Kopien einzeln atomar installiert/readback-gehasht und ihr Fortschritt erst nach exakter Prüfung auf `verified` gesetzt. Absent/inactive mit ungebundener Manifest-/Source-/Netzmutation bleibt `NO-GO`; es gibt keinen Stable-State-Adoptionsweg.
+- Exact-Head-Fachkorrektur P1 B: Der feste fünfte geschützte Pfad `/opt/catering-phase3/phase3.rollback-completion.receipt` enthält ausschließlich nicht-sensitive, exakt an Transaktions-ID, Manifestpfad/-hash, prioren Markerzustand/-hash und `restore_evidence_sha256` gebundene Finalisierungsdaten. Er wird erst nach vollständigem Restore-/Fremd-Invariant-/Smoke-Beweis geschrieben; danach bleiben Manifest und Receipt bis zum stabilen prioren Marker-Readback erhalten, anschließend werden Manifest und zuletzt Receipt entfernt. Die drei idempotenten Zustände `rolling_back + manifest + receipt`, stabil prior + `manifest + receipt` und stabil prior + kein Manifest + Receipt sowie die verbotenen Zustände `stable + manifest` ohne Receipt und `rolling_back` ohne Manifest sind in der Crash-Point-Tabelle des Plans festgelegt.
+- Die Korrektur bleibt strikt dokumentarisch und ändert ausschließlich Plan, Root-Memory und den bestehenden Phase-3-Snapshot; keine Runtime-, Docker-, Server-, Workflow-, Deployment- oder Git-Metadatenaktion.
