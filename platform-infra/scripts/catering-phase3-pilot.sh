@@ -1131,38 +1131,14 @@ write_restore_evidence_control() {
   validate_restore_evidence
 }
 
-if [[ "${command_name}" == resume ]]; then
-  case "${marker_state}" in
-    candidate)
-      validate_resume_evidence candidate
-      if [[ "$(field "${activation_marker}" catering_ingress_id)" != "$(field "${adoption_journal}" catering_ingress_id)" || "$(field "${activation_marker}" catering_private_id)" != "$(field "${adoption_journal}" catering_private_id)" ]]; then
-        adopt_candidate_networks
-      fi
-      resume_candidate_networks
-      validate_resume_host_smokes
-      validate_resume_egress
-      adoption_proof="resume:${run_id}:$(field "${activation_marker}" marker_sha256)"
-      write_control_marker active 1 "${adoption_proof}"
-      ;;
-    active)
-      validate_resume_evidence active
-      validate_resume_host_smokes
-      validate_resume_egress
-      write_control_marker active 1 "$(field "${activation_marker}" adoption_proof)"
-      ;;
-    rolling_back)
-      finalize_rolling_back_resume
-      release_control_locks terminal
-      printf '%s\n' 'PILOT: ROLLED BACK'
-      exit 0
-      ;;
-    *) fail ;;
-  esac
-  release_control_locks terminal
-  printf '%s\n' 'PILOT: GO'
-elif [[ "${command_name}" == rollback ]]; then
+continue_rollback_control() {
+  local initialize_marker="$1"
+  local network created_by_run container members archive_tmp archive_hash marker_sha256
+  local restore_evidence_sha256 receipt_tmp receipt_hash
   smoke_readback_sha256=pending
-  write_control_marker rolling_back 0 not_adopted
+  if [[ "${initialize_marker}" == 1 ]]; then
+    write_control_marker rolling_back 0 not_adopted
+  fi
   connect_if_missing_control() {
     local network alias container networks
     network="$1"; alias="$2"; container="$3"
@@ -1256,6 +1232,44 @@ elif [[ "${command_name}" == rollback ]]; then
   finalize_rolling_back_resume
   release_control_locks terminal
   printf '%s\n' 'PILOT: ROLLED BACK'
+}
+
+if [[ "${command_name}" == resume ]]; then
+  case "${marker_state}" in
+    candidate)
+      validate_resume_evidence candidate
+      if [[ "$(field "${activation_marker}" catering_ingress_id)" != "$(field "${adoption_journal}" catering_ingress_id)" || "$(field "${activation_marker}" catering_private_id)" != "$(field "${adoption_journal}" catering_private_id)" ]]; then
+        adopt_candidate_networks
+      fi
+      resume_candidate_networks
+      validate_resume_host_smokes
+      validate_resume_egress
+      adoption_proof="resume:${run_id}:$(field "${activation_marker}" marker_sha256)"
+      write_control_marker active 1 "${adoption_proof}"
+      ;;
+    active)
+      validate_resume_evidence active
+      validate_resume_host_smokes
+      validate_resume_egress
+      write_control_marker active 1 "$(field "${activation_marker}" adoption_proof)"
+      ;;
+    rolling_back)
+      if [[ "$(field "${baseline_manifest}" schema)" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" &&
+        ! -e "${restore_proof_archive}" && ! -e "${completion_receipt}" && ! -e "${restore_evidence_record}" ]]; then
+        continue_rollback_control 0
+      else
+        finalize_rolling_back_resume
+        release_control_locks terminal
+        printf '%s\n' 'PILOT: ROLLED BACK'
+      fi
+      exit 0
+      ;;
+    *) fail ;;
+  esac
+  release_control_locks terminal
+  printf '%s\n' 'PILOT: GO'
+elif [[ "${command_name}" == rollback ]]; then
+  continue_rollback_control 1
 else
   fail
 fi

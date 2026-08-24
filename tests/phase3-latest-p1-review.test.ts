@@ -861,6 +861,50 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
   }, 120_000);
 
+  test("RED: legacy rolling_back crash before evidence resumes the rollback idempotently", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-pre-evidence-red-"));
+    const crashed = runHarness("crash-after-rollback", root);
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(false);
+    convertManifestToLegacy(root);
+
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network create/);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: legacy rolling_back partial evidence remains fail-closed", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-partial-evidence-red-"));
+    const crashed = runHarness("crash-after-receipt", root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+    writeFileSync(path.join(root, "phase3.rollback-completion.receipt"), "schema=broken\n");
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
   test("RED: legacy rolling_back rejects an explicit rollback command", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-command-red-"));
     const crashed = runHarness("crash-after-receipt", root);
