@@ -261,6 +261,9 @@ jobs:
           state_pending="${bootstrap_state}.pending.${owner_token}.$$"
           cleanup() {
             unlink "$tmp" 2>/dev/null || true
+            if [[ -n "${pending:-}" ]]; then
+              sudo unlink "$pending" 2>/dev/null || true
+            fi
             if [[ -n "${state_pending:-}" ]]; then
               sudo unlink "$state_pending" 2>/dev/null || true
             fi
@@ -315,7 +318,12 @@ jobs:
           verify_bootstrap_state "$bootstrap_state" mutation_started "$bootstrap_state" || exit 1
           [[ -f "$pending" && ! -L "$pending" ]] || exit 1
           verify_bootstrap_state "$bootstrap_state" mutation_started "$bootstrap_state" || exit 1
-          sudo mv -f "$pending" "${edge_path}/.env"
+          sudo ln -T -- "$pending" "${edge_path}/.env"
+          pending_inode="$(stat -c '%i' "$pending" 2>/dev/null || stat -f '%i' "$pending")"
+          live_inode="$(stat -c '%i' "${edge_path}/.env" 2>/dev/null || stat -f '%i' "${edge_path}/.env")"
+          [[ "${pending_inode}" =~ ^[0-9]+$ && "${pending_inode}" == "${live_inode}" ]] || exit 1
+          cmp -s "$pending" "${edge_path}/.env"
+          sudo unlink "$pending"
           pending=""
           test "$(stat -c '%a %u %g' "${edge_path}/.env" 2>/dev/null || stat -f '%Lp %u %g' "${edge_path}/.env")" = "600 ${deploy_uid} ${deploy_gid}"
           verify_bootstrap_state "$bootstrap_state" mutation_started "$bootstrap_state" || exit 1
