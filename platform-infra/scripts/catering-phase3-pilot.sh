@@ -191,6 +191,8 @@ pilot_root="${17}"
 egress_exercise="${18}"
 lock_token="${owner}:${run_id}"
 readonly PLATFORM_PRODUCTION="platform-infra-production-1"
+readonly TRANSACTION_MANIFEST_SCHEMA="phase3.2.transaction-baseline"
+readonly LEGACY_TRANSACTION_MANIFEST_SCHEMA="phase3.1.transaction-baseline"
 
 fail() { printf '%s\n' 'PILOT: NO-GO' >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || fail
@@ -427,10 +429,11 @@ trap release_control_locks EXIT
 phase3_lock_acquire "${platform_lock}" held_platform
 phase3_lock_acquire "${edge_lock}" held_edge
 validate_manifest() {
-  local marker_hash
+  local marker_hash manifest_schema required smoke_evidence_hash
   validate_kv_file "${baseline_manifest}" manifest
   require_regular "${baseline_manifest}"
-  require_field "${baseline_manifest}" schema "phase3.1.transaction-baseline"
+  manifest_schema="$(field "${baseline_manifest}" schema)"
+  [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" || "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
   require_field "${baseline_manifest}" owner "${owner}"
   require_field "${baseline_manifest}" transaction_id "${run_id}"
   grep -Eq '^prior_marker_content_b64=' "${baseline_manifest}" || fail
@@ -438,11 +441,30 @@ validate_manifest() {
     network_driver network_scope network_internal network_ipam network_labels network_members network_aliases \
     platform_network_baseline_id platform_network_baseline_members platform_network_baseline_aliases \
     zeiterfassung_network_baseline_id zeiterfassung_network_baseline_members zeiterfassung_network_baseline_aliases \
-    catering_path_baseline baseline_smoke_evidence baseline_smoke_sha256; do
+    catering_path_baseline; do
     grep -Eq "^${required}=" "${baseline_manifest}" || fail
   done
-  [[ "$(field "${baseline_manifest}" baseline_smoke_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
-  [[ "$(field "${baseline_manifest}" baseline_smoke_evidence)" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
+  if [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
+    for required in baseline_smoke_evidence baseline_smoke_sha256; do
+      grep -Eq "^${required}=" "${baseline_manifest}" || fail
+    done
+    [[ "$(field "${baseline_manifest}" baseline_smoke_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
+    [[ "$(field "${baseline_manifest}" baseline_smoke_evidence)" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
+    smoke_evidence_hash="$(printf '%s\n' "$(field "${baseline_manifest}" baseline_smoke_evidence | tr ';' '\n')" | sha256sum | awk '{print $1}')"
+    [[ "${smoke_evidence_hash}" == "$(field "${baseline_manifest}" baseline_smoke_sha256)" ]] || fail
+  else
+    # The old schema is a recovery-only authority. It may never authorize a
+    # forward resume, and it carries no inferred replacement for the missing
+    # pre-mutation semantic baseline.
+    if [[ "${command_name}" == rollback ]]; then
+      [[ "${marker_state}" == candidate || "${marker_state}" == active || "${legacy_rollback_finalize:-0}" == 1 ]] || fail
+    elif [[ "${command_name}" == resume ]]; then
+      [[ "${marker_state}" == rolling_back ]] || fail
+    else
+      fail
+    fi
+    ! grep -Eq '^baseline_smoke_(evidence|sha256)=' "${baseline_manifest}" || fail
+  fi
   if grep -Eiq 'secret[^=]*(value|password|token)=' "${baseline_manifest}"; then fail; fi
   marker_hash="$(field "${baseline_manifest}" marker_sha256)"
   [[ -n "${marker_hash}" ]] || fail
@@ -452,9 +474,9 @@ rehydrate_manifest() {
   # inferred from a partially written marker or from live container guesses.
   validate_manifest
 }
-rehydrate_manifest
 validate_marker_file "${activation_marker}"
 marker_state="$(field "${activation_marker}" state)"
+legacy_rollback_finalize=0
 [[ "${marker_state}" == candidate || "${marker_state}" == active || "${marker_state}" == rolling_back ]] || fail
 require_field "${activation_marker}" schema "${schema}"
 require_field "${activation_marker}" owner "${owner}"
@@ -462,6 +484,7 @@ require_field "${activation_marker}" transaction_id "${run_id}"
 require_field "${activation_marker}" transaction_manifest_path "${baseline_manifest}"
 manifest_sha256="$(sha256sum "${baseline_manifest}" | awk '{print $1}')"
 require_field "${activation_marker}" transaction_manifest_sha256 "${manifest_sha256}"
+rehydrate_manifest
 
 validate_network_provenance() {
   local network="$1" kind="$2" created_by_run="${3:-true}" id driver scope internal ipam_driver ipam_config options labels members
@@ -1229,6 +1252,7 @@ elif [[ "${command_name}" == rollback ]]; then
   sudo mv -f "${completion_receipt}.pending.${run_id}" "${completion_receipt}"
   unlink "${receipt_tmp}"
   validate_receipt
+  legacy_rollback_finalize=1
   finalize_rolling_back_resume
   release_control_locks terminal
   printf '%s\n' 'PILOT: ROLLED BACK'
@@ -1384,6 +1408,7 @@ done
 
 owner="catering-agents-platform"
 schema="phase3.1"
+transaction_manifest_schema="phase3.2.transaction-baseline"
 FOREIGN_CONTAINERS=(
   zeiterfassung-app-1
   commcats-eventos-app
@@ -1996,7 +2021,7 @@ smoke_readback_sha256=pending
 manifest_tmp="$(mktemp)"
 register_temp "${manifest_tmp}"
 printf '%s\n' \
-  "schema=phase3.1.transaction-baseline" \
+  "schema=${transaction_manifest_schema}" \
   "owner=${owner}" \
   "transaction_id=${transaction_id}" \
   "prior_marker_state=${prior_marker_state}" \
@@ -2079,9 +2104,10 @@ validate_manifest_fields() {
 manifest_field() { sed -n "s/^$1=//p" "${baseline_manifest}" | tail -n 1; }
 
 validate_manifest() {
-  local required
+  local required smoke_evidence_hash
   [[ -f "${baseline_manifest}" && ! -L "${baseline_manifest}" ]] || fail
   validate_manifest_fields
+  [[ "$(manifest_field schema)" == "${transaction_manifest_schema}" ]] || fail
   [[ "$(sudo sha256sum "${baseline_manifest}" | awk '{print $1}')" == "${transaction_manifest_sha256}" ]] || fail
   for required in container_id RestartCount NetworkSettings Aliases PortBindings Mounts secret_ref \
     network_driver network_scope network_internal network_ipam network_labels network_members network_aliases \
@@ -2092,6 +2118,8 @@ validate_manifest() {
   done
   [[ "$(manifest_field baseline_smoke_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
   [[ "$(manifest_field baseline_smoke_evidence)" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
+  smoke_evidence_hash="$(printf '%s\n' "$(manifest_field baseline_smoke_evidence | tr ';' '\n')" | sha256sum | awk '{print $1}')"
+  [[ "${smoke_evidence_hash}" == "$(manifest_field baseline_smoke_sha256)" ]] || fail
   if grep -Eiq 'secret[^=]*(value|password|token)=' "${baseline_manifest}"; then fail; fi
 }
 validate_manifest

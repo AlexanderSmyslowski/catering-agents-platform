@@ -43,6 +43,84 @@ function digestFile(filePath: string) {
   return digest(readFileSync(filePath, "utf8"));
 }
 
+function rewriteFields(filePath: string, updates: Record<string, string>, removals: string[] = []) {
+  const remove = new Set(removals);
+  const lines = textAt(filePath).split("\n").filter(Boolean);
+  const seen = new Set<string>();
+  const rewritten = lines.flatMap((line) => {
+    const separator = line.indexOf("=");
+    if (separator < 0) return [line];
+    const key = line.slice(0, separator);
+    if (remove.has(key)) return [];
+    if (Object.hasOwn(updates, key)) {
+      seen.add(key);
+      return [`${key}=${updates[key]}`];
+    }
+    return [line];
+  });
+  for (const [key, value] of Object.entries(updates)) {
+    if (!seen.has(key)) rewritten.push(`${key}=${value}`);
+  }
+  writeFileSync(filePath, `${rewritten.join("\n")}\n`);
+}
+
+function canonicalSelfHash(filePath: string, fieldName: string) {
+  return digest(textAt(filePath).replace(new RegExp(`^${fieldName}=.*$`, "m"), `${fieldName}=absent`));
+}
+
+function rebindManifestReferences(root: string) {
+  const manifest = path.join(root, "phase3.transaction-baseline.manifest");
+  const marker = path.join(root, "phase3.activation");
+  const journal = path.join(root, "phase3.network-adoption.journal");
+  const manifestHash = digestFile(manifest);
+  rewriteFields(marker, { transaction_manifest_sha256: manifestHash, marker_sha256: "absent" });
+  rewriteFields(marker, { marker_sha256: canonicalSelfHash(marker, "marker_sha256") });
+  if (existsSync(journal)) {
+    rewriteFields(journal, { transaction_manifest_sha256: manifestHash, journal_sha256: "absent" });
+    rewriteFields(journal, { journal_sha256: canonicalSelfHash(journal, "journal_sha256") });
+  }
+  return { manifestHash, markerHash: canonicalSelfHash(marker, "marker_sha256") };
+}
+
+function convertManifestToLegacy(root: string) {
+  const manifest = path.join(root, "phase3.transaction-baseline.manifest");
+  rewriteFields(
+    manifest,
+    { schema: "phase3.1.transaction-baseline" },
+    ["baseline_smoke_evidence", "baseline_smoke_sha256"],
+  );
+  const bindings = rebindManifestReferences(root);
+  const restoreEvidence = path.join(root, "phase3.restore-evidence.record");
+  let restoreEvidenceHash = "";
+  if (existsSync(restoreEvidence)) {
+    rewriteFields(restoreEvidence, { baseline_manifest_sha256: bindings.manifestHash });
+    restoreEvidenceHash = digestFile(restoreEvidence);
+  }
+  const archive = path.join(root, "phase3.rollback-restore-proof.archive");
+  if (existsSync(archive)) {
+    rewriteFields(archive, {
+      transaction_manifest_sha256: bindings.manifestHash,
+      marker_sha256: bindings.markerHash,
+      ...(restoreEvidenceHash ? { restore_evidence_sha256: restoreEvidenceHash } : {}),
+      archive_sha256: "absent",
+    });
+    rewriteFields(archive, { archive_sha256: canonicalSelfHash(archive, "archive_sha256") });
+  }
+  const receipt = path.join(root, "phase3.rollback-completion.receipt");
+  if (existsSync(receipt)) {
+    const archiveHash = existsSync(archive) ? fieldsAt(archive).get("archive_sha256") ?? "" : "";
+    rewriteFields(receipt, {
+      transaction_manifest_sha256: bindings.manifestHash,
+      marker_sha256: bindings.markerHash,
+      ...(restoreEvidenceHash ? { restore_evidence_sha256: restoreEvidenceHash } : {}),
+      restore_proof_archive_sha256: archiveHash,
+      archive_sha256: archiveHash,
+      receipt_sha256: "absent",
+    });
+    rewriteFields(receipt, { receipt_sha256: canonicalSelfHash(receipt, "receipt_sha256") });
+  }
+}
+
 function canonicalArchiveDigest(filePath: string) {
   return digest(textAt(filePath).replace(/^archive_sha256=.*$/m, "archive_sha256=absent"));
 }
@@ -94,6 +172,8 @@ function runHarness(scenario: string, root = mkdtempSync(path.join(tmpdir(), "ca
       ...process.env,
       PATH: `${sandbox.bin}:${process.env.PATH ?? ""}`,
       CATERING_PHASE3_TEST_MODE: "1",
+      CATERING_PHASE3_ENVIRONMENT: "production",
+      CATERING_PHASE3_EXECUTE: "1",
       CATERING_PHASE3_FAKE_HOST_ROOT: root,
       CATERING_PHASE3_HARNESS_SCENARIO: scenario,
       CATERING_PHASE3_SANDBOX_LOG: sandbox.log,
@@ -102,14 +182,16 @@ function runHarness(scenario: string, root = mkdtempSync(path.join(tmpdir(), "ca
   return { root, sandbox, result };
 }
 
-function runExistingResume(root: string, sandbox: ReturnType<typeof commandSandbox>) {
-  const result = spawnSync("/bin/bash", [helperPath, "--resume"], {
+function runExistingControl(root: string, sandbox: ReturnType<typeof commandSandbox>, command: "resume" | "rollback") {
+  const result = spawnSync("/bin/bash", [helperPath, `--${command}`], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
       ...process.env,
       PATH: `${path.join(root, "bin")}:${sandbox.bin}:${process.env.PATH ?? ""}`,
       CATERING_PHASE3_TEST_MODE: "1",
+      CATERING_PHASE3_ENVIRONMENT: "production",
+      CATERING_PHASE3_EXECUTE: "1",
       CATERING_PHASE3_FAKE_HOST_ROOT: root,
       CATERING_PHASE3_SANDBOX_LOG: sandbox.log,
       CATERING_PHASE3_TRANSACTION_ID: "phase3-harness",
@@ -127,6 +209,14 @@ function runExistingResume(root: string, sandbox: ReturnType<typeof commandSandb
     },
   });
   return { root, sandbox, result };
+}
+
+function runExistingResume(root: string, sandbox: ReturnType<typeof commandSandbox>) {
+  return runExistingControl(root, sandbox, "resume");
+}
+
+function runExistingRollback(root: string, sandbox: ReturnType<typeof commandSandbox>) {
+  return runExistingControl(root, sandbox, "rollback");
 }
 
 function remotePilotBody() {
@@ -738,6 +828,100 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     const resumed = runExistingResume(root, crashed.sandbox);
     expect(resumed.result.status).not.toBe(0);
     expect(`${resumed.result.stdout}${resumed.result.stderr}`).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
+  test.each(["crash-after-candidate", "crash-after-active"])("RED: legacy %s manifest remains explicitly rollback-recoverable", (scenario) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rollback-red-"));
+    const crashed = runHarness(scenario, root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    expect(rolledBack.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+  }, 120_000);
+
+  test("RED: legacy rolling_back manifest resumes only rollback finalization", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-red-"));
+    const crashed = runHarness("crash-after-receipt", root);
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    convertManifestToLegacy(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+  }, 120_000);
+
+  test("RED: legacy rolling_back rejects an explicit rollback command", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-command-red-"));
+    const crashed = runHarness("crash-after-receipt", root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect)/);
+  }, 120_000);
+
+  test("RED: legacy candidate cannot forward-resume or claim GO", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-forward-resume-red-"));
+    const crashed = runHarness("crash-after-candidate", root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("candidate");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect)/);
+  }, 120_000);
+
+  test.each(["baseline_smoke_evidence", "baseline_smoke_sha256"])("RED: new manifest missing %s fails closed", (missingField) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-new-manifest-required-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    rewriteFields(path.join(root, "phase3.transaction-baseline.manifest"), {}, [missingField]);
+    rebindManifestReferences(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
+  test("RED: new manifest smoke evidence/hash mismatch fails closed", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-new-manifest-hash-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    rewriteFields(path.join(root, "phase3.transaction-baseline.manifest"), {
+      baseline_smoke_sha256: "0".repeat(64),
+    });
+    rebindManifestReferences(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
     expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
   }, 120_000);
 

@@ -861,6 +861,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
       normalDockerLog.findIndex((line) => line.includes("network create")),
     );
     const normalManifest = markerFields(path.join(normal.fakeHostRoot, "phase3.transaction-baseline.manifest"));
+    expect(normalManifest.get("schema")).toBe("phase3.2.transaction-baseline");
     expect(normalManifest.get("baseline_smoke_evidence")).toMatch(
       /^catering:[0-9a-f]{64};zeiterfassung:[0-9a-f]{64};eventos:[0-9a-f]{64}$/,
     );
