@@ -306,6 +306,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   registerProductionApprovalRoutes(app, {
     store,
     intakeRecords,
+    handoffReader,
     repository,
     auditLog,
     trustedActorSecret,

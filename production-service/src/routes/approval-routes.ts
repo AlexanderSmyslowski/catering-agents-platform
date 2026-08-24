@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
   areJsonValuesEqual,
@@ -6,9 +7,11 @@ import {
   createProductionApplyManifest,
   validateProductionDraft,
   type ApprovedProductionSpec,
+  type AcceptedEventSpec,
   type ApprovalRequestRecord,
   type AuditLogStore,
   type BusinessContext,
+  type ProductionHandoff,
   type ProductionApplyManifest,
   type TrustedActor
 } from "@catering/shared-core";
@@ -19,6 +22,7 @@ import {
 } from "../repositories/production-store.js";
 import type { ProductionDecisionTargetScope } from "../repositories/production-decision-repository.js";
 import type { IntakeRecordsPort } from "../ports/intake-records-port.js";
+import type { ProductionHandoffReader } from "../ports/production-handoff-reader.js";
 import {
   productionDecidedDraftFor,
   validateProductionDecisionAggregate,
@@ -36,6 +40,7 @@ export type ProductionApplyFaultPhase =
 export interface ProductionApprovalRouteDependencies {
   store: ProductionStore;
   intakeRecords: IntakeRecordsPort;
+  handoffReader?: ProductionHandoffReader;
   repository: InMemoryRecipeRepository;
   auditLog: AuditLogStore;
   trustedActorSecret?: string;
@@ -88,23 +93,179 @@ function manifestMatchesApprovedSpec(
   }
 }
 
+interface CompareOrInsertResult {
+  conflict?: string;
+  created: boolean;
+}
+
 async function compareOrInsert<T>(input: {
   get: () => Promise<T | undefined>;
   insert: () => Promise<"created" | "exists">;
   expected: T;
   label: string;
-}): Promise<string | undefined> {
+}): Promise<CompareOrInsertResult> {
   const existing = await input.get();
   if (existing) {
-    return areJsonValuesEqual(existing, input.expected)
-      ? undefined
-      : `${input.label} existiert bereits mit abweichendem Inhalt.`;
+    return {
+      created: false,
+      ...(areJsonValuesEqual(existing, input.expected)
+        ? {}
+        : { conflict: `${input.label} existiert bereits mit abweichendem Inhalt.` })
+    };
   }
-  await input.insert();
+  const insertion = await input.insert();
   const observed = await input.get();
-  return areJsonValuesEqual(observed, input.expected)
-    ? undefined
-    : `${input.label} konnte nicht konfliktfrei veröffentlicht werden.`;
+  return {
+    created: insertion === "created",
+    ...(areJsonValuesEqual(observed, input.expected)
+      ? {}
+      : { conflict: `${input.label} konnte nicht konfliktfrei veröffentlicht werden.` })
+  };
+}
+
+async function existingArtifactConflict<T>(input: {
+  get: () => Promise<T | undefined>;
+  expected: T;
+  label: string;
+}): Promise<string | undefined> {
+  const existing = await input.get();
+  return existing && !areJsonValuesEqual(existing, input.expected)
+    ? `${input.label} existiert bereits mit abweichendem Inhalt.`
+    : undefined;
+}
+
+function productionDecisionSnapshot(spec: AcceptedEventSpec): Array<{
+  componentId: string;
+  productionDecision: AcceptedEventSpec["menuPlan"][number]["productionDecision"];
+}> {
+  return spec.menuPlan
+    .map((component) => ({
+      componentId: component.componentId,
+      productionDecision: component.productionDecision
+    }))
+    .sort((left, right) => left.componentId.localeCompare(right.componentId));
+}
+
+function acceptedEventSpecConsistencyError(
+  canonical: AcceptedEventSpec | undefined,
+  candidate: AcceptedEventSpec
+): string | undefined {
+  if (!canonical) return `AcceptedEventSpec ${candidate.specId} fehlt im autoritativen Intake.`;
+  if (canonical.specId !== candidate.specId) {
+    return `AcceptedEventSpec ${candidate.specId} referenziert eine unzulässige Identität.`;
+  }
+  if (!areJsonValuesEqual(canonical.sourceLineage, candidate.sourceLineage)) {
+    return `AcceptedEventSpec ${candidate.specId} besitzt eine inkonsistente sourceLineage.`;
+  }
+  if (!areJsonValuesEqual(productionDecisionSnapshot(canonical), productionDecisionSnapshot(candidate))) {
+    return `AcceptedEventSpec ${candidate.specId} besitzt inkonsistente Produktionsentscheidungen.`;
+  }
+  return undefined;
+}
+
+async function approvedSnapshotConsistencyError(
+  store: ProductionStore,
+  actor: TrustedActor,
+  approvedSpec: ApprovedProductionSpec
+): Promise<string | undefined> {
+  const aggregate = await productionDecisionRepositoryFor(store).getDecisionAggregate(
+    actor,
+    approvedSpec.approvalRequestId
+  );
+  if (!aggregate?.approvedProductionSpec || !areJsonValuesEqual(aggregate.approvedProductionSpec, approvedSpec)) {
+    return "ApprovedProductionSpec stimmt nicht mit der persistierten Freigabeevidenz überein.";
+  }
+  return undefined;
+}
+
+function offerHandoffIdFor(sourceRef: string | undefined): string | undefined {
+  const prefix = "offer-handoff:";
+  if (!sourceRef?.startsWith(prefix)) return undefined;
+  const handoffId = sourceRef.slice(prefix.length).trim();
+  return handoffId.length > 0 ? handoffId : undefined;
+}
+
+async function handoffSnapshotConsistencyError(
+  store: ProductionStore,
+  handoffReader: ProductionHandoffReader | undefined,
+  actor: TrustedActor,
+  approvedSpec: ApprovedProductionSpec
+): Promise<string | undefined> {
+  const sourceDraft = await store.getProductionDraft(actor, approvedSpec.sourceDraft.draftId);
+  const sourceRefHandoffId = offerHandoffIdFor(sourceDraft?.source.sourceRef);
+  const linkedCaseId = await store.findCaseIdForArtifact(actor, approvedSpec.sourceDraft.draftId);
+  const linkedCase = linkedCaseId ? await store.getCase(actor, linkedCaseId) : undefined;
+  const caseHandoffId = linkedCase?.productionHandoffId;
+  if (!sourceRefHandoffId && !caseHandoffId) {
+    return "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz.";
+  }
+  // The mutable draft may only corroborate the immutable case linkage; it
+  // must never choose a different Handoff identity for Apply.
+  if (
+    sourceRefHandoffId !== caseHandoffId ||
+    !linkedCase?.productionHandoffId
+  ) {
+    return "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz.";
+  }
+  if (!handoffReader) return "Freigegebener Produktionssnapshot besitzt keine lesbare Offer-/Handoff-Evidenz.";
+
+  let handoff: ProductionHandoff | undefined;
+  try {
+    handoff = await handoffReader.get(actor, caseHandoffId!);
+  } catch {
+    return "Freigegebener Produktionssnapshot konnte nicht gegen den persistierten Offer-/Handoff-Snapshot geprüft werden.";
+  }
+  if (
+    !handoff ||
+    handoff.businessId !== actor.businessId ||
+    handoff.handoffId !== caseHandoffId ||
+    !handoff.approvedOfferId?.trim() ||
+    !handoff.approvalRequestId?.trim() ||
+    !handoff.source.draftId?.trim() ||
+    !Number.isInteger(handoff.source.revision) ||
+    !handoff.source.selectedVariantId?.trim()
+  ) {
+    return "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz.";
+  }
+  if (!areJsonValuesEqual(handoff.eventSpecSnapshot, approvedSpec.artifacts.eventSpec)) {
+    return "Freigegebener Produktionssnapshot weicht vom persistierten Offer-/Handoff-Snapshot ab.";
+  }
+  const pricingSummary = approvedSpec.artifacts.eventSpec.budgetContext?.pricingSummary;
+  if (!pricingSummary || !areJsonValuesEqual(handoff.pricingSnapshot, pricingSummary)) {
+    return "Freigegebener Produktionssnapshot besitzt eine inkonsistente Offer-Preisgrundlage.";
+  }
+  return undefined;
+}
+
+async function productionCaseApplyConsistencyError(
+  store: ProductionStore,
+  actor: TrustedActor,
+  currentCase: Awaited<ReturnType<ProductionStore["getCase"]>>,
+  approvedSpec: ApprovedProductionSpec
+): Promise<string | undefined> {
+  if (!currentCase || currentCase.approvedProductionSpecId !== approvedSpec.approvedProductionSpecId) {
+    return "ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag.";
+  }
+  if (currentCase.status === "archived") {
+    return "ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag.";
+  }
+
+  const events = await store.listEvents(actor, currentCase.caseId);
+  const latestDraftEvent = events
+    .filter((event) => event.kind === "draft_created" || event.kind === "revision_created")
+    .sort((left, right) => right.sequence - left.sequence)[0];
+  const approvalEvent = events
+    .filter((event) => event.kind === "approval" && event.artifactId === approvedSpec.approvedProductionSpecId)
+    .sort((left, right) => right.sequence - left.sequence)[0];
+  if (
+    !latestDraftEvent ||
+    latestDraftEvent.artifactId !== approvedSpec.sourceDraft.draftId ||
+    !approvalEvent ||
+    approvalEvent.sequence <= latestDraftEvent.sequence
+  ) {
+    return "ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag.";
+  }
+  return undefined;
 }
 
 async function updateLinkedProductionCase(
@@ -173,6 +334,7 @@ export function registerProductionApprovalRoutes(
   const {
     store,
     intakeRecords,
+    handoffReader,
     repository,
     auditLog,
     trustedActorSecret,
@@ -379,55 +541,152 @@ export function registerProductionApprovalRoutes(
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const approvedSpec = await store.getApprovedProductionSpec(actor, request.params.approvedProductionSpecId);
       if (!approvedSpec) return reply.code(404).send({ message: "ApprovedProductionSpec nicht gefunden." });
+      const snapshotConflict = await approvedSnapshotConsistencyError(store, actor, approvedSpec);
+      if (snapshotConflict) {
+        return reply.code(409).send({
+          message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
+          errors: [snapshotConflict]
+        });
+      }
+      const handoffConflict = await handoffSnapshotConsistencyError(
+        store,
+        handoffReader,
+        actor,
+        approvedSpec
+      );
+      if (handoffConflict) {
+        return reply.code(409).send({
+          message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
+          errors: [handoffConflict]
+        });
+      }
 
-      const { eventSpec, productionPlan, purchaseList, recipes } = approvedSpec.artifacts;
+      const caseId = await store.findCaseIdForArtifact(actor, approvedSpec.sourceDraft.draftId);
+      if (!caseId) {
+        return reply.code(409).send({
+          message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
+          errors: ["ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag."]
+        });
+      }
+      const applyResult = await store.withCaseApplyCriticalSection(actor, caseId, async (currentCase) => {
+        const caseConflict = await productionCaseApplyConsistencyError(store, actor, currentCase, approvedSpec);
+        if (caseConflict) {
+          return reply.code(409).send({
+            message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
+            errors: [caseConflict]
+          });
+        }
+
+        const { eventSpec, productionPlan, purchaseList, recipes } = approvedSpec.artifacts;
       const conflicts: string[] = [];
-      const eventSpecConflict = await compareOrInsert({
-        get: () => intakeRecords.getSpec(actor, eventSpec.specId),
-        insert: async () => (await intakeRecords.insertSpec(actor, eventSpec)) === "created" ? "created" : "exists",
-        expected: eventSpec,
-        label: `AcceptedEventSpec ${eventSpec.specId}`
-      });
+      const createdPlans: typeof productionPlan[] = [];
+      const createdPurchaseLists: typeof purchaseList[] = [];
+      const createdRecipes: typeof recipes = [];
+      let createdManifest: ProductionApplyManifest | undefined;
+      const rollbackCreatedArtifacts = async (): Promise<void> => {
+        const rollbackConflicts: string[] = [];
+        for (const recipe of [...createdRecipes].reverse()) {
+          const result = await repository.deleteIfExact(actor, recipe);
+          if (result === "conflict") rollbackConflicts.push(`Recipe ${recipe.recipeId} konnte nicht sicher zurückgebaut werden.`);
+        }
+        for (const list of [...createdPurchaseLists].reverse()) {
+          const result = await store.deletePurchaseListIfExact(actor, list);
+          if (result === "conflict") rollbackConflicts.push(`PurchaseList ${list.purchaseListId} konnte nicht sicher zurückgebaut werden.`);
+        }
+        for (const plan of [...createdPlans].reverse()) {
+          const result = await store.deletePlanIfExact(actor, plan);
+          if (result === "conflict") rollbackConflicts.push(`ProductionPlan ${plan.planId} konnte nicht sicher zurückgebaut werden.`);
+        }
+        if (createdManifest) {
+          const result = await store.deleteApplyManifestIfExact(actor, createdManifest);
+          if (result === "conflict") rollbackConflicts.push("ProductionApplyManifest konnte nicht sicher zurückgebaut werden.");
+        }
+        conflicts.push(...rollbackConflicts);
+      };
+      const canonicalEventSpec = await intakeRecords.getSpec(actor, eventSpec.specId);
+      const eventSpecConflict = acceptedEventSpecConsistencyError(
+        canonicalEventSpec,
+        eventSpec
+      );
       if (eventSpecConflict) conflicts.push(eventSpecConflict);
       applyFaultInjector?.("after_event_spec_write");
 
+      if (conflicts.length === 0 && canonicalEventSpec) {
+        try {
+          // The existing Intake replacement endpoint is a server-side exact CAS.
+          // Passing the same snapshot as replacement performs a no-op while proving
+          // that the canonical hash-equivalent payload did not drift since the read.
+          const verified = await intakeRecords.replaceSpec(actor, canonicalEventSpec, canonicalEventSpec);
+          if (verified !== "same_content") {
+            conflicts.push("AcceptedEventSpec wurde zwischenzeitlich geändert.");
+          }
+        } catch {
+          conflicts.push("AcceptedEventSpec wurde zwischenzeitlich geändert.");
+        }
+      }
+
       if (conflicts.length === 0) {
-        const conflict = await compareOrInsert({
+        const preflightConflicts = [
+          await existingArtifactConflict({
+            get: () => store.getPlan(actor, productionPlan.planId),
+            expected: productionPlan,
+            label: `ProductionPlan ${productionPlan.planId}`
+          }),
+          await existingArtifactConflict({
+            get: () => store.getPurchaseList(actor, purchaseList.purchaseListId),
+            expected: purchaseList,
+            label: `PurchaseList ${purchaseList.purchaseListId}`
+          }),
+          ...(await Promise.all(recipes.map((recipe) => existingArtifactConflict({
+            get: () => repository.get(actor, recipe.recipeId),
+            expected: recipe,
+            label: `Recipe ${recipe.recipeId}`
+          }))))
+        ].filter((conflict): conflict is string => Boolean(conflict));
+        conflicts.push(...preflightConflicts);
+      }
+
+      if (conflicts.length === 0) {
+        const result = await compareOrInsert({
           get: () => store.getPlan(actor, productionPlan.planId),
           insert: () => store.insertPlan(actor, productionPlan),
           expected: productionPlan,
           label: `ProductionPlan ${productionPlan.planId}`
         });
-        if (conflict) conflicts.push(conflict);
+        if (result.conflict) conflicts.push(result.conflict);
+        if (result.created) createdPlans.push(productionPlan);
       }
       applyFaultInjector?.("after_plan_write");
 
       if (conflicts.length === 0) {
-        const conflict = await compareOrInsert({
+        const result = await compareOrInsert({
           get: () => store.getPurchaseList(actor, purchaseList.purchaseListId),
           insert: () => store.insertPurchaseList(actor, purchaseList),
           expected: purchaseList,
           label: `PurchaseList ${purchaseList.purchaseListId}`
         });
-        if (conflict) conflicts.push(conflict);
+        if (result.conflict) conflicts.push(result.conflict);
+        if (result.created) createdPurchaseLists.push(purchaseList);
       }
       applyFaultInjector?.("after_purchase_list_write");
 
       for (const recipe of conflicts.length === 0 ? recipes : []) {
-        const conflict = await compareOrInsert({
+        const result = await compareOrInsert({
           get: () => repository.get(actor, recipe.recipeId),
           insert: () => repository.insert(actor, recipe),
           expected: recipe,
           label: `Recipe ${recipe.recipeId}`
         });
-        if (conflict) {
-          conflicts.push(conflict);
+        if (result.conflict) {
+          conflicts.push(result.conflict);
           break;
         }
+        if (result.created) createdRecipes.push(recipe);
         applyFaultInjector?.("after_recipe_write");
       }
 
       if (conflicts.length > 0) {
+        await rollbackCreatedArtifacts();
         return reply.code(409).send({
           message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
           errors: conflicts
@@ -444,6 +703,7 @@ export function registerProductionApprovalRoutes(
         applyFaultInjector?.("before_manifest_publish");
         const insertResult = await store.insertApplyManifest(actor, candidateManifest);
         expectedPersistedClaim = insertResult === "created" ? candidateManifest : undefined;
+        createdManifest = insertResult === "created" ? candidateManifest : undefined;
       }
       const authoritativeManifest = await store.getApplyManifest(actor, approvedSpec.approvedProductionSpecId);
       if (
@@ -451,6 +711,7 @@ export function registerProductionApprovalRoutes(
         !manifestMatchesApprovedSpec(authoritativeManifest, approvedSpec) ||
         (expectedPersistedClaim && !areJsonValuesEqual(authoritativeManifest, expectedPersistedClaim))
       ) {
+        await rollbackCreatedArtifacts();
         return reply.code(409).send({ message: "ProductionApplyManifest konnte nicht konfliktfrei veröffentlicht werden." });
       }
 
@@ -476,7 +737,7 @@ export function registerProductionApprovalRoutes(
         currentPurchaseListId: purchaseList.purchaseListId,
         status: "completed"
       });
-      await store.appendEventForArtifactCase(actor, approvedSpec.sourceDraft.draftId, {
+      await store.appendEventForArtifactCaseWhileCaseLocked(actor, approvedSpec.sourceDraft.draftId, {
         at: authoritativeManifest.appliedAt,
         role: "system",
         kind: "result",
@@ -484,6 +745,11 @@ export function registerProductionApprovalRoutes(
         artifactId: productionPlan.planId
       });
       return reply.send({ eventSpec, plan: productionPlan, purchaseList, recipes });
+      });
+      return applyResult ?? reply.code(409).send({
+        message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
+        errors: ["ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag."]
+      });
     }
   );
 }

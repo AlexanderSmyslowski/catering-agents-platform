@@ -23,6 +23,7 @@ export async function runApprovedProductionWorkflow(
   app: InjectableApp,
   input: {
     headers?: Record<string, string>;
+    handoffId?: string;
     payload?: { eventSpec?: AcceptedEventSpec; sourceReviewConfirmed?: boolean };
   }
 ): Promise<InjectResponse> {
@@ -51,20 +52,26 @@ export async function runApprovedProductionWorkflow(
     await testIntakeRecordsPortFor(app).insertSpec({ businessId }, eventSpec);
     const caseResponse = await app.inject({
       method: "POST",
-      url: "/v1/production/cases",
+      url: input.handoffId
+        ? `/v1/production/cases/from-handoff/${input.handoffId}`
+        : "/v1/production/cases",
       headers,
-      payload: {
-        eventTypeLabel: eventSpec.servicePlan.eventType,
-        attendeeCount: eventSpec.attendees.expected
-      }
+      payload: input.handoffId
+        ? {}
+        : {
+            eventTypeLabel: eventSpec.servicePlan.eventType,
+            attendeeCount: eventSpec.attendees.expected
+          }
     });
     if (caseResponse.statusCode !== 201) return caseResponse;
     const caseId = caseResponse.json().case.caseId as string;
     const imported = await app.inject({
       method: "POST",
-      url: "/v1/production/drafts",
+      url: input.handoffId
+        ? `/v1/production/drafts/from-handoff/${input.handoffId}`
+        : "/v1/production/drafts",
       headers,
-      payload: { caseId, specId: eventSpec.specId }
+      payload: input.handoffId ? { caseId } : { caseId, specId: eventSpec.specId }
     });
     if (imported.statusCode !== 201) return imported;
 

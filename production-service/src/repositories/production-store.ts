@@ -384,6 +384,9 @@ function assertProductionCaseUpdate(
   if (existing.sourceSpecId && next.sourceSpecId !== existing.sourceSpecId) {
     throw new Error("Die Quellspezifikation eines ProductionCase darf nicht verändert werden.");
   }
+  if (existing.productionHandoffId !== next.productionHandoffId) {
+    throw new Error("Die Offer-/Handoff-Identität eines ProductionCase darf nicht verändert werden.");
+  }
 }
 
 type ProductionCaseDraftMutation<T> =
@@ -490,6 +493,14 @@ export class ProductionStore {
     return this.plans.get(context, id);
   }
 
+  async deletePlanIfExact(
+    context: BusinessContext,
+    plan: ProductionPlan
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    assertBusinessContext(context);
+    return this.plans.deleteIfExact(context, plan.planId, plan);
+  }
+
   async savePurchaseList(context: BusinessContext, list: PurchaseList): Promise<void> {
     assertBusinessContext(context);
     await this.purchaseLists.set(context, list);
@@ -503,6 +514,14 @@ export class ProductionStore {
   async getPurchaseList(context: BusinessContext, id: string): Promise<PurchaseList | undefined> {
     assertBusinessContext(context);
     return this.purchaseLists.get(context, id);
+  }
+
+  async deletePurchaseListIfExact(
+    context: BusinessContext,
+    purchaseList: PurchaseList
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    assertBusinessContext(context);
+    return this.purchaseLists.deleteIfExact(context, purchaseList.purchaseListId, purchaseList);
   }
 
   async listPlans(context: BusinessContext): Promise<ProductionPlan[]> {
@@ -774,6 +793,14 @@ export class ProductionStore {
     return this.applyManifests.get(context, approvedProductionSpecId);
   }
 
+  async deleteApplyManifestIfExact(
+    context: BusinessContext,
+    manifest: ProductionApplyManifest
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    assertBusinessContext(context);
+    return this.applyManifests.deleteIfExact(context, manifest.approvedProductionSpecId, manifest);
+  }
+
   async listApplyManifests(context: BusinessContext): Promise<ProductionApplyManifest[]> {
     assertBusinessContext(context);
     return this.applyManifests.list(context);
@@ -809,6 +836,33 @@ export class ProductionStore {
   async getCase(context: BusinessContext, caseId: string): Promise<ProductionCase | undefined> {
     assertBusinessContext(context);
     return this.cases.get(context, caseId);
+  }
+
+  async withCaseApplyCriticalSection<T>(
+    context: BusinessContext,
+    caseId: string,
+    operation: (current: ProductionCase) => Promise<T>
+  ): Promise<T | undefined> {
+    assertBusinessContext(context);
+    const storage = this.storageOptions;
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "production_case", artifactId: caseId, revision: 0 },
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Produktionsauftrag konnte nicht rechtzeitig für Apply gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte nicht rechtzeitig für Apply gesperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Produktionsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        const current = await collections.cases.get(context, caseId);
+        return current ? operation(current) : undefined;
+      }
+    });
   }
 
   // The first canonical spec establishes the case lineage; later revisions keep the ID,
@@ -1106,6 +1160,53 @@ export class ProductionStore {
     return this.cases.compareAndSet(context, caseId, expectedVersion, next);
   }
 
+  private async appendEventInCollections(
+    context: BusinessContext,
+    caseId: string,
+    input: CaseEventInput,
+    eventIdentity: string | undefined,
+    collections: ProductionCaseCollections
+  ): Promise<CaseEvent> {
+    if (!await collections.cases.get(context, caseId)) {
+      throw new Error("ProductionCase wurde nicht gefunden.");
+    }
+    const eventId = eventIdentity
+      ? `production-case-event-${createHash("sha256")
+        .update(`${context.businessId}\0${caseId}\0${input.kind}\0${eventIdentity}`)
+        .digest("hex")}`
+      : `production-case-event-${randomUUID()}`;
+    const existing = await collections.events.get(context, eventId);
+    if (existing) {
+      const expected = validateCaseEventForProduct({
+        ...input,
+        businessId: context.businessId,
+        eventId,
+        caseId,
+        sequence: existing.sequence
+      }, "production");
+      if (!areJsonValuesEqual(existing, expected)) {
+        throw new Error("Bestehendes Produktionsereignis stimmt nicht mit dem Auftrag überein.");
+      }
+      return existing;
+    }
+    const sequence = (await collections.events.list(context))
+      .filter((event) => event.caseId === caseId)
+      .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
+    const event = validateCaseEventForProduct({
+      ...input,
+      businessId: context.businessId,
+      eventId,
+      caseId,
+      sequence
+    }, "production");
+    if (await collections.events.insert(context, event) !== "created") {
+      const raced = await collections.events.get(context, eventId);
+      if (raced && areJsonValuesEqual(raced, event)) return raced;
+      throw new Error("Der Produktionsverlauf konnte nicht eindeutig fortgeschrieben werden.");
+    }
+    return event;
+  }
+
   async appendEvent(
     context: BusinessContext,
     caseId: string,
@@ -1128,44 +1229,7 @@ export class ProductionStore {
         const collections = transactionalQueryable
           ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
           : { cases: this.cases, events: this.caseEvents };
-        if (!await collections.cases.get(context, caseId)) {
-          throw new Error("ProductionCase wurde nicht gefunden.");
-        }
-        const eventId = eventIdentity
-          ? `production-case-event-${createHash("sha256")
-            .update(`${context.businessId}\0${caseId}\0${input.kind}\0${eventIdentity}`)
-            .digest("hex")}`
-          : `production-case-event-${randomUUID()}`;
-        const existing = await collections.events.get(context, eventId);
-        if (existing) {
-          const expected = validateCaseEventForProduct({
-            ...input,
-            businessId: context.businessId,
-            eventId,
-            caseId,
-            sequence: existing.sequence
-          }, "production");
-          if (!areJsonValuesEqual(existing, expected)) {
-            throw new Error("Bestehendes Produktionsereignis stimmt nicht mit dem Auftrag überein.");
-          }
-          return existing;
-        }
-        const sequence = (await collections.events.list(context))
-          .filter((event) => event.caseId === caseId)
-          .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
-        const event = validateCaseEventForProduct({
-          ...input,
-          businessId: context.businessId,
-          eventId,
-          caseId,
-          sequence
-        }, "production");
-        if (await collections.events.insert(context, event) !== "created") {
-          const raced = await collections.events.get(context, eventId);
-          if (raced && areJsonValuesEqual(raced, event)) return raced;
-          throw new Error("Der Produktionsverlauf konnte nicht eindeutig fortgeschrieben werden.");
-        }
-        return event;
+        return this.appendEventInCollections(context, caseId, input, eventIdentity, collections);
       }
     });
   }
@@ -1188,6 +1252,27 @@ export class ProductionStore {
     const caseId = await this.findCaseIdForArtifact(context, sourceArtifactId);
     if (!caseId) return undefined;
     return this.appendEvent(context, caseId, input, eventIdentity);
+  }
+
+  async appendEventForArtifactCaseWhileCaseLocked(
+    context: BusinessContext,
+    sourceArtifactId: string,
+    input: CaseEventInput,
+    eventIdentity = input.artifactId ?? sourceArtifactId
+  ): Promise<CaseEvent | undefined> {
+    assertBusinessContext(context);
+    const caseId = await this.findCaseIdForArtifact(context, sourceArtifactId);
+    if (!caseId) return undefined;
+    // The caller owns the ProductionCase lock for the whole operation. Re-entering
+    // appendEvent here would wait on that same lock and turn a successful Apply into
+    // a timeout after the product writes have already completed.
+    return this.appendEventInCollections(
+      context,
+      caseId,
+      input,
+      eventIdentity,
+      { cases: this.cases, events: this.caseEvents }
+    );
   }
 
   async findCaseIdForArtifact(context: BusinessContext, sourceArtifactId: string): Promise<string | undefined> {
