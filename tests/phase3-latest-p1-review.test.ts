@@ -194,12 +194,19 @@ function runWebListenerRollbackCleanupReproducer() {
   const archive = path.join(root, "rollback.tar.gz");
   mkdirSync(path.join(deployPath, "filled", "nested"), { recursive: true });
   mkdirSync(path.join(deployPath, "rollbacks", "keep"), { recursive: true });
+  mkdirSync(path.join(deployPath, "data", "runtime", "keep"), { recursive: true });
+  mkdirSync(path.join(deployPath, "platform-infra", "sites", "live", "keep"), { recursive: true });
+  mkdirSync(path.join(deployPath, "platform-infra", "stale"), { recursive: true });
   mkdirSync(path.join(archiveStage, "restored", "nested"), { recursive: true });
   mkdirSync(path.join(archiveStage, "platform-infra"), { recursive: true });
   writeFileSync(path.join(deployPath, ".env"), "protected-env\n");
   writeFileSync(path.join(deployPath, ".deploy-manifest"), "old-manifest\n");
   writeFileSync(path.join(deployPath, "filled", "nested", "old.txt"), "old\n");
   writeFileSync(path.join(deployPath, "rollbacks", "keep", "audit.txt"), "keep\n");
+  writeFileSync(path.join(deployPath, "data", "runtime", "keep", "state.db"), "runtime-state\n");
+  writeFileSync(path.join(deployPath, "platform-infra", ".env"), "platform-env\n");
+  writeFileSync(path.join(deployPath, "platform-infra", "sites", "live", "keep", "site.conf"), "site-state\n");
+  writeFileSync(path.join(deployPath, "platform-infra", "stale", "old.conf"), "stale\n");
   writeFileSync(path.join(archiveStage, ".deploy-manifest"), "restored-manifest\n");
   writeFileSync(path.join(archiveStage, "restored", "nested", "restored.txt"), "restored\n");
   writeFileSync(path.join(archiveStage, "platform-infra", "docker-compose.yml"), "services: {}\n");
@@ -231,14 +238,26 @@ function runPostRestoreSmokeFailureReproducer() {
   const restoreEvidence = path.join(root, "restore-evidence.record");
   const restoreArchive = path.join(root, "restore-proof.archive");
   const completionReceipt = path.join(root, "completion.receipt");
+  const platformLock = path.join(root, "locks", "catering-agents-platform.deploy-lock");
+  const edgeLock = path.join(root, "locks", "shared-edge.deploy-lock");
+  const marker = path.join(root, "phase3.activation");
   writeFileSync(baselineManifest, "baseline\n");
   writeFileSync(foreignSnapshot, "snapshot\nsnapshot\n");
   writeFileSync(sharedEdgeSnapshot, "snapshot\n");
+  mkdirSync(platformLock, { recursive: true });
+  mkdirSync(edgeLock, { recursive: true });
+  writeFileSync(path.join(platformLock, "owner"), "platform-owner\n");
+  writeFileSync(path.join(edgeLock, "owner"), "edge-owner\n");
+  writeFileSync(marker, "state=active\n");
   const body = remotePilotBody();
-  const start = body.indexOf("rollback_transaction() {");
-  const end = body.indexOf("\nwrite_marker candidate", start);
-  expect(start).toBeGreaterThanOrEqual(0);
-  expect(end).toBeGreaterThan(start);
+  const cleanupStart = body.indexOf("cleanup_temp_files() {");
+  const cleanupEnd = body.indexOf("\ntrap cleanup_temp_files EXIT", cleanupStart);
+  const rollbackStart = body.indexOf("rollback_transaction() {");
+  const rollbackEnd = body.indexOf("\nwrite_marker candidate", rollbackStart);
+  expect(cleanupStart).toBeGreaterThanOrEqual(0);
+  expect(cleanupEnd).toBeGreaterThan(cleanupStart);
+  expect(rollbackStart).toBeGreaterThanOrEqual(0);
+  expect(rollbackEnd).toBeGreaterThan(rollbackStart);
   const prefix = [
     "set +e",
     `event_log=${shellQuote(eventLog)}`,
@@ -248,8 +267,10 @@ function runPostRestoreSmokeFailureReproducer() {
     `restore_evidence_record=${shellQuote(restoreEvidence)}`,
     `restore_proof_archive=${shellQuote(restoreArchive)}`,
     `completion_receipt=${shellQuote(completionReceipt)}`,
-    `activation_marker=${shellQuote(path.join(root, "activation.marker"))}`,
+    `activation_marker=${shellQuote(marker)}`,
     `prior_marker_backup=${shellQuote(path.join(root, "prior.marker"))}`,
+    `platform_lock=${shellQuote(platformLock)}`,
+    `edge_lock=${shellQuote(edgeLock)}`,
     "owner=catering-agents-platform",
     "schema=phase3.1",
     "transaction_id=phase3-post-restore-smoke",
@@ -263,10 +284,17 @@ function runPostRestoreSmokeFailureReproducer() {
     "edge_source=/tmp/absent-edge-source",
     "SHARED_EDGE=shared-edge-edge-1",
     "FOREIGN_CONTAINERS=(foreign-a foreign-b)",
+    "platform_lock_mode=acquired",
+    "edge_lock_mode=acquired",
+    "candidate_written=true",
+    "rollback_started=false",
+    "rollback_complete=false",
     'sudo() { "$@"; }',
     'docker() { if [[ "$1" == inspect ]]; then printf "snapshot\\n"; printf "restore-readback\\n" >> "$event_log"; fi; return 0; }',
     "register_temp() { :; }",
-    "write_marker() { :; }",
+    "temp_cleanup() { :; }",
+    "write_marker() { printf 'state=%s\\n' \"$1\" > \"$activation_marker\"; }",
+    "phase3_lock_release_checked() { printf 'release=%s\\n' \"$1\" >> \"$event_log\"; return 0; }",
     "connect_if_missing() { :; }",
     "disconnect_if_attached() { :; }",
     "assert_compatibility_baseline() { :; }",
@@ -287,7 +315,7 @@ function runPostRestoreSmokeFailureReproducer() {
     result: spawnSync("/bin/bash", ["-s", "post-restore-smoke-reproducer"], {
       cwd: repoRoot,
       encoding: "utf8",
-      input: `${prefix}\n${body.slice(start, end)}\nrollback_transaction\nstatus=$?\nif [[ "$status" -eq 0 ]]; then printf 'unexpected-success\\n'; exit 0; fi\nprintf 'PILOT: RECOVERY_REQUIRED\\n'; exit 1\n`,
+      input: `${prefix}\n${body.slice(cleanupStart, cleanupEnd)}\n${body.slice(rollbackStart, rollbackEnd)}\nfalse\ncleanup_temp_files\n`,
     }),
   };
 }
@@ -816,21 +844,32 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(textAt(path.join(deployPath, ".env"))).toBe("protected-env\n");
     expect(textAt(path.join(deployPath, ".deploy-manifest"))).toBe("restored-manifest\n");
     expect(textAt(path.join(deployPath, "rollbacks", "keep", "audit.txt"))).toBe("keep\n");
+    expect(textAt(path.join(deployPath, "data", "runtime", "keep", "state.db"))).toBe("runtime-state\n");
+    expect(textAt(path.join(deployPath, "platform-infra", ".env"))).toBe("platform-env\n");
+    expect(textAt(path.join(deployPath, "platform-infra", "sites", "live", "keep", "site.conf"))).toBe("site-state\n");
+    expect(existsSync(path.join(deployPath, "platform-infra", "stale", "old.conf"))).toBe(false);
   });
 
   test("RED: post-restore host smokes gate evidence and rollback cleanup", () => {
     const reproducer = runPostRestoreSmokeFailureReproducer();
     const events = textAt(reproducer.eventLog);
+    const terminalLines = `${reproducer.result.stdout}${reproducer.result.stderr}`
+      .split("\n")
+      .filter((line) => line.startsWith("PILOT:"));
     expect(reproducer.result.status).not.toBe(0);
-    expect(`${reproducer.result.stdout}${reproducer.result.stderr}`).toContain("PILOT: RECOVERY_REQUIRED");
+    expect(terminalLines).toEqual(["PILOT: RECOVERY_REQUIRED"]);
     expect(events).toContain("restore-readback");
     expect(events).toContain("post-restore-smoke");
     expect(events.indexOf("restore-readback")).toBeLessThan(events.indexOf("post-restore-smoke"));
     expect(events).not.toContain("evidence");
     expect(events).not.toContain("atomic=");
+    expect(events).not.toContain("release=");
     expect(existsSync(reproducer.restoreEvidence)).toBe(false);
     expect(existsSync(reproducer.restoreArchive)).toBe(false);
     expect(existsSync(reproducer.completionReceipt)).toBe(false);
     expect(existsSync(reproducer.baselineManifest)).toBe(true);
+    expect(fieldsAt(path.join(path.dirname(reproducer.baselineManifest), "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(path.dirname(reproducer.baselineManifest), "locks", "catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(path.dirname(reproducer.baselineManifest), "locks", "shared-edge.deploy-lock"))).toBe(true);
   });
 });

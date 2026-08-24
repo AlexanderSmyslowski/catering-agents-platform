@@ -1503,7 +1503,9 @@ cleanup_temp_files() {
   # only an ordinary, observable error may enter the compensating rollback.
   if [[ "${status}" -ne 0 && "${uncertain_recovery}" == false && "${candidate_written}" == true && "${rollback_started}" == false ]]; then
     rollback_started=true
-    rollback_transaction || true
+    if ! rollback_transaction; then
+      recovery_required=true
+    fi
   fi
   if [[ "${recovery_required}" == true ]]; then
     printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2

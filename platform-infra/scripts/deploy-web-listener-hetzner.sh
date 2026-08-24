@@ -233,6 +233,12 @@ sudo find "${deploy_path}" -mindepth 1 \
   ! -path "${deploy_path}/.deploy-manifest.manifest" \
   ! -path "${deploy_path}/rollbacks" \
   ! -path "${deploy_path}/rollbacks/*" \
+  ! -path "${deploy_path}/data" \
+  ! -path "${deploy_path}/data/*" \
+  ! -path "${deploy_path}/platform-infra" \
+  ! -path "${deploy_path}/platform-infra/.env" \
+  ! -path "${deploy_path}/platform-infra/sites" \
+  ! -path "${deploy_path}/platform-infra/sites/*" \
   -depth -delete
 sudo tar -xzf "${archive}" -C "${deploy_path}"
 [[ -f "${deploy_path}/.deploy-manifest" && ! -L "${deploy_path}/.deploy-manifest" ]] || exit 1
