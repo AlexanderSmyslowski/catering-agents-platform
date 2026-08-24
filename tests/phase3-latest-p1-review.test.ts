@@ -354,6 +354,105 @@ function runReenteredControlRelease(failEdge = false) {
   });
 }
 
+function runExplicitRollbackReproducer(smokeFails = false) {
+  const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-explicit-rollback-red-"));
+  const eventLog = path.join(root, "events.log");
+  const marker = path.join(root, "phase3.activation");
+  const baselineManifest = path.join(root, "phase3.transaction-baseline.manifest");
+  const restoreArchive = path.join(root, "phase3.rollback-restore-proof.archive");
+  const completionReceipt = path.join(root, "phase3.rollback-completion.receipt");
+  const restoreEvidence = path.join(root, "phase3.restore-evidence.record");
+  const platformLock = path.join(root, "locks", "catering-agents-platform.deploy-lock");
+  const edgeLock = path.join(root, "locks", "shared-edge.deploy-lock");
+  mkdirSync(platformLock, { recursive: true });
+  mkdirSync(edgeLock, { recursive: true });
+  writeFileSync(marker, "state=active\n");
+  writeFileSync(baselineManifest, "baseline\n");
+
+  const body = remoteControlBody();
+  const releaseStart = body.indexOf("release_control_locks() {");
+  const releaseEnd = body.indexOf("\ntrap release_control_locks EXIT", releaseStart);
+  const rollbackStart = body.indexOf('elif [[ "${command_name}" == rollback ]]; then');
+  const rollbackEnd = body.indexOf("\nelse\n  fail", rollbackStart);
+  expect(releaseStart).toBeGreaterThanOrEqual(0);
+  expect(releaseEnd).toBeGreaterThan(releaseStart);
+  expect(rollbackStart).toBeGreaterThanOrEqual(0);
+  expect(rollbackEnd).toBeGreaterThan(rollbackStart);
+  const rollbackBody = body.slice(rollbackStart).slice(body.slice(rollbackStart).indexOf("\n") + 1, rollbackEnd - rollbackStart);
+  const prefix = [
+    "set -euo pipefail",
+    `event_log=${shellQuote(eventLog)}`,
+    `activation_marker=${shellQuote(marker)}`,
+    `baseline_manifest=${shellQuote(baselineManifest)}`,
+    `restore_proof_archive=${shellQuote(restoreArchive)}`,
+    `completion_receipt=${shellQuote(completionReceipt)}`,
+    `restore_evidence_record=${shellQuote(restoreEvidence)}`,
+    `adoption_journal=${shellQuote(path.join(root, "phase3.network-adoption.journal"))}`,
+    `platform_source=${shellQuote(path.join(root, "platform-compose.phase3.yml"))}`,
+    `edge_source=${shellQuote(path.join(root, "edge-compose.phase3.yml"))}`,
+    `pilot_root=${shellQuote(root)}`,
+    "command_name=rollback",
+    "run_id=phase3-explicit-rollback",
+    "owner=catering-agents-platform",
+    "schema=phase3.1",
+    `platform_lock=${shellQuote(platformLock)}`,
+    `edge_lock=${shellQuote(edgeLock)}`,
+    "lock_token=catering-agents-platform:phase3-explicit-rollback",
+    "manifest_sha256=manifesthash",
+    "expected_platform_source_sha256=platformhash",
+    "expected_edge_source_sha256=edgehash",
+    "egress_exercise=1",
+    "held_edge=reentered",
+    "held_platform=reentered",
+    "sudo() { \"$@\"; }",
+    "docker() {",
+    "  if [[ \"$1\" == inspect ]]; then printf '{}'; return 0; fi",
+    "  if [[ \"$1\" == network && \"$2\" == inspect ]]; then return 0; fi",
+    "  return 0",
+    "}",
+    "field() {",
+    "  case \"$2\" in",
+    "    platform_source_prior|edge_source_prior|prior_marker_state) printf 'absent' ;;",
+    "    catering_private_created_by_run_authorized|catering_ingress_created_by_run_authorized) printf 'false' ;;",
+    "    *) printf 'absent' ;;",
+    "  esac",
+    "}",
+    "fail() { printf '%s\\n' 'PILOT: NO-GO' >&2; return 1; }",
+    "validate_compatibility_baseline_control() { :; }",
+    "validate_network_provenance() { :; }",
+    "validate_receipt() { :; }",
+    "canonical_marker_sha256() { printf 'markerhash'; }",
+    "canonical_archive_sha256() { printf 'archivehash'; }",
+    "write_control_marker() { printf 'marker=%s\\n' \"$1\" >> \"$event_log\"; printf 'state=%s\\nsmoke_readback_sha256=pending\\n' \"$1\" > \"$activation_marker\"; }",
+    "run_all_host_semantic_smokes() {",
+    `  printf '%s\\n' 'post-restore-smoke:catering,zeiterfassung,eventos' >> \"$event_log\"; [[ \"${smokeFails ? 1 : 0}\" == 0 ]] || return 1; smoke_readback_sha256=smokehash;`,
+    "}",
+    "run_rollback_host_semantic_smokes() { run_all_host_semantic_smokes; }",
+    "write_restore_evidence_control() { printf '%s\\n' evidence >> \"$event_log\"; printf '%s\\n' evidence > \"$restore_evidence_record\"; }",
+    "finalize_rolling_back_resume() { printf '%s\\n' finalize >> \"$event_log\"; unlink \"$activation_marker\"; unlink \"$baseline_manifest\"; unlink \"$completion_receipt\" 2>/dev/null || true; }",
+    "phase3_lock_release() { printf 'release=%s\\n' \"$1\" >> \"$event_log\"; rmdir \"$1\"; }",
+    body.slice(releaseStart, releaseEnd),
+    `run_explicit_rollback() {\n${rollbackBody}\n}`,
+    "trap release_control_locks EXIT",
+    "run_explicit_rollback",
+  ].join("\n");
+  return {
+    root,
+    marker,
+    restoreArchive,
+    completionReceipt,
+    restoreEvidence,
+    platformLock,
+    edgeLock,
+    eventLog,
+    result: spawnSync("/bin/bash", ["-s"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      input: prefix,
+    }),
+  };
+}
+
 function runForeignEdgeLockReproducer(failPlatformUnlink = false) {
   const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-lock-pair-"));
   const pilotRoot = path.join(root, "pilot");
@@ -575,6 +674,39 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(failedEdge.stdout).toContain("release=/tmp/reentered-edge-lock");
     expect(failedEdge.stdout).not.toContain("release=/tmp/reentered-platform-lock");
     expect(`${failedEdge.stdout}${failedEdge.stderr}`).toContain("RECOVERY_REQUIRED");
+  });
+
+  test("RED: explicit rollback releases authenticated reentered locks after restore proof", () => {
+    const rollback = runExplicitRollbackReproducer();
+    const events = textAt(rollback.eventLog).split("\n").filter(Boolean);
+    expect(rollback.result.status).toBe(0);
+    expect(`${rollback.result.stdout}${rollback.result.stderr}`).toContain("PILOT: ROLLED BACK");
+    expect(events).toContain("post-restore-smoke:catering,zeiterfassung,eventos");
+    expect(events.indexOf("post-restore-smoke:catering,zeiterfassung,eventos")).toBeLessThan(events.indexOf("evidence"));
+    expect(events.indexOf("evidence")).toBeLessThan(events.indexOf("finalize"));
+    expect(events.slice(-2)).toEqual([`release=${rollback.edgeLock}`, `release=${rollback.platformLock}`]);
+    expect(existsSync(rollback.edgeLock)).toBe(false);
+    expect(existsSync(rollback.platformLock)).toBe(false);
+    expect(existsSync(rollback.marker)).toBe(false);
+  });
+
+  test("RED: explicit rollback smoke failure keeps marker and locks recovery-required", () => {
+    const rollback = runExplicitRollbackReproducer(true);
+    const events = textAt(rollback.eventLog);
+    const terminal = `${rollback.result.stdout}${rollback.result.stderr}`;
+    expect(rollback.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: RECOVERY_REQUIRED");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(events).toContain("post-restore-smoke:catering,zeiterfassung,eventos");
+    expect(events).not.toContain("evidence");
+    expect(events).not.toContain("finalize");
+    expect(events).not.toContain("release=");
+    expect(existsSync(rollback.marker)).toBe(true);
+    expect(existsSync(rollback.edgeLock)).toBe(true);
+    expect(existsSync(rollback.platformLock)).toBe(true);
+    expect(existsSync(rollback.restoreEvidence)).toBe(false);
+    expect(existsSync(rollback.restoreArchive)).toBe(false);
+    expect(existsSync(rollback.completionReceipt)).toBe(false);
   });
 
   test("RED: resume replays bound provider egress and every host smoke after cutover", () => {

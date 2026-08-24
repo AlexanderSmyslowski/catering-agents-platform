@@ -506,6 +506,41 @@ semantic_smoke() {
   smoke_readback_sha256="$(sha256sum "${body}" | awk '{print $1}')"
 }
 
+smoke_json_control() {
+  local label="$1" target="$2" expected_service="$3" body
+  body="$(mktemp)"
+  if ! docker exec shared-edge-edge-1 wget -qO- "${target}" >"${body}"; then
+    unlink "${body}" 2>/dev/null || true
+    return 1
+  fi
+  if ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${body}"; then
+    unlink "${body}" 2>/dev/null || true
+    return 1
+  fi
+  if [[ -n "${expected_service}" ]] && ! grep -Eq "\"service\"[[:space:]]*:[[:space:]]*\"${expected_service}\"" "${body}"; then
+    unlink "${body}" 2>/dev/null || true
+    return 1
+  fi
+  printf '%s:%s\n' "${label}" "$(sha256sum "${body}" | awk '{print $1}')" >>"${smoke_evidence_file}"
+  unlink "${body}"
+}
+
+run_all_host_semantic_smokes() {
+  local evidence
+  evidence="$(mktemp)"
+  smoke_evidence_file="${evidence}"
+  if ! smoke_json_control catering "http://web:8081/api/intake/health" intake-service || \
+    ! smoke_json_control zeiterfassung "http://zeiterfassung-app-1:3040/healthz" "" || \
+    ! smoke_json_control eventos "http://commcats-eventos-app:3045/health" ""; then
+    unlink "${evidence}" 2>/dev/null || true
+    smoke_evidence_file=
+    return 1
+  fi
+  smoke_readback_sha256="$(sha256sum "${evidence}" | awk '{print $1}')"
+  unlink "${evidence}"
+  smoke_evidence_file=
+}
+
 write_control_marker() {
   local state="$1" adoption="$2" proof="$3" tmp marker_hash final stage source_hash smoke_value
   local journal_ingress_id=absent journal_private_id=absent
@@ -1101,6 +1136,7 @@ if [[ "${command_name}" == resume ]]; then
   release_control_locks terminal
   printf '%s\n' 'PILOT: GO'
 elif [[ "${command_name}" == rollback ]]; then
+  smoke_readback_sha256=pending
   write_control_marker rolling_back 0 not_adopted
   connect_if_missing_control() {
     local network alias container networks
@@ -1153,6 +1189,12 @@ elif [[ "${command_name}" == rollback ]]; then
     [[ "$(sha256sum "${edge_source}" | awk '{print $1}')" == "${expected_edge_source_sha256}" ]] || fail
     sudo unlink "${edge_source}"
   fi
+  if ! run_all_host_semantic_smokes; then
+    printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
+    trap - EXIT
+    exit 1
+  fi
+  write_control_marker rolling_back 0 not_adopted
   archive_tmp="$(mktemp)"
   marker_sha256="$(canonical_marker_sha256 "${activation_marker}")"
   write_restore_evidence_control
@@ -1186,6 +1228,7 @@ elif [[ "${command_name}" == rollback ]]; then
   unlink "${receipt_tmp}"
   validate_receipt
   finalize_rolling_back_resume
+  release_control_locks terminal
   printf '%s\n' 'PILOT: ROLLED BACK'
 else
   fail
