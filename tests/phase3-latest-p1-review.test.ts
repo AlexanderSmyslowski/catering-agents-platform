@@ -464,11 +464,16 @@ function runExplicitRollbackReproducer(smokeFails = false) {
   const releaseEnd = body.indexOf("\ntrap release_control_locks EXIT", releaseStart);
   const rollbackStart = body.indexOf('elif [[ "${command_name}" == rollback ]]; then');
   const rollbackEnd = body.indexOf("\nelse\n  fail", rollbackStart);
+  const rollbackControlStart = body.indexOf("continue_rollback_control() {");
+  const rollbackControlEnd = body.indexOf('\nif [[ "${command_name}" == resume ]]; then', rollbackControlStart);
   expect(releaseStart).toBeGreaterThanOrEqual(0);
   expect(releaseEnd).toBeGreaterThan(releaseStart);
   expect(rollbackStart).toBeGreaterThanOrEqual(0);
   expect(rollbackEnd).toBeGreaterThan(rollbackStart);
+  expect(rollbackControlStart).toBeGreaterThanOrEqual(0);
+  expect(rollbackControlEnd).toBeGreaterThan(rollbackControlStart);
   const rollbackBody = body.slice(rollbackStart).slice(body.slice(rollbackStart).indexOf("\n") + 1, rollbackEnd - rollbackStart);
+  const rollbackControl = body.slice(rollbackControlStart, rollbackControlEnd);
   const prefix = [
     "set -euo pipefail",
     `event_log=${shellQuote(eventLog)}`,
@@ -522,6 +527,7 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     "finalize_rolling_back_resume() { printf '%s\\n' finalize >> \"$event_log\"; unlink \"$activation_marker\"; unlink \"$baseline_manifest\"; unlink \"$completion_receipt\" 2>/dev/null || true; }",
     "phase3_lock_release() { printf 'release=%s\\n' \"$1\" >> \"$event_log\"; rmdir \"$1\"; }",
     body.slice(releaseStart, releaseEnd),
+    rollbackControl,
     `run_explicit_rollback() {\n${rollbackBody}\n}`,
     "trap release_control_locks EXIT",
     "run_explicit_rollback",
