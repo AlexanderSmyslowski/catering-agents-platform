@@ -525,7 +525,7 @@ semantic_smoke() {
   local body
   body="$(mktemp)"
   trap '[[ -z "${body:-}" ]] || unlink "${body}" 2>/dev/null || true' RETURN
-  docker exec "${SHARED_EDGE:-shared-edge-edge-1}" wget -qO- http://web:8081/api/intake/health >"${body}" || fail
+  docker exec "${SHARED_EDGE:-shared-edge-edge-1}" wget -qO- --timeout=2 http://web:8081/api/intake/health >"${body}" || fail
   grep -Eq '"service"[[:space:]]*:[[:space:]]*"intake-service"' "${body}" || fail
   grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${body}" || fail
   smoke_readback_sha256="$(sha256sum "${body}" | awk '{print $1}')"
@@ -534,7 +534,7 @@ semantic_smoke() {
 smoke_json_control() {
   local label="$1" target="$2" expected_service="$3" body
   body="$(mktemp)"
-  if ! docker exec shared-edge-edge-1 wget -qO- "${target}" >"${body}"; then
+  if ! docker exec shared-edge-edge-1 wget -qO- --timeout=2 "${target}" >"${body}"; then
     unlink "${body}" 2>/dev/null || true
     return 1
   fi
@@ -751,7 +751,7 @@ validate_resume_host_smokes() {
       *) fail ;;
     esac
     body="$(mktemp)"
-    docker exec shared-edge-edge-1 wget -qO- "${target}" >"${body}" || fail
+    docker exec shared-edge-edge-1 wget -qO- --timeout=2 "${target}" >"${body}" || fail
     grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${body}" || fail
     printf '%s:%s\n' "${label}" "$(sha256sum "${body}" | awk '{print $1}')" >>"${evidence}"
     unlink "${body}"
@@ -1987,7 +1987,7 @@ smoke_json() {
   local label="$1" target="$2" expected_service="$3" smoke_file
   smoke_file="$(mktemp)"
   register_temp "${smoke_file}"
-  docker exec "${SHARED_EDGE}" wget -qO- "${target}" >"${smoke_file}" || { printf '%s\n' "${label} smoke request failed" >&2; fail; }
+  docker exec "${SHARED_EDGE}" wget -qO- --timeout=2 "${target}" >"${smoke_file}" || { printf '%s\n' "${label} smoke request failed" >&2; fail; }
   grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${smoke_file}" || { printf '%s\n' "${label} smoke status is not ok" >&2; fail; }
   if [[ -n "${expected_service}" ]]; then
     grep -Eq "\"service\"[[:space:]]*:[[:space:]]*\"${expected_service}\"" "${smoke_file}" || { printf '%s\n' "${label} smoke service identity is unexpected" >&2; fail; }
@@ -2566,7 +2566,7 @@ write_marker candidate verified verified "${ingress_id}" "${private_id}"
 # foreign restart, alias drift, public semantic regression, or private-route
 # leak fail before the next mutation can compound it.
 assert_private_reachability() {
-  docker exec "${PLATFORM_WEB}" wget -qO- "http://intake:${CATERING_INTAKE_PORT}/health" >/dev/null || fail
+  docker exec "${PLATFORM_WEB}" wget -qO- --timeout=2 "http://intake:${CATERING_INTAKE_PORT}/health" >/dev/null || fail
   if docker exec "${PLATFORM_WEB}" sh -c 'wget -qO- --timeout=2 http://postgres:5432/' >/dev/null 2>&1; then
     fail
   fi

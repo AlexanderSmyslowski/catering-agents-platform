@@ -53,7 +53,7 @@ fi
 
 fault=
 case "${scenario}" in
-  crash-after-candidate|crash-after-ingress|crash-after-private|crash-after-active|crash-after-rollback|crash-after-receipt|semantic-smoke-fail|semantic-smoke-incomplete|egress-fail|egress-disabled|egress-missing|egress-malformed|egress-foreign|compose-render-fail|network-provenance-fail)
+  crash-after-candidate|crash-after-ingress|crash-after-private|crash-after-active|crash-after-rollback|crash-after-receipt|semantic-smoke-fail|semantic-smoke-incomplete|baseline-smoke-timeout|egress-fail|egress-disabled|egress-missing|egress-malformed|egress-foreign|compose-render-fail|network-provenance-fail)
     fault="${scenario}" ;;
   *) fault= ;;
 esac

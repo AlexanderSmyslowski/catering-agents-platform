@@ -14,6 +14,7 @@ import os
 import re
 import signal
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 from typing import Any
@@ -385,6 +386,16 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
         save(state)
         print("{}")
         return 0
+    if state.get("fault") == "baseline-smoke-timeout" and host == "web" and not state.get("fault_triggered"):
+        state["fault_triggered"] = True
+        save(state)
+        # A real endpoint can accept the connection and then never produce a
+        # response. The production timeout must make this boundary fail fast;
+        # without it, keep the fake blocked long enough for the regression to
+        # observe the unbounded command.
+        if "--timeout=2" not in command:
+            time.sleep(2)
+        return 1
     if state.get("fault") == "foreign-smoke-fail" and host in {"zeiterfassung-app-1", "commcats-eventos-app"} and not negative:
         return 1
     tcp_tail = re.search(r"\b(?:nc|netcat)\b(?P<rest>.*)$", command)
