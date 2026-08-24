@@ -1,0 +1,140 @@
+name: Catering Phase 3 isolation pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catering-phase3-isolation-pilot
+  cancel-in-progress: false
+
+jobs:
+  pilot:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@v5
+
+      - name: Configure SSH
+        env:
+          HETZNER_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          HETZNER_SSH_KNOWN_HOSTS: ${{ secrets.HETZNER_SSH_KNOWN_HOSTS || secrets.HETZNER_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$HETZNER_SSH_PRIVATE_KEY"
+          test -n "$HETZNER_SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$HETZNER_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$HETZNER_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Fail-closed Compose JSON render and parity gate
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null 2>&1 || { echo 'Docker Compose is required for the Phase 3 render gate.' >&2; exit 1; }
+          compose_version="$(docker compose version --short | sed 's/^v//')"
+          python3 - "$compose_version" "2.24.4" <<'PYTHON'
+          import sys
+          def version(value):
+              parts = value.split(".")
+              if len(parts) != 3 or not all(part.isdigit() for part in parts):
+                  raise SystemExit("invalid Compose version")
+              return tuple(int(part) for part in parts)
+          if version(sys.argv[1]) < version(sys.argv[2]):
+              raise SystemExit("Compose 2.24.4 or newer is required")
+          PYTHON
+          test -s platform-infra/docker-compose.phase3-catering-pilot.yml
+          test -s edge-infra/docker-compose.phase3-catering-pilot.yml
+          render_env="$(mktemp)"
+          cleanup_render() {
+            unlink "$render_env" 2>/dev/null || true
+            unlink platform-phase3.render.json 2>/dev/null || true
+            unlink edge-phase3.render.json 2>/dev/null || true
+          }
+          trap cleanup_render EXIT
+          printf '%s\n' \
+            'CATERING_TRUSTED_ACTOR_SECRET=ci-render-only' \
+            'CATERING_BASIC_AUTH_USER=ci-render-only' \
+            'CATERING_BASIC_AUTH_PASSWORD_HASH=ci-render-only' \
+            'CADDY_EMAIL=ci-render-only@example.invalid' \
+            'CATERING_INTAKE_SERVICE_URL=http://intake:3101' \
+            > "$render_env"
+          docker compose -p platform-infra --env-file "$render_env" \
+            -f platform-infra/docker-compose.yml \
+            -f platform-infra/docker-compose.production.yml \
+            -f platform-infra/docker-compose.edge-cutover.yml \
+            -f platform-infra/docker-compose.phase3-catering-pilot.yml \
+            config --format json > platform-phase3.render.json
+          docker compose -p shared-edge --env-file "$render_env" \
+            -f edge-infra/docker-compose.yml \
+            -f edge-infra/docker-compose.phase3-catering-pilot.yml \
+            config --format json > edge-phase3.render.json
+          test -s platform-phase3.render.json
+          test -s edge-phase3.render.json
+          python3 - platform-phase3.render.json edge-phase3.render.json <<'PYTHON'
+          import json
+          import sys
+
+          platform = json.load(open(sys.argv[1], encoding="utf-8"))
+          edge = json.load(open(sys.argv[2], encoding="utf-8"))
+          if sorted(platform.get("services", {})) != ["exports", "intake", "offer", "postgres", "production", "web"]:
+              raise SystemExit("unexpected rendered platform services")
+          if sorted(edge.get("services", {})) != ["edge"]:
+              raise SystemExit("unexpected rendered edge services")
+          if sorted(platform.get("networks", {})) != ["catering_ingress", "catering_private"]:
+              raise SystemExit("unexpected rendered platform networks")
+          if "catering_ingress" not in edge.get("networks", {}):
+              raise SystemExit("edge render lost catering_ingress")
+          if "catering_private" in edge.get("networks", {}):
+              raise SystemExit("edge render gained catering_private")
+          for service in ["postgres", "intake", "offer", "production", "exports"]:
+              if set(platform["services"][service].get("networks", {})) != {"catering_private"}:
+                  raise SystemExit(f"private service parity failed for {service}")
+          if set(platform["services"]["web"].get("networks", {})) != {"catering_ingress", "catering_private"}:
+              raise SystemExit("web network parity failed")
+          if set(edge["services"]["edge"].get("networks", {})) != {"catering_ingress", "platform-infra_default", "zeiterfassung_default"}:
+              raise SystemExit("shared edge network parity failed")
+          expected_platform_fields = {
+              "postgres": {"restart", "environment", "volumes", "networks"},
+              "intake": {"restart", "environment", "networks"},
+              "offer": {"restart", "environment", "networks"},
+              "production": {"restart", "environment", "networks"},
+              "exports": {"restart", "environment", "networks"},
+              "web": {"restart", "environment", "volumes", "ports", "networks"},
+          }
+          for service, fields in expected_platform_fields.items():
+              actual = set(platform["services"][service])
+              if not fields.issubset(actual):
+                  raise SystemExit(f"platform runtime parity failed for {service}: missing {sorted(fields - actual)}")
+          if platform["services"]["web"].get("ports") not in ([], None):
+              raise SystemExit("platform web still owns public ports")
+          expected_edge_fields = {"image", "restart", "ports", "environment", "volumes", "networks"}
+          actual_edge = set(edge["services"]["edge"])
+          if not expected_edge_fields.issubset(actual_edge):
+              raise SystemExit(f"edge runtime parity failed: missing {sorted(expected_edge_fields - actual_edge)}")
+          if edge["services"]["edge"]["ports"] != ["80:80", "443:443"]:
+              raise SystemExit("shared edge public port parity failed")
+          if edge["services"]["edge"]["environment"].get("EVENTOS_UPSTREAM") != "commcats-eventos-app:3045":
+              raise SystemExit("EventOS upstream parity failed")
+          if edge["services"]["edge"]["environment"].get("CATERING_UPSTREAM") != "http://web:8081":
+              raise SystemExit("Catering upstream parity failed")
+          if platform["services"]["intake"]["environment"].get("CATERING_INTAKE_SERVICE_URL") != "http://intake:3101":
+              raise SystemExit("intake service URL parity failed")
+          PYTHON
+
+      - name: Run owner-scoped pilot
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          CATERING_PHASE3_ENVIRONMENT: production
+          CATERING_PHASE3_EXECUTE: "1"
+          CATERING_PHASE3_EGRESS_EXERCISE: "1"
+          CATERING_PHASE3_EGRESS_URL: https://www.cloudflare.com/cdn-cgi/trace
+        run: bash platform-infra/scripts/catering-phase3-pilot.sh

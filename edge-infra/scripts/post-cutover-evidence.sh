@@ -2,6 +2,8 @@
 
 set -euo pipefail
 umask 077
+readonly PHASE3_NOT_APPLICABLE="NOT_APPLICABLE_PHASE3"
+: "${PHASE3_NOT_APPLICABLE}"
 
 : "${DEPLOY_HOST:?Set DEPLOY_HOST from the production environment.}"
 : "${DEPLOY_USER:?Set DEPLOY_USER from the production environment.}"
@@ -78,6 +80,23 @@ SSH_ARGS=(
   -o ConnectTimeout=10
   -p 22
 )
+
+phase3_guard() {
+  ssh "${SSH_ARGS[@]}" -- "${REMOTE}" bash -s -- "/opt/catering-agents-platform.deploy-lock" "/opt/shared-edge.deploy-lock" "/opt/catering-phase3/phase3.activation" "/opt/catering-phase3/phase3.transaction-baseline.manifest" <<'REMOTE_PHASE3_GUARD'
+set -euo pipefail
+platform_lock="$1"; edge_lock="$2"; marker="$3"; manifest="$4"
+# Evidence remains strictly read-only: inspect both lock paths in the
+# canonical order; mutating callers acquire them before their first write.
+if [[ -e "${platform_lock}" && ! -d "${platform_lock}" ]]; then exit 1; fi
+if [[ -e "${edge_lock}" && ! -d "${edge_lock}" ]]; then exit 1; fi
+state=absent
+[[ ! -e "${marker}" ]] || { [[ -f "${marker}" && ! -L "${marker}" ]] || exit 1; state="$(sed -n 's/^state=//p' "${marker}")"; }
+[[ "${state}" == absent || "${state}" == inactive ]] || { printf '%s\n' NOT_APPLICABLE_PHASE3 >&2; exit 1; }
+[[ ! -e "${manifest}" ]] || exit 1
+REMOTE_PHASE3_GUARD
+}
+
+phase3_guard
 
 remote_snapshot() {
   ssh "${SSH_ARGS[@]}" -- "${REMOTE}" bash -s -- "${EXPECTED_CADDYFILE_SHA256}" <<'REMOTE_SCRIPT'

@@ -9,6 +9,14 @@ CANDIDATE_BODY_FILE="${4:-}"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 NETWORK_NAME="${CATERING_DIAGNOSTIC_NETWORK:-platform-infra_default}"
 BODY_PREVIEW_LIMIT="${CATERING_DIAGNOSTIC_BODY_PREVIEW_LIMIT:-800}"
+CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE="${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE:-}"
+
+if [[ -n "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}" ]]; then
+  [[ -f "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}" && ! -L "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}" ]] || exit 1
+  auth_mode="$(stat -c '%a' "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}" 2>/dev/null || stat -f '%Lp' "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}")"
+  auth_owner="$(stat -c '%u' "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}" 2>/dev/null || stat -f '%u' "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}")"
+  [[ "${auth_mode}" == 600 && "${auth_owner}" == "$(id -u)" ]] || exit 1
+fi
 
 case "${BODY_PREVIEW_LIMIT}" in
   ''|*[!0-9]*) BODY_PREVIEW_LIMIT=800 ;;
@@ -83,7 +91,7 @@ collect_network_evidence() {
   network_file="$(mktemp)"
   if ! "${DOCKER_BIN}" network inspect "${NETWORK_NAME}" >"${network_file}" 2>/dev/null; then
     printf 'Catering diagnostic network: unavailable (could not inspect %s)\n' "$(safe_scalar "${NETWORK_NAME}")"
-    rm -f "${network_file}"
+    unlink "${network_file}" 2>/dev/null || true
     return 0
   fi
 
@@ -184,7 +192,7 @@ PYTHON
   then
     printf 'Catering diagnostic network: metadata parser failed\n'
   fi
-  rm -f "${network_file}"
+  unlink "${network_file}" 2>/dev/null || true
 }
 
 parse_wget_metadata() {
@@ -226,22 +234,28 @@ probe_from_edge() {
   local edge_container="$2"
   local url="$3"
   local use_auth="$4"
-  local auth_b64="$5"
+  local auth_user="$5"
+  local auth_password="$6"
+  local auth_config_file="${7:-}"
   local body_file header_file client_status metadata status content_type peer reported_client_status
   body_file="$(mktemp)"
   header_file="$(mktemp)"
 
   if [[ "${use_auth}" == "true" ]]; then
-    "${DOCKER_BIN}" exec \
-      -e "CATERING_DIAGNOSTIC_HOST=${CATERING_HOST}" \
-      -e "CATERING_DIAGNOSTIC_AUTH_B64=${auth_b64}" \
-      "${edge_container}" sh -c '
-        set -eu
-        exec wget -S -O - \
-          --header "Host: ${CATERING_DIAGNOSTIC_HOST}" \
-          --header "Authorization: Basic ${CATERING_DIAGNOSTIC_AUTH_B64}" \
-          "$1"
-      ' sh "${url}" >"${body_file}" 2>"${header_file}"
+    # curl consumes the credential and Host directives from stdin. The secret
+    # therefore never enters docker exec argv or a container environment.
+    if [[ -n "${auth_config_file}" ]]; then
+      { cat "${auth_config_file}"; printf 'header = "Host: %s"\nurl = "%s"\n' "${CATERING_HOST}" "${url}"; } | \
+        "${DOCKER_BIN}" exec -i "${edge_container}" sh -c \
+          'exec curl --config - --silent --show-error --dump-header /dev/stderr' \
+          >"${body_file}" 2>"${header_file}"
+    else
+      printf 'user = "%s:%s"\nheader = "Host: %s"\nurl = "%s"\n' \
+        "${auth_user}" "${auth_password}" "${CATERING_HOST}" "${url}" | \
+        "${DOCKER_BIN}" exec -i "${edge_container}" sh -c \
+          'exec curl --config - --silent --show-error --dump-header /dev/stderr' \
+          >"${body_file}" 2>"${header_file}"
+    fi
     client_status=$?
   else
     "${DOCKER_BIN}" exec "${edge_container}" sh -c '
@@ -263,11 +277,12 @@ probe_from_edge() {
     "$(safe_scalar "${peer}")" \
     "$(safe_scalar "${reported_client_status}")"
   print_body_preview "${label}" "${body_file}"
-  rm -f "${body_file}" "${header_file}"
+  unlink "${body_file}" 2>/dev/null || true
+  unlink "${header_file}" 2>/dev/null || true
 }
 
 collect_direct_evidence() {
-  local edge_container edge_count effective_upstream auth_b64
+  local edge_container edge_count effective_upstream
   edge_container="$(
     "${DOCKER_BIN}" ps \
       --filter 'label=com.docker.compose.project=shared-edge' \
@@ -303,24 +318,25 @@ collect_direct_evidence() {
   printf 'Catering diagnostic effective edge upstream: CATERING_UPSTREAM=%s\n' \
     "$(safe_scalar "${effective_upstream:-<unavailable>}")"
 
-  if [[ -z "${CATERING_SMOKE_BASIC_AUTH_USER:-}" || -z "${CATERING_SMOKE_BASIC_AUTH_PASSWORD:-}" ]]; then
-    printf 'Catering diagnostic direct-web: unavailable (Basic Auth credentials absent)\n'
-    auth_b64=""
-  else
-    auth_b64="$(python3 - <<'PYTHON'
-import base64
-import os
-
-raw = f"{os.environ['CATERING_SMOKE_BASIC_AUTH_USER']}:{os.environ['CATERING_SMOKE_BASIC_AUTH_PASSWORD']}".encode("utf-8")
-print(base64.b64encode(raw).decode("ascii"))
-PYTHON
-)"
+  if [[ -n "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}" ]]; then
     probe_from_edge \
       "Catering diagnostic direct-web" \
       "${edge_container}" \
       'http://web:8081/api/intake/health' \
       true \
-      "${auth_b64}"
+      "" \
+      "" \
+      "${CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE}"
+  elif [[ -z "${CATERING_SMOKE_BASIC_AUTH_USER:-}" || -z "${CATERING_SMOKE_BASIC_AUTH_PASSWORD:-}" ]]; then
+    printf 'Catering diagnostic direct-web: unavailable (Basic Auth credentials absent)\n'
+  else
+    probe_from_edge \
+      "Catering diagnostic direct-web" \
+      "${edge_container}" \
+      'http://web:8081/api/intake/health' \
+      true \
+      "${CATERING_SMOKE_BASIC_AUTH_USER}" \
+      "${CATERING_SMOKE_BASIC_AUTH_PASSWORD}"
   fi
 
   probe_from_edge \
@@ -328,6 +344,7 @@ PYTHON
     "${edge_container}" \
     'http://intake:3101/health' \
     false \
+    "" \
     ""
 }
 

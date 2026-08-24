@@ -6,7 +6,7 @@ DEPLOY_HOST="${DEPLOY_HOST:?Set DEPLOY_HOST}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
 EDGE_DEPLOY_PATH="${EDGE_DEPLOY_PATH:?Set EDGE_DEPLOY_PATH}"
 EDGE_ROLLBACK_ROOT="${EDGE_ROLLBACK_ROOT:-${EDGE_DEPLOY_PATH}-rollbacks}"
-EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"
+PHASE3_EDGE_LOCK="/opt/shared-edge.deploy-lock"
 EDGE_DEPLOY_COMMIT_SHA="${EDGE_DEPLOY_COMMIT_SHA:?Set EDGE_DEPLOY_COMMIT_SHA}"
 EDGE_MODE="${EDGE_MODE:-rehearsal}"
 CATERING_SMOKE_URL="${CATERING_SMOKE_URL:?Set CATERING_SMOKE_URL}"
@@ -15,6 +15,15 @@ EVENTOS_SMOKE_URL="${EVENTOS_SMOKE_URL:?Set EVENTOS_SMOKE_URL}"
 DEPLOY_RSYNC_PATH="${DEPLOY_RSYNC_PATH:-rsync}"
 CATERING_SMOKE_BASIC_AUTH_USER="${CATERING_SMOKE_BASIC_AUTH_USER:-}"
 CATERING_SMOKE_BASIC_AUTH_PASSWORD="${CATERING_SMOKE_BASIC_AUTH_PASSWORD:-}"
+
+write_rollback_outcome() {
+  local outcome="$1"
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    printf 'rollback_outcome=%s\n' "${outcome}" >>"${GITHUB_OUTPUT}"
+  fi
+}
+
+write_rollback_outcome not_attempted
 
 if [[ "${EDGE_MODE}" != "rehearsal" && "${EDGE_MODE}" != "cutover" ]]; then
   echo "EDGE_MODE must be rehearsal or cutover." >&2
@@ -31,7 +40,7 @@ if [[ "${EDGE_MODE}" == "rehearsal" && ( -z "${CATERING_SMOKE_BASIC_AUTH_USER}" 
   exit 1
 fi
 
-for command_name in ssh rsync docker; do
+for command_name in ssh scp rsync docker; do
   command -v "${command_name}" >/dev/null 2>&1 || {
     echo "${command_name} is required for edge deployment." >&2
     exit 1
@@ -41,8 +50,162 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EDGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
+validate_remote_path() {
+  local value="$1"
+  [[ "${value}" == /opt/shared-edge || "${value}" == /opt/shared-edge-rollbacks ]] || {
+    echo "Remote edge path is outside the fixed allowlist." >&2
+    exit 1
+  }
+  [[ "${value}" != *..* && "${value}" != *$'\n'* && "${value}" != *$'\r'* ]] || exit 1
+}
+validate_remote_path "${EDGE_DEPLOY_PATH}"
+validate_remote_path "${EDGE_ROLLBACK_ROOT}"
 EDGE_LOCK_HELD=false
+EDGE_LOCK_REENTRANT=false
 EDGE_RECOVERY_REQUIRED=false
+EDGE_LOCK_MODE=absent
+PLATFORM_LOCK_MODE=absent
+phase3_owner_id() {
+  local pid="${BASHPID-}"
+  [[ -n "${pid}" ]] || pid="$$"
+  printf 'normal-caller-%s-%s-%s' "${GITHUB_RUN_ID:-local}" "${GITHUB_RUN_ATTEMPT:-1}" "${pid}"
+}
+PHASE3_LOCK_OWNER="${PHASE3_LOCK_OWNER:-$(phase3_owner_id)}"
+PHASE3_LOCK_HELD=false
+
+phase3_guard() {
+  local guard_result_file
+  guard_result_file="$(mktemp "${TMPDIR:-/tmp}/catering-phase3-guard.XXXXXX")"
+  if ! ssh "${REMOTE}" bash -s -- "/opt/catering-agents-platform.deploy-lock" "/opt/shared-edge.deploy-lock" "/opt/catering-phase3/phase3.activation" "/opt/catering-phase3/phase3.transaction-baseline.manifest" "${PHASE3_LOCK_OWNER}" >"${guard_result_file}" <<'REMOTE_PHASE3_GUARD'
+set -euo pipefail
+platform_lock="$1"; edge_lock="$2"; marker="$3"; manifest="$4"; owner_token="$5"
+platform_mode=absent; edge_mode=absent
+verify_lock_owned() {
+  local lock="$1" expected_owner="$2" owner_file="${lock}/owner"
+  local lock_real lock_expected_real lock_mode owner_mode
+  lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")" || return 1
+  lock_expected_real="$(sudo realpath -e -- "$(dirname "${lock}")" 2>/dev/null || sudo realpath "$(dirname "${lock}")")/$(basename "${lock}")"
+  lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")"
+  owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")"
+  [[ -d "${lock}" && ! -L "${lock}" && "${lock_real}" == "${lock_expected_real}" && "${lock_mode}" == 700 ]] || return 1
+  [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || return 1
+  sudo grep -Fxq "owner_token=${expected_owner}" "${owner_file}"
+}
+release_on_guard_failure() { local status=$?; set +e; if [[ "${edge_mode}" == acquired ]] && verify_lock_owned "${edge_lock}" "${owner_token}"; then sudo unlink "${edge_lock}/owner"; sudo rmdir "${edge_lock}" 2>/dev/null || true; fi; if [[ "${platform_mode}" == acquired ]] && verify_lock_owned "${platform_lock}" "${owner_token}"; then sudo unlink "${platform_lock}/owner"; sudo rmdir "${platform_lock}" 2>/dev/null || true; fi; exit "${status}"; }
+trap release_on_guard_failure EXIT
+phase3_lock_acquire() {
+  local lock="$1" mode_var="$2"
+  local owner_file owner_tmp lock_real lock_mode owner_mode
+  if sudo mkdir -m 0700 -- "${lock}" 2>/dev/null; then
+    printf -v "${mode_var}" '%s' acquired
+    lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")"
+    lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")"
+    [[ "${lock_real}" == "${lock}" && "${lock_mode}" == 700 ]] || return 1
+    owner_file="${lock}/owner"; owner_tmp="${owner_file}.pending.$$"
+    printf '%s\n' "owner_token=${owner_token}" "owner=normal-caller-phase3-guard" | sudo tee "${owner_tmp}" >/dev/null
+    sudo chmod 0600 "${owner_tmp}"; sudo mv -f "${owner_tmp}" "${owner_file}"
+    owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")"
+    [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || return 1
+    sudo grep -Fxq "owner_token=${owner_token}" "${owner_file}" || return 1
+    return 0
+  fi
+  owner_file="${lock}/owner"
+  lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")"
+  lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")"
+  owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")"
+  [[ -d "${lock}" && ! -L "${lock}" && "${lock_real}" == "${lock}" && "${lock_mode}" == 700 ]] || return 1
+  [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || return 1
+  sudo grep -Fxq "owner_token=${owner_token}" "${owner_file}" || return 1
+  printf -v "${mode_var}" '%s' reentered
+}
+phase3_lock_acquire "${platform_lock}" platform_mode
+phase3_lock_acquire "${edge_lock}" edge_mode
+state=absent
+[[ ! -e "${marker}" ]] || { [[ -f "${marker}" && ! -L "${marker}" ]] || exit 1; state="$(sed -n 's/^state=//p' "${marker}")"; }
+validate_phase3_artifacts() {
+  case "${state}" in
+    absent|inactive) [[ ! -e "${manifest}" && ! -e "/opt/catering-phase3/phase3.rollback-restore-proof.archive" && ! -e "/opt/catering-phase3/phase3.rollback-completion.receipt" ]] || exit 1 ;;
+    candidate|active|rolling_back) printf '%s\n' NOT_APPLICABLE_PHASE3 >&2; exit 1 ;;
+    *) exit 1 ;;
+  esac
+}
+validate_phase3_artifacts
+trap - EXIT
+printf '%s\n' "platform_mode=${platform_mode}" "edge_mode=${edge_mode}"
+REMOTE_PHASE3_GUARD
+  then
+    unlink "${guard_result_file}"
+    return 1
+  fi
+  if ! cat "${guard_result_file}" >/dev/null; then
+    unlink "${guard_result_file}"
+    return 1
+  fi
+  PLATFORM_LOCK_MODE="$(sed -n 's/^platform_mode=//p' "${guard_result_file}" | tail -n 1)"
+  EDGE_LOCK_MODE="$(sed -n 's/^edge_mode=//p' "${guard_result_file}" | tail -n 1)"
+  unlink "${guard_result_file}"
+  [[ "${PLATFORM_LOCK_MODE}" == acquired || "${PLATFORM_LOCK_MODE}" == reentered ]] || return 1
+  [[ "${EDGE_LOCK_MODE}" == acquired || "${EDGE_LOCK_MODE}" == reentered ]] || return 1
+  PHASE3_LOCK_HELD=true
+}
+
+phase3_release() {
+  if [[ "${EDGE_RECOVERY_REQUIRED}" == "true" ]]; then
+    echo "Recovery is still required; retaining phase-3 locks." >&2
+    return 0
+  fi
+  [[ "${PHASE3_LOCK_HELD}" == true ]] || return 0
+  ssh "${REMOTE}" bash -s -- "/opt/catering-agents-platform.deploy-lock" "/opt/shared-edge.deploy-lock" "${PHASE3_LOCK_OWNER}" "${PLATFORM_LOCK_MODE}" "${EDGE_LOCK_MODE}" <<'REMOTE_PHASE3_RELEASE'
+set -euo pipefail
+platform_lock="$1"; edge_lock="$2"; owner_token="$3"; platform_mode="$4"; edge_mode="$5"
+verify_lock_owned() {
+  local lock="$1" expected_token="$2" owner_file="${lock}/owner" lock_real expected_real lock_mode owner_mode
+  lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")"
+  expected_real="$(sudo realpath -e -- "$(dirname "${lock}")" 2>/dev/null || sudo realpath "$(dirname "${lock}")")/$(basename "${lock}")"
+  lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")"
+  owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")"
+  [[ -d "${lock}" && ! -L "${lock}" && "${lock_real}" == "${expected_real}" && "${lock_mode}" == 700 ]] || return 1
+  [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || return 1
+  sudo grep -Fxq "owner_token=${expected_token}" "${owner_file}"
+}
+if [[ "${edge_mode}" == acquired ]]; then verify_lock_owned "${edge_lock}" "${owner_token}"; sudo unlink "${edge_lock}/owner"; sudo rmdir "${edge_lock}"; fi
+if [[ "${platform_mode}" == acquired ]]; then verify_lock_owned "${platform_lock}" "${owner_token}"; sudo unlink "${platform_lock}/owner"; sudo rmdir "${platform_lock}"; fi
+REMOTE_PHASE3_RELEASE
+  PHASE3_LOCK_HELD=false
+}
+
+phase3_recheck() {
+  ssh "${REMOTE}" bash -s -- "/opt/catering-agents-platform.deploy-lock" "/opt/shared-edge.deploy-lock" "/opt/catering-phase3/phase3.activation" "/opt/catering-phase3/phase3.transaction-baseline.manifest" "${PHASE3_LOCK_OWNER}" <<'REMOTE_PHASE3_RECHECK'
+set -euo pipefail
+platform_lock="$1"; edge_lock="$2"; marker="$3"; manifest="$4"; owner_token="$5"
+verify_lock_owned() {
+  local lock="$1" expected_owner="$2" owner_file="${lock}/owner"
+  local lock_real lock_expected_real lock_mode owner_mode
+  lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")" || exit 1
+  lock_expected_real="$(sudo realpath -e -- "$(dirname "${lock}")" 2>/dev/null || sudo realpath "$(dirname "${lock}")")/$(basename "${lock}")"
+  lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")"
+  owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")"
+  [[ -d "${lock}" && ! -L "${lock}" && "${lock_real}" == "${lock_expected_real}" && "${lock_mode}" == 700 ]] || exit 1
+  [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || exit 1
+  sudo grep -Fxq "owner_token=${expected_owner}" "${owner_file}" || exit 1
+}
+verify_lock_owned "${platform_lock}" "${owner_token}"
+verify_lock_owned "${edge_lock}" "${owner_token}"
+state=absent
+if [[ -e "${marker}" ]]; then
+  [[ -f "${marker}" && ! -L "${marker}" ]] || exit 1
+  state="$(sed -n 's/^state=//p' "${marker}")"
+fi
+validate_phase3_artifacts() {
+  case "${state}" in
+    absent|inactive) [[ ! -e "${manifest}" && ! -e "/opt/catering-phase3/phase3.rollback-restore-proof.archive" && ! -e "/opt/catering-phase3/phase3.rollback-completion.receipt" ]] || exit 1 ;;
+    candidate|active|rolling_back) printf '%s\n' NOT_APPLICABLE_PHASE3 >&2; exit 1 ;;
+    *) exit 1 ;;
+  esac
+}
+validate_phase3_artifacts
+REMOTE_PHASE3_RECHECK
+}
 
 url_host() {
   local value="${1#*://}"
@@ -69,28 +232,29 @@ fi
     caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 )
 
-ssh "${REMOTE}" "
-  set -euo pipefail
-  command -v curl >/dev/null 2>&1 || { echo 'curl is required for local edge rehearsal probes.' >&2; exit 1; }
-  command -v python3 >/dev/null 2>&1 || { echo 'python3 is required for semantic edge rehearsal probes.' >&2; exit 1; }
-  docker network inspect platform-infra_default >/dev/null 2>&1 || { echo 'Missing required external Docker network: platform-infra_default' >&2; exit 1; }
-  docker network inspect zeiterfassung_default >/dev/null 2>&1 || { echo 'Missing required external Docker network: zeiterfassung_default' >&2; exit 1; }
-  test -f '${EDGE_DEPLOY_PATH}/.env' || { echo 'Missing protected edge .env on server.' >&2; exit 1; }
-"
+ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" <<'REMOTE_PREFLIGHT'
+set -euo pipefail
+edge_path="$1"
+[[ "${edge_path}" == /opt/shared-edge ]] || exit 1
+[[ -d "${edge_path}" && ! -L "${edge_path}" ]] || exit 1
+[[ "$(realpath -e -- "${edge_path}")" == "${edge_path}" ]] || exit 1
+[[ "$(stat -c '%a' "${edge_path}")" == 755 ]] || exit 1
+command -v curl >/dev/null 2>&1 || { echo 'curl is required for local edge rehearsal probes.' >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo 'python3 is required for semantic edge rehearsal probes.' >&2; exit 1; }
+docker network inspect platform-infra_default >/dev/null 2>&1 || { echo 'Missing required external Docker network: platform-infra_default' >&2; exit 1; }
+docker network inspect zeiterfassung_default >/dev/null 2>&1 || { echo 'Missing required external Docker network: zeiterfassung_default' >&2; exit 1; }
+test -f "${edge_path}/.env" || { echo 'Missing protected edge .env on server.' >&2; exit 1; }
+REMOTE_PREFLIGHT
+
+phase3_guard
+# The trap is installed immediately after the guard so every subsequent
+# mutation is covered, including signal/ERR paths.
+trap 'release_edge_lock; phase3_release' EXIT
 
 acquire_edge_lock() {
-  ssh "${REMOTE}" bash -s -- "${EDGE_LOCK_PATH}" "${EDGE_DEPLOY_COMMIT_SHA}" "${EDGE_MODE}" <<'REMOTE_SCRIPT'
-set -euo pipefail
-lock_path="$1"
-commit_sha="$2"
-mode="$3"
-if ! sudo mkdir "${lock_path}" 2>/dev/null; then
-  echo "Another shared-edge deployment holds ${lock_path}. Inspect and clear it only after confirming no deploy is running." >&2
-  if sudo test -f "${lock_path}/owner"; then sudo cat "${lock_path}/owner" >&2 || true; fi
-  exit 1
-fi
-printf '%s\n' "commit=${commit_sha}" "mode=${mode}" "acquired_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | sudo tee "${lock_path}/owner" >/dev/null
-REMOTE_SCRIPT
+  # phase3_guard already acquired or safely re-entered the shared lock. Keep
+  # that exact mode; a newly acquired lock must not be mislabeled reentrant.
+  EDGE_LOCK_REENTRANT="${EDGE_LOCK_MODE}"
   EDGE_LOCK_HELD=true
 }
 
@@ -104,8 +268,8 @@ canonical_zt="ZEITERFASSUNG_UPSTREAM=zeiterfassung-app-1:3040"
 pending="${edge_path}/.env.pending.$$"
 local_tmp="$(mktemp)"
 cleanup() {
-  rm -f "$local_tmp"
-  sudo rm -f "$pending"
+  unlink "$local_tmp" 2>/dev/null || true
+  sudo unlink "$pending" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -152,20 +316,15 @@ REMOTE_SCRIPT
 release_edge_lock() {
   if [[ "${EDGE_LOCK_HELD}" != "true" ]]; then return 0; fi
   if [[ "${EDGE_RECOVERY_REQUIRED}" == "true" ]]; then
-    echo "Recovery is still required; retaining edge deploy lock ${EDGE_LOCK_PATH}." >&2
+    echo "Recovery is still required; retaining edge deploy lock ${PHASE3_EDGE_LOCK}." >&2
     return 0
   fi
-  ssh "${REMOTE}" bash -s -- "${EDGE_LOCK_PATH}" <<'REMOTE_SCRIPT'
-set -euo pipefail
-lock_path="$1"
-sudo rm -f "${lock_path}/owner"
-sudo rmdir "${lock_path}"
-REMOTE_SCRIPT
+  [[ "${EDGE_LOCK_REENTRANT}" == reentered ]] || return 0
   EDGE_LOCK_HELD=false
 }
 
-trap 'release_edge_lock' EXIT
 acquire_edge_lock
+phase3_recheck
 migrate_legacy_zeiterfassung_upstream
 
 echo "Creating edge rollback snapshot..."
@@ -196,7 +355,7 @@ revoke_live_manifest() {
   ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" <<'REMOTE_SCRIPT'
 set -euo pipefail
 edge_path="$1"
-sudo rm -f "${edge_path}/.deploy-manifest"
+  sudo unlink "${edge_path}/.deploy-manifest"
 REMOTE_SCRIPT
 }
 
@@ -231,7 +390,16 @@ edge_path="$1"
 archive="$2"
 mode="$3"
 manifest_archive="${archive}.manifest"
-sudo find "${edge_path}" -mindepth 1 -maxdepth 1 ! -name .env ! -name .deploy-manifest -exec rm -rf -- {} +
+# Remove only the allowlisted deployment entries while preserving protected
+# state. Depth-first deletion empties filled top-level directories first; the
+# rollback tree and every descendant remain outside the deletion set.
+sudo find "${edge_path}" -mindepth 1 \
+  ! -path "${edge_path}/.env" \
+  ! -path "${edge_path}/.deploy-manifest" \
+  ! -path "${edge_path}/.deploy-manifest.manifest" \
+  ! -path "${edge_path}/rollbacks" \
+  ! -path "${edge_path}/rollbacks/*" \
+  -depth -delete
 sudo tar -xzf "${archive}" -C "${edge_path}"
 cd "${edge_path}"
 compose_files=(-f docker-compose.yml)
@@ -244,9 +412,11 @@ REMOTE_SCRIPT
   fi
 
   if [[ "${rollback_status}" -ne 0 ]]; then
+    write_rollback_outcome recovery_required
     echo "Edge rollback failed; live deployment remains untrusted because no manifest is present." >&2
   else
     EDGE_RECOVERY_REQUIRED=false
+    write_rollback_outcome successful
   fi
   exit "${failure_status}"
 }
@@ -256,30 +426,68 @@ trap 'rollback_edge_candidate 143' TERM
 trap 'rollback_edge_candidate 130' INT
 trap 'rollback_edge_candidate 129' HUP
 revoke_live_manifest
+phase3_recheck
 
 echo "Syncing edge source..."
 rsync -az --delete --rsync-path="${DEPLOY_RSYNC_PATH}" --exclude ".env" --exclude ".deploy-manifest" "${EDGE_DIR}/" "${REMOTE}:${EDGE_DEPLOY_PATH}/"
 
-if [[ "${EDGE_MODE}" == "rehearsal" ]]; then REMOTE_COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rehearsal.yml"; else REMOTE_COMPOSE_FILES="-f docker-compose.yml"; fi
-
-ssh "${REMOTE}" "
-  set -euo pipefail
-  cd '${EDGE_DEPLOY_PATH}'
-  docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env config >/dev/null
-  docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env run --rm --no-deps --entrypoint caddy edge validate --config /etc/caddy/Caddyfile
-  docker compose -p shared-edge ${REMOTE_COMPOSE_FILES} --env-file .env up -d
-"
+phase3_recheck
+ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" "${EDGE_MODE}" <<'REMOTE_COMPOSE'
+set -euo pipefail
+edge_path="$1"; mode="$2"
+cd "${edge_path}"
+compose_files=(-f docker-compose.yml)
+if [[ "${mode}" == rehearsal ]]; then compose_files+=(-f docker-compose.rehearsal.yml); fi
+docker compose -p shared-edge "${compose_files[@]}" --env-file .env config >/dev/null
+docker compose -p shared-edge "${compose_files[@]}" --env-file .env run --rm --no-deps --entrypoint caddy edge validate --config /etc/caddy/Caddyfile
+docker compose -p shared-edge "${compose_files[@]}" --env-file .env up -d
+REMOTE_COMPOSE
 
 probe_rehearsal_listener() {
+  local auth_file="" remote_auth_file="" remote_auth_pending=""
+  cleanup_rehearsal_auth() {
+    [[ -z "${auth_file}" ]] || unlink "${auth_file}" 2>/dev/null || true
+    if [[ -n "${remote_auth_file}" || -n "${remote_auth_pending}" ]]; then
+      ssh "${REMOTE}" bash -s -- "${remote_auth_file}" "${remote_auth_pending}" <<'REMOTE_CLEANUP' >/dev/null 2>&1 || true
+set +e
+for path in "$1" "$2"; do
+  [[ -n "${path}" && -f "${path}" && ! -L "${path}" ]] && unlink "${path}" 2>/dev/null || true
+done
+REMOTE_CLEANUP
+    fi
+  }
+  trap cleanup_rehearsal_auth EXIT
+  trap 'cleanup_rehearsal_auth; exit 143' TERM INT HUP
+  auth_file="$(mktemp)"
+  chmod 600 "${auth_file}"
+  printf 'user = "%s:%s"\n' "${CATERING_SMOKE_BASIC_AUTH_USER}" "${CATERING_SMOKE_BASIC_AUTH_PASSWORD}" >"${auth_file}"
+  remote_auth_file="$(ssh "${REMOTE}" bash -s <<'REMOTE_MKTEMP'
+set -euo pipefail
+umask 077
+mktemp /tmp/.catering-edge-probe-auth.XXXXXX
+REMOTE_MKTEMP
+)"
+  [[ "${remote_auth_file}" == /tmp/.catering-edge-probe-auth.?????? ]] || return 1
+  remote_auth_pending="${remote_auth_file}.pending.${EDGE_DEPLOY_COMMIT_SHA:0:12}"
+  scp "${auth_file}" "${REMOTE}:${remote_auth_pending}"
+  ssh "${REMOTE}" bash -s -- "${remote_auth_file}" "${remote_auth_pending}" <<'REMOTE_AUTH_INSTALL'
+set -euo pipefail
+auth_file="$1"; auth_pending="$2"
+[[ -f "${auth_pending}" && ! -L "${auth_pending}" ]] || exit 1
+auth_mode="$(stat -c '%a' "${auth_pending}" 2>/dev/null || stat -f '%Lp' "${auth_pending}")"
+auth_owner="$(stat -c '%u' "${auth_pending}" 2>/dev/null || stat -f '%u' "${auth_pending}")"
+[[ "${auth_mode}" == 600 && "${auth_owner}" == "$(id -u)" ]] || exit 1
+[[ ! -e "${auth_file}" || ( -f "${auth_file}" && ! -L "${auth_file}" ) ]] || exit 1
+mv -f "${auth_pending}" "${auth_file}"
+REMOTE_AUTH_INSTALL
   {
-    printf 'CATERING_SMOKE_BASIC_AUTH_USER=%q\n' "${CATERING_SMOKE_BASIC_AUTH_USER}"
-    printf 'CATERING_SMOKE_BASIC_AUTH_PASSWORD=%q\n' "${CATERING_SMOKE_BASIC_AUTH_PASSWORD}"
     cat <<'REMOTE_SCRIPT'
 set -euo pipefail
 ZEITERFASSUNG_SMOKE_HOST="$1"
 EVENTOS_SMOKE_HOST="$2"
 CATERING_SMOKE_HOST="$3"
 EDGE_DEPLOY_PATH="$4"
+REMOTE_AUTH_FILE="$5"
 probe() {
   local label="$1" host="$2" path="$3" expected_status="$4" status="" attempt
   for attempt in $(seq 1 15); do
@@ -296,19 +504,19 @@ probe_ok_json() {
   for attempt in $(seq 1 15); do
     : >"${body_file}"
     status="$(curl --silent --show-error --max-time 5 --output "${body_file}" --write-out '%{http_code}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
-    if [[ "${status}" == "200" ]] && grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "${body_file}"; then rm -f "${body_file}"; echo "${label}: ok (${status}, semantic identity confirmed)"; return 0; fi
+    if [[ "${status}" == "200" ]] && grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "${body_file}"; then unlink "${body_file}" 2>/dev/null || true; echo "${label}: ok (${status}, semantic identity confirmed)"; return 0; fi
     sleep 1
   done
-  rm -f "${body_file}"
+  unlink "${body_file}" 2>/dev/null || true
   echo "${label}: expected 200 with ok=true, got ${status:-no response}" >&2
   return 1
 }
 probe_catering_json() {
-  local label="$1" host="$2" path="$3" status="" content_type="" response_meta="" body_file attempt
+  local label="$1" host="$2" path="$3" auth_file="$4" status="" content_type="" response_meta="" body_file attempt
   body_file="$(mktemp)"
   for attempt in $(seq 1 15); do
     : >"${body_file}"
-    response_meta="$(curl --silent --show-error --max-time 5 --basic --user "${CATERING_SMOKE_BASIC_AUTH_USER}:${CATERING_SMOKE_BASIC_AUTH_PASSWORD}" --output "${body_file}" --write-out $'%{http_code}\t%{content_type}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
+    response_meta="$(curl --silent --show-error --max-time 5 --config "${auth_file}" --output "${body_file}" --write-out $'%{http_code}\t%{content_type}' --header "Host: ${host}" "http://127.0.0.1:18080${path}" || true)"
     IFS=$'\t' read -r status content_type <<<"${response_meta}"
     if [[ "${status}" == "200" ]]; then
       if python3 - "${body_file}" <<'PYTHON'
@@ -329,7 +537,7 @@ if payload.get("service") != "intake-service":
     raise SystemExit(1)
 PYTHON
       then
-        rm -f "${body_file}"
+        unlink "${body_file}" 2>/dev/null || true
         echo "${label}: ok (${status}, exact service identity confirmed)"
         return 0
       fi
@@ -337,8 +545,7 @@ PYTHON
     sleep 1
   done
   echo "${label}: expected authenticated 200 from intake-service with status=ok, got ${status:-no response}; collecting safe diagnostics" >&2
-  if ! CATERING_SMOKE_BASIC_AUTH_USER="${CATERING_SMOKE_BASIC_AUTH_USER}" \
-    CATERING_SMOKE_BASIC_AUTH_PASSWORD="${CATERING_SMOKE_BASIC_AUTH_PASSWORD}" \
+  if ! CATERING_DIAGNOSTIC_AUTH_CONFIG_FILE="${REMOTE_AUTH_FILE}" \
     bash "${EDGE_DEPLOY_PATH}/scripts/diagnose-catering-identity.sh" \
       "${host}" \
       "${status:-no response}" \
@@ -347,14 +554,16 @@ PYTHON
   then
     echo "${label}: diagnostic collector failed; identity gate remains failed" >&2
   fi
-  rm -f "${body_file}"
+  unlink "${body_file}" 2>/dev/null || true
   return 1
 }
 probe_ok_json "Rehearsal Zeiterfassung" "${ZEITERFASSUNG_SMOKE_HOST}" "/healthz"
 probe "Rehearsal EventOS" "${EVENTOS_SMOKE_HOST}" "/" "200"
-probe_catering_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health"
+probe_catering_json "Rehearsal Catering" "${CATERING_SMOKE_HOST}" "/api/intake/health" "${REMOTE_AUTH_FILE}"
 REMOTE_SCRIPT
-  } | ssh "${REMOTE}" bash -s -- "${ZEITERFASSUNG_SMOKE_HOST}" "${EVENTOS_SMOKE_HOST}" "${CATERING_SMOKE_HOST}" "${EDGE_DEPLOY_PATH}"
+  } | ssh "${REMOTE}" bash -s -- "${ZEITERFASSUNG_SMOKE_HOST}" "${EVENTOS_SMOKE_HOST}" "${CATERING_SMOKE_HOST}" "${EDGE_DEPLOY_PATH}" "${remote_auth_file}"
+  cleanup_rehearsal_auth
+  trap - EXIT TERM INT HUP
 }
 
 if [[ "${EDGE_MODE}" == "rehearsal" ]]; then probe_rehearsal_listener; fi
@@ -366,15 +575,17 @@ else
 fi
 
 echo "Recording edge deployment manifest..."
-ssh "${REMOTE}" "
-  set -euo pipefail
-  manifest='${EDGE_DEPLOY_PATH}/.deploy-manifest'
-  temporary=\"\${manifest}.tmp.\$$\"
-  printf '%s\n' 'commit=${EDGE_DEPLOY_COMMIT_SHA}' 'mode=${EDGE_MODE}' \"deployed_at=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" 'rollback_root=${EDGE_ROLLBACK_ROOT}' | sudo tee \"\${temporary}\" >/dev/null
-  sudo mv \"\${temporary}\" \"\${manifest}\"
-"
+ssh "${REMOTE}" bash -s -- "${EDGE_DEPLOY_PATH}" "${EDGE_DEPLOY_COMMIT_SHA}" "${EDGE_MODE}" "${EDGE_ROLLBACK_ROOT}" <<'REMOTE_MANIFEST'
+set -euo pipefail
+edge_path="$1"; commit_sha="$2"; mode="$3"; rollback_root="$4"
+manifest="${edge_path}/.deploy-manifest"
+temporary="${manifest}.tmp.$$"
+printf '%s\n' "commit=${commit_sha}" "mode=${mode}" "deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" "rollback_root=${rollback_root}" | sudo tee "${temporary}" >/dev/null
+sudo mv "${temporary}" "${manifest}"
+REMOTE_MANIFEST
 
 trap - ERR TERM INT HUP
 release_edge_lock
+phase3_release
 trap - EXIT
 echo "Edge deployment completed in ${EDGE_MODE} mode."

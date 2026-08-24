@@ -35,9 +35,10 @@ describe('edge Catering rehearsal contract', () => {
     expect(rehearsalCaddy).toContain('reverse_proxy {$CATERING_UPSTREAM}');
     expect(rehearsalCaddy).not.toMatch(/basic_auth|basicauth/);
 
-    expect(deploy).toContain("printf 'CATERING_SMOKE_BASIC_AUTH_USER=%q\\n'");
-    expect(deploy).toContain("printf 'CATERING_SMOKE_BASIC_AUTH_PASSWORD=%q\\n'");
-    expect(deploy).toContain('--user "${CATERING_SMOKE_BASIC_AUTH_USER}:${CATERING_SMOKE_BASIC_AUTH_PASSWORD}"');
+    expect(deploy).toContain('remote_auth_file');
+    expect(deploy).toContain('scp "${auth_file}" "${REMOTE}:${remote_auth_pending}"');
+    expect(deploy).toContain('--config "${auth_file}"');
+    expect(deploy).not.toContain('--user "${CATERING_SMOKE_BASIC_AUTH_USER}:${CATERING_SMOKE_BASIC_AUTH_PASSWORD}"');
 
     expect(deploy).toContain('json.load');
     expect(deploy).toContain('payload.get("status") != "ok"');

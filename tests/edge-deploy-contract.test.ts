@@ -63,7 +63,7 @@ describe('edge deploy safety contract', () => {
     const revokeCall = deploy.indexOf('\nrevoke_live_manifest\n', rollbackTrap);
     expect(bootstrapGuard).toBeGreaterThanOrEqual(0);
     expect(bootstrapEnd).toBeGreaterThan(bootstrapGuard);
-    expect(deploy.slice(bootstrapGuard, bootstrapEnd)).not.toContain('sudo rm -f "${edge_path}/.deploy-manifest"');
+    expect(deploy.slice(bootstrapGuard, bootstrapEnd)).not.toContain('sudo unlink "${edge_path}/.deploy-manifest"');
     expect(revokeCall).toBeGreaterThan(rollbackTrap);
   });
 
@@ -84,7 +84,7 @@ describe('edge deploy safety contract', () => {
   it('invalidates manifest trust before candidate mutation and restores it only after verified rollback', () => {
     expect(deploy).toContain('manifest_archive="${archive}.manifest"');
     expect(deploy).toContain('sudo cp "${edge_path}/.deploy-manifest" "${manifest_archive}"');
-    expect(deploy).toContain('sudo rm -f "${edge_path}/.deploy-manifest"');
+    expect(deploy).toContain('sudo unlink "${edge_path}/.deploy-manifest"');
     const revokeCall = deploy.indexOf('\nrevoke_live_manifest\n');
     expect(revokeCall).toBeLessThan(deploy.indexOf('Syncing edge source'));
     expect(deploy).toContain('sudo cp "${manifest_archive}" "${edge_path}/.deploy-manifest"');
@@ -95,7 +95,7 @@ describe('edge deploy safety contract', () => {
     expect(deploy).toContain('EDGE_RECOVERY_REQUIRED=true');
     expect(deploy).toContain('Recovery is still required; retaining edge deploy lock');
     const recoveryGuard = deploy.indexOf('if [[ "${EDGE_RECOVERY_REQUIRED}" == "true" ]]');
-    const remoteLockRemoval = deploy.indexOf('sudo rm -f "${lock_path}/owner"');
+    const remoteLockRemoval = deploy.lastIndexOf('sudo unlink "${edge_lock}/owner"');
     expect(recoveryGuard).toBeGreaterThanOrEqual(0);
     expect(recoveryGuard).toBeLessThan(remoteLockRemoval);
   });
@@ -143,10 +143,10 @@ describe('edge deploy safety contract', () => {
   });
 
   it('serializes every edge deployment on the host for the full mutation window', () => {
-    expect(deploy).toContain('EDGE_LOCK_PATH="${EDGE_DEPLOY_PATH}.deploy-lock"');
+    expect(deploy).toContain('PHASE3_EDGE_LOCK="/opt/shared-edge.deploy-lock"');
     expect(deploy).toContain('acquire_edge_lock');
     expect(deploy).toContain('release_edge_lock');
-    expect(deploy).toContain("trap 'release_edge_lock' EXIT");
+    expect(deploy).toContain("trap 'release_edge_lock; phase3_release' EXIT");
     expect(deploy.indexOf('acquire_edge_lock')).toBeLessThan(deploy.indexOf('Creating edge rollback snapshot'));
     expect(deploy.indexOf('Recording edge deployment manifest')).toBeLessThan(deploy.lastIndexOf('release_edge_lock'));
   });

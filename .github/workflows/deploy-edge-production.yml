@@ -12,9 +12,12 @@ concurrency:
 
 jobs:
   deploy-edge:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 20
+    env:
+      PHASE3_LOCK_OWNER: phase3-normal-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Checkout exact dispatch commit
@@ -34,7 +37,81 @@ jobs:
           printf '%s\n' "$HETZNER_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
+      - name: Guard Phase 3 owner state before edge bootstrap
+        id: phase3_guard
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          PHASE3_LOCK_OWNER: phase3-normal-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh "$remote" bash -s -- "$PHASE3_LOCK_OWNER" <<'REMOTE_PHASE3_GUARD'
+          set -euo pipefail
+          owner_token="$1"
+          platform_lock=/opt/catering-agents-platform.deploy-lock
+          edge_lock=/opt/shared-edge.deploy-lock
+          marker=/opt/catering-phase3/phase3.activation
+          manifest=/opt/catering-phase3/phase3.transaction-baseline.manifest
+          platform_mode=absent
+          edge_mode=absent
+          verify_lock_owned() {
+            local lock="$1" expected_token="$2"
+            local owner_file="${lock}/owner"
+            local lock_real expected_real lock_mode owner_mode
+            lock_real="$(sudo realpath -e -- "$lock" 2>/dev/null || sudo realpath "$lock")"
+            expected_real="$(sudo realpath -e -- "$(dirname "$lock")" 2>/dev/null || sudo realpath "$(dirname "$lock")")/$(basename "$lock")"
+            lock_mode="$(sudo stat -c '%a' "$lock" 2>/dev/null || sudo stat -f '%Lp' "$lock")"
+            owner_mode="$(sudo stat -c '%a' "$owner_file" 2>/dev/null || sudo stat -f '%Lp' "$owner_file")"
+            [[ -d "$lock" && ! -L "$lock" && "$lock_real" == "$expected_real" && "$lock_mode" == 700 ]] || return 1
+            [[ -f "$owner_file" && ! -L "$owner_file" && "$owner_mode" == 600 ]] || return 1
+            sudo grep -Fxq "owner_token=$expected_token" "$owner_file" || return 1
+            sudo grep -Fxq 'owner=normal-caller-phase3-guard' "$owner_file"
+          }
+          release_on_guard_failure() {
+            local status=$?
+            set +e
+            if [[ "$edge_mode" == acquired ]] && verify_lock_owned "$edge_lock" "$owner_token"; then sudo unlink "$edge_lock/owner"; sudo rmdir "$edge_lock"; fi
+            if [[ "$platform_mode" == acquired ]] && verify_lock_owned "$platform_lock" "$owner_token"; then sudo unlink "$platform_lock/owner"; sudo rmdir "$platform_lock"; fi
+            exit "$status"
+          }
+          trap release_on_guard_failure EXIT
+          phase3_lock_acquire() {
+            local lock="$1" mode_var="$2"
+            local owner_file owner_tmp lock_real expected_real lock_mode owner_mode
+            if sudo mkdir -m 0700 -- "$lock" 2>/dev/null; then
+              printf -v "$mode_var" '%s' acquired
+              lock_real="$(sudo realpath -e -- "$lock" 2>/dev/null || sudo realpath "$lock")"
+              expected_real="$(sudo realpath -e -- "$(dirname "$lock")" 2>/dev/null || sudo realpath "$(dirname "$lock")")/$(basename "$lock")"
+              lock_mode="$(sudo stat -c '%a' "$lock" 2>/dev/null || sudo stat -f '%Lp' "$lock")"
+              [[ "$lock_real" == "$expected_real" && "$lock_mode" == 700 ]] || return 1
+              owner_file="$lock/owner"
+              owner_tmp="${owner_file}.pending.$$"
+              printf '%s\n' "owner_token=$owner_token" 'owner=normal-caller-phase3-guard' | sudo tee "$owner_tmp" >/dev/null
+              sudo chmod 0600 "$owner_tmp"
+              sudo mv -f "$owner_tmp" "$owner_file"
+              owner_mode="$(sudo stat -c '%a' "$owner_file" 2>/dev/null || sudo stat -f '%Lp' "$owner_file")"
+              [[ -f "$owner_file" && ! -L "$owner_file" && "$owner_mode" == 600 ]] || return 1
+              sudo grep -Fxq "owner_token=$owner_token" "$owner_file" || return 1
+              return 0
+            fi
+            verify_lock_owned "$lock" "$owner_token" || return 1
+            printf -v "$mode_var" '%s' reentrant
+          }
+          phase3_lock_acquire "$platform_lock" platform_mode
+          phase3_lock_acquire "$edge_lock" edge_mode
+          state=absent
+          if [[ -e "$marker" ]]; then
+            [[ -f "$marker" && ! -L "$marker" ]] || exit 1
+            state="$(sed -n 's/^state=//p' "$marker")"
+          fi
+          [[ "$state" == absent || "$state" == inactive ]] || { printf '%s\n' NOT_APPLICABLE_PHASE3 >&2; exit 1; }
+          [[ ! -e "$manifest" ]] || { printf '%s\n' 'phase3 manifest is bound; normal edge bootstrap is frozen.' >&2; exit 1; }
+          trap - EXIT
+          REMOTE_PHASE3_GUARD
+
       - name: Validate edge deployment inputs
+        id: validate_edge_inputs
         env:
           DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
@@ -52,49 +129,209 @@ jobs:
           test "$EDGE_MODE" = rehearsal
 
       - name: Bootstrap protected edge env if missing
+        id: bootstrap_edge_env
         env:
           DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          PHASE3_LOCK_OWNER: phase3-normal-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
-          if ssh "$remote" "sudo test -f /opt/shared-edge/.env"; then
-            echo "Protected edge .env already present; leaving bootstrap state unchanged."
+          bootstrap_state="$(ssh "$remote" bash -s -- "${PHASE3_LOCK_OWNER}" <<'REMOTE_PHASE3_BOOTSTRAP_BEGIN'
+          set -euo pipefail
+          owner_token="$1"
+          [[ "${owner_token}" =~ ^phase3-normal-[A-Za-z0-9._-]+$ ]] || exit 1
+          edge_path=/opt/shared-edge
+          bootstrap_state="${edge_path}/.env.bootstrap-state"
+          [[ -d "${edge_path}" && ! -L "${edge_path}" ]] || exit 1
+          [[ ! -e "${bootstrap_state}" && ! -L "${bootstrap_state}" ]] || exit 1
+          for pending in "${edge_path}"/.env.pending.*; do
+            [[ -e "${pending}" || -L "${pending}" ]] && exit 1
+          done
+          if [[ -f "${edge_path}/.env" && ! -L "${edge_path}/.env" ]]; then
+            initial_state=preexisting
           else
+            [[ ! -e "${edge_path}/.env" && ! -L "${edge_path}/.env" ]] || exit 1
+            initial_state=not_started
+          fi
+          deploy_uid="$(id -u)"
+          deploy_gid="$(id -g)"
+          verify_bootstrap_state() {
+            local state_path="$1" expected_state="$2" expected_path="$3"
+            local root_real state_real state_real_after expected_real
+            local state_stat state_stat_after state_mode state_uid state_gid state_inode state_links
+            local state_mode_after state_uid_after state_gid_after state_inode_after state_links_after
+            local state_content expected_content
+            [[ -f "${state_path}" && ! -L "${state_path}" ]] || return 1
+            [[ "${expected_path%/*}" == "${edge_path}" && -n "${expected_path##*/}" ]] || return 1
+            root_real="$(sudo realpath -e -- "${edge_path}" 2>/dev/null || sudo realpath "${edge_path}")" || return 1
+            state_real="$(sudo realpath -e -- "${state_path}" 2>/dev/null || sudo realpath "${state_path}")" || return 1
+            expected_real="${root_real}/${expected_path##*/}"
+            [[ "${state_real}" == "${expected_real}" ]] || return 1
+            state_stat="$(sudo stat -c '%a %u %g %i %h' "${state_path}" 2>/dev/null || sudo stat -f '%Lp %u %g %i %l' "${state_path}")" || return 1
+            read -r state_mode state_uid state_gid state_inode state_links <<< "${state_stat}" || return 1
+            [[ "${state_mode}" == 600 && "${state_uid}" == "${deploy_uid}" && "${state_gid}" == "${deploy_gid}" ]] || return 1
+            [[ "${state_inode}" =~ ^[0-9]+$ && "${state_links}" == 1 ]] || return 1
+            state_content="$(sudo cat "${state_path}")" || return 1
+            expected_content="$(printf '%s\n' schema=1 "owner_token=${owner_token}" "state=${expected_state}" stage=bootstrap)"
+            [[ "${state_content}" == "${expected_content}" ]] || return 1
+            state_real_after="$(sudo realpath -e -- "${state_path}" 2>/dev/null || sudo realpath "${state_path}")" || return 1
+            [[ "${state_real_after}" == "${state_real}" ]] || return 1
+            state_stat_after="$(sudo stat -c '%a %u %g %i %h' "${state_path}" 2>/dev/null || sudo stat -f '%Lp %u %g %i %l' "${state_path}")" || return 1
+            read -r state_mode_after state_uid_after state_gid_after state_inode_after state_links_after <<< "${state_stat_after}" || return 1
+            [[ "${state_mode_after}" == "${state_mode}" && "${state_uid_after}" == "${state_uid}" && "${state_gid_after}" == "${state_gid}" ]] || return 1
+            [[ "${state_inode_after}" == "${state_inode}" && "${state_links_after}" == 1 ]] || return 1
+          }
+          state_pending="${bootstrap_state}.pending.${owner_token}.$$"
+          cleanup() {
+            if [[ -n "${state_pending:-}" ]]; then
+              sudo unlink "${state_pending}" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+          sudo install -o "${deploy_uid}" -g "${deploy_gid}" -m 0600 /dev/null "${state_pending}"
+          printf '%s\n' schema=1 "owner_token=${owner_token}" "state=${initial_state}" stage=bootstrap | sudo tee "${state_pending}" >/dev/null
+          verify_bootstrap_state "${state_pending}" "${initial_state}" "${state_pending}" || exit 1
+          [[ ! -e "${bootstrap_state}" && ! -L "${bootstrap_state}" ]] || exit 1
+          sudo mv -f "${state_pending}" "${bootstrap_state}"
+          state_pending=""
+          verify_bootstrap_state "${bootstrap_state}" "${initial_state}" "${bootstrap_state}" || exit 1
+          printf '%s\n' "${initial_state}"
+          REMOTE_PHASE3_BOOTSTRAP_BEGIN
+          )"
+          case "${bootstrap_state}" in
+            preexisting)
+              ssh "$remote" bash -s -- "${PHASE3_LOCK_OWNER}" <<'REMOTE_PHASE3_BOOTSTRAP_PREEXISTING'
+          set -euo pipefail
+          owner_token="$1"
+          edge_path=/opt/shared-edge
+          bootstrap_state="${edge_path}/.env.bootstrap-state"
+          [[ "${owner_token}" =~ ^phase3-normal-[A-Za-z0-9._-]+$ ]] || exit 1
+          [[ -d "${edge_path}" && ! -L "${edge_path}" ]] || exit 1
+          deploy_uid="$(id -u)"
+          deploy_gid="$(id -g)"
+          verify_bootstrap_state() {
+            local state_path="$1" expected_state="$2" expected_path="$3"
+            local root_real state_real state_real_after expected_real
+            local state_stat state_stat_after state_mode state_uid state_gid state_inode state_links
+            local state_mode_after state_uid_after state_gid_after state_inode_after state_links_after
+            local state_content expected_content
+            [[ -f "${state_path}" && ! -L "${state_path}" ]] || return 1
+            [[ "${expected_path%/*}" == "${edge_path}" && -n "${expected_path##*/}" ]] || return 1
+            root_real="$(sudo realpath -e -- "${edge_path}" 2>/dev/null || sudo realpath "${edge_path}")" || return 1
+            state_real="$(sudo realpath -e -- "${state_path}" 2>/dev/null || sudo realpath "${state_path}")" || return 1
+            expected_real="${root_real}/${expected_path##*/}"
+            [[ "${state_real}" == "${expected_real}" ]] || return 1
+            state_stat="$(sudo stat -c '%a %u %g %i %h' "${state_path}" 2>/dev/null || sudo stat -f '%Lp %u %g %i %l' "${state_path}")" || return 1
+            read -r state_mode state_uid state_gid state_inode state_links <<< "${state_stat}" || return 1
+            [[ "${state_mode}" == 600 && "${state_uid}" == "${deploy_uid}" && "${state_gid}" == "${deploy_gid}" ]] || return 1
+            [[ "${state_inode}" =~ ^[0-9]+$ && "${state_links}" == 1 ]] || return 1
+            state_content="$(sudo cat "${state_path}")" || return 1
+            expected_content="$(printf '%s\n' schema=1 "owner_token=${owner_token}" "state=${expected_state}" stage=bootstrap)"
+            [[ "${state_content}" == "${expected_content}" ]] || return 1
+            state_real_after="$(sudo realpath -e -- "${state_path}" 2>/dev/null || sudo realpath "${state_path}")" || return 1
+            [[ "${state_real_after}" == "${state_real}" ]] || return 1
+            state_stat_after="$(sudo stat -c '%a %u %g %i %h' "${state_path}" 2>/dev/null || sudo stat -f '%Lp %u %g %i %l' "${state_path}")" || return 1
+            read -r state_mode_after state_uid_after state_gid_after state_inode_after state_links_after <<< "${state_stat_after}" || return 1
+            [[ "${state_mode_after}" == "${state_mode}" && "${state_uid_after}" == "${state_uid}" && "${state_gid_after}" == "${state_gid}" ]] || return 1
+            [[ "${state_inode_after}" == "${state_inode}" && "${state_links_after}" == 1 ]] || return 1
+          }
+          verify_bootstrap_state "${bootstrap_state}" preexisting "${bootstrap_state}" || exit 1
+          [[ -f "${edge_path}/.env" && ! -L "${edge_path}/.env" ]] || exit 1
+          for pending in "${edge_path}"/.env.pending.*; do
+            [[ -e "${pending}" || -L "${pending}" ]] && exit 1
+          done
+          verify_bootstrap_state "${bootstrap_state}" preexisting "${bootstrap_state}" || exit 1
+          sudo unlink "${bootstrap_state}"
+          [[ ! -e "${bootstrap_state}" && ! -L "${bootstrap_state}" ]] || exit 1
+          REMOTE_PHASE3_BOOTSTRAP_PREEXISTING
+              echo "Protected edge .env already present; leaving bootstrap state unchanged."
+              ;;
+            not_started)
             remote_tmp="/tmp/shared-edge.env.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
             scp edge-infra/.env.example "$remote:$remote_tmp"
-            ssh "$remote" bash -s -- "$remote_tmp" <<'REMOTE_SCRIPT'
+            ssh "$remote" bash -s -- "$remote_tmp" "${PHASE3_LOCK_OWNER}" <<'REMOTE_SCRIPT'
           set -euo pipefail
           tmp="$1"
+          owner_token="$2"
+          [[ "${owner_token}" =~ ^phase3-normal-[A-Za-z0-9._-]+$ ]] || exit 1
           edge_path="/opt/shared-edge"
           pending="${edge_path}/.env.pending.$$"
+          bootstrap_state="${edge_path}/.env.bootstrap-state"
+          state_pending="${bootstrap_state}.pending.${owner_token}.$$"
           cleanup() {
-            rm -f "$tmp"
-            if [[ -n "${pending:-}" ]]; then
-              sudo rm -f "$pending"
+            unlink "$tmp" 2>/dev/null || true
+            if [[ -n "${state_pending:-}" ]]; then
+              sudo unlink "$state_pending" 2>/dev/null || true
             fi
           }
           trap cleanup EXIT
 
-          if sudo test -f "${edge_path}/.env"; then
-            echo "Protected edge .env appeared concurrently; leaving it unchanged."
-            exit 0
-          fi
-
+          [[ -d "${edge_path}" && ! -L "${edge_path}" ]] || exit 1
           deploy_uid="$(id -u)"
           deploy_gid="$(id -g)"
+          verify_bootstrap_state() {
+            local state_path="$1" expected_state="$2" expected_path="$3"
+            local root_real state_real state_real_after expected_real
+            local state_stat state_stat_after state_mode state_uid state_gid state_inode state_links
+            local state_mode_after state_uid_after state_gid_after state_inode_after state_links_after
+            local state_content expected_content
+            [[ -f "${state_path}" && ! -L "${state_path}" ]] || return 1
+            [[ "${expected_path%/*}" == "${edge_path}" && -n "${expected_path##*/}" ]] || return 1
+            root_real="$(sudo realpath -e -- "${edge_path}" 2>/dev/null || sudo realpath "${edge_path}")" || return 1
+            state_real="$(sudo realpath -e -- "${state_path}" 2>/dev/null || sudo realpath "${state_path}")" || return 1
+            expected_real="${root_real}/${expected_path##*/}"
+            [[ "${state_real}" == "${expected_real}" ]] || return 1
+            state_stat="$(sudo stat -c '%a %u %g %i %h' "${state_path}" 2>/dev/null || sudo stat -f '%Lp %u %g %i %l' "${state_path}")" || return 1
+            read -r state_mode state_uid state_gid state_inode state_links <<< "${state_stat}" || return 1
+            [[ "${state_mode}" == 600 && "${state_uid}" == "${deploy_uid}" && "${state_gid}" == "${deploy_gid}" ]] || return 1
+            [[ "${state_inode}" =~ ^[0-9]+$ && "${state_links}" == 1 ]] || return 1
+            state_content="$(sudo cat "${state_path}")" || return 1
+            expected_content="$(printf '%s\n' schema=1 "owner_token=${owner_token}" "state=${expected_state}" stage=bootstrap)"
+            [[ "${state_content}" == "${expected_content}" ]] || return 1
+            state_real_after="$(sudo realpath -e -- "${state_path}" 2>/dev/null || sudo realpath "${state_path}")" || return 1
+            [[ "${state_real_after}" == "${state_real}" ]] || return 1
+            state_stat_after="$(sudo stat -c '%a %u %g %i %h' "${state_path}" 2>/dev/null || sudo stat -f '%Lp %u %g %i %l' "${state_path}")" || return 1
+            read -r state_mode_after state_uid_after state_gid_after state_inode_after state_links_after <<< "${state_stat_after}" || return 1
+            [[ "${state_mode_after}" == "${state_mode}" && "${state_uid_after}" == "${state_uid}" && "${state_gid_after}" == "${state_gid}" ]] || return 1
+            [[ "${state_inode_after}" == "${state_inode}" && "${state_links_after}" == 1 ]] || return 1
+          }
+          verify_bootstrap_state "${bootstrap_state}" not_started "${bootstrap_state}" || exit 1
+          [[ ! -e "${edge_path}/.env" && ! -L "${edge_path}/.env" ]] || exit 1
+          for existing_pending in "${edge_path}"/.env.pending.*; do
+            [[ -e "${existing_pending}" || -L "${existing_pending}" ]] && exit 1
+          done
+
           sudo install -d -m 0755 "$edge_path"
           sudo install -o "$deploy_uid" -g "$deploy_gid" -m 0600 "$tmp" "$pending"
           cmp -s "$tmp" "$pending"
-          test "$(stat -c '%a %u %g' "$pending")" = "600 ${deploy_uid} ${deploy_gid}"
+          test "$(stat -c '%a %u %g' "$pending" 2>/dev/null || stat -f '%Lp %u %g' "$pending")" = "600 ${deploy_uid} ${deploy_gid}"
+          sudo install -o "$deploy_uid" -g "$deploy_gid" -m 0600 /dev/null "$state_pending"
+          printf '%s\n' schema=1 "owner_token=${owner_token}" state=mutation_started stage=bootstrap | sudo tee "$state_pending" >/dev/null
+          verify_bootstrap_state "$state_pending" mutation_started "$state_pending" || exit 1
+          verify_bootstrap_state "$bootstrap_state" not_started "$bootstrap_state" || exit 1
+          sudo mv -f "$state_pending" "$bootstrap_state"
+          state_pending=""
+          verify_bootstrap_state "$bootstrap_state" mutation_started "$bootstrap_state" || exit 1
+          [[ -f "$pending" && ! -L "$pending" ]] || exit 1
+          verify_bootstrap_state "$bootstrap_state" mutation_started "$bootstrap_state" || exit 1
           sudo mv -f "$pending" "${edge_path}/.env"
           pending=""
-          test "$(stat -c '%a %u %g' "${edge_path}/.env")" = "600 ${deploy_uid} ${deploy_gid}"
+          test "$(stat -c '%a %u %g' "${edge_path}/.env" 2>/dev/null || stat -f '%Lp %u %g' "${edge_path}/.env")" = "600 ${deploy_uid} ${deploy_gid}"
+          verify_bootstrap_state "$bootstrap_state" mutation_started "$bootstrap_state" || exit 1
+          sudo unlink "$bootstrap_state"
+          [[ ! -e "${bootstrap_state}" && ! -L "${bootstrap_state}" ]] || exit 1
           REMOTE_SCRIPT
             echo "Protected edge .env bootstrapped atomically from edge-only rehearsal defaults."
-          fi
+              ;;
+            *)
+              printf '%s\n' 'invalid protected-env bootstrap state' >&2
+              exit 1
+              ;;
+          esac
 
       - name: Deploy exact edge commit
+        id: deploy_edge
         env:
           DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
@@ -109,3 +346,212 @@ jobs:
           ZEITERFASSUNG_SMOKE_URL: https://zeit.the-one.catering
           EVENTOS_SMOKE_URL: https://eventos.commcats.de
         run: bash edge-infra/scripts/deploy-hetzner.sh
+
+      - name: phase3-lock-predeploy-failure-release
+        # Only validation failures before protected-env bootstrap and deploy may
+        # release the guard locks. Once bootstrap or deploy starts, recovery owns
+        # the locks and this cleanup must stay fail-closed.
+        if: ${{ failure() && steps.phase3_guard.outcome == 'success' && steps.deploy_edge.outcome == 'skipped' }}
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          PHASE3_LOCK_OWNER: phase3-normal-${{ github.run_id }}-${{ github.run_attempt }}
+          PHASE3_BOOTSTRAP_OUTCOME: ${{ steps.bootstrap_edge_env.outcome }}
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh "${remote}" bash -s -- \
+            "${PHASE3_LOCK_OWNER}" \
+            /opt/catering-agents-platform.deploy-lock \
+            /opt/shared-edge.deploy-lock \
+            /opt/catering-phase3/phase3.activation \
+            /opt/catering-phase3/phase3.transaction-baseline.manifest \
+            /opt/catering-phase3/phase3.rollback-restore-proof.archive \
+            /opt/catering-phase3/phase3.rollback-completion.receipt \
+            /opt/catering-phase3/phase3.restore-evidence.record \
+            /opt/catering-phase3/phase3.network-adoption.journal \
+            "${PHASE3_BOOTSTRAP_OUTCOME}" \
+            /opt/shared-edge <<'REMOTE_PHASE3_PREDEPLOY_RELEASE'
+          set -euo pipefail
+          owner_token="$1"
+          platform_lock="$2"
+          edge_lock="$3"
+          marker="$4"
+          manifest="$5"
+          restore_archive="$6"
+          completion_receipt="$7"
+          restore_evidence="$8"
+          adoption_journal="$9"
+          bootstrap_outcome="${10}"
+          bootstrap_root="${11}"
+
+          [[ "${owner_token}" =~ ^phase3-normal-[A-Za-z0-9._-]+$ ]] || exit 1
+          for remote_path in "${platform_lock}" "${edge_lock}" "${marker}" "${manifest}" \
+            "${restore_archive}" "${completion_receipt}" "${restore_evidence}" "${adoption_journal}" "${bootstrap_root}"; do
+            [[ "${remote_path}" == /* && "${remote_path}" != *".."* && ! -L "${remote_path}" ]] || exit 1
+          done
+          [[ "${bootstrap_root##*/}" == shared-edge && -d "${bootstrap_root}" && ! -L "${bootstrap_root}" ]] || exit 1
+          bootstrap_state="${bootstrap_root}/.env.bootstrap-state"
+          bootstrap_uid="$(id -u)"
+          bootstrap_gid="$(id -g)"
+          verify_no_bootstrap_pending() {
+            local pending
+            for pending in "${bootstrap_root}"/.env.pending.*; do
+              if [[ -e "${pending}" || -L "${pending}" ]]; then
+                return 1
+              fi
+            done
+          }
+          verify_no_bootstrap_pending || exit 1
+
+          verify_bootstrap_state() {
+            local expected_state="$1" state_stat state_stat_after state_mode state_uid state_gid state_inode state_links
+            local state_mode_after state_uid_after state_gid_after state_inode_after state_links_after
+            local state_real state_real_after root_real state_content expected_content
+            [[ -f "${bootstrap_state}" && ! -L "${bootstrap_state}" ]] || return 1
+            root_real="$(sudo realpath -e -- "${bootstrap_root}" 2>/dev/null || sudo realpath "${bootstrap_root}")" || return 1
+            state_real="$(sudo realpath -e -- "${bootstrap_state}" 2>/dev/null || sudo realpath "${bootstrap_state}")" || return 1
+            [[ "${state_real}" == "${root_real}/.env.bootstrap-state" ]] || return 1
+            state_stat="$(sudo stat -c '%a %u %g %i %h' "${bootstrap_state}" 2>/dev/null || sudo stat -f '%Lp %u %g %i %l' "${bootstrap_state}")" || return 1
+            read -r state_mode state_uid state_gid state_inode state_links <<< "${state_stat}" || return 1
+            [[ "${state_mode}" == 600 && "${state_uid}" == "${bootstrap_uid}" && "${state_gid}" == "${bootstrap_gid}" ]] || return 1
+            [[ "${state_inode}" =~ ^[0-9]+$ && "${state_links}" == 1 ]] || return 1
+            state_content="$(sudo cat "${bootstrap_state}")" || return 1
+            expected_content="$(printf '%s\n' schema=1 "owner_token=${owner_token}" "state=${expected_state}" stage=bootstrap)"
+            [[ "${state_content}" == "${expected_content}" ]] || return 1
+            state_real_after="$(sudo realpath -e -- "${bootstrap_state}" 2>/dev/null || sudo realpath "${bootstrap_state}")" || return 1
+            [[ "${state_real_after}" == "${state_real}" ]] || return 1
+            state_stat_after="$(sudo stat -c '%a %u %g %i %h' "${bootstrap_state}" 2>/dev/null || sudo stat -f '%Lp %u %g %i %l' "${bootstrap_state}")" || return 1
+            read -r state_mode_after state_uid_after state_gid_after state_inode_after state_links_after <<< "${state_stat_after}" || return 1
+            [[ "${state_mode_after}" == "${state_mode}" && "${state_uid_after}" == "${state_uid}" && "${state_gid_after}" == "${state_gid}" ]] || return 1
+            [[ "${state_inode_after}" == "${state_inode}" && "${state_links_after}" == 1 ]] || return 1
+          }
+
+          state_to_clear=""
+          case "${bootstrap_outcome}" in
+            skipped)
+              [[ ! -e "${bootstrap_state}" && ! -L "${bootstrap_state}" ]] || exit 1
+              ;;
+            failure)
+              if [[ -e "${bootstrap_state}" || -L "${bootstrap_state}" ]]; then
+                state_value="$(sed -n 's/^state=//p' "${bootstrap_state}")"
+                case "${state_value}" in
+                  not_started)
+                    verify_bootstrap_state not_started || exit 1
+                    [[ ! -e "${bootstrap_root}/.env" && ! -L "${bootstrap_root}/.env" ]] || exit 1
+                    state_to_clear=not_started
+                    ;;
+                  preexisting)
+                    verify_bootstrap_state preexisting || exit 1
+                    [[ -f "${bootstrap_root}/.env" && ! -L "${bootstrap_root}/.env" ]] || exit 1
+                    state_to_clear=preexisting
+                    ;;
+                  *)
+                    exit 1
+                    ;;
+                esac
+              else
+                exit 1
+              fi
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+
+          state=absent
+          if [[ -e "${marker}" || -L "${marker}" ]]; then
+            [[ -f "${marker}" && ! -L "${marker}" ]] || exit 1
+            state="$(sed -n 's/^state=//p' "${marker}")"
+          fi
+          case "${state}" in
+            absent|inactive) ;;
+            *) exit 1 ;;
+          esac
+          for protected in "${manifest}" "${restore_archive}" "${completion_receipt}" \
+            "${restore_evidence}" "${adoption_journal}"; do
+            [[ ! -e "${protected}" && ! -L "${protected}" ]] || exit 1
+          done
+
+          if [[ -n "${state_to_clear}" ]]; then
+            verify_bootstrap_state "${state_to_clear}" || exit 1
+            sudo unlink "${bootstrap_state}"
+            [[ ! -e "${bootstrap_state}" && ! -L "${bootstrap_state}" ]] || exit 1
+            verify_no_bootstrap_pending || exit 1
+          fi
+
+          verify_lock_owned() {
+            local lock="$1" expected_token="$2"
+            local owner_file="${lock}/owner"
+            local lock_real expected_real lock_mode owner_mode
+            lock_real="$(sudo realpath -e -- "${lock}" 2>/dev/null || sudo realpath "${lock}")"
+            expected_real="$(sudo realpath -e -- "$(dirname "${lock}")" 2>/dev/null || sudo realpath "$(dirname "${lock}")")/$(basename "${lock}")"
+            lock_mode="$(sudo stat -c '%a' "${lock}" 2>/dev/null || sudo stat -f '%Lp' "${lock}")"
+            owner_mode="$(sudo stat -c '%a' "${owner_file}" 2>/dev/null || sudo stat -f '%Lp' "${owner_file}")"
+            [[ -d "${lock}" && ! -L "${lock}" && "${lock_real}" == "${expected_real}" && "${lock_mode}" == 700 ]] || return 1
+            [[ -f "${owner_file}" && ! -L "${owner_file}" && "${owner_mode}" == 600 ]] || return 1
+            sudo grep -Fxq "owner_token=${expected_token}" "${owner_file}" || return 1
+            sudo grep -Fxq 'owner=normal-caller-phase3-guard' "${owner_file}"
+          }
+
+          # Validate every present lock before releasing either one. This keeps
+          # mixed ownership and partial acquisition fail-closed without deleting
+          # a lock that was not proven to belong to this run.
+          for lock in "${platform_lock}" "${edge_lock}"; do
+            if [[ -e "${lock}" || -L "${lock}" ]]; then
+              verify_lock_owned "${lock}" "${owner_token}" || exit 1
+            fi
+          done
+          release_lock() {
+            local lock="$1"
+            if [[ ! -e "${lock}" && ! -L "${lock}" ]]; then return 0; fi
+            verify_lock_owned "${lock}" "${owner_token}" || exit 1
+            sudo unlink "${lock}/owner"
+            sudo rmdir "${lock}"
+          }
+          release_lock "${edge_lock}"
+          release_lock "${platform_lock}"
+          [[ ! -e "${edge_lock}" && ! -L "${edge_lock}" && ! -e "${platform_lock}" && ! -L "${platform_lock}" ]] || exit 1
+          REMOTE_PHASE3_PREDEPLOY_RELEASE
+
+      - name: phase3-lock-release
+        # A failed deployment must leave the owner locks for authenticated
+        # recovery. Cleanup is allowed only for a normal success or a deploy
+        # step that recorded a complete rollback; all other failures retain
+        # both owner locks for recovery.
+        if: ${{ always() && (steps.deploy_edge.outcome == 'success' || steps.deploy_edge.outputs.rollback_outcome == 'successful') }}
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+          PHASE3_LOCK_OWNER: phase3-normal-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh "$remote" bash -s -- "$PHASE3_LOCK_OWNER" <<'REMOTE_PHASE3_RELEASE'
+          set -euo pipefail
+          owner_token="$1"
+          platform_lock=/opt/catering-agents-platform.deploy-lock
+          edge_lock=/opt/shared-edge.deploy-lock
+          verify_lock_owned() {
+            local lock="$1" expected_token="$2"
+            local owner_file="${lock}/owner"
+            local lock_real expected_real lock_mode owner_mode
+            lock_real="$(sudo realpath -e -- "$lock" 2>/dev/null || sudo realpath "$lock")"
+            expected_real="$(sudo realpath -e -- "$(dirname "$lock")" 2>/dev/null || sudo realpath "$(dirname "$lock")")/$(basename "$lock")"
+            lock_mode="$(sudo stat -c '%a' "$lock" 2>/dev/null || sudo stat -f '%Lp' "$lock")"
+            owner_mode="$(sudo stat -c '%a' "$owner_file" 2>/dev/null || sudo stat -f '%Lp' "$owner_file")"
+            [[ -d "$lock" && ! -L "$lock" && "$lock_real" == "$expected_real" && "$lock_mode" == 700 ]] || return 1
+            [[ -f "$owner_file" && ! -L "$owner_file" && "$owner_mode" == 600 ]] || return 1
+            sudo grep -Fxq "owner_token=$expected_token" "$owner_file" || return 1
+            sudo grep -Fxq 'owner=normal-caller-phase3-guard' "$owner_file"
+          }
+          release() {
+            local lock="$1"
+            verify_lock_owned "$lock" "$owner_token"
+            sudo unlink "$lock/owner"
+            sudo rmdir "$lock"
+            [[ ! -e "$lock" && ! -L "$lock" ]]
+          }
+          release "$edge_lock"
+          release "$platform_lock"
+          REMOTE_PHASE3_RELEASE

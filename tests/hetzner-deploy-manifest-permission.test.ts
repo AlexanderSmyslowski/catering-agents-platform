@@ -8,9 +8,9 @@ const deploy = readFileSync(
 
 describe('Hetzner deploy manifest write permissions', () => {
   it('keeps the atomic manifest replace while performing target-directory writes through sudo', () => {
-    expect(deploy).toContain('| sudo tee \\\"\\${temporary}\\\" >/dev/null');
-    expect(deploy).toContain('sudo mv \\\"\\${temporary}\\\" \\\"\\${manifest}\\\"');
-    expect(deploy).not.toContain('> \\\"\\${temporary}\\\"');
-    expect(deploy).not.toContain('\n  mv \\\"\\${temporary}\\\" \\\"\\${manifest}\\\"');
+    expect(deploy).toContain('| sudo tee "${temporary}" >/dev/null');
+    expect(deploy).toContain('sudo mv "${temporary}" "${manifest}"');
+    expect(deploy).not.toContain('> "${temporary}"');
+    expect(deploy).not.toContain('\n  mv "${temporary}" "${manifest}"');
   });
 });
