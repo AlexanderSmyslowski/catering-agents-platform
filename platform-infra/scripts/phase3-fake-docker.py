@@ -374,7 +374,11 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
     parsed = urlparse(target)
     host = parsed.hostname or ""
     negative = bool(re.search(r"(?:^|[;&|\s])!\s*(?:wget|nc|netcat)", command))
-    if state.get("fault") == "semantic-smoke-fail" and host == "web":
+    # This scenario models one failed mutating probe; persist consumption so
+    # the fresh post-restore smoke exercises the normal service response.
+    if state.get("fault") == "semantic-smoke-fail" and host == "web" and not state.get("fault_triggered"):
+        state["fault_triggered"] = True
+        save(state)
         return 1
     if state.get("fault") == "foreign-smoke-fail" and host in {"zeiterfassung-app-1", "commcats-eventos-app"} and not negative:
         return 1
