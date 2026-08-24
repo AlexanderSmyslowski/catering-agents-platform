@@ -225,9 +225,15 @@ expected_ports="$5"
 [[ -f "${archive}" && ! -L "${archive}" ]] || exit 1
 sudo tar -tzf "${archive}" >/dev/null
 sudo tar -tzf "${archive}" | grep -Fx './.deploy-manifest' >/dev/null || exit 1
-sudo find "${deploy_path}" -mindepth 1 -maxdepth 1 \
-  ! -name .env ! -name .deploy-manifest ! -name .deploy-manifest.manifest \
-  ! -name 'rollbacks' -depth -delete
+# Remove filled deployment directories depth-first while preserving protected
+# state and the complete rollback tree, including all of its descendants.
+sudo find "${deploy_path}" -mindepth 1 \
+  ! -path "${deploy_path}/.env" \
+  ! -path "${deploy_path}/.deploy-manifest" \
+  ! -path "${deploy_path}/.deploy-manifest.manifest" \
+  ! -path "${deploy_path}/rollbacks" \
+  ! -path "${deploy_path}/rollbacks/*" \
+  -depth -delete
 sudo tar -xzf "${archive}" -C "${deploy_path}"
 [[ -f "${deploy_path}/.deploy-manifest" && ! -L "${deploy_path}/.deploy-manifest" ]] || exit 1
 expected_manifest_hash="$(sudo tar -xOf "${archive}" ./.deploy-manifest | sha256sum | awk '{print $1}')"

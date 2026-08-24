@@ -2219,6 +2219,39 @@ validate_completion_receipt_normal() {
   [[ "$(restore_field_normal "${completion_receipt}" receipt_sha256)" == "${receipt_hash}" ]] || return 1
 }
 
+smoke_json() {
+  local label="$1" target="$2" expected_service="$3" smoke_file
+  smoke_file="$(mktemp)"
+  register_temp "${smoke_file}"
+  docker exec "${SHARED_EDGE}" wget -qO- "${target}" >"${smoke_file}" || { printf '%s\n' "${label} smoke request failed" >&2; fail; }
+  grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${smoke_file}" || { printf '%s\n' "${label} smoke status is not ok" >&2; fail; }
+  if [[ -n "${expected_service}" ]]; then
+    grep -Eq "\"service\"[[:space:]]*:[[:space:]]*\"${expected_service}\"" "${smoke_file}" || { printf '%s\n' "${label} smoke service identity is unexpected" >&2; fail; }
+  fi
+  printf '%s:%s\n' "${label}" "$(sha256sum "${smoke_file}" | awk '{print $1}')" >>"${smoke_evidence_file}"
+  smoke_readback_sha256="$(sha256sum "${smoke_evidence_file}" | awk '{print $1}')"
+}
+
+run_all_host_semantic_smokes() {
+  # The terminal public Catering contract is served by the web identity.  The
+  # private intake alias is intentionally not a required Edge route after the
+  # platform detach; private reachability is proved separately from platform-web.
+  smoke_json catering "http://web:8081/api/intake/health" intake-service
+  smoke_json zeiterfassung "http://${ZEITERFASSUNG_APP}:${ZEITERFASSUNG_HTTP_PORT}/healthz" ""
+  smoke_json eventos "http://${EVENTOS_APP}:${EVENTOS_HTTP_PORT}/health" ""
+}
+
+run_rollback_host_semantic_smokes() {
+  # smoke_json uses the terminal fail() exit contract. Run the complete set in
+  # a child shell so rollback can convert any smoke failure into recovery
+  # without skipping its caller's authenticated cleanup decision.
+  if (run_all_host_semantic_smokes); then
+    smoke_readback_sha256="$(sudo sha256sum "${smoke_evidence_file}" | awk '{print $1}')"
+    return 0
+  fi
+  return 1
+}
+
 rollback_transaction() {
   # Rollback is deliberately owner-scoped and only runs after a durable
   # candidate marker exists. Any uncertain readback leaves rolling_back plus
@@ -2310,6 +2343,11 @@ rollback_transaction() {
   register_temp "${shared_edge_restore}"
   docker inspect --format '{{.Id}}|{{.RestartCount}}|{{.State.StartedAt}}|{{.State.Status}}|{{.Image}}|{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}|{{json .HostConfig.PortBindings}}|{{json .Mounts}}|{{json .NetworkSettings.Networks}}' "${SHARED_EDGE}" >"${shared_edge_restore}" || return 1
   cmp -s "${shared_edge_snapshot}" "${shared_edge_restore}" || return 1
+
+  # Fresh post-restore host smokes are part of the rollback proof. A failed
+  # smoke leaves recovery active and prevents evidence, archive, receipt, and
+  # cleanup from being written.
+  run_rollback_host_semantic_smokes || return 1
 
   [[ ! -e "${restore_proof_archive}" && ! -e "${completion_receipt}" ]] || return 1
   write_restore_evidence_normal || return 1
@@ -2433,28 +2471,6 @@ write_marker candidate verified verified "${ingress_id}" "${private_id}"
 # Each network mutation is surrounded by the full evidence set. This makes a
 # foreign restart, alias drift, public semantic regression, or private-route
 # leak fail before the next mutation can compound it.
-smoke_json() {
-  local label="$1" target="$2" expected_service="$3" smoke_file
-  smoke_file="$(mktemp)"
-  register_temp "${smoke_file}"
-  docker exec "${SHARED_EDGE}" wget -qO- "${target}" >"${smoke_file}" || { printf '%s\n' "${label} smoke request failed" >&2; fail; }
-  grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${smoke_file}" || { printf '%s\n' "${label} smoke status is not ok" >&2; fail; }
-  if [[ -n "${expected_service}" ]]; then
-    grep -Eq "\"service\"[[:space:]]*:[[:space:]]*\"${expected_service}\"" "${smoke_file}" || { printf '%s\n' "${label} smoke service identity is unexpected" >&2; fail; }
-  fi
-  printf '%s:%s\n' "${label}" "$(sha256sum "${smoke_file}" | awk '{print $1}')" >>"${smoke_evidence_file}"
-  smoke_readback_sha256="$(sha256sum "${smoke_evidence_file}" | awk '{print $1}')"
-}
-
-run_all_host_semantic_smokes() {
-  # The terminal public Catering contract is served by the web identity.  The
-  # private intake alias is intentionally not a required Edge route after the
-  # platform detach; private reachability is proved separately from platform-web.
-  smoke_json catering "http://web:8081/api/intake/health" intake-service
-  smoke_json zeiterfassung "http://${ZEITERFASSUNG_APP}:${ZEITERFASSUNG_HTTP_PORT}/healthz" ""
-  smoke_json eventos "http://${EVENTOS_APP}:${EVENTOS_HTTP_PORT}/health" ""
-}
-
 assert_private_reachability() {
   docker exec "${PLATFORM_WEB}" wget -qO- "http://intake:${CATERING_INTAKE_PORT}/health" >/dev/null || fail
   if docker exec "${PLATFORM_WEB}" sh -c 'wget -qO- --timeout=2 http://postgres:5432/' >/dev/null 2>&1; then

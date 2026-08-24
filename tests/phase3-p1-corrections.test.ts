@@ -112,8 +112,8 @@ describe("Phase 3 P1 correction reproducers", () => {
     expect(lockFunction).toContain("stat -c '%a'");
     expect(lockFunction).toContain("chmod 0600");
     const releaseStep = workflow.slice(workflow.lastIndexOf("phase3-lock-release"));
-    expect(releaseStep).toContain("if: success()");
-    expect(releaseStep).not.toContain("if: always()");
+    expect(releaseStep).toContain("if: ${{ always() && (steps.deploy_edge.outcome == 'success' || steps.deploy_edge.outputs.rollback_outcome == 'successful') }}");
+    expect(releaseStep).not.toContain("if: success()");
     expect(releaseStep).toContain("verify_lock_owned");
     expect(releaseStep).not.toMatch(/sudo test -f[^\n]*owner/);
   });

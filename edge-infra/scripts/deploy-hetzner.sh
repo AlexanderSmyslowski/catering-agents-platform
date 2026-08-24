@@ -391,10 +391,15 @@ archive="$2"
 mode="$3"
 manifest_archive="${archive}.manifest"
 # Remove only the allowlisted deployment entries while preserving protected
-# state; depth-first unlink/rmdir avoids a recursive shell delete.
-sudo find "${edge_path}" -mindepth 1 -maxdepth 1 \
-  ! -name .env ! -name .deploy-manifest ! -name .deploy-manifest.manifest \
-  ! -name 'rollbacks' -depth -delete
+# state. Depth-first deletion empties filled top-level directories first; the
+# rollback tree and every descendant remain outside the deletion set.
+sudo find "${edge_path}" -mindepth 1 \
+  ! -path "${edge_path}/.env" \
+  ! -path "${edge_path}/.deploy-manifest" \
+  ! -path "${edge_path}/.deploy-manifest.manifest" \
+  ! -path "${edge_path}/rollbacks" \
+  ! -path "${edge_path}/rollbacks/*" \
+  -depth -delete
 sudo tar -xzf "${archive}" -C "${edge_path}"
 cd "${edge_path}"
 compose_files=(-f docker-compose.yml)
