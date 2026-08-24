@@ -380,6 +380,11 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
         state["fault_triggered"] = True
         save(state)
         return 1
+    if state.get("fault") == "semantic-smoke-incomplete" and host == "commcats-eventos-app" and not state.get("fault_triggered"):
+        state["fault_triggered"] = True
+        save(state)
+        print("{}")
+        return 0
     if state.get("fault") == "foreign-smoke-fail" and host in {"zeiterfassung-app-1", "commcats-eventos-app"} and not negative:
         return 1
     tcp_tail = re.search(r"\b(?:nc|netcat)\b(?P<rest>.*)$", command)

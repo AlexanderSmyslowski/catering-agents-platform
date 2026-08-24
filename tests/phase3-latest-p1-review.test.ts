@@ -783,6 +783,28 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(egressIndex).toBeGreaterThan(detachIndex);
   }, 120_000);
 
+  test.each(["semantic-smoke-fail", "semantic-smoke-incomplete"])("RED: %s baseline prevents every Phase-3 target mutation", (scenario) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-baseline-smoke-red-"));
+    const run = runHarness(scenario, root);
+    const dockerLog = textAt(path.join(root, "fake-docker.log")).split("\n").filter(Boolean);
+    const firstSmoke = dockerLog.findIndex((line) => line.includes("exec shared-edge-edge-1 wget"));
+    const firstTargetMutation = dockerLog.findIndex((line) =>
+      line.includes("network create") || line.includes("network connect") || line.includes("network disconnect")
+    );
+    const terminal = `${run.result.stdout}${run.result.stderr}`;
+    expect(run.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(firstSmoke).toBeGreaterThanOrEqual(0);
+    expect(firstTargetMutation).toBe(-1);
+    expect(existsSync(path.join(root, "platform-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(root, "edge-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks", "catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks", "shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
   test("RED: successful lock release is edge-first and edge failure keeps platform protected", () => {
     const success = runSuccessReleaseBlock();
     expect(success.status).toBe(0);

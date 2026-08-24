@@ -72,7 +72,7 @@ readonly FOREIGN_CONTAINERS=(
 readonly SEMANTIC_SMOKE_SERVICE="service=intake-service"
 readonly SEMANTIC_SMOKE_STATUS="status=ok"
 readonly ROLLBACK_RECEIPT_BINDING_FIELDS="restore_evidence_sha256 restore_proof_archive_path restore_proof_archive_sha256 archive receipt"
-readonly MANIFEST_BINDING_FIELDS="container_id RestartCount NetworkSettings Aliases PortBindings Mounts secret_ref manifest_sha256 marker_sha256 archive_sha256 receipt_sha256 network_driver network_scope network_internal network_ipam network_labels network_members network_aliases"
+readonly MANIFEST_BINDING_FIELDS="container_id RestartCount NetworkSettings Aliases PortBindings Mounts secret_ref manifest_sha256 marker_sha256 archive_sha256 receipt_sha256 network_driver network_scope network_internal network_ipam network_labels network_members network_aliases baseline_smoke_evidence baseline_smoke_sha256"
 readonly VALID_RESUME_STATES="candidate|active|rolling_back"
 : "${DEFAULT_PLATFORM_SOURCE}" "${DEFAULT_EDGE_SOURCE}" "${DEFAULT_ACTIVATION_MARKER}"
 : "${DEFAULT_BASELINE_MANIFEST}" "${DEFAULT_RESTORE_PROOF_ARCHIVE}" "${DEFAULT_COMPLETION_RECEIPT}"
@@ -231,7 +231,7 @@ validate_kv_file() {
     case " ${seen} " in *" ${key} "*) printf '%s\n' "duplicate ${kind} field: ${key}" >&2; fail ;; esac
     seen="${seen} ${key}"
     case "${kind}:${key}" in
-      manifest:schema|manifest:owner|manifest:transaction_id|manifest:prior_marker_state|manifest:prior_marker_sha256|manifest:prior_marker_content_b64|manifest:platform_source_prior|manifest:edge_source_prior|manifest:catering_ingress_baseline|manifest:catering_private_baseline|manifest:catering_ingress_baseline_id|manifest:catering_private_baseline_id|manifest:catering_ingress_created_by_run_authorized|manifest:catering_private_created_by_run_authorized|manifest:network_create_order|manifest:platform_network_baseline_id|manifest:platform_network_baseline_members|manifest:platform_network_baseline_aliases|manifest:zeiterfassung_network_baseline_id|manifest:zeiterfassung_network_baseline_members|manifest:zeiterfassung_network_baseline_aliases|manifest:catering_path_baseline|manifest:expected_platform_source_sha256|manifest:expected_edge_source_sha256|manifest:container_id|manifest:RestartCount|manifest:StartedAt|manifest:Status|manifest:Image|manifest:ComposeProject|manifest:ComposeService|manifest:NetworkSettings|manifest:Aliases|manifest:PortBindings|manifest:Mounts|manifest:secret_ref|manifest:network_driver|manifest:network_scope|manifest:network_internal|manifest:network_ipam|manifest:network_labels|manifest:network_members|manifest:network_aliases|manifest:manifest_sha256|manifest:marker_sha256|manifest:archive_sha256|manifest:receipt_sha256|manifest:foreign_invariants_sha256|manifest:container_id_*|manifest:RestartCount_*|manifest:StartedAt_*|manifest:Status_*|manifest:Image_*|manifest:ComposeProject_*|manifest:ComposeService_*|manifest:NetworkSettings_*|manifest:Aliases_*|manifest:PortBindings_*|manifest:Mounts_*|manifest:secret_ref_*) ;;
+      manifest:schema|manifest:owner|manifest:transaction_id|manifest:prior_marker_state|manifest:prior_marker_sha256|manifest:prior_marker_content_b64|manifest:platform_source_prior|manifest:edge_source_prior|manifest:catering_ingress_baseline|manifest:catering_private_baseline|manifest:catering_ingress_baseline_id|manifest:catering_private_baseline_id|manifest:catering_ingress_created_by_run_authorized|manifest:catering_private_created_by_run_authorized|manifest:network_create_order|manifest:platform_network_baseline_id|manifest:platform_network_baseline_members|manifest:platform_network_baseline_aliases|manifest:zeiterfassung_network_baseline_id|manifest:zeiterfassung_network_baseline_members|manifest:zeiterfassung_network_baseline_aliases|manifest:catering_path_baseline|manifest:expected_platform_source_sha256|manifest:expected_edge_source_sha256|manifest:baseline_smoke_evidence|manifest:baseline_smoke_sha256|manifest:container_id|manifest:RestartCount|manifest:StartedAt|manifest:Status|manifest:Image|manifest:ComposeProject|manifest:ComposeService|manifest:NetworkSettings|manifest:Aliases|manifest:PortBindings|manifest:Mounts|manifest:secret_ref|manifest:network_driver|manifest:network_scope|manifest:network_internal|manifest:network_ipam|manifest:network_labels|manifest:network_members|manifest:network_aliases|manifest:manifest_sha256|manifest:marker_sha256|manifest:archive_sha256|manifest:receipt_sha256|manifest:foreign_invariants_sha256|manifest:container_id_*|manifest:RestartCount_*|manifest:StartedAt_*|manifest:Status_*|manifest:Image_*|manifest:ComposeProject_*|manifest:ComposeService_*|manifest:NetworkSettings_*|manifest:Aliases_*|manifest:PortBindings_*|manifest:Mounts_*|manifest:secret_ref_*) ;;
       archive:schema|archive:transaction_id|archive:transaction_manifest_path|archive:transaction_manifest_sha256|archive:marker_sha256|archive:prior_marker_state|archive:prior_marker_sha256|archive:restore_evidence_path|archive:restore_evidence_sha256|archive:restore_proof_archive_path|archive:archive_sha256) ;;
       receipt:schema|receipt:transaction_id|receipt:transaction_manifest_path|receipt:transaction_manifest_sha256|receipt:marker_sha256|receipt:prior_marker_state|receipt:prior_marker_sha256|receipt:restore_evidence_path|receipt:restore_evidence_sha256|receipt:restore_proof_archive_path|receipt:restore_proof_archive_sha256|receipt:archive_sha256|receipt:receipt_sha256) ;;
       journal:schema|journal:owner|journal:transaction_id|journal:transaction_manifest_path|journal:transaction_manifest_sha256|journal:expected_platform_source_sha256|journal:expected_edge_source_sha256|journal:network_create_order|journal:adoption_order|journal:adoption_count|journal:next_network|journal:adoption_phase|journal:catering_ingress_id|journal:catering_private_id|journal:catering_ingress_owner|journal:catering_private_owner|journal:catering_ingress_phase|journal:catering_private_phase|journal:catering_ingress_transaction|journal:catering_private_transaction|journal:catering_ingress_members_b64|journal:catering_private_members_b64|journal:catering_ingress_aliases_b64|journal:catering_private_aliases_b64|journal:source_readback_sha256|journal:journal_sha256) ;;
@@ -438,9 +438,11 @@ validate_manifest() {
     network_driver network_scope network_internal network_ipam network_labels network_members network_aliases \
     platform_network_baseline_id platform_network_baseline_members platform_network_baseline_aliases \
     zeiterfassung_network_baseline_id zeiterfassung_network_baseline_members zeiterfassung_network_baseline_aliases \
-    catering_path_baseline; do
+    catering_path_baseline baseline_smoke_evidence baseline_smoke_sha256; do
     grep -Eq "^${required}=" "${baseline_manifest}" || fail
   done
+  [[ "$(field "${baseline_manifest}" baseline_smoke_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
+  [[ "$(field "${baseline_manifest}" baseline_smoke_evidence)" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
   if grep -Eiq 'secret[^=]*(value|password|token)=' "${baseline_manifest}"; then fail; fi
   marker_hash="$(field "${baseline_manifest}" marker_sha256)"
   [[ -n "${marker_hash}" ]] || fail
@@ -1954,6 +1956,43 @@ PYTHON
   unlink "${shared_check}"
 }
 
+# Define the baseline smoke at the same pre-mutation boundary where its
+# evidence is captured; the remote script executes stdin incrementally.
+smoke_json() {
+  local label="$1" target="$2" expected_service="$3" smoke_file
+  smoke_file="$(mktemp)"
+  register_temp "${smoke_file}"
+  docker exec "${SHARED_EDGE}" wget -qO- "${target}" >"${smoke_file}" || { printf '%s\n' "${label} smoke request failed" >&2; fail; }
+  grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${smoke_file}" || { printf '%s\n' "${label} smoke status is not ok" >&2; fail; }
+  if [[ -n "${expected_service}" ]]; then
+    grep -Eq "\"service\"[[:space:]]*:[[:space:]]*\"${expected_service}\"" "${smoke_file}" || { printf '%s\n' "${label} smoke service identity is unexpected" >&2; fail; }
+  fi
+  printf '%s:%s\n' "${label}" "$(sha256sum "${smoke_file}" | awk '{print $1}')" >>"${smoke_evidence_file}"
+  smoke_readback_sha256="$(sha256sum "${smoke_evidence_file}" | awk '{print $1}')"
+}
+
+run_all_host_semantic_smokes() {
+  # The terminal public Catering contract is served by the web identity. The
+  # private intake alias is intentionally not a required Edge route after the
+  # platform detach; private reachability is proved separately from platform-web.
+  smoke_json catering "http://web:8081/api/intake/health" intake-service
+  smoke_json zeiterfassung "http://${ZEITERFASSUNG_APP}:${ZEITERFASSUNG_HTTP_PORT}/healthz" ""
+  smoke_json eventos "http://${EVENTOS_APP}:${EVENTOS_HTTP_PORT}/health" ""
+}
+
+# Bind the complete host semantic baseline to this transaction before the
+# immutable manifest exists. The temporary evidence is hash-recorded in that
+# manifest; no source, marker, network, or other Phase-3 target mutation is
+# permitted until this gate has passed.
+run_all_host_semantic_smokes
+baseline_smoke_evidence="$(tr '\n' ';' <"${smoke_evidence_file}" | sed 's/;$//')"
+baseline_smoke_sha256="$(sha256sum "${smoke_evidence_file}" | awk '{print $1}')"
+[[ "${baseline_smoke_sha256}" =~ ^[0-9a-f]{64}$ ]] || fail
+[[ "${baseline_smoke_evidence}" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
+smoke_evidence_file="$(mktemp)"
+register_temp "${smoke_evidence_file}"
+smoke_readback_sha256=pending
+
 manifest_tmp="$(mktemp)"
 register_temp "${manifest_tmp}"
 printf '%s\n' \
@@ -1981,6 +2020,8 @@ printf '%s\n' \
   "catering_path_baseline=${catering_path_baseline}" \
   "expected_platform_source_sha256=${expected_platform_source_sha256}" \
   "expected_edge_source_sha256=${expected_edge_source_sha256}" \
+  "baseline_smoke_evidence=${baseline_smoke_evidence}" \
+  "baseline_smoke_sha256=${baseline_smoke_sha256}" \
   "container_id=${SHARED_EDGE}:$(docker inspect --format '{{.Id}}' "${SHARED_EDGE}")" \
   "RestartCount=${SHARED_EDGE}:$(docker inspect --format '{{.RestartCount}}' "${SHARED_EDGE}")" \
   "NetworkSettings=${SHARED_EDGE}:$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${SHARED_EDGE}")" \
@@ -2029,12 +2070,14 @@ validate_manifest_fields() {
     case " ${seen} " in *" ${key} "*) fail ;; esac
     seen="${seen} ${key}"
     case "${key}" in
-      schema|owner|transaction_id|prior_marker_state|prior_marker_sha256|prior_marker_content_b64|platform_source_prior|edge_source_prior|catering_ingress_baseline|catering_private_baseline|catering_ingress_baseline_id|catering_private_baseline_id|catering_ingress_created_by_run_authorized|catering_private_created_by_run_authorized|network_create_order|platform_network_baseline_id|platform_network_baseline_members|platform_network_baseline_aliases|zeiterfassung_network_baseline_id|zeiterfassung_network_baseline_members|zeiterfassung_network_baseline_aliases|catering_path_baseline|expected_platform_source_sha256|expected_edge_source_sha256|container_id|RestartCount|StartedAt|Status|Image|ComposeProject|ComposeService|NetworkSettings|Aliases|PortBindings|Mounts|secret_ref|network_driver|network_scope|network_internal|network_ipam|network_labels|network_members|network_aliases|manifest_sha256|marker_sha256|archive_sha256|receipt_sha256|foreign_invariants_sha256|container_id_*|RestartCount_*|StartedAt_*|Status_*|Image_*|ComposeProject_*|ComposeService_*|NetworkSettings_*|Aliases_*|PortBindings_*|Mounts_*|secret_ref_*) ;;
+      schema|owner|transaction_id|prior_marker_state|prior_marker_sha256|prior_marker_content_b64|platform_source_prior|edge_source_prior|catering_ingress_baseline|catering_private_baseline|catering_ingress_baseline_id|catering_private_baseline_id|catering_ingress_created_by_run_authorized|catering_private_created_by_run_authorized|network_create_order|platform_network_baseline_id|platform_network_baseline_members|platform_network_baseline_aliases|zeiterfassung_network_baseline_id|zeiterfassung_network_baseline_members|zeiterfassung_network_baseline_aliases|catering_path_baseline|expected_platform_source_sha256|expected_edge_source_sha256|baseline_smoke_evidence|baseline_smoke_sha256|container_id|RestartCount|StartedAt|Status|Image|ComposeProject|ComposeService|NetworkSettings|Aliases|PortBindings|Mounts|secret_ref|network_driver|network_scope|network_internal|network_ipam|network_labels|network_members|network_aliases|manifest_sha256|marker_sha256|archive_sha256|receipt_sha256|foreign_invariants_sha256|container_id_*|RestartCount_*|StartedAt_*|Status_*|Image_*|ComposeProject_*|ComposeService_*|NetworkSettings_*|Aliases_*|PortBindings_*|Mounts_*|secret_ref_*) ;;
       *) fail ;;
     esac
   done <"${baseline_manifest}"
   if grep -Eiq 'secret[^=]*(value|password|token)=' "${baseline_manifest}"; then fail; fi
 }
+manifest_field() { sed -n "s/^$1=//p" "${baseline_manifest}" | tail -n 1; }
+
 validate_manifest() {
   local required
   [[ -f "${baseline_manifest}" && ! -L "${baseline_manifest}" ]] || fail
@@ -2044,14 +2087,14 @@ validate_manifest() {
     network_driver network_scope network_internal network_ipam network_labels network_members network_aliases \
     platform_network_baseline_id platform_network_baseline_members platform_network_baseline_aliases \
     zeiterfassung_network_baseline_id zeiterfassung_network_baseline_members zeiterfassung_network_baseline_aliases \
-    catering_path_baseline; do
+    catering_path_baseline baseline_smoke_evidence baseline_smoke_sha256; do
     grep -Eq "^${required}=" "${baseline_manifest}" || fail
   done
+  [[ "$(manifest_field baseline_smoke_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
+  [[ "$(manifest_field baseline_smoke_evidence)" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
   if grep -Eiq 'secret[^=]*(value|password|token)=' "${baseline_manifest}"; then fail; fi
 }
 validate_manifest
-
-manifest_field() { sed -n "s/^$1=//p" "${baseline_manifest}" | tail -n 1; }
 
 assert_compatibility_baseline() {
   local network="$1" id_field="$2" members_field="$3" aliases_field="$4"
@@ -2262,28 +2305,6 @@ validate_completion_receipt_normal() {
   [[ "$(restore_field_normal "${completion_receipt}" archive_sha256)" == "${archive_hash}" ]] || return 1
   receipt_hash="$(sed -E 's/^receipt_sha256=.*/receipt_sha256=absent/' "${completion_receipt}" | sha256sum | awk '{print $1}')"
   [[ "$(restore_field_normal "${completion_receipt}" receipt_sha256)" == "${receipt_hash}" ]] || return 1
-}
-
-smoke_json() {
-  local label="$1" target="$2" expected_service="$3" smoke_file
-  smoke_file="$(mktemp)"
-  register_temp "${smoke_file}"
-  docker exec "${SHARED_EDGE}" wget -qO- "${target}" >"${smoke_file}" || { printf '%s\n' "${label} smoke request failed" >&2; fail; }
-  grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${smoke_file}" || { printf '%s\n' "${label} smoke status is not ok" >&2; fail; }
-  if [[ -n "${expected_service}" ]]; then
-    grep -Eq "\"service\"[[:space:]]*:[[:space:]]*\"${expected_service}\"" "${smoke_file}" || { printf '%s\n' "${label} smoke service identity is unexpected" >&2; fail; }
-  fi
-  printf '%s:%s\n' "${label}" "$(sha256sum "${smoke_file}" | awk '{print $1}')" >>"${smoke_evidence_file}"
-  smoke_readback_sha256="$(sha256sum "${smoke_evidence_file}" | awk '{print $1}')"
-}
-
-run_all_host_semantic_smokes() {
-  # The terminal public Catering contract is served by the web identity.  The
-  # private intake alias is intentionally not a required Edge route after the
-  # platform detach; private reachability is proved separately from platform-web.
-  smoke_json catering "http://web:8081/api/intake/health" intake-service
-  smoke_json zeiterfassung "http://${ZEITERFASSUNG_APP}:${ZEITERFASSUNG_HTTP_PORT}/healthz" ""
-  smoke_json eventos "http://${EVENTOS_APP}:${EVENTOS_HTTP_PORT}/health" ""
 }
 
 run_rollback_host_semantic_smokes() {

@@ -854,8 +854,17 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     const normal = runHarness("full-pilot");
     expect(normal.result.status).toBe(0);
     expect(sourceAt(path.join(normal.fakeHostRoot, "fake-ssh.log"))).toMatch(/bash -s --/);
-    expect(sourceAt(path.join(normal.fakeHostRoot, "fake-docker.log"))).toMatch(/compose/);
-    expect(sourceAt(path.join(normal.fakeHostRoot, "fake-docker.log"))).toMatch(/network create/);
+    const normalDockerLog = sourceAt(path.join(normal.fakeHostRoot, "fake-docker.log")).split("\n");
+    expect(normalDockerLog.join("\n")).toMatch(/compose/);
+    expect(normalDockerLog.join("\n")).toMatch(/network create/);
+    expect(normalDockerLog.findIndex((line) => line.includes("exec shared-edge-edge-1 wget"))).toBeLessThan(
+      normalDockerLog.findIndex((line) => line.includes("network create")),
+    );
+    const normalManifest = markerFields(path.join(normal.fakeHostRoot, "phase3.transaction-baseline.manifest"));
+    expect(normalManifest.get("baseline_smoke_evidence")).toMatch(
+      /^catering:[0-9a-f]{64};zeiterfassung:[0-9a-f]{64};eventos:[0-9a-f]{64}$/,
+    );
+    expect(normalManifest.get("baseline_smoke_sha256")).toMatch(/^[0-9a-f]{64}$/);
 
     const resumedRoot = mkdtempSync(path.join(tmpdir(), "catering-phase3-real-resume-"));
     const crashed = runHarness("crash-after-candidate", resumedRoot);
@@ -893,8 +902,13 @@ describe("Phase-3 Catering isolation pilot contract", () => {
 
     const failed = runHarness("semantic-smoke-fail");
     expect(failed.result.status).not.toBe(0);
-    expect(existsSync(path.join(failed.fakeHostRoot, "phase3.rollback-restore-proof.archive"))).toBe(true);
+    expect(existsSync(path.join(failed.fakeHostRoot, "phase3.rollback-restore-proof.archive"))).toBe(false);
     expect(existsSync(path.join(failed.fakeHostRoot, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(failed.fakeHostRoot, "platform-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(failed.fakeHostRoot, "edge-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(failed.fakeHostRoot, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(failed.fakeHostRoot, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(sourceAt(path.join(failed.fakeHostRoot, "fake-docker.log"))).not.toMatch(/network (?:create|connect|disconnect)/);
     const rollbackState = JSON.parse(sourceAt(path.join(failed.fakeHostRoot, "fake-docker-state.json"))) as {
       networks: Record<string, unknown>;
     };
