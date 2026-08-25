@@ -504,6 +504,7 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     "schema=phase3.1",
     `platform_lock=${shellQuote(platformLock)}`,
     `edge_lock=${shellQuote(edgeLock)}`,
+    "marker_state=active",
     "lock_token=catering-agents-platform:phase3-explicit-rollback",
     "manifest_sha256=manifesthash",
     "expected_platform_source_sha256=platformhash",

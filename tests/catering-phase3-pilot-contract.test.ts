@@ -898,8 +898,14 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     expect(crashedRollback.result.status).not.toBe(0);
     expect(sourceAt(path.join(rollingBackRoot, "phase3.activation"))).toMatch(/^state=rolling_back$/m);
     const resumedRollingBack = runHarness("resume-rolling-back", rollingBackRoot);
-    expect(resumedRollingBack.result.status).not.toBe(0);
-    expect(sourceAt(path.join(rollingBackRoot, "phase3.activation"))).toMatch(/^state=rolling_back$/m);
+    const resumedRollingBackOutput = `${resumedRollingBack.result.stdout}${resumedRollingBack.result.stderr}`;
+    expect(resumedRollingBack.result.status).toBe(0);
+    expect(resumedRollingBackOutput).toContain("PILOT: ROLLED BACK");
+    expect(resumedRollingBackOutput).not.toContain("PILOT: GO");
+    expect(existsSync(path.join(rollingBackRoot, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(rollingBackRoot, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(rollingBackRoot, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(rollingBackRoot, "locks/shared-edge.deploy-lock"))).toBe(false);
 
     const failed = runHarness("semantic-smoke-fail");
     expect(failed.result.status).not.toBe(0);
