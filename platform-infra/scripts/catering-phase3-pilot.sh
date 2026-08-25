@@ -1675,7 +1675,9 @@ continue_rollback_control() {
           "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
           validate_mixed_candidate_baseline
           candidate_absent_networks_authorized=true
-        elif [[ "$(field "${activation_marker}" stage)" == S2 ]]; then
+        elif [[ "$(field "${activation_marker}" stage)" == S2 &&
+          "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
+          "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ]]; then
           validate_pre_existing_exact_candidate
           candidate_absent_networks_authorized=true
         else
