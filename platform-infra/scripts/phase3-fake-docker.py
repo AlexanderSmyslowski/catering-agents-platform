@@ -428,9 +428,10 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
         # Force the real helper into its compensating rollback; the next
         # inspect while rolling_back is the durable crash boundary.
         return 1
-    if state.get("fault") == "crash-after-receipt" and marker_state() == "candidate" and "web:8081" in command:
+    if state.get("fault") in {"crash-after-receipt", "crash-after-evidence", "crash-after-archive"} and marker_state() == "candidate" and "web:8081" in command:
         # Fail the semantic gate normally so the real helper enters its
-        # compensating rollback; inject the crash only after its receipt exists.
+        # compensating rollback; the fake sudo then injects the requested
+        # crash only at the durable evidence/archive boundary.
         return 1
     if host == "web":
         print('{"service":"intake-service","status":"ok"}')

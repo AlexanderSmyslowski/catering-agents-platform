@@ -793,12 +793,10 @@ validate_resume_egress() {
   esac
 }
 
-validate_receipt() {
+validate_restore_archive() {
   validate_kv_file "${restore_proof_archive}" archive
-  validate_kv_file "${completion_receipt}" receipt
   validate_restore_evidence
   require_regular "${restore_proof_archive}"
-  require_regular "${completion_receipt}"
   require_field "${restore_proof_archive}" schema "phase3.1.rollback-restore-proof"
   require_field "${restore_proof_archive}" transaction_id "${run_id}"
   require_field "${restore_proof_archive}" transaction_manifest_path "${baseline_manifest}"
@@ -806,6 +804,15 @@ validate_receipt() {
   require_field "${restore_proof_archive}" restore_evidence_path "${restore_evidence_record}"
   require_field "${restore_proof_archive}" restore_evidence_sha256 "$(sha256sum "${restore_evidence_record}" | awk '{print $1}')"
   require_field "${restore_proof_archive}" marker_sha256 "$(canonical_marker_sha256 "${activation_marker}")"
+  archive_hash="$(canonical_archive_sha256 "${restore_proof_archive}")"
+  [[ "${archive_hash}" =~ ^[0-9a-f]{64}$ ]] || fail
+  require_field "${restore_proof_archive}" archive_sha256 "${archive_hash}"
+}
+
+validate_receipt() {
+  validate_restore_archive
+  validate_kv_file "${completion_receipt}" receipt
+  require_regular "${completion_receipt}"
   require_field "${completion_receipt}" transaction_id "${run_id}"
   require_field "${completion_receipt}" schema "phase3.1.rollback-completion"
   require_field "${completion_receipt}" transaction_manifest_path "${baseline_manifest}"
@@ -813,9 +820,6 @@ validate_receipt() {
   require_field "${completion_receipt}" restore_evidence_path "${restore_evidence_record}"
   require_field "${completion_receipt}" restore_evidence_sha256 "$(sha256sum "${restore_evidence_record}" | awk '{print $1}')"
   require_field "${completion_receipt}" marker_sha256 "$(canonical_marker_sha256 "${activation_marker}")"
-  archive_hash="$(canonical_archive_sha256 "${restore_proof_archive}")"
-  [[ "${archive_hash}" =~ ^[0-9a-f]{64}$ ]] || fail
-  require_field "${restore_proof_archive}" archive_sha256 "${archive_hash}"
   require_field "${completion_receipt}" restore_proof_archive_sha256 "${archive_hash}"
   require_field "${completion_receipt}" archive_sha256 "${archive_hash}"
   receipt_hash="$(sed -E 's/^receipt_sha256=.*/receipt_sha256=absent/' "${completion_receipt}" | sha256sum | awk '{print $1}')"
@@ -1061,6 +1065,38 @@ validate_rolling_back_evidence() {
   done
 }
 
+validate_rolling_back_prefix() {
+  local network created
+  local has_evidence=false has_archive=false has_receipt=false
+  validate_manifest
+  validate_marker_file "${activation_marker}"
+  require_field "${activation_marker}" state rolling_back
+  require_field "${activation_marker}" stage RB
+  validate_foreign_evidence
+  validate_compatibility_baseline_control
+  [[ ! -e "${platform_source}" && ! -e "${edge_source}" ]] || fail
+  for network in catering_ingress catering_private; do
+    created="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
+    if [[ "${created}" == true ]]; then
+      docker network inspect "${network}" >/dev/null 2>&1 && fail
+    fi
+  done
+  [[ -e "${restore_evidence_record}" ]] && has_evidence=true
+  [[ -e "${restore_proof_archive}" ]] && has_archive=true
+  [[ -e "${completion_receipt}" ]] && has_receipt=true
+  [[ "${has_archive}" == false || "${has_evidence}" == true ]] || fail
+  [[ "${has_receipt}" == false || ( "${has_evidence}" == true && "${has_archive}" == true ) ]] || fail
+  if [[ "${has_evidence}" == true ]]; then
+    validate_restore_evidence
+  fi
+  if [[ "${has_archive}" == true ]]; then
+    validate_restore_archive
+  fi
+  if [[ "${has_receipt}" == true ]]; then
+    validate_receipt
+  fi
+}
+
 finalize_rolling_back_resume() {
   validate_rolling_back_evidence
   prior_state="$(field "${baseline_manifest}" prior_marker_state)"
@@ -1081,6 +1117,30 @@ finalize_rolling_back_resume() {
   [[ ! -e "${baseline_manifest}" ]] || fail
   sudo unlink "${completion_receipt}" || fail
   [[ ! -e "${completion_receipt}" ]] || fail
+}
+
+resume_legacy_rolling_back_control() {
+  local has_evidence=false has_archive=false has_receipt=false
+  # Legacy recovery accepts only the monotonic proof prefixes produced by a
+  # crash; every missing suffix is rebuilt under the already-held locks.
+  [[ -e "${restore_evidence_record}" ]] && has_evidence=true
+  [[ -e "${restore_proof_archive}" ]] && has_archive=true
+  [[ -e "${completion_receipt}" ]] && has_receipt=true
+  if [[ "${has_evidence}" == false && "${has_archive}" == false && "${has_receipt}" == false ]]; then
+    continue_rollback_control 0
+    return 0
+  fi
+  validate_rolling_back_prefix
+  if [[ "${has_archive}" == false ]]; then
+    write_restore_archive_control
+  fi
+  if [[ "${has_receipt}" == false ]]; then
+    write_completion_receipt_control
+  fi
+  legacy_rollback_finalize=1
+  finalize_rolling_back_resume
+  release_control_locks terminal
+  printf '%s\n' 'PILOT: ROLLED BACK'
 }
 
 write_restore_evidence_control() {
@@ -1131,10 +1191,53 @@ write_restore_evidence_control() {
   validate_restore_evidence
 }
 
+write_restore_archive_control() {
+  local archive_tmp archive_hash marker_sha256 restore_evidence_sha256
+  validate_restore_evidence
+  restore_evidence_sha256="$(sha256sum "${restore_evidence_record}" | awk '{print $1}')"
+  marker_sha256="$(canonical_marker_sha256 "${activation_marker}")"
+  archive_tmp="$(mktemp)"
+  printf '%s\n' "schema=phase3.1.rollback-restore-proof" "transaction_id=${run_id}" \
+    "transaction_manifest_path=${baseline_manifest}" "transaction_manifest_sha256=${manifest_sha256}" \
+    "marker_sha256=${marker_sha256}" "prior_marker_state=$(field "${baseline_manifest}" prior_marker_state)" \
+    "prior_marker_sha256=$(field "${baseline_manifest}" prior_marker_sha256)" \
+    "restore_evidence_path=${restore_evidence_record}" "restore_evidence_sha256=${restore_evidence_sha256}" \
+    "restore_proof_archive_path=${restore_proof_archive}" "archive_sha256=absent" >"${archive_tmp}"
+  archive_hash="$(canonical_archive_sha256 "${archive_tmp}")"
+  sed "s/^archive_sha256=absent$/archive_sha256=${archive_hash}/" "${archive_tmp}" >"${archive_tmp}.final"
+  sudo install -m 0640 "${archive_tmp}.final" "${restore_proof_archive}.pending.${run_id}"
+  sudo mv -f "${restore_proof_archive}.pending.${run_id}" "${restore_proof_archive}"
+  unlink "${archive_tmp}"
+  unlink "${archive_tmp}.final"
+  validate_restore_archive
+}
+
+write_completion_receipt_control() {
+  local receipt_tmp receipt_hash archive_hash marker_sha256 restore_evidence_sha256
+  validate_restore_archive
+  archive_hash="$(canonical_archive_sha256 "${restore_proof_archive}")"
+  restore_evidence_sha256="$(sha256sum "${restore_evidence_record}" | awk '{print $1}')"
+  marker_sha256="$(canonical_marker_sha256 "${activation_marker}")"
+  receipt_tmp="$(mktemp)"
+  printf '%s\n' "schema=phase3.1.rollback-completion" "transaction_id=${run_id}" \
+    "transaction_manifest_path=${baseline_manifest}" "transaction_manifest_sha256=${manifest_sha256}" \
+    "marker_sha256=${marker_sha256}" "prior_marker_state=$(field "${baseline_manifest}" prior_marker_state)" \
+    "prior_marker_sha256=$(field "${baseline_manifest}" prior_marker_sha256)" \
+    "restore_evidence_path=${restore_evidence_record}" "restore_evidence_sha256=${restore_evidence_sha256}" \
+    "restore_proof_archive_path=${restore_proof_archive}" \
+    "restore_proof_archive_sha256=${archive_hash}" "archive_sha256=${archive_hash}" "receipt_sha256=absent" >"${receipt_tmp}"
+  receipt_hash="$(sed -E 's/^receipt_sha256=.*/receipt_sha256=absent/' "${receipt_tmp}" | sha256sum | awk '{print $1}')"
+  sed "s/^receipt_sha256=absent$/receipt_sha256=${receipt_hash}/" "${receipt_tmp}" >"${receipt_tmp}.final"
+  mv -f "${receipt_tmp}.final" "${receipt_tmp}"
+  sudo install -m 0640 "${receipt_tmp}" "${completion_receipt}.pending.${run_id}"
+  sudo mv -f "${completion_receipt}.pending.${run_id}" "${completion_receipt}"
+  unlink "${receipt_tmp}"
+  validate_receipt
+}
+
 continue_rollback_control() {
   local initialize_marker="$1"
-  local network created_by_run container members archive_tmp archive_hash marker_sha256
-  local restore_evidence_sha256 receipt_tmp receipt_hash
+  local network created_by_run container members
   smoke_readback_sha256=pending
   if [[ "${initialize_marker}" == 1 ]]; then
     write_control_marker rolling_back 0 not_adopted
@@ -1196,37 +1299,9 @@ continue_rollback_control() {
     exit 1
   fi
   write_control_marker rolling_back 0 not_adopted
-  archive_tmp="$(mktemp)"
-  marker_sha256="$(canonical_marker_sha256 "${activation_marker}")"
   write_restore_evidence_control
-  restore_evidence_sha256="$(sha256sum "${restore_evidence_record}" | awk '{print $1}')"
-  printf '%s\n' "schema=phase3.1.rollback-restore-proof" "transaction_id=${run_id}" \
-    "transaction_manifest_path=${baseline_manifest}" "transaction_manifest_sha256=${manifest_sha256}" \
-    "marker_sha256=${marker_sha256}" "prior_marker_state=$(field "${baseline_manifest}" prior_marker_state)" \
-    "prior_marker_sha256=$(field "${baseline_manifest}" prior_marker_sha256)" \
-    "restore_evidence_path=${restore_evidence_record}" "restore_evidence_sha256=${restore_evidence_sha256}" \
-    "restore_proof_archive_path=${restore_proof_archive}" "archive_sha256=absent" >"${archive_tmp}"
-  archive_hash="$(canonical_archive_sha256 "${archive_tmp}")"
-  sed "s/^archive_sha256=absent$/archive_sha256=${archive_hash}/" "${archive_tmp}" >"${archive_tmp}.final"
-  sudo install -m 0640 "${archive_tmp}.final" "${restore_proof_archive}.pending.${run_id}"
-  sudo mv -f "${restore_proof_archive}.pending.${run_id}" "${restore_proof_archive}"
-  unlink "${archive_tmp}"
-  unlink "${archive_tmp}.final"
-  [[ "$(canonical_archive_sha256 "${restore_proof_archive}")" == "${archive_hash}" ]] || fail
-  receipt_tmp="$(mktemp)"
-  printf '%s\n' "schema=phase3.1.rollback-completion" "transaction_id=${run_id}" \
-    "transaction_manifest_path=${baseline_manifest}" "transaction_manifest_sha256=${manifest_sha256}" \
-    "marker_sha256=${marker_sha256}" "prior_marker_state=$(field "${baseline_manifest}" prior_marker_state)" \
-    "prior_marker_sha256=$(field "${baseline_manifest}" prior_marker_sha256)" \
-    "restore_evidence_path=${restore_evidence_record}" "restore_evidence_sha256=${restore_evidence_sha256}" \
-    "restore_proof_archive_path=${restore_proof_archive}" \
-    "restore_proof_archive_sha256=${archive_hash}" "archive_sha256=${archive_hash}" "receipt_sha256=absent" >"${receipt_tmp}"
-  receipt_hash="$(sed -E 's/^receipt_sha256=.*/receipt_sha256=absent/' "${receipt_tmp}" | sha256sum | awk '{print $1}')"
-  sed "s/^receipt_sha256=absent$/receipt_sha256=${receipt_hash}/" "${receipt_tmp}" >"${receipt_tmp}.final"
-  mv -f "${receipt_tmp}.final" "${receipt_tmp}"
-  sudo install -m 0640 "${receipt_tmp}" "${completion_receipt}.pending.${run_id}"
-  sudo mv -f "${completion_receipt}.pending.${run_id}" "${completion_receipt}"
-  unlink "${receipt_tmp}"
+  write_restore_archive_control
+  write_completion_receipt_control
   validate_receipt
   legacy_rollback_finalize=1
   finalize_rolling_back_resume
@@ -1254,9 +1329,8 @@ if [[ "${command_name}" == resume ]]; then
       write_control_marker active 1 "$(field "${activation_marker}" adoption_proof)"
       ;;
     rolling_back)
-      if [[ "$(field "${baseline_manifest}" schema)" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" &&
-        ! -e "${restore_proof_archive}" && ! -e "${completion_receipt}" && ! -e "${restore_evidence_record}" ]]; then
-        continue_rollback_control 0
+      if [[ "$(field "${baseline_manifest}" schema)" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]]; then
+        resume_legacy_rolling_back_control
       else
         finalize_rolling_back_resume
         release_control_locks terminal

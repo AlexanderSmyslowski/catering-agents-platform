@@ -53,11 +53,17 @@ fi
 
 fault=
 case "${scenario}" in
-  crash-after-candidate|crash-after-ingress|crash-after-private|crash-after-active|crash-after-rollback|crash-after-receipt|semantic-smoke-fail|semantic-smoke-incomplete|baseline-smoke-timeout|egress-fail|egress-disabled|egress-missing|egress-malformed|egress-foreign|compose-render-fail|network-provenance-fail)
+  crash-after-candidate|crash-after-ingress|crash-after-private|crash-after-active|crash-after-rollback|crash-after-evidence|crash-after-archive|crash-after-receipt|semantic-smoke-fail|semantic-smoke-incomplete|baseline-smoke-timeout|egress-fail|egress-disabled|egress-missing|egress-malformed|egress-foreign|compose-render-fail|network-provenance-fail)
     fault="${scenario}" ;;
   *) fault= ;;
 esac
 CATERING_PHASE3_FAKE_HOST_ROOT="${root}" python3 "${fake_docker}" --set-fault "${fault}"
+
+case "${scenario}" in
+  crash-after-evidence) export CATERING_PHASE3_FAKE_CRASH_AT=evidence ;;
+  crash-after-archive) export CATERING_PHASE3_FAKE_CRASH_AT=archive ;;
+  *) unset CATERING_PHASE3_FAKE_CRASH_AT 2>/dev/null || true ;;
+esac
 
 for command_name in docker ssh scp sudo; do
   [[ ! -e "${bin}/${command_name}" && ! -L "${bin}/${command_name}" ]] || unlink "${bin}/${command_name}"
