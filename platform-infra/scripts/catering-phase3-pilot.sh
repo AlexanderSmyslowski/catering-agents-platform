@@ -300,8 +300,9 @@ canonical_adoption_journal_sha256() {
 }
 rollback_preexisting_members_relaxed=false
 validate_adoption_journal() {
-  local allow_absent_networks="${1:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run relax_members
+  local allow_absent_networks="${1:-false}" allow_run_created_partial="${2:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run relax_members
   [[ "${allow_absent_networks}" == true || "${allow_absent_networks}" == false ]] || fail
+  [[ "${allow_run_created_partial}" == true || "${allow_run_created_partial}" == false ]] || fail
   validate_kv_file "${adoption_journal}" journal
   require_field "${adoption_journal}" schema "phase3.1.network-adoption"
   require_field "${adoption_journal}" owner "${owner}"
@@ -347,7 +348,8 @@ validate_adoption_journal() {
     expected_aliases="$(printf '%s' "$(field "${adoption_journal}" "${network}_aliases_b64")" | base64 -d)" || fail
     relax_members=false
     [[ "${rollback_preexisting_members_relaxed:-false}" == true && "${created_by_run}" == false ]] && relax_members=true
-    python3 - "${expected_members}" "${expected_aliases}" "${members}" "${relax_members}" <<'PYTHON' || fail
+    [[ "${allow_run_created_partial}" == true && "${created_by_run}" == true ]] && relax_members=partial
+    python3 - "${expected_members}" "${expected_aliases}" "${members}" "${relax_members}" "${network}" <<'PYTHON' || fail
 import json
 import sys
 
@@ -369,11 +371,105 @@ def canonical(value):
 
 if canonical(expected_members) != canonical(expected_aliases):
     raise SystemExit('network member or alias set mismatch')
-if sys.argv[4] != 'true' and canonical(expected_members) != canonical(actual):
+if sys.argv[4] == 'partial':
+    order = {
+        'catering_private': [
+            'platform-infra-postgres-1',
+            'platform-infra-intake-1',
+            'platform-infra-offer-1',
+            'platform-infra-production-1',
+            'platform-infra-exports-1',
+            'platform-infra-web-1',
+        ],
+        'catering_ingress': ['platform-infra-web-1', 'shared-edge-edge-1'],
+    }.get(sys.argv[5])
+    if order is None:
+        raise SystemExit('unknown rollback network')
+    expected = canonical(expected_members)
+    actual = canonical(actual)
+    expected_by_name = {record['Name']: (key, record) for key, record in expected.items()}
+    if set(expected_by_name) != set(order):
+        raise SystemExit('rollback journal membership order is not canonical')
+    for removed_count in range(len(order) + 1):
+        removed = set(order[:removed_count])
+        remaining = {key: record for name, (key, record) in expected_by_name.items() if name not in removed}
+        if actual == remaining:
+            break
+    else:
+        raise SystemExit('network membership is not a rollback prefix')
+elif sys.argv[4] != 'true' and canonical(expected_members) != canonical(actual):
     raise SystemExit('network member or alias set mismatch')
 PYTHON
   done
 }
+
+validate_run_created_rollback_order() {
+  local private_created ingress_created private_expected ingress_expected private_actual ingress_actual
+  private_created="$(field "${baseline_manifest}" catering_private_created_by_run_authorized)"
+  ingress_created="$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)"
+  [[ "${private_created}" == true && "${ingress_created}" == true ]] || return 0
+  private_expected="$(printf '%s' "$(field "${adoption_journal}" catering_private_members_b64)" | base64 -d)" || fail
+  ingress_expected="$(printf '%s' "$(field "${adoption_journal}" catering_ingress_members_b64)" | base64 -d)" || fail
+  if network_present_by_name catering_private; then
+    private_actual="$(docker network inspect --format '{{json .Containers}}' catering_private)" || fail
+  else
+    private_actual='{}'
+  fi
+  if network_present_by_name catering_ingress; then
+    ingress_actual="$(docker network inspect --format '{{json .Containers}}' catering_ingress)" || fail
+  else
+    ingress_actual='{}'
+  fi
+  python3 - "${private_expected}" "${private_actual}" "${ingress_expected}" "${ingress_actual}" <<'PYTHON' || fail
+import json
+import sys
+
+private_expected, private_actual, ingress_expected, ingress_actual = (json.loads(value) for value in sys.argv[1:5])
+
+def canonical(value):
+    if not isinstance(value, dict):
+        raise SystemExit('network member record is not an object')
+    result = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or not isinstance(item, dict):
+            raise SystemExit('network member record is malformed')
+        name = str(item.get('Name', '')).lstrip('/')
+        aliases = item.get('Aliases', [])
+        if not name or not isinstance(aliases, list):
+            raise SystemExit('network member aliases are malformed')
+        result[key] = {'Name': name, 'Aliases': sorted(str(alias) for alias in aliases)}
+    return result
+
+def removed_prefix(expected_value, actual_value, order):
+    expected = canonical(expected_value)
+    actual = canonical(actual_value)
+    expected_by_name = {record['Name']: (key, record) for key, record in expected.items()}
+    if set(expected_by_name) != set(order):
+        raise SystemExit('rollback journal membership order is not canonical')
+    for removed_count in range(len(order) + 1):
+        removed = set(order[:removed_count])
+        remaining = {key: record for name, (key, record) in expected_by_name.items() if name not in removed}
+        if actual == remaining:
+            return removed_count
+    raise SystemExit('network membership is not a rollback prefix')
+
+private_removed = removed_prefix(private_expected, private_actual, [
+    'platform-infra-postgres-1',
+    'platform-infra-intake-1',
+    'platform-infra-offer-1',
+    'platform-infra-production-1',
+    'platform-infra-exports-1',
+    'platform-infra-web-1',
+])
+ingress_removed = removed_prefix(ingress_expected, ingress_actual, [
+    'platform-infra-web-1',
+    'shared-edge-edge-1',
+])
+if private_removed < 6 and ingress_removed != 0:
+    raise SystemExit('ingress rollback started before private rollback completed')
+PYTHON
+}
+
 phase3_lock_acquire() {
   local lock="$1" mode_var="$2" owner_file owner_tmp lock_real lock_expected_real lock_mode owner_mode
   # mkdir is the ownership claim: two contenders cannot both create the same
@@ -1242,7 +1338,12 @@ validate_legacy_rollback_network_progress() {
       "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ) ]]; then
     rollback_preexisting_members_relaxed=true
   fi
-  validate_adoption_journal true
+  if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
+    validate_adoption_journal true true
+    validate_run_created_rollback_order
+  else
+    validate_adoption_journal "true"
+  fi
   rollback_private_present_before=false
   rollback_ingress_present_before=false
   if network_present_by_name catering_private; then
