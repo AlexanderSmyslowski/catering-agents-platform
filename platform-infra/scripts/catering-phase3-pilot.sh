@@ -72,7 +72,7 @@ readonly FOREIGN_CONTAINERS=(
 readonly SEMANTIC_SMOKE_SERVICE="service=intake-service"
 readonly SEMANTIC_SMOKE_STATUS="status=ok"
 readonly ROLLBACK_RECEIPT_BINDING_FIELDS="restore_evidence_sha256 restore_proof_archive_path restore_proof_archive_sha256 archive receipt"
-readonly MANIFEST_BINDING_FIELDS="container_id RestartCount NetworkSettings Aliases PortBindings Mounts secret_ref manifest_sha256 marker_sha256 archive_sha256 receipt_sha256 network_driver network_scope network_internal network_ipam network_labels network_members network_aliases baseline_smoke_evidence baseline_smoke_sha256"
+readonly MANIFEST_BINDING_FIELDS="container_id RestartCount NetworkSettings Aliases PortBindings Mounts secret_ref manifest_sha256 marker_sha256 archive_sha256 receipt_sha256 network_driver network_scope network_internal network_ipam network_enable_ipv6 network_ipam_options network_ipam_config network_labels network_members network_aliases baseline_smoke_evidence baseline_smoke_sha256"
 readonly VALID_RESUME_STATES="candidate|active|rolling_back"
 : "${DEFAULT_PLATFORM_SOURCE}" "${DEFAULT_EDGE_SOURCE}" "${DEFAULT_ACTIVATION_MARKER}"
 : "${DEFAULT_BASELINE_MANIFEST}" "${DEFAULT_RESTORE_PROOF_ARCHIVE}" "${DEFAULT_COMPLETION_RECEIPT}"
@@ -245,7 +245,7 @@ validate_kv_file() {
     case " ${seen} " in *" ${key} "*) printf '%s\n' "duplicate ${kind} field: ${key}" >&2; fail ;; esac
     seen="${seen} ${key}"
     case "${kind}:${key}" in
-      manifest:schema|manifest:owner|manifest:transaction_id|manifest:prior_marker_state|manifest:prior_marker_sha256|manifest:prior_marker_content_b64|manifest:platform_source_prior|manifest:edge_source_prior|manifest:catering_ingress_baseline|manifest:catering_private_baseline|manifest:catering_ingress_baseline_id|manifest:catering_private_baseline_id|manifest:catering_ingress_created_by_run_authorized|manifest:catering_private_created_by_run_authorized|manifest:network_create_order|manifest:platform_network_baseline_id|manifest:platform_network_baseline_members|manifest:platform_network_baseline_aliases|manifest:zeiterfassung_network_baseline_id|manifest:zeiterfassung_network_baseline_members|manifest:zeiterfassung_network_baseline_aliases|manifest:catering_path_baseline|manifest:expected_platform_source_sha256|manifest:expected_edge_source_sha256|manifest:baseline_smoke_evidence|manifest:baseline_smoke_sha256|manifest:container_id|manifest:RestartCount|manifest:StartedAt|manifest:Status|manifest:Image|manifest:ComposeProject|manifest:ComposeService|manifest:NetworkSettings|manifest:Aliases|manifest:PortBindings|manifest:Mounts|manifest:secret_ref|manifest:network_driver|manifest:network_scope|manifest:network_internal|manifest:network_ipam|manifest:network_labels|manifest:network_members|manifest:network_aliases|manifest:manifest_sha256|manifest:marker_sha256|manifest:archive_sha256|manifest:receipt_sha256|manifest:foreign_invariants_sha256|manifest:container_id_*|manifest:RestartCount_*|manifest:StartedAt_*|manifest:Status_*|manifest:Image_*|manifest:ComposeProject_*|manifest:ComposeService_*|manifest:NetworkSettings_*|manifest:Aliases_*|manifest:PortBindings_*|manifest:Mounts_*|manifest:secret_ref_*) ;;
+      manifest:schema|manifest:owner|manifest:transaction_id|manifest:prior_marker_state|manifest:prior_marker_sha256|manifest:prior_marker_content_b64|manifest:platform_source_prior|manifest:edge_source_prior|manifest:catering_ingress_baseline|manifest:catering_private_baseline|manifest:catering_ingress_baseline_id|manifest:catering_private_baseline_id|manifest:catering_ingress_created_by_run_authorized|manifest:catering_private_created_by_run_authorized|manifest:network_create_order|manifest:platform_network_baseline_id|manifest:platform_network_baseline_members|manifest:platform_network_baseline_aliases|manifest:zeiterfassung_network_baseline_id|manifest:zeiterfassung_network_baseline_members|manifest:zeiterfassung_network_baseline_aliases|manifest:catering_path_baseline|manifest:expected_platform_source_sha256|manifest:expected_edge_source_sha256|manifest:baseline_smoke_evidence|manifest:baseline_smoke_sha256|manifest:container_id|manifest:RestartCount|manifest:StartedAt|manifest:Status|manifest:Image|manifest:ComposeProject|manifest:ComposeService|manifest:NetworkSettings|manifest:Aliases|manifest:PortBindings|manifest:Mounts|manifest:secret_ref|manifest:network_driver|manifest:network_scope|manifest:network_internal|manifest:network_ipam|manifest:network_enable_ipv6|manifest:network_ipam_options|manifest:network_ipam_config|manifest:network_labels|manifest:network_members|manifest:network_aliases|manifest:manifest_sha256|manifest:marker_sha256|manifest:archive_sha256|manifest:receipt_sha256|manifest:foreign_invariants_sha256|manifest:container_id_*|manifest:RestartCount_*|manifest:StartedAt_*|manifest:Status_*|manifest:Image_*|manifest:ComposeProject_*|manifest:ComposeService_*|manifest:NetworkSettings_*|manifest:Aliases_*|manifest:PortBindings_*|manifest:Mounts_*|manifest:secret_ref_*) ;;
       archive:schema|archive:transaction_id|archive:transaction_manifest_path|archive:transaction_manifest_sha256|archive:marker_sha256|archive:prior_marker_state|archive:prior_marker_sha256|archive:restore_evidence_path|archive:restore_evidence_sha256|archive:restore_proof_archive_path|archive:archive_sha256) ;;
       receipt:schema|receipt:transaction_id|receipt:transaction_manifest_path|receipt:transaction_manifest_sha256|receipt:marker_sha256|receipt:prior_marker_state|receipt:prior_marker_sha256|receipt:restore_evidence_path|receipt:restore_evidence_sha256|receipt:restore_proof_archive_path|receipt:restore_proof_archive_sha256|receipt:archive_sha256|receipt:receipt_sha256) ;;
       journal:schema|journal:owner|journal:transaction_id|journal:transaction_manifest_path|journal:transaction_manifest_sha256|journal:expected_platform_source_sha256|journal:expected_edge_source_sha256|journal:network_create_order|journal:adoption_order|journal:adoption_count|journal:next_network|journal:adoption_phase|journal:catering_ingress_id|journal:catering_private_id|journal:catering_ingress_owner|journal:catering_private_owner|journal:catering_ingress_phase|journal:catering_private_phase|journal:catering_ingress_transaction|journal:catering_private_transaction|journal:catering_ingress_members_b64|journal:catering_private_members_b64|journal:catering_ingress_aliases_b64|journal:catering_private_aliases_b64|journal:source_readback_sha256|journal:journal_sha256) ;;
@@ -299,7 +299,7 @@ canonical_adoption_journal_sha256() {
   unlink "${canonical}"
 }
 validate_adoption_journal() {
-  local allow_absent_networks="${1:-false}" network id actual members expected_members aliases expected_aliases order count next phase
+  local allow_absent_networks="${1:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run
   [[ "${allow_absent_networks}" == true || "${allow_absent_networks}" == false ]] || fail
   validate_kv_file "${adoption_journal}" journal
   require_field "${adoption_journal}" schema "phase3.1.network-adoption"
@@ -334,7 +334,12 @@ validate_adoption_journal() {
     [[ "$(network_id "${network}")" == "${id}" ]] || fail
     [[ "$(docker network inspect --format '{{index .Labels "com.catering.owner"}}' "${id}")" == "${owner}" ]] || fail
     [[ "$(docker network inspect --format '{{index .Labels "com.catering.phase"}}' "${id}")" == "${schema}" ]] || fail
-    [[ "$(docker network inspect --format '{{index .Labels "com.catering.transaction"}}' "${id}")" == "${run_id}" ]] || fail
+    created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
+    if [[ "${created_by_run}" == true ]]; then
+      [[ "$(docker network inspect --format '{{index .Labels "com.catering.transaction"}}' "${id}")" == "${run_id}" ]] || fail
+    else
+      [[ "$(docker network inspect --format '{{index .Labels "com.catering.transaction"}}' "${id}")" == "" ]] || fail
+    fi
     members="$(docker network inspect --format '{{json .Containers}}' "${id}")" || fail
     expected_members="$(printf '%s' "$(field "${adoption_journal}" "${network}_members_b64")" | base64 -d)" || fail
     expected_aliases="$(printf '%s' "$(field "${adoption_journal}" "${network}_aliases_b64")" | base64 -d)" || fail
@@ -461,6 +466,11 @@ validate_manifest() {
     grep -Eq "^${required}=" "${baseline_manifest}" || fail
   done
   if [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
+    for required in network_enable_ipv6 network_ipam_options network_ipam_config; do
+      grep -Eq "^${required}=" "${baseline_manifest}" || fail
+    done
+  fi
+  if [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
     for required in baseline_smoke_evidence baseline_smoke_sha256; do
       grep -Eq "^${required}=" "${baseline_manifest}" || fail
     done
@@ -502,8 +512,36 @@ manifest_sha256="$(sha256sum "${baseline_manifest}" | awk '{print $1}')"
 require_field "${activation_marker}" transaction_manifest_sha256 "${manifest_sha256}"
 rehydrate_manifest
 
+manifest_network_value() {
+  local key="$1" network="$2" raw value
+  raw="$(field "${baseline_manifest}" "${key}")"
+  value="$(printf '%s\n' "${raw}" | awk -F';' -v network="${network}" '{ for (i = 1; i <= NF; i++) if ($i ~ ("^" network ":")) { sub("^[^:]*:", "", $i); print $i; found = 1; exit } } END { if (!found) exit 1 }')" || fail
+  [[ -n "${value}" ]] || fail
+  printf '%s' "${value}"
+}
+
+validate_manifest_network_provenance() {
+  local expected_labels expected_members expected_aliases
+  [[ "$(field "${baseline_manifest}" network_driver)" == "catering_ingress:bridge;catering_private:bridge" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_scope)" == "catering_ingress:local;catering_private:local" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_internal)" == "catering_ingress:false;catering_private:false" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_ipam)" == "catering_ingress:default;catering_private:default" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_enable_ipv6)" == "catering_ingress:false;catering_private:false" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_ipam_options)" == "catering_ingress:{};catering_private:{}" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_ipam_config)" == "catering_ingress:[];catering_private:[]" ]] || fail
+  expected_labels="owner=${owner};phase=${schema}"
+  if [[ "$(field "${baseline_manifest}" network_labels)" == *';transaction='* ]]; then
+    expected_labels+=";transaction=${run_id}"
+  fi
+  [[ "$(field "${baseline_manifest}" network_labels)" == "${expected_labels}" ]] || fail
+  expected_members="catering_ingress:shared-edge-edge-1,platform-infra-web-1;catering_private:platform-infra-web-1,platform-infra-postgres-1,platform-infra-intake-1,platform-infra-offer-1,platform-infra-production-1,platform-infra-exports-1"
+  expected_aliases="catering_ingress:shared-edge-edge-1=edge|shared-edge-edge-1;platform-infra-web-1=web"
+  [[ "$(field "${baseline_manifest}" network_members)" == "${expected_members}" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_aliases)" == "${expected_aliases}" ]] || fail
+}
+
 validate_network_provenance() {
-  local network="$1" kind="$2" created_by_run="${3:-true}" id driver scope internal ipam_driver ipam_config options labels members
+  local network="$1" kind="$2" created_by_run="${3:-true}" id driver scope internal ipam_driver ipam_config options enable_ipv6 labels members manifest_schema expected_driver expected_scope expected_internal expected_ipam_driver expected_ipam_config expected_options expected_enable_ipv6
   id="$(network_id "${network}")" || fail
   driver="$(docker network inspect --format '{{.Driver}}' "${id}")" || fail
   scope="$(docker network inspect --format '{{.Scope}}' "${id}")" || fail
@@ -511,9 +549,29 @@ validate_network_provenance() {
   ipam_driver="$(docker network inspect --format '{{.IPAM.Driver}}' "${id}")" || fail
   ipam_config="$(docker network inspect --format '{{json .IPAM.Config}}' "${id}")" || fail
   options="$(docker network inspect --format '{{json .Options}}' "${id}")" || fail
+  enable_ipv6="$(docker network inspect --format '{{.EnableIPv6}}' "${id}")" || fail
   labels="$(docker network inspect --format '{{json .Labels}}' "${id}")" || fail
   members="$(docker network inspect --format '{{json .Containers}}' "${id}")" || fail
-  [[ "${driver}" == bridge && "${scope}" == local && "${internal}" == false && "${ipam_driver}" == default && ( "${ipam_config}" == '[]' || "${ipam_config}" == 'null' ) && "${options}" == '{}' ]] || fail
+  manifest_schema="$(field "${baseline_manifest}" schema)"
+  if [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
+    expected_driver="$(manifest_network_value network_driver "${network}")"
+    expected_scope="$(manifest_network_value network_scope "${network}")"
+    expected_internal="$(manifest_network_value network_internal "${network}")"
+    expected_ipam_driver="$(manifest_network_value network_ipam "${network}")"
+    expected_enable_ipv6="$(manifest_network_value network_enable_ipv6 "${network}")"
+    expected_options="$(manifest_network_value network_ipam_options "${network}")"
+    expected_ipam_config="$(manifest_network_value network_ipam_config "${network}")"
+    validate_manifest_network_provenance
+  else
+    expected_driver=bridge
+    expected_scope=local
+    expected_internal=false
+    expected_ipam_driver=default
+    expected_enable_ipv6=false
+    expected_options='{}'
+    expected_ipam_config='[]'
+  fi
+  [[ "${driver}" == "${expected_driver}" && "${scope}" == "${expected_scope}" && "${internal}" == "${expected_internal}" && "${ipam_driver}" == "${expected_ipam_driver}" && "${enable_ipv6}" == "${expected_enable_ipv6}" && "${ipam_config}" == "${expected_ipam_config}" && "${options}" == "${expected_options}" ]] || fail
   python3 - "${labels}" "${members}" "${owner}" "${schema}" "${kind}" "${run_id}" "${created_by_run}" <<'PYTHON' || fail
 import json
 import sys
@@ -632,6 +690,33 @@ write_control_marker() {
   grep -Fxq "adoption_count=${adoption}" "${activation_marker}" || fail
 }
 
+write_control_adoption_journal_intent() {
+  local journal_tmp journal_final journal_hash
+  [[ ! -e "${adoption_journal}" ]] || return 0
+  journal_tmp="$(mktemp)"
+  printf '%s\n' \
+    "schema=phase3.1.network-adoption" "owner=${owner}" "transaction_id=${run_id}" \
+    "transaction_manifest_path=${baseline_manifest}" "transaction_manifest_sha256=${manifest_sha256}" \
+    "expected_platform_source_sha256=${expected_platform_source_sha256}" "expected_edge_source_sha256=${expected_edge_source_sha256}" \
+    "network_create_order=catering_ingress,catering_private" "adoption_order=" \
+    "adoption_count=0" "next_network=catering_ingress" "adoption_phase=prepared" \
+    "catering_ingress_id=absent" "catering_private_id=absent" \
+    "catering_ingress_owner=${owner}" "catering_private_owner=${owner}" \
+    "catering_ingress_phase=${schema}" "catering_private_phase=${schema}" \
+    "catering_ingress_transaction=${run_id}" "catering_private_transaction=${run_id}" \
+    "catering_ingress_members_b64=absent" "catering_private_members_b64=absent" \
+    "catering_ingress_aliases_b64=absent" "catering_private_aliases_b64=absent" \
+    "source_readback_sha256=pending" "journal_sha256=absent" >"${journal_tmp}"
+  journal_hash="$(canonical_adoption_journal_sha256 "${journal_tmp}")"
+  journal_final="${journal_tmp}.final"
+  sed "s/^journal_sha256=absent$/journal_sha256=${journal_hash}/" "${journal_tmp}" >"${journal_final}"
+  sudo install -m 0640 "${journal_final}" "${adoption_journal}.pending.${run_id}"
+  sudo mv -f "${adoption_journal}.pending.${run_id}" "${adoption_journal}"
+  cmp -s "${journal_final}" "${adoption_journal}" || fail
+  unlink "${journal_tmp}"
+  unlink "${journal_final}"
+}
+
 write_control_adoption_journal() {
   local network="$1" id="$2" members members_b64 journal_tmp journal_final journal_hash
   canonical_network_id "${id}" >/dev/null
@@ -697,7 +782,8 @@ write_control_membership_journal() {
 }
 
 adopt_candidate_networks() {
-  local network kind id next members
+  local network kind id next members expected_id created_by_run
+  write_control_adoption_journal_intent
   validate_adoption_journal
   for network in catering_ingress catering_private; do
     id="$(field "${adoption_journal}" "${network}_id")"
@@ -705,13 +791,24 @@ adopt_candidate_networks() {
       next="$(field "${adoption_journal}" next_network)"
       [[ "${next}" == "${network}" ]] || fail
       kind="${network#catering_}"
-      docker network create --driver bridge --internal=false --ipam-driver default \
-        --label "com.catering.owner=${owner}" --label "com.catering.phase=${schema}" \
-        --label "com.catering.kind=${kind}" --label "com.catering.transaction=${run_id}" \
-        "${network}" >/dev/null || fail
-      id="$(network_id "${network}")"
-      members="$(docker network inspect --format '{{json .Containers}}' "${id}")" || fail
-      [[ "${members}" == "{}" ]] || fail
+      created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
+      if [[ "${created_by_run}" == false ]]; then
+        expected_id="$(field "${baseline_manifest}" "${network}_baseline_id")"
+        network_present_by_name "${network}" || fail
+        id="$(network_id "${network}")"
+        [[ "${id}" == "${expected_id}" ]] || fail
+        validate_network_provenance "${network}" "${kind}" false
+        members="$(docker network inspect --format '{{json .Containers}}' "${id}")" || fail
+        [[ "${members}" == "{}" ]] || fail
+      else
+        docker network create --driver bridge --internal=false --ipam-driver default \
+          --label "com.catering.owner=${owner}" --label "com.catering.phase=${schema}" \
+          --label "com.catering.kind=${kind}" --label "com.catering.transaction=${run_id}" \
+          "${network}" >/dev/null || fail
+        id="$(network_id "${network}")"
+        members="$(docker network inspect --format '{{json .Containers}}' "${id}")" || fail
+        [[ "${members}" == "{}" ]] || fail
+      fi
       write_control_adoption_journal "${network}" "${id}"
     else
       [[ "$(network_id "${network}")" == "${id}" ]] || fail
@@ -1011,7 +1108,15 @@ validate_final_isolation() {
 validate_resume_evidence() {
   local state="$1" ingress_id_value private_id_value marker_stage adoption_value adoption_proof_value smoke_value
   validate_manifest
-  validate_adoption_journal
+  if [[ -e "${adoption_journal}" ]]; then
+    validate_adoption_journal
+  elif [[ "${state}" == candidate && "$(field "${activation_marker}" stage)" == S2 &&
+    "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
+    "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ]]; then
+    :
+  else
+    fail
+  fi
   validate_marker_file "${activation_marker}"
   require_field "${activation_marker}" state "${state}"
   require_field "${activation_marker}" owner "${owner}"
@@ -1047,7 +1152,14 @@ validate_resume_evidence() {
     validate_target_members catering_private "platform-infra-web-1,platform-infra-postgres-1,platform-infra-intake-1,platform-infra-offer-1,platform-infra-production-1,platform-infra-exports-1"
     [[ "${state}" != active ]] || validate_final_isolation
   elif [[ "${state}" == candidate ]]; then
-    [[ "$(field "${adoption_journal}" adoption_count)" == 1 || "$(field "${adoption_journal}" adoption_count)" == 2 ]] || fail
+    if [[ "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
+      "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact &&
+      "${marker_stage}" == S2 ]]; then
+      validate_pre_existing_exact_candidate
+    else
+      [[ -e "${adoption_journal}" ]] || fail
+      [[ "$(field "${adoption_journal}" adoption_count)" == 1 || "$(field "${adoption_journal}" adoption_count)" == 2 ]] || fail
+    fi
   else
     fail
   fi
@@ -1342,6 +1454,39 @@ validate_initial_candidate_absence() {
   :
 }
 
+validate_pre_existing_exact_candidate() {
+  local network expected_id actual_id members
+  [[ "${marker_state}" == candidate && "$(field "${activation_marker}" stage)" == S2 ]] || fail
+  [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=pre-existing-exact;catering_private=pre-existing-exact" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_create_order)" == "catering_ingress,catering_private" ]] || fail
+  [[ "$(field "${baseline_manifest}" network_labels)" == "owner=${owner};phase=${schema}" ]] || fail
+  [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
+    "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
+  [[ "$(field "${activation_marker}" adoption_count)" == 0 &&
+    "$(field "${activation_marker}" adoption_proof)" == not_adopted ]] || fail
+  for network in catering_ingress catering_private; do
+    [[ "$(field "${baseline_manifest}" ${network}_baseline)" == pre-existing-exact ]] || fail
+    [[ "$(field "${baseline_manifest}" ${network}_created_by_run_authorized)" == false ]] || fail
+    expected_id="$(field "${baseline_manifest}" ${network}_baseline_id)"
+    [[ "${expected_id}" =~ ^[0-9a-f]{64}$ ]] || fail
+    network_present_by_name "${network}" || fail
+    actual_id="$(network_id "${network}")" || fail
+    [[ "${actual_id}" == "${expected_id}" ]] || fail
+    validate_network_provenance "${network}" "${network#catering_}" false
+    members="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+    [[ "${members}" == "{}" ]] || fail
+  done
+  if [[ -e "${adoption_journal}" ]]; then
+    validate_adoption_journal false
+    [[ "$(field "${adoption_journal}" adoption_order)" == "" &&
+      "$(field "${adoption_journal}" adoption_count)" == 0 &&
+      "$(field "${adoption_journal}" next_network)" == catering_ingress &&
+      "$(field "${adoption_journal}" adoption_phase)" == prepared ]] || fail
+    [[ "$(field "${adoption_journal}" catering_ingress_id)" == absent &&
+      "$(field "${adoption_journal}" catering_private_id)" == absent ]] || fail
+  fi
+}
+
 validate_phase32_ingress_adoption_prefix() {
   local recovery_state="$1"
   local network journal_id marker_id baseline_status created_by_run manifest_schema
@@ -1430,6 +1575,10 @@ continue_rollback_control() {
         if [[ -e "${adoption_journal}" && "$(field "${adoption_journal}" adoption_count)" == 1 ]]; then
           validate_phase32_ingress_adoption_prefix candidate
           journalized_ingress_adoption_authorized=true
+        elif [[ "$(field "${activation_marker}" stage)" == S2 &&
+          "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
+          "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ]]; then
+          validate_pre_existing_exact_candidate
         else
           validate_initial_candidate_absence
           candidate_absent_networks_authorized=true
@@ -2369,6 +2518,9 @@ printf '%s\n' \
   "network_scope=catering_ingress:local;catering_private:local" \
   "network_internal=catering_ingress:false;catering_private:false" \
   "network_ipam=catering_ingress:default;catering_private:default" \
+  "network_enable_ipv6=catering_ingress:false;catering_private:false" \
+  "network_ipam_options=catering_ingress:{};catering_private:{}" \
+  "network_ipam_config=catering_ingress:[];catering_private:[]" \
   "network_labels=owner=${owner};phase=${schema};transaction=${transaction_id}" \
   "network_members=catering_ingress:${SHARED_EDGE},${PLATFORM_WEB};catering_private:${PLATFORM_WEB},${PLATFORM_POSTGRES},${PLATFORM_INTAKE},${PLATFORM_OFFER},${PLATFORM_PRODUCTION},${PLATFORM_EXPORTS}" \
   "network_aliases=catering_ingress:${SHARED_EDGE}=edge|shared-edge-edge-1;${PLATFORM_WEB}=web" \
@@ -2406,7 +2558,7 @@ validate_manifest_fields() {
     case " ${seen} " in *" ${key} "*) fail ;; esac
     seen="${seen} ${key}"
     case "${key}" in
-      schema|owner|transaction_id|prior_marker_state|prior_marker_sha256|prior_marker_content_b64|platform_source_prior|edge_source_prior|catering_ingress_baseline|catering_private_baseline|catering_ingress_baseline_id|catering_private_baseline_id|catering_ingress_created_by_run_authorized|catering_private_created_by_run_authorized|network_create_order|platform_network_baseline_id|platform_network_baseline_members|platform_network_baseline_aliases|zeiterfassung_network_baseline_id|zeiterfassung_network_baseline_members|zeiterfassung_network_baseline_aliases|catering_path_baseline|expected_platform_source_sha256|expected_edge_source_sha256|baseline_smoke_evidence|baseline_smoke_sha256|container_id|RestartCount|StartedAt|Status|Image|ComposeProject|ComposeService|NetworkSettings|Aliases|PortBindings|Mounts|secret_ref|network_driver|network_scope|network_internal|network_ipam|network_labels|network_members|network_aliases|manifest_sha256|marker_sha256|archive_sha256|receipt_sha256|foreign_invariants_sha256|container_id_*|RestartCount_*|StartedAt_*|Status_*|Image_*|ComposeProject_*|ComposeService_*|NetworkSettings_*|Aliases_*|PortBindings_*|Mounts_*|secret_ref_*) ;;
+      schema|owner|transaction_id|prior_marker_state|prior_marker_sha256|prior_marker_content_b64|platform_source_prior|edge_source_prior|catering_ingress_baseline|catering_private_baseline|catering_ingress_baseline_id|catering_private_baseline_id|catering_ingress_created_by_run_authorized|catering_private_created_by_run_authorized|network_create_order|platform_network_baseline_id|platform_network_baseline_members|platform_network_baseline_aliases|zeiterfassung_network_baseline_id|zeiterfassung_network_baseline_members|zeiterfassung_network_baseline_aliases|catering_path_baseline|expected_platform_source_sha256|expected_edge_source_sha256|baseline_smoke_evidence|baseline_smoke_sha256|container_id|RestartCount|StartedAt|Status|Image|ComposeProject|ComposeService|NetworkSettings|Aliases|PortBindings|Mounts|secret_ref|network_driver|network_scope|network_internal|network_ipam|network_enable_ipv6|network_ipam_options|network_ipam_config|network_labels|network_members|network_aliases|manifest_sha256|marker_sha256|archive_sha256|receipt_sha256|foreign_invariants_sha256|container_id_*|RestartCount_*|StartedAt_*|Status_*|Image_*|ComposeProject_*|ComposeService_*|NetworkSettings_*|Aliases_*|PortBindings_*|Mounts_*|secret_ref_*) ;;
       *) fail ;;
     esac
   done <"${baseline_manifest}"
@@ -2427,6 +2579,11 @@ validate_manifest() {
     catering_path_baseline baseline_smoke_evidence baseline_smoke_sha256; do
     grep -Eq "^${required}=" "${baseline_manifest}" || fail
   done
+  if [[ "$(manifest_field schema)" == "${transaction_manifest_schema}" ]]; then
+    for required in network_enable_ipv6 network_ipam_options network_ipam_config; do
+      grep -Eq "^${required}=" "${baseline_manifest}" || fail
+    done
+  fi
   [[ "$(manifest_field baseline_smoke_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
   [[ "$(manifest_field baseline_smoke_evidence)" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
   smoke_evidence_hash="$(printf '%s\n' "$(manifest_field baseline_smoke_evidence | tr ';' '\n')" | sha256sum | awk '{print $1}')"
