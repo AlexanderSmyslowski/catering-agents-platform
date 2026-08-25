@@ -372,6 +372,14 @@ def canonical(value):
 if canonical(expected_members) != canonical(expected_aliases):
     raise SystemExit('network member or alias set mismatch')
 if sys.argv[4] == 'partial':
+    # A crash before the first membership connect leaves the durable adoption
+    # journal with an empty, but truthful, membership snapshot.  Treat only an
+    # empty journal paired with an empty live network as the zero-length
+    # rollback prefix; any live member still fails closed below.
+    if not expected_members:
+        if actual:
+            raise SystemExit('network membership is not a rollback prefix')
+        raise SystemExit(0)
     order = {
         'catering_private': [
             'platform-infra-postgres-1',
@@ -443,6 +451,12 @@ def canonical(value):
 def removed_prefix(expected_value, actual_value, order):
     expected = canonical(expected_value)
     actual = canonical(actual_value)
+    # The journal can durably precede the first membership connect.  Empty
+    # expected and live sets are the only valid zero-length rollback prefix.
+    if not expected:
+        if actual:
+            raise SystemExit('network membership is not a rollback prefix')
+        return 0
     expected_by_name = {record['Name']: (key, record) for key, record in expected.items()}
     if set(expected_by_name) != set(order):
         raise SystemExit('rollback journal membership order is not canonical')
