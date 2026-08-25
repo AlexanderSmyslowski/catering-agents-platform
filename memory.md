@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.372
-date: 2026-08-24
+version: 5.373
+date: 2026-08-25
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1829,3 +1829,9 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Die Phase-3-Pre-Mutation-Semantikbaseline ist vor jeder ersten Zielmutation vollständig aufzunehmen, zu hashen und an das unveränderliche Transaktionsmanifest zu binden; rote, unvollständige oder nicht bindbare Smoke-Evidenz bleibt vor `atomic_install`, Netz-Erzeugung und Connect/Disconnect fail-closed.
 - Neue Transaktionen verwenden ausdrücklich `phase3.2.transaction-baseline`; `baseline_smoke_evidence` und `baseline_smoke_sha256` bleiben für dieses Format Pflicht. Das bisherige `phase3.1.transaction-baseline` ist ausschließlich eine unveränderliche, Marker-/Owner-/Run-/Pfad-/Hash-gebundene Recovery-Autorität: `candidate`/`active` dürfen nur über einen expliziten Rollback wiederhergestellt werden, `rolling_back` ausschließlich per Resume/Finalize; ein Forward-Resume oder eine Live-Inferenz kann daraus kein `PILOT: GO` ableiten.
 - Diese Fortschreibung dokumentiert nur den versionierten Recovery-/Baseline-Vertrag; sie behauptet keinen produktiven Pilot, keinen Merge, kein Deployment und keine Runtime-Mutation.
+
+### 5.373 - 2026-08-25
+
+- Der freigegebene Phase-3-P1-Rollback-Fix akzeptiert die zwei historisch erzeugbaren `phase3.1`-Candidate-Präfixe nur als explizites `--rollback`: vorbereitete Adoption mit beiden Netz-IDs `absent` und durable Ingress-Adoption mit exakter transaktionsgelabelter Live-Ingress sowie absent Private-Netz. Beide Pfade validieren weiter Owner/Run, Manifestpfad/-hash, Journal-Selbsthash, Source-/Baselinebindung, Netzwerkprovenienz und die feste Ingress-vor-Private-Reihenfolge; beim Ingress-Präfix wird die Journal-ID vor jeder Entfernung atomar in `rolling_back` übernommen.
+- Ein `phase3.1`-Candidate bleibt für `--resume` und jede Forward-Freigabe `NO-GO`; `phase3.2`-Baseline-/Recovery-Verträge und die bestehenden negativen Owner-/Run-/Hash-/ID-/Reihenfolge-/Mitgliedschafts-/Replacement-/Rename-Gates bleiben unverändert.
+- Der Stand ist nur lokal und synthetisch über fokussierte Vitest-/Shell-/Diff-Verträge geprüft. Es gab keine echte Netzwerk-, Docker-, Server-, Deployment-, Commit-, Push- oder PR-Aktion; reine Vitest-`onTaskUpdate`-Worker-Timeouts wurden als P2 und nicht als Suite-GO behandelt.

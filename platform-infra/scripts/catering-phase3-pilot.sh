@@ -1083,14 +1083,16 @@ validate_rolling_back_evidence() {
 
 validate_legacy_rollback_network_progress() {
   local network created expected_id journal_id current_id
-  if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+  if [[ ( "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
+    "$(field "${baseline_manifest}" schema)" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ) &&
     "${marker_state}" == rolling_back &&
     "$(field "${activation_marker}" catering_ingress_id)" == absent &&
     "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
     validate_initial_candidate_absence
     return 0
   fi
-  if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+  if [[ ( "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
+    "$(field "${baseline_manifest}" schema)" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ) &&
     "${marker_state}" == rolling_back &&
     "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ &&
     "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
@@ -1302,10 +1304,18 @@ write_completion_receipt_control() {
 }
 
 validate_initial_candidate_absence() {
-  local network marker_id journal_id baseline_status created_by_run
+  local network marker_id journal_id baseline_status created_by_run manifest_schema
   [[ ( "${command_name}" == rollback && "${marker_state}" == candidate ) ||
     ( "${command_name}" == resume && "${marker_state}" == rolling_back ) ]] || fail
-  [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  manifest_schema="$(field "${baseline_manifest}" schema)"
+  [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
+    "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  # The legacy schema is recovery-only: an absent-network candidate may enter
+  # explicit rollback, and its durable rolling_back prefix may only resume.
+  if [[ "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]]; then
+    [[ ( "${command_name}" == rollback && "${marker_state}" == candidate ) ||
+      ( "${command_name}" == resume && "${marker_state}" == rolling_back ) ]] || fail
+  fi
   [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=absent" ]] || fail
   [[ "$(field "${activation_marker}" adoption_count)" == 0 && "$(field "${activation_marker}" adoption_proof)" == not_adopted ]] || fail
   if [[ -e "${adoption_journal}" ]]; then
@@ -1334,8 +1344,19 @@ validate_initial_candidate_absence() {
 
 validate_phase32_ingress_adoption_prefix() {
   local recovery_state="$1"
-  local network journal_id marker_id baseline_status created_by_run
-  [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  local network journal_id marker_id baseline_status created_by_run manifest_schema
+  manifest_schema="$(field "${baseline_manifest}" schema)"
+  [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
+    "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  # A legacy manifest can prove only the historical candidate rollback prefix;
+  # candidate is never a resume authority, while rolling_back resumes only its
+  # durable rollback.
+  if [[ "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]]; then
+    [[ ( "${recovery_state}" == candidate && "${command_name}" == rollback &&
+      "${marker_state}" == candidate ) ||
+      ( "${recovery_state}" == rolling_back && "${command_name}" == resume &&
+        "${marker_state}" == rolling_back ) ]] || fail
+  fi
   [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=absent" ]] || fail
   for network in catering_ingress catering_private; do
     baseline_status="$(field "${baseline_manifest}" "${network}_baseline")"
