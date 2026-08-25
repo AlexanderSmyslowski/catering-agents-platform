@@ -1083,6 +1083,26 @@ validate_rolling_back_evidence() {
 
 validate_legacy_rollback_network_progress() {
   local network created expected_id journal_id current_id
+  if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+    "${marker_state}" == rolling_back &&
+    "$(field "${activation_marker}" catering_ingress_id)" == absent &&
+    "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
+    validate_initial_candidate_absence
+    return 0
+  fi
+  if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+    "${marker_state}" == rolling_back &&
+    "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ &&
+    "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
+    validate_phase32_ingress_adoption_prefix rolling_back
+    rollback_private_present_before=false
+    if network_present_by_name catering_ingress; then
+      rollback_ingress_present_before=true
+    else
+      rollback_ingress_present_before=false
+    fi
+    return 0
+  fi
   validate_adoption_journal true
   rollback_private_present_before=false
   rollback_ingress_present_before=false
@@ -1281,15 +1301,137 @@ write_completion_receipt_control() {
   validate_receipt
 }
 
+validate_initial_candidate_absence() {
+  local network marker_id journal_id baseline_status created_by_run
+  [[ ( "${command_name}" == rollback && "${marker_state}" == candidate ) ||
+    ( "${command_name}" == resume && "${marker_state}" == rolling_back ) ]] || fail
+  [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=absent" ]] || fail
+  [[ "$(field "${activation_marker}" adoption_count)" == 0 && "$(field "${activation_marker}" adoption_proof)" == not_adopted ]] || fail
+  if [[ -e "${adoption_journal}" ]]; then
+    validate_adoption_journal false
+    [[ "$(field "${adoption_journal}" adoption_order)" == "" ]] || fail
+    [[ "$(field "${adoption_journal}" adoption_count)" == 0 ]] || fail
+    [[ "$(field "${adoption_journal}" next_network)" == catering_ingress ]] || fail
+    [[ "$(field "${adoption_journal}" adoption_phase)" == prepared ]] || fail
+  fi
+  for network in catering_ingress catering_private; do
+    marker_id="$(field "${activation_marker}" "${network}_id")"
+    [[ "${marker_id}" == absent ]] || fail
+    baseline_status="$(field "${baseline_manifest}" "${network}_baseline")"
+    created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
+    [[ "${baseline_status}" == absent && "${created_by_run}" == true ]] || fail
+    if [[ -e "${adoption_journal}" ]]; then
+      journal_id="$(field "${adoption_journal}" "${network}_id")"
+      [[ "${journal_id}" == absent ]] || fail
+    fi
+    if network_present_by_name "${network}"; then
+      fail
+    fi
+  done
+  :
+}
+
+validate_phase32_ingress_adoption_prefix() {
+  local recovery_state="$1"
+  local network journal_id marker_id baseline_status created_by_run
+  [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=absent" ]] || fail
+  for network in catering_ingress catering_private; do
+    baseline_status="$(field "${baseline_manifest}" "${network}_baseline")"
+    created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
+    [[ "${baseline_status}" == absent && "${created_by_run}" == true ]] || fail
+  done
+  case "${recovery_state}" in
+    candidate)
+      [[ "${command_name}" == rollback && "${marker_state}" == candidate ]] || fail
+      [[ "$(field "${activation_marker}" stage)" == S2 ]] || fail
+      [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
+        "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
+      [[ "$(field "${activation_marker}" adoption_count)" == 0 &&
+        "$(field "${activation_marker}" adoption_proof)" == not_adopted ]] || fail
+      [[ "$(field "${activation_marker}" platform_source_progress)" == verified &&
+        "$(field "${activation_marker}" edge_source_progress)" == verified ]] || fail
+      validate_adoption_journal false
+      ;;
+    rolling_back)
+      [[ "${command_name}" == resume && "${marker_state}" == rolling_back ]] || fail
+      [[ "$(field "${activation_marker}" stage)" == RB ]] || fail
+      [[ "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
+      [[ "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ ]] || fail
+      validate_adoption_journal true
+      ;;
+    *)
+      fail
+      ;;
+  esac
+  [[ "$(field "${adoption_journal}" adoption_order)" == catering_ingress &&
+    "$(field "${adoption_journal}" adoption_count)" == 1 &&
+    "$(field "${adoption_journal}" next_network)" == catering_private &&
+    "$(field "${adoption_journal}" adoption_phase)" == created ]] || fail
+  journal_id="$(field "${adoption_journal}" catering_ingress_id)"
+  [[ "${journal_id}" =~ ^[0-9a-f]{64}$ ]] || fail
+  [[ "$(field "${adoption_journal}" catering_private_id)" == absent ]] || fail
+  for network in catering_ingress catering_private; do
+    require_field "${adoption_journal}" "${network}_owner" "${owner}"
+    require_field "${adoption_journal}" "${network}_phase" "${schema}"
+    require_field "${adoption_journal}" "${network}_transaction" "${run_id}"
+  done
+  if [[ "${recovery_state}" == rolling_back ]]; then
+    [[ "$(field "${activation_marker}" catering_ingress_id)" == "${journal_id}" ]] || fail
+  fi
+  if network_present_by_name catering_private; then
+    fail
+  fi
+  if network_present_by_name catering_ingress; then
+    [[ "$(network_id catering_ingress)" == "${journal_id}" ]] || fail
+    validate_network_provenance catering_ingress ingress true
+  else
+    [[ "${recovery_state}" == rolling_back ]] || fail
+    if network_id_present_anywhere "${journal_id}"; then
+      fail
+    fi
+  fi
+}
+
 continue_rollback_control() {
   local initialize_marker="$1"
   local network created_by_run expected_id container members
+  local candidate_absent_networks_authorized=false
+  local journalized_ingress_adoption_authorized=false
+  [[ "${initialize_marker}" != 1 || "${marker_state}" != rolling_back ]] || fail
   rollback_private_present_before=false
   smoke_readback_sha256=pending
   if [[ "${initialize_marker}" == 1 ]]; then
+    if [[ "${marker_state}" == candidate ]]; then
+      if [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
+        "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
+        if [[ -e "${adoption_journal}" && "$(field "${adoption_journal}" adoption_count)" == 1 ]]; then
+          validate_phase32_ingress_adoption_prefix candidate
+          journalized_ingress_adoption_authorized=true
+        else
+          validate_initial_candidate_absence
+          candidate_absent_networks_authorized=true
+        fi
+      fi
+    fi
     write_control_marker rolling_back 0 not_adopted
   else
-    validate_legacy_rollback_network_progress
+    if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+      "${marker_state}" == rolling_back &&
+      "$(field "${activation_marker}" catering_ingress_id)" == absent &&
+      "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
+      validate_initial_candidate_absence
+      candidate_absent_networks_authorized=true
+    elif [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+      "${marker_state}" == rolling_back &&
+      "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ &&
+      "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
+      validate_phase32_ingress_adoption_prefix rolling_back
+      journalized_ingress_adoption_authorized=true
+    else
+      validate_legacy_rollback_network_progress
+    fi
   fi
   connect_if_missing_control() {
     local network alias container networks
@@ -1300,7 +1442,8 @@ continue_rollback_control() {
   disconnect_if_attached_control() {
     local network="$1" container="$2" networks
     if ! network_present_by_name "${network}"; then
-      [[ "${initialize_marker}" == 0 ]] || fail
+      [[ "${initialize_marker}" == 0 || "${candidate_absent_networks_authorized}" == true ||
+        "${journalized_ingress_adoption_authorized}" == true ]] || fail
       return 0
     fi
     networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${container}")" || fail
@@ -1327,14 +1470,15 @@ continue_rollback_control() {
   for network in catering_private catering_ingress; do
     created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
     if ! network_present_by_name "${network}"; then
-      [[ "${initialize_marker}" == 0 ]] || fail
+      [[ "${initialize_marker}" == 0 || "${candidate_absent_networks_authorized}" == true ||
+        "${journalized_ingress_adoption_authorized}" == true ]] || fail
       [[ "${created_by_run}" == true ]] || fail
       if [[ "${network}" == catering_ingress ]]; then
         [[ "${rollback_private_present_before}" != true ]] || fail
       fi
       continue
     fi
-    if [[ "${initialize_marker}" == 0 ]]; then
+    if [[ "${initialize_marker}" == 0 || "${journalized_ingress_adoption_authorized}" == true ]]; then
       expected_id="$(field "${activation_marker}" "${network}_id")"
       [[ "$(network_id "${network}")" == "${expected_id}" ]] || fail
     fi
@@ -1393,13 +1537,7 @@ if [[ "${command_name}" == resume ]]; then
       write_control_marker active 1 "$(field "${activation_marker}" adoption_proof)"
       ;;
     rolling_back)
-      if [[ "$(field "${baseline_manifest}" schema)" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]]; then
-        resume_legacy_rolling_back_control
-      else
-        finalize_rolling_back_resume
-        release_control_locks terminal
-        printf '%s\n' 'PILOT: ROLLED BACK'
-      fi
+      resume_legacy_rolling_back_control
       exit 0
       ;;
     *) fail ;;

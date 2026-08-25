@@ -157,7 +157,10 @@ def inject_fault(state: dict[str, Any], operation: str, name: str = "") -> None:
     private_members = {str(value.get("Name", "")).lstrip("/") for value in private}
     trigger = False
     if fault == "crash-after-candidate":
-        trigger = current == "candidate" and operation == "inspect" and ingress_members == expected_ingress and private_members == expected_private
+        if os.environ.get("CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH") == "1":
+            trigger = current == "candidate" and operation == "network" and name == "create" and not ingress_members and not private_members
+        else:
+            trigger = current == "candidate" and operation == "inspect" and ingress_members == expected_ingress and private_members == expected_private
     elif fault == "crash-after-active":
         trigger = current == "active" and operation == "inspect"
     elif fault == "crash-after-rollback":
@@ -172,6 +175,8 @@ def inject_fault(state: dict[str, Any], operation: str, name: str = "") -> None:
         state["fault_triggered"] = True
         save(state)
         os.kill(os.getppid(), signal.SIGKILL)
+        if os.environ.get("CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH") == "1":
+            os.kill(os.getpid(), signal.SIGKILL)
 
 
 def resolve_network(state: dict[str, Any], value: str) -> tuple[str, dict[str, Any]]:
@@ -281,6 +286,7 @@ def do_network(state: dict[str, Any], args: list[str]) -> int:
     if not args:
         return 1
     action = args[0]
+    inject_fault(state, "network", action)
     if action == "ls":
         match = re.search(r"name=\^([^$]+)\$", " ".join(args))
         if match and match.group(1) in state["networks"]:
