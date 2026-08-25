@@ -373,7 +373,13 @@ describe("ProductionDraft E2E chain", () => {
         role: "system",
         kind: "draft_created",
         text: "Synthetische Produktionsakte angelegt.",
-        artifactId: importedDraft.draftId
+        artifactId: importedDraft.draftId,
+        revisionRef: {
+          artifactType: "ProductionDraft",
+          artifactId: importedDraft.draftId,
+          revision: importedDraft.revision,
+          createdAt: importedDraft.createdAt
+        }
       });
       expect(importedDraft.status).toBe("pending_review");
       await intakeRecords.insertSpec(localBusiness, approvedHandoff.eventSpecSnapshot);

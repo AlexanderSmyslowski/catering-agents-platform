@@ -14,12 +14,16 @@ import {
   AuditLogStore,
   approvalRequestIdForTarget,
   createEventRequestFromText,
+  evaluateQuantityRecipeProductionBridge,
+  evaluateReadiness,
   normalizeEventRequestToSpec,
   SCHEMA_VERSION,
   type AcceptedEventSpec,
+  type QuantityDecisionInput,
   type ProductionDraft,
   type ProductionHandoff,
-  type Recipe
+  type Recipe,
+  type RecipeEventUseReview
 } from "@catering/shared-core";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import type { IntakeRecordsPort } from "../production-service/src/ports/intake-records-port.js";
@@ -57,13 +61,104 @@ async function buildDraft(
   specOverride?: AcceptedEventSpec
 ): Promise<ProductionDraft> {
   const spec = specOverride ?? eventSpec();
+  const planningRepository = new InMemoryRecipeRepository();
+  const planningRecipe = {
+    ...recipeCandidate(),
+    // The shared Apply fixture represents a human-reviewed vegetarian recipe
+    // rather than relying on an implicit recipe or readiness override.
+    dietTags: ["vegetarian"]
+  } satisfies Recipe;
+  await planningRepository.save({ businessId: "local" }, planningRecipe);
+  const explicitPlanningDecisions: Record<string, {
+    menuCategory: "classic" | "vegetarian" | "vegan";
+    productionDecision: NonNullable<AcceptedEventSpec["menuPlan"][number]["productionDecision"]>;
+  }> = {
+    "Lunch-Buffet kompakt": { menuCategory: "classic", productionDecision: { mode: "scratch" } },
+    "Salate": { menuCategory: "classic", productionDecision: { mode: "scratch" } },
+    "vegetarische/vegane Komponente": { menuCategory: "vegetarian", productionDecision: { mode: "scratch" } },
+    "Brot/Baguette": {
+      menuCategory: "classic",
+      productionDecision: { mode: "convenience_purchase", purchasedElements: ["Baguette"] }
+    },
+    "kleines Dessert optional": { menuCategory: "classic", productionDecision: { mode: "scratch" } },
+    "vegetarischer Tomatensuppe": { menuCategory: "vegetarian", productionDecision: { mode: "scratch" } }
+  };
+  const planningSpecBase: AcceptedEventSpec = {
+    ...spec,
+    event: {
+      ...spec.event,
+      date: spec.event.date
+    },
+    menuPlan: spec.menuPlan.map((component) => {
+      const decision = explicitPlanningDecisions[component.label];
+      if (!decision) throw new Error(`Apply-Positivfixture benötigt eine explizite Entscheidung für ${component.label}.`);
+      return {
+        ...component,
+        menuCategory: decision.menuCategory,
+        productionDecision: decision.productionDecision,
+        recipeOverrideId: planningRecipe.recipeId
+      };
+    })
+  };
+  const evaluatedPlanningReadiness = evaluateReadiness(planningSpecBase);
+  const planningSpec: AcceptedEventSpec = {
+    ...planningSpecBase,
+    readiness: evaluatedPlanningReadiness.readiness,
+    missingFields: evaluatedPlanningReadiness.missingFields
+  };
+  const quantityRecipeBridges: Record<string, ReturnType<typeof evaluateQuantityRecipeProductionBridge>> = {};
+  const recipeEventUseReviews: Record<string, RecipeEventUseReview> = {};
+  for (const component of planningSpec.menuPlan) {
+    const guestCount = component.servings ?? planningSpec.attendees.expected ?? 0;
+    const quantityDecision: QuantityDecisionInput = {
+      decisionId: `quantity-review-${draftId}-${component.componentId}`,
+      eventSpecId: planningSpec.specId,
+      componentId: component.componentId,
+      guestCount,
+      serviceFormat: component.serviceStyle ?? "buffet",
+      dishRole: component.course === "starter" ? "starter" : "other",
+      basis: "servings_per_person",
+      perUnitAmount: 1,
+      perUnitUnit: "servings",
+      targetAmount: guestCount,
+      targetUnit: "servings",
+      rationale: "Menschlich bestätigte Portionsentscheidung für den Apply-Positivpfad.",
+      evidence: { kind: "operator_instruction", reference: "apply-positive-fixture-review" },
+      reviewStatus: "approved"
+    };
+    const recipeEventUseReview: RecipeEventUseReview = {
+      eventSpecId: planningSpec.specId,
+      recipeId: planningRecipe.recipeId,
+      reviewedBy: "Produktions-Mitarbeiter",
+      reviewedAt: "2026-07-01T12:00:00.000Z",
+      decision: "accepted_for_event",
+      confirmations: {
+        quantitiesAndYield: true,
+        methodAndEquipment: true,
+        allergensAndDiet: true,
+        holdingAndRegeneration: true
+      }
+    };
+    recipeEventUseReviews[component.componentId] = recipeEventUseReview;
+    quantityRecipeBridges[component.componentId] = evaluateQuantityRecipeProductionBridge({
+      eventSpecId: planningSpec.specId,
+      componentId: component.componentId,
+      quantityDecision,
+      recipe: planningRecipe,
+      recipeEventUseReview
+    });
+  }
   const discoveryService = new RecipeDiscoveryService(
-    new InMemoryRecipeRepository(),
+    planningRepository,
     {
       searchRecipes: async () => []
     }
   );
-  const artifacts = await buildProductionArtifacts(spec, discoveryService, { context: { businessId: "local" } });
+  const artifacts = await buildProductionArtifacts(planningSpec, discoveryService, {
+    context: { businessId: "local" },
+    quantityRecipeBridges,
+    recipeEventUseReviews
+  });
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -135,7 +230,7 @@ async function buildDraft(
       eventSpec: spec,
       productionPlan: artifacts.productionPlan,
       purchaseList: artifacts.purchaseList,
-      recipes: [recipeCandidate()],
+      recipes: [planningRecipe],
       notes: ["SECRET_DRAFT_NOTE"]
     }
   };
@@ -345,7 +440,7 @@ async function createPersistedOfferHandoff(rootDir: string): Promise<{
     method: "POST",
     url: "/v1/offers/from-text",
     headers: trustedOfferHeaders,
-    payload: { caseId, text: "Business Lunch fuer 45 Personen." }
+    payload: { caseId, text: "Business Lunch am 2026-09-18 fuer 45 Personen." }
   });
   expect(draftResponse.statusCode).toBe(201);
   const offerDraft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
@@ -390,7 +485,13 @@ async function linkProductionCaseToDraft(
     role: "system",
     kind: "draft_created",
     text: "Synthetische Produktionsakte angelegt.",
-    artifactId: draft.draftId
+    artifactId: draft.draftId,
+    revisionRef: {
+      artifactType: "ProductionDraft",
+      artifactId: draft.draftId,
+      revision: draft.revision,
+      createdAt: draft.createdAt
+    }
   });
 }
 
@@ -716,42 +817,53 @@ describe("ProductionDraft apply", () => {
     const originalDraft = await buildDraft("production-draft-apply-variant-binding");
     const originalSpec = originalDraft.draftArtifacts.eventSpec!;
     const handoff = offerHandoffFor(originalSpec, originalDraft.draftId);
-    const tamperedDraft: ProductionDraft = {
+    const canonicalDraft: ProductionDraft = {
       ...originalDraft,
       source: { ...originalDraft.source, sourceRef: `offer-handoff:${handoff.handoffId}` },
       draftArtifacts: {
         ...originalDraft.draftArtifacts,
-        eventSpec: {
+        eventSpec: handoff.eventSpecSnapshot
+      }
+    };
+    await intakeRecords.insertSpec({ businessId: "local" }, handoff.eventSpecSnapshot);
+    let handoffForApply = handoff;
+    const app = buildProductionApp({
+      dataRoot,
+      store,
+      intakeRecords,
+      handoffReader: { get: async () => handoffForApply },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: {}
+    });
+
+    try {
+      await linkProductionCaseToDraft(app, store, canonicalDraft, handoff.handoffId);
+      const approvedProductionSpecId = await approveDraft(
+        app,
+        store,
+        canonicalDraft,
+        intakeRecords,
+        handoff.eventSpecSnapshot
+      );
+      handoffForApply = {
+        ...handoff,
+        eventSpecSnapshot: {
           ...handoff.eventSpecSnapshot,
           attendees: {
             ...handoff.eventSpecSnapshot.attendees,
             expected: (handoff.eventSpecSnapshot.attendees.expected ?? 0) + 1
           }
         }
-      }
-    };
-    await intakeRecords.insertSpec({ businessId: "local" }, handoff.eventSpecSnapshot);
-    const app = buildProductionApp({
-      dataRoot,
-      store,
-      intakeRecords,
-      handoffReader: { get: async () => handoff },
-      trustedActorSecret: TRUSTED_SECRET,
-      env: {}
-    });
-
-    try {
-      const response = await importApproveAndApply(
-        app,
-        store,
-        tamperedDraft,
-        intakeRecords,
-        handoff.eventSpecSnapshot
-      );
+      };
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
+        headers: trustedProductionHeaders
+      });
 
       expect(response.statusCode).toBe(409);
       expect(response.json().errors).toContain(
-        "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz."
+        "Freigegebener Produktionssnapshot weicht vom persistierten Offer-/Handoff-Snapshot ab."
       );
       expect(await store.listPlans({ businessId: "local" })).toHaveLength(0);
       expect(await store.listPurchaseLists({ businessId: "local" })).toHaveLength(0);
@@ -799,7 +911,13 @@ describe("ProductionDraft apply", () => {
         role: "system",
         kind: "draft_created",
         text: "Synthetische Produktionsakte angelegt.",
-        artifactId: draft.draftId
+        artifactId: draft.draftId,
+        revisionRef: {
+          artifactType: "ProductionDraft",
+          artifactId: draft.draftId,
+          revision: draft.revision,
+          createdAt: draft.createdAt
+        }
       });
       const approvedProductionSpecId = await approveDraft(app, store, draft, intakeRecords, handoff.eventSpecSnapshot);
       const draftPath = path.join(
@@ -879,7 +997,13 @@ describe("ProductionDraft apply", () => {
         role: "system",
         kind: "draft_created",
         text: "Synthetische Produktionsakte angelegt.",
-        artifactId: draft.draftId
+        artifactId: draft.draftId,
+        revisionRef: {
+          artifactType: "ProductionDraft",
+          artifactId: draft.draftId,
+          revision: draft.revision,
+          createdAt: draft.createdAt
+        }
       });
       await caseApp.close();
       invalidApp = buildProductionApp({

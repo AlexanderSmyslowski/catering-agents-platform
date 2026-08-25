@@ -25,6 +25,7 @@ export async function buildProductionArtifacts(
   options: {
     context: BusinessContext;
     persistDiscoveredRecipes?: boolean;
+    allowQuantityRecipeBridgeResolver?: boolean;
     quantityRecipeBridges?: Record<string, QuantityRecipeProductionBridgeResult>;
     recipeEventUseReviews?: Record<string, RecipeEventUseReview>;
   }
@@ -59,6 +60,7 @@ export async function buildProductionArtifacts(
         servings,
         bridgeResult: options.quantityRecipeBridges?.[component.componentId],
         recipeEventUseReview: options.recipeEventUseReviews?.[component.componentId],
+        allowQuantityRecipeBridgeResolver: options.allowQuantityRecipeBridgeResolver,
         discoveryService,
         context: options.context,
         persistDiscoveredRecipes: options.persistDiscoveredRecipes !== false,

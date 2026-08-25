@@ -25,8 +25,14 @@ import {
   type ProductionPlan,
   type ProductionCase,
   type PurchaseList,
+  type QuantityDecisionInput,
+  type QuantityRecipeProductionBridgeResult,
+  type RecipeOutputMapping,
+  type RecipeEventUseReview,
   type TrustedActor,
   approvedProductionSpecIdForApproval,
+  evaluateQuantityDecision,
+  validateRecipeEventUseReview,
   validateApprovedProductionSpec,
   validateApprovalRequestRecord,
   validateCaseEvent,
@@ -34,7 +40,10 @@ import {
   validateProductionCase,
   validateProductionDraft
 } from "@catering/shared-core";
-import { validateProductionDecisionAggregate } from "../production-decision-aggregate.js";
+import {
+  validateProductionDecisionAggregate,
+  type ProductionDecisionAggregate
+} from "../production-decision-aggregate.js";
 import {
   createProductionDecisionCollections,
   productionDecisionTargetScopeFor,
@@ -64,6 +73,170 @@ export interface ProductionFeedbackContent {
   summary: string;
   observations: string[];
   changeRequests: string[];
+}
+
+/**
+ * A persisted, case- and revision-bound kitchen decision consumed by Prepare.
+ * The bridge is recomputed by the route before this record is stored; it is
+ * retained here as evidence so a later Prepare cannot silently invent a
+ * quantity or recipe approval.
+ */
+export interface ProductionPlanningEvidence {
+  schemaVersion: "1.0";
+  evidenceId: string;
+  businessId: string;
+  caseId: string;
+  draftId: string;
+  draftRevision: number;
+  eventSpecId: string;
+  componentId: string;
+  recipeId: string;
+  recipeSnapshotHash: string;
+  quantityDecision: QuantityDecisionInput;
+  recipeEventUseReview: RecipeEventUseReview;
+  outputMapping?: RecipeOutputMapping;
+  bridge: QuantityRecipeProductionBridgeResult;
+  recordedBy: {
+    name: string;
+    source: TrustedActor["source"];
+  };
+  recordedAt: string;
+}
+
+export type ProductionPlanningEvidenceBinding = Pick<
+  ProductionPlanningEvidence,
+  "businessId" | "caseId" | "draftId" | "draftRevision" | "componentId"
+>;
+
+export interface ProductionPlanningEvidenceScope {
+  getCase: (caseId: string) => Promise<ProductionCase | undefined>;
+  getDraft: (draftId: string) => Promise<ProductionDraft | undefined>;
+  hasDecisionEvidence: (draftId: string, draftRevision: number) => Promise<boolean>;
+  listDrafts: (caseId?: string) => Promise<ProductionDraft[]>;
+  listDraftsInLineage: (sourceDraftId: string) => Promise<ProductionDraft[]>;
+  findCaseIdForArtifact: (sourceArtifactId: string) => Promise<string | undefined>;
+  hasDirectDraftEvent: (draft: ProductionDraft) => Promise<boolean>;
+  hasReviewDecisionEvent: (
+    draftId: string,
+    cardId: string,
+    decidedAt: string,
+    text: string
+  ) => Promise<boolean>;
+  getEvidence: (evidenceId: string) => Promise<ProductionPlanningEvidence | undefined>;
+  listEvidence: (draftId?: string, draftRevision?: number) => Promise<ProductionPlanningEvidence[]>;
+  insertEvidence: (evidence: ProductionPlanningEvidence) => Promise<"created" | "exists">;
+  insertDraft: (draft: ProductionDraft) => Promise<"created" | "exists">;
+  setReviewDraft: (draft: ProductionDraft) => Promise<void>;
+  appendDraftCreatedEvent: (draft: ProductionDraft) => Promise<void>;
+  appendReviewDecisionEvent: (
+    draft: ProductionDraft,
+    input: { at: string; text: string; eventIdentity: string }
+  ) => Promise<void>;
+  supersedeDraft: (draft: ProductionDraft) => Promise<boolean>;
+  commitPreparedDraft: (sourceDraft: ProductionDraft, preparedDraft: ProductionDraft) => Promise<boolean>;
+  appendRevisionEvent: (
+    sourceDraft: ProductionDraft,
+    revision: ProductionDraft,
+    text: string
+  ) => Promise<void>;
+}
+
+export interface ProductionCaseApplyScope {
+  getDraft: (draftId: string) => Promise<ProductionDraft | undefined>;
+  getCaseEvent: (eventId: string) => Promise<CaseEvent | undefined>;
+  getDecisionAggregate: (approvalRequestId: string) => Promise<ProductionDecisionAggregate | undefined>;
+  listEvents: (caseId: string) => Promise<CaseEvent[]>;
+}
+
+export function productionPlanningEvidenceId(binding: ProductionPlanningEvidenceBinding): string {
+  return `production-planning-evidence-${createHash("sha256")
+    .update(JSON.stringify({
+      businessId: binding.businessId,
+      caseId: binding.caseId,
+      componentId: binding.componentId,
+      draftId: binding.draftId,
+      draftRevision: binding.draftRevision
+    }))
+    .digest("hex")}`;
+}
+
+function validateProductionPlanningEvidence(value: ProductionPlanningEvidence): ProductionPlanningEvidence {
+  const errors: string[] = [];
+  if (value.schemaVersion !== "1.0") errors.push("schemaVersion muss 1.0 sein.");
+  for (const [field, candidate] of [
+    ["evidenceId", value.evidenceId],
+    ["businessId", value.businessId],
+    ["caseId", value.caseId],
+    ["draftId", value.draftId],
+    ["eventSpecId", value.eventSpecId],
+    ["componentId", value.componentId],
+    ["recipeId", value.recipeId]
+  ] as const) {
+    if (!isNonEmptyString(candidate)) errors.push(`${field} ist erforderlich.`);
+  }
+  if (value.evidenceId !== productionPlanningEvidenceId(value)) {
+    errors.push("evidenceId muss exakt aus der semantischen Planungs-Evidenz-Bindung abgeleitet sein.");
+  }
+  if (!/^sha256:[0-9a-f]{64}$/u.test(value.recipeSnapshotHash ?? "")) {
+    errors.push("recipeSnapshotHash muss ein stabiler Rezept-Snapshot-Hash sein.");
+  }
+  if (!Number.isSafeInteger(value.draftRevision) || value.draftRevision < 1) {
+    errors.push("draftRevision muss eine positive Ganzzahl sein.");
+  }
+  if (!isNonEmptyString(value.recordedBy?.name) || !isNonEmptyString(value.recordedBy?.source)) {
+    errors.push("recordedBy muss Actor-Provenienz enthalten.");
+  }
+  if (!isNonEmptyString(value.recordedAt) || !Number.isFinite(Date.parse(value.recordedAt))) {
+    errors.push("recordedAt muss ein gültiger Zeitpunkt sein.");
+  }
+  try {
+    validateRecipeEventUseReview(value.recipeEventUseReview);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "RecipeEventUseReview ist ungültig.");
+  }
+  const quantity = evaluateQuantityDecision(value.quantityDecision);
+  if (!quantity.valid || !quantity.usableForPlanning || quantity.decision.reviewStatus !== "approved") {
+    errors.push("quantityDecision muss als menschliche Planungsentscheidung freigegeben sein.");
+  }
+  if (
+    value.quantityDecision?.eventSpecId !== value.eventSpecId ||
+    value.quantityDecision?.componentId !== value.componentId
+  ) {
+    errors.push("quantityDecision ist nicht exakt an EventSpec und Komponente gebunden.");
+  }
+  if (
+    value.recipeEventUseReview?.eventSpecId !== value.eventSpecId ||
+    value.recipeEventUseReview?.recipeId !== value.recipeId ||
+    value.recipeEventUseReview?.decision !== "accepted_for_event"
+  ) {
+    errors.push("RecipeEventUseReview ist nicht exakt an EventSpec und Rezept gebunden.");
+  }
+  if (value.outputMapping !== undefined) {
+    if (
+      value.outputMapping.recipeId !== value.recipeId ||
+      !Number.isFinite(value.outputMapping.outputAmount) || value.outputMapping.outputAmount <= 0 ||
+      !Number.isFinite(value.outputMapping.recipeServings) || value.outputMapping.recipeServings <= 0 ||
+      !isNonEmptyString(value.outputMapping.outputUnit) ||
+      !isNonEmptyString(value.outputMapping.reviewedBy) ||
+      value.outputMapping.reviewedBy !== value.recordedBy?.name ||
+      !isNonEmptyString(value.outputMapping.reviewedAt) ||
+      !Number.isFinite(Date.parse(value.outputMapping.reviewedAt))
+    ) {
+      errors.push("outputMapping muss an Rezept, Ausgabe und menschliche Prüferprovenienz gebunden sein.");
+    }
+  }
+  if (
+    value.bridge?.status !== "ready_for_scaling" ||
+    value.bridge?.eventSpecId !== value.eventSpecId ||
+    value.bridge?.componentId !== value.componentId ||
+    value.bridge?.recipeId !== value.recipeId
+  ) {
+    errors.push("Mengen-Rezept-Brücke ist nicht vollständig freigegeben oder falsch gebunden.");
+  }
+  if (errors.length > 0) {
+    throw new Error(`Ungültige ProductionPlanningEvidence: ${[...new Set(errors)].join("; ")}`);
+  }
+  return structuredClone(value);
 }
 
 export interface ProductionFeedbackDraft {
@@ -363,6 +536,61 @@ async function createProductionCaseInCollections(
   return persistCaseWithInitialEvent(collections, context, item, initialEvent);
 }
 
+async function reopenCaseForDraftContinuationInCollections(
+  collections: ProductionCaseCollections,
+  context: BusinessContext,
+  caseId: string,
+  draftId: string
+): Promise<"reopened" | "unchanged" | "missing"> {
+  const current = await collections.cases.get(context, caseId);
+  if (!current) return "missing";
+
+  const events = (await collections.events.list(context))
+    .filter((event) => event.caseId === caseId);
+  const continuationEvents = events.filter((event) =>
+    (event.kind === "draft_created" || event.kind === "revision_created") &&
+    event.artifactId === draftId
+  );
+  if (continuationEvents.length !== 1) {
+    throw new Error("ProductionDraft ist nicht eindeutig mit dem Produktionsauftrag verknüpft.");
+  }
+  const draftEvent = continuationEvents[0]!;
+  const latestDownstreamSequence = events
+    .filter((event) => event.kind === "approval" || event.kind === "result")
+    .reduce((maximum, event) => Math.max(maximum, event.sequence), 0);
+
+  // A retry of an already approved/applied draft must not reopen the case. Only a draft
+  // event later in the same timeline is a genuine continuation that invalidates old results.
+  if (draftEvent.sequence <= latestDownstreamSequence || current.status === "archived") {
+    return "unchanged";
+  }
+  if (
+    current.status === "open" &&
+    current.approvedProductionSpecId === undefined &&
+    current.currentPlanId === undefined &&
+    current.currentPurchaseListId === undefined
+  ) {
+    return "unchanged";
+  }
+
+  const {
+    approvedProductionSpecId: _approvedProductionSpecId,
+    currentPlanId: _currentPlanId,
+    currentPurchaseListId: _currentPurchaseListId,
+    ...caseWithoutOldResults
+  } = current;
+  const next = validateProductionCase({
+    ...caseWithoutOldResults,
+    status: "open",
+    version: current.version + 1,
+    updatedAt: current.updatedAt > draftEvent.at ? current.updatedAt : draftEvent.at
+  });
+  const updated = await collections.cases.compareAndSet(context, caseId, current.version, next);
+  if (updated === "updated") return "reopened";
+  if (updated === "missing") return "missing";
+  throw new Error("Produktionsauftrag wurde gleichzeitig verändert.");
+}
+
 function assertProductionCaseUpdate(
   existing: ProductionCase,
   next: ProductionCase,
@@ -411,6 +639,7 @@ export class ProductionStore {
   private readonly clarificationDrafts: BusinessScopedPersistentCollection<ClarificationDraft>;
   private readonly productionDrafts: BusinessScopedPersistentCollection<ProductionDraft>;
   private readonly productionFeedbackDrafts: BusinessScopedPersistentCollection<ProductionFeedbackDraft>;
+  private readonly productionPlanningEvidence: BusinessScopedPersistentCollection<ProductionPlanningEvidence>;
   private readonly approvals: BusinessScopedPersistentCollection<ApprovalRequestRecord>;
   private readonly approvedProductionSpecs: BusinessScopedPersistentCollection<ApprovedProductionSpec>;
   private readonly applyManifests: BusinessScopedPersistentCollection<ProductionApplyManifest>;
@@ -459,6 +688,14 @@ export class ProductionStore {
       collectionName: "production/feedback-drafts",
       getId: (draft) => draft.feedbackId,
       validate: validateProductionFeedbackDraftForStorage,
+      rootDir: options?.rootDir,
+      databaseUrl: options?.databaseUrl,
+      pgPool: options?.pgPool
+    });
+    this.productionPlanningEvidence = createBusinessScopedPersistentCollection<ProductionPlanningEvidence>({
+      collectionName: "production/planning-evidence",
+      getId: (evidence) => evidence.evidenceId,
+      validate: validateProductionPlanningEvidence,
       rootDir: options?.rootDir,
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
@@ -627,6 +864,309 @@ export class ProductionStore {
       }
       return scope.insertDraft(normalized);
     });
+  }
+
+  async insertProductionPlanningEvidence(
+    context: BusinessContext,
+    evidence: ProductionPlanningEvidence
+  ): Promise<"created" | "exists"> {
+    assertBusinessContext(context);
+    if (evidence.businessId !== context.businessId) {
+      throw new Error("ProductionPlanningEvidence gehört nicht zum aktuellen Betriebskontext.");
+    }
+    return this.productionPlanningEvidence.insert(context, evidence);
+  }
+
+  async withPlanningEvidenceCriticalSection<T>(
+    context: BusinessContext,
+    caseId: string,
+    draftId: string,
+    draftRevision: number,
+    operation: (scope: ProductionPlanningEvidenceScope) => Promise<T>
+  ): Promise<T> {
+    assertBusinessContext(context);
+    const storage = this.storageOptions;
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "production_case", artifactId: caseId, revision: 0 },
+      compatibilityTargets: [
+        { kind: "production_draft", artifactId: draftId, revision: 0 },
+        { kind: "production_draft", artifactId: draftId, revision: draftRevision }
+      ],
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Planungs-Evidenz-Warteschlange benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Planungs-Evidenz-Warteschlange ist ausgeschöpft.",
+      timeoutMessage: "Produktionsauftrag und Entwurf konnten für Planungs-Evidenz nicht gemeinsam gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Produktionsverlauf konnte für Planungs-Evidenz nicht gesperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Planungs-Evidenz benötigt einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const options = transactionalQueryable
+          ? { ...storage, pgPool: transactionalQueryable }
+          : storage;
+        const caseCollections = createProductionCaseCollections(options);
+        const decisionCollections = createProductionDecisionCollections(options);
+        const evidenceCollection = transactionalQueryable
+          ? createBusinessScopedPersistentCollection<ProductionPlanningEvidence>({
+            collectionName: "production/planning-evidence",
+            getId: (evidence) => evidence.evidenceId,
+            validate: validateProductionPlanningEvidence,
+            rootDir: storage.rootDir,
+            databaseUrl: storage.databaseUrl,
+            pgPool: transactionalQueryable
+          })
+          : this.productionPlanningEvidence;
+        const scope: ProductionPlanningEvidenceScope = {
+          getCase: (requestedCaseId) => caseCollections.cases.get(context, requestedCaseId),
+          getDraft: (requestedDraftId) => decisionCollections.drafts.get(context, requestedDraftId),
+          hasDecisionEvidence: async (requestedDraftId, requestedDraftRevision) => {
+            const target = {
+              kind: "production_draft" as const,
+              artifactId: requestedDraftId,
+              revision: requestedDraftRevision
+            };
+            const aggregate = await decisionCollections.decisionAggregates.get(
+              context,
+              approvalRequestIdForTarget({ businessId: context.businessId, target })
+            );
+            if (aggregate) return true;
+            return (await decisionCollections.approvals.list(context)).some((approval) =>
+              approval.target.kind === target.kind &&
+              approval.target.artifactId === target.artifactId &&
+              approval.target.revision === target.revision
+            );
+          },
+          listDrafts: async (requestedCaseId) => {
+            const drafts = await decisionCollections.drafts.list(context);
+            if (!requestedCaseId) return drafts;
+            const linkedArtifactIds = new Set((await caseCollections.events.list(context))
+              .filter((event) => event.caseId === requestedCaseId)
+              .flatMap((event) => [event.artifactId, event.revisionRef?.artifactId].filter(
+                (artifactId): artifactId is string => Boolean(artifactId)
+              )));
+            return drafts.filter((draft) => linkedArtifactIds.has(draft.draftId));
+          },
+          listDraftsInLineage: async (sourceDraftId) => {
+            const drafts = await decisionCollections.drafts.list(context);
+            const descendants = new Set([sourceDraftId]);
+            let changed = true;
+            while (changed) {
+              changed = false;
+              for (const candidate of drafts) {
+                if (candidate.supersedesDraftId && descendants.has(candidate.supersedesDraftId) && !descendants.has(candidate.draftId)) {
+                  descendants.add(candidate.draftId);
+                  changed = true;
+                }
+              }
+            }
+            return drafts.filter((draft) => descendants.has(draft.draftId));
+          },
+          findCaseIdForArtifact: async (sourceArtifactId) => {
+            const linkedCaseIds = [...new Set((await caseCollections.events.list(context))
+              .filter((event) =>
+                event.artifactId === sourceArtifactId || event.revisionRef?.artifactId === sourceArtifactId
+              )
+              .map((event) => event.caseId))];
+            if (linkedCaseIds.length > 1) {
+              throw new Error("Produktionsartefakt ist mehreren Produktionsaufträgen zugeordnet.");
+            }
+            return linkedCaseIds[0];
+          },
+          hasDirectDraftEvent: async (draft) => {
+            const events = (await caseCollections.events.list(context))
+              .filter((event) => event.caseId === caseId);
+            return events.some((event) => {
+              const revisionRef = event.revisionRef;
+              if (draft.supersedesDraftId) {
+                return event.kind === "revision_created" &&
+                  revisionRef?.artifactType === "ProductionDraft" &&
+                  revisionRef.artifactId === draft.draftId &&
+                  revisionRef.revision === draft.revision &&
+                  revisionRef.createdAt === draft.createdAt &&
+                  revisionRef.supersedesArtifactId === draft.supersedesDraftId;
+              }
+              return event.kind === "draft_created" &&
+                event.artifactId === draft.draftId &&
+                revisionRef?.artifactType === "ProductionDraft" &&
+                revisionRef.artifactId === draft.draftId &&
+                revisionRef.revision === draft.revision &&
+                revisionRef.createdAt === draft.createdAt;
+            });
+          },
+          hasReviewDecisionEvent: async (draftId, cardId, decidedAt, text) => {
+            const eventIdentity = `review:${draftId}:${cardId}:${decidedAt}`;
+            const eventId = `production-case-event-${createHash("sha256")
+              .update(`${context.businessId}\0${caseId}\0review_decision\0${eventIdentity}`)
+              .digest("hex")}`;
+            const event = await caseCollections.events.get(context, eventId);
+            return event?.kind === "review_decision" &&
+              event.artifactId === draftId &&
+              event.at === decidedAt &&
+              event.role === "user" &&
+              event.text === text;
+          },
+          getEvidence: (evidenceId) => evidenceCollection.get(context, evidenceId),
+          listEvidence: async (requestedDraftId, requestedRevision) => (await evidenceCollection.list(context))
+            .filter((evidence) => requestedDraftId === undefined || evidence.draftId === requestedDraftId)
+            .filter((evidence) => requestedRevision === undefined || evidence.draftRevision === requestedRevision)
+            .sort((left, right) => left.componentId.localeCompare(right.componentId) || left.evidenceId.localeCompare(right.evidenceId)),
+          insertEvidence: (evidence) => evidenceCollection.insert(context, evidence),
+          insertDraft: (draft) => decisionCollections.drafts.insert(context, draft),
+          setReviewDraft: (draft) => decisionCollections.drafts.set(context, draft),
+          appendDraftCreatedEvent: async (draft) => {
+            await this.appendEventInCollections(
+              context,
+              caseId,
+              {
+                at: draft.createdAt,
+                role: "assistant",
+                kind: "draft_created",
+                text: "Produktionsentwurf erstellt.",
+                artifactId: draft.draftId,
+                revisionRef: {
+                  artifactType: "ProductionDraft",
+                  artifactId: draft.draftId,
+                  revision: draft.revision,
+                  createdAt: draft.createdAt,
+                  ...(draft.supersedesDraftId ? { supersedesArtifactId: draft.supersedesDraftId } : {})
+                }
+              },
+              draft.draftId,
+              caseCollections
+            );
+            const caseUpdate = await reopenCaseForDraftContinuationInCollections(
+              caseCollections,
+              context,
+              caseId,
+              draft.draftId
+            );
+            if (caseUpdate === "missing") {
+              throw new Error("ProductionCase wurde nicht gefunden.");
+            }
+          },
+          appendReviewDecisionEvent: async (draft, input) => {
+            await this.appendEventInCollections(
+              context,
+              caseId,
+              {
+                at: input.at,
+                role: "user",
+                kind: "review_decision",
+                text: input.text,
+                artifactId: draft.draftId
+              },
+              input.eventIdentity,
+              caseCollections
+            );
+          },
+          appendRevisionEvent: async (sourceDraft, revision, text) => {
+            await this.appendEventInCollections(
+              context,
+              caseId,
+              {
+                at: revision.createdAt,
+                role: "assistant",
+                kind: "revision_created",
+                text,
+                artifactId: revision.draftId,
+                revisionRef: {
+                  artifactType: "ProductionDraft",
+                  artifactId: revision.draftId,
+                  revision: revision.revision,
+                  createdAt: revision.createdAt,
+                  supersedesArtifactId: sourceDraft.draftId
+                }
+              },
+              `revision:${revision.draftId}`,
+              caseCollections
+            );
+            const caseUpdate = await reopenCaseForDraftContinuationInCollections(
+              caseCollections,
+              context,
+              caseId,
+              revision.draftId
+            );
+            if (caseUpdate === "missing") {
+              throw new Error("ProductionCase wurde nicht gefunden.");
+            }
+          },
+          supersedeDraft: async (sourceDraft) => {
+            const current = await decisionCollections.drafts.get(context, sourceDraft.draftId);
+            if (!current || current.status !== "pending_review" || !areJsonValuesEqual(current, sourceDraft)) return false;
+            const target = {
+              kind: "production_draft" as const,
+              artifactId: sourceDraft.draftId,
+              revision: sourceDraft.revision
+            };
+            const aggregate = await decisionCollections.decisionAggregates.get(
+              context,
+              approvalRequestIdForTarget({ businessId: sourceDraft.businessId, target })
+            );
+            const approvals = (await decisionCollections.approvals.list(context)).filter((approval) =>
+              approval.target.kind === target.kind &&
+              approval.target.artifactId === target.artifactId &&
+              approval.target.revision === target.revision
+            );
+            if (aggregate || approvals.length > 0) return false;
+            await decisionCollections.drafts.set(context, validateProductionDraft({ ...sourceDraft, status: "superseded" }));
+            return true;
+          },
+          commitPreparedDraft: async (sourceDraft, preparedDraft) => {
+            const current = await decisionCollections.drafts.get(context, sourceDraft.draftId);
+            if (!current || current.status !== "pending_review" || !areJsonValuesEqual(current, sourceDraft)) return false;
+            const target = {
+              kind: "production_draft" as const,
+              artifactId: sourceDraft.draftId,
+              revision: sourceDraft.revision
+            };
+            const aggregate = await decisionCollections.decisionAggregates.get(
+              context,
+              approvalRequestIdForTarget({ businessId: sourceDraft.businessId, target })
+            );
+            const approvals = (await decisionCollections.approvals.list(context)).filter((approval) =>
+              approval.target.kind === target.kind &&
+              approval.target.artifactId === target.artifactId &&
+              approval.target.revision === target.revision
+            );
+            if (aggregate || approvals.length > 0) return false;
+            const inserted = await decisionCollections.drafts.insert(context, preparedDraft);
+            if (inserted === "exists") {
+              const existing = await decisionCollections.drafts.get(context, preparedDraft.draftId);
+              if (!existing || !areJsonValuesEqual(existing, preparedDraft)) return false;
+            }
+            await decisionCollections.drafts.set(context, validateProductionDraft({ ...sourceDraft, status: "superseded" }));
+            return true;
+          }
+        };
+        const run = () => operation(scope);
+        if (transactionalQueryable) return run();
+        return productionDecisionRepositoryFor(this).withTargetCriticalSection(
+          context,
+          { kind: "production_draft", artifactId: draftId, revision: draftRevision },
+          run
+        );
+      }
+    });
+  }
+
+  async getProductionPlanningEvidence(
+    context: BusinessContext,
+    evidenceId: string
+  ): Promise<ProductionPlanningEvidence | undefined> {
+    assertBusinessContext(context);
+    return this.productionPlanningEvidence.get(context, evidenceId);
+  }
+
+  async listProductionPlanningEvidence(
+    context: BusinessContext,
+    draftId?: string,
+    draftRevision?: number
+  ): Promise<ProductionPlanningEvidence[]> {
+    assertBusinessContext(context);
+    return (await this.productionPlanningEvidence.list(context))
+      .filter((evidence) => draftId === undefined || evidence.draftId === draftId)
+      .filter((evidence) => draftRevision === undefined || evidence.draftRevision === draftRevision)
+      .sort((left, right) => left.componentId.localeCompare(right.componentId) || left.evidenceId.localeCompare(right.evidenceId));
   }
 
   async getProductionDraft(
@@ -841,7 +1381,8 @@ export class ProductionStore {
   async withCaseApplyCriticalSection<T>(
     context: BusinessContext,
     caseId: string,
-    operation: (current: ProductionCase) => Promise<T>
+    operation: (current: ProductionCase, scope: ProductionCaseApplyScope) => Promise<T>,
+    draftTarget?: { draftId: string; revision: number }
   ): Promise<T | undefined> {
     assertBusinessContext(context);
     const storage = this.storageOptions;
@@ -849,6 +1390,12 @@ export class ProductionStore {
       storage,
       context,
       target: { kind: "production_case", artifactId: caseId, revision: 0 },
+      compatibilityTargets: draftTarget
+        ? [
+          { kind: "production_draft", artifactId: draftTarget.draftId, revision: 0 },
+          { kind: "production_draft", artifactId: draftTarget.draftId, revision: draftTarget.revision }
+        ]
+        : undefined,
       collectionNamespace: "production/case-events",
       queueFullMessage: "Die Warteschlange für Produktionsverläufe benötigt eine betriebliche Bereinigung.",
       queueExhaustedMessage: "Die Warteschlange für Produktionsverläufe ist ausgeschöpft.",
@@ -859,8 +1406,20 @@ export class ProductionStore {
         const collections = transactionalQueryable
           ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
           : { cases: this.cases, events: this.caseEvents };
+        const decisionCollections = transactionalQueryable
+          ? createProductionDecisionCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : createProductionDecisionCollections(storage);
         const current = await collections.cases.get(context, caseId);
-        return current ? operation(current) : undefined;
+        if (!current) return undefined;
+        const scope: ProductionCaseApplyScope = {
+          getDraft: (draftId) => decisionCollections.drafts.get(context, draftId),
+          getCaseEvent: (eventId) => collections.events.get(context, eventId),
+          getDecisionAggregate: (approvalRequestId) => decisionCollections.decisionAggregates.get(context, approvalRequestId),
+          listEvents: async (requestedCaseId) => (await collections.events.list(context))
+            .filter((event) => event.caseId === requestedCaseId)
+            .sort((left, right) => left.sequence - right.sequence || left.eventId.localeCompare(right.eventId))
+        };
+        return operation(current, scope);
       }
     });
   }
@@ -1088,53 +1647,7 @@ export class ProductionStore {
         const collections = transactionalQueryable
           ? createProductionCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
           : { cases: this.cases, events: this.caseEvents };
-        const current = await collections.cases.get(context, caseId);
-        if (!current) return "missing";
-
-        const events = (await collections.events.list(context))
-          .filter((event) => event.caseId === caseId);
-        const continuationEvents = events.filter((event) =>
-          (event.kind === "draft_created" || event.kind === "revision_created") &&
-          event.artifactId === draftId
-        );
-        if (continuationEvents.length !== 1) {
-          throw new Error("ProductionDraft ist nicht eindeutig mit dem Produktionsauftrag verknüpft.");
-        }
-        const draftEvent = continuationEvents[0]!;
-        const latestDownstreamSequence = events
-          .filter((event) => event.kind === "approval" || event.kind === "result")
-          .reduce((maximum, event) => Math.max(maximum, event.sequence), 0);
-
-        // A retry of an already approved/applied draft must not reopen the case. Only a draft
-        // event later in the same timeline is a genuine continuation that invalidates old results.
-        if (draftEvent.sequence <= latestDownstreamSequence || current.status === "archived") {
-          return "unchanged";
-        }
-        if (
-          current.status === "open" &&
-          current.approvedProductionSpecId === undefined &&
-          current.currentPlanId === undefined &&
-          current.currentPurchaseListId === undefined
-        ) {
-          return "unchanged";
-        }
-
-        const {
-          approvedProductionSpecId: _approvedProductionSpecId,
-          currentPlanId: _currentPlanId,
-          currentPurchaseListId: _currentPurchaseListId,
-          ...caseWithoutOldResults
-        } = current;
-        const next = validateProductionCase({
-          ...caseWithoutOldResults,
-          status: "open",
-          version: current.version + 1,
-          updatedAt: current.updatedAt > draftEvent.at ? current.updatedAt : draftEvent.at
-        });
-        const updated = await collections.cases.compareAndSet(context, caseId, current.version, next);
-        if (updated === "updated") return "reopened";
-        if (updated === "missing") return "missing";
-        throw new Error("Produktionsauftrag wurde gleichzeitig verändert.");
+        return reopenCaseForDraftContinuationInCollections(collections, context, caseId, draftId);
       }
     });
   }

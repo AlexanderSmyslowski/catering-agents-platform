@@ -12,13 +12,15 @@ import {
   type AuditLogStore,
   type BusinessContext,
   type ProductionHandoff,
+  type ProductionDraft,
   type ProductionApplyManifest,
   type TrustedActor
 } from "@catering/shared-core";
 import type { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 import {
   productionDecisionRepositoryFor,
-  type ProductionStore
+  type ProductionStore,
+  type ProductionCaseApplyScope
 } from "../repositories/production-store.js";
 import type { ProductionDecisionTargetScope } from "../repositories/production-decision-repository.js";
 import type { IntakeRecordsPort } from "../ports/intake-records-port.js";
@@ -185,6 +187,225 @@ function offerHandoffIdFor(sourceRef: string | undefined): string | undefined {
   return handoffId.length > 0 ? handoffId : undefined;
 }
 
+function reviewDecisionEventText(decision: ProductionDraft["reviewCards"][number]["decision"]): string {
+  const decisionLabel = {
+    pending: "Offen",
+    fits: "Passt",
+    change_requested: "Änderung nötig",
+    unclear: "Unklar",
+    blocked: "Blockiert"
+  }[decision];
+  return `Prüfpunkt als „${decisionLabel}“ bewertet.`;
+}
+
+async function canonicalDraftTimelineError(
+  store: ProductionStore,
+  actor: TrustedActor,
+  draft: ProductionDraft
+): Promise<string | undefined> {
+  const lineage: ProductionDraft[] = [];
+  const seen = new Set<string>();
+  let current: ProductionDraft | undefined = draft;
+  while (current) {
+    if (seen.has(current.draftId) || lineage.length >= 100) {
+      return "ProductionDraft-Lineage ist nicht vollständig oder nicht eindeutig projiziert.";
+    }
+    seen.add(current.draftId);
+    lineage.push(current);
+    const predecessorId = current.supersedesDraftId;
+    if (!predecessorId) break;
+    current = await store.getProductionDraft(actor, predecessorId);
+    if (!current) {
+      return "ProductionDraft-Lineage ist nicht vollständig oder nicht eindeutig projiziert.";
+    }
+  }
+  const root = lineage.at(-1);
+  const handoffId = offerHandoffIdFor(root?.source.sourceRef);
+  if (!handoffId) return undefined;
+  const caseIds = new Set<string>();
+  for (const candidate of lineage) {
+    const caseId = await store.findCaseIdForArtifact(actor, candidate.draftId);
+    if (caseId) caseIds.add(caseId);
+  }
+  if (caseIds.size !== 1) {
+    return "ProductionDraft ist nicht exakt an die kanonische Offer-/Handoff-Case-Identität gebunden.";
+  }
+  const caseId = [...caseIds][0]!;
+  const productionCase = await store.getCase(actor, caseId);
+  if (
+    !productionCase ||
+    productionCase.productionHandoffId !== handoffId ||
+    productionCase.sourceSpecId !== root?.draftArtifacts.eventSpec?.specId
+  ) {
+    return "ProductionDraft ist nicht exakt an die kanonische Offer-/Handoff-Case-Identität gebunden.";
+  }
+  const events = await store.listEvents(actor, caseId);
+  for (const candidate of lineage) {
+    const direct = events.some((event) => {
+      const revisionRef = event.revisionRef;
+      if (candidate.supersedesDraftId) {
+        return event.kind === "revision_created" &&
+          revisionRef?.artifactType === "ProductionDraft" &&
+          revisionRef.artifactId === candidate.draftId &&
+          revisionRef.revision === candidate.revision &&
+          revisionRef.createdAt === candidate.createdAt &&
+          revisionRef.supersedesArtifactId === candidate.supersedesDraftId;
+      }
+      return event.kind === "draft_created" &&
+        event.artifactId === candidate.draftId &&
+        revisionRef?.artifactType === "ProductionDraft" &&
+        revisionRef.artifactId === candidate.draftId &&
+        revisionRef.revision === candidate.revision &&
+        revisionRef.createdAt === candidate.createdAt;
+    });
+    if (!direct) {
+      return "ProductionDraft besitzt keine direkte kanonische Case-Timeline-Projektion.";
+    }
+  }
+  return undefined;
+}
+
+async function canonicalReviewProjectionError(
+  store: ProductionStore,
+  actor: TrustedActor,
+  draft: ProductionDraft,
+  caseId: string
+): Promise<string | undefined> {
+  const valid = await store.withPlanningEvidenceCriticalSection(
+    actor,
+    caseId,
+    draft.draftId,
+    draft.revision,
+    async (scope) => {
+      const current = await scope.getDraft(draft.draftId);
+      if (!current || !areJsonValuesEqual(current, draft)) return false;
+      const lineage: ProductionDraft[] = [];
+      const seen = new Set<string>();
+      let lineageDraft: ProductionDraft | undefined = current;
+      while (lineageDraft) {
+        if (seen.has(lineageDraft.draftId) || lineage.length >= 100) return false;
+        seen.add(lineageDraft.draftId);
+        lineage.push(lineageDraft);
+        const predecessorId = lineageDraft.supersedesDraftId;
+        if (!predecessorId) break;
+        lineageDraft = await scope.getDraft(predecessorId);
+        if (!lineageDraft) return false;
+      }
+      for (const candidate of lineage) {
+        for (const card of candidate.reviewCards) {
+          if (!card.decidedAt) {
+            if (card.decision !== "pending") return false;
+            continue;
+          }
+          if (!await scope.hasReviewDecisionEvent(
+            candidate.draftId,
+            card.cardId,
+            card.decidedAt,
+            reviewDecisionEventText(card.decision)
+          )) return false;
+        }
+      }
+      return true;
+    }
+  );
+  return valid
+    ? undefined
+    : "ProductionDraft besitzt nicht für jede persistierte Review-Entscheidung ein kanonisches Case-Ereignis.";
+}
+
+async function canonicalReviewProjectionErrorAtDecisionScope(
+  actor: TrustedActor,
+  scope: Pick<ProductionDecisionTargetScope, "getDraft" | "getCaseEvent">,
+  expectedCurrent: ProductionDraft,
+  reviewSource: ProductionDraft,
+  caseId: string,
+  persistedCurrent?: ProductionDraft
+): Promise<string | undefined> {
+  const current = persistedCurrent ?? await scope.getDraft(expectedCurrent.draftId);
+  if (
+    expectedCurrent.draftId !== reviewSource.draftId ||
+    expectedCurrent.revision !== reviewSource.revision ||
+    !current ||
+    !areJsonValuesEqual(current, expectedCurrent)
+  ) {
+    return "ProductionDraft wurde während der Freigabe verändert oder entschieden.";
+  }
+  const lineage: ProductionDraft[] = [];
+  const seen = new Set<string>();
+  let lineageDraft: ProductionDraft | undefined = reviewSource;
+  while (lineageDraft) {
+    if (seen.has(lineageDraft.draftId) || lineage.length >= 100) {
+      return "ProductionDraft-Lineage ist nicht vollständig oder nicht eindeutig projiziert.";
+    }
+    seen.add(lineageDraft.draftId);
+    lineage.push(lineageDraft);
+    const predecessorId = lineageDraft.supersedesDraftId;
+    if (!predecessorId) break;
+    lineageDraft = await scope.getDraft(predecessorId);
+    if (!lineageDraft) {
+      return "ProductionDraft-Lineage ist nicht vollständig oder nicht eindeutig projiziert.";
+    }
+  }
+  for (const candidate of lineage) {
+    for (const card of candidate.reviewCards) {
+      if (!card.decidedAt) {
+        if (card.decision !== "pending") {
+          return "ProductionDraft besitzt nicht für jede persistierte Review-Entscheidung ein kanonisches Case-Ereignis.";
+        }
+        continue;
+      }
+      const eventIdentity = `review:${candidate.draftId}:${card.cardId}:${card.decidedAt}`;
+      const eventId = `production-case-event-${createHash("sha256")
+        .update(`${actor.businessId}\0${caseId}\0review_decision\0${eventIdentity}`)
+        .digest("hex")}`;
+      const event = await scope.getCaseEvent(eventId);
+      if (
+        !event ||
+        event.caseId !== caseId ||
+        event.kind !== "review_decision" ||
+        event.artifactId !== candidate.draftId ||
+        event.at !== card.decidedAt ||
+        event.role !== "user" ||
+        event.text !== reviewDecisionEventText(card.decision)
+      ) {
+        return "ProductionDraft besitzt nicht für jede persistierte Review-Entscheidung ein kanonisches Case-Ereignis.";
+      }
+    }
+  }
+  return undefined;
+}
+
+async function canonicalDecisionContinuationErrorAtDecisionScope(
+  scope: Pick<ProductionDecisionTargetScope, "listCaseEvents">,
+  caseId: string,
+  aggregate: ProductionDecisionAggregate
+): Promise<string | undefined> {
+  const target = aggregate.approval.target;
+  const latestDraftEvent = (await scope.listCaseEvents(caseId))
+    .filter((event) => event.kind === "draft_created" || event.kind === "revision_created")
+    .sort((left, right) => right.sequence - left.sequence)[0];
+  const revisionRef = latestDraftEvent?.revisionRef;
+  const expectedSupersedes = aggregate.decidedDraft.supersedesDraftId;
+  const directEventMatches = expectedSupersedes
+    ? latestDraftEvent?.kind === "revision_created" && revisionRef?.supersedesArtifactId === expectedSupersedes
+    : latestDraftEvent?.kind === "draft_created" && revisionRef?.supersedesArtifactId === undefined;
+  if (
+    target.kind !== "production_draft" ||
+    target.artifactId !== aggregate.decidedDraft.draftId ||
+    target.revision !== aggregate.decidedDraft.revision ||
+    !latestDraftEvent ||
+    latestDraftEvent.artifactId !== aggregate.decidedDraft.draftId ||
+    !directEventMatches ||
+    revisionRef?.artifactType !== "ProductionDraft" ||
+    revisionRef.artifactId !== aggregate.decidedDraft.draftId ||
+    revisionRef.revision !== aggregate.decidedDraft.revision ||
+    revisionRef.createdAt !== aggregate.decidedDraft.createdAt
+  ) {
+    return "ProductionDraft wurde nach der Freigabe fortgesetzt.";
+  }
+  return undefined;
+}
+
 async function handoffSnapshotConsistencyError(
   store: ProductionStore,
   handoffReader: ProductionHandoffReader | undefined,
@@ -241,7 +462,8 @@ async function productionCaseApplyConsistencyError(
   store: ProductionStore,
   actor: TrustedActor,
   currentCase: Awaited<ReturnType<ProductionStore["getCase"]>>,
-  approvedSpec: ApprovedProductionSpec
+  approvedSpec: ApprovedProductionSpec,
+  scope?: ProductionCaseApplyScope
 ): Promise<string | undefined> {
   if (!currentCase || currentCase.approvedProductionSpecId !== approvedSpec.approvedProductionSpecId) {
     return "ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag.";
@@ -250,7 +472,9 @@ async function productionCaseApplyConsistencyError(
     return "ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag.";
   }
 
-  const events = await store.listEvents(actor, currentCase.caseId);
+  const events = scope
+    ? await scope.listEvents(currentCase.caseId)
+    : await store.listEvents(actor, currentCase.caseId);
   const latestDraftEvent = events
     .filter((event) => event.kind === "draft_created" || event.kind === "revision_created")
     .sort((left, right) => right.sequence - left.sequence)[0];
@@ -391,9 +615,26 @@ export function registerProductionApprovalRoutes(
     }
     const existingAggregate = aggregateCandidates[0];
     const observedDraft = existingAggregate
-      ? existingAggregate.sourceDraft
+      ? existingAggregate.decidedDraft
       : await store.getProductionDraft(actor, request.params.draftId);
     if (!observedDraft) return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+    const canonicalTimelineError = await canonicalDraftTimelineError(store, actor, observedDraft);
+    if (canonicalTimelineError) {
+      return reply.code(409).send({ message: canonicalTimelineError });
+    }
+    const linkedCaseId = await store.findCaseIdForArtifact(actor, observedDraft.draftId);
+    const linkedCase = linkedCaseId ? await store.getCase(actor, linkedCaseId) : undefined;
+    if (!existingAggregate && linkedCaseId && linkedCase?.productionHandoffId) {
+      const reviewProjectionError = await canonicalReviewProjectionError(
+        store,
+        actor,
+        observedDraft,
+        linkedCaseId
+      );
+      if (reviewProjectionError) {
+        return reply.code(409).send({ message: reviewProjectionError });
+      }
+    }
     const target = existingAggregate?.approval.target ?? {
       kind: "production_draft" as const,
       artifactId: observedDraft.draftId,
@@ -413,6 +654,50 @@ export function registerProductionApprovalRoutes(
         if (!sameApproval(persistedAggregate.approval, requestedApproval)) {
           return { kind: "conflict" as const, message: "ProductionDraft-Revision wurde bereits anders entschieden." };
         }
+        if (
+          request.body.decision === "approved" &&
+          persistedAggregate.approvedProductionSpec &&
+          (
+            persistedAggregate.approvedProductionSpec.artifacts.productionPlan.readiness.status === "insufficient" ||
+            (persistedAggregate.approvedProductionSpec.artifacts.productionPlan.blockingIssues?.length ?? 0) > 0
+          )
+        ) {
+          return {
+            kind: "readiness_conflict" as const,
+            errors: ["production readiness is insufficient"]
+          };
+        }
+        if (linkedCaseId && linkedCase?.productionHandoffId) {
+          const continuationError = await canonicalDecisionContinuationErrorAtDecisionScope(
+            scope,
+            linkedCaseId,
+            persistedAggregate
+          );
+          if (continuationError) {
+            return { kind: "conflict" as const, message: continuationError };
+          }
+          const persistedCurrent = await scope.getDraft(persistedAggregate.decidedDraft.draftId);
+          if (
+            !persistedCurrent ||
+            (
+              !areJsonValuesEqual(persistedCurrent, persistedAggregate.sourceDraft) &&
+              !areJsonValuesEqual(persistedCurrent, persistedAggregate.decidedDraft)
+            )
+          ) {
+            return { kind: "conflict" as const, message: "ProductionDraft wurde während der Freigabe verändert oder entschieden." };
+          }
+          const reviewProjectionError = await canonicalReviewProjectionErrorAtDecisionScope(
+            actor,
+            scope,
+            persistedCurrent,
+            persistedAggregate.sourceDraft,
+            linkedCaseId,
+            persistedCurrent
+          );
+          if (reviewProjectionError) {
+            return { kind: "conflict" as const, message: reviewProjectionError };
+          }
+        }
         await projectDecisionAggregate(scope, persistedAggregate);
         return { kind: "decided" as const, aggregate: persistedAggregate };
       }
@@ -421,6 +706,18 @@ export function registerProductionApprovalRoutes(
       if (!draft) return { kind: "not_found" as const };
       if (draft.revision !== target.revision) {
         return { kind: "conflict" as const, message: "ProductionDraft-Revision wurde gleichzeitig verändert." };
+      }
+      if (linkedCaseId && linkedCase?.productionHandoffId) {
+        const reviewProjectionError = await canonicalReviewProjectionErrorAtDecisionScope(
+          actor,
+          scope,
+          draft,
+          draft,
+          linkedCaseId
+        );
+        if (reviewProjectionError) {
+          return { kind: "conflict" as const, message: reviewProjectionError };
+        }
       }
       const existingApprovals = await scope.listApprovalsForTarget();
       if (existingApprovals.length > 1) {
@@ -447,6 +744,8 @@ export function registerProductionApprovalRoutes(
           .filter((recipeId): recipeId is string => Boolean(recipeId)) ?? [];
         const incomplete = !eventSpec || !productionPlan || !purchaseList || !Array.isArray(recipes) ||
           selectedRecipeIds.some((recipeId) => !recipes?.some((recipe) => recipe.recipeId === recipeId));
+        const planningInsufficient = productionPlan?.readiness.status === "insufficient" ||
+          (productionPlan?.blockingIssues?.length ?? 0) > 0;
         if (unresolvedCards.length > 0 || incomplete) {
           return {
             kind: "unprocessable" as const,
@@ -454,6 +753,12 @@ export function registerProductionApprovalRoutes(
               ...unresolvedCards.map((card) => `reviewCard ${card.cardId} is ${card.decision}`),
               ...(incomplete ? ["eventSpec, productionPlan, purchaseList und recipes müssen vollständig vorliegen"] : [])
             ]
+          };
+        }
+        if (planningInsufficient) {
+          return {
+            kind: "readiness_conflict" as const,
+            errors: ["production readiness is insufficient"]
           };
         }
       }
@@ -476,7 +781,7 @@ export function registerProductionApprovalRoutes(
       }
       await projectDecisionAggregate(scope, authoritative);
       return { kind: "decided" as const, aggregate: authoritative };
-    });
+    }, linkedCaseId && linkedCase?.productionHandoffId ? linkedCaseId : undefined);
 
     if (resolution.kind === "not_found") {
       return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
@@ -487,6 +792,12 @@ export function registerProductionApprovalRoutes(
     if (resolution.kind === "unprocessable") {
       return reply.code(422).send({
         message: "ProductionDraft-Snapshot ist noch nicht vollständig freigabefähig.",
+        errors: resolution.errors
+      });
+    }
+    if (resolution.kind === "readiness_conflict") {
+      return reply.code(409).send({
+        message: "ProductionDraft ist wegen unzureichender Produktionsbereitschaft nicht freigabefähig.",
         errors: resolution.errors
       });
     }
@@ -541,6 +852,15 @@ export function registerProductionApprovalRoutes(
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const approvedSpec = await store.getApprovedProductionSpec(actor, request.params.approvedProductionSpecId);
       if (!approvedSpec) return reply.code(404).send({ message: "ApprovedProductionSpec nicht gefunden." });
+      if (
+        approvedSpec.artifacts.productionPlan.readiness.status === "insufficient" ||
+        (approvedSpec.artifacts.productionPlan.blockingIssues?.length ?? 0) > 0
+      ) {
+        return reply.code(409).send({
+          message: "ApprovedProductionSpec ist wegen unzureichender Produktionsbereitschaft nicht freigabefähig.",
+          errors: ["production readiness is insufficient"]
+        });
+      }
       const snapshotConflict = await approvedSnapshotConsistencyError(store, actor, approvedSpec);
       if (snapshotConflict) {
         return reply.code(409).send({
@@ -568,13 +888,50 @@ export function registerProductionApprovalRoutes(
           errors: ["ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag."]
         });
       }
-      const applyResult = await store.withCaseApplyCriticalSection(actor, caseId, async (currentCase) => {
-        const caseConflict = await productionCaseApplyConsistencyError(store, actor, currentCase, approvedSpec);
+      const applyResult = await store.withCaseApplyCriticalSection(actor, caseId, async (currentCase, applyScope) => {
+        const caseConflict = await productionCaseApplyConsistencyError(store, actor, currentCase, approvedSpec, applyScope);
         if (caseConflict) {
           return reply.code(409).send({
             message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
             errors: [caseConflict]
           });
+        }
+
+        const aggregate = await applyScope.getDecisionAggregate(approvedSpec.approvalRequestId);
+        if (
+          !aggregate ||
+          !aggregate.approvedProductionSpec ||
+          !areJsonValuesEqual(aggregate.approvedProductionSpec, approvedSpec) ||
+          aggregate.sourceDraft.draftId !== approvedSpec.sourceDraft.draftId ||
+          aggregate.sourceDraft.revision !== approvedSpec.sourceDraft.revision
+        ) {
+          return reply.code(409).send({
+            message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
+            errors: ["ApprovedProductionSpec stimmt nicht mit der unveränderlichen Freigabeevidenz überein."]
+          });
+        }
+        const currentDraft = await applyScope.getDraft(approvedSpec.sourceDraft.draftId);
+        if (!currentDraft || !areJsonValuesEqual(currentDraft, aggregate.decidedDraft)) {
+          return reply.code(409).send({
+            message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
+            errors: ["ProductionDraft stimmt nicht mit der unveränderlichen Freigabeevidenz überein."]
+          });
+        }
+        const sourceRefHandoffId = offerHandoffIdFor(currentDraft?.source.sourceRef);
+        if (sourceRefHandoffId && currentCase.productionHandoffId === sourceRefHandoffId) {
+          const reviewProjectionError = await canonicalReviewProjectionErrorAtDecisionScope(
+            actor,
+            applyScope,
+            aggregate.decidedDraft,
+            aggregate.sourceDraft,
+            caseId
+          );
+          if (reviewProjectionError) {
+            return reply.code(409).send({
+              message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
+              errors: [reviewProjectionError]
+            });
+          }
         }
 
         const { eventSpec, productionPlan, purchaseList, recipes } = approvedSpec.artifacts;
@@ -745,7 +1102,7 @@ export function registerProductionApprovalRoutes(
         artifactId: productionPlan.planId
       });
       return reply.send({ eventSpec, plan: productionPlan, purchaseList, recipes });
-      });
+      }, { draftId: approvedSpec.sourceDraft.draftId, revision: approvedSpec.sourceDraft.revision });
       return applyResult ?? reply.code(409).send({
         message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
         errors: ["ApprovedProductionSpec gehört nicht mehr zum aktuellen freigegebenen Produktionsauftrag."]
