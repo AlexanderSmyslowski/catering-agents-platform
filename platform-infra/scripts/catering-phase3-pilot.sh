@@ -223,6 +223,18 @@ network_id() {
   value="$(docker network inspect --format '{{.Id}}' "${network}")" || fail
   canonical_network_id "${value}"
 }
+network_present_by_name() {
+  local network="$1" listing count
+  listing="$(docker network ls --no-trunc --filter "name=^${network}$" --format '{{.ID}}')" || fail
+  count="$(printf '%s\n' "${listing}" | awk 'NF {n++} END {print n+0}')"
+  [[ "${count}" == 0 || "${count}" == 1 ]] || fail
+  [[ "${count}" == 1 ]]
+}
+network_id_present_anywhere() {
+  local expected_id="$1" listing
+  listing="$(docker network ls --no-trunc --format '{{.ID}}')" || fail
+  printf '%s\n' "${listing}" | grep -Fxq "${expected_id}"
+}
 validate_kv_file() {
   local file="$1" kind="$2" line key seen=""
   require_regular "${file}"
@@ -287,7 +299,8 @@ canonical_adoption_journal_sha256() {
   unlink "${canonical}"
 }
 validate_adoption_journal() {
-  local network id actual members expected_members aliases expected_aliases order count next phase
+  local allow_absent_networks="${1:-false}" network id actual members expected_members aliases expected_aliases order count next phase
+  [[ "${allow_absent_networks}" == true || "${allow_absent_networks}" == false ]] || fail
   validate_kv_file "${adoption_journal}" journal
   require_field "${adoption_journal}" schema "phase3.1.network-adoption"
   require_field "${adoption_journal}" owner "${owner}"
@@ -315,6 +328,9 @@ validate_adoption_journal() {
       continue
     fi
     [[ "${id}" =~ ^[0-9a-f]{64}$ ]] || fail
+    if [[ "${allow_absent_networks}" == true ]] && ! network_present_by_name "${network}"; then
+      continue
+    fi
     [[ "$(network_id "${network}")" == "${id}" ]] || fail
     [[ "$(docker network inspect --format '{{index .Labels "com.catering.owner"}}' "${id}")" == "${owner}" ]] || fail
     [[ "$(docker network inspect --format '{{index .Labels "com.catering.phase"}}' "${id}")" == "${schema}" ]] || fail
@@ -1065,8 +1081,42 @@ validate_rolling_back_evidence() {
   done
 }
 
+validate_legacy_rollback_network_progress() {
+  local network created expected_id journal_id current_id
+  validate_adoption_journal true
+  rollback_private_present_before=false
+  rollback_ingress_present_before=false
+  if network_present_by_name catering_private; then
+    rollback_private_present_before=true
+  fi
+  if network_present_by_name catering_ingress; then
+    rollback_ingress_present_before=true
+  fi
+  # Rollback removes private before ingress. An ingress gap while private is
+  # still present is therefore an impossible or externally altered prefix.
+  [[ "${rollback_private_present_before}" != true || "${rollback_ingress_present_before}" == true ]] || fail
+  for network in catering_private catering_ingress; do
+    created="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
+    expected_id="$(field "${activation_marker}" "${network}_id")"
+    journal_id="$(field "${adoption_journal}" "${network}_id")"
+    [[ "${expected_id}" =~ ^[0-9a-f]{64}$ ]] || fail
+    [[ "${expected_id}" == "${journal_id}" ]] || fail
+    if ! network_present_by_name "${network}"; then
+      # Only a run-created network has an authorized absent target. A
+      # pre-existing network must remain present and bound to its baseline ID.
+      [[ "${created}" == true ]] || fail
+      # An expected ID that still exists under another name is not a completed
+      # removal; accepting it would detach the name/identity binding.
+      if network_id_present_anywhere "${expected_id}"; then fail; fi
+      continue
+    fi
+    current_id="$(network_id "${network}")" || fail
+    [[ "${current_id}" == "${expected_id}" ]] || fail
+    validate_network_provenance "${network}" "${network#catering_}" "${created}"
+  done
+}
+
 validate_rolling_back_prefix() {
-  local network created
   local has_evidence=false has_archive=false has_receipt=false
   validate_manifest
   validate_marker_file "${activation_marker}"
@@ -1075,12 +1125,7 @@ validate_rolling_back_prefix() {
   validate_foreign_evidence
   validate_compatibility_baseline_control
   [[ ! -e "${platform_source}" && ! -e "${edge_source}" ]] || fail
-  for network in catering_ingress catering_private; do
-    created="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
-    if [[ "${created}" == true ]]; then
-      docker network inspect "${network}" >/dev/null 2>&1 && fail
-    fi
-  done
+  validate_legacy_rollback_network_progress
   [[ -e "${restore_evidence_record}" ]] && has_evidence=true
   [[ -e "${restore_proof_archive}" ]] && has_archive=true
   [[ -e "${completion_receipt}" ]] && has_receipt=true
@@ -1127,6 +1172,7 @@ resume_legacy_rolling_back_control() {
   [[ -e "${restore_proof_archive}" ]] && has_archive=true
   [[ -e "${completion_receipt}" ]] && has_receipt=true
   if [[ "${has_evidence}" == false && "${has_archive}" == false && "${has_receipt}" == false ]]; then
+    validate_legacy_rollback_network_progress
     continue_rollback_control 0
     return 0
   fi
@@ -1237,10 +1283,13 @@ write_completion_receipt_control() {
 
 continue_rollback_control() {
   local initialize_marker="$1"
-  local network created_by_run container members
+  local network created_by_run expected_id container members
+  rollback_private_present_before=false
   smoke_readback_sha256=pending
   if [[ "${initialize_marker}" == 1 ]]; then
     write_control_marker rolling_back 0 not_adopted
+  else
+    validate_legacy_rollback_network_progress
   fi
   connect_if_missing_control() {
     local network alias container networks
@@ -1250,7 +1299,10 @@ continue_rollback_control() {
   }
   disconnect_if_attached_control() {
     local network="$1" container="$2" networks
-    docker network inspect "${network}" >/dev/null 2>&1 || return 0
+    if ! network_present_by_name "${network}"; then
+      [[ "${initialize_marker}" == 0 ]] || fail
+      return 0
+    fi
     networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${container}")" || fail
     [[ "${networks}" != *"\"${network}\""* ]] || docker network disconnect "${network}" "${container}" || fail
   }
@@ -1274,6 +1326,18 @@ continue_rollback_control() {
   # eligible. No foreign container or broad network cleanup is permitted.
   for network in catering_private catering_ingress; do
     created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
+    if ! network_present_by_name "${network}"; then
+      [[ "${initialize_marker}" == 0 ]] || fail
+      [[ "${created_by_run}" == true ]] || fail
+      if [[ "${network}" == catering_ingress ]]; then
+        [[ "${rollback_private_present_before}" != true ]] || fail
+      fi
+      continue
+    fi
+    if [[ "${initialize_marker}" == 0 ]]; then
+      expected_id="$(field "${activation_marker}" "${network}_id")"
+      [[ "$(network_id "${network}")" == "${expected_id}" ]] || fail
+    fi
     validate_network_provenance "${network}" "${network#catering_}" "${created_by_run}"
     [[ "${created_by_run}" == true ]] || continue
     for container in platform-infra-postgres-1 platform-infra-intake-1 platform-infra-offer-1 \

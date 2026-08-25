@@ -286,6 +286,10 @@ def do_network(state: dict[str, Any], args: list[str]) -> int:
         if match and match.group(1) in state["networks"]:
             value = state["networks"][match.group(1)]["id"]
             print(value if "--no-trunc" in args else value[:12])
+        elif not match:
+            for item in state["networks"].values():
+                value = item["id"]
+                print(value if "--no-trunc" in args else value[:12])
         return 0
     if action == "inspect":
         value = args[-1]
