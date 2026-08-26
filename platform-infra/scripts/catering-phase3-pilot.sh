@@ -300,7 +300,7 @@ canonical_adoption_journal_sha256() {
 }
 rollback_preexisting_members_relaxed=false
 validate_adoption_journal() {
-  local allow_absent_networks="${1:-false}" allow_run_created_partial="${2:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run relax_members
+  local allow_absent_networks="${1:-false}" allow_run_created_partial="${2:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run relax_members transaction_label expected_network_labels manifest_transaction_label
   [[ "${allow_absent_networks}" == true || "${allow_absent_networks}" == false ]] || fail
   [[ "${allow_run_created_partial}" == true || "${allow_run_created_partial}" == false ]] || fail
   validate_kv_file "${adoption_journal}" journal
@@ -341,7 +341,13 @@ validate_adoption_journal() {
       [[ "$(docker network inspect --format '{{index .Labels "com.catering.transaction"}}' "${id}")" == "${run_id}" ]] || fail
     else
       transaction_label="$(docker network inspect --format '{{index .Labels "com.catering.transaction"}}' "${id}")"
-      [[ -z "${transaction_label}" || "${transaction_label}" == "<no value>" ]] || fail
+      expected_network_labels="$(field "${baseline_manifest}" "${network}_network_labels")"
+      manifest_transaction_label="$(printf '%s\n' "${expected_network_labels}" | awk -F';' '{ for (i = 1; i <= NF; i++) if ($i ~ /^transaction=/) { sub(/^transaction=/, "", $i); print $i; exit } }')"
+      if [[ -z "${transaction_label}" || "${transaction_label}" == "<no value>" ]]; then
+        [[ -z "${manifest_transaction_label}" ]] || fail
+      else
+        [[ "${transaction_label}" == "${run_id}" && "${manifest_transaction_label}" == "${run_id}" ]] || fail
+      fi
     fi
     members="$(docker network inspect --format '{{json .Containers}}' "${id}")" || fail
     expected_members="$(printf '%s' "$(field "${adoption_journal}" "${network}_members_b64")" | base64 -d)" || fail
