@@ -299,6 +299,7 @@ canonical_adoption_journal_sha256() {
   unlink "${canonical}"
 }
 rollback_preexisting_members_relaxed=false
+rollback_mixed_s2_authorized=false
 validate_adoption_journal() {
   local allow_absent_networks="${1:-false}" allow_run_created_partial="${2:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run relax_members transaction_label expected_network_labels manifest_transaction_label
   [[ "${allow_absent_networks}" == true || "${allow_absent_networks}" == false ]] || fail
@@ -1329,17 +1330,24 @@ validate_rolling_back_evidence() {
 }
 
 validate_legacy_rollback_network_progress() {
-  local network created expected_id journal_id current_id
-  if [[ ( "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
-    "$(field "${baseline_manifest}" schema)" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ) &&
+  local network created expected_id journal_id current_id manifest_schema ingress_baseline private_baseline ingress_created private_created
+  manifest_schema="$(field "${baseline_manifest}" schema)"
+  if [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+    "${marker_state}" == rolling_back &&
+    "$(field "${activation_marker}" catering_ingress_id)" == absent &&
+    "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
+    validate_phase32_mixed_rollback_prefix
+    return 0
+  fi
+  if [[ "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" &&
     "${marker_state}" == rolling_back &&
     "$(field "${activation_marker}" catering_ingress_id)" == absent &&
     "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
     validate_initial_candidate_absence
     return 0
   fi
-  if [[ ( "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
-    "$(field "${baseline_manifest}" schema)" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ) &&
+  if [[ ( "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
+    "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ) &&
     "${marker_state}" == rolling_back &&
     "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ &&
     "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
@@ -1372,9 +1380,21 @@ validate_legacy_rollback_network_progress() {
   if network_present_by_name catering_ingress; then
     rollback_ingress_present_before=true
   fi
-  # Rollback removes private before ingress. An ingress gap while private is
-  # still present is therefore an impossible or externally altered prefix.
-  [[ "${rollback_private_present_before}" != true || "${rollback_ingress_present_before}" == true ]] || fail
+  # Rollback removes private before ingress for two run-created networks. The
+  # inverse mixed S2 baseline is the one bounded exception: ingress was the
+  # only run-created network and may already be absent while preserved private
+  # remains, but only with the exact immutable manifest provenance.
+  if [[ "${rollback_private_present_before}" == true && "${rollback_ingress_present_before}" != true ]]; then
+    ingress_baseline="$(field "${baseline_manifest}" catering_ingress_baseline)"
+    private_baseline="$(field "${baseline_manifest}" catering_private_baseline)"
+    ingress_created="$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)"
+    private_created="$(field "${baseline_manifest}" catering_private_created_by_run_authorized)"
+    [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+      "${ingress_baseline}" == absent && "${private_baseline}" == pre-existing-exact &&
+      "${ingress_created}" == true && "${private_created}" == false &&
+      "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=pre-existing-exact" ]] || fail
+    rollback_mixed_s2_authorized=true
+  fi
   for network in catering_private catering_ingress; do
     created="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
     expected_id="$(field "${activation_marker}" "${network}_id")"
@@ -1592,9 +1612,11 @@ validate_pre_existing_rollback_network() {
 }
 
 validate_mixed_candidate_baseline() {
-  local network marker_id journal_id baseline_status created_by_run
-  [[ "$(field "${activation_marker}" stage)" == S2 ]] || fail
+  local network marker_id journal_id baseline_status created_by_run expected_stage="${1:-S2}" expected_status
+  [[ "$(field "${activation_marker}" stage)" == "${expected_stage}" ]] || fail
   [[ "$(field "${baseline_manifest}" network_create_order)" == "catering_ingress,catering_private" ]] || fail
+  expected_status="catering_ingress=$(field "${baseline_manifest}" catering_ingress_baseline);catering_private=$(field "${baseline_manifest}" catering_private_baseline)"
+  [[ "$(field "${activation_marker}" baseline_network_status)" == "${expected_status}" ]] || fail
   [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
     "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
   [[ "$(field "${activation_marker}" adoption_count)" == 0 &&
@@ -1629,6 +1651,17 @@ validate_mixed_candidate_baseline() {
       [[ "${journal_id}" == absent ]] || fail
     fi
   done
+}
+
+validate_phase32_mixed_rollback_prefix() {
+  [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  [[ "${marker_state}" == rolling_back && "$(field "${activation_marker}" stage)" == RB ]] || fail
+  if [[ "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact ||
+    "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ]]; then
+    rollback_preexisting_members_relaxed=true
+  fi
+  validate_mixed_candidate_baseline RB
+  rollback_mixed_s2_authorized=true
 }
 
 validate_initial_candidate_absence() {
@@ -1782,6 +1815,7 @@ continue_rollback_control() {
   local network created_by_run expected_id container members
   local candidate_absent_networks_authorized=false
   local journalized_ingress_adoption_authorized=false
+  local mixed_s2_rollback_authorized=false
   [[ "${initialize_marker}" != 1 || "${marker_state}" != rolling_back ]] || fail
   rollback_private_present_before=false
   smoke_readback_sha256=pending
@@ -1796,6 +1830,7 @@ continue_rollback_control() {
           "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
           validate_mixed_candidate_baseline
           candidate_absent_networks_authorized=true
+          mixed_s2_rollback_authorized=true
         elif [[ "$(field "${activation_marker}" stage)" == S2 &&
           "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
           "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ]]; then
@@ -1813,8 +1848,9 @@ continue_rollback_control() {
       "${marker_state}" == rolling_back &&
       "$(field "${activation_marker}" catering_ingress_id)" == absent &&
       "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
-      validate_initial_candidate_absence
+      validate_phase32_mixed_rollback_prefix
       candidate_absent_networks_authorized=true
+      mixed_s2_rollback_authorized=true
     elif [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
       "${marker_state}" == rolling_back &&
       "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ &&
@@ -1823,6 +1859,7 @@ continue_rollback_control() {
       journalized_ingress_adoption_authorized=true
     else
       validate_legacy_rollback_network_progress
+      mixed_s2_rollback_authorized="${rollback_mixed_s2_authorized}"
     fi
   fi
   connect_if_missing_control() {
@@ -1866,13 +1903,21 @@ continue_rollback_control() {
         "${journalized_ingress_adoption_authorized}" == true ]] || fail
       [[ "${created_by_run}" == true ]] || fail
       if [[ "${network}" == catering_ingress ]]; then
-        [[ "${rollback_private_present_before}" != true ]] || fail
+        [[ "${rollback_private_present_before}" != true || "${mixed_s2_rollback_authorized}" == true ]] || fail
       fi
       continue
     fi
     if [[ "${initialize_marker}" == 0 || "${journalized_ingress_adoption_authorized}" == true ]]; then
-      expected_id="$(field "${activation_marker}" "${network}_id")"
-      [[ "$(network_id "${network}")" == "${expected_id}" ]] || fail
+      if [[ "${mixed_s2_rollback_authorized}" == true && "${created_by_run}" == false ]]; then
+        if [[ "$(field "${activation_marker}" "${network}_id")" =~ ^[0-9a-f]{64}$ ]]; then
+          validate_pre_existing_rollback_network "${network}"
+        else
+          validate_pre_existing_baseline_network "${network}"
+        fi
+      else
+        expected_id="$(field "${activation_marker}" "${network}_id")"
+        [[ "$(network_id "${network}")" == "${expected_id}" ]] || fail
+      fi
     fi
     validate_network_provenance "${network}" "${network#catering_}" "${created_by_run}"
     [[ "${created_by_run}" == true ]] || continue
