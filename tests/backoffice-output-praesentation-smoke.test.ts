@@ -252,6 +252,7 @@ function installBackofficeMocks(
   };
   const offerCaseId = blocked ? "presentation-offer-case-blocked" : "presentation-offer-case-success";
   const productionCaseId = blocked ? "presentation-production-case-blocked" : "presentation-production-case-success";
+  const productionDraftId = `${productionCaseId}-draft`;
 
   vi.stubGlobal(
     "fetch",
@@ -371,8 +372,47 @@ function installBackofficeMocks(
                   dataClass: "synthetic_demo",
                   addedAt: "2026-07-01T09:05:00.000Z"
                 }
+              },
+              {
+                businessId: "demo-business",
+                eventId: `${productionCaseId}-revision`,
+                caseId: productionCaseId,
+                sequence: 2,
+                at: "2026-07-01T09:06:00.000Z",
+                role: "assistant",
+                kind: "revision_created",
+                text: "Produktionsentwurf erstellt.",
+                artifactId: productionDraftId,
+                revisionRef: {
+                  artifactType: "ProductionDraft",
+                  artifactId: productionDraftId,
+                  revision: 1,
+                  createdAt: "2026-07-01T09:06:00.000Z"
+                }
               }
             ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith(`/api/production/v1/production/drafts?caseId=${productionCaseId}`)) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                businessId: "demo-business",
+                draftId: productionDraftId,
+                revision: 1,
+                status: "approved",
+                createdAt: "2026-07-01T09:06:00.000Z",
+                reviewCards: [],
+                draftArtifacts: {
+                  eventSpec: activeSpec
+                }
+              }
+            ],
+            approvedProductionSpecs: []
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
@@ -428,10 +468,16 @@ function installBackofficeMocks(
       }
 
       if (url.endsWith("/api/production/v1/production/plans")) {
-        return new Response(JSON.stringify({ items: dashboard.productionPlans }), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
+        return new Response(
+          JSON.stringify({
+            access: { canOperateProduction: true },
+            items: dashboard.productionPlans
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
       }
 
       if (url.endsWith("/api/production/v1/production/purchase-lists")) {

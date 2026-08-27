@@ -3,6 +3,7 @@ import type { MinimalMvpRole, TrustedActor } from "./access-control.js";
 import type { BusinessId } from "./business-context.js";
 import type { ByoLlmDataClass } from "./data-classification.js";
 import type { ByoLlmProcessingPolicyMetadata } from "./byo-llm-provider-data-policy.js";
+import type { CaseEventVisibility } from "./case-contracts.js";
 
 export const SCHEMA_VERSION = "1.0.0";
 
@@ -407,6 +408,7 @@ export interface ProductionDraftReviewCard {
   riskLevel?: "low" | "medium" | "high" | "blocking";
   requiredApproval?: boolean;
   operatorComment?: string;
+  operatorCommentVisibility?: CaseEventVisibility;
   decidedBy?: string;
   decidedAt?: string;
 }

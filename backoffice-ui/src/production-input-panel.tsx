@@ -6,7 +6,7 @@ import {
   useRef,
   useState
 } from "react";
-import type { IntakeDocumentChannel, IntakeRequestDetail } from "./api.js";
+import type { IntakeDocumentChannel, ProductionSourceDetail } from "./api.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
 import { ProductionDraftReviewPanel } from "./production-draft-review-panel.js";
 import { buildProductionInputPanelState } from "./production-input-panel-state.js";
@@ -76,7 +76,7 @@ type ProductionInputPanelProps = {
   hasActiveProductionContext?: boolean;
   productionQuestions?: string[];
   productionAssumptions?: string[];
-  intakeRequestDetail?: IntakeRequestDetail | null;
+  intakeRequestDetail?: ProductionSourceDetail | null;
   onDraftChanged?: (appliedSpecId?: string) => Promise<void>;
 };
 

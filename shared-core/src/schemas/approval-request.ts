@@ -45,7 +45,8 @@ export const approvalRequestSchema = {
             "intake_operator",
             "offer_operator",
             "production_operator",
-            "operations_audit_operator"
+            "operations_audit_operator",
+            "admin"
           ]
         },
         source: { const: "trusted-proxy:x-catering-actor-name" }
