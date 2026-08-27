@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -31,7 +32,7 @@ const productionHeaders = headersFor("Produktions-Mitarbeiter");
 const adminHeaders = headersFor("Administrator");
 
 function createDataRoot(): string {
-  return mkdtempSync(path.join("/private/tmp", "catering-gate-b-read-only-"));
+  return mkdtempSync(path.join(tmpdir(), "catering-gate-b-read-only-"));
 }
 
 function expectStatus(response: { statusCode: number; body: string }, expected: number): void {

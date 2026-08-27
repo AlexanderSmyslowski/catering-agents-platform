@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildOfferApp } from "../offer-service/src/app.js";
@@ -25,7 +26,7 @@ const adminHeaders = headersFor("Administrator");
 type InjectableApp = { inject: (request: { method: string; url: string; headers: Record<string, string>; payload?: unknown }) => Promise<{ statusCode: number; body: string; json: <T>() => T }>; close: () => Promise<void> };
 
 function createDataRoot(): string {
-  return mkdtempSync(path.join("/private/tmp", "catering-gate-b-admin-api-"));
+  return mkdtempSync(path.join(tmpdir(), "catering-gate-b-admin-api-"));
 }
 
 function expectStatus(response: { statusCode: number; body: string }, expected: number): void {

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -18,7 +19,7 @@ const PRICING_SUMMARY_SENTINEL = 7314.29;
 const SERVICE_MODULE_PRICE_SENTINEL = 913.57;
 
 function createDataRoot(): string {
-  return mkdtempSync(path.join("/private/tmp", "catering-gate-b-intake-commercial-"));
+  return mkdtempSync(path.join(tmpdir(), "catering-gate-b-intake-commercial-"));
 }
 
 function headersFor(actorName: string) {

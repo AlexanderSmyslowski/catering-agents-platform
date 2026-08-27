@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildOfferApp } from "../offer-service/src/app.js";
@@ -96,7 +97,7 @@ class CommercialSentinelOfferStore extends OfferStore {
 }
 
 function createDataRoot(): string {
-  return mkdtempSync(path.join("/private/tmp", "catering-gate-b-production-commercial-"));
+  return mkdtempSync(path.join(tmpdir(), "catering-gate-b-production-commercial-"));
 }
 
 function expectStatus(response: { statusCode: number; body: string }, expected: number): void {
