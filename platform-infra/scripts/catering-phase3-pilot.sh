@@ -706,6 +706,10 @@ validate_network_provenance() {
     expected_options='{}'
     expected_ipam_config='[]'
   fi
+  if [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+    "${expected_ipam_config}" == '[]' && "${ipam_config}" == 'null' ]]; then
+    ipam_config='[]'
+  fi
   expected_network_labels="$(manifest_network_labels_for "${network}" "${created_by_run}")"
   [[ "${driver}" == "${expected_driver}" && "${scope}" == "${expected_scope}" && "${internal}" == "${expected_internal}" && "${ipam_driver}" == "${expected_ipam_driver}" && "${enable_ipv6}" == "${expected_enable_ipv6}" && "${ipam_config}" == "${expected_ipam_config}" && "${options}" == "${expected_options}" ]] || fail
   python3 - "${labels}" "${members}" "${expected_network_labels}" <<'PYTHON' || fail

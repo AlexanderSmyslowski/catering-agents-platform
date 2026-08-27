@@ -39,6 +39,17 @@ function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function digestFile(filePath: string) {
   return digest(readFileSync(filePath, "utf8"));
 }
@@ -342,6 +353,29 @@ function prepareNormalAllPreExistingS2State(root: string) {
   state.containers["platform-infra-production-1"].config = {
     env: { CATERING_ENABLE_WEB_RECIPE_SEARCH: "1" },
   };
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+
+function prepareNormalAllPreExistingS2NullIpamState(root: string) {
+  prepareNormalAllPreExistingS2State(root);
+  const statePath = path.join(root, "fake-docker-state.json");
+  const state = JSON.parse(textAt(statePath)) as {
+    networks: Record<string, { ipam_config: unknown }>;
+  };
+  for (const network of ["catering_ingress", "catering_private"]) {
+    state.networks[network].ipam_config = null;
+  }
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+
+function setFakeNetworkIpamConfig(root: string, value: unknown) {
+  const statePath = path.join(root, "fake-docker-state.json");
+  const state = JSON.parse(textAt(statePath)) as {
+    networks: Record<string, { ipam_config: unknown }>;
+  };
+  for (const network of ["catering_ingress", "catering_private"]) {
+    state.networks[network].ipam_config = value;
+  }
   writeFileSync(statePath, JSON.stringify(state, null, 2));
 }
 
@@ -2711,6 +2745,164 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
       expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
       expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
     }
+  }, 120_000);
+
+  test("RED: all-pre-existing S2 resume canonicalizes Docker null IPAM against manifest []", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-all-preexisting-ipam-null-resume-red-"));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const logPath = path.join(root, "fake-docker.log");
+    expect(fieldsAt(manifestPath).get("network_ipam_config")).toBe(
+      "catering_ingress:[];catering_private:[]",
+    );
+    const beforeLog = textAt(logPath);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect({
+      status: resumed.result.status,
+      pilotGo: terminal.includes("PILOT: GO"),
+      targetCreateOrRemove: /network (?:create|rm) catering_(?:private|ingress)/.test(addedLog),
+      markerState: fieldsAt(markerPath).get("state"),
+      platformLockHeld: existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock")),
+      edgeLockHeld: existsSync(path.join(root, "locks/shared-edge.deploy-lock")),
+    }).toEqual({
+      status: 0,
+      pilotGo: true,
+      targetCreateOrRemove: false,
+      markerState: "active",
+      platformLockHeld: false,
+      edgeLockHeld: false,
+    });
+  }, 120_000);
+
+  test("RED: all-pre-existing S2 rollback canonicalizes Docker null IPAM against manifest []", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-all-preexisting-ipam-null-rollback-red-"));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    expect(fieldsAt(manifestPath).get("network_ipam_config")).toBe(
+      "catering_ingress:[];catering_private:[]",
+    );
+    const beforeState = JSON.parse(textAt(statePath)) as { networks: Record<string, unknown> };
+    const beforeTargetNetworks = canonicalJson({
+      catering_ingress: beforeState.networks.catering_ingress,
+      catering_private: beforeState.networks.catering_private,
+    });
+    const beforeLog = textAt(logPath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect({
+      status: rolledBack.result.status,
+      pilotRolledBack: terminal.includes("PILOT: ROLLED BACK"),
+      targetNetworksUnchanged: (() => {
+        const afterState = JSON.parse(textAt(statePath)) as { networks: Record<string, unknown> };
+        return canonicalJson({
+          catering_ingress: afterState.networks.catering_ingress,
+          catering_private: afterState.networks.catering_private,
+        }) === beforeTargetNetworks;
+      })(),
+      targetMutation: /network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/.test(addedLog),
+      markerExists: existsSync(markerPath),
+      manifestExists: existsSync(manifestPath),
+      platformLockHeld: existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock")),
+      edgeLockHeld: existsSync(path.join(root, "locks/shared-edge.deploy-lock")),
+    }).toEqual({
+      status: 0,
+      pilotRolledBack: true,
+      targetNetworksUnchanged: true,
+      targetMutation: false,
+      markerExists: false,
+      manifestExists: false,
+      platformLockHeld: false,
+      edgeLockHeld: false,
+    });
+  }, 120_000);
+
+  test.each(["resume", "rollback"] as const)("IPAM null canonicalization rejects nonempty live IPAM during %s", (command) => {
+    const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-ipam-nonempty-${command}-negative-`));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    setFakeNetworkIpamConfig(root, [{ Subnet: "10.0.0.0/24" }]);
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+    const recovered = command === "resume"
+      ? runExistingResume(root, crashed.sandbox)
+      : runExistingRollback(root, crashed.sandbox);
+    const terminal = `${recovered.result.stdout}${recovered.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect({
+      statusNonzero: recovered.result.status !== 0,
+      noGo: terminal.includes("PILOT: NO-GO"),
+      terminalSuccess: terminal.includes("PILOT: GO") || terminal.includes("PILOT: ROLLED BACK"),
+      targetMutation: /network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/.test(addedLog),
+      markerState: fieldsAt(markerPath).get("state"),
+      platformLockHeld: existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock")),
+      edgeLockHeld: existsSync(path.join(root, "locks/shared-edge.deploy-lock")),
+    }).toEqual({
+      statusNonzero: true,
+      noGo: true,
+      terminalSuccess: false,
+      targetMutation: false,
+      markerState: "candidate",
+      platformLockHeld: true,
+      edgeLockHeld: true,
+    });
+    expect(recovered.result.status).not.toBe(0);
+  }, 120_000);
+
+  test("IPAM null canonicalization rejects an invalid live JSON type", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-ipam-invalid-type-negative-"));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    setFakeNetworkIpamConfig(root, { Subnet: "10.0.0.0/24" });
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("IPAM null canonicalization requires an immutable manifest []", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-ipam-manifest-mismatch-negative-"));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    rewriteFields(manifestPath, {
+      network_ipam_config: 'catering_ingress:[{"Subnet":"10.0.0.0/24"}];catering_private:[]',
+    });
+    rebindManifestReferences(root);
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
   }, 120_000);
 
   test("RED: mixed pre-existing adoption journal rollback is not rejected before marker update", () => {
