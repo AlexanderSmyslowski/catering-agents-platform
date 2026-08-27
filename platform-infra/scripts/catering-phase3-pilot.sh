@@ -1739,7 +1739,7 @@ validate_pre_existing_exact_candidate() {
 
 validate_phase32_ingress_adoption_prefix() {
   local recovery_state="$1"
-  local network journal_id marker_id baseline_status created_by_run manifest_schema
+  local network journal_id marker_id baseline_status created_by_run manifest_schema expected_status mixed_baseline=false
   manifest_schema="$(field "${baseline_manifest}" schema)"
   [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
     "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
@@ -1752,11 +1752,30 @@ validate_phase32_ingress_adoption_prefix() {
       ( "${recovery_state}" == rolling_back && "${command_name}" == resume &&
         "${marker_state}" == rolling_back ) ]] || fail
   fi
-  [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=absent" ]] || fail
+  expected_status="catering_ingress=$(field "${baseline_manifest}" catering_ingress_baseline);catering_private=$(field "${baseline_manifest}" catering_private_baseline)"
+  [[ "$(field "${activation_marker}" baseline_network_status)" == "${expected_status}" ]] || fail
+  if [[ "${expected_status}" == "catering_ingress=absent;catering_private=absent" ]]; then
+    [[ "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == true &&
+      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == true ]] || fail
+  elif [[ "${expected_status}" == "catering_ingress=pre-existing-exact;catering_private=absent" ]]; then
+    [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+      "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == false &&
+      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == true ]] || fail
+    mixed_baseline=true
+  elif [[ "${expected_status}" == "catering_ingress=absent;catering_private=pre-existing-exact" ]]; then
+    [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+      "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == true &&
+      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == false ]] || fail
+    mixed_baseline=true
+  else
+    fail
+  fi
+  [[ "${mixed_baseline}" != true ]] || rollback_mixed_s2_authorized=true
   for network in catering_ingress catering_private; do
     baseline_status="$(field "${baseline_manifest}" "${network}_baseline")"
     created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
-    [[ "${baseline_status}" == absent && "${created_by_run}" == true ]] || fail
+    [[ ( "${baseline_status}" == absent && "${created_by_run}" == true ) ||
+      ( "${baseline_status}" == pre-existing-exact && "${created_by_run}" == false ) ]] || fail
   done
   case "${recovery_state}" in
     candidate)
@@ -1797,11 +1816,17 @@ validate_phase32_ingress_adoption_prefix() {
     [[ "$(field "${activation_marker}" catering_ingress_id)" == "${journal_id}" ]] || fail
   fi
   if network_present_by_name catering_private; then
-    fail
+    [[ "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact &&
+      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == false ]] || fail
+    validate_pre_existing_baseline_network catering_private
   fi
   if network_present_by_name catering_ingress; then
+    if [[ "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
+      "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == false ]]; then
+      validate_pre_existing_baseline_network catering_ingress
+    fi
     [[ "$(network_id catering_ingress)" == "${journal_id}" ]] || fail
-    validate_network_provenance catering_ingress ingress true
+    validate_network_provenance catering_ingress ingress "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)"
   else
     [[ "${recovery_state}" == rolling_back ]] || fail
     if network_id_present_anywhere "${journal_id}"; then
@@ -1826,6 +1851,7 @@ continue_rollback_control() {
         if [[ -e "${adoption_journal}" && "$(field "${adoption_journal}" adoption_count)" == 1 ]]; then
           validate_phase32_ingress_adoption_prefix candidate
           journalized_ingress_adoption_authorized=true
+          mixed_s2_rollback_authorized="${rollback_mixed_s2_authorized}"
         elif [[ "$(field "${activation_marker}" stage)" == S2 &&
           "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
           validate_mixed_candidate_baseline
@@ -1857,6 +1883,7 @@ continue_rollback_control() {
       "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
       validate_phase32_ingress_adoption_prefix rolling_back
       journalized_ingress_adoption_authorized=true
+      mixed_s2_rollback_authorized="${rollback_mixed_s2_authorized}"
     else
       validate_legacy_rollback_network_progress
       mixed_s2_rollback_authorized="${rollback_mixed_s2_authorized}"

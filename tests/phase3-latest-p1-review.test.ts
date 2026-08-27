@@ -2625,6 +2625,136 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
   }, 120_000);
 
+  test("RED: mixed pre-existing adoption journal rollback is not rejected before marker update", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-mixed-adoption-rollback-red-"));
+    prepareNormalMixedS2State(root, "catering_ingress");
+    const crashed = runHarness("crash-after-ingress", root);
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    expect(crashed.result.status).not.toBe(0);
+
+    const marker = fieldsAt(markerPath);
+    const manifest = fieldsAt(manifestPath);
+    const journal = fieldsAt(journalPath);
+    expect(marker.get("state")).toBe("candidate");
+    expect(marker.get("stage")).toBe("S2");
+    expect(marker.get("baseline_network_status")).toBe(
+      "catering_ingress=pre-existing-exact;catering_private=absent",
+    );
+    expect(marker.get("catering_ingress_id")).toBe("absent");
+    expect(marker.get("catering_private_id")).toBe("absent");
+    expect(manifest.get("catering_ingress_baseline")).toBe("pre-existing-exact");
+    expect(manifest.get("catering_private_baseline")).toBe("absent");
+    expect(manifest.get("catering_ingress_created_by_run_authorized")).toBe("false");
+    expect(manifest.get("catering_private_created_by_run_authorized")).toBe("true");
+    expect(journal.get("adoption_order")).toBe("catering_ingress");
+    expect(journal.get("adoption_count")).toBe("1");
+    expect(journal.get("next_network")).toBe("catering_private");
+    expect(journal.get("catering_ingress_id")).toMatch(/^[0-9a-f]{64}$/);
+    expect(journal.get("catering_private_id")).toBe("absent");
+    expect(journal.get("catering_ingress_transaction")).toBe("phase3-harness");
+    expect(journal.get("catering_private_transaction")).toBe("phase3-harness");
+
+    const beforeState = textAt(statePath);
+    const beforeRollbackLog = textAt(logPath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeRollbackLog.length);
+    expect(rolledBack.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(JSON.parse(textAt(statePath))).toEqual(JSON.parse(beforeState));
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("GREEN: inverse mixed adoption journal rollback preserves the pre-existing network", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-inverse-mixed-adoption-rollback-green-"));
+    prepareNormalMixedS2State(root, "catering_private");
+    const crashed = runHarness("crash-after-ingress", root);
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(markerPath).get("baseline_network_status")).toBe(
+      "catering_ingress=absent;catering_private=pre-existing-exact",
+    );
+    expect(fieldsAt(journalPath).get("adoption_count")).toBe("1");
+    expect(fieldsAt(journalPath).get("catering_ingress_id")).toMatch(/^[0-9a-f]{64}$/);
+    expect(fieldsAt(journalPath).get("catering_private_id")).toBe("absent");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforePrivate = beforeState.networks.catering_private;
+    const beforeRollbackLog = textAt(logPath);
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeRollbackLog.length);
+    expect(rolledBack.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    const afterState = JSON.parse(textAt(statePath));
+    expect(afterState.networks.catering_private).toEqual(beforePrivate);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_private/);
+    expect(addedLog.match(/^docker network rm catering_ingress$/gm) ?? []).toHaveLength(1);
+    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(manifestPath)).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: mixed adoption rollback rejects immutable member drift before disconnect", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-mixed-adoption-member-drift-red-"));
+    prepareNormalMixedS2State(root, "catering_ingress");
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const state = JSON.parse(textAt(statePath)) as {
+      networks: Record<string, { containers: Record<string, { Name: string; Aliases: string[] }> }>;
+      containers: Record<string, { id: string; networks: Record<string, { aliases: string[] }> }>;
+    };
+    const ingress = state.networks.catering_ingress;
+    ingress.containers[state.containers["platform-infra-web-1"].id] = {
+      Name: "/platform-infra-web-1",
+      Aliases: ["web"],
+    };
+    ingress.containers["foreign-container-id"] = { Name: "/foreign", Aliases: ["foreign"] };
+    state.containers["platform-infra-web-1"].networks.catering_ingress = { aliases: ["web"] };
+    writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    const driftedMembers = encodeFakeDockerJson(ingress.containers);
+    rewriteFields(journalPath, {
+      catering_ingress_members_b64: driftedMembers,
+      catering_ingress_aliases_b64: driftedMembers,
+      journal_sha256: "absent",
+    });
+    rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+
+    const beforeLog = textAt(logPath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network disconnect catering_ingress/);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(JSON.parse(textAt(statePath)).networks.catering_ingress.containers["foreign-container-id"]).toEqual({
+      Name: "/foreign",
+      Aliases: ["foreign"],
+    });
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
   test("phase3.2 rolling_back after ingress journal crash resumes the same rollback", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-ingress-rolling-back-red-"));
     const crashed = runHarness("crash-after-ingress", root);
