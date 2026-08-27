@@ -300,6 +300,51 @@ function prepareNormalMixedS2State(root: string, preExistingNetwork: "catering_i
   writeFileSync(statePath, JSON.stringify(state, null, 2));
 }
 
+function prepareNormalAllPreExistingS2State(root: string) {
+  initializeFakeState(root);
+  const statePath = path.join(root, "fake-docker-state.json");
+  const state = JSON.parse(textAt(statePath)) as {
+    networks: Record<string, {
+      driver: string;
+      enable_ipv6: boolean;
+      id: string;
+      internal: boolean;
+      ipam_config: unknown[];
+      ipam_driver: string;
+      labels: Record<string, string>;
+      options: Record<string, string>;
+      scope: string;
+      containers: Record<string, unknown>;
+    }>;
+    containers: Record<string, {
+      config: Record<string, unknown>;
+    }>;
+  };
+  for (const network of ["catering_ingress", "catering_private"] as const) {
+    const kind = network.replace(/^catering_/, "");
+    state.networks[network] = {
+      driver: "bridge",
+      enable_ipv6: false,
+      id: digest(`network:${network}`),
+      internal: false,
+      ipam_config: [],
+      ipam_driver: "default",
+      labels: {
+        "com.catering.owner": "catering-agents-platform",
+        "com.catering.phase": "phase3.1",
+        "com.catering.kind": kind,
+      },
+      options: {},
+      scope: "local",
+      containers: {},
+    };
+  }
+  state.containers["platform-infra-production-1"].config = {
+    env: { CATERING_ENABLE_WEB_RECIPE_SEARCH: "1" },
+  };
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+
 function runNormalMixedS2(preExistingNetwork: "catering_ingress" | "catering_private") {
   const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-normal-mixed-s2-red-"));
   prepareNormalMixedS2State(root, preExistingNetwork);
@@ -2623,6 +2668,49 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
     expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("GREEN: all-pre-existing S2 adoption prefix resumes and rolls back before marker update", () => {
+    for (const command of ["rollback", "resume"] as const) {
+      const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-all-preexisting-${command}-green-`));
+      prepareNormalAllPreExistingS2State(root);
+      const crashed = runHarness("crash-after-ingress", root);
+      const markerPath = path.join(root, "phase3.activation");
+      const journalPath = path.join(root, "phase3.network-adoption.journal");
+      const statePath = path.join(root, "fake-docker-state.json");
+      const logPath = path.join(root, "fake-docker.log");
+      expect(crashed.result.status).not.toBe(0);
+      expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+      expect(fieldsAt(markerPath).get("stage")).toBe("S2");
+      expect(fieldsAt(markerPath).get("catering_ingress_id")).toBe("absent");
+      expect(fieldsAt(markerPath).get("catering_private_id")).toBe("absent");
+      expect(fieldsAt(journalPath).get("adoption_order")).toBe("catering_ingress");
+      expect(fieldsAt(journalPath).get("adoption_count")).toBe("1");
+      expect(fieldsAt(journalPath).get("catering_ingress_id")).toMatch(/^[0-9a-f]{64}$/);
+      expect(fieldsAt(journalPath).get("catering_private_id")).toBe("absent");
+      const beforeState = textAt(statePath);
+      const beforeLog = textAt(logPath);
+      const recovered = command === "rollback"
+        ? runExistingRollback(root, crashed.sandbox)
+        : runExistingResume(root, crashed.sandbox);
+      const terminal = `${recovered.result.stdout}${recovered.result.stderr}`;
+      const addedLog = textAt(logPath).slice(beforeLog.length);
+      expect(recovered.result.status).toBe(0);
+      if (command === "rollback") {
+        expect(terminal).toContain("PILOT: ROLLED BACK");
+        expect(terminal).not.toContain("PILOT: GO\n");
+        expect(textAt(statePath)).toBe(beforeState);
+        expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+        expect(existsSync(markerPath)).toBe(false);
+        expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+      } else {
+        expect(terminal).toContain("PILOT: GO");
+        expect(fieldsAt(markerPath).get("state")).toBe("active");
+        expect(addedLog).not.toMatch(/network (?:create|rm) catering_(?:private|ingress)/);
+      }
+      expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+      expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+    }
   }, 120_000);
 
   test("RED: mixed pre-existing adoption journal rollback is not rejected before marker update", () => {

@@ -1291,7 +1291,11 @@ validate_resume_evidence() {
     if [[ "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
       "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact &&
       "${marker_stage}" == S2 ]]; then
-      validate_pre_existing_exact_candidate
+      if [[ -e "${adoption_journal}" && "$(field "${adoption_journal}" adoption_count)" == 1 ]]; then
+        validate_phase32_ingress_adoption_prefix candidate
+      else
+        validate_pre_existing_exact_candidate
+      fi
     else
       [[ -e "${adoption_journal}" ]] || fail
       [[ "$(field "${adoption_journal}" adoption_count)" == 1 || "$(field "${adoption_journal}" adoption_count)" == 2 ]] || fail
@@ -1767,6 +1771,11 @@ validate_phase32_ingress_adoption_prefix() {
       "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == true &&
       "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == false ]] || fail
     mixed_baseline=true
+  elif [[ "${expected_status}" == "catering_ingress=pre-existing-exact;catering_private=pre-existing-exact" ]]; then
+    [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+      "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == false &&
+      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == false ]] || fail
+    mixed_baseline=true
   else
     fail
   fi
@@ -1779,7 +1788,12 @@ validate_phase32_ingress_adoption_prefix() {
   done
   case "${recovery_state}" in
     candidate)
-      [[ "${command_name}" == rollback && "${marker_state}" == candidate ]] || fail
+      [[ "${marker_state}" == candidate &&
+        ( "${command_name}" == rollback ||
+          ( "${command_name}" == resume &&
+            "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
+            "${expected_status}" == "catering_ingress=pre-existing-exact;catering_private=pre-existing-exact" &&
+            "$(field "${adoption_journal}" adoption_count)" == 1 ) ) ]] || fail
       [[ "$(field "${activation_marker}" stage)" == S2 ]] || fail
       [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
         "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
