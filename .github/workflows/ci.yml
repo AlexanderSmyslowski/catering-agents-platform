@@ -197,6 +197,7 @@ jobs:
               raise SystemExit("EventOS upstream parity failed")
           if edge["services"]["edge"]["environment"].get("CATERING_UPSTREAM") != "http://web:8081":
               raise SystemExit("Catering upstream parity failed")
-          if platform["services"]["intake"]["environment"].get("CATERING_INTAKE_SERVICE_URL") != "http://intake:3101":
-              raise SystemExit("intake service URL parity failed")
+          for service in ["offer", "production"]:
+              if platform["services"][service]["environment"].get("CATERING_INTAKE_SERVICE_URL") != "http://intake:3101":
+                  raise SystemExit(f"intake service URL parity failed for {service}")
           PYTHON
