@@ -180,7 +180,18 @@ jobs:
           actual_edge = set(edge["services"]["edge"])
           if not expected_edge_fields.issubset(actual_edge):
               raise SystemExit(f"edge runtime parity failed: missing {sorted(expected_edge_fields - actual_edge)}")
-          if edge["services"]["edge"]["ports"] != ["80:80", "443:443"]:
+          edge_ports = edge["services"]["edge"].get("ports")
+          expected_edge_port_keys = {"mode", "target", "published", "protocol"}
+          if not isinstance(edge_ports, list) or len(edge_ports) != 2:
+              raise SystemExit("shared edge public port parity failed")
+          edge_port_tuples = []
+          for port in edge_ports:
+              if not isinstance(port, dict) or set(port) != expected_edge_port_keys:
+                  raise SystemExit("shared edge public port parity failed")
+              if type(port["target"]) is not int or type(port["published"]) is not str:
+                  raise SystemExit("shared edge public port parity failed")
+              edge_port_tuples.append((port["mode"], port["target"], port["published"], port["protocol"]))
+          if set(edge_port_tuples) != {("ingress", 80, "80", "tcp"), ("ingress", 443, "443", "tcp")}:
               raise SystemExit("shared edge public port parity failed")
           if edge["services"]["edge"]["environment"].get("EVENTOS_UPSTREAM") != "commcats-eventos-app:3045":
               raise SystemExit("EventOS upstream parity failed")
