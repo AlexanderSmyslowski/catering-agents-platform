@@ -160,6 +160,96 @@ describe("Catering session boundary", () => {
     expect(calls).toEqual(["/api/intake/v1/auth/session"]);
   });
 
+  describe("Offer route capability boundary", () => {
+    it.each([
+      ["Production ohne Offer-Recht", ["production", "production_read"]],
+      ["Read-only ohne Offer-Recht", ["production_read"]]
+    ])("keeps %s out of the loader and interactive workbench", async (_label, capabilities) => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        calls.push(url);
+        if (url.endsWith("/api/intake/v1/auth/session")) {
+          return jsonResponse({
+            authenticated: true,
+            user: {
+              userId: "user-without-offer-access",
+              displayName: "Benutzer ohne Angebotsrecht"
+            },
+            access: { capabilities }
+          });
+        }
+        return offerRouteResponse(url);
+      }));
+
+      const container = await renderApp("/angebot");
+
+      expect(container.textContent).toContain("Kein Zugriff auf Angebote");
+      expect(container.textContent).not.toContain("Angebotsassistent");
+      expect(container.querySelector("textarea[aria-label='Kundenanfrage als Text']")).toBeNull();
+      expect(container.querySelector("input[type='file']")).toBeNull();
+      expect(buttonWithText(container, "Entwurf aus Text erstellen")).toBeUndefined();
+      expect(calls).toEqual(["/api/intake/v1/auth/session"]);
+    });
+
+    it("keeps the existing offer workbench for an administrator", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        calls.push(url);
+        if (url.endsWith("/api/intake/v1/auth/session")) {
+          return jsonResponse({
+            ...authenticatedSession,
+            access: {
+              capabilities: [
+                "intake",
+                "offer",
+                "production",
+                "production_read",
+                "operations_audit",
+                "commercial"
+              ]
+            }
+          });
+        }
+        return offerRouteResponse(url);
+      }));
+
+      const container = await renderApp("/angebot");
+
+      expect(container.textContent).toContain("Angebotsassistent");
+      expect(container.querySelector("textarea[aria-label='Kundenanfrage als Text']")).not.toBeNull();
+      expect(calls).toContain("/api/offers/v1/offers/cases");
+      expect(calls).toContain("/api/offers/health");
+    });
+
+    it.each([
+      ["fehlendem Access-Kontext", {
+        authenticated: true,
+        user: { userId: "user-anna", displayName: "Anna Beispiel" }
+      }],
+      ["unbekannter Capability", {
+        ...authenticatedSession,
+        access: { capabilities: ["offer", "admin"] }
+      }]
+    ])("fails closed before the offer loader with %s", async (_label, payload) => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        calls.push(url);
+        if (url.endsWith("/api/intake/v1/auth/session")) return jsonResponse(payload);
+        return offerRouteResponse(url);
+      }));
+
+      const container = await renderApp("/angebot");
+
+      expect(container.textContent).toContain("Anwendung ist derzeit nicht verfügbar");
+      expect(container.textContent).not.toContain("Angebotsassistent");
+      expect(container.querySelector("textarea[aria-label='Kundenanfrage als Text']")).toBeNull();
+      expect(calls).toEqual(["/api/intake/v1/auth/session"]);
+    });
+  });
+
   it.each([
     ["einen Netzwerkfehler", "network"],
     ["einen anderen HTTP-Status", "status"]

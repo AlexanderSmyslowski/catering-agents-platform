@@ -13,7 +13,8 @@ import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
 import { HomePortalApp } from "./home-portal-app.js";
-import { OfferProductApp } from "./offer-product-app.js";
+import { OfferRouteAccessBoundary } from "./offer-route-access-boundary.js";
+import type { OfferProductApp } from "./offer-product-app.js";
 import { ProductionRouteAccessBoundary } from "./production-route-access-boundary.js";
 import { SessionBoundary, useCateringSession } from "./session-boundary.js";
 import {
@@ -1332,7 +1333,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
 
   if (route === "offer") {
     return (
-      <OfferProductApp
+      <OfferRouteAccessBoundary
         shell={shell}
         masthead={masthead}
         activeCaseId={activeOfferCaseId}
@@ -1360,7 +1361,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
               (await createProductionCaseFromHandoff(handoffId)).case}
           />
         )}
-      </OfferProductApp>
+      </OfferRouteAccessBoundary>
     );
   }
 
