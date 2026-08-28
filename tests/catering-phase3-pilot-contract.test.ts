@@ -388,7 +388,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     expect(helper).toMatch(/manifest[^\n]{0,180}(?:sha256|cmp)[^\n]{0,180}(?:owner|transaction)/i);
     expect(helper).toContain('phase3_lock_acquire "${platform_lock}" held_platform');
     expect(helper).toContain('phase3_lock_acquire "${edge_lock}" held_edge');
-    expect(helper).toContain('elif [[ "${command_name}" == rollback ]]');
+    expect(helper).toContain('case "${command_name}:${recovery_class}" in');
   });
 
   test("uses inactive and active file chains while freezing active identity-changing callers", () => {
@@ -887,10 +887,11 @@ describe("Phase-3 Catering isolation pilot contract", () => {
       "platform-infra-web-1",
     ]);
     const resumed = runHarness("resume-candidate", resumedRoot);
-    // Crash 137 leaves the candidate marker without a smoke readback. Resume
-    // must fail closed instead of adopting a partial proof as active/GO.
-    expect(resumed.result.status).not.toBe(0);
-    expect(sourceAt(path.join(resumedRoot, "phase3.activation"))).toMatch(/^state=candidate$/m);
+    // The run-created candidate has a complete immutable manifest and may be
+    // resumed into the supported active state after the crash.
+    expect(resumed.result.status).toBe(0);
+    expect(`${resumed.result.stdout}${resumed.result.stderr}`).toContain("PILOT: GO");
+    expect(sourceAt(path.join(resumedRoot, "phase3.activation"))).toMatch(/^state=active$/m);
     expect(sourceAt(path.join(resumedRoot, "fake-ssh.log"))).toMatch(/command=resume/);
 
     const rollingBackRoot = mkdtempSync(path.join(tmpdir(), "catering-phase3-rolling-back-resume-"));
