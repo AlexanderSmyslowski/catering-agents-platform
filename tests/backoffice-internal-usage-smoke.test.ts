@@ -19,6 +19,7 @@ import {
   type WebRecipeSearchProvider
 } from "@catering/production-service";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 class EmptyWebProvider implements WebRecipeSearchProvider {
   async searchRecipes() {
@@ -260,6 +261,10 @@ describe("backoffice internal usage smoke", () => {
           }
         }
         fetchCalls.push({ method, url, body });
+
+        if (method === "GET" && url.endsWith("/api/intake/v1/auth/session")) {
+          return adminSessionResponse();
+        }
 
         if (method === "GET" && url.endsWith("/api/production/v1/production/cases")) {
           return new Response(

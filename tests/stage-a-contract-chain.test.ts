@@ -83,7 +83,7 @@ describe("Stage A trusted offer-to-production chain", () => {
       store: offerStore,
       auditLog: new AuditLogStore({ rootDir: dataRoot }),
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
 
     const createdCase = ok<{ case: { caseId: string } }>(await offerApp.inject({
@@ -155,18 +155,18 @@ describe("Stage A trusted offer-to-production chain", () => {
       intakeRecords: new InMemoryIntakeRecordsPort(),
       handoffReader,
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
     const intakeApp = buildIntakeApp({
       rootDir: dataRoot,
       store: new IntakeStore({ rootDir: dataRoot }),
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
     const exportApp = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
 
     try {

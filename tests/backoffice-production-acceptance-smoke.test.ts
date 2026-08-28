@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 import { ProductionConversationalWorkbench } from "../backoffice-ui/src/production-workbench.js";
 import {
   buildProductionClarificationQuestions,
@@ -441,6 +442,9 @@ function installProductionAcceptanceMocks(
       const url = String(input);
 
       const requestPath = new URL(url, "http://localhost").pathname;
+      if (requestPath.endsWith("/api/intake/v1/auth/session")) {
+        return adminSessionResponse();
+      }
       if (requestPath.endsWith("/api/production/v1/production/cases") && (!init?.method || init.method === "GET")) {
         const cases =
           options.withoutSpecs

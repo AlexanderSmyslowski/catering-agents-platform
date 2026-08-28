@@ -15,6 +15,7 @@ import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
 import { HomePortalApp } from "./home-portal-app.js";
 import { OfferProductApp } from "./offer-product-app.js";
 import { ProductionRouteAccessBoundary } from "./production-route-access-boundary.js";
+import { SessionBoundary, useCateringSession } from "./session-boundary.js";
 import {
   buildRecordView,
   buildRecordViewMap,
@@ -1397,8 +1398,9 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
   );
 }
 
-/** Resolve the three product routes before handing control to the workbench. */
-export function App() {
+/** Resolve the three product routes only after the server has authenticated the browser session. */
+function AuthenticatedApp() {
+  const cateringSession = useCateringSession();
   const route = detectRoute(getPathname());
   const routeShellState = buildAppRouteShellState({
     route,
@@ -1412,7 +1414,18 @@ export function App() {
   });
 
   if (route === "home") {
-    return <HomePortalApp shell={routeShellState.shell} />;
+    return (
+      <HomePortalApp shell={routeShellState.shell}>
+        {cateringSession ? (
+          <div className="masthead-actions">
+            <span aria-label="Angemeldeter Benutzer">{cateringSession.session.user.displayName}</span>
+            <button className="secondary-button" type="button" onClick={cateringSession.logout}>
+              Abmelden
+            </button>
+          </div>
+        ) : null}
+      </HomePortalApp>
+    );
   }
   return (
     <ProductRouteController
@@ -1420,5 +1433,13 @@ export function App() {
       shell={routeShellState.shell}
       masthead={routeShellState.masthead}
     />
+  );
+}
+
+export function App() {
+  return (
+    <SessionBoundary>
+      <AuthenticatedApp />
+    </SessionBoundary>
   );
 }

@@ -11,6 +11,28 @@ import { ProductionReadOnlyView } from "../backoffice-ui/src/production-read-onl
 
 const roots: Root[] = [];
 
+const authenticatedSession = {
+  authenticated: true,
+  user: { userId: "production-reader", displayName: "Produktionsleser" },
+  access: { capabilities: ["production_read"] }
+};
+
+type BrowserCall = {
+  url: string;
+  method: string;
+  credentials?: RequestCredentials;
+  identityHeaders: string[];
+};
+
+function identityHeaders(init?: RequestInit) {
+  return [...new Headers(init?.headers).keys()].filter((name) =>
+    name === "authorization" ||
+    name === "x-actor-name" ||
+    name.startsWith("x-catering-") ||
+    /(?:actor|subject|role|business|identity)/u.test(name)
+  );
+}
+
 beforeEach(() => {
   const storage = new Map<string, string>();
   Object.defineProperty(window, "localStorage", {
@@ -101,10 +123,18 @@ async function renderProductionRoute(
   pathname = "/produktion"
 ) {
   window.history.replaceState({}, "", pathname);
-  const calls: Array<{ url: string; method: string }> = [];
+  const calls: BrowserCall[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    calls.push({ url, method: init?.method ?? "GET" });
+    calls.push({
+      url,
+      method: init?.method ?? "GET",
+      credentials: init?.credentials,
+      identityHeaders: identityHeaders(init)
+    });
+    if (url.endsWith("/api/intake/v1/auth/session")) {
+      return Response.json(authenticatedSession);
+    }
     return responder(url, init);
   }));
   const container = document.createElement("div");
@@ -134,10 +164,15 @@ afterEach(() => {
 
 describe("Gate B production read-only UI", () => {
   it("loads only projected plans and purchase lists for read-only access", async () => {
-    const calls: Array<{ url: string; method: string }> = [];
+    const calls: BrowserCall[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      calls.push({ url, method: init?.method ?? "GET" });
+      calls.push({
+        url,
+        method: init?.method ?? "GET",
+        credentials: init?.credentials,
+        identityHeaders: identityHeaders(init)
+      });
       if (url.endsWith("/api/production/v1/production/plans")) {
         return Response.json({
           access: { canOperateProduction: false },
@@ -157,8 +192,18 @@ describe("Gate B production read-only UI", () => {
     expect(result.productionPlans).toHaveLength(1);
     expect(result.purchaseLists).toHaveLength(1);
     expect(calls).toEqual([
-      { url: "/api/production/v1/production/plans", method: "GET" },
-      { url: "/api/production/v1/production/purchase-lists", method: "GET" }
+      {
+        url: "/api/production/v1/production/plans",
+        method: "GET",
+        credentials: "same-origin",
+        identityHeaders: []
+      },
+      {
+        url: "/api/production/v1/production/purchase-lists",
+        method: "GET",
+        credentials: "same-origin",
+        identityHeaders: []
+      }
     ]);
     expect(JSON.stringify(result)).not.toContain("8.192,44 EUR");
   });
@@ -197,7 +242,11 @@ describe("Gate B production read-only UI", () => {
     { access: { canOperateProduction: null } },
     { access: { canOperateProduction: "false" } }
   ])("fails closed for an invalid access context %#", async (plansResponse) => {
-    const fetchMock = vi.fn(async () => Response.json(plansResponse));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.credentials).toBe("same-origin");
+      expect(identityHeaders(init)).toEqual([]);
+      return Response.json(plansResponse);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(loadProductionRouteAccessData()).rejects.toThrow("Produktionszugriff");
@@ -206,8 +255,10 @@ describe("Gate B production read-only UI", () => {
 
   it("does not load reader follow-up data for an operative production user", async () => {
     const calls: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      expect(init?.credentials).toBe("same-origin");
+      expect(identityHeaders(init)).toEqual([]);
       calls.push(url);
       if (url.endsWith("/api/production/v1/production/plans")) {
         return Response.json({ access: { canOperateProduction: true }, items: [productionPlan()] });
@@ -236,12 +287,28 @@ describe("Gate B production read-only UI", () => {
     expect(container.textContent).toContain("Nur-Lese-Zugriff");
     expect(container.textContent).toContain("Roastbeef rosa");
     expect(container.textContent).not.toContain("Produktionsassistent");
-    expect(container.querySelector("button")).toBeNull();
     expect(container.querySelector("form")).toBeNull();
     expect([...container.querySelectorAll("a")].some((link) => link.href.includes("/exports/"))).toBe(false);
+    expect([...container.querySelectorAll("button")].map((button) => button.textContent?.trim())).toEqual(["Abmelden"]);
     expect(calls).toEqual([
-      { url: "/api/production/v1/production/plans", method: "GET" },
-      { url: "/api/production/v1/production/purchase-lists", method: "GET" }
+      {
+        url: "/api/intake/v1/auth/session",
+        method: "GET",
+        credentials: "same-origin",
+        identityHeaders: []
+      },
+      {
+        url: "/api/production/v1/production/plans",
+        method: "GET",
+        credentials: "same-origin",
+        identityHeaders: []
+      },
+      {
+        url: "/api/production/v1/production/purchase-lists",
+        method: "GET",
+        credentials: "same-origin",
+        identityHeaders: []
+      }
     ]);
   });
 
@@ -256,7 +323,20 @@ describe("Gate B production read-only UI", () => {
     expect(container.textContent).toContain("Produktionszugriff konnte nicht eindeutig bestimmt werden");
     expect(container.textContent).not.toContain("Produktionsassistent");
     expect(container.textContent).not.toContain("Roastbeef rosa");
-    expect(calls).toEqual([{ url: "/api/production/v1/production/plans", method: "GET" }]);
+    expect(calls).toEqual([
+      {
+        url: "/api/intake/v1/auth/session",
+        method: "GET",
+        credentials: "same-origin",
+        identityHeaders: []
+      },
+      {
+        url: "/api/production/v1/production/plans",
+        method: "GET",
+        credentials: "same-origin",
+        identityHeaders: []
+      }
+    ]);
   });
 
   it("keeps the existing production workbench for an operative capability", async () => {
@@ -275,8 +355,9 @@ describe("Gate B production read-only UI", () => {
 
     expect(container.textContent).toContain("Produktionsassistent");
     expect(container.textContent).not.toContain("Nur-Lese-Zugriff");
-    expect(calls.some(({ url }) => url.includes("/api/intake/"))).toBe(false);
+    expect(calls.some(({ url }) => url.includes("/api/intake/") && !url.endsWith("/auth/session"))).toBe(false);
     expect(calls.some(({ url }) => url.endsWith("/api/production/v1/production/cases"))).toBe(true);
+    expect(calls.every((call) => call.credentials === "same-origin" && call.identityHeaders.length === 0)).toBe(true);
   });
 
   it("does not let the mounted operative workbench reload Intake request details", async () => {
@@ -357,8 +438,9 @@ describe("Gate B production read-only UI", () => {
     }, "/produktion?productionCaseId=case-a");
 
     expect(container.textContent).toContain("Produktionsassistent");
-    expect(calls.some(({ url }) => url.includes("/api/intake/"))).toBe(false);
+    expect(calls.some(({ url }) => url.includes("/api/intake/") && !url.endsWith("/auth/session"))).toBe(false);
     expect(container.textContent).not.toContain("8.192,44 EUR");
     expect(container.innerHTML).not.toContain("8.192,44 EUR");
+    expect(calls.every((call) => call.credentials === "same-origin" && call.identityHeaders.length === 0)).toBe(true);
   });
 });

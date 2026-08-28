@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AcceptedEventSpec } from "@catering/shared-core";
 import { App } from "../backoffice-ui/src/App.js";
 import { OfferProductApp } from "../backoffice-ui/src/offer-product-app.js";
@@ -15,10 +15,18 @@ import { useProductionWorkspaceData } from "../backoffice-ui/src/use-production-
 import { buildProductProductionDashboardRecordsState } from "../backoffice-ui/src/production-dashboard-records-state.js";
 import * as api from "../backoffice-ui/src/api.js";
 import type { ProductionDraft, ProductionProductData } from "../backoffice-ui/src/api.js";
+import {
+  activateCateringSessionRequests,
+  deactivateCateringSessionRequests
+} from "../backoffice-ui/src/session-api.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 const roots: Root[] = [];
 
 function responseFor(url: string): Response {
+  if (url.endsWith("/api/intake/v1/auth/session")) {
+    return adminSessionResponse();
+  }
   if (url.includes("/health")) {
     return Response.json({ service: "local", status: "ok", timestamp: "", counts: {} });
   }
@@ -277,6 +285,10 @@ function productionQuestionPanelProps(activeCaseId?: string): ProductionQuestion
   };
 }
 
+beforeEach(() => {
+  activateCateringSessionRequests();
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) {
     act(() => root.unmount());
@@ -285,6 +297,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   window.history.replaceState({}, "", "/");
+  deactivateCateringSessionRequests();
 });
 
 describe("independent product loader boundaries", () => {
@@ -304,11 +317,17 @@ describe("independent product loader boundaries", () => {
 
   it("keeps the portal free of operational requests and health checks", async () => {
     const { fetchMock } = await renderAt("/");
+    const productCalls = fetchMock.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => !url.endsWith("/api/intake/v1/auth/session"));
 
-    expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContainEqual(
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+      "/api/intake/v1/auth/session"
+    ]);
+    expect(productCalls).not.toContainEqual(
       expect.stringMatching(/\/api\/(intake|offers|production)\//)
     );
-    expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContainEqual(
+    expect(productCalls).not.toContainEqual(
       expect.stringMatching(/\/api\/(intake|offers|production)\/health/)
     );
   });

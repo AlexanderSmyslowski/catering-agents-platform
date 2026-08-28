@@ -229,10 +229,11 @@ function buildHarness(options: {
     productionDecisionFaultInjector: options.decisionFaultInjector,
     env: approvalPath
       ? {
+          CATERING_DEV_AUTH: "1",
           CATERING_SYNTHETIC_LLM_SLICE: "1",
           CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath
         }
-      : {}
+      : { CATERING_DEV_AUTH: "1" }
   });
   return { app, auditLog, intakeStore, repository, store };
 }

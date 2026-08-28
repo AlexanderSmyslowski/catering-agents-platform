@@ -221,7 +221,7 @@ describe("BYO LLM runtime clarification drafts", () => {
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
-      env: { CATERING_LLM_PROVIDER: "fixture" }
+      env: { CATERING_LLM_PROVIDER: "fixture", CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -297,6 +297,7 @@ describe("BYO LLM runtime clarification drafts", () => {
       llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
+        CATERING_DEV_AUTH: "1",
         CATERING_SYNTHETIC_LLM_SLICE: "1",
         CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalApproval(dataRoot)
       }
@@ -342,6 +343,7 @@ describe("BYO LLM runtime clarification drafts", () => {
       llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
+        CATERING_DEV_AUTH: "1",
         CATERING_SYNTHETIC_LLM_SLICE: "1",
         CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalApproval(dataRoot)
       }
@@ -379,7 +381,7 @@ describe("BYO LLM runtime clarification drafts", () => {
       intakeRecords: intakeStore,
       store,
       trustedActorSecret: TRUSTED_SECRET,
-      env: { CATERING_LLM_PROVIDER: "fixture" }
+      env: { CATERING_LLM_PROVIDER: "fixture", CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -425,7 +427,7 @@ describe("BYO LLM runtime clarification drafts", () => {
       intakeRecords: intakeStore,
       store,
       trustedActorSecret: TRUSTED_SECRET,
-      env: { CATERING_LLM_PROVIDER: "fixture" }
+      env: { CATERING_LLM_PROVIDER: "fixture", CATERING_DEV_AUTH: "1" }
     });
 
     try {

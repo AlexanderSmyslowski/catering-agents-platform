@@ -230,7 +230,7 @@ describe("ProductionDraft apply", () => {
       auditLog,
       intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const draft = await buildDraft();
 
@@ -282,7 +282,7 @@ describe("ProductionDraft apply", () => {
       store,
       intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const draft = await buildDraft("production-draft-apply-pending");
 
@@ -311,7 +311,7 @@ describe("ProductionDraft apply", () => {
       store,
       intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const draft = await buildDraft("production-draft-apply-conflict");
     await store.savePlan({ businessId: "local" }, {
@@ -341,7 +341,7 @@ describe("ProductionDraft apply", () => {
       store,
       intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const draft = await buildDraft("production-draft-apply-recipe-conflict");
     await repository.save({ businessId: "local" }, {

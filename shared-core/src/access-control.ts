@@ -24,6 +24,7 @@ export type MinimalMvpCapability = (typeof MINIMAL_MVP_CAPABILITIES)[number];
 import { assertBusinessId, type BusinessId } from "./business-context.js";
 
 export type TrustedActorSource =
+  | "authenticated-session"
   | "trusted-proxy:x-catering-actor-name"
   | "dev-header:x-actor-name"
   | "dev-default"
@@ -31,31 +32,42 @@ export type TrustedActorSource =
   | "untrusted";
 
 export const TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE = "trusted-proxy:x-catering-actor-name";
+export const AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE = "authenticated-session";
 
-export type TrustedFinalApprovalActorSource = typeof TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE;
+export type TrustedFinalApprovalActorSource =
+  | typeof TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE
+  | typeof AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE;
 
 export interface TrustedActor {
   name: string;
   businessId: BusinessId;
   source: TrustedActorSource;
   trusted: boolean;
+  // Diese Rolle wird ausschließlich nach einer Cookie-/JWT-Prüfung serverseitig gesetzt.
+  role?: MinimalMvpRole;
 }
 
 export function isTrustedFinalApprovalSource(source: string): source is TrustedFinalApprovalActorSource {
-  return source === TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE;
+  return source === TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE || source === AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE;
 }
 
 export function assertTrustedFinalApprovalActor(
   actor: TrustedActor
-): asserts actor is TrustedActor & { source: TrustedFinalApprovalActorSource; trusted: true } {
+): asserts actor is TrustedActor & (
+  | { source: typeof TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE; trusted: true }
+  | { source: typeof AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE; trusted: true; role: MinimalMvpRole }
+) {
   // The resolver alone authenticates proxy headers; this guard only preserves its trusted provenance invariant.
-  const allowedActorKeys = ["name", "businessId", "source", "trusted"];
+  const allowedActorKeys = actor.source === AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE
+    ? ["name", "businessId", "source", "trusted", "role"]
+    : ["name", "businessId", "source", "trusted"];
   if (
     Object.keys(actor).some((key) => !allowedActorKeys.includes(key)) ||
     !actor.trusted ||
-    !isTrustedFinalApprovalSource(actor.source)
+    !isTrustedFinalApprovalSource(actor.source) ||
+    (actor.source === AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE && !isMinimalMvpRole(actor.role ?? ""))
   ) {
-    throw new Error("Vertrauenswürdiger Proxy-Actor für finale Freigaben erforderlich.");
+    throw new Error("Vertrauenswürdiger menschlicher Actor für finale Freigaben erforderlich.");
   }
 }
 
@@ -360,6 +372,9 @@ export function createTrustedActorResolver<TRequest extends TrustedActorRequest>
 }
 
 export function resolveMinimalMvpRoleFromTrustedActor(actor: TrustedActor): MinimalMvpRole | undefined {
+  if (actor.source === AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE) {
+    return actor.trusted && isMinimalMvpRole(actor.role ?? "") ? actor.role : undefined;
+  }
   if (!actor.trusted && actor.source !== "dev-header:x-actor-name" && actor.source !== "dev-default") {
     return undefined;
   }

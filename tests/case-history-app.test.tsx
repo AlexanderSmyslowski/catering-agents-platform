@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 const roots: Array<ReturnType<typeof createRoot>> = [];
 
@@ -40,6 +41,9 @@ describe("case history in the rendered offer route", () => {
       const url = String(input);
       const method = (init?.method ?? "GET").toUpperCase();
       calls.push({ method, url });
+      if (url.endsWith("/api/intake/v1/auth/session")) {
+        return adminSessionResponse();
+      }
       if (url.endsWith("/api/offers/health")) {
         return Response.json({ service: "offer-service", status: "ok", timestamp: "", counts: {} });
       }

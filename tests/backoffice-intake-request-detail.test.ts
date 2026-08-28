@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { normalizeEventRequestToSpec, SCHEMA_VERSION, type EventRequest } from "@catering/shared-core";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 function buildEventRequest(): EventRequest {
   return {
@@ -37,6 +38,9 @@ describe("backoffice intake request detail", () => {
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url.endsWith("/api/intake/v1/auth/session")) {
+          return adminSessionResponse();
+        }
         if (url.endsWith("/api/production/v1/production/cases")) {
           return new Response(
             JSON.stringify({
@@ -270,7 +274,9 @@ describe("backoffice intake request detail", () => {
     expect(document.body.textContent).not.toContain("channel: text");
     expect(document.body.textContent).toContain("Herkunft und Übergabe");
     expect(document.body.textContent).not.toContain("Konferenz am 2026-04-18 fuer 45 Teilnehmer");
-    expect(fetchMock.mock.calls.map(([input]) => String(input)).some((url) => url.includes("/api/intake/"))).toBe(false);
+    expect(fetchMock.mock.calls.map(([input]) => String(input)).some((url) =>
+      url.includes("/api/intake/") && !url.endsWith("/api/intake/v1/auth/session")
+    )).toBe(false);
 
     await act(async () => {
       root.unmount();

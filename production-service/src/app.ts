@@ -5,13 +5,18 @@ import {
   assertBusinessId,
   BoundaryGuardedLlmAdapter,
   buildBoundaryGuardedLlmAdapterFromEnv,
+  CateringUserStore,
+  classifyCateringRouteAuth,
   loadByoLlmExternalProcessingApprovalFromEnv,
   createTrustedActorResolver,
+  deriveCateringAuthKeys,
   hasMinimalMvpCapability,
   getDemoProductionSpecs,
   hostedMultiBusinessReady,
   internalRecipes,
+  isCateringSessionMode,
   isDevAuthEnabled,
+  registerCateringRequestAuth,
   type ByoLlmProviderDescriptor,
   type LlmReadinessProviderAdapter,
   type LlmReadinessDataMode,
@@ -56,6 +61,7 @@ export interface ProductionAppOptions {
   intakeRecords?: IntakeRecordsPort;
   sourceDocumentReader?: SourceDocumentReader;
   auditLog?: AuditLogStore;
+  userStore?: CateringUserStore;
   llmAdapter?: LlmReadinessProviderAdapter;
   buildLlmAdapter?: () => LlmReadinessProviderAdapter;
   llmProviderDescriptor?: ByoLlmProviderDescriptor;
@@ -122,11 +128,12 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   }
   const productionDraftDataMode = productionDraftDataModeFromEnv(env);
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const sessionMode = isCateringSessionMode(env);
   const allowDevActorHeader = isDevAuthEnabled(env);
   const resolveActor = createTrustedActorResolver({
     fallbackActorName: "Produktions-Mitarbeiter", fallbackBusinessId: defaultBusinessContext.businessId, requireTrustedBusinessId: hosted, trustedActorSecret, allowDevActorHeader
   });
-  const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
+  let actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
   const isProductionOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
     hasMinimalMvpCapability(actorForRequest(request), "production");
   const requireProductionOperator = (
@@ -188,6 +195,11 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
+  const userStore = options.userStore ?? new CateringUserStore({
+    rootDir: options.dataRoot,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
   const injectedAdapter = options.buildLlmAdapter ?? (options.llmAdapter ? () => options.llmAdapter as LlmReadinessProviderAdapter : undefined);
   if (injectedAdapter && !options.llmProviderDescriptor) {
     throw new Error("Injected BYO LLM adapters require an explicit server-owned llmProviderDescriptor.");
@@ -205,6 +217,23 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     : undefined);
 
   const app = Fastify({ logger: false });
+  const authKeys = sessionMode ? deriveCateringAuthKeys(trustedActorSecret ?? "") : undefined;
+  const requestAuth = sessionMode
+    ? registerCateringRequestAuth({
+        app,
+        sessionMode,
+        userStore,
+        businessContext: defaultBusinessContext,
+        authKeys: authKeys!,
+        isPublicRequest: (request) => classifyCateringRouteAuth({
+          targetService: "production-service",
+          method: request.method,
+          pathname: request.url.split("?", 1)[0]
+        }) === "public-health"
+      })
+    : undefined;
+  actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    sessionMode ? requestAuth!.actorForRequest(request) : resolveActor(request);
   const appWithBridgeResolver = app as typeof app & {
     setQuantityRecipeBridgeResolver: (resolver: QuantityRecipeBridgeResolver | undefined) => void;
   };

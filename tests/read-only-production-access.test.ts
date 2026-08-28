@@ -316,7 +316,7 @@ describe("Gate B read-only Production API", () => {
   it("reports the canonical Production capability on the plan list and denies missing or unknown roles", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
 
     try {
       const readOnlyResponse = await app.inject({
@@ -361,7 +361,7 @@ describe("Gate B read-only Production API", () => {
     const store = new ProductionStore({ rootDir: dataRoot });
     await store.savePlan(localBusiness, productionPlanWithCommercialSentinels());
     await store.savePurchaseList(localBusiness, purchaseListWithCommercialSentinels());
-    const app = buildProductionApp({ dataRoot, store, trustedActorSecret: TRUSTED_SECRET, env: {} });
+    const app = buildProductionApp({ dataRoot, store, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
 
     try {
       const readOnlyResponses = await Promise.all([
@@ -419,7 +419,7 @@ describe("Gate B read-only Production API", () => {
   it.each(forbiddenProductionReads)("keeps non-artifact GET %s forbidden for Read-only", async (url) => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
     try {
       const response = await app.inject({ method: "GET", url, headers: readOnlyHeaders });
       expectStatus(response, 403);
@@ -435,7 +435,7 @@ describe("Gate B read-only Production API", () => {
   it.each(productionMutations)("rejects Read-only mutation %s %s", async (method, url, payload) => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);
-    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+    const app = buildProductionApp({ dataRoot, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
     try {
       const response = await app.inject({
         method,
@@ -461,7 +461,7 @@ describe("Gate B read-only Production API", () => {
       store,
       quantityOverrideStore,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {

@@ -159,7 +159,12 @@ function expectProductionCommercialsAbsent(value: unknown): void {
 async function createCanonicalProduction() {
   const rootDir = createDataRoot();
   const offerStore = new CommercialSentinelOfferStore({ rootDir });
-  const offerApp = buildOfferApp({ rootDir, store: offerStore, trustedActorSecret: TRUSTED_SECRET });
+  const offerApp = buildOfferApp({
+    rootDir,
+    store: offerStore,
+    trustedActorSecret: TRUSTED_SECRET,
+    env: { CATERING_DEV_AUTH: "1" }
+  });
   const createdCase = await offerApp.inject({
     method: "POST",
     url: "/v1/offers/cases",
@@ -233,7 +238,7 @@ async function createCanonicalProduction() {
       fetch: offerServiceFetch(offerApp)
     }),
     trustedActorSecret: TRUSTED_SECRET,
-    env: { CATERING_ENABLE_WEB_RECIPE_SEARCH: "0" }
+    env: { CATERING_ENABLE_WEB_RECIPE_SEARCH: "0", CATERING_DEV_AUTH: "1" }
   });
 
   const productionCase = await productionApp.inject({
@@ -624,7 +629,7 @@ describe("Gate B Slice 2 production commercial confidentiality", () => {
         endpoint: "local://fixture-review-comment-test",
         metadataVerified: true
       },
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     try {
       const supportedCard = fixture.preparedDraft.reviewCards.find((card) =>

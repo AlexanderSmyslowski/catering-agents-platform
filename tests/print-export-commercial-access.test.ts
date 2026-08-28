@@ -201,7 +201,7 @@ async function seedProductionExportArtifacts(rootDir: string) {
 }
 
 async function seedOfferDraft(rootDir: string): Promise<string> {
-  const offerApp = buildOfferApp({ rootDir, trustedActorSecret: TRUSTED_SECRET, env: {} });
+  const offerApp = buildOfferApp({ rootDir, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
   try {
     const seeded = await offerApp.inject({
       method: "POST",
@@ -232,7 +232,7 @@ describe("Gate B print-export commercial confidentiality", () => {
     const rootDir = createDataRoot();
     dataRoots.push(rootDir);
     const { plan } = await seedProductionExportArtifacts(rootDir);
-    const app = buildPrintExportApp({ rootDir, trustedActorSecret: TRUSTED_SECRET, env: {} });
+    const app = buildPrintExportApp({ rootDir, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
 
     try {
       const [productionPlan, productionFolder, adminFolder] = await Promise.all([
@@ -290,7 +290,7 @@ describe("Gate B print-export commercial confidentiality", () => {
     dataRoots.push(rootDir);
     const { plan, purchaseList } = await seedProductionExportArtifacts(rootDir);
     const offerDraftId = await seedOfferDraft(rootDir);
-    const app = buildPrintExportApp({ rootDir, trustedActorSecret: TRUSTED_SECRET, env: {} });
+    const app = buildPrintExportApp({ rootDir, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
 
     try {
       for (const headers of [offerHeaders, adminHeaders]) {

@@ -34,6 +34,7 @@ function buildHarness(configuredBusinessId = "alpha") {
     auditLog: new AuditLogStore({ rootDir }),
     trustedActorSecret: trustedSecret,
     env: {
+      CATERING_DEV_AUTH: "1",
       CATERING_DEFAULT_BUSINESS_ID: configuredBusinessId,
       CATERING_TRUSTED_ACTOR_SECRET: trustedSecret
     }

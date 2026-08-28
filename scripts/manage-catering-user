@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repository_root="$(cd -- "${script_dir}/.." && pwd)"
+tsx_runner="${repository_root}/node_modules/.bin/tsx"
+
+if [[ ! -x "${tsx_runner}" ]]; then
+  printf '%s\n' '{"status":"error"}' >&2
+  exit 1
+fi
+
+exec "${tsx_runner}" "${repository_root}/scripts/manage-catering-user.ts" "$@"

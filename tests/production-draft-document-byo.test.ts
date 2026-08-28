@@ -121,10 +121,14 @@ function buildProductionApp(
     env: approvalPath
       ? {
           ...options.env,
+          CATERING_DEV_AUTH: "1",
           CATERING_SYNTHETIC_LLM_SLICE: "1",
           CATERING_LLM_PROCESSING_APPROVAL_FILE: approvalPath
         }
-      : options.env,
+      : {
+          ...options.env,
+          CATERING_DEV_AUTH: "1"
+        },
     sourceDocumentReader: options.sourceDocumentReader ?? sourceDocumentReader
   });
 }

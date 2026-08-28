@@ -3,7 +3,11 @@ import multipart from "@fastify/multipart";
 import {
   AuditLogStore,
   assertBusinessId,
+  CateringUserStore,
+  classifyCateringRouteAuth,
+  createCateringInternalServiceActorResolver,
   createTrustedActorResolver,
+  deriveCateringAuthKeys,
   hasMinimalMvpCapability,
   createOfferDraft,
   createUploadSourceMetadata,
@@ -11,7 +15,9 @@ import {
   getDemoOfferRequests,
   hostedMultiBusinessReady,
   parseUploadedRecipeText,
+  isCateringSessionMode,
   isDevAuthEnabled,
+  registerCateringRequestAuth,
   RecipeLibrary,
   multipartLimitsForUpload,
   readLimitedUploadBuffer,
@@ -45,6 +51,7 @@ export interface OfferAppOptions extends CollectionStorageOptions {
   store?: OfferStore;
   recipeLibrary?: RecipeLibrary;
   auditLog?: AuditLogStore;
+  userStore?: CateringUserStore;
   trustedActorSecret?: string;
   sourceDocumentReader?: SourceDocumentMetadataReader;
   env?: Record<string, string | undefined>;
@@ -126,11 +133,12 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
   }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const sessionMode = isCateringSessionMode(env);
   const allowDevActorHeader = isDevAuthEnabled(env);
   const resolveActor = createTrustedActorResolver({
     fallbackActorName: "Angebots-Mitarbeiter", fallbackBusinessId: defaultBusinessContext.businessId, requireTrustedBusinessId: hosted, trustedActorSecret, allowDevActorHeader
   });
-  const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
+  let actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
   const isOfferOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
     hasMinimalMvpCapability(actorForRequest(request), "offer");
   const requireOfferOperator = (
@@ -146,8 +154,13 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   ): unknown | undefined => {
     const actor = actorForRequest(request);
     const canReadOffer = hasMinimalMvpCapability(actor, "offer");
+    const canReadAsProductionService = actor.trusted
+      && actor.name === "Production-Service"
+      && (sessionMode
+        ? actor.source === "service-default"
+        : actor.source === "trusted-proxy:x-catering-actor-name");
     return canReadOffer ||
-      (actor.trusted && actor.name === "Production-Service")
+      canReadAsProductionService
       ? undefined
       : reply.code(403).send({ message: "Leseberechtigung für Produktionsübergaben erforderlich." });
   };
@@ -175,6 +188,11 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool
     });
+  const userStore = options.userStore ?? new CateringUserStore({
+    rootDir: storageOptions?.rootDir,
+    databaseUrl: storageOptions?.databaseUrl,
+    pgPool: storageOptions?.pgPool
+  });
   const sourceDocumentReader = options.sourceDocumentReader ?? (env.CATERING_INTAKE_SERVICE_URL
     ? new HttpSourceDocumentMetadataReader({
         intakeServiceUrl: env.CATERING_INTAKE_SERVICE_URL,
@@ -185,6 +203,37 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   const app = Fastify({
     logger: false
   });
+
+  const authKeys = sessionMode ? deriveCateringAuthKeys(trustedActorSecret ?? "") : undefined;
+  const internalServiceActorForRequest = sessionMode
+    ? createCateringInternalServiceActorResolver({
+        targetService: "offer-service",
+        trustedActorSecret: trustedActorSecret!,
+        businessContext: defaultBusinessContext
+      })
+    : undefined;
+  const requestAuth = sessionMode
+    ? registerCateringRequestAuth({
+        app,
+        sessionMode,
+        userStore,
+        businessContext: defaultBusinessContext,
+        authKeys: authKeys!,
+        internalServiceActorForRequest,
+        isInternalServiceRequest: (request) => classifyCateringRouteAuth({
+          targetService: "offer-service",
+          method: request.method,
+          pathname: request.url.split("?", 1)[0]
+        }) === "internal-service",
+        isPublicRequest: (request) => classifyCateringRouteAuth({
+          targetService: "offer-service",
+          method: request.method,
+          pathname: request.url.split("?", 1)[0]
+        }) === "public-health"
+      })
+    : undefined;
+  actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    sessionMode ? requestAuth!.actorForRequest(request) : resolveActor(request);
 
   app.addHook("onRequest", async (request, reply) => {
     if (request.url.split("?", 1)[0] === "/health") return;

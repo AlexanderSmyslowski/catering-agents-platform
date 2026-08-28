@@ -16,13 +16,18 @@ import {
   formatDocumentIngestionWarningLabel,
   assertBusinessId,
   assertTrustedActorConfiguration,
+  CateringUserStore,
+  classifyCateringRouteAuth,
   createTrustedActorResolver,
+  deriveCateringAuthKeys,
   hasMinimalMvpCapability,
   formatMetroGroupLabel,
+  isCateringSessionMode,
   isDevAuthEnabled,
   hostedMultiBusinessReady,
   projectAcceptedEventSpecForActor,
   RecipeLibrary,
+  registerCateringRequestAuth,
   recipeSourceOriginLabel,
   recipeSourceReferenceLabel,
 } from "@catering/shared-core";
@@ -296,6 +301,7 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
 
 export interface PrintExportAppOptions extends CollectionStorageOptions {
   trustedActorSecret?: string;
+  userStore?: CateringUserStore;
   env?: Record<string, string | undefined>;
 }
 
@@ -306,6 +312,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
   }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const sessionMode = isCateringSessionMode(env);
   assertTrustedActorConfiguration({ requireTrustedBusinessId: hosted, trustedActorSecret });
   const allowDevActorHeader = isDevAuthEnabled(env);
   const defaultBusinessId = env.CATERING_DEFAULT_BUSINESS_ID ?? "local";
@@ -321,7 +328,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     trustedActorSecret,
     allowDevActorHeader
   }));
-  const actorForRequest = (request: PrintExportRequest, ..._ignored: unknown[]) => resolveActor(request);
+  let actorForRequest = (request: PrintExportRequest, ..._ignored: unknown[]) => resolveActor(request);
   const isOfferOperator = (request: PrintExportRequest, ..._ignored: unknown[]) =>
     hasMinimalMvpCapability(actorForRequest(request), "offer");
   const isProductionOperator = (request: PrintExportRequest, ..._ignored: unknown[]) =>
@@ -343,6 +350,28 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   const app = Fastify({
     logger: false
   });
+  const userStore = options.userStore ?? new CateringUserStore({
+    rootDir: options.rootDir,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
+  const authKeys = sessionMode ? deriveCateringAuthKeys(trustedActorSecret ?? "") : undefined;
+  const requestAuth = sessionMode
+    ? registerCateringRequestAuth({
+        app,
+        sessionMode,
+        userStore,
+        businessContext: defaultBusinessContext,
+        authKeys: authKeys!,
+        isPublicRequest: (request) => classifyCateringRouteAuth({
+          targetService: "print-export",
+          method: request.method,
+          pathname: request.url.split("?", 1)[0]
+        }) === "public-health"
+      })
+    : undefined;
+  actorForRequest = (request: PrintExportRequest, ..._ignored: unknown[]) =>
+    sessionMode ? requestAuth!.actorForRequest(request) : resolveActor(request);
   app.addHook("onRequest", async (request) => {
     if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
   });

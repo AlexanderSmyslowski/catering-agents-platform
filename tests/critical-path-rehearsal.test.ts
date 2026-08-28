@@ -145,7 +145,7 @@ describe("critical path rehearsal", () => {
     const offerApp = buildOfferApp({
       rootDir: dataRoot,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const intakeRecords = new InMemoryIntakeRecordsPort();
     const productionApp = buildProductionApp({
@@ -154,6 +154,7 @@ describe("critical path rehearsal", () => {
       intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
+        CATERING_DEV_AUTH: "1",
         CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
       }
     });
@@ -161,7 +162,7 @@ describe("critical path rehearsal", () => {
     const exportApp = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {

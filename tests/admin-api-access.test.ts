@@ -51,7 +51,11 @@ function offerServiceFetch(offerApp: InjectableApp) {
 }
 
 async function createCanonicalOfferHandoff(rootDir: string) {
-  const offerApp = buildOfferApp({ rootDir, trustedActorSecret: TRUSTED_SECRET });
+  const offerApp = buildOfferApp({
+    rootDir,
+    trustedActorSecret: TRUSTED_SECRET,
+    env: { CATERING_DEV_AUTH: "1" }
+  });
   const createdCase = await offerApp.inject({
     method: "POST",
     url: "/v1/offers/cases",
@@ -119,7 +123,7 @@ async function createCanonicalProductionDraft(rootDir: string) {
       fetch: offerServiceFetch(offerApp)
     }),
     trustedActorSecret: TRUSTED_SECRET,
-    env: { CATERING_ENABLE_WEB_RECIPE_SEARCH: "0" }
+    env: { CATERING_ENABLE_WEB_RECIPE_SEARCH: "0", CATERING_DEV_AUTH: "1" }
   });
 
   const productionCase = await productionApp.inject({

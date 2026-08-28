@@ -49,7 +49,7 @@ export const approvalRequestSchema = {
             "admin"
           ]
         },
-        source: { const: "trusted-proxy:x-catering-actor-name" }
+        source: { enum: ["trusted-proxy:x-catering-actor-name", "authenticated-session"] }
       }
     },
     comment: { type: "string", minLength: 1, maxLength: 1000, pattern: ".*\\S.*" }

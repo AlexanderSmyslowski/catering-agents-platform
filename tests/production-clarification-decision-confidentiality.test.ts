@@ -133,7 +133,7 @@ async function createFixture() {
     store,
     intakeRecords,
     trustedActorSecret: TRUSTED_SECRET,
-    env: { CATERING_DEFAULT_BUSINESS_ID: "local" }
+    env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_DEV_AUTH: "1" }
   });
 
   return { app, canonicalSpec, dataRoot, intakeRecords };
