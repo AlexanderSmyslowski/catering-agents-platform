@@ -91,7 +91,146 @@ readonly VALID_RESUME_STATES="candidate|active|rolling_back"
 : "${MANIFEST_BINDING_FIELDS}"
 : "${VALID_RESUME_STATES}"
 : "${FOREIGN_CONTAINERS[*]}"
+# One parametrized WAL/alias/provenance primitive is injected into both remote shells.
+IFS= read -r -d '' REMOTE_MEMBERSHIP_PRIMITIVE <<'REMOTE_MEMBERSHIP_PRIMITIVE' || true
+membership_field() {
+  if declare -F field >/dev/null 2>&1; then field "$@"; else journal_field_normal "$@"; fi
+}
+membership_alias_matrix() {
+  local network="$1" members; [[ "${network}" == catering_ingress || "${network}" == catering_private ]] || fail
+  members="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+  python3 -c '
+import json,sys
+expected={"catering_ingress":{"platform-infra-web-1":["web"],"shared-edge-edge-1":["edge","shared-edge-edge-1"]},"catering_private":{"platform-infra-web-1":["web"],"platform-infra-postgres-1":["postgres"],"platform-infra-intake-1":["intake"],"platform-infra-offer-1":["offer"],"platform-infra-production-1":["production"],"platform-infra-exports-1":["exports"]}}
+actual={}
+for item in json.loads(sys.argv[2]).values():
+  if not isinstance(item,dict): raise SystemExit("member record is malformed")
+  name,aliases=str(item.get("Name","")).lstrip("/"),item.get("Aliases")
+  if name in actual or name not in expected[sys.argv[1]] or not isinstance(aliases,list): raise SystemExit("member alias matrix contains an unexpected entry")
+  actual[name]=sorted(str(alias) for alias in aliases)
+for name,aliases in actual.items():
+  if aliases != expected[sys.argv[1]][name]: raise SystemExit("member alias mapping drifted")
+' "${network}" "${members}" || fail
+}
+membership_wal_validate() {
+  local phase action network container context sequence aliases before after actual; [[ -e "${adoption_journal}" ]] || return 0
+  phase="$(membership_field "${adoption_journal}" membership_wal_phase)"; action="$(membership_field "${adoption_journal}" membership_wal_action)"; network="$(membership_field "${adoption_journal}" membership_wal_network)"; container="$(membership_field "${adoption_journal}" membership_wal_container)"; context="$(membership_field "${adoption_journal}" membership_wal_context)"; sequence="$(membership_field "${adoption_journal}" membership_wal_sequence)"; aliases="$(membership_field "${adoption_journal}" membership_wal_aliases)"
+  case "${phase}" in
+    idle) [[ "${action}" == none && "${network}" == none && "${container}" == none && "${context}" == none && "${sequence}" =~ ^[0-9]+$ && "${aliases}" == absent && "$(membership_field "${adoption_journal}" membership_wal_before_b64)" == absent && "$(membership_field "${adoption_journal}" membership_wal_after_b64)" == absent ]] || fail ;;
+    pending)
+      [[ "${action}" == connect || "${action}" == disconnect ]] || fail
+      [[ "${network}" == catering_ingress || "${network}" == catering_private ]] || fail
+      [[ "${container}" =~ ^(platform-infra-(web|postgres|intake|offer|production|exports)-1|shared-edge-edge-1)$ ]] || fail
+      [[ "${context}" == forward || "${context}" == rollback ]] || fail
+      [[ "${sequence}" =~ ^[1-9][0-9]*$ ]] || fail
+      [[ "${action}" == disconnect || "${aliases}" != absent ]] || fail
+      before="$(printf '%s' "$(membership_field "${adoption_journal}" membership_wal_before_b64)" | base64 -d)" || fail
+      after="$(printf '%s' "$(membership_field "${adoption_journal}" membership_wal_after_b64)" | base64 -d)" || fail
+      actual="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+      membership_alias_matrix "${network}"
+      python3 -c '
+import json,sys
+action,container,before,after,actual=sys.argv[1:]
+def canonical(value):
+ value=json.loads(value)
+ if not isinstance(value,dict): raise SystemExit("membership record is malformed")
+ return {str(key):{"Name":str(item.get("Name","")).lstrip("/"),"Aliases":sorted(str(alias) for alias in item.get("Aliases",[]))} for key,item in value.items() if isinstance(item,dict) and str(item.get("Name","")).lstrip("/") and isinstance(item.get("Aliases"),list)}
+before,after,actual=(canonical(value) for value in (before,after,actual)); names_before={item["Name"] for item in before.values()}; names_after={item["Name"] for item in after.values()}
+if action=="connect" and (container in names_before or container not in names_after): raise SystemExit("connect WAL transition is not canonical")
+if action=="disconnect" and (container not in names_before or container in names_after): raise SystemExit("disconnect WAL transition is not canonical")
+if actual not in (before,after): raise SystemExit("membership WAL is not a before/after prefix")
+' "${action}" "${container}" "${before}" "${after}" "${actual}" || fail
+      ;;
+    *) fail ;;
+  esac
+}
 
+membership_wal_write() {
+  local phase="$1" action="$2" network="$3" container="$4" context="$5" sequence="$6" aliases="$7" before="$8" after="$9" ingress="${10}" private="${11}" tmp final hash txn; tmp="$(mktemp)"
+  sed -e "s|^membership_wal_phase=.*|membership_wal_phase=${phase}|" -e "s|^membership_wal_action=.*|membership_wal_action=${action}|" -e "s|^membership_wal_network=.*|membership_wal_network=${network}|" -e "s|^membership_wal_container=.*|membership_wal_container=${container}|" -e "s|^membership_wal_context=.*|membership_wal_context=${context}|" -e "s|^membership_wal_sequence=.*|membership_wal_sequence=${sequence}|" -e "s|^membership_wal_aliases=.*|membership_wal_aliases=${aliases}|" -e "s|^membership_wal_before_b64=.*|membership_wal_before_b64=${before}|" -e "s|^membership_wal_after_b64=.*|membership_wal_after_b64=${after}|" -e "s|^catering_ingress_members_b64=.*|catering_ingress_members_b64=${ingress}|" -e "s|^catering_ingress_aliases_b64=.*|catering_ingress_aliases_b64=${ingress}|" -e "s|^catering_private_members_b64=.*|catering_private_members_b64=${private}|" -e "s|^catering_private_aliases_b64=.*|catering_private_aliases_b64=${private}|" -e 's|^journal_sha256=.*|journal_sha256=absent|' "${adoption_journal}" >"${tmp}"
+  hash="$(canonical_adoption_journal_sha256 "${tmp}")"; final="${tmp}.final"
+  sed "s|^journal_sha256=absent$|journal_sha256=${hash}|" "${tmp}" >"${final}"
+  if declare -F atomic_record >/dev/null 2>&1; then atomic_record "${adoption_journal}" "${final}"; else
+    txn="${transaction_id:-${run_id:-}}"; sudo install -m 0640 "${final}" "${adoption_journal}.pending.${txn}"; sudo mv -f "${adoption_journal}.pending.${txn}" "${adoption_journal}"; cmp -s "${final}" "${adoption_journal}" || fail
+  fi
+  unlink "${tmp}"
+  unlink "${final}"
+}
+membership_wal_prepare() {
+  local network="$1" container="$2" action="$3" context="$4" aliases="${5:-}" before after id sequence ingress private; [[ "$(membership_field "${adoption_journal}" membership_wal_phase)" == idle ]] || fail
+  membership_alias_matrix "${network}"
+  before="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+  id="$(docker inspect --format '{{.Id}}' "${container}")" || fail
+  sequence="$(membership_field "${adoption_journal}" membership_wal_sequence)"; [[ "${sequence}" =~ ^[0-9]+$ ]] || fail; sequence=$((sequence + 1))
+  after="$(python3 -c 'import json,sys; value=json.loads(sys.argv[1]); action,identity,name,aliases=sys.argv[2:]; (value.__setitem__(identity,{"Name":"/"+name,"Aliases":[item for item in aliases.split(",") if item]}) if action=="connect" and identity not in value else value.pop(identity) if action=="disconnect" and identity in value else (_ for _ in ()).throw(SystemExit("invalid WAL transition"))); print(json.dumps(value,sort_keys=True,separators=(",",":")))' "${before}" "${action}" "${id}" "${container}" "${aliases}")" || fail
+  ingress="$(membership_field "${adoption_journal}" catering_ingress_members_b64)"; private="$(membership_field "${adoption_journal}" catering_private_members_b64)"
+  membership_wal_write pending "${action}" "${network}" "${container}" "${context}" "${sequence}" "${aliases:-absent}" "$(printf '%s' "${before}" | base64 | tr -d '\n')" "$(printf '%s' "${after}" | base64 | tr -d '\n')" "${ingress}" "${private}"
+}
+membership_wal_finish() {
+  local network action context sequence actual expected ingress private; [[ "$(membership_field "${adoption_journal}" membership_wal_phase)" == pending ]] || fail
+  network="$(membership_field "${adoption_journal}" membership_wal_network)"; action="$(membership_field "${adoption_journal}" membership_wal_action)"; context="$(membership_field "${adoption_journal}" membership_wal_context)"; sequence="$(membership_field "${adoption_journal}" membership_wal_sequence)"
+  actual="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail; membership_alias_matrix "${network}"
+  expected="$(printf '%s' "$(membership_field "${adoption_journal}" membership_wal_after_b64)" | base64 -d)" || fail
+  python3 -c 'import json,sys; canonical=lambda value:{str(key):{"Name":str(item.get("Name","")).lstrip("/"),"Aliases":sorted(str(alias) for alias in item.get("Aliases",[]))} for key,item in json.loads(value).items()}; sys.exit("membership readback differs from WAL after-state") if canonical(sys.argv[1])!=canonical(sys.argv[2]) else None' "${expected}" "${actual}" || fail
+  ingress="$(membership_field "${adoption_journal}" catering_ingress_members_b64)"; private="$(membership_field "${adoption_journal}" catering_private_members_b64)"
+  if [[ "${network}" == catering_ingress ]]; then ingress="$(printf '%s' "${actual}" | base64 | tr -d '\n')"; else private="$(printf '%s' "${actual}" | base64 | tr -d '\n')"; fi
+  membership_wal_write idle none none none none "${sequence}" absent absent absent "${ingress}" "${private}"
+}
+membership_mutation() {
+  local action="$1" network="$2" container="$3" context="$4" aliases="${5:-}" resume="${6:-0}" alias args=()
+  if [[ -z "${aliases}" ]]; then case "${network}:${container}" in catering_ingress:platform-infra-web-1) aliases=web ;; catering_ingress:shared-edge-edge-1) aliases=edge,shared-edge-edge-1 ;; catering_private:platform-infra-postgres-1) aliases=postgres ;; catering_private:platform-infra-intake-1) aliases=intake ;; catering_private:platform-infra-offer-1) aliases=offer ;; catering_private:platform-infra-production-1) aliases=production ;; catering_private:platform-infra-exports-1) aliases=exports ;; catering_private:platform-infra-web-1) aliases=web ;; *) aliases=absent ;; esac; fi
+  [[ "${network}" == catering_ingress || "${network}" == catering_private ]] || fail
+  [[ "${resume}" == 1 ]] || membership_wal_prepare "${network}" "${container}" "${action}" "${context}" "${aliases}"
+  case "${action}" in
+    connect) [[ -n "${aliases}" && "${aliases}" != absent ]] || fail; for alias in ${aliases//,/ }; do args+=(--alias "${alias}"); done; docker network connect "${args[@]}" "${network}" "${container}" || fail ;;
+    disconnect) docker network disconnect "${network}" "${container}" || fail ;;
+    *) fail ;;
+  esac
+  membership_wal_finish
+}
+membership_wal_recover() {
+  local phase action network container context aliases before after actual state; [[ -e "${adoption_journal}" ]] || return 0; phase="$(membership_field "${adoption_journal}" membership_wal_phase)"; [[ "${phase}" == pending ]] || return 0
+  membership_wal_validate; action="$(membership_field "${adoption_journal}" membership_wal_action)"; network="$(membership_field "${adoption_journal}" membership_wal_network)"; container="$(membership_field "${adoption_journal}" membership_wal_container)"; context="$(membership_field "${adoption_journal}" membership_wal_context)"; aliases="$(membership_field "${adoption_journal}" membership_wal_aliases)"
+  before="$(printf '%s' "$(membership_field "${adoption_journal}" membership_wal_before_b64)" | base64 -d)" || fail; after="$(printf '%s' "$(membership_field "${adoption_journal}" membership_wal_after_b64)" | base64 -d)" || fail; actual="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+  state="$(python3 -c 'import json,sys; canonical=lambda value:{str(key):{"Name":str(item.get("Name","")).lstrip("/"),"Aliases":sorted(str(alias) for alias in item.get("Aliases",[]))} for key,item in json.loads(value).items()}; before,after,actual=(canonical(value) for value in sys.argv[1:]); print("before" if actual==before else "after" if actual==after else "invalid")' "${before}" "${after}" "${actual}")" || fail
+  case "${state}" in after) membership_wal_finish ;; before) membership_mutation "${action}" "${network}" "${container}" "${context}" "${aliases}" 1 ;; *) fail ;; esac
+}
+membership_reconcile_compatibility_baseline() {
+  local mutate="${1:-0}" network expected_members expected_aliases expected_id actual plan platform_plan zeiterfassung_plan members_field id_field aliases_field name aliases alias args=(); [[ "${mutate}" == 0 || "${mutate}" == 1 ]] || fail
+  for network in platform-infra_default zeiterfassung_default; do
+    if [[ "${network}" == platform-infra_default ]]; then id_field=platform_network_baseline_id; members_field=platform_network_baseline_members; aliases_field=platform_network_baseline_aliases; else id_field=zeiterfassung_network_baseline_id; members_field=zeiterfassung_network_baseline_members; aliases_field=zeiterfassung_network_baseline_aliases; fi
+    expected_id="$(membership_field "${baseline_manifest}" "${id_field}")"; expected_members="$(membership_field "${baseline_manifest}" "${members_field}")"; expected_aliases="$(membership_field "${baseline_manifest}" "${aliases_field}")"
+    [[ "${expected_id}" =~ ^[0-9a-f]{64}$ && "${expected_members}" == "${expected_aliases}" && "$(network_id "${network}")" == "${expected_id}" ]] || fail
+    actual="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+    plan="$(python3 -c 'import base64,json,sys; e=json.loads(base64.b64decode(sys.argv[1])); a=json.loads(sys.argv[2]); n=sys.argv[3]; o={"platform-infra_default":["platform-infra-postgres-1","platform-infra-intake-1","platform-infra-offer-1","platform-infra-production-1","platform-infra-exports-1","platform-infra-web-1"],"zeiterfassung_default":["platform-infra-web-1"]}[n]; f=lambda v:[(str(x.get("Name","")).lstrip("/"),k,sorted(map(str,x["Aliases"]))) for k,x in v.items()]; re,ra=f(e),f(a); sys.exit("compatibility membership malformed") if not isinstance(e,dict) or not isinstance(a,dict) or any(not isinstance(x,dict) or not isinstance(x.get("Aliases"),list) or not str(x.get("Name","")).lstrip("/") for _,x in e.items()) or any(not isinstance(x,dict) or not isinstance(x.get("Aliases"),list) or not str(x.get("Name","")).lstrip("/") for _,x in a.items()) or len(re)!=len({x[0] for x in re}) or len(ra)!=len({x[0] for x in ra}) else None; E={x[0]:(x[1],x[2]) for x in re}; A={x[0]:(x[1],x[2]) for x in ra}; sys.exit("compatibility member or alias provenance drifted") if any(k not in E or E[k]!=v for k,v in A.items()) else None; missing=set(E)-set(A); sys.exit("compatibility baseline is incomplete") if missing-set(o) else None; print("\n".join(k+"\t"+",".join(E[k][1]) for k in o if k in missing))' "${expected_members}" "${actual}" "${network}")" || fail
+    if [[ "${network}" == platform-infra_default ]]; then platform_plan="${plan}"; else zeiterfassung_plan="${plan}"; fi
+  done
+  [[ "${mutate}" == 1 ]] || return 0
+  for network in platform-infra_default zeiterfassung_default; do
+    if [[ "${network}" == platform-infra_default ]]; then plan="${platform_plan}"; members_field=platform_network_baseline_members; else plan="${zeiterfassung_plan}"; members_field=zeiterfassung_network_baseline_members; fi
+    expected_members="$(membership_field "${baseline_manifest}" "${members_field}")"
+    while IFS=$'\t' read -r name aliases; do
+      [[ -n "${name}" ]] || continue; args=(); for alias in ${aliases//,/ }; do args+=(--alias "${alias}"); done; docker network connect "${args[@]}" "${network}" "${name}" || fail
+      actual="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+      python3 -c 'import base64,json,sys; e=json.loads(base64.b64decode(sys.argv[1])); a=json.loads(sys.argv[2]); f=lambda v:{str(x.get("Name","")).lstrip("/"):(k,sorted(map(str,x.get("Aliases",[])))) for k,x in v.items() if isinstance(x,dict) and isinstance(x.get("Aliases"),list)}; E,A=f(e),f(a); sys.exit("compatibility readback drifted") if any(k not in E or E[k]!=v for k,v in A.items()) else None' "${expected_members}" "${actual}" || fail
+    done <<< "${plan}"
+    actual="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
+    python3 -c 'import base64,json,sys; e=json.loads(base64.b64decode(sys.argv[1])); a=json.loads(sys.argv[2]); f=lambda v:{str(x.get("Name","")).lstrip("/"):(k,sorted(map(str,x.get("Aliases",[])))) for k,x in v.items() if isinstance(x,dict) and isinstance(x.get("Aliases"),list)}; sys.exit("compatibility baseline is incomplete") if f(e)!=f(a) else None' "${expected_members}" "${actual}" || fail
+  done
+}
+membership_rollback_preflight() {
+  local network; if declare -F validate_manifest >/dev/null 2>&1; then validate_manifest; fi
+  if declare -F validate_absent_only_transaction >/dev/null 2>&1; then validate_absent_only_transaction; fi
+  if declare -F validate_marker_file >/dev/null 2>&1; then validate_marker_file "${activation_marker}"; fi
+  if declare -F assert_marker_readback >/dev/null 2>&1; then assert_marker_readback; fi
+  if [[ -n "${run_id:-}" ]]; then [[ "${held_platform:-absent}" == acquired || "${held_platform:-absent}" == reentered ]] || fail; [[ "${held_edge:-absent}" == acquired || "${held_edge:-absent}" == reentered ]] || fail; else [[ "${platform_lock_held:-false}" == true && "${edge_lock_held:-false}" == true ]] || fail; fi
+  if declare -F validate_foreign_evidence >/dev/null 2>&1; then validate_foreign_evidence; elif declare -F assert_foreign_invariants >/dev/null 2>&1; then assert_foreign_invariants; fi
+  if [[ -e "${adoption_journal}" ]]; then if declare -F validate_adoption_journal >/dev/null 2>&1; then validate_adoption_journal true true; fi; membership_wal_validate; fi
+  for network in catering_ingress catering_private; do if docker network inspect "${network}" >/dev/null 2>&1; then if [[ -n "${run_id:-}" ]]; then validate_network_provenance "${network}" "${network#catering_}"; else validate_network_provenance "${network}" "${network#catering_}" "" "" true; fi; membership_alias_matrix "${network}"; fi; done
+  membership_reconcile_compatibility_baseline 0
+}
+REMOTE_MEMBERSHIP_PRIMITIVE
+readonly REMOTE_MEMBERSHIP_PRIMITIVE
 no_go() {
   printf '%s\n' "PILOT: NO-GO" >&2
   exit 1
@@ -168,8 +307,10 @@ if [[ "${PILOT_COMMAND}" != run ]]; then
     "${ADOPTION_JOURNAL}" \
     "${PLATFORM_SOURCE}" "${EDGE_SOURCE}" \
     "${EXPECTED_PLATFORM_SOURCE_SHA256}" "${EXPECTED_EDGE_SOURCE_SHA256}" "${PILOT_ROOT}" \
-    "${EGRESS_EXERCISE}" <<'REMOTE_CONTROL'
+    "${EGRESS_EXERCISE}" \
+    "$(printf '%s' "${REMOTE_MEMBERSHIP_PRIMITIVE}" | base64 | tr -d '\n')" <<'REMOTE_CONTROL'
 set -euo pipefail
+eval "$(printf '%s' "${19}" | base64 -d)"
 
 command_name="$1"
 run_id="$2"
@@ -190,9 +331,9 @@ expected_edge_source_sha256="${16}"
 pilot_root="${17}"
 egress_exercise="${18}"
 lock_token="${owner}:${run_id}"
+retain_recovery_locks=false
 readonly PLATFORM_PRODUCTION="platform-infra-production-1"
 readonly TRANSACTION_MANIFEST_SCHEMA="phase3.2.transaction-baseline"
-readonly LEGACY_TRANSACTION_MANIFEST_SCHEMA="phase3.1.transaction-baseline"
 
 fail() { printf '%s\n' 'PILOT: NO-GO' >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || fail
@@ -248,7 +389,7 @@ validate_kv_file() {
       manifest:schema|manifest:owner|manifest:transaction_id|manifest:prior_marker_state|manifest:prior_marker_sha256|manifest:prior_marker_content_b64|manifest:platform_source_prior|manifest:edge_source_prior|manifest:catering_ingress_baseline|manifest:catering_private_baseline|manifest:catering_ingress_baseline_id|manifest:catering_private_baseline_id|manifest:catering_ingress_created_by_run_authorized|manifest:catering_private_created_by_run_authorized|manifest:network_create_order|manifest:platform_network_baseline_id|manifest:platform_network_baseline_members|manifest:platform_network_baseline_aliases|manifest:zeiterfassung_network_baseline_id|manifest:zeiterfassung_network_baseline_members|manifest:zeiterfassung_network_baseline_aliases|manifest:catering_path_baseline|manifest:expected_platform_source_sha256|manifest:expected_edge_source_sha256|manifest:baseline_smoke_evidence|manifest:baseline_smoke_sha256|manifest:container_id|manifest:RestartCount|manifest:StartedAt|manifest:Status|manifest:Image|manifest:ComposeProject|manifest:ComposeService|manifest:NetworkSettings|manifest:Aliases|manifest:PortBindings|manifest:Mounts|manifest:secret_ref|manifest:network_driver|manifest:network_scope|manifest:network_internal|manifest:network_ipam|manifest:network_enable_ipv6|manifest:network_ipam_options|manifest:network_ipam_config|manifest:network_labels|manifest:catering_ingress_network_labels|manifest:catering_private_network_labels|manifest:catering_ingress_baseline_members|manifest:catering_ingress_baseline_aliases|manifest:catering_private_baseline_members|manifest:catering_private_baseline_aliases|manifest:network_members|manifest:network_aliases|manifest:manifest_sha256|manifest:marker_sha256|manifest:archive_sha256|manifest:receipt_sha256|manifest:foreign_invariants_sha256|manifest:container_id_*|manifest:RestartCount_*|manifest:StartedAt_*|manifest:Status_*|manifest:Image_*|manifest:ComposeProject_*|manifest:ComposeService_*|manifest:NetworkSettings_*|manifest:Aliases_*|manifest:PortBindings_*|manifest:Mounts_*|manifest:secret_ref_*) ;;
       archive:schema|archive:transaction_id|archive:transaction_manifest_path|archive:transaction_manifest_sha256|archive:marker_sha256|archive:prior_marker_state|archive:prior_marker_sha256|archive:restore_evidence_path|archive:restore_evidence_sha256|archive:restore_proof_archive_path|archive:archive_sha256) ;;
       receipt:schema|receipt:transaction_id|receipt:transaction_manifest_path|receipt:transaction_manifest_sha256|receipt:marker_sha256|receipt:prior_marker_state|receipt:prior_marker_sha256|receipt:restore_evidence_path|receipt:restore_evidence_sha256|receipt:restore_proof_archive_path|receipt:restore_proof_archive_sha256|receipt:archive_sha256|receipt:receipt_sha256) ;;
-      journal:schema|journal:owner|journal:transaction_id|journal:transaction_manifest_path|journal:transaction_manifest_sha256|journal:expected_platform_source_sha256|journal:expected_edge_source_sha256|journal:network_create_order|journal:adoption_order|journal:adoption_count|journal:next_network|journal:adoption_phase|journal:catering_ingress_id|journal:catering_private_id|journal:catering_ingress_owner|journal:catering_private_owner|journal:catering_ingress_phase|journal:catering_private_phase|journal:catering_ingress_transaction|journal:catering_private_transaction|journal:catering_ingress_members_b64|journal:catering_private_members_b64|journal:catering_ingress_aliases_b64|journal:catering_private_aliases_b64|journal:source_readback_sha256|journal:journal_sha256) ;;
+      journal:schema|journal:owner|journal:transaction_id|journal:transaction_manifest_path|journal:transaction_manifest_sha256|journal:expected_platform_source_sha256|journal:expected_edge_source_sha256|journal:network_create_order|journal:adoption_order|journal:adoption_count|journal:next_network|journal:adoption_phase|journal:catering_ingress_id|journal:catering_private_id|journal:catering_ingress_owner|journal:catering_private_owner|journal:catering_ingress_phase|journal:catering_private_phase|journal:catering_ingress_transaction|journal:catering_private_transaction|journal:catering_ingress_members_b64|journal:catering_private_members_b64|journal:catering_ingress_aliases_b64|journal:catering_private_aliases_b64|journal:membership_wal_phase|journal:membership_wal_action|journal:membership_wal_network|journal:membership_wal_container|journal:membership_wal_context|journal:membership_wal_sequence|journal:membership_wal_aliases|journal:membership_wal_before_b64|journal:membership_wal_after_b64|journal:source_readback_sha256|journal:journal_sha256) ;;
       restore:schema|restore:owner|restore:transaction_id|restore:baseline_manifest_sha256|restore:foreign_invariants_sha256|restore:shared_edge_baseline_sha256|restore:shared_edge_restore_sha256|restore:platform_source_expected_sha256|restore:edge_source_expected_sha256|restore:platform_source_readback|restore:edge_source_readback|restore:platform_network_baseline_id|restore:platform_network_baseline_members|restore:platform_network_baseline_aliases|restore:zeiterfassung_network_baseline_id|restore:zeiterfassung_network_baseline_members|restore:zeiterfassung_network_baseline_aliases|restore:catering_path_baseline|restore:catering_ingress_target|restore:catering_private_target|restore:smoke_readback_sha256) ;;
       *) printf '%s\n' "unknown ${kind} field: ${key}" >&2; fail ;;
     esac
@@ -298,8 +439,6 @@ canonical_adoption_journal_sha256() {
   sha256sum "${canonical}" | awk '{print $1}'
   unlink "${canonical}"
 }
-rollback_preexisting_members_relaxed=false
-rollback_mixed_s2_authorized=false
 validate_adoption_journal() {
   local allow_absent_networks="${1:-false}" allow_run_created_partial="${2:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run relax_members transaction_label expected_network_labels manifest_transaction_label
   [[ "${allow_absent_networks}" == true || "${allow_absent_networks}" == false ]] || fail
@@ -354,7 +493,6 @@ validate_adoption_journal() {
     expected_members="$(printf '%s' "$(field "${adoption_journal}" "${network}_members_b64")" | base64 -d)" || fail
     expected_aliases="$(printf '%s' "$(field "${adoption_journal}" "${network}_aliases_b64")" | base64 -d)" || fail
     relax_members=false
-    [[ "${rollback_preexisting_members_relaxed:-false}" == true && "${created_by_run}" == false ]] && relax_members=true
     [[ "${allow_run_created_partial}" == true && "${created_by_run}" == true ]] && relax_members=partial
     python3 - "${expected_members}" "${expected_aliases}" "${members}" "${relax_members}" "${network}" <<'PYTHON' || fail
 import json
@@ -562,6 +700,7 @@ release_control_locks() {
     fi
     return 0
   fi
+  [[ "${retain_recovery_locks}" == true ]] && return 0
   if [[ "${held_edge}" == acquired ]]; then
     phase3_lock_release "${edge_lock}" "${lock_token}" || printf '%s\n' 'PILOT: RECOVERY_REQUIRED' >&2
   fi
@@ -577,7 +716,7 @@ validate_manifest() {
   validate_kv_file "${baseline_manifest}" manifest
   require_regular "${baseline_manifest}"
   manifest_schema="$(field "${baseline_manifest}" schema)"
-  [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" || "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
   require_field "${baseline_manifest}" owner "${owner}"
   require_field "${baseline_manifest}" transaction_id "${run_id}"
   grep -Eq '^prior_marker_content_b64=' "${baseline_manifest}" || fail
@@ -596,27 +735,13 @@ validate_manifest() {
       grep -Eq "^${required}=" "${baseline_manifest}" || fail
     done
   fi
-  if [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
-    for required in baseline_smoke_evidence baseline_smoke_sha256; do
-      grep -Eq "^${required}=" "${baseline_manifest}" || fail
-    done
-    [[ "$(field "${baseline_manifest}" baseline_smoke_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
-    [[ "$(field "${baseline_manifest}" baseline_smoke_evidence)" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
-    smoke_evidence_hash="$(printf '%s\n' "$(field "${baseline_manifest}" baseline_smoke_evidence | tr ';' '\n')" | sha256sum | awk '{print $1}')"
-    [[ "${smoke_evidence_hash}" == "$(field "${baseline_manifest}" baseline_smoke_sha256)" ]] || fail
-  else
-    # The old schema is a recovery-only authority. It may never authorize a
-    # forward resume, and it carries no inferred replacement for the missing
-    # pre-mutation semantic baseline.
-    if [[ "${command_name}" == rollback ]]; then
-      [[ "${marker_state}" == candidate || "${marker_state}" == active || "${legacy_rollback_finalize:-0}" == 1 ]] || fail
-    elif [[ "${command_name}" == resume ]]; then
-      [[ "${marker_state}" == rolling_back ]] || fail
-    else
-      fail
-    fi
-    ! grep -Eq '^baseline_smoke_(evidence|sha256)=' "${baseline_manifest}" || fail
-  fi
+  for required in baseline_smoke_evidence baseline_smoke_sha256; do
+    grep -Eq "^${required}=" "${baseline_manifest}" || fail
+  done
+  [[ "$(field "${baseline_manifest}" baseline_smoke_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
+  [[ "$(field "${baseline_manifest}" baseline_smoke_evidence)" =~ ^catering:[0-9a-f]{64}\;zeiterfassung:[0-9a-f]{64}\;eventos:[0-9a-f]{64}$ ]] || fail
+  smoke_evidence_hash="$(printf '%s\n' "$(field "${baseline_manifest}" baseline_smoke_evidence | tr ';' '\n')" | sha256sum | awk '{print $1}')"
+  [[ "${smoke_evidence_hash}" == "$(field "${baseline_manifest}" baseline_smoke_sha256)" ]] || fail
   if grep -Eiq 'secret[^=]*(value|password|token)=' "${baseline_manifest}"; then fail; fi
   marker_hash="$(field "${baseline_manifest}" marker_sha256)"
   [[ -n "${marker_hash}" ]] || fail
@@ -626,9 +751,50 @@ rehydrate_manifest() {
   # inferred from a partially written marker or from live container guesses.
   validate_manifest
 }
+validate_absent_only_transaction() {
+  local network marker_id
+  [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
+  [[ "$(field "${baseline_manifest}" catering_ingress_baseline)" == absent &&
+    "$(field "${baseline_manifest}" catering_private_baseline)" == absent ]] || fail
+  [[ "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == true &&
+    "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == true ]] || fail
+  [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=absent" ]] || fail
+  for network in catering_ingress catering_private; do
+    [[ "$(field "${baseline_manifest}" "${network}_baseline_id")" == absent ]] || fail
+    marker_id="$(field "${activation_marker}" "${network}_id")"
+    [[ "${marker_id}" == absent || "${marker_id}" =~ ^[0-9a-f]{64}$ ]] || fail
+  done
+}
+classify_recovery_transition() {
+  case "${marker_state}:${command_name}" in
+    absent:resume) [[ ! -e "${baseline_manifest}" && ! -L "${baseline_manifest}" && ! -e "${completion_receipt}" && ! -L "${completion_receipt}" ]] || fail; recovery_class=terminal:resume ;;
+    candidate:resume|active:resume|rolling_back:resume|candidate:rollback|active:rollback)
+      recovery_class="${marker_state}:${command_name}"
+      ;;
+    *)
+      fail
+      ;;
+  esac
+}
+terminal_resume_noop() {
+  validate_kv_file "${adoption_journal}" journal; validate_kv_file "${restore_evidence_record}" restore; validate_kv_file "${restore_proof_archive}" archive
+  terminal_manifest_sha256="$(field "${adoption_journal}" transaction_manifest_sha256)"; [[ "${terminal_manifest_sha256}" =~ ^[0-9a-f]{64}$ ]] || fail
+  require_field "${adoption_journal}" schema "phase3.1.network-adoption"; require_field "${adoption_journal}" owner "${owner}"; require_field "${adoption_journal}" transaction_id "${run_id}"; require_field "${adoption_journal}" transaction_manifest_path "${baseline_manifest}"
+  require_field "${adoption_journal}" adoption_order "catering_ingress,catering_private"; require_field "${adoption_journal}" adoption_count 2; require_field "${adoption_journal}" next_network complete; require_field "${adoption_journal}" adoption_phase memberships_verified
+  require_field "${adoption_journal}" catering_ingress_members_b64 e30=; require_field "${adoption_journal}" catering_private_members_b64 e30=; require_field "${adoption_journal}" catering_ingress_aliases_b64 e30=; require_field "${adoption_journal}" catering_private_aliases_b64 e30=
+  [[ "$(canonical_adoption_journal_sha256 "${adoption_journal}")" == "$(field "${adoption_journal}" journal_sha256)" ]] || fail; membership_wal_validate
+  require_field "${restore_evidence_record}" schema "phase3.1.restore-evidence"; require_field "${restore_evidence_record}" owner "${owner}"; require_field "${restore_evidence_record}" transaction_id "${run_id}"; require_field "${restore_evidence_record}" baseline_manifest_sha256 "${terminal_manifest_sha256}"
+  require_field "${restore_evidence_record}" platform_source_readback absent; require_field "${restore_evidence_record}" edge_source_readback absent; require_field "${restore_evidence_record}" catering_ingress_target absent; require_field "${restore_evidence_record}" catering_private_target absent
+  [[ "$(field "${restore_evidence_record}" platform_network_baseline_members)" == "$(field "${restore_evidence_record}" platform_network_baseline_aliases)" && "$(field "${restore_evidence_record}" zeiterfassung_network_baseline_members)" == "$(field "${restore_evidence_record}" zeiterfassung_network_baseline_aliases)" && "$(field "${restore_evidence_record}" smoke_readback_sha256)" =~ ^[0-9a-f]{64}$ ]] || fail
+  require_field "${restore_proof_archive}" schema "phase3.1.rollback-restore-proof"; require_field "${restore_proof_archive}" transaction_id "${run_id}"; require_field "${restore_proof_archive}" transaction_manifest_path "${baseline_manifest}"; require_field "${restore_proof_archive}" transaction_manifest_sha256 "${terminal_manifest_sha256}"; require_field "${restore_proof_archive}" restore_evidence_path "${restore_evidence_record}"; require_field "${restore_proof_archive}" restore_evidence_sha256 "$(sha256sum "${restore_evidence_record}" | awk '{print $1}')"
+  archive_hash="$(canonical_archive_sha256 "${restore_proof_archive}")"; [[ "${archive_hash}" =~ ^[0-9a-f]{64}$ ]] || fail; require_field "${restore_proof_archive}" archive_sha256 "${archive_hash}"
+  [[ ! -e "${platform_source}" && ! -e "${edge_source}" ]] || fail
+  for terminal_network in catering_ingress catering_private; do terminal_id="$(field "${adoption_journal}" "${terminal_network}_id")"; [[ "${terminal_id}" =~ ^[0-9a-f]{64}$ ]] || fail; if network_present_by_name "${terminal_network}"; then fail; fi; if network_id_present_anywhere "${terminal_id}"; then fail; fi; done
+  release_control_locks terminal; printf '%s\n' 'PILOT: ROLLED BACK'; return 0
+}
+if [[ ! -e "${activation_marker}" && ! -L "${activation_marker}" ]]; then marker_state=absent; else
 validate_marker_file "${activation_marker}"
 marker_state="$(field "${activation_marker}" state)"
-legacy_rollback_finalize=0
 [[ "${marker_state}" == candidate || "${marker_state}" == active || "${marker_state}" == rolling_back ]] || fail
 require_field "${activation_marker}" schema "${schema}"
 require_field "${activation_marker}" owner "${owner}"
@@ -637,6 +803,13 @@ require_field "${activation_marker}" transaction_manifest_path "${baseline_manif
 manifest_sha256="$(sha256sum "${baseline_manifest}" | awk '{print $1}')"
 require_field "${activation_marker}" transaction_manifest_sha256 "${manifest_sha256}"
 rehydrate_manifest
+validate_absent_only_transaction
+fi
+recovery_class=unknown
+classify_recovery_transition
+if [[ "${recovery_class}" == active:rollback || "${recovery_class}" == rolling_back:resume ]]; then
+  retain_recovery_locks=true
+fi
 
 manifest_network_value() {
   local key="$1" network="$2" raw value
@@ -846,6 +1019,7 @@ write_control_adoption_journal_intent() {
     "catering_ingress_transaction=${run_id}" "catering_private_transaction=${run_id}" \
     "catering_ingress_members_b64=absent" "catering_private_members_b64=absent" \
     "catering_ingress_aliases_b64=absent" "catering_private_aliases_b64=absent" \
+    "membership_wal_phase=idle" "membership_wal_action=none" "membership_wal_network=none" "membership_wal_container=none" "membership_wal_context=none" "membership_wal_sequence=0" "membership_wal_aliases=absent" "membership_wal_before_b64=absent" "membership_wal_after_b64=absent" \
     "source_readback_sha256=pending" "journal_sha256=absent" >"${journal_tmp}"
   journal_hash="$(canonical_adoption_journal_sha256 "${journal_tmp}")"
   journal_final="${journal_tmp}.final"
@@ -960,13 +1134,13 @@ adopt_candidate_networks() {
 connect_resume_if_missing() {
   local network="$1" alias="$2" container="$3" networks
   networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${container}")" || fail
-  [[ "${networks}" == *"\"${network}\""* ]] || docker network connect --alias "${alias}" "${network}" "${container}" || fail
+  [[ "${networks}" == *"\"${network}\""* ]] || membership_mutation connect "${network}" "${container}" forward || fail
 }
 disconnect_resume_if_attached() {
   local network="$1" container="$2" networks
   docker network inspect "${network}" >/dev/null 2>&1 || return 0
   networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${container}")" || fail
-  [[ "${networks}" != *"\"${network}\""* ]] || docker network disconnect "${network}" "${container}" || fail
+  if [[ "${networks}" == *"\"${network}\""* ]]; then if [[ "${network}" == catering_ingress || "${network}" == catering_private ]]; then membership_mutation disconnect "${network}" "${container}" rollback; else docker network disconnect "${network}" "${container}" || fail; fi; fi
 }
 resume_candidate_networks() {
   connect_resume_if_missing catering_ingress edge shared-edge-edge-1
@@ -979,6 +1153,7 @@ resume_candidate_networks() {
   connect_resume_if_missing catering_private web platform-infra-web-1
   validate_target_members catering_ingress "platform-infra-web-1,shared-edge-edge-1"
   validate_target_members catering_private "platform-infra-web-1,platform-infra-postgres-1,platform-infra-intake-1,platform-infra-offer-1,platform-infra-production-1,platform-infra-exports-1"
+  membership_alias_matrix catering_ingress; membership_alias_matrix catering_private
   semantic_smoke
   disconnect_resume_if_attached platform-infra_default platform-infra-postgres-1
   disconnect_resume_if_attached platform-infra_default platform-infra-intake-1
@@ -1116,7 +1291,20 @@ validate_foreign_evidence() {
 }
 
 validate_compatibility_baseline_control() {
-  local network id_field members_field aliases_field expected_id expected_members actual_id actual_members
+  local mode="${1:-strict}" network id_field members_field aliases_field expected_id expected_members actual_id actual_members
+  local cutover_private=absent cutover_ingress=absent
+  [[ "${mode}" == strict || "${mode}" == cutover ]] || fail
+  if [[ "${mode}" == cutover ]]; then
+    [[ "${marker_state:-}" == active || "${marker_state:-}" == rolling_back ]] || fail
+    case "${marker_state}:${command_name:-}:$(field "${activation_marker}" stage)" in
+      active:rollback:S4|rolling_back:resume:RB) ;;
+      *) fail ;;
+    esac
+    [[ -e "${adoption_journal}" ]] || fail
+    [[ "$(field "${adoption_journal}" adoption_count)" == 2 && "$(field "${adoption_journal}" adoption_phase)" == memberships_verified && "$(field "${adoption_journal}" next_network)" == complete ]] || fail
+    cutover_private="$(field "${adoption_journal}" catering_private_members_b64)"
+    cutover_ingress="$(field "${adoption_journal}" catering_ingress_members_b64)"
+  fi
   for network in platform-infra_default zeiterfassung_default; do
     if [[ "${network}" == platform-infra_default ]]; then
       id_field=platform_network_baseline_id; members_field=platform_network_baseline_members; aliases_field=platform_network_baseline_aliases
@@ -1129,14 +1317,45 @@ validate_compatibility_baseline_control() {
     actual_id="$(network_id "${network}")" || fail
     actual_members="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
     [[ "${actual_id}" == "${expected_id}" ]] || fail
-    python3 - "${expected_members}" "${actual_members}" <<'PYTHON' || fail
+    python3 - "${expected_members}" "${actual_members}" "${mode}" "${cutover_private}" "${cutover_ingress}" "${network}" <<'PYTHON' || fail
 import base64
 import json
 import sys
 expected = json.loads(base64.b64decode(sys.argv[1]).decode())
 actual = json.loads(sys.argv[2])
+mode = sys.argv[3]
 def canonical(value):
-    return {key: {"Name": item.get("Name", ""), "Aliases": sorted(item.get("Aliases", []))} for key, item in value.items()}
+    if not isinstance(value, dict):
+        raise SystemExit('compatibility member record is malformed')
+    result = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or not isinstance(item, dict) or not isinstance(item.get("Aliases"), list):
+            raise SystemExit('compatibility member record is malformed')
+        name = str(item.get("Name", "")).lstrip('/')
+        if not name:
+            raise SystemExit('compatibility member record is malformed')
+        result[key] = {"Name": name, "Aliases": sorted(str(alias) for alias in item["Aliases"])}
+    return result
+expected = canonical(expected)
+actual = canonical(actual)
+if mode == 'cutover':
+    private = canonical(json.loads(base64.b64decode(sys.argv[4]).decode()))
+    ingress = canonical(json.loads(base64.b64decode(sys.argv[5]).decode()))
+    if {item['Name'] for item in private.values()} != {
+        'platform-infra-postgres-1', 'platform-infra-intake-1',
+        'platform-infra-offer-1', 'platform-infra-production-1',
+        'platform-infra-exports-1', 'platform-infra-web-1',
+    }:
+        raise SystemExit('private cutover membership evidence is not canonical')
+    if {item['Name'] for item in ingress.values()} != {'platform-infra-web-1', 'shared-edge-edge-1'}:
+        raise SystemExit('ingress cutover membership evidence is not canonical')
+    if sys.argv[6] == 'platform-infra_default':
+        removed = {item['Name'] for item in private.values()}
+    elif sys.argv[6] == 'zeiterfassung_default':
+        removed = {'platform-infra-web-1'}
+    else:
+        raise SystemExit('unknown compatibility network')
+    expected = {key: item for key, item in expected.items() if item['Name'] not in removed}
 if canonical(expected) != canonical(actual):
     raise SystemExit('compatibility baseline mismatch')
 PYTHON
@@ -1248,15 +1467,8 @@ validate_final_isolation() {
 validate_resume_evidence() {
   local state="$1" ingress_id_value private_id_value marker_stage adoption_value adoption_proof_value smoke_value
   validate_manifest
-  if [[ -e "${adoption_journal}" ]]; then
-    validate_adoption_journal
-  elif [[ "${state}" == candidate && "$(field "${activation_marker}" stage)" == S2 &&
-    "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
-    "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ]]; then
-    :
-  else
-    fail
-  fi
+  [[ -e "${adoption_journal}" ]] || fail
+  validate_adoption_journal
   validate_marker_file "${activation_marker}"
   require_field "${activation_marker}" state "${state}"
   require_field "${activation_marker}" owner "${owner}"
@@ -1290,20 +1502,11 @@ validate_resume_evidence() {
     validate_network_provenance catering_private private "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)"
     validate_target_members catering_ingress "platform-infra-web-1,shared-edge-edge-1"
     validate_target_members catering_private "platform-infra-web-1,platform-infra-postgres-1,platform-infra-intake-1,platform-infra-offer-1,platform-infra-production-1,platform-infra-exports-1"
+    membership_alias_matrix catering_ingress; membership_alias_matrix catering_private
     [[ "${state}" != active ]] || validate_final_isolation
   elif [[ "${state}" == candidate ]]; then
-    if [[ "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
-      "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact &&
-      "${marker_stage}" == S2 ]]; then
-      if [[ -e "${adoption_journal}" && "$(field "${adoption_journal}" adoption_count)" == 1 ]]; then
-        validate_phase32_ingress_adoption_prefix candidate
-      else
-        validate_pre_existing_exact_candidate
-      fi
-    else
-      [[ -e "${adoption_journal}" ]] || fail
-      [[ "$(field "${adoption_journal}" adoption_count)" == 1 || "$(field "${adoption_journal}" adoption_count)" == 2 ]] || fail
-    fi
+    [[ "$(field "${adoption_journal}" adoption_count)" == 1 ||
+      "$(field "${adoption_journal}" adoption_count)" == 2 ]] || fail
   else
     fail
   fi
@@ -1322,6 +1525,7 @@ validate_resume_evidence() {
 validate_rolling_back_evidence() {
   local network created
   validate_manifest
+  validate_absent_only_transaction
   validate_marker_file "${activation_marker}"
   require_field "${activation_marker}" state rolling_back
   require_field "${activation_marker}" stage RB
@@ -1331,102 +1535,34 @@ validate_rolling_back_evidence() {
   [[ ! -e "${platform_source}" && ! -e "${edge_source}" ]] || fail
   for network in catering_ingress catering_private; do
     created="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
-    if [[ "${created}" == true ]]; then
-      if docker network inspect "${network}" >/dev/null 2>&1; then fail; fi
-    fi
+    [[ "${created}" == true ]] || fail
+    if docker network inspect "${network}" >/dev/null 2>&1; then fail; fi
   done
 }
 
-validate_legacy_rollback_network_progress() {
-  local network created expected_id journal_id current_id manifest_schema ingress_baseline private_baseline ingress_created private_created
-  manifest_schema="$(field "${baseline_manifest}" schema)"
-  if [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-    "${marker_state}" == rolling_back &&
-    "$(field "${activation_marker}" catering_ingress_id)" == absent &&
-    "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
-    validate_phase32_mixed_rollback_prefix
-    return 0
-  fi
-  if [[ "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" &&
-    "${marker_state}" == rolling_back &&
-    "$(field "${activation_marker}" catering_ingress_id)" == absent &&
-    "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
-    validate_initial_candidate_absence
-    return 0
-  fi
-  if [[ ( "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
-    "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ) &&
-    "${marker_state}" == rolling_back &&
-    "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ &&
-    "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
-    validate_phase32_ingress_adoption_prefix rolling_back
-    rollback_private_present_before=false
-    if network_present_by_name catering_ingress; then
-      rollback_ingress_present_before=true
-    else
-      rollback_ingress_present_before=false
-    fi
-    return 0
-  fi
-  rollback_preexisting_members_relaxed=false
-  if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-    ( "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact ||
-      "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ) ]]; then
-    rollback_preexisting_members_relaxed=true
-  fi
-  if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
-    validate_adoption_journal true true
-    validate_run_created_rollback_order
-  else
-    validate_adoption_journal "true"
-  fi
-  rollback_private_present_before=false
-  rollback_ingress_present_before=false
-  if network_present_by_name catering_private; then
-    rollback_private_present_before=true
-  fi
-  if network_present_by_name catering_ingress; then
-    rollback_ingress_present_before=true
-  fi
-  # Rollback removes private before ingress for two run-created networks. The
-  # inverse mixed S2 baseline is the one bounded exception: ingress was the
-  # only run-created network and may already be absent while preserved private
-  # remains, but only with the exact immutable manifest provenance.
-  if [[ "${rollback_private_present_before}" == true && "${rollback_ingress_present_before}" != true ]]; then
-    ingress_baseline="$(field "${baseline_manifest}" catering_ingress_baseline)"
-    private_baseline="$(field "${baseline_manifest}" catering_private_baseline)"
-    ingress_created="$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)"
-    private_created="$(field "${baseline_manifest}" catering_private_created_by_run_authorized)"
-    [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-      "${ingress_baseline}" == absent && "${private_baseline}" == pre-existing-exact &&
-      "${ingress_created}" == true && "${private_created}" == false &&
-      "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=pre-existing-exact" ]] || fail
-    rollback_mixed_s2_authorized=true
-  fi
+validate_run_created_rollback_progress() {
+  local network marker_id journal_id expected_id created
+  validate_adoption_journal true true
+  validate_run_created_rollback_order
   for network in catering_private catering_ingress; do
     created="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
-    expected_id="$(field "${activation_marker}" "${network}_id")"
+    [[ "${created}" == true ]] || fail
+    marker_id="$(field "${activation_marker}" "${network}_id")"
     journal_id="$(field "${adoption_journal}" "${network}_id")"
-    [[ "${expected_id}" =~ ^[0-9a-f]{64}$ ]] || fail
-    [[ "${expected_id}" == "${journal_id}" ]] || fail
-    if ! network_present_by_name "${network}"; then
-      # Only a run-created network has an authorized absent target. A
-      # pre-existing network must remain present and bound to its baseline ID.
-      [[ "${created}" == true ]] || fail
-      # An expected ID that still exists under another name is not a completed
-      # removal; accepting it would detach the name/identity binding.
-      if network_id_present_anywhere "${expected_id}"; then fail; fi
+    [[ "${journal_id}" == absent || "${journal_id}" =~ ^[0-9a-f]{64}$ ]] || fail
+    [[ "${marker_id}" == absent || "${marker_id}" == "${journal_id}" ]] || fail
+    expected_id="${journal_id}"
+    if [[ "${expected_id}" == absent ]]; then
+      network_present_by_name "${network}" && fail
       continue
     fi
-    current_id="$(network_id "${network}")" || fail
-    [[ "${current_id}" == "${expected_id}" ]] || fail
-    if [[ "${created}" == false ]]; then
-      validate_pre_existing_rollback_network "${network}"
-    else
-      validate_network_provenance "${network}" "${network#catering_}" "${created}"
+    if ! network_present_by_name "${network}"; then
+      network_id_present_anywhere "${expected_id}" && fail
+      continue
     fi
+    [[ "$(network_id "${network}")" == "${expected_id}" ]] || fail
+    validate_network_provenance "${network}" "${network#catering_}" true
   done
-  rollback_preexisting_members_relaxed=false
 }
 
 validate_rolling_back_prefix() {
@@ -1438,7 +1574,7 @@ validate_rolling_back_prefix() {
   validate_foreign_evidence
   validate_compatibility_baseline_control
   [[ ! -e "${platform_source}" && ! -e "${edge_source}" ]] || fail
-  validate_legacy_rollback_network_progress
+  validate_run_created_rollback_progress
   [[ -e "${restore_evidence_record}" ]] && has_evidence=true
   [[ -e "${restore_proof_archive}" ]] && has_archive=true
   [[ -e "${completion_receipt}" ]] && has_receipt=true
@@ -1477,15 +1613,19 @@ finalize_rolling_back_resume() {
   [[ ! -e "${completion_receipt}" ]] || fail
 }
 
-resume_legacy_rolling_back_control() {
+resume_rolling_back_control() {
   local has_evidence=false has_archive=false has_receipt=false
-  # Legacy recovery accepts only the monotonic proof prefixes produced by a
-  # crash; every missing suffix is rebuilt under the already-held locks.
+  # Every missing suffix is rebuilt only from the authenticated run-created
+  # rollback prefix under the already-held locks.
   [[ -e "${restore_evidence_record}" ]] && has_evidence=true
   [[ -e "${restore_proof_archive}" ]] && has_archive=true
   [[ -e "${completion_receipt}" ]] && has_receipt=true
   if [[ "${has_evidence}" == false && "${has_archive}" == false && "${has_receipt}" == false ]]; then
-    validate_legacy_rollback_network_progress
+    if [[ "$(field "${adoption_journal}" adoption_count)" == 0 ]]; then
+      validate_initial_candidate_absence
+    else
+      validate_run_created_rollback_progress
+    fi
     continue_rollback_control 0
     return 0
   fi
@@ -1496,7 +1636,6 @@ resume_legacy_rolling_back_control() {
   if [[ "${has_receipt}" == false ]]; then
     write_completion_receipt_control
   fi
-  legacy_rollback_finalize=1
   finalize_rolling_back_resume
   release_control_locks terminal
   printf '%s\n' 'PILOT: ROLLED BACK'
@@ -1594,97 +1733,11 @@ write_completion_receipt_control() {
   validate_receipt
 }
 
-validate_pre_existing_baseline_network() {
-  local network="$1" expected_id actual_id expected_members expected_aliases actual_members actual_aliases
-  expected_id="$(field "${baseline_manifest}" "${network}_baseline_id")"
-  [[ "${expected_id}" =~ ^[0-9a-f]{64}$ ]] || fail
-  expected_members="$(field "${baseline_manifest}" "${network}_baseline_members")"
-  expected_aliases="$(field "${baseline_manifest}" "${network}_baseline_aliases")"
-  [[ "${expected_members}" != absent && -n "${expected_members}" && "${expected_aliases}" != absent && -n "${expected_aliases}" ]] || fail
-  network_present_by_name "${network}" || fail
-  actual_id="$(network_id "${network}")" || fail
-  [[ "${actual_id}" == "${expected_id}" ]] || fail
-  validate_network_provenance "${network}" "${network#catering_}" false
-  actual_members="$(docker network inspect --format '{{json .Containers}}' "${network}" | base64 | tr -d '\n')" || fail
-  actual_aliases="${actual_members}"
-  [[ "${actual_members}" == "${expected_members}" && "${actual_aliases}" == "${expected_aliases}" ]] || fail
-}
-
-validate_pre_existing_rollback_network() {
-  local network="$1" expected_id marker_id journal_id
-  expected_id="$(field "${baseline_manifest}" "${network}_baseline_id")"
-  marker_id="$(field "${activation_marker}" "${network}_id")"
-  journal_id="$(field "${adoption_journal}" "${network}_id")"
-  [[ "${expected_id}" =~ ^[0-9a-f]{64}$ && "${marker_id}" == "${expected_id}" && "${journal_id}" == "${expected_id}" ]] || fail
-  validate_pre_existing_baseline_network "${network}"
-}
-
-validate_mixed_candidate_baseline() {
-  local network marker_id journal_id baseline_status created_by_run expected_stage="${1:-S2}" expected_status
-  [[ "$(field "${activation_marker}" stage)" == "${expected_stage}" ]] || fail
-  [[ "$(field "${baseline_manifest}" network_create_order)" == "catering_ingress,catering_private" ]] || fail
-  expected_status="catering_ingress=$(field "${baseline_manifest}" catering_ingress_baseline);catering_private=$(field "${baseline_manifest}" catering_private_baseline)"
-  [[ "$(field "${activation_marker}" baseline_network_status)" == "${expected_status}" ]] || fail
-  [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
-    "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
-  [[ "$(field "${activation_marker}" adoption_count)" == 0 &&
-    "$(field "${activation_marker}" adoption_proof)" == not_adopted ]] || fail
-  if [[ -e "${adoption_journal}" ]]; then
-    validate_adoption_journal false
-    [[ "$(field "${adoption_journal}" adoption_order)" == "" &&
-      "$(field "${adoption_journal}" adoption_count)" == 0 &&
-      "$(field "${adoption_journal}" next_network)" == catering_ingress &&
-      "$(field "${adoption_journal}" adoption_phase)" == prepared ]] || fail
-  fi
-  for network in catering_ingress catering_private; do
-    marker_id="$(field "${activation_marker}" "${network}_id")"
-    [[ "${marker_id}" == absent ]] || fail
-    baseline_status="$(field "${baseline_manifest}" "${network}_baseline")"
-    created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
-    case "${baseline_status}:${created_by_run}" in
-      absent:true)
-        [[ "$(field "${baseline_manifest}" "${network}_baseline_id")" == absent &&
-          "$(field "${baseline_manifest}" "${network}_baseline_members")" == absent &&
-          "$(field "${baseline_manifest}" "${network}_baseline_aliases")" == absent &&
-          "$(field "${baseline_manifest}" "${network}_network_labels")" == "owner=${owner};phase=${schema};kind=${network#catering_};transaction=${run_id}" ]] || fail
-        network_present_by_name "${network}" && fail
-        ;;
-      pre-existing-exact:false)
-        validate_pre_existing_baseline_network "${network}"
-        ;;
-      *) fail ;;
-    esac
-    if [[ -e "${adoption_journal}" ]]; then
-      journal_id="$(field "${adoption_journal}" "${network}_id")"
-      [[ "${journal_id}" == absent ]] || fail
-    fi
-  done
-}
-
-validate_phase32_mixed_rollback_prefix() {
-  [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
-  [[ "${marker_state}" == rolling_back && "$(field "${activation_marker}" stage)" == RB ]] || fail
-  if [[ "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact ||
-    "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ]]; then
-    rollback_preexisting_members_relaxed=true
-  fi
-  validate_mixed_candidate_baseline RB
-  rollback_mixed_s2_authorized=true
-}
-
 validate_initial_candidate_absence() {
-  local network marker_id journal_id baseline_status created_by_run manifest_schema
+  local network marker_id journal_id baseline_status created_by_run
   [[ ( "${command_name}" == rollback && "${marker_state}" == candidate ) ||
     ( "${command_name}" == resume && "${marker_state}" == rolling_back ) ]] || fail
-  manifest_schema="$(field "${baseline_manifest}" schema)"
-  [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
-    "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
-  # The legacy schema is recovery-only: an absent-network candidate may enter
-  # explicit rollback, and its durable rolling_back prefix may only resume.
-  if [[ "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]]; then
-    [[ ( "${command_name}" == rollback && "${marker_state}" == candidate ) ||
-      ( "${command_name}" == resume && "${marker_state}" == rolling_back ) ]] || fail
-  fi
+  [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
   [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=absent;catering_private=absent" ]] || fail
   [[ "$(field "${activation_marker}" adoption_count)" == 0 && "$(field "${activation_marker}" adoption_proof)" == not_adopted ]] || fail
   if [[ -e "${adoption_journal}" ]]; then
@@ -1711,225 +1764,50 @@ validate_initial_candidate_absence() {
   :
 }
 
-validate_pre_existing_exact_candidate() {
-  local network expected_id actual_id members
-  [[ "${marker_state}" == candidate && "$(field "${activation_marker}" stage)" == S2 ]] || fail
-  [[ "$(field "${activation_marker}" baseline_network_status)" == "catering_ingress=pre-existing-exact;catering_private=pre-existing-exact" ]] || fail
-  [[ "$(field "${baseline_manifest}" network_create_order)" == "catering_ingress,catering_private" ]] || fail
-  [[ "$(field "${baseline_manifest}" network_labels)" == "owner=${owner};phase=${schema}" ||
-    "$(field "${baseline_manifest}" network_labels)" == "owner=${owner};phase=${schema};transaction=${run_id}" ]] || fail
-  [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
-    "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
-  [[ "$(field "${activation_marker}" adoption_count)" == 0 &&
-    "$(field "${activation_marker}" adoption_proof)" == not_adopted ]] || fail
-  for network in catering_ingress catering_private; do
-    [[ "$(field "${baseline_manifest}" ${network}_baseline)" == pre-existing-exact ]] || fail
-    [[ "$(field "${baseline_manifest}" ${network}_created_by_run_authorized)" == false ]] || fail
-    expected_id="$(field "${baseline_manifest}" ${network}_baseline_id)"
-    [[ "${expected_id}" =~ ^[0-9a-f]{64}$ ]] || fail
-    network_present_by_name "${network}" || fail
-    actual_id="$(network_id "${network}")" || fail
-    [[ "${actual_id}" == "${expected_id}" ]] || fail
-    validate_network_provenance "${network}" "${network#catering_}" false
-    members="$(docker network inspect --format '{{json .Containers}}' "${network}")" || fail
-    [[ "${members}" == "{}" ]] || fail
-  done
-  if [[ -e "${adoption_journal}" ]]; then
-    validate_adoption_journal false
-    [[ "$(field "${adoption_journal}" adoption_order)" == "" &&
-      "$(field "${adoption_journal}" adoption_count)" == 0 &&
-      "$(field "${adoption_journal}" next_network)" == catering_ingress &&
-      "$(field "${adoption_journal}" adoption_phase)" == prepared ]] || fail
-    [[ "$(field "${adoption_journal}" catering_ingress_id)" == absent &&
-      "$(field "${adoption_journal}" catering_private_id)" == absent ]] || fail
-  fi
-}
-
-validate_phase32_ingress_adoption_prefix() {
-  local recovery_state="$1"
-  local network journal_id marker_id baseline_status created_by_run manifest_schema expected_status mixed_baseline=false
-  manifest_schema="$(field "${baseline_manifest}" schema)"
-  [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" ||
-    "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]] || fail
-  # A legacy manifest can prove only the historical candidate rollback prefix;
-  # candidate is never a resume authority, while rolling_back resumes only its
-  # durable rollback.
-  if [[ "${manifest_schema}" == "${LEGACY_TRANSACTION_MANIFEST_SCHEMA}" ]]; then
-    [[ ( "${recovery_state}" == candidate && "${command_name}" == rollback &&
-      "${marker_state}" == candidate ) ||
-      ( "${recovery_state}" == rolling_back && "${command_name}" == resume &&
-        "${marker_state}" == rolling_back ) ]] || fail
-  fi
-  expected_status="catering_ingress=$(field "${baseline_manifest}" catering_ingress_baseline);catering_private=$(field "${baseline_manifest}" catering_private_baseline)"
-  [[ "$(field "${activation_marker}" baseline_network_status)" == "${expected_status}" ]] || fail
-  if [[ "${expected_status}" == "catering_ingress=absent;catering_private=absent" ]]; then
-    [[ "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == true &&
-      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == true ]] || fail
-  elif [[ "${expected_status}" == "catering_ingress=pre-existing-exact;catering_private=absent" ]]; then
-    [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-      "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == false &&
-      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == true ]] || fail
-    mixed_baseline=true
-  elif [[ "${expected_status}" == "catering_ingress=absent;catering_private=pre-existing-exact" ]]; then
-    [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-      "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == true &&
-      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == false ]] || fail
-    mixed_baseline=true
-  elif [[ "${expected_status}" == "catering_ingress=pre-existing-exact;catering_private=pre-existing-exact" ]]; then
-    [[ "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-      "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == false &&
-      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == false ]] || fail
-    mixed_baseline=true
-  else
-    fail
-  fi
-  [[ "${mixed_baseline}" != true ]] || rollback_mixed_s2_authorized=true
-  for network in catering_ingress catering_private; do
-    baseline_status="$(field "${baseline_manifest}" "${network}_baseline")"
-    created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
-    [[ ( "${baseline_status}" == absent && "${created_by_run}" == true ) ||
-      ( "${baseline_status}" == pre-existing-exact && "${created_by_run}" == false ) ]] || fail
-  done
-  case "${recovery_state}" in
-    candidate)
-      [[ "${marker_state}" == candidate &&
-        ( "${command_name}" == rollback ||
-          ( "${command_name}" == resume &&
-            "${manifest_schema}" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-            "${expected_status}" == "catering_ingress=pre-existing-exact;catering_private=pre-existing-exact" &&
-            "$(field "${adoption_journal}" adoption_count)" == 1 ) ) ]] || fail
-      [[ "$(field "${activation_marker}" stage)" == S2 ]] || fail
-      [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
-        "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
-      [[ "$(field "${activation_marker}" adoption_count)" == 0 &&
-        "$(field "${activation_marker}" adoption_proof)" == not_adopted ]] || fail
-      [[ "$(field "${activation_marker}" platform_source_progress)" == verified &&
-        "$(field "${activation_marker}" edge_source_progress)" == verified ]] || fail
-      validate_adoption_journal false
-      ;;
-    rolling_back)
-      [[ "${command_name}" == resume && "${marker_state}" == rolling_back ]] || fail
-      [[ "$(field "${activation_marker}" stage)" == RB ]] || fail
-      [[ "$(field "${activation_marker}" catering_private_id)" == absent ]] || fail
-      [[ "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ ]] || fail
-      validate_adoption_journal true
-      ;;
-    *)
-      fail
-      ;;
-  esac
-  [[ "$(field "${adoption_journal}" adoption_order)" == catering_ingress &&
-    "$(field "${adoption_journal}" adoption_count)" == 1 &&
-    "$(field "${adoption_journal}" next_network)" == catering_private &&
-    "$(field "${adoption_journal}" adoption_phase)" == created ]] || fail
-  journal_id="$(field "${adoption_journal}" catering_ingress_id)"
-  [[ "${journal_id}" =~ ^[0-9a-f]{64}$ ]] || fail
-  [[ "$(field "${adoption_journal}" catering_private_id)" == absent ]] || fail
-  for network in catering_ingress catering_private; do
-    require_field "${adoption_journal}" "${network}_owner" "${owner}"
-    require_field "${adoption_journal}" "${network}_phase" "${schema}"
-    require_field "${adoption_journal}" "${network}_transaction" "${run_id}"
-  done
-  if [[ "${recovery_state}" == rolling_back ]]; then
-    [[ "$(field "${activation_marker}" catering_ingress_id)" == "${journal_id}" ]] || fail
-  fi
-  if network_present_by_name catering_private; then
-    [[ "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact &&
-      "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)" == false ]] || fail
-    validate_pre_existing_baseline_network catering_private
-  fi
-  if network_present_by_name catering_ingress; then
-    if [[ "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
-      "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)" == false ]]; then
-      validate_pre_existing_baseline_network catering_ingress
-    fi
-    [[ "$(network_id catering_ingress)" == "${journal_id}" ]] || fail
-    validate_network_provenance catering_ingress ingress "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)"
-  else
-    [[ "${recovery_state}" == rolling_back ]] || fail
-    if network_id_present_anywhere "${journal_id}"; then
-      fail
-    fi
-  fi
-}
-
 continue_rollback_control() {
   local initialize_marker="$1"
   local network created_by_run expected_id container members
-  local candidate_absent_networks_authorized=false
-  local journalized_ingress_adoption_authorized=false
-  local mixed_s2_rollback_authorized=false
+  local rollback_targets_authorized=false
+  membership_rollback_preflight
   [[ "${initialize_marker}" != 1 || "${marker_state}" != rolling_back ]] || fail
-  rollback_private_present_before=false
   smoke_readback_sha256=pending
   if [[ "${initialize_marker}" == 1 ]]; then
-    if [[ "${marker_state}" == candidate ]]; then
-      if [[ "$(field "${activation_marker}" catering_ingress_id)" == absent &&
-        "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
-        if [[ -e "${adoption_journal}" && "$(field "${adoption_journal}" adoption_count)" == 1 ]]; then
-          validate_phase32_ingress_adoption_prefix candidate
-          journalized_ingress_adoption_authorized=true
-          mixed_s2_rollback_authorized="${rollback_mixed_s2_authorized}"
-        elif [[ "$(field "${activation_marker}" stage)" == S2 &&
-          "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" ]]; then
-          validate_mixed_candidate_baseline
-          candidate_absent_networks_authorized=true
-          mixed_s2_rollback_authorized=true
-        elif [[ "$(field "${activation_marker}" stage)" == S2 &&
-          "$(field "${baseline_manifest}" catering_ingress_baseline)" == pre-existing-exact &&
-          "$(field "${baseline_manifest}" catering_private_baseline)" == pre-existing-exact ]]; then
-          validate_pre_existing_exact_candidate
-          candidate_absent_networks_authorized=true
-        else
-          validate_initial_candidate_absence
-          candidate_absent_networks_authorized=true
-        fi
+    [[ "${marker_state}" == candidate || "${marker_state}" == active ]] || fail
+    if [[ "${marker_state}" == active ]]; then
+      # The common dispatcher has already run the complete active/evidence leaf.
+      :
+    elif [[ -e "${adoption_journal}" ]]; then
+      if [[ "$(field "${adoption_journal}" adoption_count)" == 0 ]]; then
+        validate_initial_candidate_absence
+      else
+        validate_run_created_rollback_progress
       fi
+    else
+      validate_initial_candidate_absence
     fi
+    rollback_targets_authorized=true
     write_control_marker rolling_back 0 not_adopted
   else
-    if [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-      "${marker_state}" == rolling_back &&
-      "$(field "${activation_marker}" catering_ingress_id)" == absent &&
-      "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
-      validate_phase32_mixed_rollback_prefix
-      candidate_absent_networks_authorized=true
-      mixed_s2_rollback_authorized=true
-    elif [[ "$(field "${baseline_manifest}" schema)" == "${TRANSACTION_MANIFEST_SCHEMA}" &&
-      "${marker_state}" == rolling_back &&
-      "$(field "${activation_marker}" catering_ingress_id)" =~ ^[0-9a-f]{64}$ &&
-      "$(field "${activation_marker}" catering_private_id)" == absent ]]; then
-      validate_phase32_ingress_adoption_prefix rolling_back
-      journalized_ingress_adoption_authorized=true
-      mixed_s2_rollback_authorized="${rollback_mixed_s2_authorized}"
-    else
-      validate_legacy_rollback_network_progress
-      mixed_s2_rollback_authorized="${rollback_mixed_s2_authorized}"
-    fi
+    [[ "${marker_state}" == rolling_back ]] || fail
+    validate_run_created_rollback_progress
+    rollback_targets_authorized=true
   fi
-  connect_if_missing_control() {
-    local network alias container networks
-    network="$1"; alias="$2"; container="$3"
-    networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${container}")" || fail
-    [[ "${networks}" == *"\"${network}\""* ]] || docker network connect --alias "${alias}" "${network}" "${container}" || fail
-  }
   disconnect_if_attached_control() {
     local network="$1" container="$2" networks
     if ! network_present_by_name "${network}"; then
-      [[ "${initialize_marker}" == 0 || "${candidate_absent_networks_authorized}" == true ||
-        "${journalized_ingress_adoption_authorized}" == true ]] || fail
+      [[ "${rollback_targets_authorized}" == true ]] || fail
       return 0
     fi
     networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${container}")" || fail
-    [[ "${networks}" != *"\"${network}\""* ]] || docker network disconnect "${network}" "${container}" || fail
+    if [[ "${networks}" == *"\"${network}\""* ]]; then
+      if [[ "${network}" == catering_ingress || "${network}" == catering_private ]]; then
+        membership_mutation disconnect "${network}" "${container}" rollback
+      else
+        docker network disconnect "${network}" "${container}" || fail
+      fi
+    fi
   }
-  connect_if_missing_control platform-infra_default postgres platform-infra-postgres-1
-  connect_if_missing_control platform-infra_default intake platform-infra-intake-1
-  connect_if_missing_control platform-infra_default offer platform-infra-offer-1
-  connect_if_missing_control platform-infra_default production platform-infra-production-1
-  connect_if_missing_control platform-infra_default exports platform-infra-exports-1
-  connect_if_missing_control platform-infra_default web platform-infra-web-1
-  connect_if_missing_control zeiterfassung_default web platform-infra-web-1
+  membership_reconcile_compatibility_baseline 1
   disconnect_if_attached_control catering_private platform-infra-postgres-1
   disconnect_if_attached_control catering_private platform-infra-intake-1
   disconnect_if_attached_control catering_private platform-infra-offer-1
@@ -1944,31 +1822,20 @@ continue_rollback_control() {
   for network in catering_private catering_ingress; do
     created_by_run="$(field "${baseline_manifest}" "${network}_created_by_run_authorized")"
     if ! network_present_by_name "${network}"; then
-      [[ "${initialize_marker}" == 0 || "${candidate_absent_networks_authorized}" == true ||
-        "${journalized_ingress_adoption_authorized}" == true ]] || fail
+      [[ "${rollback_targets_authorized}" == true ]] || fail
       [[ "${created_by_run}" == true ]] || fail
-      if [[ "${network}" == catering_ingress ]]; then
-        [[ "${rollback_private_present_before}" != true || "${mixed_s2_rollback_authorized}" == true ]] || fail
-      fi
       continue
     fi
-    if [[ "${initialize_marker}" == 0 || "${journalized_ingress_adoption_authorized}" == true ]]; then
-      if [[ "${mixed_s2_rollback_authorized}" == true && "${created_by_run}" == false ]]; then
-        if [[ "$(field "${activation_marker}" "${network}_id")" =~ ^[0-9a-f]{64}$ ]]; then
-          validate_pre_existing_rollback_network "${network}"
-        else
-          validate_pre_existing_baseline_network "${network}"
-        fi
-      else
-        expected_id="$(field "${activation_marker}" "${network}_id")"
-        [[ "$(network_id "${network}")" == "${expected_id}" ]] || fail
-      fi
+    [[ "${created_by_run}" == true ]] || fail
+    expected_id="$(field "${activation_marker}" "${network}_id")"
+    if [[ "${expected_id}" == absent ]]; then
+      expected_id="$(field "${adoption_journal}" "${network}_id")"
     fi
-    validate_network_provenance "${network}" "${network#catering_}" "${created_by_run}"
-    [[ "${created_by_run}" == true ]] || continue
+    [[ "$(network_id "${network}")" == "${expected_id}" ]] || fail
+    validate_network_provenance "${network}" "${network#catering_}" true
     for container in platform-infra-postgres-1 platform-infra-intake-1 platform-infra-offer-1 \
       platform-infra-production-1 platform-infra-exports-1 platform-infra-web-1 shared-edge-edge-1; do
-      docker network disconnect "${network}" "${container}" >/dev/null 2>&1 || true
+      disconnect_if_attached_control "${network}" "${container}"
     done
     members="$(docker network inspect --format '{{len .Containers}}' "${network}")"
     [[ "${members}" == 0 ]] || fail
@@ -1993,15 +1860,16 @@ continue_rollback_control() {
   write_restore_archive_control
   write_completion_receipt_control
   validate_receipt
-  legacy_rollback_finalize=1
   finalize_rolling_back_resume
   release_control_locks terminal
   printf '%s\n' 'PILOT: ROLLED BACK'
 }
 
-if [[ "${command_name}" == resume ]]; then
-  case "${marker_state}" in
-    candidate)
+dispatch_recovery_transition() {
+  membership_wal_recover
+  case "${command_name}:${recovery_class}" in
+    resume:terminal:resume) terminal_resume_noop; return 0 ;;
+    resume:candidate:resume)
       validate_resume_evidence candidate
       if [[ "$(field "${activation_marker}" catering_ingress_id)" != "$(field "${adoption_journal}" catering_ingress_id)" || "$(field "${activation_marker}" catering_private_id)" != "$(field "${adoption_journal}" catering_private_id)" ]]; then
         adopt_candidate_networks
@@ -2012,25 +1880,31 @@ if [[ "${command_name}" == resume ]]; then
       adoption_proof="resume:${run_id}:$(field "${activation_marker}" marker_sha256)"
       write_control_marker active 1 "${adoption_proof}"
       ;;
-    active)
+    resume:active:resume)
       validate_resume_evidence active
       validate_resume_host_smokes
       validate_resume_egress
       write_control_marker active 1 "$(field "${activation_marker}" adoption_proof)"
       ;;
-    rolling_back)
-      resume_legacy_rolling_back_control
-      exit 0
+    resume:rolling_back:resume)
+      resume_rolling_back_control
+      return 0
+      ;;
+    rollback:candidate:rollback)
+      continue_rollback_control 1
+      return 0
+      ;;
+    rollback:active:rollback)
+      validate_resume_evidence active
+      continue_rollback_control 1
+      return 0
       ;;
     *) fail ;;
   esac
   release_control_locks terminal
   printf '%s\n' 'PILOT: GO'
-elif [[ "${command_name}" == rollback ]]; then
-  continue_rollback_control 1
-else
-  fail
-fi
+}
+dispatch_recovery_transition
 REMOTE_CONTROL
   exit 0
 fi
@@ -2141,8 +2015,10 @@ ssh "${REMOTE}" bash -s -- \
   "${BASELINE_MANIFEST}" "${RESTORE_PROOF_ARCHIVE}" "${COMPLETION_RECEIPT}" \
   "${RESTORE_EVIDENCE_RECORD}" "${ADOPTION_JOURNAL}" \
   "${EGRESS_EXERCISE}" "${EGRESS_URL}" \
-  "${PLATFORM_RUNTIME_DIR}" "${EDGE_RUNTIME_DIR}" <<'REMOTE_PILOT'
+  "${PLATFORM_RUNTIME_DIR}" "${EDGE_RUNTIME_DIR}" \
+  "$(printf '%s' "${REMOTE_MEMBERSHIP_PRIMITIVE}" | base64 | tr -d '\n')" <<'REMOTE_PILOT'
 set -euo pipefail
+eval "$(printf '%s' "${21}" | base64 -d)"
 
 transaction_id="$1"
 platform_stage="$2"
@@ -2403,6 +2279,19 @@ platform_lock_held=true
 phase3_lock_acquire "${edge_lock}" edge_lock_mode
 edge_lock_held=true
 
+# The only mutable Phase-3 baseline is two absent target networks.  Recheck
+# their names while both deployment locks are held, before any source,
+# manifest, marker, journal, or network mutation can become durable.
+validate_absent_only_baseline() {
+  local network listing count
+  for network in catering_ingress catering_private; do
+    listing="$(docker network ls --no-trunc --filter "name=^${network}$" --format '{{.ID}}')" || fail
+    count="$(printf '%s\n' "${listing}" | awk 'NF {n++} END {print n+0}')"
+    [[ "${count}" == 0 ]] || fail
+  done
+}
+validate_absent_only_baseline
+
 atomic_install() {
   local source="$1" destination="$2" expected_sha="$3" pending
   pending="${destination}.pending.${transaction_id}"
@@ -2518,6 +2407,15 @@ write_adoption_journal() {
     "catering_private_members_b64=${adoption_private_members_b64}" \
     "catering_ingress_aliases_b64=${adoption_ingress_aliases_b64}" \
     "catering_private_aliases_b64=${adoption_private_aliases_b64}" \
+    "membership_wal_phase=idle" \
+    "membership_wal_action=none" \
+    "membership_wal_network=none" \
+    "membership_wal_container=none" \
+    "membership_wal_context=none" \
+    "membership_wal_sequence=0" \
+    "membership_wal_aliases=absent" \
+    "membership_wal_before_b64=absent" \
+    "membership_wal_after_b64=absent" \
     "source_readback_sha256=${source_hash}" \
     "journal_sha256=absent" >"${journal_tmp}"
   journal_hash="$(canonical_adoption_journal_sha256 "${journal_tmp}")"
@@ -2545,6 +2443,7 @@ write_adoption_journal_intent() {
     "catering_ingress_transaction=${transaction_id}" "catering_private_transaction=${transaction_id}" \
     "catering_ingress_members_b64=${adoption_ingress_members_b64}" "catering_private_members_b64=${adoption_private_members_b64}" \
     "catering_ingress_aliases_b64=${adoption_ingress_aliases_b64}" "catering_private_aliases_b64=${adoption_private_aliases_b64}" \
+    "membership_wal_phase=idle" "membership_wal_action=none" "membership_wal_network=none" "membership_wal_container=none" "membership_wal_context=none" "membership_wal_sequence=0" "membership_wal_aliases=absent" "membership_wal_before_b64=absent" "membership_wal_after_b64=absent" \
     "source_readback_sha256=pending" "journal_sha256=absent" >"${journal_tmp}"
   journal_hash="$(canonical_adoption_journal_sha256 "${journal_tmp}")"
   journal_final="${journal_tmp}.final"
@@ -2577,40 +2476,10 @@ write_membership_adoption_journal_normal() {
 }
 
 network_status() {
-  local network="$1" count id driver scope internal ipam_driver enable_ipv6 options ipam_config owner_label phase_label kind_label transaction_label members
+  local network="$1" count
   count="$(docker network ls --no-trunc --filter "name=^${network}$" --format '{{.ID}}' | awk 'NF {n++} END {print n+0}')"
   [[ "${count}" == 0 || "${count}" == 1 ]] || fail
-  if [[ "${count}" == 0 ]]; then printf '%s' absent; return; fi
-  id="$(network_id "${network}")"
-  driver="$(docker network inspect --format '{{.Driver}}' "${id}")"
-  scope="$(docker network inspect --format '{{.Scope}}' "${id}")"
-  internal="$(docker network inspect --format '{{.Internal}}' "${id}")"
-  ipam_driver="$(docker network inspect --format '{{.IPAM.Driver}}' "${id}")"
-  ipam_config="$(docker network inspect --format '{{json .IPAM.Config}}' "${id}")"
-  enable_ipv6="$(docker network inspect --format '{{.EnableIPv6}}' "${id}")"
-  options="$(docker network inspect --format '{{json .Options}}' "${id}")"
-  owner_label="$(docker network inspect --format '{{index .Labels "com.catering.owner"}}' "${id}")"
-  phase_label="$(docker network inspect --format '{{index .Labels "com.catering.phase"}}' "${id}")"
-  kind_label="$(docker network inspect --format '{{index .Labels "com.catering.kind"}}' "${id}")"
-  transaction_label="$(docker network inspect --format '{{index .Labels "com.catering.transaction"}}' "${id}")"
-  members="$(docker network inspect --format '{{len .Containers}}' "${id}")"
-  [[ "${driver}" == bridge && "${scope}" == local && "${internal}" == false && "${ipam_driver}" == default && "${enable_ipv6}" == false && "${options}" == '{}' && ( "${ipam_config}" == '[]' || "${ipam_config}" == 'null' ) && "${owner_label}" == "${owner}" && "${phase_label}" == "phase3.1" && "${kind_label}" == "${network#catering_}" && ( -z "${transaction_label}" || "${transaction_label}" == "<no value>" || "${transaction_label}" == "${transaction_id}" ) && "${members}" == 0 ]] || fail
-  printf '%s' pre-existing-exact
-}
-
-network_label_provenance() {
-  local network="$1" owner_label phase_label kind_label transaction_label value
-  owner_label="$(docker network inspect --format '{{index .Labels "com.catering.owner"}}' "${network}")" || fail
-  phase_label="$(docker network inspect --format '{{index .Labels "com.catering.phase"}}' "${network}")" || fail
-  kind_label="$(docker network inspect --format '{{index .Labels "com.catering.kind"}}' "${network}")" || fail
-  transaction_label="$(docker network inspect --format '{{index .Labels "com.catering.transaction"}}' "${network}")" || fail
-  [[ "${owner_label}" == "${owner}" && "${phase_label}" == "${schema}" && "${kind_label}" == "${network#catering_}" ]] || fail
-  value="owner=${owner_label};phase=${phase_label};kind=${kind_label}"
-  if [[ -n "${transaction_label}" && "${transaction_label}" != "<no value>" ]]; then
-    [[ "${transaction_label}" == "${transaction_id}" ]] || fail
-    value+=";transaction=${transaction_label}"
-  fi
-  printf '%s' "${value}"
+  [[ "${count}" == 0 ]] && printf '%s' absent || printf '%s' present
 }
 
 validate_network_provenance() {
@@ -2685,38 +2554,16 @@ PYTHON
 
 ingress_status="$(network_status catering_ingress)"
 private_status="$(network_status catering_private)"
-ingress_created_by_run=false
-private_created_by_run=false
-[[ "${ingress_status}" == absent ]] && ingress_created_by_run=true
-[[ "${private_status}" == absent ]] && private_created_by_run=true
 ingress_baseline_id=absent
 private_baseline_id=absent
-if [[ "${ingress_status}" == pre-existing-exact ]]; then
-  ingress_baseline_id="$(network_id catering_ingress)" || fail
-fi
-if [[ "${private_status}" == pre-existing-exact ]]; then
-  private_baseline_id="$(network_id catering_private)" || fail
-fi
-ingress_network_labels="owner=${owner};phase=${schema};kind=ingress"
-private_network_labels="owner=${owner};phase=${schema};kind=private"
+ingress_created_by_run=true
+private_created_by_run=true
+ingress_network_labels="owner=${owner};phase=${schema};kind=ingress;transaction=${transaction_id}"
+private_network_labels="owner=${owner};phase=${schema};kind=private;transaction=${transaction_id}"
 ingress_baseline_members=absent
 ingress_baseline_aliases=absent
 private_baseline_members=absent
 private_baseline_aliases=absent
-if [[ "${ingress_status}" == pre-existing-exact ]]; then
-  ingress_network_labels="$(network_label_provenance catering_ingress)" || fail
-  ingress_baseline_members="$(docker network inspect --format '{{json .Containers}}' catering_ingress | base64 | tr -d '\n')" || fail
-  ingress_baseline_aliases="${ingress_baseline_members}"
-else
-  ingress_network_labels+=";transaction=${transaction_id}"
-fi
-if [[ "${private_status}" == pre-existing-exact ]]; then
-  private_network_labels="$(network_label_provenance catering_private)" || fail
-  private_baseline_members="$(docker network inspect --format '{{json .Containers}}' catering_private | base64 | tr -d '\n')" || fail
-  private_baseline_aliases="${private_baseline_members}"
-else
-  private_network_labels+=";transaction=${transaction_id}"
-fi
 
 # Phase-2 compatibility networks are immutable rollback inputs. Capture their
 # exact IDs and Docker membership/alias records before any Catering mutation;
@@ -3193,6 +3040,7 @@ rollback_transaction() {
   # Rollback is deliberately owner-scoped and only runs after a durable
   # candidate marker exists. Any uncertain readback leaves rolling_back plus
   # the immutable manifest for an authenticated resume; it never broad-cleans.
+  membership_rollback_preflight || return 1
   set +e
   local ingress_id_value="${ingress_id:-absent}"
   local private_id_value="${private_id:-absent}"
@@ -3200,26 +3048,13 @@ rollback_transaction() {
   write_marker rolling_back pending pending "${ingress_id_value}" "${private_id_value}" || return 1
 
   # Restore the exact old Catering memberships before removing pilot links.
-  connect_if_missing() {
-    local network="$1" alias="$2" container="$3" networks
-    networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${container}")" || return 1
-    [[ "${networks}" == *"\"${network}\""* ]] || docker network connect --alias "${alias}" "${network}" "${container}" || return 1
-  }
+  membership_reconcile_compatibility_baseline 1 || return 1
   disconnect_if_attached() {
     local network="$1" container="$2" networks
     docker network inspect "${network}" >/dev/null 2>&1 || return 0
     networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "${container}")" || return 1
-    if [[ "${networks}" == *"\"${network}\""* ]]; then
-      docker network disconnect "${network}" "${container}" || return 1
-    fi
+    if [[ "${networks}" == *"\"${network}\""* ]]; then if [[ "${network}" == catering_ingress || "${network}" == catering_private ]]; then membership_mutation disconnect "${network}" "${container}" rollback; else docker network disconnect "${network}" "${container}" || return 1; fi; fi
   }
-  connect_if_missing platform-infra_default postgres platform-infra-postgres-1 || return 1
-  connect_if_missing platform-infra_default intake platform-infra-intake-1 || return 1
-  connect_if_missing platform-infra_default offer platform-infra-offer-1 || return 1
-  connect_if_missing platform-infra_default production platform-infra-production-1 || return 1
-  connect_if_missing platform-infra_default exports platform-infra-exports-1 || return 1
-  connect_if_missing zeiterfassung_default web platform-infra-web-1 || return 1
-  connect_if_missing platform-infra_default web platform-infra-web-1 || return 1
 
   # Remove only the pilot-owned memberships; foreign containers are never
   # addressed. A failed disconnect is uncertainty and stops the transaction.
@@ -3376,21 +3211,17 @@ docker compose -p shared-edge --env-file "${edge_dir}/.env" \
   -f "${edge_source}" config >/dev/null
 
 create_or_verify_network() {
-  local network="$1" kind="$2" baseline="$3" id created_by_run=true
+  local network="$1" kind="$2" id
   write_adoption_journal_intent "${network}"
-  if [[ "${baseline}" == absent ]]; then
-    docker network create --driver bridge --internal=false --ipam-driver default \
-      --label "com.catering.owner=${owner}" \
-      --label "com.catering.phase=phase3.1" \
-      --label "com.catering.kind=${kind}" \
-      --label "com.catering.transaction=${transaction_id}" \
-      "${network}" >/dev/null
-  else
-    created_by_run=false
-  fi
+  docker network create --driver bridge --internal=false --ipam-driver default \
+    --label "com.catering.owner=${owner}" \
+    --label "com.catering.phase=phase3.1" \
+    --label "com.catering.kind=${kind}" \
+    --label "com.catering.transaction=${transaction_id}" \
+    "${network}" >/dev/null
   id="$(network_id "${network}")"
   [[ -n "${id}" ]] || fail
-  validate_post_create_adoption "${network}" "${kind}" "${created_by_run}"
+  validate_post_create_adoption "${network}" "${kind}" true
   write_adoption_journal "${network}" "${id}"
   # The adapter's crash boundary is after the durable journal readback and
   # before the legacy activation-marker write below.
@@ -3399,10 +3230,10 @@ create_or_verify_network() {
   printf '%s' "${id}"
 }
 
-ingress_id="$(create_or_verify_network catering_ingress ingress "${ingress_status}")"
+ingress_id="$(create_or_verify_network catering_ingress ingress)"
 pilot_stage=S3
 write_marker candidate verified verified "${ingress_id}" absent
-private_id="$(create_or_verify_network catering_private private "${private_status}")"
+private_id="$(create_or_verify_network catering_private private)"
 write_marker candidate verified verified "${ingress_id}" "${private_id}"
 
 # Each network mutation is surrounded by the full evidence set. This makes a
@@ -3482,7 +3313,7 @@ after_network_mutation() {
 network_connect_checked() {
   local network="$1" container="$2"; shift 2
   before_network_mutation
-  docker network connect "$@" "${network}" "${container}"
+  if [[ "${network}" == catering_ingress || "${network}" == catering_private ]]; then membership_mutation connect "${network}" "${container}" forward; else docker network connect "$@" "${network}" "${container}"; fi
   after_network_mutation
 }
 

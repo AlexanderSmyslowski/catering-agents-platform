@@ -270,6 +270,64 @@ function installCrashAfterFirstNetworkDisconnect(root: string) {
   return { shimBin, flagPath };
 }
 
+function installCrashAfterCompatibilityConnect(root: string, reconnectCount: number) {
+  const shimBin = path.join(root, `compatibility-crash-docker-shim-${reconnectCount}`);
+  const flagPath = path.join(shimBin, "crashed");
+  const countPath = path.join(shimBin, "connect-count");
+  mkdirSync(shimBin, { recursive: true });
+  writeFileSync(
+    path.join(shimBin, "docker"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `real=${shellQuote(fakeDockerPath)}`,
+      `flag=${shellQuote(flagPath)}`,
+      `count_file=${shellQuote(countPath)}`,
+      `limit=${reconnectCount}`,
+      'if [[ "${1:-}" == network && "${2:-}" == connect ]] && [[ " $* " == *" platform-infra_default "* || " $* " == *" zeiterfassung_default "* ]]; then',
+      '  if [[ -e "$flag" ]]; then exec python3 "$real" "$@"; fi',
+      '  count=0',
+      '  [[ -e "$count_file" ]] && count="$(cat "$count_file")"',
+      '  if (( count < limit )); then',
+      '    set +e',
+      '    python3 "$real" "$@"',
+      '    status=$?',
+      '    set -e',
+      '    [[ "$status" == 0 ]] || exit "$status"',
+      '    count=$((count + 1))',
+      '    printf "%s\\n" "$count" >"$count_file"',
+      '  fi',
+      '  if (( count >= limit )); then',
+      '    : >"$flag"',
+      '    exit 137',
+      '  fi',
+      '  exit 0',
+      'fi',
+      'exec python3 "$real" "$@"',
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { shimBin, flagPath, countPath };
+}
+
+function restoreCompatibilityBaselineExcept(root: string, missing: string) {
+  const expected = [
+    ["platform-infra_default", "postgres", "platform-infra-postgres-1"],
+    ["platform-infra_default", "intake", "platform-infra-intake-1"],
+    ["platform-infra_default", "offer", "platform-infra-offer-1"],
+    ["platform-infra_default", "production", "platform-infra-production-1"],
+    ["platform-infra_default", "exports", "platform-infra-exports-1"],
+    ["platform-infra_default", "web", "platform-infra-web-1"],
+    ["zeiterfassung_default", "web", "platform-infra-web-1"],
+  ] as const;
+  for (const [network, alias, container] of expected) {
+    if (container === missing) continue;
+    const result = fakeDocker(root, ["network", "connect", "--alias", alias, network, container]);
+    expect(result.status).toBe(0);
+  }
+}
+
 type PartialRollbackState = {
   networks: Record<string, { containers: Record<string, { Name: string; Aliases: string[] }> }>;
 };
@@ -1010,18 +1068,18 @@ function runExplicitRollbackReproducer(smokeFails = false) {
   const body = remoteControlBody();
   const releaseStart = body.indexOf("release_control_locks() {");
   const releaseEnd = body.indexOf("\ntrap release_control_locks EXIT", releaseStart);
-  const rollbackStart = body.indexOf('elif [[ "${command_name}" == rollback ]]; then');
-  const rollbackEnd = body.indexOf("\nelse\n  fail", rollbackStart);
   const rollbackControlStart = body.indexOf("continue_rollback_control() {");
-  const rollbackControlEnd = body.indexOf('\nif [[ "${command_name}" == resume ]]; then', rollbackControlStart);
+  const dispatcherStart = body.indexOf("dispatch_recovery_transition() {");
+  const dispatcherEnd = body.indexOf("\ndispatch_recovery_transition", dispatcherStart);
+  const rollbackControlEnd = body.indexOf("\ndispatch_recovery_transition() {", rollbackControlStart);
   expect(releaseStart).toBeGreaterThanOrEqual(0);
   expect(releaseEnd).toBeGreaterThan(releaseStart);
-  expect(rollbackStart).toBeGreaterThanOrEqual(0);
-  expect(rollbackEnd).toBeGreaterThan(rollbackStart);
   expect(rollbackControlStart).toBeGreaterThanOrEqual(0);
   expect(rollbackControlEnd).toBeGreaterThan(rollbackControlStart);
-  const rollbackBody = body.slice(rollbackStart).slice(body.slice(rollbackStart).indexOf("\n") + 1, rollbackEnd - rollbackStart);
+  expect(dispatcherStart).toBeGreaterThanOrEqual(0);
+  expect(dispatcherEnd).toBeGreaterThan(dispatcherStart);
   const rollbackControl = body.slice(rollbackControlStart, rollbackControlEnd);
+  const dispatcher = body.slice(dispatcherStart, dispatcherEnd);
   const prefix = [
     "set -euo pipefail",
     `event_log=${shellQuote(eventLog)}`,
@@ -1035,6 +1093,7 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     `edge_source=${shellQuote(path.join(root, "edge-compose.phase3.yml"))}`,
     `pilot_root=${shellQuote(root)}`,
     "command_name=rollback",
+    "recovery_class=active:rollback",
     "run_id=phase3-explicit-rollback",
     "owner=catering-agents-platform",
     "schema=phase3.1",
@@ -1057,14 +1116,15 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     "field() {",
     "  case \"$2\" in",
     "    platform_source_prior|edge_source_prior|prior_marker_state) printf 'absent' ;;",
-    "    catering_private_created_by_run_authorized|catering_ingress_created_by_run_authorized) printf 'false' ;;",
+    "    catering_private_created_by_run_authorized|catering_ingress_created_by_run_authorized) printf 'true' ;;",
     "    *) printf 'absent' ;;",
     "  esac",
     "}",
     "fail() { printf '%s\\n' 'PILOT: NO-GO' >&2; return 1; }",
+    "validate_resume_evidence() { :; }",
     "validate_compatibility_baseline_control() { :; }",
     "validate_network_provenance() { :; }",
-    "network_present_by_name() { return 0; }",
+    "network_present_by_name() { return 1; }",
     "validate_receipt() { :; }",
     "canonical_marker_sha256() { printf 'markerhash'; }",
     "canonical_archive_sha256() { printf 'archivehash'; }",
@@ -1080,9 +1140,9 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     "phase3_lock_release() { printf 'release=%s\\n' \"$1\" >> \"$event_log\"; rmdir \"$1\"; }",
     body.slice(releaseStart, releaseEnd),
     rollbackControl,
-    `run_explicit_rollback() {\n${rollbackBody}\n}`,
+    dispatcher,
     "trap release_control_locks EXIT",
-    "run_explicit_rollback",
+    "dispatch_recovery_transition",
   ].join("\n");
   return {
     root,
@@ -1261,6 +1321,269 @@ function runRollbackReleaseCleanup(failLock: "edge" | "platform" | "none" = "non
 }
 
 describe("latest independent Phase-3 P1 review reproducers", () => {
+  const absentOnlyMatrix = [
+    ["happy absent/absent", "normal", "GO"],
+    ["precondition ingress-present", "normal", "NO-GO"],
+    ["precondition private-present", "normal", "NO-GO"],
+    ["precondition both-present", "normal", "NO-GO"],
+    ["prepared/no-network cleanup", "candidate-rollback", "ROLLED BACK"],
+    ["crash after run-created ingress", "crash-after-ingress", "resume"],
+    ["crash after run-created private", "crash-after-private", "resume"],
+    ["membership WAL prefix", "crash-after-active", "rollback"],
+    ["partial disconnect rollback", "crash-after-rollback", "resume"],
+    ["active rollback", "active", "rollback"],
+    ["provenance drift", "drift", "NO-GO"],
+  ] as const;
+
+  test("RED matrix declares one finite absent-only recovery table", () => {
+    expect(absentOnlyMatrix.map(([name]) => name)).toEqual([
+      "happy absent/absent",
+      "precondition ingress-present",
+      "precondition private-present",
+      "precondition both-present",
+      "prepared/no-network cleanup",
+      "crash after run-created ingress",
+      "crash after run-created private",
+      "membership WAL prefix",
+      "partial disconnect rollback",
+      "active rollback",
+      "provenance drift",
+    ]);
+    expect(new Set(absentOnlyMatrix.map(([name]) => name)).size).toBe(absentOnlyMatrix.length);
+  });
+
+  test.each([
+    ["ingress-present", (root: string) => prepareNormalMixedS2State(root, "catering_ingress")],
+    ["private-present", (root: string) => prepareNormalMixedS2State(root, "catering_private")],
+    ["both-present", (root: string) => prepareNormalAllPreExistingS2State(root)],
+  ] as const)("RED: absent-only precondition rejects %s before durable mutation", (_name, prepare) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-absent-only-precondition-red-"));
+    prepare(root);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const beforeState = textAt(statePath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const log = textAt(path.join(root, "fake-docker.log"));
+
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(log).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(JSON.parse(textAt(statePath))).toEqual(JSON.parse(beforeState));
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("GREEN: absent-only baseline completes the normal run with terminal locks free", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-absent-only-happy-green-"));
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const state = JSON.parse(textAt(path.join(root, "fake-docker-state.json"))) as {
+      networks: Record<string, { id: string; labels: Record<string, string> }>;
+    };
+
+    expect(run.result.status).toBe(0);
+    expect(output).toContain("PILOT: GO");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+    expect(state.networks.catering_ingress.labels["com.catering.transaction"]).toBe("phase3-harness");
+    expect(state.networks.catering_private.labels["com.catering.transaction"]).toBe("phase3-harness");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: a membership crash leaves an authenticated WAL prefix for exact recovery", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-membership-wal-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+
+    const disconnectCrash = installCrashAfterFirstNetworkDisconnect(root);
+    const rollback = runExistingRollback(root, crashed.sandbox, disconnectCrash.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    const journal = fieldsAt(path.join(root, "phase3.network-adoption.journal"));
+    expect(journal.get("membership_wal_phase")).toBe("pending");
+    expect(journal.get("membership_wal_action")).toBe("disconnect");
+    expect(journal.get("membership_wal_network")).toBe("catering_private");
+    expect(journal.get("membership_wal_container")).toBe("platform-infra-postgres-1");
+    expect(journal.get("membership_wal_before_b64")).toMatch(/^[A-Za-z0-9+/=]+$/);
+    expect(journal.get("membership_wal_after_b64")).toMatch(/^[A-Za-z0-9+/=]+$/);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    expect(resumed.result.status).toBe(0);
+    expect(`${resumed.result.stdout}${resumed.result.stderr}`).toContain("PILOT: ROLLED BACK");
+  }, 120_000);
+
+  test("RED: resume fails closed when a non-leading target alias drifts", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-alias-matrix-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as any;
+    const web = state.containers["platform-infra-web-1"];
+    web.networks.catering_ingress.aliases = ["wrong-web-alias"];
+    state.networks.catering_ingress.containers[web.id].Aliases = ["wrong-web-alias"];
+    writeFileSync(statePath, JSON.stringify(state));
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const driftedIngress = encodeFakeDockerJson(state.networks.catering_ingress.containers);
+    rewriteFields(journalPath, {
+      catering_ingress_members_b64: driftedIngress,
+      catering_ingress_aliases_b64: driftedIngress,
+      journal_sha256: "absent",
+    });
+    rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+
+    const resumed = runExistingResume(root, run.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(output).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
+  test("RED: active rollback rejects compatibility drift before its first mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-rollback-preflight-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as any;
+    const foreign = state.containers["commcats-eventos-app"];
+    expect(foreign.networks["platform-infra_default"]).toBeDefined();
+    expect(state.networks["platform-infra_default"].containers[foreign.id]).toBeDefined();
+    delete foreign.networks["platform-infra_default"];
+    delete state.networks["platform-infra_default"].containers[foreign.id];
+    writeFileSync(statePath, JSON.stringify(state));
+    const beforeState = textAt(statePath);
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+
+    const rolledBack = runExistingRollback(root, run.sandbox);
+    const output = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm)/);
+    expect(textAt(statePath)).toBe(beforeState);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test.each([0, 1, 3])("RED: monotonic rollback resumes after %s compatibility reconnects", (reconnectCount) => {
+    const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-monotonic-crash-${reconnectCount}-red-`));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const crashShim = installCrashAfterCompatibilityConnect(root, reconnectCount);
+    const rollback = runExistingRollback(root, crashed.sandbox, crashShim.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: a complete compatibility baseline makes rolling_back resume a terminal no-op", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-complete-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const crashShim = installCrashAfterCompatibilityConnect(root, 7);
+    const rollback = runExistingRollback(root, crashed.sandbox, crashShim.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+  }, 120_000);
+
+  test("RED: exactly one missing compatibility connection is the only forward delta", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-single-delta-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    restoreCompatibilityBaselineExcept(root, "platform-infra-postgres-1");
+    const markerPath = path.join(root, "phase3.activation");
+    rewriteFields(markerPath, { state: "rolling_back", stage: "RB", marker_sha256: "absent" });
+    rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+    const rollback = runExistingResume(root, run.sandbox);
+    const output = `${rollback.result.stdout}${rollback.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rollback.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    expect((addedLog.match(/^docker network connect .*platform-infra_default platform-infra-postgres-1$/gm) ?? []).length).toBe(1);
+    expect(addedLog).not.toMatch(/network connect .*platform-infra_default (?:platform-infra-(?:intake|offer|production|exports|web)-1)/);
+  }, 120_000);
+
+  test("RED: compatibility member or alias provenance drift fails before rollback mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-provenance-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as any;
+    const foreign = state.containers["commcats-eventos-app"];
+    state.networks["platform-infra_default"].containers[foreign.id] = {
+      Name: "/commcats-eventos-app",
+      Aliases: ["unexpected"],
+    };
+    foreign.networks["platform-infra_default"] = { aliases: ["unexpected"] };
+    writeFileSync(statePath, JSON.stringify(state));
+    const beforeState = textAt(statePath);
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const rollback = runExistingRollback(root, run.sandbox);
+    const output = `${rollback.result.stdout}${rollback.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(rollback.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:connect|disconnect|rm)/);
+    expect(textAt(statePath)).toBe(beforeState);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
+  test("RED: target network cleanup follows full compatibility readback and frees locks", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-cleanup-gate-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+    const rollback = runExistingRollback(root, run.sandbox);
+    const output = `${rollback.result.stdout}${rollback.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rollback.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    const firstRm = addedLog.search(/^docker network rm catering_/m);
+    expect(firstRm).toBeGreaterThan(0);
+    const beforeCleanup = addedLog.slice(0, firstRm);
+    const lastCompatibilityInspect = Math.max(
+      beforeCleanup.lastIndexOf("docker network inspect --format {{json .Containers}} platform-infra_default"),
+      beforeCleanup.lastIndexOf("docker network inspect --format {{json .Containers}} zeiterfassung_default"),
+    );
+    expect(lastCompatibilityInspect).toBeGreaterThanOrEqual(0);
+    expect(firstRm).toBeGreaterThan(lastCompatibilityInspect);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: repeated resume on the terminal absent target state is idempotent", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-repeat-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    const rollback = runExistingRollback(root, run.sandbox);
+    expect(rollback.result.status).toBe(0);
+    const repeated = runExistingResume(root, run.sandbox);
+    const output = `${repeated.result.stdout}${repeated.result.stderr}`;
+    expect(repeated.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
   test("harness self-integrity survives two runs with the same backend root", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-harness-integrity-"));
     const beforeBytes = readFileSync(fakeDockerPath).length;
@@ -2463,6 +2786,7 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
       rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
     }
     const beforeRollbackLog = textAt(logPath);
+    const beforeRollbackMarker = textAt(markerPath);
     const rolledBack = runExistingRollback(root, crashed.sandbox);
     const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
     const addedLog = textAt(logPath).slice(beforeRollbackLog.length);
@@ -2471,7 +2795,8 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(terminal).not.toContain("PILOT: ROLLED BACK");
     expect(addedLog).not.toMatch(/network create catering_(?:private|ingress)/);
     expect(addedLog).not.toMatch(/network (?:disconnect|rm) catering_(?:private|ingress)/);
-    expect(fieldsAt(markerPath).get("state")).toBe(claimSource === "marker" ? "rolling_back" : "candidate");
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(textAt(markerPath)).toBe(beforeRollbackMarker);
     expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
   }, 120_000);
