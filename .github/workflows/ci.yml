@@ -168,7 +168,7 @@ jobs:
               "offer": {"restart", "environment", "networks"},
               "production": {"restart", "environment", "networks"},
               "exports": {"restart", "environment", "networks"},
-              "web": {"restart", "environment", "volumes", "ports", "networks"},
+              "web": {"restart", "environment", "volumes", "networks"},
           }
           for service, fields in expected_platform_fields.items():
               actual = set(platform["services"][service])
