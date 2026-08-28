@@ -288,6 +288,7 @@ describe("ProductionDraft E2E chain", () => {
       intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
+        CATERING_DEV_AUTH: "1",
         CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
       }
     });
@@ -296,12 +297,12 @@ describe("ProductionDraft E2E chain", () => {
       rootDir: dataRoot,
       store: intakeStore,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const exportApp = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const draft = await buildDraft();
 
@@ -426,13 +427,14 @@ describe("ProductionDraft E2E chain", () => {
         store,
         trustedActorSecret: TRUSTED_SECRET,
         env: {
+          CATERING_DEV_AUTH: "1",
           CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
         }
       });
       const intakeApp = buildIntakeApp({
         rootDir: dataRoot,
         trustedActorSecret: TRUSTED_SECRET,
-        env: {}
+        env: { CATERING_DEV_AUTH: "1" }
       });
       const draft = await buildDraft(`production-draft-e2e-${status}`);
 

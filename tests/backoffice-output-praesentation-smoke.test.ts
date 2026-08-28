@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 function createDashboardResponse(
   blocked = false,
@@ -258,6 +259,10 @@ function installBackofficeMocks(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+
+      if (url.endsWith("/api/intake/v1/auth/session")) {
+        return adminSessionResponse();
+      }
 
       if (url.endsWith("/api/offers/v1/offers/cases")) {
         return new Response(

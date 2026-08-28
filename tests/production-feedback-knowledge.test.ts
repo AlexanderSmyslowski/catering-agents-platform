@@ -78,7 +78,7 @@ describe("production feedback knowledge", () => {
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -149,7 +149,7 @@ describe("production feedback knowledge", () => {
       dataRoot,
       store,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -197,7 +197,7 @@ describe("production feedback knowledge", () => {
       dataRoot,
       store,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {

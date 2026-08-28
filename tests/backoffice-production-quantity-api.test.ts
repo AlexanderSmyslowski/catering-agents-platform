@@ -22,6 +22,9 @@ describe("backoffice production quantity api", () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/production/v1/production/cases/case%201/quantity-workflow");
     expect(init?.method).toBeUndefined();
+    expect(init?.credentials).toBe("same-origin");
+    expect([...new Headers(init?.headers).keys()]).not.toContain("authorization");
+    expect([...new Headers(init?.headers).keys()]).not.toContain("x-actor-name");
   });
 
   it("posts only the requested edit for preview", async () => {
@@ -35,7 +38,9 @@ describe("backoffice production quantity api", () => {
     expect(url).toBe("/api/production/v1/production/cases/case-1/quantity-workflow/component-1/preview");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toEqual({ edit: { origin: "target_output", perUnitAmount: 1.2, unit: "servings" } });
-    expect(new Headers(init?.headers).get("x-actor-name")).toBe("Produktions-Mitarbeiter");
+    expect(init?.credentials).toBe("same-origin");
+    expect(new Headers(init?.headers).get("x-actor-name")).toBeNull();
+    expect(new Headers(init?.headers).get("authorization")).toBeNull();
   });
 
   it("confirms the exact preview id plus original edit and nothing derived in the browser", async () => {
@@ -53,5 +58,8 @@ describe("backoffice production quantity api", () => {
       previewId: "quantity-preview-1",
       edit: { origin: "purchase_ingredient", ingredientId: "beef", amount: 3, unit: "kg" }
     });
+    expect(init?.credentials).toBe("same-origin");
+    expect(new Headers(init?.headers).get("x-actor-name")).toBeNull();
+    expect(new Headers(init?.headers).get("authorization")).toBeNull();
   });
 });

@@ -33,7 +33,7 @@ function disposeDataRoot(dataRoot: string): void {
 describe("production audit access", () => {
   it("rejects the audit feed without the audit operator role", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot });
+    const app = buildProductionApp({ dataRoot, env: { CATERING_DEV_AUTH: "1" } });
 
     const response = await app.inject({
       method: "GET",
@@ -51,7 +51,7 @@ describe("production audit access", () => {
 
   it("allows the audit feed with the audit operator role", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot });
+    const app = buildProductionApp({ dataRoot, env: { CATERING_DEV_AUTH: "1" } });
 
     const response = await app.inject({
       method: "GET",
@@ -72,7 +72,7 @@ describe("production audit access", () => {
 
   it("rejects production seed demo without the audit operator role", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot });
+    const app = buildProductionApp({ dataRoot, env: { CATERING_DEV_AUTH: "1" } });
 
     const response = await app.inject({
       method: "POST",
@@ -109,7 +109,8 @@ describe("production audit access", () => {
     const app = buildProductionApp({
       dataRoot,
       auditLog,
-      trustedActorSecret: TRUSTED_SECRET
+      trustedActorSecret: TRUSTED_SECRET,
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {

@@ -16,7 +16,13 @@ import {
 } from "../backoffice-ui/src/api.js";
 
 function installFetchSpy() {
-  const calls: Array<{ url: string; method?: string; actor: string | null; contentType: string | null }> = [];
+  const calls: Array<{
+    url: string;
+    method?: string;
+    credentials?: RequestCredentials;
+    identityHeaders: string[];
+    contentType: string | null;
+  }> = [];
 
   vi.stubGlobal(
     "fetch",
@@ -25,7 +31,13 @@ function installFetchSpy() {
       calls.push({
         url: String(input),
         method: init?.method,
-        actor: headers.get("x-actor-name"),
+        credentials: init?.credentials,
+        identityHeaders: [...headers.keys()].filter((name) =>
+          name === "authorization" ||
+          name === "x-actor-name" ||
+          name.startsWith("x-catering-") ||
+          /(?:actor|subject|role|business|identity)/u.test(name)
+        ),
         contentType: headers.get("content-type")
       });
 
@@ -46,8 +58,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("backoffice API actor defaults", () => {
-  it("sends role-specific default actors for mutating UI helpers", async () => {
+describe("backoffice API session requests", () => {
+  it("uses same-origin cookies without browser-supplied identity for mutating UI helpers", async () => {
     const calls = installFetchSpy();
 
     await createAcceptedSpecFromText("Konferenz am 2026-06-18 fuer 90 Teilnehmer.");
@@ -60,47 +72,49 @@ describe("backoffice API actor defaults", () => {
       {
         url: "/api/intake/v1/intake/normalize",
         method: "POST",
-        actor: "Intake-Mitarbeiter",
+        credentials: "same-origin",
+        identityHeaders: [],
         contentType: "application/json"
       },
       {
         url: "/api/offers/v1/offers/cases",
         method: "POST",
-        actor: "Angebots-Mitarbeiter",
+        credentials: "same-origin",
+        identityHeaders: [],
         contentType: "application/json"
       },
       {
         url: "/api/offers/v1/offers/from-text",
         method: "POST",
-        actor: "Angebots-Mitarbeiter",
+        credentials: "same-origin",
+        identityHeaders: [],
         contentType: "application/json"
       },
       {
         url: "/api/offers/v1/offers/recipes/recipe-offer-1/review",
         method: "PATCH",
-        actor: "Angebots-Mitarbeiter",
+        credentials: "same-origin",
+        identityHeaders: [],
         contentType: "application/json"
       },
       {
         url: "/api/production/v1/production/recipes/recipe-production-1/review",
         method: "PATCH",
-        actor: "Produktions-Mitarbeiter",
+        credentials: "same-origin",
+        identityHeaders: [],
         contentType: "application/json"
       }
     ]);
   });
 
-  it("keeps audit/seed paths on the Betriebs-/Audit-Operator", async () => {
+  it("keeps audit/seed paths free of browser identity claims", async () => {
     const calls = installFetchSpy();
 
     await seedDemoData();
 
     expect(calls).toHaveLength(3);
-    expect(calls.map((call) => call.actor)).toEqual([
-      "Betriebs-/Audit-Operator",
-      "Betriebs-/Audit-Operator",
-      "Betriebs-/Audit-Operator"
-    ]);
+    expect(calls.map((call) => call.credentials)).toEqual(["same-origin", "same-origin", "same-origin"]);
+    expect(calls.map((call) => call.identityHeaders)).toEqual([[], [], []]);
     expect(calls.map((call) => call.contentType)).toEqual(["application/json", "application/json", "application/json"]);
   });
 
@@ -116,31 +130,34 @@ describe("backoffice API actor defaults", () => {
       {
         url: "/api/intake/v1/intake/source-documents",
         method: "POST",
-        actor: "Intake-Mitarbeiter",
+        credentials: "same-origin",
+        identityHeaders: [],
         contentType: null
       },
       {
         url: "/api/production/v1/production/cases",
         method: "POST",
-        actor: "Produktions-Mitarbeiter",
+        credentials: "same-origin",
+        identityHeaders: [],
         contentType: "application/json"
       },
       {
         url: "/api/production/v1/production/drafts/from-document",
         method: "POST",
-        actor: "Produktions-Mitarbeiter",
+        credentials: "same-origin",
+        identityHeaders: [],
         contentType: "application/json"
       }
     ]);
   });
 
   it("imports an AcceptedEventSpec as a guarded draft-only production review", async () => {
-    const requests: Array<{ url: string; method?: string; body: Record<string, unknown> }> = [];
+    const requests: Array<{ url: string; method?: string; credentials?: RequestCredentials; body: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-        requests.push({ url: String(input), method: init?.method, body });
+        requests.push({ url: String(input), method: init?.method, credentials: init?.credentials, body });
 
         return new Response(JSON.stringify({ draft: body }), {
           status: 201,
@@ -162,6 +179,7 @@ describe("backoffice API actor defaults", () => {
     expect(requests).toEqual([{
       url: "/api/production/v1/production/drafts",
       method: "POST",
+      credentials: "same-origin",
       body: {
         caseId: "production-case-safe",
         specId: "spec-safe"
@@ -170,12 +188,12 @@ describe("backoffice API actor defaults", () => {
   });
 
   it("creates an offer draft with a stable case reference after intake normalization", async () => {
-    const requests: Array<{ url: string; method?: string; body: Record<string, unknown> }> = [];
+    const requests: Array<{ url: string; method?: string; credentials?: RequestCredentials; body: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-        requests.push({ url: String(input), method: init?.method, body });
+        requests.push({ url: String(input), method: init?.method, credentials: init?.credentials, body });
         return new Response(JSON.stringify({ draftId: "offer-draft-upload-1" }), {
           status: 201,
           headers: { "content-type": "application/json" }
@@ -195,6 +213,7 @@ describe("backoffice API actor defaults", () => {
     expect(requests).toEqual([{
       url: "/api/offers/v1/offers/drafts",
       method: "POST",
+      credentials: "same-origin",
       body: {
         requestId: "request-upload-1",
         channel: "pdf_upload",

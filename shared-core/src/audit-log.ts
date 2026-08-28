@@ -59,6 +59,11 @@ export class AuditLogStore {
     const { idempotencyKey, ...auditInput } = input;
     const entryWithoutId: Omit<AuditEntry, "auditId"> = {
       ...auditInput,
+      // Session actors carry live authorization state; audit persists only stable identity and provenance.
+      actor: {
+        name: auditInput.actor.name,
+        source: auditInput.actor.source
+      },
       businessId: context.businessId,
       at: auditInput.at ?? new Date().toISOString()
     };

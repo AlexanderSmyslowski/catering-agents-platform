@@ -9,10 +9,10 @@ import {
   findLlmReadinessPromptSchemaEntryByInputKind,
   hasMinimalMvpCapability,
   ingestDocument,
-  isTrustedFinalApprovalSource,
   llmReadinessForbiddenPayloadKeys,
   llmReadinessContractVersion,
   normalizeEventRequestToSpec,
+  TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE,
   validateAcceptedEventSpec,
   validateUploadedDocument,
   validateLlmReadinessModelOutputCandidate,
@@ -79,10 +79,11 @@ function canAccessProductionFeedback(
 ): boolean {
   if (!hasMinimalMvpCapability(reader, "production")) return false;
   if (canReadProductionCommercials(reader)) return true;
-  if (!isTrustedFinalApprovalSource(feedback.createdBy.source)) return false;
+  if (feedback.visibility === "operational") return true;
+  if (feedback.visibility === "commercial") return false;
+  if (feedback.createdBy.source !== TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE) return false;
 
-  // Die gespeicherte Ersteller-Provenienz reicht an dieser engen Grenze aus:
-  // Nur ein vertrauenswürdiger Produktions-Ersteller ohne Preisrecht ist sichtbar.
+  // Nur unklassifizierte historische Proxy-Datensätze behalten die bisherige namensbasierte Kompatibilitätsregel.
   const creator: TrustedActor = {
     name: feedback.createdBy.name,
     businessId: reader.businessId,
@@ -2423,6 +2424,9 @@ export function registerProductionArtifactRoutes(
       const draft: ProductionFeedbackDraft = {
         feedbackId: `production-feedback-${randomUUID()}`,
         status: "pending_review",
+        visibility: hasMinimalMvpCapability(actor, "commercial")
+          ? "commercial"
+          : "operational",
         createdAt: now,
         updatedAt: now,
         createdBy: {
@@ -2440,7 +2444,10 @@ export function registerProductionArtifactRoutes(
       };
 
       try {
-        await store.saveProductionFeedbackDraft(actor, draft);
+        const stored = await store.saveProductionFeedbackDraft(actor, draft);
+        if (stored !== "created") {
+          return reply.code(409).send({ message: "ProductionFeedbackDraft konnte nicht konfliktfrei angelegt werden." });
+        }
       } catch (error) {
         return reply.code(422).send({
           message: "Produktionsfeedback-Entwurf ist nicht valide.",
@@ -2520,7 +2527,12 @@ export function registerProductionArtifactRoutes(
           rejectedAt: now
         };
 
-      await store.saveProductionFeedbackDraft(actor, decidedDraft);
+      const stored = await store.saveProductionFeedbackDraft(actor, decidedDraft, draft);
+      if (stored !== "updated") {
+        return reply.code(409).send({
+          message: "ProductionFeedbackDraft wurde gleichzeitig verändert oder entschieden."
+        });
+      }
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: request.body.approve
           ? "production.feedback_draft_approved"

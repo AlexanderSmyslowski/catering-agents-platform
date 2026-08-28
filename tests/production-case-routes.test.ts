@@ -81,6 +81,7 @@ function buildHarness(handoffReader?: ProductionHandoffReader) {
     handoffReader,
     trustedActorSecret: trustedSecret,
     env: {
+      CATERING_DEV_AUTH: "1",
       CATERING_DEFAULT_BUSINESS_ID: "alpha",
       CATERING_TRUSTED_ACTOR_SECRET: trustedSecret
     }

@@ -24,6 +24,7 @@ import {
   renderPurchaseListCsv
 } from "@catering/print-export";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 class EmptyWebProvider implements WebRecipeSearchProvider {
   async searchRecipes() {
@@ -275,6 +276,10 @@ describe("UI critical path rehearsal", () => {
           input instanceof Request ? input.method : init?.method ?? "GET"
         ).toUpperCase();
         fetchCalls.push({ method, url });
+
+        if (method === "GET" && url.endsWith("/api/intake/v1/auth/session")) {
+          return adminSessionResponse();
+        }
 
         if (method === "GET" && url.endsWith("/api/offers/v1/offers/cases")) {
           return Response.json({

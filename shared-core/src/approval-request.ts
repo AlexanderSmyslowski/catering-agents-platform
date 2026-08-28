@@ -25,6 +25,9 @@ export function createApprovalRequestRecord(
   input: CreateApprovalRequestRecordInput
 ): ApprovalRequestRecord {
   assertTrustedFinalApprovalActor(input.actor);
+  if (input.actor.source === "authenticated-session" && input.actor.role !== input.role) {
+    throw new Error("Die Freigaberolle muss der aktuellen Sitzungsrolle entsprechen.");
+  }
 
   const businessId = input.actor.businessId;
   const now = input.now ?? new Date();

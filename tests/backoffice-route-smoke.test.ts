@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
 
 type RouteSmokeRecord = Record<string, unknown>;
+const routeSmokeSession = {
+  authenticated: true,
+  user: { userId: "route-smoke-user", displayName: "Route-Smoke" },
+  access: { capabilities: ["intake", "offer", "production", "production_read"] }
+};
 type RouteSmokeDashboardFixture = {
   intakeRequests?: Array<RouteSmokeRecord & { requestId?: string }>;
   acceptedSpecs?: Array<RouteSmokeRecord & { specId?: string }>;
@@ -161,6 +166,10 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+
+      if (url.endsWith("/api/intake/v1/auth/session")) {
+        return Response.json(routeSmokeSession);
+      }
 
       if (url.endsWith("/api/offers/v1/offers/cases")) {
         return new Response(
@@ -487,7 +496,12 @@ function installPendingBackofficeEnvironmentMocks() {
     configurable: true
   });
   vi.stubGlobal("localStorage", localStorageMock);
-  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    if (String(input).endsWith("/api/intake/v1/auth/session")) {
+      return Promise.resolve(Response.json(routeSmokeSession));
+    }
+    return new Promise<Response>(() => undefined);
+  }));
 }
 
 afterEach(() => {
@@ -844,6 +858,10 @@ describe("backoffice route smoke", () => {
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+
+      if (url.endsWith("/api/intake/v1/auth/session")) {
+        return Response.json(routeSmokeSession);
+      }
 
       if (
         url.endsWith("/api/offers/v1/offers/cases") &&

@@ -482,7 +482,7 @@ describe("production folder export", () => {
     const app = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -516,7 +516,7 @@ describe("production folder export", () => {
     const app = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {

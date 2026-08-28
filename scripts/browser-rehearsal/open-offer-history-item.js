@@ -7,8 +7,8 @@ async () => {
   const expectedCaseId = sessionStorage.getItem("catering.browser-rehearsal.offer-case-id")?.trim();
   if (!expectedCaseId) throw new Error("Synthetischer Angebotsfall ist nicht im Browserkontext gebunden.");
 
-  const fetchJson = async (path, headers = {}) => {
-    const response = await fetch(path, { headers });
+  const fetchJson = async (path) => {
+    const response = await fetch(path);
     const raw = typeof response.text === "function"
       ? await response.text()
       : JSON.stringify(await response.json());
@@ -19,10 +19,8 @@ async () => {
     if (!response.ok) throw new Error(`${path} schlug mit HTTP ${response.status} fehl: ${payload?.message ?? raw}`);
     return payload;
   };
-  const offerHeaders = { "x-actor-name": "Angebots-Mitarbeiter" };
   const readOfferCase = () => fetchJson(
     `/api/offers/v1/offers/cases/${encodeURIComponent(expectedCaseId)}`,
-    offerHeaders,
   );
   const draftForCase = (casePayload) => [...(casePayload?.events ?? [])]
     .reverse()
@@ -46,7 +44,7 @@ async () => {
   }
   const draftId = draftForCase(initialCasePayload);
   if (typeof draftId !== "string" || draftId.length === 0) throw new Error("Synthetischer Angebotsfall enthält keinen fallgebundenen Entwurf.");
-  const draft = await fetchJson(`/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}`, offerHeaders);
+  const draft = await fetchJson(`/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}`);
   if (draft?.draftId !== draftId || draft.eventSummary !== "Besprechung für 35 Teilnehmer als Kaffeepause." ||
     draft.proposedEventSpec?.specId !== expectedSpecId) {
     throw new Error("Synthetischer Angebotsentwurf ist nicht über den aktiven Fall und seine AcceptedEventSpec gebunden.");

@@ -47,6 +47,7 @@ export { productionDecisionRepositoryFor } from "./production-decision-repositor
 
 export type ClarificationDraftStatus = "pending_review" | "approved" | "rejected";
 export type ProductionFeedbackStatus = "pending_review" | "approved" | "rejected";
+export type ProductionFeedbackVisibility = "operational" | "commercial";
 
 interface ProductionFeedbackActor {
   name: string;
@@ -69,6 +70,7 @@ export interface ProductionFeedbackContent {
 export interface ProductionFeedbackDraft {
   feedbackId: string;
   status: ProductionFeedbackStatus;
+  visibility?: ProductionFeedbackVisibility;
   createdAt: string;
   updatedAt: string;
   createdBy: ProductionFeedbackActor;
@@ -217,6 +219,25 @@ function normalizeProductionFeedbackActor(value: unknown, field: string, errors:
   };
 }
 
+function normalizeProductionFeedbackVisibility(
+  value: unknown,
+  createdBy: ProductionFeedbackActor,
+  errors: string[]
+): ProductionFeedbackVisibility | undefined {
+  if (value === undefined) {
+    // Nur historische Proxy-Datensätze dürfen unklassifiziert bleiben; neue Session-Datensätze müssen fail-closed sein.
+    if (createdBy.source === "authenticated-session") {
+      errors.push("visibility muss für session-origin ProductionFeedbackDraft gesetzt sein.");
+    }
+    return undefined;
+  }
+  if (value !== "operational" && value !== "commercial") {
+    errors.push("visibility muss operational oder commercial sein.");
+    return undefined;
+  }
+  return value;
+}
+
 function normalizeProductionFeedbackTarget(
   value: unknown,
   errors: string[]
@@ -260,12 +281,16 @@ export function validateProductionFeedbackDraftForStorage(value: ProductionFeedb
     errors.push("guardrails müssen draft-only, human-reviewed und reviewed_only sein.");
   }
 
+  const createdBy = normalizeProductionFeedbackActor(value.createdBy, "createdBy", errors);
+  const visibility = normalizeProductionFeedbackVisibility(value.visibility, createdBy, errors);
+
   const normalized: ProductionFeedbackDraft = {
     feedbackId: normalizeProductionFeedbackText(value.feedbackId, "feedbackId", errors),
     status,
+    ...(visibility ? { visibility } : {}),
     createdAt: normalizeProductionFeedbackText(value.createdAt, "createdAt", errors),
     updatedAt: normalizeProductionFeedbackText(value.updatedAt, "updatedAt", errors),
-    createdBy: normalizeProductionFeedbackActor(value.createdBy, "createdBy", errors),
+    createdBy,
     ...(value.target ? { target: normalizeProductionFeedbackTarget(value.target, errors) } : {}),
     feedback: {
       summary: normalizeProductionFeedbackText(value.feedback?.summary, "feedback.summary", errors),
@@ -642,10 +667,41 @@ export class ProductionStore {
 
   async saveProductionFeedbackDraft(
     context: BusinessContext,
-    draft: ProductionFeedbackDraft
-  ): Promise<void> {
+    draft: ProductionFeedbackDraft,
+    expectedDraft?: ProductionFeedbackDraft
+  ): Promise<"created" | "updated" | "conflict"> {
     assertBusinessContext(context);
-    await this.productionFeedbackDrafts.set(context, validateProductionFeedbackDraftForStorage(draft));
+    const normalized = validateProductionFeedbackDraftForStorage(draft);
+    if (expectedDraft) {
+      const expected = validateProductionFeedbackDraftForStorage(expectedDraft);
+      if (
+        expected.feedbackId !== normalized.feedbackId
+        || expected.status !== "pending_review"
+        || normalized.status === "pending_review"
+      ) {
+        return "conflict";
+      }
+      if (expected.visibility !== normalized.visibility) {
+        throw new Error("Die Sichtbarkeit eines ProductionFeedbackDraft ist unveränderlich.");
+      }
+
+      const result = await this.productionFeedbackDrafts.compareAndSetExact(
+        context,
+        normalized.feedbackId,
+        expected,
+        normalized
+      );
+      return result === "updated" ? "updated" : "conflict";
+    }
+
+    const inserted = await this.productionFeedbackDrafts.insert(context, normalized);
+    if (inserted === "created") return "created";
+
+    const existing = await this.productionFeedbackDrafts.get(context, normalized.feedbackId);
+    if (existing && existing.visibility !== normalized.visibility) {
+      throw new Error("Die Sichtbarkeit eines ProductionFeedbackDraft ist unveränderlich.");
+    }
+    return "conflict";
   }
 
   async getProductionFeedbackDraft(

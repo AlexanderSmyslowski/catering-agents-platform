@@ -60,12 +60,12 @@ function collection(mode: "file" | "postgres", validate?: (record: Record<string
 describe("Task 1 review fixes", () => {
   it.each([buildIntakeApp, buildOfferApp, buildProductionApp, buildPrintExportApp])("opens hosted construction only behind the code-owned readiness gate", (build) => {
     expect(hostedMultiBusinessReady).toBe(true);
-    expect(() => build({ env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: "secret" } } as never)).not.toThrow();
+    expect(() => build({ env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: "task-1-review-hosted-secret-32-bytes" } } as never)).not.toThrow();
   });
 
   it("binds an intake audit to the builder business context instead of process env", async () => {
     const dataRoot = root();
-    const app = buildIntakeApp({ rootDir: dataRoot, env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_DEV_AUTH: "true" } });
+    const app = buildIntakeApp({ rootDir: dataRoot, env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_DEV_AUTH: "1" } });
     try {
       await app.inject({ method: "POST", url: "/v1/intake/seed-demo", headers: { "x-actor-name": "Betriebs-/Audit-Operator" } });
       expect((await app.inject({ method: "GET", url: "/health" })).json().counts.auditEvents).toBeGreaterThan(0);
@@ -84,7 +84,7 @@ describe("Task 1 review fixes", () => {
     const app = buildIntakeApp({
       rootDir: dataRoot,
       auditLog: auditLog as never,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_DEV_AUTH: "true" }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_DEV_AUTH: "1" }
     });
     try {
       const response = await app.inject({

@@ -33,10 +33,10 @@ describe("hosted trusted actor startup contract", () => {
   it("does not require the hosted secret for the local profile", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-local-secret-"));
     const apps = [
-      buildIntakeApp({ rootDir, env: { CATERING_DEPLOYMENT_PROFILE: "local" } }),
-      buildOfferApp({ rootDir, env: { CATERING_DEPLOYMENT_PROFILE: "local" } }),
-      buildProductionApp({ dataRoot: rootDir, env: { CATERING_DEPLOYMENT_PROFILE: "local" } }),
-      buildPrintExportApp({ rootDir, env: { CATERING_DEPLOYMENT_PROFILE: "local" } })
+      buildIntakeApp({ rootDir, env: { CATERING_DEPLOYMENT_PROFILE: "local", CATERING_DEV_AUTH: "1" } }),
+      buildOfferApp({ rootDir, env: { CATERING_DEPLOYMENT_PROFILE: "local", CATERING_DEV_AUTH: "1" } }),
+      buildProductionApp({ dataRoot: rootDir, env: { CATERING_DEPLOYMENT_PROFILE: "local", CATERING_DEV_AUTH: "1" } }),
+      buildPrintExportApp({ rootDir, env: { CATERING_DEPLOYMENT_PROFILE: "local", CATERING_DEV_AUTH: "1" } })
     ];
 
     for (const app of apps) {
@@ -48,7 +48,7 @@ describe("hosted trusted actor startup contract", () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-hosted-configured-"));
     const env = {
       ...hostedWithoutSecret,
-      CATERING_TRUSTED_ACTOR_SECRET: "test-only-hosted-secret",
+      CATERING_TRUSTED_ACTOR_SECRET: "test-only-hosted-session-secret-123456",
       CATERING_DEFAULT_BUSINESS_ID: "acme-main"
     };
     const apps = [
@@ -67,7 +67,7 @@ describe("hosted trusted actor startup contract", () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-hosted-business-id-"));
     const env = {
       ...hostedWithoutSecret,
-      CATERING_TRUSTED_ACTOR_SECRET: "test-only-hosted-secret",
+      CATERING_TRUSTED_ACTOR_SECRET: "test-only-hosted-session-secret-123456",
       CATERING_DEFAULT_BUSINESS_ID: "INVALID BUSINESS ID"
     };
     const builders: Array<[string, () => unknown]> = [

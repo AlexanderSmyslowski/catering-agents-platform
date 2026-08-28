@@ -239,7 +239,7 @@ describe("production handoff port", () => {
       dataRoot: rootDir,
       store,
       trustedActorSecret: sharedSecret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha" },
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_DEV_AUTH: "1" },
       handoffReader: { async get() { return handoff; } }
     });
     const headersFor = (businessId: string) => ({
