@@ -221,13 +221,14 @@ membership_reconcile_compatibility_baseline() {
   done
 }
 membership_rollback_preflight() {
-  local network; if declare -F validate_manifest >/dev/null 2>&1; then validate_manifest; fi
+  local network allow_absent_networks=true; [[ "${command_name}" == rollback && "${marker_state}" == candidate ]] && allow_absent_networks=false
+  if declare -F validate_manifest >/dev/null 2>&1; then validate_manifest; fi
   if declare -F validate_absent_only_transaction >/dev/null 2>&1; then validate_absent_only_transaction; fi
   if declare -F validate_marker_file >/dev/null 2>&1; then validate_marker_file "${activation_marker}"; fi
   if declare -F assert_marker_readback >/dev/null 2>&1; then assert_marker_readback; fi
   if [[ -n "${run_id:-}" ]]; then [[ "${held_platform:-absent}" == acquired || "${held_platform:-absent}" == reentered ]] || fail; [[ "${held_edge:-absent}" == acquired || "${held_edge:-absent}" == reentered ]] || fail; else [[ "${platform_lock_held:-false}" == true && "${edge_lock_held:-false}" == true ]] || fail; fi
   if declare -F validate_foreign_evidence >/dev/null 2>&1; then validate_foreign_evidence; elif declare -F assert_foreign_invariants >/dev/null 2>&1; then assert_foreign_invariants; fi
-  if [[ -e "${adoption_journal}" ]]; then if declare -F validate_adoption_journal >/dev/null 2>&1; then validate_adoption_journal true true; fi; membership_wal_validate; fi
+  if [[ -e "${adoption_journal}" ]]; then if declare -F validate_adoption_journal >/dev/null 2>&1; then validate_adoption_journal "${allow_absent_networks}" true; fi; membership_wal_validate; fi
   for network in catering_ingress catering_private; do if docker network inspect "${network}" >/dev/null 2>&1; then if [[ -n "${run_id:-}" ]]; then validate_network_provenance "${network}" "${network#catering_}"; else validate_network_provenance "${network}" "${network#catering_}" "" "" true; fi; membership_alias_matrix "${network}"; fi; done
   membership_reconcile_compatibility_baseline 0
 }
