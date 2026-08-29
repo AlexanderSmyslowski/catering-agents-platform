@@ -1489,6 +1489,47 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
   }, 120_000);
 
+  test("RED: pending membership WAL is not replayed before foreign-invariant preflight", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-wal-preflight-order-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const markerPath = path.join(root, "phase3.activation");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const logPath = path.join(root, "fake-docker.log");
+    const activeState = textAt(statePath);
+    const crashShim = installCrashAfterFirstNetworkDisconnect(root);
+    const crashed = runExistingRollback(root, run.sandbox, crashShim.shimBin);
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(fieldsAt(journalPath).get("membership_wal_phase")).toBe("pending");
+    expect(fieldsAt(journalPath).get("membership_wal_action")).toBe("disconnect");
+
+    writeFileSync(statePath, activeState);
+    const state = JSON.parse(textAt(statePath)) as any;
+    const foreign = state.containers["commcats-eventos-app"];
+    expect(foreign.networks["platform-infra_default"]).toBeDefined();
+    expect(state.networks["platform-infra_default"].containers[foreign.id]).toBeDefined();
+    delete foreign.networks["platform-infra_default"];
+    delete state.networks["platform-infra_default"].containers[foreign.id];
+    writeFileSync(statePath, JSON.stringify(state));
+    const beforeResumeState = textAt(statePath);
+    const beforeResumeLog = textAt(logPath);
+
+    const resumed = runExistingResume(root, run.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeResumeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:connect|disconnect)/);
+    expect(textAt(statePath)).toBe(beforeResumeState);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(fieldsAt(journalPath).get("membership_wal_phase")).toBe("pending");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
   test.each([0, 1, 3])("RED: monotonic rollback resumes after %s compatibility reconnects", (reconnectCount) => {
     const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-monotonic-crash-${reconnectCount}-red-`));
     const crashed = runHarness("crash-after-active", root);

@@ -1875,11 +1875,11 @@ continue_rollback_control() {
 }
 
 dispatch_recovery_transition() {
-  membership_wal_recover
   case "${command_name}:${recovery_class}" in
     resume:terminal:resume) terminal_resume_noop; return 0 ;;
     resume:candidate:resume)
       validate_resume_evidence candidate
+      membership_wal_recover
       if [[ "$(field "${activation_marker}" catering_ingress_id)" != "$(field "${adoption_journal}" catering_ingress_id)" || "$(field "${activation_marker}" catering_private_id)" != "$(field "${adoption_journal}" catering_private_id)" ]]; then
         adopt_candidate_networks
       fi
@@ -1891,20 +1891,26 @@ dispatch_recovery_transition() {
       ;;
     resume:active:resume)
       validate_resume_evidence active
+      membership_wal_recover
       validate_resume_host_smokes
       validate_resume_egress
       write_control_marker active 1 "$(field "${activation_marker}" adoption_proof)"
       ;;
     resume:rolling_back:resume)
+      membership_rollback_preflight
+      membership_wal_recover
       resume_rolling_back_control
       return 0
       ;;
     rollback:candidate:rollback)
+      membership_rollback_preflight
+      membership_wal_recover
       continue_rollback_control 1
       return 0
       ;;
     rollback:active:rollback)
       validate_resume_evidence active
+      membership_wal_recover
       continue_rollback_control 1
       return 0
       ;;
