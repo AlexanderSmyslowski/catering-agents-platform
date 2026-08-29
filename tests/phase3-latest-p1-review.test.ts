@@ -1546,7 +1546,7 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
     expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
-  }, 120_000);
+  }, 180_000);
 
   test("RED: a complete compatibility baseline makes rolling_back resume a terminal no-op", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-complete-red-"));

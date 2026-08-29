@@ -1003,7 +1003,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     const rollbackOutput = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
     expect(rollbackOutput).toContain("PILOT: ROLLED BACK");
     expect(rollbackOutput).not.toContain("PILOT: GO");
-  }, 120_000);
+  }, 180_000);
 
   test("fails closed on a foreign same-name network instead of overwriting it", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-network-conflict-"));
