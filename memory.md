@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.371
-date: 2026-08-23
+version: 5.373
+date: 2026-08-25
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1823,3 +1823,15 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Exact-Head-Fachkorrektur P1 Active-Recreate-Rollbackauthority: Solange der Marker `active` trägt und das unveränderliche Baseline-Manifest Rollbackauthority bleibt, ist der Catering-Pilot für normale identitätsverändernde Platform-/Web-/Edge-/Cutover-/Recovery-Caller eingefroren. Unter beiden Locks müssen Deploy, Recreate, Restart, Rebuild, `compose up`, Source-Sync und Netzmutationen, die manifestgebundene Container-ID, `StartedAt`, Netzwerkbaseline, Mitgliedschaft, Alias oder Portbindung ändern könnten, vor Mutation fail-closed stoppen. Read-only, Hash-/Readback- und nachweislich identitätsneutrale Evidenz bleibt zulässig; ein unauthentifizierter Refresh ist verboten. Eine spätere deployfähige Phase 3 benötigt einen separat geprüften Checkpoint-/Manifestrotationsvertrag.
 - Exact-Head-Fachkorrektur P1 Archivbeweis: Der sechste geschützte kanonische Pfad ist `/opt/catering-phase3/phase3.rollback-restore-proof.archive`. Nach vollständigem Restore-/Fremd-Invariant-/Smoke-Beweis wird genau ein deterministisches, nicht-sensitives Archiv atomar installiert, readback-validiert und gehasht; `archive_sha256` ist seine immutable Identität. Erst danach wird `/opt/catering-phase3/phase3.rollback-completion.receipt` geschrieben und exakt an Transaktions-ID, Manifestpfad/-hash, prioren Markerzustand/-hash, `restore_evidence_sha256`, Archivpfad und Archivhash gebunden. Receipt, Manifest und Archiv werden vor Markerrestore/-remove, Manifestlöschung und Receipt-Cleanup gegeneinander validiert. Fehlendes, doppeltes, pfadfremdes oder hashabweichendes Archiv bleibt `NO-GO`; das Archiv darf nach Receipt-Cleanup als nicht-autoritative Audit-Evidenz bestehen, ersetzt aber niemals Runtime-Rollback.
 - Die drei Finalisierungsfenster sind exakt `rolling_back + manifest + receipt + archive`, stabiler priorer Marker/`absent` + `manifest + receipt + archive` und stabiler priorer Marker/`absent` + kein Manifest + `receipt + archive`. Die Crash-Point-Tabelle bindet den Archiv-Install/Readback-Schritt vor Receipt-Write sowie die Cleanup-Reihenfolge und hält `stable + manifest` ohne Receipt/Archiv, `rolling_back` ohne Manifest, Receipt ohne passendes Archiv und jede Archivmehrdeutigkeit fail-closed. Scope bleibt ausschließlich Plan, Snapshot und append-only Root-Memory; keine Runtime-, Deployment- oder Git-Metadatenaktion.
+
+### 5.372 - 2026-08-24
+
+- Die Phase-3-Pre-Mutation-Semantikbaseline ist vor jeder ersten Zielmutation vollständig aufzunehmen, zu hashen und an das unveränderliche Transaktionsmanifest zu binden; rote, unvollständige oder nicht bindbare Smoke-Evidenz bleibt vor `atomic_install`, Netz-Erzeugung und Connect/Disconnect fail-closed.
+- Neue Transaktionen verwenden ausdrücklich `phase3.2.transaction-baseline`; `baseline_smoke_evidence` und `baseline_smoke_sha256` bleiben für dieses Format Pflicht. Das bisherige `phase3.1.transaction-baseline` ist ausschließlich eine unveränderliche, Marker-/Owner-/Run-/Pfad-/Hash-gebundene Recovery-Autorität: `candidate`/`active` dürfen nur über einen expliziten Rollback wiederhergestellt werden, `rolling_back` ausschließlich per Resume/Finalize; ein Forward-Resume oder eine Live-Inferenz kann daraus kein `PILOT: GO` ableiten.
+- Diese Fortschreibung dokumentiert nur den versionierten Recovery-/Baseline-Vertrag; sie behauptet keinen produktiven Pilot, keinen Merge, kein Deployment und keine Runtime-Mutation.
+
+### 5.373 - 2026-08-25
+
+- Der freigegebene Phase-3-P1-Rollback-Fix akzeptiert die zwei historisch erzeugbaren `phase3.1`-Candidate-Präfixe nur als explizites `--rollback`: vorbereitete Adoption mit beiden Netz-IDs `absent` und durable Ingress-Adoption mit exakter transaktionsgelabelter Live-Ingress sowie absent Private-Netz. Beide Pfade validieren weiter Owner/Run, Manifestpfad/-hash, Journal-Selbsthash, Source-/Baselinebindung, Netzwerkprovenienz und die feste Ingress-vor-Private-Reihenfolge; beim Ingress-Präfix wird die Journal-ID vor jeder Entfernung atomar in `rolling_back` übernommen.
+- Ein `phase3.1`-Candidate bleibt für `--resume` und jede Forward-Freigabe `NO-GO`; `phase3.2`-Baseline-/Recovery-Verträge und die bestehenden negativen Owner-/Run-/Hash-/ID-/Reihenfolge-/Mitgliedschafts-/Replacement-/Rename-Gates bleiben unverändert.
+- Der Stand ist nur lokal und synthetisch über fokussierte Vitest-/Shell-/Diff-Verträge geprüft. Es gab keine echte Netzwerk-, Docker-, Server-, Deployment-, Commit-, Push- oder PR-Aktion; reine Vitest-`onTaskUpdate`-Worker-Timeouts wurden als P2 und nicht als Suite-GO behandelt.

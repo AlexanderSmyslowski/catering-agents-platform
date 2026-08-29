@@ -14,6 +14,7 @@ import os
 import re
 import signal
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 from typing import Any
@@ -156,7 +157,10 @@ def inject_fault(state: dict[str, Any], operation: str, name: str = "") -> None:
     private_members = {str(value.get("Name", "")).lstrip("/") for value in private}
     trigger = False
     if fault == "crash-after-candidate":
-        trigger = current == "candidate" and operation == "inspect" and ingress_members == expected_ingress and private_members == expected_private
+        if os.environ.get("CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH") == "1":
+            trigger = current == "candidate" and operation == "network" and name == "create" and not ingress_members and not private_members
+        else:
+            trigger = current == "candidate" and operation == "inspect" and ingress_members == expected_ingress and private_members == expected_private
     elif fault == "crash-after-active":
         trigger = current == "active" and operation == "inspect"
     elif fault == "crash-after-rollback":
@@ -171,6 +175,8 @@ def inject_fault(state: dict[str, Any], operation: str, name: str = "") -> None:
         state["fault_triggered"] = True
         save(state)
         os.kill(os.getppid(), signal.SIGKILL)
+        if os.environ.get("CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH") == "1":
+            os.kill(os.getpid(), signal.SIGKILL)
 
 
 def resolve_network(state: dict[str, Any], value: str) -> tuple[str, dict[str, Any]]:
@@ -280,11 +286,16 @@ def do_network(state: dict[str, Any], args: list[str]) -> int:
     if not args:
         return 1
     action = args[0]
+    inject_fault(state, "network", action)
     if action == "ls":
         match = re.search(r"name=\^([^$]+)\$", " ".join(args))
         if match and match.group(1) in state["networks"]:
             value = state["networks"][match.group(1)]["id"]
             print(value if "--no-trunc" in args else value[:12])
+        elif not match:
+            for item in state["networks"].values():
+                value = item["id"]
+                print(value if "--no-trunc" in args else value[:12])
         return 0
     if action == "inspect":
         value = args[-1]
@@ -380,6 +391,21 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
         state["fault_triggered"] = True
         save(state)
         return 1
+    if state.get("fault") == "semantic-smoke-incomplete" and host == "commcats-eventos-app" and not state.get("fault_triggered"):
+        state["fault_triggered"] = True
+        save(state)
+        print("{}")
+        return 0
+    if state.get("fault") == "baseline-smoke-timeout" and host == "web" and not state.get("fault_triggered"):
+        state["fault_triggered"] = True
+        save(state)
+        # A real endpoint can accept the connection and then never produce a
+        # response. The production timeout must make this boundary fail fast;
+        # without it, keep the fake blocked long enough for the regression to
+        # observe the unbounded command.
+        if "--timeout=2" not in command:
+            time.sleep(2)
+        return 1
     if state.get("fault") == "foreign-smoke-fail" and host in {"zeiterfassung-app-1", "commcats-eventos-app"} and not negative:
         return 1
     tcp_tail = re.search(r"\b(?:nc|netcat)\b(?P<rest>.*)$", command)
@@ -412,9 +438,10 @@ def do_exec(state: dict[str, Any], args: list[str]) -> int:
         # Force the real helper into its compensating rollback; the next
         # inspect while rolling_back is the durable crash boundary.
         return 1
-    if state.get("fault") == "crash-after-receipt" and marker_state() == "candidate" and "web:8081" in command:
+    if state.get("fault") in {"crash-after-receipt", "crash-after-evidence", "crash-after-archive"} and marker_state() == "candidate" and "web:8081" in command:
         # Fail the semantic gate normally so the real helper enters its
-        # compensating rollback; inject the crash only after its receipt exists.
+        # compensating rollback; the fake sudo then injects the requested
+        # crash only at the durable evidence/archive boundary.
         return 1
     if host == "web":
         print('{"service":"intake-service","status":"ok"}')

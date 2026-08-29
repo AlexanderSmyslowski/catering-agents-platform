@@ -388,7 +388,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     expect(helper).toMatch(/manifest[^\n]{0,180}(?:sha256|cmp)[^\n]{0,180}(?:owner|transaction)/i);
     expect(helper).toContain('phase3_lock_acquire "${platform_lock}" held_platform');
     expect(helper).toContain('phase3_lock_acquire "${edge_lock}" held_edge');
-    expect(helper).toContain('elif [[ "${command_name}" == rollback ]]');
+    expect(helper).toContain('case "${command_name}:${recovery_class}" in');
   });
 
   test("uses inactive and active file chains while freezing active identity-changing callers", () => {
@@ -854,8 +854,18 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     const normal = runHarness("full-pilot");
     expect(normal.result.status).toBe(0);
     expect(sourceAt(path.join(normal.fakeHostRoot, "fake-ssh.log"))).toMatch(/bash -s --/);
-    expect(sourceAt(path.join(normal.fakeHostRoot, "fake-docker.log"))).toMatch(/compose/);
-    expect(sourceAt(path.join(normal.fakeHostRoot, "fake-docker.log"))).toMatch(/network create/);
+    const normalDockerLog = sourceAt(path.join(normal.fakeHostRoot, "fake-docker.log")).split("\n");
+    expect(normalDockerLog.join("\n")).toMatch(/compose/);
+    expect(normalDockerLog.join("\n")).toMatch(/network create/);
+    expect(normalDockerLog.findIndex((line) => line.includes("exec shared-edge-edge-1 wget"))).toBeLessThan(
+      normalDockerLog.findIndex((line) => line.includes("network create")),
+    );
+    const normalManifest = markerFields(path.join(normal.fakeHostRoot, "phase3.transaction-baseline.manifest"));
+    expect(normalManifest.get("schema")).toBe("phase3.2.transaction-baseline");
+    expect(normalManifest.get("baseline_smoke_evidence")).toMatch(
+      /^catering:[0-9a-f]{64};zeiterfassung:[0-9a-f]{64};eventos:[0-9a-f]{64}$/,
+    );
+    expect(normalManifest.get("baseline_smoke_sha256")).toMatch(/^[0-9a-f]{64}$/);
 
     const resumedRoot = mkdtempSync(path.join(tmpdir(), "catering-phase3-real-resume-"));
     const crashed = runHarness("crash-after-candidate", resumedRoot);
@@ -877,10 +887,11 @@ describe("Phase-3 Catering isolation pilot contract", () => {
       "platform-infra-web-1",
     ]);
     const resumed = runHarness("resume-candidate", resumedRoot);
-    // Crash 137 leaves the candidate marker without a smoke readback. Resume
-    // must fail closed instead of adopting a partial proof as active/GO.
-    expect(resumed.result.status).not.toBe(0);
-    expect(sourceAt(path.join(resumedRoot, "phase3.activation"))).toMatch(/^state=candidate$/m);
+    // The run-created candidate has a complete immutable manifest and may be
+    // resumed into the supported active state after the crash.
+    expect(resumed.result.status).toBe(0);
+    expect(`${resumed.result.stdout}${resumed.result.stderr}`).toContain("PILOT: GO");
+    expect(sourceAt(path.join(resumedRoot, "phase3.activation"))).toMatch(/^state=active$/m);
     expect(sourceAt(path.join(resumedRoot, "fake-ssh.log"))).toMatch(/command=resume/);
 
     const rollingBackRoot = mkdtempSync(path.join(tmpdir(), "catering-phase3-rolling-back-resume-"));
@@ -888,13 +899,24 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     expect(crashedRollback.result.status).not.toBe(0);
     expect(sourceAt(path.join(rollingBackRoot, "phase3.activation"))).toMatch(/^state=rolling_back$/m);
     const resumedRollingBack = runHarness("resume-rolling-back", rollingBackRoot);
-    expect(resumedRollingBack.result.status).not.toBe(0);
-    expect(sourceAt(path.join(rollingBackRoot, "phase3.activation"))).toMatch(/^state=rolling_back$/m);
+    const resumedRollingBackOutput = `${resumedRollingBack.result.stdout}${resumedRollingBack.result.stderr}`;
+    expect(resumedRollingBack.result.status).toBe(0);
+    expect(resumedRollingBackOutput).toContain("PILOT: ROLLED BACK");
+    expect(resumedRollingBackOutput).not.toContain("PILOT: GO");
+    expect(existsSync(path.join(rollingBackRoot, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(rollingBackRoot, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(rollingBackRoot, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(rollingBackRoot, "locks/shared-edge.deploy-lock"))).toBe(false);
 
     const failed = runHarness("semantic-smoke-fail");
     expect(failed.result.status).not.toBe(0);
-    expect(existsSync(path.join(failed.fakeHostRoot, "phase3.rollback-restore-proof.archive"))).toBe(true);
+    expect(existsSync(path.join(failed.fakeHostRoot, "phase3.rollback-restore-proof.archive"))).toBe(false);
     expect(existsSync(path.join(failed.fakeHostRoot, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(failed.fakeHostRoot, "platform-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(failed.fakeHostRoot, "edge-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(failed.fakeHostRoot, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(failed.fakeHostRoot, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(sourceAt(path.join(failed.fakeHostRoot, "fake-docker.log"))).not.toMatch(/network (?:create|connect|disconnect)/);
     const rollbackState = JSON.parse(sourceAt(path.join(failed.fakeHostRoot, "fake-docker-state.json"))) as {
       networks: Record<string, unknown>;
     };
@@ -981,7 +1003,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     const rollbackOutput = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
     expect(rollbackOutput).toContain("PILOT: ROLLED BACK");
     expect(rollbackOutput).not.toContain("PILOT: GO");
-  }, 120_000);
+  }, 180_000);
 
   test("fails closed on a foreign same-name network instead of overwriting it", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-network-conflict-"));

@@ -38,9 +38,9 @@ describe("Phase 3 P1 correction reproducers", () => {
     }
     expect(helper).toContain("rolling_back");
     expect(helper).toMatch(/rolling_back[\s\S]{0,700}validate_receipt[\s\S]{0,700}(?:restore|fail)/);
-    const resumeBranch = helper.match(/if \[\[ "\$\{command_name\}" == resume \]\]; then([\s\S]*?)elif \[\[ "\$\{command_name\}" == rollback \]\]; then/)?.[1] ?? "";
-    expect(resumeBranch).toContain("validate_resume_evidence candidate");
-    expect(resumeBranch).not.toMatch(/candidate\)\s*\n\s*write_control_marker active\s*$/m);
+    expect(helper).toMatch(/case "\$\{command_name\}:\$\{recovery_class\}" in[\s\S]*resume:candidate:resume/);
+    expect(helper).toContain("validate_resume_evidence candidate");
+    expect(helper).not.toMatch(/candidate\)\s*\n\s*write_control_marker active\s*$/m);
   });
 
   test("RED C: all Phase 3 lock acquisition is atomic and proves owner/mode/realpath", () => {
