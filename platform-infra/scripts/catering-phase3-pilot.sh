@@ -1608,6 +1608,13 @@ validate_rolling_back_prefix() {
 
 finalize_rolling_back_resume() {
   validate_rolling_back_evidence
+  retain_recovery_locks=true
+  membership_wal_write idle none none none none "$(membership_field "${adoption_journal}" membership_wal_sequence)" absent absent absent "e30=" "e30="
+  validate_adoption_journal true true
+  membership_wal_validate
+  validate_restore_evidence
+  validate_restore_archive
+  validate_receipt
   prior_state="$(field "${baseline_manifest}" prior_marker_state)"
   if [[ "${prior_state}" == absent ]]; then
     sudo unlink "${activation_marker}" 2>/dev/null || true

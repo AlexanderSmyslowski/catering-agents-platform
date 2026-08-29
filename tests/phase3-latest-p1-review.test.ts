@@ -341,6 +341,32 @@ function installCrashAfterCompatibilityConnect(root: string, reconnectCount: num
   return { shimBin, flagPath, countPath };
 }
 
+function installMembershipJournalWriteFailure(root: string) {
+  const shimBin = path.join(root, "membership-journal-write-failure-shim");
+  const failureFlag = path.join(shimBin, "triggered");
+  const countFile = path.join(shimBin, "journal-write-count");
+  mkdirSync(shimBin, { recursive: true });
+  writeFileSync(
+    path.join(shimBin, "sudo"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `real=${shellQuote(path.join(root, "bin/sudo"))}`,
+      `flag=${shellQuote(failureFlag)}`,
+      `count_file=${shellQuote(countFile)}`,
+      'if [[ "${1:-}" == install && "${!#}" == *"/phase3.network-adoption.journal.pending."* ]]; then',
+      '  count=0; [[ -e "$count_file" ]] && count="$(cat "$count_file")"',
+      '  count=$((count + 1)); printf "%s\n" "$count" >"$count_file"',
+      '  if [[ "$count" == 17 ]]; then : >"$flag"; exit 97; fi',
+      "fi",
+      'exec "$real" "$@"',
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { shimBin, failureFlag, countFile };
+}
+
 function restoreCompatibilityBaselineExcept(root: string, missing: string) {
   const expected = [
     ["platform-infra_default", "postgres", "platform-infra-postgres-1"],
@@ -1672,6 +1698,30 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(output).toContain("PILOT: ROLLED BACK");
     expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: rollback:candidate keeps recovery authority when terminal journal write fails", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-terminal-journal-failure-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    rewriteFields(markerPath, { state: "candidate", marker_sha256: "absent" });
+    rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    const failure = installMembershipJournalWriteFailure(root);
+    const rollback = runExistingRollback(root, crashed.sandbox, failure.shimBin);
+    const output = `${rollback.result.stdout}${rollback.result.stderr}`;
+
+    expect(existsSync(failure.failureFlag)).toBe(true);
+    expect(textAt(failure.countFile).trim()).toBe("17");
+    expect(rollback.result.status).not.toBe(0);
+    expect(output).not.toContain("PILOT: ROLLED BACK");
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
   }, 120_000);
 
   test("harness self-integrity survives two runs with the same backend root", () => {
