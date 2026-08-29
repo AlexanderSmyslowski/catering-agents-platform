@@ -1029,6 +1029,15 @@ function remoteControlBody() {
   return markerIndex >= 0 && bodyEnd > bodyStart ? source.slice(bodyStart, bodyEnd) : "";
 }
 
+function remoteMembershipPrimitive() {
+  const source = readFileSync(helperPath, "utf8");
+  const marker = "<<'REMOTE_MEMBERSHIP_PRIMITIVE'";
+  const markerIndex = source.indexOf(marker);
+  const bodyStart = markerIndex >= 0 ? source.indexOf("\n", markerIndex) + 1 : -1;
+  const bodyEnd = source.indexOf("\nREMOTE_MEMBERSHIP_PRIMITIVE", bodyStart);
+  return markerIndex >= 0 && bodyEnd > bodyStart ? source.slice(bodyStart, bodyEnd) : "";
+}
+
 function runReenteredControlRelease(failEdge = false) {
   const body = remoteControlBody();
   const start = body.indexOf("release_control_locks()");
@@ -1070,6 +1079,7 @@ function runExplicitRollbackReproducer(smokeFails = false) {
   writeFileSync(baselineManifest, "baseline\n");
 
   const body = remoteControlBody();
+  const membershipPrimitive = remoteMembershipPrimitive();
   const releaseStart = body.indexOf("release_control_locks() {");
   const releaseEnd = body.indexOf("\ntrap release_control_locks EXIT", releaseStart);
   const rollbackControlStart = body.indexOf("continue_rollback_control() {");
@@ -1082,6 +1092,7 @@ function runExplicitRollbackReproducer(smokeFails = false) {
   expect(rollbackControlEnd).toBeGreaterThan(rollbackControlStart);
   expect(dispatcherStart).toBeGreaterThanOrEqual(0);
   expect(dispatcherEnd).toBeGreaterThan(dispatcherStart);
+  expect(membershipPrimitive).not.toBe("");
   const rollbackControl = body.slice(rollbackControlStart, rollbackControlEnd);
   const dispatcher = body.slice(dispatcherStart, dispatcherEnd);
   const prefix = [
@@ -1114,7 +1125,7 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     "sudo() { \"$@\"; }",
     "docker() {",
     "  if [[ \"$1\" == inspect ]]; then printf '{}'; return 0; fi",
-    "  if [[ \"$1\" == network && \"$2\" == inspect ]]; then return 0; fi",
+    "  if [[ \"$1\" == network && \"$2\" == inspect ]]; then printf '{}'; return 0; fi",
     "  return 0",
     "}",
     "field() {",
@@ -1125,6 +1136,8 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     "  esac",
     "}",
     "fail() { printf '%s\\n' 'PILOT: NO-GO' >&2; return 1; }",
+    membershipPrimitive,
+    "membership_reconcile_compatibility_baseline() { :; }",
     "validate_resume_evidence() { :; }",
     "membership_wal_recover() { :; }",
     "retain_recovery_locks=false",
@@ -3204,51 +3217,30 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
   }, 120_000);
 
-  test("RED: mixed adoption rollback rejects immutable member drift before disconnect", () => {
+  test("RED: mixed adoption is rejected before durable mutation", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-mixed-adoption-member-drift-red-"));
     prepareNormalMixedS2State(root, "catering_ingress");
-    const crashed = runHarness("crash-after-ingress", root);
-    expect(crashed.result.status).not.toBe(0);
-
     const statePath = path.join(root, "fake-docker-state.json");
-    const journalPath = path.join(root, "phase3.network-adoption.journal");
     const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
     const logPath = path.join(root, "fake-docker.log");
-    const state = JSON.parse(textAt(statePath)) as {
-      networks: Record<string, { containers: Record<string, { Name: string; Aliases: string[] }> }>;
-      containers: Record<string, { id: string; networks: Record<string, { aliases: string[] }> }>;
-    };
-    const ingress = state.networks.catering_ingress;
-    ingress.containers[state.containers["platform-infra-web-1"].id] = {
-      Name: "/platform-infra-web-1",
-      Aliases: ["web"],
-    };
-    ingress.containers["foreign-container-id"] = { Name: "/foreign", Aliases: ["foreign"] };
-    state.containers["platform-infra-web-1"].networks.catering_ingress = { aliases: ["web"] };
-    writeFileSync(statePath, JSON.stringify(state, null, 2));
-
-    const driftedMembers = encodeFakeDockerJson(ingress.containers);
-    rewriteFields(journalPath, {
-      catering_ingress_members_b64: driftedMembers,
-      catering_ingress_aliases_b64: driftedMembers,
-      journal_sha256: "absent",
-    });
-    rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
-
+    const beforeState = JSON.parse(textAt(statePath));
     const beforeLog = textAt(logPath);
-    const rolledBack = runExistingRollback(root, crashed.sandbox);
-    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const run = runHarness("crash-after-ingress", root);
+    const terminal = `${run.result.stdout}${run.result.stderr}`;
     const addedLog = textAt(logPath).slice(beforeLog.length);
-    expect(rolledBack.result.status).not.toBe(0);
+    const afterState = JSON.parse(textAt(statePath));
+    expect(run.result.status).not.toBe(0);
     expect(terminal).toContain("PILOT: NO-GO");
-    expect(addedLog).not.toMatch(/network disconnect catering_ingress/);
-    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
-    expect(JSON.parse(textAt(statePath)).networks.catering_ingress.containers["foreign-container-id"]).toEqual({
-      Name: "/foreign",
-      Aliases: ["foreign"],
-    });
-    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
-    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+    expect(afterState.networks).toEqual(beforeState.networks);
+    expect(afterState.containers).toEqual(beforeState.containers);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(manifestPath)).toBe(false);
+    expect(existsSync(journalPath)).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
   }, 120_000);
 
   test("phase3.2 rolling_back after ingress journal crash resumes the same rollback", () => {

@@ -563,8 +563,12 @@ validate_run_created_rollback_order() {
   private_created="$(field "${baseline_manifest}" catering_private_created_by_run_authorized)"
   ingress_created="$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)"
   [[ "${private_created}" == true && "${ingress_created}" == true ]] || return 0
-  private_expected="$(printf '%s' "$(field "${adoption_journal}" catering_private_members_b64)" | base64 -d)" || fail
-  ingress_expected="$(printf '%s' "$(field "${adoption_journal}" catering_ingress_members_b64)" | base64 -d)" || fail
+  private_expected="$(field "${adoption_journal}" catering_private_members_b64)"
+  ingress_expected="$(field "${adoption_journal}" catering_ingress_members_b64)"
+  [[ "${private_expected}" == absent ]] && private_expected=e30=
+  [[ "${ingress_expected}" == absent ]] && ingress_expected=e30=
+  private_expected="$(printf '%s' "${private_expected}" | base64 -d)" || fail
+  ingress_expected="$(printf '%s' "${ingress_expected}" | base64 -d)" || fail
   if network_present_by_name catering_private; then
     private_actual="$(docker network inspect --format '{{json .Containers}}' catering_private)" || fail
   else
